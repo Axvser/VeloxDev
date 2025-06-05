@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<NoWarn>1573</NoWarn>
+		<NoWarn>1591</NoWarn>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<TargetFrameworks>netframework4.6.2;net5.0-windows</TargetFrameworks>
+		<Nullable>enable</Nullable>
+		<LangVersion>latest</LangVersion>
+		<UseWPF>true</UseWPF>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="System.ValueTuple" Version="4.6.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
+	</ItemGroup>
+
+</Project>
