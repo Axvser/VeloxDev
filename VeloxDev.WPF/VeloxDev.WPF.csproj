@@ -9,14 +9,17 @@
 		<LangVersion>latest</LangVersion>
 		<UseWPF>true</UseWPF>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<Title>VeloxDev.WPF</Title>
+		<Version>1.0.0-beta</Version>
+		<Authors>Axvser</Authors>
+		<Description>VeloxDev.Core + Velox.WPF</Description>
 	</PropertyGroup>
 
 	<ItemGroup>
 	  <PackageReference Include="System.ValueTuple" Version="4.6.1" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
+	  <PackageReference Include="VeloxDev.Core" Version="1.0.0-beta" />
+	  <PackageReference Include="VeloxDev.WPF.Generator" Version="1.0.0-beta" />
 	</ItemGroup>
 
 </Project>

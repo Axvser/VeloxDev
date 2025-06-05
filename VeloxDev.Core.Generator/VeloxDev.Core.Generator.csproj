@@ -7,9 +7,9 @@
 		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<Title>VeloxDev.WPF.Generator</Title>
+		<Title>VeloxDev.Core.Generator</Title>
 		<Version>1.0.0-beta</Version>
-		<Authors>Axver</Authors>
+		<Authors>Axvser</Authors>
 	</PropertyGroup>
 
 	<ItemGroup>
