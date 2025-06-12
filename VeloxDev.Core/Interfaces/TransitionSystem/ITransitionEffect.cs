@@ -5,7 +5,7 @@
         public bool Handled { get; set; } = false;
     }
 
-    public interface ITransitionEffect<TPriority> : ICloneable
+    public interface ITransitionEffect<TPriority> : ITransitionEffect, ICloneable
     {
         public TPriority Priority { get; set; }
         public int FPS { get; set; }
@@ -31,5 +31,10 @@
         public void FinallyInvoke(object sender, FrameEventArgs e);
 
         public ITransitionEffect<TPriority> DeepCopy();
+    }
+
+    public interface ITransitionEffect
+    {
+
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using System.Windows;
 using System.Windows.Threading;
 using VeloxDev.Core.TransitionSystem;
 
@@ -10,22 +11,30 @@ namespace VeloxDev.WPF.TransitionSystem
         {
             if (isUIAccess)
             {
-                Update(target, frameIndex, priority);
+                Update(target, frameIndex);
             }
             else
             {
-                Dispatcher.CurrentDispatcher.InvokeAsync(() => Update(target, frameIndex, priority), priority);
+                Application.Current.Dispatcher.InvokeAsync(() => Update(target, frameIndex), priority);
             }
         }
-        internal virtual void AddFrameFrameSequence(PropertyInfo propertyInfo, ICollection<object?> objects)
+        internal virtual void AddFrameFrameSequence(PropertyInfo propertyInfo, List<object?> objects)
         {
-
+            if (Frames.TryGetValue(propertyInfo, out _))
+            {
+                Frames[propertyInfo] = objects;
+            }
+            else
+            {
+                Frames.Add(propertyInfo, objects);
+            }
         }
         internal virtual void SetCount(int count)
         {
             Count = count;
         }
-        private void Update(object target, int frameIndex, DispatcherPriority priority)
+
+        private void Update(object target, int frameIndex)
         {
             foreach (var kvp in Frames)
             {

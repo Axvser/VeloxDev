@@ -6,24 +6,24 @@ using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    public class StateBase<TTarget, TOutput, TPriority>() : IFrameState<TTarget, TOutput, TPriority>, ICloneable
+    public class StateBase<TOutput, TPriority>() : IFrameState<TOutput, TPriority>, ICloneable
         where TOutput : IFrameSequence<TPriority>
     {
         protected ConcurrentDictionary<PropertyInfo, object?> _values = [];
-        protected ConcurrentDictionary<PropertyInfo, object> _interpolators = [];
+        protected ConcurrentDictionary<PropertyInfo, IValueInterpolator> _interpolators = [];
 
         public virtual ConcurrentDictionary<PropertyInfo, object?> Values
         {
             get => _values;
             protected set => _values = value;
         }
-        public virtual ConcurrentDictionary<PropertyInfo, object> Interpolators
+        public virtual ConcurrentDictionary<PropertyInfo, IValueInterpolator> Interpolators
         {
             get => _interpolators;
             protected set => _interpolators = value;
         }
 
-        public virtual void SetInterpolator(Expression<Func<TTarget>> expression, IFrameInterpolator<TTarget, TOutput, TPriority> interpolator)
+        public virtual void SetInterpolator<T>(Expression<Func<T>> expression, IValueInterpolator? interpolator)
         {
             if (expression.Body is MemberExpression propertyExpr)
             {
@@ -45,7 +45,7 @@ namespace VeloxDev.Core.TransitionSystem
                 }
             }
         }
-        public virtual void SetValue(Expression<Func<TTarget>> expression, object? value)
+        public virtual void SetValue<T>(Expression<Func<T>> expression, object? value)
         {
             if (expression.Body is MemberExpression propertyExpr)
             {
@@ -67,7 +67,7 @@ namespace VeloxDev.Core.TransitionSystem
                 }
             }
         }
-        public virtual bool TryGetInterpolator(Expression<Func<TTarget>> expression, out IFrameInterpolator<TTarget, TOutput, TPriority>? interpolator)
+        public virtual bool TryGetInterpolator<T>(Expression<Func<T>> expression, out IValueInterpolator? interpolator)
         {
             if (expression.Body is MemberExpression propertyExpr
                 && propertyExpr.Member is PropertyInfo property
@@ -76,7 +76,7 @@ namespace VeloxDev.Core.TransitionSystem
                 && property.CanWrite
                 && _interpolators.TryGetValue(property, out var item))
             {
-                interpolator = item as IFrameInterpolator<TTarget, TOutput, TPriority>;
+                interpolator = item as IValueInterpolator;
                 return true;
             }
             else
@@ -85,7 +85,7 @@ namespace VeloxDev.Core.TransitionSystem
                 return false;
             }
         }
-        public virtual bool TryGetValue(Expression<Func<TTarget>> expression, out object? value)
+        public virtual bool TryGetValue<T>(Expression<Func<T>> expression, out object? value)
         {
             if (expression.Body is MemberExpression propertyExpr
                 && propertyExpr.Member is PropertyInfo property
@@ -104,9 +104,9 @@ namespace VeloxDev.Core.TransitionSystem
             }
         }
 
-        public virtual IFrameState<TTarget, TOutput, TPriority> DeepCopy()
+        public virtual IFrameState<TOutput, TPriority> DeepCopy()
         {
-            var value = new StateBase<TTarget, TOutput, TPriority>();
+            var value = new StateBase<TOutput, TPriority>();
 
             foreach (var kvp in _values)
             {

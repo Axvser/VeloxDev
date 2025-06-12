@@ -1,11 +1,16 @@
 ﻿namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
-    public interface IFrameInterpolator<TTarget, TOutput, TPriority>
+    public interface IFrameInterpolator<TOutput, TPriority> : IFrameInterpolator
         where TOutput : IFrameSequence<TPriority>
     {
         public TOutput Interpolate(
-            TTarget target,
-            IFrameState<TTarget, TOutput, TPriority> state,
+            object target,
+            IFrameState<TOutput, TPriority> state,
             ITransitionEffect<TPriority> effect);
+    }
+
+    public interface IFrameInterpolator
+    {
+
     }
 }

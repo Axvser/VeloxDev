@@ -3,11 +3,12 @@
 namespace VeloxDev.Core.TransitionSystem
 {
     public abstract class TransitionSchedulerBase<TTarget, TOutput, TPriority> : ITransitionScheduler<TTarget, TOutput, TPriority>
+        where TTarget : class
         where TOutput : IFrameSequence<TPriority>
     {
         public abstract void Execute(
-            IFrameInterpolator<TTarget, TOutput, TPriority> interpolator,
-            IFrameState<TTarget, TOutput, TPriority> state,
+            IFrameInterpolator<TOutput, TPriority> interpolator,
+            IFrameState<TOutput, TPriority> state,
             ITransitionEffect<TPriority> effect);
 
         public abstract void Exit();

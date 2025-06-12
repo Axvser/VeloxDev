@@ -2,10 +2,15 @@
 
 namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
-    public interface IFrameSequence<TPriority>
+    public interface IFrameSequence<TPriority> : IFrameSequence
     {
         public int Count { get; }
         public Dictionary<PropertyInfo, List<object?>> Frames { get; }
         public void Update(object target, int frameIndex, bool isUIAccess, TPriority priority);
+    }
+
+    public interface IFrameSequence
+    {
+
     }
 }

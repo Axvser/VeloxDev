@@ -4,14 +4,20 @@ using System.Reflection;
 
 namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
-    public interface IFrameState<TTarget, TOutput, TPriority> where TOutput : IFrameSequence<TPriority>
+    public interface IFrameState<TOutput, TPriority> : IFrameState
+        where TOutput : IFrameSequence<TPriority>
     {
         public ConcurrentDictionary<PropertyInfo, object?> Values { get; }
-        public ConcurrentDictionary<PropertyInfo, object> Interpolators { get; }
-        public void SetInterpolator(Expression<Func<TTarget>> expression, IFrameInterpolator<TTarget, TOutput, TPriority> interpolator);
-        public bool TryGetInterpolator(Expression<Func<TTarget>> expression, out IFrameInterpolator<TTarget, TOutput, TPriority>? interpolator);
-        public void SetValue(Expression<Func<TTarget>> expression, object? value);
-        public bool TryGetValue(Expression<Func<TTarget>> expression, out object? value);
-        public IFrameState<TTarget, TOutput, TPriority> DeepCopy();
+        public ConcurrentDictionary<PropertyInfo, IValueInterpolator> Interpolators { get; }
+        public void SetInterpolator<T>(Expression<Func<T>> expression, IValueInterpolator interpolator);
+        public bool TryGetInterpolator<T>(Expression<Func<T>> expression, out IValueInterpolator? interpolator);
+        public void SetValue<T>(Expression<Func<T>> expression, object? value);
+        public bool TryGetValue<T>(Expression<Func<T>> expression, out object? value);
+        public IFrameState<TOutput, TPriority> DeepCopy();
+    }
+
+    public interface IFrameState
+    {
+
     }
 }

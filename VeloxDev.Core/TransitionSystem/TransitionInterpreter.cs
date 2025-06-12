@@ -2,7 +2,7 @@
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    public class TransitionInterpreter<TOutput, TPriority>() : ITransitionInterpreter<TPriority>
+    public class TransitionInterpreterBase<TOutput, TPriority>() : ITransitionInterpreter<TPriority>
         where TOutput : IFrameSequence<TPriority>
     {
         public FrameEventArgs Args { get; protected set; } = new();
