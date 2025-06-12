@@ -1,14 +1,13 @@
-﻿using System.Runtime.CompilerServices;
-using VeloxDev.Core.Interfaces.TransitionSystem;
+﻿using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    public abstract class TransitionSchedulerBase<TUpdator, TOutput, TPriority> : ITransitionScheduler<TOutput, TPriority>
-        where TUpdator : IFrameUpdator<TPriority>
+    public abstract class TransitionSchedulerBase<TTarget, TOutput, TPriority> : ITransitionScheduler<TTarget, TOutput, TPriority>
         where TOutput : IFrameSequence<TPriority>
     {
         public abstract void Execute(
-            IFrameInterpolator<TOutput, TPriority> interpolator,
+            IFrameInterpolator<TTarget, TOutput, TPriority> interpolator,
+            IFrameState<TTarget, TOutput, TPriority> state,
             ITransitionEffect<TPriority> effect);
 
         public abstract void Exit();

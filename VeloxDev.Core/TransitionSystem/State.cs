@@ -1,53 +1,128 @@
 ﻿using System.Collections.Concurrent;
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    public class StateBase<TOutput, TPriority>() : ICloneable
+    public class StateBase<TTarget, TOutput, TPriority>() : IFrameState<TTarget, TOutput, TPriority>, ICloneable
         where TOutput : IFrameSequence<TPriority>
     {
-        public ConcurrentDictionary<string, object?> Values { get; protected set; } = new();
-        public ConcurrentDictionary<string, IFrameInterpolator<TOutput, TPriority>> Interpolators { get; protected set; } = new();
-        public void SetInterpolator(string propertyName, IFrameInterpolator<TOutput, TPriority> value)
+        protected ConcurrentDictionary<PropertyInfo, object?> _values = [];
+        protected ConcurrentDictionary<PropertyInfo, object> _interpolators = [];
+
+        public virtual ConcurrentDictionary<PropertyInfo, object?> Values
         {
-            Interpolators.AddOrUpdate(propertyName, value, (key, old) => value);
+            get => _values;
+            protected set => _values = value;
         }
-        public void SetValue(string propertyName, object? value)
+        public virtual ConcurrentDictionary<PropertyInfo, object> Interpolators
         {
-            Values.AddOrUpdate(propertyName, value, (key, old) => value);
+            get => _interpolators;
+            protected set => _interpolators = value;
         }
-        public bool TryGetInterpolator(string propertyName, out IFrameInterpolator<TOutput, TPriority>? interpolator)
+
+        public virtual void SetInterpolator(Expression<Func<TTarget>> expression, IFrameInterpolator<TTarget, TOutput, TPriority> interpolator)
         {
-            if (Interpolators.TryGetValue(propertyName, out var value))
+            if (expression.Body is MemberExpression propertyExpr)
             {
-                interpolator = value;
+                var property = propertyExpr.Member as PropertyInfo;
+                if (property == null || !property.CanRead || !property.CanWrite)
+                {
+                    return;
+                }
+                else
+                {
+                    if (_interpolators.TryGetValue(property, out _))
+                    {
+                        _interpolators[property] = interpolator;
+                    }
+                    else
+                    {
+                        _interpolators.TryAdd(property, interpolator);
+                    }
+                }
+            }
+        }
+        public virtual void SetValue(Expression<Func<TTarget>> expression, object? value)
+        {
+            if (expression.Body is MemberExpression propertyExpr)
+            {
+                var property = propertyExpr.Member as PropertyInfo;
+                if (property == null || !property.CanRead || !property.CanWrite)
+                {
+                    return;
+                }
+                else
+                {
+                    if (_values.TryGetValue(property, out _))
+                    {
+                        _values[property] = value;
+                    }
+                    else
+                    {
+                        _values.TryAdd(property, value);
+                    }
+                }
+            }
+        }
+        public virtual bool TryGetInterpolator(Expression<Func<TTarget>> expression, out IFrameInterpolator<TTarget, TOutput, TPriority>? interpolator)
+        {
+            if (expression.Body is MemberExpression propertyExpr
+                && propertyExpr.Member is PropertyInfo property
+                && property is not null
+                && property.CanRead
+                && property.CanWrite
+                && _interpolators.TryGetValue(property, out var item))
+            {
+                interpolator = item as IFrameInterpolator<TTarget, TOutput, TPriority>;
                 return true;
             }
-            interpolator = null;
-            return false;
-        }
-        public bool TryGetValue(string propertyName, out object? value)
-        {
-            if (Interpolators.TryGetValue(propertyName, out var target))
+            else
             {
-                value = target;
+                interpolator = null;
+                return false;
+            }
+        }
+        public virtual bool TryGetValue(Expression<Func<TTarget>> expression, out object? value)
+        {
+            if (expression.Body is MemberExpression propertyExpr
+                && propertyExpr.Member is PropertyInfo property
+                && property is not null
+                && property.CanRead
+                && property.CanWrite
+                && _values.TryGetValue(property, out var item))
+            {
+                value = item;
                 return true;
             }
-            value = null;
-            return false;
+            else
+            {
+                value = null;
+                return false;
+            }
         }
-        public object Clone()
+
+        public virtual IFrameState<TTarget, TOutput, TPriority> DeepCopy()
         {
-            var newState = new StateBase<TOutput, TPriority>();
-            foreach (var kvp in Values)
+            var value = new StateBase<TTarget, TOutput, TPriority>();
+
+            foreach (var kvp in _values)
             {
-                newState.Values[kvp.Key] = kvp.Value;
+                value._values.TryAdd(kvp.Key, kvp.Value);
             }
-            foreach (var kvp in Interpolators)
+
+            foreach (var kvp in _interpolators)
             {
-                newState.Interpolators[kvp.Key] = kvp.Value;
+                value._interpolators.TryAdd(kvp.Key, kvp.Value);
             }
-            return newState;
+
+            return value;
+        }
+        public virtual object Clone()
+        {
+            return DeepCopy();
         }
     }
 }

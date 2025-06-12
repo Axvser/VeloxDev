@@ -2,8 +2,7 @@
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    public class TransitionInterpreter<TUpdator, TOutput, TPriority>() : ITransitionInterpreter<TPriority>
-        where TUpdator : IFrameUpdator<TPriority>
+    public class TransitionInterpreter<TOutput, TPriority>() : ITransitionInterpreter<TPriority>
         where TOutput : IFrameSequence<TPriority>
     {
         public FrameEventArgs Args { get; protected set; } = new();
@@ -13,7 +12,6 @@ namespace VeloxDev.Core.TransitionSystem
             IFrameSequence<TPriority> frameSequence,
             ITransitionEffect<TPriority> effect,
             bool isUIAccess,
-            IFrameUpdator<TPriority> updator,
             CancellationTokenSource cts)
         {
             var spans = GetSpans(frameSequence, effect);
@@ -28,14 +26,12 @@ namespace VeloxDev.Core.TransitionSystem
                         index > 0 && index < frameSequence.Count;
                         index++)
                     {
-                        await updator.Update(
+                        frameSequence.Update(
                             target,
-                            isUIAccess,
                             index,
-                            frameSequence,
-                            effect,
-                            spans[index],
-                            cts);
+                            isUIAccess,
+                            effect.Priority);
+                        await Task.Delay(spans[index], cts.Token);
                     }
 
                     if (effect.IsAutoReverse)
@@ -44,14 +40,12 @@ namespace VeloxDev.Core.TransitionSystem
                         index > -1 && index < frameSequence.Count;
                         index--)
                         {
-                            await updator.Update(
+                            frameSequence.Update(
                                 target,
-                                isUIAccess,
                                 index,
-                                frameSequence,
-                                effect,
-                                spans[index],
-                                cts);
+                                isUIAccess,
+                                effect.Priority);
+                            await Task.Delay(spans[index], cts.Token);
                         }
                     }
                 }

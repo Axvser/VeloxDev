@@ -7,7 +7,6 @@
             IFrameSequence<TPriority> frameSequence,
             ITransitionEffect<TPriority> effect,
             bool isUIAccess,
-            IFrameUpdator<TPriority> updator,
             CancellationTokenSource cts);
 
         public void Exit();
