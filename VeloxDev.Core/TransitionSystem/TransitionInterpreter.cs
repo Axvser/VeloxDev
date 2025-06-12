@@ -19,7 +19,7 @@ namespace VeloxDev.Core.TransitionSystem
             {
                 effect.StartInvoke(target, Args);
                 for (int loop = effect.LoopTime;
-                    loop > 0;
+                    loop > -1;
                     loop -= effect.LoopTime == int.MaxValue ? 0 : 1)
                 {
                     for (int index = 0;
@@ -58,6 +58,7 @@ namespace VeloxDev.Core.TransitionSystem
             finally
             {
                 effect.FinallyInvoke(target, Args);
+                Exit();
             }
         }
 

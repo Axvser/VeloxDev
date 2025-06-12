@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Windows;
 using System.Windows.Threading;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
@@ -10,11 +11,11 @@ namespace VeloxDev.WPF.TransitionSystem
         static LinearInterpolator()
         {
             Natives.TryAdd(typeof(double), new Double());
-            Natives.TryAdd(typeof(double), new Brush());
-            Natives.TryAdd(typeof(double), new Thickness());
-            Natives.TryAdd(typeof(double), new Point());
-            Natives.TryAdd(typeof(double), new CornerRadius());
-            Natives.TryAdd(typeof(double), new Transform());
+            Natives.TryAdd(typeof(System.Windows.Media.Brush), new Brush());
+            Natives.TryAdd(typeof(System.Windows.Thickness), new Thickness());
+            Natives.TryAdd(typeof(System.Windows.Point), new Point());
+            Natives.TryAdd(typeof(System.Windows.CornerRadius), new CornerRadius());
+            Natives.TryAdd(typeof(System.Windows.Media.Transform), new Transform());
         }
         public static ConcurrentDictionary<Type, IValueInterpolator> Natives { get; protected set; } = [];
         public static bool TryGetInterpolator(Type type, out IValueInterpolator? interpolator)
@@ -46,7 +47,7 @@ namespace VeloxDev.WPF.TransitionSystem
         {
             var output = new InterpolatorOutput();
             var type = target.GetType();
-            var count = (int)(effect.FPS / 1000d * effect.Duration.TotalMilliseconds);
+            var count = (int)(effect.FPS * effect.Duration.TotalSeconds);
             count = count > 0 ? count : 1;
             output.SetCount(count);
             foreach (var kvp in state.Values)
@@ -55,9 +56,19 @@ namespace VeloxDev.WPF.TransitionSystem
                 {
                     var currentValue = kvp.Key.GetValue(target);
                     var newValue = kvp.Value;
-                    if (interpolator != null)
+                    if (state.TryGetInterpolator(kvp.Key, out var item))
                     {
-                        output.AddFrameFrameSequence(kvp.Key, [.. interpolator.Interpolate(currentValue, newValue, count)]);
+                        if (item != null)
+                        {
+                            output.AddFrameFrameSequence(kvp.Key, item.Interpolate(currentValue, newValue, count));
+                        }
+                    }
+                    else
+                    {
+                        if (interpolator != null)
+                        {
+                            output.AddFrameFrameSequence(kvp.Key, interpolator.Interpolate(currentValue, newValue, count));
+                        }
                     }
                 }
             }

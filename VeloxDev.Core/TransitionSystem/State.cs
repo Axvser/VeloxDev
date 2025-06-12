@@ -23,7 +23,7 @@ namespace VeloxDev.Core.TransitionSystem
             protected set => _interpolators = value;
         }
 
-        public virtual void SetInterpolator<T>(Expression<Func<T>> expression, IValueInterpolator? interpolator)
+        public virtual void SetInterpolator<T>(Expression<Func<T, IValueInterpolator>> expression, IValueInterpolator interpolator)
         {
             if (expression.Body is MemberExpression propertyExpr)
             {
@@ -45,7 +45,7 @@ namespace VeloxDev.Core.TransitionSystem
                 }
             }
         }
-        public virtual void SetValue<T>(Expression<Func<T>> expression, object? value)
+        public virtual void SetValue<T>(Expression<Func<T, T?>> expression, T? value)
         {
             if (expression.Body is MemberExpression propertyExpr)
             {
@@ -67,7 +67,7 @@ namespace VeloxDev.Core.TransitionSystem
                 }
             }
         }
-        public virtual bool TryGetInterpolator<T>(Expression<Func<T>> expression, out IValueInterpolator? interpolator)
+        public virtual bool TryGetInterpolator<T>(Expression<Func<T, IValueInterpolator?>> expression, out IValueInterpolator? interpolator)
         {
             if (expression.Body is MemberExpression propertyExpr
                 && propertyExpr.Member is PropertyInfo property
@@ -85,7 +85,7 @@ namespace VeloxDev.Core.TransitionSystem
                 return false;
             }
         }
-        public virtual bool TryGetValue<T>(Expression<Func<T>> expression, out object? value)
+        public virtual bool TryGetValue<T>(Expression<Func<T, T?>> expression, out T? value)
         {
             if (expression.Body is MemberExpression propertyExpr
                 && propertyExpr.Member is PropertyInfo property
@@ -94,14 +94,59 @@ namespace VeloxDev.Core.TransitionSystem
                 && property.CanWrite
                 && _values.TryGetValue(property, out var item))
             {
-                value = item;
+                value = (T?)item;
                 return true;
             }
             else
             {
-                value = null;
+                value = default;
                 return false;
             }
+        }
+
+        public virtual void SetInterpolator(PropertyInfo propertyInfo, IValueInterpolator interpolator)
+        {
+            if (_interpolators.TryGetValue(propertyInfo, out _))
+            {
+                _interpolators[propertyInfo] = interpolator;
+            }
+            else
+            {
+                _interpolators.TryAdd(propertyInfo, interpolator);
+            }
+        }
+        public virtual void SetValue(PropertyInfo propertyInfo, object? value)
+        {
+            if (_values.TryGetValue(propertyInfo, out _))
+            {
+                _values[propertyInfo] = value;
+            }
+            else
+            {
+                _values.TryAdd(propertyInfo, value);
+            }
+        }
+        public virtual bool TryGetInterpolator(PropertyInfo propertyInfo, out IValueInterpolator? interpolator)
+        {
+            if (_interpolators.TryGetValue(propertyInfo, out var item))
+            {
+                interpolator = item;
+                return true;
+            }
+
+            interpolator = null;
+            return false;
+        }
+        public virtual bool TryGetValue(PropertyInfo propertyInfo, out object? value)
+        {
+            if (_values.TryGetValue(propertyInfo, out var item))
+            {
+                value = item;
+                return true;
+            }
+
+            value = null;
+            return false;
         }
 
         public virtual IFrameState<TOutput, TPriority> DeepCopy()

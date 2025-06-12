@@ -1,4 +1,5 @@
 ﻿using System.Windows.Media;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.WPF.Tools.SolidColor
 {
@@ -43,60 +44,33 @@ namespace VeloxDev.WPF.Tools.SolidColor
 
         public static RGB Empty { get; private set; } = new(0, 0, 0, 0);
 
-#if NET
         public int R
         {
             get => r;
-            set => r = Math.Clamp(value, 0, 255);
+            set => r = Clamp(value, 0, 255);
         }
         public int G
         {
             get => g;
-            set => g = Math.Clamp(value, 0, 255);
+            set => g = Clamp(value, 0, 255);
         }
         public int B
         {
             get => b;
-            set => b = Math.Clamp(value, 0, 255);
+            set => b = Clamp(value, 0, 255);
         }
         public int A
         {
             get => a;
-            set => a = Math.Clamp(value, 0, 255);
+            set => a = Clamp(value, 0, 255);
         }
-#elif NETFRAMEWORK
-        public int R
-        {
-            get => r;
-            set => r = value.Clamp(0, 255);
-        }
-        public int G
-        {
-            get => g;
-            set => g = value.Clamp(0, 255);
-        }
-        public int B
-        {
-            get => b;
-            set => b = value.Clamp(0, 255);
-        }
-        public int A
-        {
-            get => a;
-            set => a = value.Clamp(0, 255);
-        }
-#endif
 
         public double Opacity
         {
             get => (double)A / 255;
             set
             {
-#if NET
-                A = (int)(255 * Math.Clamp(value, 0, 1));
-#elif NETFRAMEWORK
-                A = (int)(255 * value.Clamp(0, 1));
-#endif
+                A = (int)(255 * Clamp(value, 0, 1));
             }
         }
 
@@ -140,13 +114,12 @@ namespace VeloxDev.WPF.Tools.SolidColor
                 throw new ArgumentException("Both current and target must be of type RGB");
             }
 
-            var result = new List<object?>();
-
-            if (steps == 0)
+            if (steps <= 1)
             {
-                result.Add(end);
-                return result;
+                return [end];
             }
+
+            var result = new List<object?>();
 
             for (int i = 0; i < steps; i++)
             {
@@ -158,7 +131,7 @@ namespace VeloxDev.WPF.Tools.SolidColor
                 result.Add(new RGB(r, g, b, a));
             }
 
-            if (result.Count > 0) result[result.Count - 1] = target;
+            if (result.Count > 0) result[~1] = target;
 
             return result;
         }
@@ -171,6 +144,21 @@ namespace VeloxDev.WPF.Tools.SolidColor
         public override int GetHashCode()
         {
             return HashCode.Combine(R, G, B, A);
+        }
+
+        private static double Clamp(double value, double minus, double max)
+        {
+            if (max < minus) throw new InvalidOperationException();
+            if (value < minus) return minus;
+            if (value > max) return max;
+            return value;
+        }
+        private static int Clamp(int value, int minus, int max)
+        {
+            if (max < minus) throw new InvalidOperationException();
+            if (value < minus) return minus;
+            if (value > max) return max;
+            return value;
         }
     }
 }

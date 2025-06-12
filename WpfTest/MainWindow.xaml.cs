@@ -1,14 +1,28 @@
 ﻿using System.Windows;
-using VeloxDev.WPF.SourceGeneratorMark;
+using System.Windows.Media;
+using VeloxDev.WPF.TransitionSystem;
 
 namespace WpfTest
 {
-    [MonoBehaviour(16)]
     public partial class MainWindow : Window
     {
-        partial void Update()
+        public MainWindow()
         {
-            MessageBox.Show("开始吧");
+            InitializeComponent();
+            var state = new State();
+            var effect = new TransitionEffect()
+            {
+                Duration = TimeSpan.FromSeconds(5),
+                LoopTime = 100
+            };
+            var scheduler = TransitionScheduler.FindOrCreate(this);
+            state.SetValue<MainWindow>(window => window.Background, Brushes.Red);
+            state.SetValue<MainWindow>(window => window.RenderTransform, Transform.Identity);
+            //foreach (var kvp in state.Values)
+            //{
+            //    MessageBox.Show($"{kvp.Key.Name} | {kvp.Value}");
+            //}
+            scheduler.Execute(new LinearInterpolator(), state, effect);
         }
     }
 }

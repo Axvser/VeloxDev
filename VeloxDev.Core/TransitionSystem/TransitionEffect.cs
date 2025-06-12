@@ -15,91 +15,91 @@ namespace VeloxDev.Core.TransitionSystem
         private WeakDelegate<EventHandler<FrameEventArgs>> _finally = new();
 
 #pragma warning disable CS8618
-        public TPriority Priority { get; set; }
+        public virtual TPriority Priority { get; set; }
 #pragma warning restore CS8618
-        public int FPS { get; set; }
-        public TimeSpan Duration { get; set; }
-        public bool IsAutoReverse { get; set; }
-        public int LoopTime { get; set; }
-        public double Acceleration { get; set; }
+        public virtual int FPS { get; set; } = 60;
+        public virtual TimeSpan Duration { get; set; } = TimeSpan.FromMilliseconds(0);
+        public virtual bool IsAutoReverse { get; set; } = false;
+        public virtual int LoopTime { get; set; } = 0;
+        public virtual double Acceleration { get; set; } = 0;
 
-        public event EventHandler<FrameEventArgs> Awaked
+        public virtual event EventHandler<FrameEventArgs> Awaked
         {
             add => _awaked.AddHandler(value);
             remove => _awaked.RemoveHandler(value);
         }
-        public event EventHandler<FrameEventArgs> Start
+        public virtual event EventHandler<FrameEventArgs> Start
         {
             add => _start.AddHandler(value);
             remove => _start.RemoveHandler(value);
         }
-        public event EventHandler<FrameEventArgs> Update
+        public virtual event EventHandler<FrameEventArgs> Update
         {
             add => _update.AddHandler(value);
             remove => _update.RemoveHandler(value);
         }
-        public event EventHandler<FrameEventArgs> LateUpdate
+        public virtual event EventHandler<FrameEventArgs> LateUpdate
         {
             add => _lateupdate.AddHandler(value);
             remove => _lateupdate.RemoveHandler(value);
         }
-        public event EventHandler<FrameEventArgs> Canceled
+        public virtual event EventHandler<FrameEventArgs> Canceled
         {
             add => _cancled.AddHandler(value);
             remove => _cancled.RemoveHandler(value);
         }
-        public event EventHandler<FrameEventArgs> Completed
+        public virtual event EventHandler<FrameEventArgs> Completed
         {
             add => _completed.AddHandler(value);
             remove => _completed.RemoveHandler(value);
         }
-        public event EventHandler<FrameEventArgs> Finally
+        public virtual event EventHandler<FrameEventArgs> Finally
         {
             add => _finally.AddHandler(value);
             remove => _finally.RemoveHandler(value);
         }
 
-        public void AwakeInvoke(object sender, FrameEventArgs e)
+        public virtual void AwakeInvoke(object sender, FrameEventArgs e)
         {
             var handlers = _awaked.GetInvocationList();
             handlers?.Invoke(sender, e);
         }
-        public void StartInvoke(object sender, FrameEventArgs e)
+        public virtual void StartInvoke(object sender, FrameEventArgs e)
         {
             var handlers = _start.GetInvocationList();
             handlers?.Invoke(sender, e);
         }
-        public void UpdateInvoke(object sender, FrameEventArgs e)
+        public virtual void UpdateInvoke(object sender, FrameEventArgs e)
         {
             var handlers = _update.GetInvocationList();
             handlers?.Invoke(sender, e);
         }
-        public void LateUpdateInvoke(object sender, FrameEventArgs e)
+        public virtual void LateUpdateInvoke(object sender, FrameEventArgs e)
         {
             var handlers = _lateupdate.GetInvocationList();
             handlers?.Invoke(sender, e);
         }
-        public void CompletedInvoke(object sender, FrameEventArgs e)
+        public virtual void CompletedInvoke(object sender, FrameEventArgs e)
         {
             var handlers = _completed.GetInvocationList();
             handlers?.Invoke(sender, e);
         }
-        public void CancledInvoke(object sender, FrameEventArgs e)
+        public virtual void CancledInvoke(object sender, FrameEventArgs e)
         {
             var handlers = _cancled.GetInvocationList();
             handlers?.Invoke(sender, e);
         }
-        public void FinallyInvoke(object sender, FrameEventArgs e)
+        public virtual void FinallyInvoke(object sender, FrameEventArgs e)
         {
             var handlers = _finally.GetInvocationList();
             handlers?.Invoke(sender, e);
         }
 
-        public object Clone()
+        public virtual object Clone()
         {
             return DeepCopy();
         }
-        public ITransitionEffect<TPriority> DeepCopy()
+        public virtual ITransitionEffect<TPriority> DeepCopy()
         {
             var copy = new TransitionEffectBase<TPriority>
             {
