@@ -23,9 +23,7 @@ namespace VeloxDev.Core.TransitionSystem
                     loop <= effect.LoopTime || foreverloop;
                     loop += foreverloop ? 0 : 1)
                 {
-                    for (int index = 0;
-                        index > 0 && index < frameSequence.Count;
-                        index++)
+                    for (int index = 0; index < frameSequence.Count; index++)
                     {
                         effect.InvokeUpdate(target, Args);
                         frameSequence.Update(
@@ -39,9 +37,7 @@ namespace VeloxDev.Core.TransitionSystem
 
                     if (effect.IsAutoReverse)
                     {
-                        for (int index = frameSequence.Count - 1;
-                        index > -1 && index < frameSequence.Count;
-                        index--)
+                        for (int index = frameSequence.Count - 1; index >= 0; index--)
                         {
                             effect.InvokeUpdate(target, Args);
                             frameSequence.Update(
