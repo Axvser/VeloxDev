@@ -4,21 +4,18 @@
 		<NoWarn>1573</NoWarn>
 		<NoWarn>1591</NoWarn>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
-		<TargetFrameworks>netstandard2.0;netframework4.6.1;netcoreapp3.0;net5.0</TargetFrameworks>
+		<TargetFrameworks>netstandard2.0;netframework4.6.1;net5.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core</Title>
-		<Version>1.0.0</Version>
+		<Version>1.0.30-beta</Version>
 		<Authors>Axvser</Authors>
 		<Description>The Core of VeloxDev. Shared those components that can optimize the development experience of WPF/Avalonia/……</Description>
 		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<RepositoryUrl>https://github.com/Axvser/VeloxDev</RepositoryUrl>
-		<RepositoryType>git</RepositoryType>
-		<PackageProjectUrl>https://www.nuget.org/packages/VeloxDev.Core/</PackageProjectUrl>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -26,7 +23,10 @@
 	    <Pack>True</Pack>
 	    <PackagePath>\</PackagePath>
 	  </None>
-	  <None Include="..\README.md">
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="README.md">
 	    <Pack>True</Pack>
 	    <PackagePath>\</PackagePath>
 	  </None>

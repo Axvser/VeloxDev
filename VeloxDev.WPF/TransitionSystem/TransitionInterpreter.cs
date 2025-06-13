@@ -3,7 +3,7 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.WPF.TransitionSystem
 {
-    public class TransitionInterpreter : TransitionInterpreterBase<InterpolatorOutput, DispatcherPriority>
+    public class TransitionInterpreter() : TransitionInterpreterCore<InterpolatorOutput, DispatcherPriority>
     {
         
     }

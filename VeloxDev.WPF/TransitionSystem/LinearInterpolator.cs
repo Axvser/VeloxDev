@@ -6,7 +6,7 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.WPF.TransitionSystem
 {
-    public class LinearInterpolator : LinearInterpolatorBase<InterpolatorOutput, DispatcherPriority>
+    public class LinearInterpolator : InterpolatorCore<InterpolatorOutput, DispatcherPriority>
     {
         static LinearInterpolator()
         {

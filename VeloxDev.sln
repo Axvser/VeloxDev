@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AvaloniaTest.Browser", "Ava
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AvaloniaTest.Desktop", "AvaloniaTest.Desktop\AvaloniaTest.Desktop.csproj", "{C8BD8A83-43D1-023B-C483-C17C3B61C70F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeloxDev.Avalonia", "VeloxDev.Avalonia\VeloxDev.Avalonia.csproj", "{54C9AFD2-1FE3-4D1F-B2EF-212AF2A90F36}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -63,6 +65,10 @@ Global
 		{C8BD8A83-43D1-023B-C483-C17C3B61C70F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C8BD8A83-43D1-023B-C483-C17C3B61C70F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C8BD8A83-43D1-023B-C483-C17C3B61C70F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{54C9AFD2-1FE3-4D1F-B2EF-212AF2A90F36}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{54C9AFD2-1FE3-4D1F-B2EF-212AF2A90F36}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{54C9AFD2-1FE3-4D1F-B2EF-212AF2A90F36}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{54C9AFD2-1FE3-4D1F-B2EF-212AF2A90F36}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -77,6 +83,7 @@ Global
 		{939EEDB4-BFDA-CBC7-EA2C-E2253BD47DC1} = {CA367EB3-C0E2-404A-BD82-39CB118528DF}
 		{91588418-6232-3A1D-2C46-0DAEEA1B6B7E} = {CA367EB3-C0E2-404A-BD82-39CB118528DF}
 		{C8BD8A83-43D1-023B-C483-C17C3B61C70F} = {CA367EB3-C0E2-404A-BD82-39CB118528DF}
+		{54C9AFD2-1FE3-4D1F-B2EF-212AF2A90F36} = {E66A6BC7-F8E2-461F-8BE0-D35A7479B3BC}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BB798447-5A6A-4215-84F8-A0A86077D0EC}

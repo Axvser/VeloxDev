@@ -3,16 +3,23 @@ using VeloxDev.Core.WeakTypes;
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    public class TransitionEffectBase<TPriority>() : ITransitionEffect<TPriority>
+    /// <summary>
+    /// <para>---</para>
+    /// ✨ ⌈ 核心 ⌋ 过渡解释器
+    /// <para>解释 : </para>
+    /// <para>在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于描述过渡效果的细节</para>
+    /// </summary>
+    /// <typeparam name="TPriority">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
+    public class TransitionEffectCore<TPriority> : ITransitionEffect<TPriority>
         where TPriority : Enum
     {
-        private WeakDelegate<EventHandler<FrameEventArgs>> _awaked = new();
-        private WeakDelegate<EventHandler<FrameEventArgs>> _start = new();
-        private WeakDelegate<EventHandler<FrameEventArgs>> _update = new();
-        private WeakDelegate<EventHandler<FrameEventArgs>> _lateupdate = new();
-        private WeakDelegate<EventHandler<FrameEventArgs>> _cancled = new();
-        private WeakDelegate<EventHandler<FrameEventArgs>> _completed = new();
-        private WeakDelegate<EventHandler<FrameEventArgs>> _finally = new();
+        protected WeakDelegate<EventHandler<FrameEventArgs>> _awaked = new();
+        protected WeakDelegate<EventHandler<FrameEventArgs>> _start = new();
+        protected WeakDelegate<EventHandler<FrameEventArgs>> _update = new();
+        protected WeakDelegate<EventHandler<FrameEventArgs>> _lateupdate = new();
+        protected WeakDelegate<EventHandler<FrameEventArgs>> _cancled = new();
+        protected WeakDelegate<EventHandler<FrameEventArgs>> _completed = new();
+        protected WeakDelegate<EventHandler<FrameEventArgs>> _finally = new();
 
 #pragma warning disable CS8618
         public virtual TPriority Priority { get; set; }
@@ -94,7 +101,7 @@ namespace VeloxDev.Core.TransitionSystem
         }
         public virtual ITransitionEffect<TPriority> DeepCopy()
         {
-            var copy = new TransitionEffectBase<TPriority>
+            var copy = new TransitionEffectCore<TPriority>
             {
                 _awaked = _awaked.DeepCopy(),
                 _start = _start.DeepCopy(),

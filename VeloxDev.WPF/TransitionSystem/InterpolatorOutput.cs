@@ -5,7 +5,7 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.WPF.TransitionSystem
 {
-    public class InterpolatorOutput : InterpolatorOutputBase<DispatcherPriority>
+    public class InterpolatorOutput : InterpolatorOutputCore<DispatcherPriority>
     {
         public override void Update(object target, int frameIndex, bool isUIAccess, DispatcherPriority priority)
         {

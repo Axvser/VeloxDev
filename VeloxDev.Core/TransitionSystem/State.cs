@@ -5,7 +5,17 @@ using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    public class StateBase<TOutput, TPriority>() : IFrameState<TOutput, TPriority>, ICloneable
+    /// <summary>
+    /// <para>---</para>
+    /// ✨ ⌈ 核心 ⌋ 状态记录器
+    /// <para>解释 : </para>
+    /// <para>在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于记录一个实例在某一时刻的状态，以及，如果要加载指向此状态的过渡，对于每个属性是否采取自定义的插值器而非系统默认插值器</para>
+    /// </summary>
+    /// <typeparam name="TOutput">帧计算完成后，需要一个统一的结构用于存储结果并按索引更新帧</typeparam>
+    /// <typeparam name="TPriority">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
+    public class StateCore<
+        TOutput, 
+        TPriority> : IFrameState<TOutput, TPriority>, ICloneable
         where TOutput : IFrameSequence<TPriority>
     {
         protected ConcurrentDictionary<PropertyInfo, object?> _values = [];
@@ -150,7 +160,7 @@ namespace VeloxDev.Core.TransitionSystem
 
         public virtual IFrameState<TOutput, TPriority> DeepCopy()
         {
-            var value = new StateBase<TOutput, TPriority>();
+            var value = new StateCore<TOutput, TPriority>();
 
             foreach (var kvp in _values)
             {

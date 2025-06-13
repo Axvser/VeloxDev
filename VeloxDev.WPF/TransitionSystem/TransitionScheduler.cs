@@ -30,7 +30,7 @@ namespace VeloxDev.WPF.TransitionSystem
             {
                 var scheduler = new TransitionScheduler<TTarget>()
                 {
-                    targetref = new WeakReference<TTarget>(source)
+                    TargetRef = new WeakReference<TTarget>(source)
                 };
                 if (CanSTAThread)
                 {
@@ -41,37 +41,13 @@ namespace VeloxDev.WPF.TransitionSystem
         }
     }
 
-    public class TransitionScheduler<TTarget> : TransitionSchedulerBase<TTarget, InterpolatorOutput, DispatcherPriority>
+    public class TransitionScheduler<TTarget> : TransitionSchedulerCore<TTarget, InterpolatorOutput, DispatcherPriority, UIThreadInspector, TransitionInterpreter>
         where TTarget : class
     {
-        internal TransitionScheduler() { }
-
-        internal WeakReference<TTarget>? targetref = null;
-        internal CancellationTokenSource? cts = null;
-        internal ITransitionInterpreter? interpreter = null;
-
-        public override async void Execute(IFrameInterpolator<InterpolatorOutput, DispatcherPriority> interpolator, IFrameState<InterpolatorOutput, DispatcherPriority> state, ITransitionEffect<DispatcherPriority> effect)
+        public WeakReference<TTarget>? TargetRef
         {
-            Exit();
-            if (targetref is null || !targetref.TryGetTarget(out var target))
-            {
-                targetref = null;
-                return;
-            }
-            var newCts = new CancellationTokenSource();
-            var newInterpreter = new TransitionInterpreter();
-            cts = newCts;
-            interpreter = newInterpreter;
-            effect.InvokeAwake(target, newInterpreter.Args);
-            var frames = interpolator.Interpolate(target, state, effect);
-            await newInterpreter.Execute(target, frames, effect, Application.Current.Dispatcher.CheckAccess(), newCts);
-        }
-
-        public override void Exit()
-        {
-            Interlocked.Exchange(ref interpreter, null);
-            var oldCts = Interlocked.Exchange(ref cts, null);
-            oldCts?.Cancel();
+            get => targetref;
+            internal set => targetref = value;
         }
     }
 }

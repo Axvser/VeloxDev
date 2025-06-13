@@ -14,6 +14,6 @@
 
     public interface ITransitionInterpreter
     {
-
+        public FrameEventArgs Args { get; set; }
     }
 }

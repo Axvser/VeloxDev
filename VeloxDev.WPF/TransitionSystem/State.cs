@@ -3,7 +3,7 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.WPF.TransitionSystem
 {
-    public class State() : StateBase<InterpolatorOutput, DispatcherPriority>
+    public class State() : StateCore<InterpolatorOutput, DispatcherPriority>
     {
 
     }

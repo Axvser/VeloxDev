@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.WPF.TransitionSystem;
 
 namespace WpfTest
@@ -18,14 +19,15 @@ namespace WpfTest
             var effect = new TransitionEffect()
             {
                 Duration = TimeSpan.FromSeconds(1),
-                LoopTime = 1000,
-                IsAutoReverse = true,
+                LoopTime = 0,
+                IsAutoReverse = false,
             };
             var scheduler = TransitionScheduler.FindOrCreate(this);
             state.SetValue<MainWindow, Brush>(window => window.Background, Brushes.Red);
             state.SetValue<MainWindow, Transform>(window => window.RenderTransform, Transform.Identity);
             state.SetValue<MainWindow, double>(window => window.Opacity, 0.4d);
             var li = new LinearInterpolator();
+
             scheduler.Execute(li, state, effect);
         }
     }
