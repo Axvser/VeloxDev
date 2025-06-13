@@ -11,7 +11,6 @@ namespace VeloxDev.Core.TransitionSystem
     /// </summary>
     /// <typeparam name="TPriority">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
     public class TransitionEffectCore<TPriority> : ITransitionEffect<TPriority>
-        where TPriority : Enum
     {
         protected WeakDelegate<EventHandler<FrameEventArgs>> _awaked = new();
         protected WeakDelegate<EventHandler<FrameEventArgs>> _start = new();
