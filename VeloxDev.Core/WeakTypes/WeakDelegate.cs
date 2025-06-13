@@ -18,7 +18,7 @@
             {
                 if (handler == null) return;
                 _handlers.Add(new WeakReference<Delegate>(handler));
-                _combinedDelegate = null;
+                _combinedDelegate = GetInvocationList();
             }
         }
 
@@ -31,7 +31,7 @@
                     if (_handlers[i].TryGetTarget(out var target) && target == handler)
                     {
                         _handlers.RemoveAt(i);
-                        _combinedDelegate = null;
+                        _combinedDelegate = GetInvocationList();
                     }
                 }
             }
@@ -74,13 +74,7 @@
         {
             lock (_lock)
             {
-                foreach (var weakref in _handlers)
-                {
-                    if (weakref.TryGetTarget(out var del))
-                    {
-                        del.DynamicInvoke(objects);
-                    }
-                }
+                _combinedDelegate?.DynamicInvoke(objects);
             }
         }
 

@@ -6,7 +6,7 @@ namespace VeloxDev.Core.TransitionSystem
         where TTarget : class
         where TOutput : IFrameSequence<TPriority>
     {
-        public abstract Task Execute(
+        public abstract void Execute(
             IFrameInterpolator<TOutput, TPriority> interpolator,
             IFrameState<TOutput, TPriority> state,
             ITransitionEffect<TPriority> effect);

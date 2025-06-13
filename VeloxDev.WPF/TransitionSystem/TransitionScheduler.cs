@@ -41,7 +41,8 @@ namespace VeloxDev.WPF.TransitionSystem
         }
     }
 
-    public class TransitionScheduler<TTarget> : TransitionSchedulerBase<TTarget, InterpolatorOutput, DispatcherPriority> where TTarget : class
+    public class TransitionScheduler<TTarget> : TransitionSchedulerBase<TTarget, InterpolatorOutput, DispatcherPriority>
+        where TTarget : class
     {
         internal TransitionScheduler() { }
 
@@ -57,11 +58,12 @@ namespace VeloxDev.WPF.TransitionSystem
                 targetref = null;
                 return;
             }
-            var frames = interpolator.Interpolate(target, state, effect);
             var newCts = new CancellationTokenSource();
             var newInterpreter = new TransitionInterpreter();
             cts = newCts;
             interpreter = newInterpreter;
+            effect.InvokeAwake(target, newInterpreter.Args);
+            var frames = interpolator.Interpolate(target, state, effect);
             await newInterpreter.Execute(target, frames, effect, Application.Current.Dispatcher.CheckAccess(), newCts);
         }
 

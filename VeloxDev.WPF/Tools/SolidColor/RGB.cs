@@ -131,7 +131,7 @@ namespace VeloxDev.WPF.Tools.SolidColor
                 result.Add(new RGB(r, g, b, a));
             }
 
-            if (result.Count > 0) result[~1] = target;
+            if (result.Count > 0) result[~-1] = target;
 
             return result;
         }

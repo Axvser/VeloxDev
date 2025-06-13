@@ -22,13 +22,13 @@
         public event EventHandler<FrameEventArgs> Completed;
         public event EventHandler<FrameEventArgs> Finally;
 
-        public void AwakeInvoke(object sender, FrameEventArgs e);
-        public void StartInvoke(object sender, FrameEventArgs e);
-        public void UpdateInvoke(object sender, FrameEventArgs e);
-        public void LateUpdateInvoke(object sender, FrameEventArgs e);
-        public void CompletedInvoke(object sender, FrameEventArgs e);
-        public void CancledInvoke(object sender, FrameEventArgs e);
-        public void FinallyInvoke(object sender, FrameEventArgs e);
+        public void InvokeAwake(object sender, FrameEventArgs e);
+        public void InvokeStart(object sender, FrameEventArgs e);
+        public void InvokeUpdate(object sender, FrameEventArgs e);
+        public void InvokeLateUpdate(object sender, FrameEventArgs e);
+        public void InvokeCompleted(object sender, FrameEventArgs e);
+        public void InvokeCancled(object sender, FrameEventArgs e);
+        public void InvokeFinally(object sender, FrameEventArgs e);
 
         public ITransitionEffect<TPriority> DeepCopy();
     }

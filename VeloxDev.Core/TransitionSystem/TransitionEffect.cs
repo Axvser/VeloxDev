@@ -59,40 +59,33 @@ namespace VeloxDev.Core.TransitionSystem
             remove => _finally.RemoveHandler(value);
         }
 
-        public virtual void AwakeInvoke(object sender, FrameEventArgs e)
+        public virtual void InvokeAwake(object sender, FrameEventArgs e)
         {
-            var handlers = _awaked.GetInvocationList();
-            handlers?.Invoke(sender, e);
+            _awaked.Invoke([sender, e]);
         }
-        public virtual void StartInvoke(object sender, FrameEventArgs e)
+        public virtual void InvokeStart(object sender, FrameEventArgs e)
         {
-            var handlers = _start.GetInvocationList();
-            handlers?.Invoke(sender, e);
+            _start.Invoke([sender, e]);
         }
-        public virtual void UpdateInvoke(object sender, FrameEventArgs e)
+        public virtual void InvokeUpdate(object sender, FrameEventArgs e)
         {
-            var handlers = _update.GetInvocationList();
-            handlers?.Invoke(sender, e);
+            _update.Invoke([sender, e]);
         }
-        public virtual void LateUpdateInvoke(object sender, FrameEventArgs e)
+        public virtual void InvokeLateUpdate(object sender, FrameEventArgs e)
         {
-            var handlers = _lateupdate.GetInvocationList();
-            handlers?.Invoke(sender, e);
+            _lateupdate.Invoke([sender, e]);
         }
-        public virtual void CompletedInvoke(object sender, FrameEventArgs e)
+        public virtual void InvokeCompleted(object sender, FrameEventArgs e)
         {
-            var handlers = _completed.GetInvocationList();
-            handlers?.Invoke(sender, e);
+            _completed.Invoke([sender, e]);
         }
-        public virtual void CancledInvoke(object sender, FrameEventArgs e)
+        public virtual void InvokeCancled(object sender, FrameEventArgs e)
         {
-            var handlers = _cancled.GetInvocationList();
-            handlers?.Invoke(sender, e);
+            _cancled.Invoke([sender, e]);
         }
-        public virtual void FinallyInvoke(object sender, FrameEventArgs e)
+        public virtual void InvokeFinally(object sender, FrameEventArgs e)
         {
-            var handlers = _finally.GetInvocationList();
-            handlers?.Invoke(sender, e);
+            _finally.Invoke([sender, e]);
         }
 
         public virtual object Clone()

@@ -46,13 +46,12 @@ namespace VeloxDev.WPF.TransitionSystem
         public override InterpolatorOutput Interpolate(object target, IFrameState<InterpolatorOutput, DispatcherPriority> state, ITransitionEffect<DispatcherPriority> effect)
         {
             var output = new InterpolatorOutput();
-            var type = target.GetType();
             var count = (int)(effect.FPS * effect.Duration.TotalSeconds);
             count = count > 0 ? count : 1;
             output.SetCount(count);
             foreach (var kvp in state.Values)
             {
-                if (TryGetInterpolator(type, out var interpolator))
+                if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator))
                 {
                     var currentValue = kvp.Key.GetValue(target);
                     var newValue = kvp.Value;

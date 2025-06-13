@@ -14,23 +14,26 @@ namespace VeloxDev.Core.TransitionSystem
             bool isUIAccess,
             CancellationTokenSource cts)
         {
-            var spans = GetSpans(frameSequence, effect);
+            var spans = GetAccDeltaTime(effect, frameSequence.Count);
+            var foreverloop = effect.LoopTime == int.MaxValue;
             try
             {
-                effect.StartInvoke(target, Args);
-                for (int loop = effect.LoopTime;
-                    loop > -1;
-                    loop -= effect.LoopTime == int.MaxValue ? 0 : 1)
+                effect.InvokeStart(target, Args);
+                for (int loop = 0;
+                    loop <= effect.LoopTime || foreverloop;
+                    loop += foreverloop ? 0 : 1)
                 {
                     for (int index = 0;
                         index > 0 && index < frameSequence.Count;
                         index++)
                     {
+                        effect.InvokeUpdate(target, Args);
                         frameSequence.Update(
                             target,
                             index,
                             isUIAccess,
                             effect.Priority);
+                        effect.InvokeLateUpdate(target, Args);
                         await Task.Delay(spans[index], cts.Token);
                     }
 
@@ -40,24 +43,26 @@ namespace VeloxDev.Core.TransitionSystem
                         index > -1 && index < frameSequence.Count;
                         index--)
                         {
+                            effect.InvokeUpdate(target, Args);
                             frameSequence.Update(
                                 target,
                                 index,
                                 isUIAccess,
                                 effect.Priority);
+                            effect.InvokeLateUpdate(target, Args);
                             await Task.Delay(spans[index], cts.Token);
                         }
                     }
                 }
-                effect.CompletedInvoke(target, Args);
+                effect.InvokeCompleted(target, Args);
             }
             catch
             {
-                effect.CancledInvoke(target, Args);
+                effect.InvokeCancled(target, Args);
             }
             finally
             {
-                effect.FinallyInvoke(target, Args);
+                effect.InvokeFinally(target, Args);
                 Exit();
             }
         }
@@ -67,22 +72,25 @@ namespace VeloxDev.Core.TransitionSystem
             Dispose();
         }
 
-        public static List<int> GetSpans(IFrameSequence<TPriority> frameSequence, ITransitionEffect<TPriority> effect)
+        private static List<int> GetAccDeltaTime(
+            ITransitionEffect<TPriority> effect,
+            int steps)
         {
-            List<int> spans = [];
-            var span = (int)(1000d / effect.FPS);
-
-            for (int i = 0; i < frameSequence.Count; i++)
+            List<int> result = [];
+            var standardDeltaTime = 1000d / effect.FPS;
+            double acc;
+            if (effect.Acceleration > 1) acc = 1;
+            else if (effect.Acceleration < -1) acc = -1;
+            else acc = effect.Acceleration;
+            var start = standardDeltaTime * (1 + acc);
+            var end = standardDeltaTime * (1 - acc);
+            var delta = end - start;
+            for (int i = 0; i < steps; i++)
             {
-                spans.Add(span + GetSpanOffset(frameSequence.Count, span, effect.Acceleration, i));
+                var t = (double)(i + 1) / steps;
+                result.Add((int)(start + t * delta));
             }
-
-            return spans;
-        }
-        public static int GetSpanOffset(int count, double span, double acc, int index)
-        {
-            if (acc == 0 || count == 0) return 0;
-            return (int)(index / count * span);
+            return result;
         }
 
         public void Dispose()

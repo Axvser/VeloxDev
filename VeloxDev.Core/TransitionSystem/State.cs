@@ -1,7 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
@@ -23,7 +22,7 @@ namespace VeloxDev.Core.TransitionSystem
             protected set => _interpolators = value;
         }
 
-        public virtual void SetInterpolator<T>(Expression<Func<T, IValueInterpolator>> expression, IValueInterpolator interpolator)
+        public virtual void SetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, IValueInterpolator interpolator)
         {
             if (expression.Body is MemberExpression propertyExpr)
             {
@@ -45,7 +44,7 @@ namespace VeloxDev.Core.TransitionSystem
                 }
             }
         }
-        public virtual void SetValue<T>(Expression<Func<T, T?>> expression, T? value)
+        public virtual void SetValue<TSource, TValue>(Expression<Func<TSource, TValue>> expression, TValue? value)
         {
             if (expression.Body is MemberExpression propertyExpr)
             {
@@ -67,7 +66,7 @@ namespace VeloxDev.Core.TransitionSystem
                 }
             }
         }
-        public virtual bool TryGetInterpolator<T>(Expression<Func<T, IValueInterpolator?>> expression, out IValueInterpolator? interpolator)
+        public virtual bool TryGetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, out IValueInterpolator? interpolator)
         {
             if (expression.Body is MemberExpression propertyExpr
                 && propertyExpr.Member is PropertyInfo property
@@ -85,7 +84,7 @@ namespace VeloxDev.Core.TransitionSystem
                 return false;
             }
         }
-        public virtual bool TryGetValue<T>(Expression<Func<T, T?>> expression, out T? value)
+        public virtual bool TryGetValue<TSource, TValue>(Expression<Func<TSource, TValue>> expression, out TValue? value)
         {
             if (expression.Body is MemberExpression propertyExpr
                 && propertyExpr.Member is PropertyInfo property
@@ -94,7 +93,7 @@ namespace VeloxDev.Core.TransitionSystem
                 && property.CanWrite
                 && _values.TryGetValue(property, out var item))
             {
-                value = (T?)item;
+                value = (TValue?)item;
                 return true;
             }
             else
