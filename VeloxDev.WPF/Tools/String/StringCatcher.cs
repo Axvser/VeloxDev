@@ -258,7 +258,7 @@ namespace VeloxDev.WPF.Tools.String
                     int start = lastIndex;
                     while (start > 0 && IsChineseChar(chunk[start - 1]))
                         start--;
-                    _ = leftover.Append(chunk.AsSpan(start).ToString());
+                    _ = leftover.Append(chunk.Substring(start));
                 }
             }
 

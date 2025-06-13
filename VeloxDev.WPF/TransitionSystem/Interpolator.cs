@@ -6,9 +6,9 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.WPF.TransitionSystem
 {
-    public class LinearInterpolator : InterpolatorCore<InterpolatorOutput, DispatcherPriority>
+    public class Interpolator : InterpolatorCore<InterpolatorOutput, DispatcherPriority>
     {
-        static LinearInterpolator()
+        static Interpolator()
         {
             Natives.TryAdd(typeof(double), new Double());
             Natives.TryAdd(typeof(System.Windows.Media.Brush), new Brush());

@@ -20,18 +20,15 @@ namespace WpfTest
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            var state = new State();
-            var effect = new TransitionEffect()
-            {
-                Duration = TimeSpan.FromSeconds(1),
-                LoopTime = 0,
-                IsAutoReverse = false,
-            };
-            var scheduler = TransitionScheduler.FindOrCreate(this);
-            state.SetValue<MainWindow, Brush>(window => window.Background, Brushes.Cyan);
-            var li = new LinearInterpolator();
-
-            scheduler.Execute(li, state, effect);
+            Transition.Create(this)// 等待 5s 后执行第一段动画
+                .Property(x => x.Background, Brushes.Red)
+                .Property(x => x.Opacity, 0.5d)
+                .Effect(TransitionEffects.Theme)
+                .Then() // 等待 3s 后执行下一段动画
+                .Property(x => x.Background, Brushes.Cyan)
+                .Property(x => x.Opacity, 1d)
+                .Effect(TransitionEffects.Theme)
+                .Start();
         }
     }
 }
