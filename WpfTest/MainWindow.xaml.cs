@@ -17,20 +17,9 @@ namespace WpfTest
             var state = new State();
             var effect = new TransitionEffect()
             {
-                Duration = TimeSpan.FromSeconds(50),
-                LoopTime = 1000
-            };
-            effect.Start += (s, e) =>
-            {
-                MessageBox.Show("开始");
-            };
-            effect.Update += (s, e) =>
-            {
-                MessageBox.Show("一帧");
-            };
-            effect.Finally += (s, e) =>
-            {
-                MessageBox.Show("动画已结束");
+                Duration = TimeSpan.FromSeconds(1),
+                LoopTime = 1000,
+                IsAutoReverse = true,
             };
             var scheduler = TransitionScheduler.FindOrCreate(this);
             state.SetValue<MainWindow, Brush>(window => window.Background, Brushes.Red);
@@ -38,8 +27,6 @@ namespace WpfTest
             state.SetValue<MainWindow, double>(window => window.Opacity, 0.4d);
             var li = new LinearInterpolator();
             scheduler.Execute(li, state, effect);
-            //var sequnce = li.Interpolate(this, state, effect);
-            //sequnce.Update(this, 59, true, DispatcherPriority.Render);
         }
     }
 }

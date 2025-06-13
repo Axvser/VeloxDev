@@ -3,23 +3,6 @@ using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.WPF.Tools.SolidColor
 {
-    /// <summary>
-    /// 🖌️ > Use reference types to represent colors
-    /// <para>Core</para>
-    /// <para>- <see cref="R"/> → Red</para>
-    /// <para>- <see cref="G"/> → Green</para>
-    /// <para>- <see cref="B"/> → Blue</para>
-    /// <para>- <see cref="A"/> → [ Int number ] representation of the Alpha</para>
-    /// <para>- <see cref="Opacity"/> → [ Floating-point number ] representation of the Alpha</para>
-    /// <para>- <see cref="Brush"/> → Converted to Brush</para>
-    /// <para>- <see cref="SolidColorBrush"/> → Converted to SolidColorBrush</para>
-    /// <para>- <see cref="Color"/> → Converted to Color</para>
-    /// <para>Helper</para>
-    /// <para>- <see cref="FromBrush(System.Windows.Media.Brush)"/></para>
-    /// <para>- <see cref="FromColor(System.Windows.Media.Color)"/></para>
-    /// <para>- <see cref="FromString(string)"/></para>
-    /// <para>- <see cref="Interpolate"/></para>
-    /// </summary>
     public class RGB : ICloneable, IInterpolable
     {
         public RGB() { }
@@ -114,7 +97,7 @@ namespace VeloxDev.WPF.Tools.SolidColor
                 throw new ArgumentException("Both current and target must be of type RGB");
             }
 
-            if (steps <= 1)
+            if (steps == 1)
             {
                 return [end];
             }
@@ -131,7 +114,8 @@ namespace VeloxDev.WPF.Tools.SolidColor
                 result.Add(new RGB(r, g, b, a));
             }
 
-            if (result.Count > 0) result[~-1] = target;
+            result[0] = start;
+            result[steps - 1] = end;
 
             return result;
         }

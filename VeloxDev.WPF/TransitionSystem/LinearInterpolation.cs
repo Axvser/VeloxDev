@@ -10,23 +10,21 @@ namespace VeloxDev.WPF.TransitionSystem
         {
             var d1 = (double)(start ?? 0);
             var d2 = (double)(end ?? d1);
+            if (steps == 1)
+            {
+                return [d2];
+            }
 
             List<object?> result = new(steps);
 
             var delta = d2 - d1;
-
-            if (steps == 0)
-            {
-                result.Add(end);
-                return result;
-            }
 
             for (var i = 0; i < steps; i++)
             {
                 var t = (double)(i + 1) / steps;
                 result.Add(d1 + t * delta);
             }
-            if (steps > 1) result[0] = start;
+            result[0] = start;
             result[steps - 1] = end;
 
             return result;
@@ -35,14 +33,12 @@ namespace VeloxDev.WPF.TransitionSystem
         {
             var matrix1 = (Transform)(start ?? Transform.Identity);
             var matrix2 = (Transform)(end ?? matrix1);
+            if (steps == 1)
+            {
+                return [matrix2];
+            }
 
             List<object?> result = new(steps);
-
-            if (steps == 0)
-            {
-                result.Add(end);
-                return result;
-            }
 
             for (int i = 0; i < steps; i++)
             {
@@ -59,7 +55,7 @@ namespace VeloxDev.WPF.TransitionSystem
                 var transform = Transform.Parse(interpolatedMatrixStr);
                 result.Add(transform);
             }
-            if (steps > 1) result[0] = start;
+            result[0] = start;
             result[steps - 1] = end;
 
             return result;
@@ -68,14 +64,12 @@ namespace VeloxDev.WPF.TransitionSystem
         {
             var point1 = (Point)(start ?? new Point(0, 0));
             var point2 = (Point)(end ?? point1);
+            if (steps == 1)
+            {
+                return [point2];
+            }
 
             List<object?> result = new(steps);
-
-            if (steps == 0)
-            {
-                result.Add(end);
-                return result;
-            }
 
             for (var i = 0; i < steps; i++)
             {
@@ -84,7 +78,7 @@ namespace VeloxDev.WPF.TransitionSystem
                 var y = point1.Y + t * (point2.Y - point1.Y);
                 result.Add(new Point(x, y));
             }
-            if (steps > 1) result[0] = start;
+            result[0] = start;
             result[steps - 1] = end;
 
             return result;
@@ -93,14 +87,12 @@ namespace VeloxDev.WPF.TransitionSystem
         {
             var thickness1 = (Thickness)(start ?? new Thickness(0));
             var thickness2 = (Thickness)(end ?? thickness1);
+            if (steps == 1)
+            {
+                return [thickness2];
+            }
 
             List<object?> result = new(steps);
-
-            if (steps == 0)
-            {
-                result.Add(end);
-                return result;
-            }
 
             for (var i = 0; i < steps; i++)
             {
@@ -111,7 +103,7 @@ namespace VeloxDev.WPF.TransitionSystem
                 var bottom = thickness1.Bottom + t * (thickness2.Bottom - thickness1.Bottom);
                 result.Add(new Thickness(left, top, right, bottom));
             }
-            if (steps > 1) result[0] = start;
+            result[0] = start;
             result[steps - 1] = end;
 
             return result;
@@ -120,14 +112,12 @@ namespace VeloxDev.WPF.TransitionSystem
         {
             var radius1 = (CornerRadius)(start ?? new CornerRadius(0));
             var radius2 = (CornerRadius)(end ?? radius1);
+            if (steps == 1)
+            {
+                return [radius2];
+            }
 
             List<object?> result = new(steps);
-
-            if (steps == 0)
-            {
-                result.Add(end);
-                return result;
-            }
 
             for (var i = 0; i < steps; i++)
             {
@@ -138,7 +128,7 @@ namespace VeloxDev.WPF.TransitionSystem
                 var bottomRight = radius1.BottomRight + t * (radius2.BottomRight - radius1.BottomRight);
                 result.Add(new CornerRadius(topLeft, topRight, bottomRight, bottomLeft));
             }
-            if (steps > 1) result[0] = start;
+            result[0] = start;
             result[steps - 1] = end;
 
             return result;
@@ -147,6 +137,10 @@ namespace VeloxDev.WPF.TransitionSystem
         {
             object startBrush = start ?? new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
             object endBrush = end ?? new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+            if (steps == 1)
+            {
+                return [endBrush as Brush ?? Brushes.Transparent];
+            }
             return (startBrush.GetType().Name, endBrush.GetType().Name) switch
             {
                 (nameof(SolidColorBrush), nameof(SolidColorBrush)) => InterpolateSolidColorBrush((SolidColorBrush)startBrush, (SolidColorBrush)endBrush, steps),
@@ -239,12 +233,9 @@ namespace VeloxDev.WPF.TransitionSystem
         }
         private static List<object?> ApplyEdgeCases(List<object?> result, int steps, object start, object end)
         {
-            if (steps == 0) return [end];
-            if (steps > 1)
-            {
-                result[0] = start;
-                result[~1] = end;
-            }
+            if (steps == 1) return [end];
+            result[0] = start;
+            result[steps - 1] = end;
             return result;
         }
 

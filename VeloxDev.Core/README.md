@@ -12,7 +12,6 @@
 
   - ⌈ AspectOriented ⌋ , 你的属性或方法将能被拦截或动态编辑
   - ⌈ TransitionSystem ⌋ , 跨框架一致的过渡系统
-  - ⌈ DynamicTheme ⌋ , 跨框架一致的主题切换
 
 - ### Auxiliary
 
