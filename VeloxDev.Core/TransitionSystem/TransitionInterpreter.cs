@@ -25,7 +25,8 @@ namespace VeloxDev.Core.TransitionSystem
             bool isUIAccess,
             CancellationTokenSource cts)
         {
-            var spans = GetAccDeltaTimes(effect, frameSequence.Count);
+            var indexs = GetEaseIndex(effect, frameSequence.Count);
+            var span = GetDeltaTime(effect);
             var foreverloop = effect.LoopTime == int.MaxValue;
             try
             {
@@ -39,11 +40,11 @@ namespace VeloxDev.Core.TransitionSystem
                         effect.InvokeUpdate(target, Args);
                         frameSequence.Update(
                             target,
-                            index,
+                            indexs[index],
                             isUIAccess,
                             effect.Priority);
                         effect.InvokeLateUpdate(target, Args);
-                        await Task.Delay(spans[index], cts.Token);
+                        await Task.Delay(span, cts.Token);
                     }
 
                     if (effect.IsAutoReverse)
@@ -53,11 +54,11 @@ namespace VeloxDev.Core.TransitionSystem
                             effect.InvokeUpdate(target, Args);
                             frameSequence.Update(
                                 target,
-                                index,
+                                indexs[index],
                                 isUIAccess,
                                 effect.Priority);
                             effect.InvokeLateUpdate(target, Args);
-                            await Task.Delay(spans[index], cts.Token);
+                            await Task.Delay(span, cts.Token);
                         }
                     }
                 }
@@ -84,23 +85,22 @@ namespace VeloxDev.Core.TransitionSystem
             GC.SuppressFinalize(this);
         }
 
-        private static List<int> GetAccDeltaTimes(
+        private static int GetDeltaTime(ITransitionEffect<TPriority> effect)
+            => (int)(1000d / effect.FPS);
+
+        private static List<int> GetEaseIndex(
             ITransitionEffect<TPriority> effect,
             int steps)
         {
             List<int> result = [];
-            var standardDeltaTime = 1000d / effect.FPS;
-            double acc;
-            if (effect.Acceleration > 1) acc = 1;
-            else if (effect.Acceleration < -1) acc = -1;
-            else acc = effect.Acceleration;
-            var start = standardDeltaTime * (1 + acc);
-            var end = standardDeltaTime * (1 - acc);
-            var delta = end - start;
+            var endIndex = steps - 1d;
             for (int i = 0; i < steps; i++)
             {
-                var t = (double)(i + 1) / steps;
-                result.Add((int)(start + t * delta));
+                var ease = effect.EaseCalculator.Ease(i / endIndex);
+                var index = (int)(steps * ease);
+                if (index < 0) result.Add(0);
+                else if (index >= steps) result.Add(steps - 1);
+                else result.Add(index);
             }
             return result;
         }

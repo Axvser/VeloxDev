@@ -1,4 +1,6 @@
-﻿namespace VeloxDev.Core.Interfaces.TransitionSystem
+﻿using VeloxDev.Core.TransitionSystem;
+
+namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
     public class FrameEventArgs : EventArgs
     {
@@ -12,7 +14,7 @@
         public TimeSpan Duration { get; set; }
         public bool IsAutoReverse { get; set; }
         public int LoopTime { get; set; }
-        public double Acceleration { get; set; }
+        public IEaseCalculator EaseCalculator { get; set; }
 
         public event EventHandler<FrameEventArgs> Awaked;
         public event EventHandler<FrameEventArgs> Start;

@@ -1,7 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Media;
-using System.Windows.Threading;
-using VeloxDev.Core.Interfaces.TransitionSystem;
+using VeloxDev.WPF.HotKey;
 using VeloxDev.WPF.TransitionSystem;
 
 namespace WpfTest
@@ -11,6 +10,12 @@ namespace WpfTest
         public MainWindow()
         {
             InitializeComponent();
+            SourceInitialized += (s, e) => GlobalHotKey.Awake();
+            Closing += (s, e) => GlobalHotKey.Dispose();
+            GlobalHotKey.Register(VirtualModifiers.Ctrl, VirtualKeys.F1, (s, e) =>
+            {
+                MessageBox.Show("快捷方式触发");
+            });
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
@@ -23,9 +28,7 @@ namespace WpfTest
                 IsAutoReverse = false,
             };
             var scheduler = TransitionScheduler.FindOrCreate(this);
-            state.SetValue<MainWindow, Brush>(window => window.Background, Brushes.Red);
-            state.SetValue<MainWindow, Transform>(window => window.RenderTransform, Transform.Identity);
-            state.SetValue<MainWindow, double>(window => window.Opacity, 0.4d);
+            state.SetValue<MainWindow, Brush>(window => window.Background, Brushes.Cyan);
             var li = new LinearInterpolator();
 
             scheduler.Execute(li, state, effect);
