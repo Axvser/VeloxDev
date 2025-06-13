@@ -6,9 +6,9 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Avalonia.TransitionSystem
 {
-    public class LinearInterpolator : InterpolatorCore<InterpolatorOutput, DispatcherPriority>
+    public class Interpolator : InterpolatorCore<InterpolatorOutput, DispatcherPriority>
     {
-        static LinearInterpolator()
+        static Interpolator()
         {
             
         }

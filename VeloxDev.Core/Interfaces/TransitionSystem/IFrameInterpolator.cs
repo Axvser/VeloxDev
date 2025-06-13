@@ -5,7 +5,7 @@
     {
         public TOutput Interpolate(
             object target,
-            IFrameState<TOutput, TPriority> state,
+            IFrameState state,
             ITransitionEffect<TPriority> effect);
     }
 

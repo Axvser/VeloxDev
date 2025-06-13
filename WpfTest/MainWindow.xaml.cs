@@ -25,6 +25,7 @@ namespace WpfTest
                 .Property(x => x.Opacity, 0.5d)
                 .Effect(TransitionEffects.Theme)
                 .Then() // 等待 3s 后执行下一段动画
+                .Await(TimeSpan.FromSeconds(3))
                 .Property(x => x.Background, Brushes.Cyan)
                 .Property(x => x.Opacity, 1d)
                 .Effect(TransitionEffects.Theme)

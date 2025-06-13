@@ -1,7 +1,6 @@
 ﻿using System.Linq.Expressions;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Threading;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.WPF.TransitionSystem

@@ -4,8 +4,6 @@ namespace VeloxDev.Core.TransitionSystem
 {
     /// <summary>
     /// ✨ ⌈ 核心 ⌋ 缓动函数
-    /// <para>支持 : </para>
-    /// <para></para>
     /// </summary>
     public static class Eases
     {

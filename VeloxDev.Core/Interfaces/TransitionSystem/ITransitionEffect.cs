@@ -1,13 +1,11 @@
-﻿using VeloxDev.Core.TransitionSystem;
-
-namespace VeloxDev.Core.Interfaces.TransitionSystem
+﻿namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
     public class FrameEventArgs : EventArgs
     {
         public bool Handled { get; set; } = false;
     }
 
-    public interface ITransitionEffect<TPriority> : ITransitionEffect, ICloneable
+    public interface ITransitionEffect<TPriority> : ICloneable
     {
         public TPriority Priority { get; set; }
         public int FPS { get; set; }
@@ -33,10 +31,5 @@ namespace VeloxDev.Core.Interfaces.TransitionSystem
         public void InvokeFinally(object sender, FrameEventArgs e);
 
         public ITransitionEffect<TPriority> DeepCopy();
-    }
-
-    public interface ITransitionEffect
-    {
-
     }
 }

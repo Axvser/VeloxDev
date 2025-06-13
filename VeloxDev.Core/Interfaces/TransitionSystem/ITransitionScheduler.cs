@@ -5,12 +5,11 @@
         where TUIThreadInspector : new()
         where TOutput : IFrameSequence<TPriority>
     {
-        public void Execute(IFrameInterpolator<TOutput, TPriority> interpolator, IFrameState<TOutput, TPriority> state, ITransitionEffect<TPriority> effect);
-        public void Exit();
+        public void Execute(IFrameInterpolator<TOutput, TPriority> interpolator, IFrameState state, ITransitionEffect<TPriority> effect);
     }
 
     public interface ITransitionScheduler
     {
-
+        public void Exit();
     }
 }

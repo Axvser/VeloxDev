@@ -8,12 +8,11 @@
             ITransitionEffect<TPriority> effect,
             bool isUIAccess,
             CancellationTokenSource cts);
-
-        public void Exit();
     }
 
     public interface ITransitionInterpreter
     {
         public FrameEventArgs Args { get; set; }
+        public void Exit();
     }
 }

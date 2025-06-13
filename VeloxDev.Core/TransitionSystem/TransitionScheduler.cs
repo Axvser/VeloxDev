@@ -31,7 +31,7 @@ namespace VeloxDev.Core.TransitionSystem
         protected TUIThreadInspector uIThreadInspector = new();
         protected TTransitionInterpreter transitionInterpreter = new();
 
-        public virtual async void Execute(IFrameInterpolator<TOutput, TPriority> interpolator, IFrameState<TOutput, TPriority> state, ITransitionEffect<TPriority> effect)
+        public virtual async void Execute(IFrameInterpolator<TOutput, TPriority> interpolator, IFrameState state, ITransitionEffect<TPriority> effect)
         {
             Exit();
             if (targetref is null || !targetref.TryGetTarget(out var target))

@@ -1,9 +1,8 @@
-﻿using System.Windows.Threading;
-using VeloxDev.Core.TransitionSystem;
+﻿using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.WPF.TransitionSystem
 {
-    public class State() : StateCore<InterpolatorOutput, DispatcherPriority>
+    public class State() : StateCore
     {
 
     }
