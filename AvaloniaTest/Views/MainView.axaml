@@ -12,10 +12,16 @@
          to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
     <vm:MainViewModel />
   </Design.DataContext>
+	<UserControl.Resources>
+		<LinearGradientBrush x:Key="lgb" StartPoint="0,0" EndPoint="100,100">
+			<GradientStop Color="Blue" Offset="0"/>
+			<GradientStop Color="Violet" Offset="1"/>
+		</LinearGradientBrush>
+	</UserControl.Resources>
 
 	<Grid>
 		<TextBlock Name="t1" Width="100" Height="100" Background="White" Text="x" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-		<Border Name="t2" Width="100" Height="100" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+		<Border Name="t2" Background="{StaticResource lgb}" Width="100" Height="100" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
 	</Grid>
 
 </UserControl>

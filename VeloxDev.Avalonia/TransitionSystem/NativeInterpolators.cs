@@ -124,7 +124,7 @@ namespace VeloxDev.Avalonia.TransitionSystem
             public List<object?> Interpolate(object? start, object? end, int steps)
             {
                 var endBrush = end as IBrush ?? Brushes.Transparent;
-                var startBrush = AdaptStartBrush(start, endBrush);
+                var startBrush = AdaptStartBrush(start);
 
                 var result = new List<object?>();
 
@@ -134,6 +134,7 @@ namespace VeloxDev.Avalonia.TransitionSystem
                     return result;
                 }
 
+                // 确保精确的起始和结束值
                 result.Add(startBrush);
 
                 if (steps > 2)
@@ -150,199 +151,39 @@ namespace VeloxDev.Avalonia.TransitionSystem
                 return result;
             }
 
-            private static IBrush AdaptStartBrush(object? start, IBrush endBrush)
+            private static IBrush AdaptStartBrush(object? start)
             {
-                if (start == null || (start is IBrush b && IsFullyTransparent(b)))
+                if (start == null)
                 {
-                    return CreateTransparentVersion(endBrush);
+                    return Brushes.Transparent;
                 }
 
-                if (start.GetType() == endBrush.GetType())
-                {
-                    return (IBrush)start;
-                }
-
-                return start switch
-                {
-                    ISolidColorBrush solid => ConvertToTargetType(solid, endBrush),
-                    _ => CreateTransparentVersion(endBrush)
-                };
-            }
-
-            private static IBrush ConvertToTargetType(ISolidColorBrush solid, IBrush target)
-            {
-                return target switch
-                {
-                    ILinearGradientBrush lg => new LinearGradientBrush
-                    {
-                        GradientStops =
-                    [
-                        new GradientStop(solid.Color, 0),
-                        new GradientStop(solid.Color, 1)
-                    ],
-                        StartPoint = lg.StartPoint,
-                        EndPoint = lg.EndPoint,
-                        Opacity = solid.Opacity,
-                        SpreadMethod = lg.SpreadMethod
-                    },
-                    IConicGradientBrush cg => new ConicGradientBrush
-                    {
-                        GradientStops =
-                    [
-                        new GradientStop(solid.Color, 0),
-                        new GradientStop(solid.Color, 1)
-                    ],
-                        Center = cg.Center,
-                        Angle = cg.Angle,
-                        Opacity = solid.Opacity,
-                        SpreadMethod = cg.SpreadMethod
-                    },
-                    _ => solid,
-                };
-            }
-
-            private static IBrush CreateTransparentVersion(IBrush brush)
-            {
-                switch (brush)
-                {
-                    case ISolidColorBrush:
-                        return Brushes.Transparent;
-
-                    case ILinearGradientBrush lg:
-                        var transparentStops = new GradientStops();
-                        foreach (var stop in lg.GradientStops)
-                        {
-                            transparentStops.Add(new GradientStop(
-                                Color.FromArgb(0, stop.Color.R, stop.Color.G, stop.Color.B),
-                                stop.Offset));
-                        }
-                        return new LinearGradientBrush
-                        {
-                            GradientStops = transparentStops,
-                            StartPoint = lg.StartPoint,
-                            EndPoint = lg.EndPoint,
-                            SpreadMethod = lg.SpreadMethod,
-                            Opacity = 0
-                        };
-
-                    case IConicGradientBrush cg:
-                        var cgTransparentStops = new GradientStops();
-                        foreach (var stop in cg.GradientStops)
-                        {
-                            cgTransparentStops.Add(new GradientStop(
-                                Color.FromArgb(0, stop.Color.R, stop.Color.G, stop.Color.B),
-                                stop.Offset));
-                        }
-                        return new ConicGradientBrush
-                        {
-                            GradientStops = cgTransparentStops,
-                            Center = cg.Center,
-                            Angle = cg.Angle,
-                            SpreadMethod = cg.SpreadMethod,
-                            Opacity = 0
-                        };
-
-                    default:
-                        return Brushes.Transparent;
-                }
+                return (IBrush)start;
             }
 
             private static IBrush InterpolateBrush(IBrush start, IBrush end, double t)
             {
-                if (start.GetType() == end.GetType())
+                if (start is ISolidColorBrush startSolid && end is ISolidColorBrush endSolid)
                 {
-                    return start switch
-                    {
-                        ISolidColorBrush s when end is ISolidColorBrush e => InterpolateSolid(s, e, t),
-                        ILinearGradientBrush lg when end is ILinearGradientBrush lgEnd => InterpolateLinearGradient(lg, lgEnd, t),
-                        IConicGradientBrush cg when end is IConicGradientBrush cgEnd => InterpolateConicGradient(cg, cgEnd, t),
-                        _ => t < 0.5 ? start : end
-                    };
+                    return InterpolateSolidColor(startSolid, endSolid, t);
                 }
-
-                return CrossFadeBrushes(start, end, t);
+                else
+                {
+                    return CrossFadeBrushes(start, end, t);
+                }
             }
 
-            private static ISolidColorBrush InterpolateSolid(ISolidColorBrush start, ISolidColorBrush end, double t)
+            private static ISolidColorBrush InterpolateSolidColor(ISolidColorBrush start, ISolidColorBrush end, double t)
             {
-                return new SolidColorBrush(InterpolateColor(start.Color, end.Color, t))
+                return new SolidColorBrush(
+                    Color.FromArgb(
+                        (byte)(start.Color.A + (end.Color.A - start.Color.A) * t),
+                        (byte)(start.Color.R + (end.Color.R - start.Color.R) * t),
+                        (byte)(start.Color.G + (end.Color.G - start.Color.G) * t),
+                        (byte)(start.Color.B + (end.Color.B - start.Color.B) * t)))
                 {
-                    Opacity = InterpolateDouble(start.Opacity, end.Opacity, t)
+                    Opacity = start.Opacity + (end.Opacity - start.Opacity) * t
                 };
-            }
-
-            private static IBrush InterpolateLinearGradient(ILinearGradientBrush start, ILinearGradientBrush end, double t)
-            {
-                var result = new LinearGradientBrush
-                {
-                    StartPoint = InterpolatePoint(start.StartPoint, end.StartPoint, t),
-                    EndPoint = InterpolatePoint(start.EndPoint, end.EndPoint, t),
-                    SpreadMethod = t < 0.5 ? start.SpreadMethod : end.SpreadMethod,
-                    Opacity = InterpolateDouble(start.Opacity, end.Opacity, t)
-                };
-
-                var stops = InterpolateGradientStops([.. start.GradientStops], [.. end.GradientStops], t);
-                foreach (var stop in stops)
-                {
-                    result.GradientStops.Add(stop);
-                }
-
-                return result;
-            }
-
-            private static IBrush InterpolateConicGradient(IConicGradientBrush start, IConicGradientBrush end, double t)
-            {
-                var result = new ConicGradientBrush
-                {
-                    Center = InterpolatePoint(start.Center, end.Center, t),
-                    Angle = InterpolateDouble(start.Angle, end.Angle, t),
-                    SpreadMethod = t < 0.5 ? start.SpreadMethod : end.SpreadMethod,
-                    Opacity = InterpolateDouble(start.Opacity, end.Opacity, t)
-                };
-
-                var stops = InterpolateGradientStops([.. start.GradientStops], [.. end.GradientStops], t);
-                foreach (var stop in stops)
-                {
-                    result.GradientStops.Add(stop);
-                }
-
-                return result;
-            }
-
-            private static List<GradientStop> InterpolateGradientStops(
-                IList<IGradientStop> startStops,
-                IList<IGradientStop> endStops,
-                double t)
-            {
-                var result = new List<GradientStop>();
-                int maxCount = Math.Max(startStops.Count, endStops.Count);
-
-                for (int i = 0; i < maxCount; i++)
-                {
-                    var startStop = i < startStops.Count ? startStops[i] : null;
-                    var endStop = i < endStops.Count ? endStops[i] : null;
-
-                    if (startStop != null && endStop != null)
-                    {
-                        result.Add(new GradientStop(
-                            InterpolateColor(startStop.Color, endStop.Color, t),
-                            InterpolateDouble(startStop.Offset, endStop.Offset, t)));
-                    }
-                    else if (startStop != null)
-                    {
-                        result.Add(new GradientStop(
-                            InterpolateColor(startStop.Color, Colors.Transparent, t),
-                            startStop.Offset));
-                    }
-                    else if (endStop != null)
-                    {
-                        result.Add(new GradientStop(
-                            InterpolateColor(Colors.Transparent, endStop.Color, t),
-                            endStop.Offset));
-                    }
-                }
-
-                return result;
             }
 
             private static IBrush CrossFadeBrushes(IBrush start, IBrush end, double t)
@@ -350,37 +191,31 @@ namespace VeloxDev.Avalonia.TransitionSystem
                 if (t <= 0.0) return start;
                 if (t >= 1.0) return end;
 
-                // 简单但有效的混合方案
-                return t < 0.5 ? start : end;
+                // 使用RenderTargetBitmap实现精确混合
+                return CreateBlendedBrush(start, end, t);
             }
 
-            private static bool IsFullyTransparent(IBrush brush)
+            // 基于RenderTargetBitmap的混合
+            private static IBrush CreateBlendedBrush(IBrush start, IBrush end, double t)
             {
-                return brush is ISolidColorBrush s && s.Color.A == 0;
-            }
+                const int renderSize = 100; // 可根据需要调整
 
-            private static Color InterpolateColor(Color start, Color end, double t)
-            {
-                return Color.FromArgb(
-                    (byte)(start.A + (end.A - start.A) * t),
-                    (byte)(start.R + (end.R - start.R) * t),
-                    (byte)(start.G + (end.G - start.G) * t),
-                    (byte)(start.B + (end.B - start.B) * t));
-            }
+                var bmp = new RenderTargetBitmap(new PixelSize(renderSize, renderSize));
+                using (var ctx = bmp.CreateDrawingContext())
+                {
+                    // 先绘制start画刷（带透明度）
+                    using (ctx.PushOpacity(1 - t))
+                    {
+                        ctx.DrawRectangle(start, null, new Rect(0, 0, renderSize, renderSize));
+                    }
 
-            private static double InterpolateDouble(double start, double end, double t)
-            {
-                return start + (end - start) * t;
-            }
-
-            private static RelativePoint InterpolatePoint(RelativePoint start, RelativePoint end, double t)
-            {
-                if (start.Unit != end.Unit) return t < 0.5 ? start : end;
-
-                return new RelativePoint(
-                    start.Point.X + (end.Point.X - start.Point.X) * t,
-                    start.Point.Y + (end.Point.Y - start.Point.Y) * t,
-                    start.Unit);
+                    // 再绘制end画刷（带透明度）
+                    using (ctx.PushOpacity(t))
+                    {
+                        ctx.DrawRectangle(end, null, new Rect(0, 0, renderSize, renderSize));
+                    }
+                }
+                return new ImageBrush(bmp);
             }
         }
         public class TransformInterpolator : IValueInterpolator
