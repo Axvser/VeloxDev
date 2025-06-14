@@ -222,7 +222,43 @@ namespace VeloxDev.Avalonia.TransitionSystem
         {
             public List<object?> Interpolate(object? start, object? end, int steps)
             {
-                throw new NotImplementedException();
+                var startTransform = (start as Transform) ?? new MatrixTransform();
+                var endTransform = (end as Transform) ?? new MatrixTransform();
+
+                var result = new List<object?>();
+
+                if (steps <= 1)
+                {
+                    result.Add(endTransform);
+                    return result;
+                }
+
+                var startMatrix = startTransform.Value;
+                var endMatrix = endTransform.Value;
+
+                for (int i = 0; i < steps; i++)
+                {
+                    double t = (double)i / (steps - 1);
+
+                    // 正确的Matrix构造函数参数顺序
+                    var interpolated = new Matrix(
+                        Lerp(startMatrix.M11, endMatrix.M11, t),  // M11
+                        Lerp(startMatrix.M12, endMatrix.M12, t),  // M12
+                        Lerp(startMatrix.M21, endMatrix.M21, t),  // M21
+                        Lerp(startMatrix.M22, endMatrix.M22, t),  // M22
+                        Lerp(startMatrix.M31, endMatrix.M31, t),  // M31 (OffsetX)
+                        Lerp(startMatrix.M32, endMatrix.M32, t)   // M32 (OffsetY)
+                    );
+
+                    result.Add(new MatrixTransform(interpolated));
+                }
+
+                return result;
+            }
+
+            private static double Lerp(double a, double b, double t)
+            {
+                return a + (b - a) * t;
             }
         }
     }

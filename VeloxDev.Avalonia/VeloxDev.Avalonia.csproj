@@ -1,10 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net5.0</TargetFramework>
+		<TargetFrameworks>netstandard2.0;net6.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<LangVersion>latest</LangVersion>
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<Title>VeloxDev.Avalonia</Title>
+		<Version>1.0.0</Version>
+		<Authors>Axvser</Authors>
 	</PropertyGroup>
 
 	<ItemGroup>
