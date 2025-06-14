@@ -19,4 +19,8 @@
     <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
     <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="Avalonia.Diagnostics" Version="$(AvaloniaVersion)" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VeloxDev.Avalonia\VeloxDev.Avalonia.csproj" />
+  </ItemGroup>
 </Project>

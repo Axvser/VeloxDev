@@ -18,22 +18,6 @@ namespace VeloxDev.Avalonia.TransitionSystem
                 Dispatcher.UIThread.InvokeAsync(() => Update(target, frameIndex), priority);
             }
         }
-        internal virtual void AddFrameFrameSequence(PropertyInfo propertyInfo, List<object?> objects)
-        {
-            if (Frames.TryGetValue(propertyInfo, out _))
-            {
-                Frames[propertyInfo] = objects;
-            }
-            else
-            {
-                Frames.Add(propertyInfo, objects);
-            }
-        }
-        internal virtual void SetCount(int count)
-        {
-            Count = count;
-        }
-
         private void Update(object target, int frameIndex)
         {
             foreach (var kvp in Frames)

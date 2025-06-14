@@ -5,12 +5,17 @@
              xmlns:vm="clr-namespace:AvaloniaTest.ViewModels"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="AvaloniaTest.Views.MainView"
-             x:DataType="vm:MainViewModel">
+             x:DataType="vm:MainViewModel"
+			 Background="Lime">
   <Design.DataContext>
     <!-- This only sets the DataContext for the previewer in an IDE,
          to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
     <vm:MainViewModel />
   </Design.DataContext>
 
-  <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+	<Grid>
+		<TextBlock Name="t1" Width="100" Height="100" Background="White" Text="x" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+		<Border Name="t2" Width="100" Height="100" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+	</Grid>
+
 </UserControl>

@@ -1,4 +1,7 @@
 ﻿using Avalonia.Controls;
+using Avalonia.Media;
+using VeloxDev.Avalonia.Tools.Value;
+using VeloxDev.Avalonia.TransitionSystem;
 
 namespace AvaloniaTest.Views;
 

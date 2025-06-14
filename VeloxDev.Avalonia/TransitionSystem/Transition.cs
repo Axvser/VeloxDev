@@ -47,18 +47,18 @@ namespace VeloxDev.Avalonia.TransitionSystem
                 state.SetValue<T, double>(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot<T> Property(Expression<Func<T, Brush>> propertyLambda, Brush newValue)
+            public StateSnapshot<T> Property(Expression<Func<T, IBrush?>> propertyLambda, IBrush newValue)
             {
-                state.SetValue<T, Brush>(propertyLambda, newValue);
+                state.SetValue<T, IBrush?>(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot<T> Property(Expression<Func<T, Transform>> propertyLambda, ICollection<Transform> newValue)
+            public StateSnapshot<T> Property(Expression<Func<T, ITransform?>> propertyLambda, ICollection<Transform> newValue)
             {
                 var transformGroup = new TransformGroup()
                 {
                     Children = [.. newValue]
                 };
-                state.SetValue<T, Transform>(propertyLambda, transformGroup);
+                state.SetValue<T, ITransform?>(propertyLambda, transformGroup);
                 return this;
             }
             public StateSnapshot<T> Property(Expression<Func<T, Point>> propertyLambda, Point newValue)
