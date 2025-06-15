@@ -14,13 +14,13 @@
 
 > VeloxDev.Core 是 VeloxDev 框架核心，包含一切必要的抽象，对于其中跨平台不变的部分进行了抽象类实现。实际使用时无需安装此项目，而是安装相应平台的 VeloxDev.×××
 
+> 如果您希望使用 VeloxDev.Core 对指定框架构建自定义的库，可以参考 VeloxDev 在 github 的 Wiki
+
 # Core
   - ⌈ TransitionSystem ⌋ , 使用Fluent API构建过渡效果 ✔
   - ⌈ AspectOriented ⌋ , 动态拦截/编辑属性、方法调用 ✔
   - ⌈ MonoBehaviour ⌋ , 实时帧刷新行为 ✔
   - ⌈ Visual Workflow Builder ⌋ ，拖拽式工作流构建器 ❌ 【 预计 V2 实装此项 】
-
-⌈ …… ⌋ 考虑到作者大学快毕业了，因此这个项目可能需要更多合作者，这样才能确保项目持续开发，当然，如果作者能找到相关工作，那是肯定不会断更的
 
 # VeloxDev.×××
 
@@ -42,9 +42,51 @@
 
 > VeloxDev.××× 是作者基于 VeloxDev.Core 实现的简易封装 , 可在 WPF / Avalonia / MAUI 使用统一的 API 去实现属性值过渡、AOP编程等功能
 
-## Ⅰ AOP编程
+> 注意 : 一些功能基于源生成器，您需要在实例初始化时调用 LoadVeloxDevCore 方法
+
+## Ⅰ 过渡
+
+> WPF / Avalonia / MAUI 虽然各自使用不同的属性系统,但最终都会以标准CLR属性暴露给用户,基于这一特点,我们可以使用下述API来实现跨平台一致的动画创建
+
+- 线程安全 ✔
+- 缓动函数 ✔
+- 生命周期 ✔
+- 源生成器依赖 ❌
+
+```csharp
+            var transition = Transition.Create(this)
+                .Await(TimeSpan.FromSeconds(3))// (可选) 等待 3s 后执行第一段动画
+                .Property(x => x.Background, Brushes.Red)
+                .Property(x => x.Opacity, 0.5d)
+                .Effect(TransitionEffects.Theme) // 效果参数
+                .Then() // 执行下一段动画 > (可选) AwaitThen()以延迟启动下一段动画
+                .Property(x => x.Background, Brushes.Cyan)
+                .Property(x => x.Opacity, 1d)
+                .Effect((p) =>
+                {
+                    p.Duration = TimeSpan.FromSeconds(1);
+
+                    p.EaseCalculator = Eases.Sine.InOut; 
+                    // 此处为系统内缓动封装，你也可从接口派生自定义缓动函数
+
+                    p.Awaked += (s, e) =>
+                    {
+
+                    };
+                    p.Update += (s, e) =>
+                    {
+
+                    };
+                }); // 使用自定义的效果参数
+
+            transition.Start(); // (可选) 为 Start 传入其它同类型的实例以改变动画生效目标 
+```
+
+## Ⅱ AOP编程
 
 > 对于公开可读写的属性或者公开可调用的方法,我们借助源生成器的力量即可对其动态代理,接着,这些属性或方法将能被我们拦截
+
+- 源生成器依赖 ✔
 
 ```csharp
     public partial class MyClass
@@ -80,34 +122,36 @@
     }
 ```
 
-## Ⅱ 过渡
+## Ⅲ MonoBehaviour
 
-> WPF / Avalonia / MAUI 虽然各自使用不同的属性系统,但最终都会以标准CLR属性暴露给用户,基于这一特点,我们可以使用下述API来实现跨平台一致的动画创建
+> 自动创建、维护一个实时循环任务，可以修改其 FPS 以控制刷新频率，示例中的 MonoBehaviour 不传入参数代表使用默认的 60 FPS
 
-- 线程安全 ✔
-- 生命周期支持 ✔
-- 并行与预编译 ❌ 【 预计 V2 实装此项 】
+- 源生成器依赖 ✔
 
 ```csharp
-            var transition = Transition.Create(this)
-                .Await(TimeSpan.FromSeconds(3))// (可选) 等待 3s 后执行第一段动画
-                .Property(x => x.Background, Brushes.Red)
-                .Property(x => x.Opacity, 0.5d)
-                .Effect(TransitionEffects.Theme) // 效果参数
-                .Then() // 执行下一段动画 > (可选) AwaitThen()以延迟启动下一段动画
-                .Property(x => x.Background, Brushes.Cyan)
-                .Property(x => x.Opacity, 1d)
-                .Effect((p) =>
-                {
-                    p.Duration = TimeSpan.FromSeconds(1);
-                    p.Awaked += (s, e) =>
-                    {
+    [MonoBehaviour]
+    public partial class MainWindow : Window
+    {
+        partial void Awake()
+        {
+            // 默认开启,但这里可以设置初始状态为关闭
+            // CanMonoBehaviour = false;
+        }
+        partial void Start()
+        {
 
-                    };
-                    p.Update += (s, e) =>
-                    {
+        }
+        partial void Update()
+        {
 
-                    };
-                }); // 使用自定义的效果参数
-            transition.Start();
+        }
+        partial void LateUpdate()
+        {
+
+        }
+        partial void ExistMonoBehaviour()
+        {
+            
+        }
+    }
 ```

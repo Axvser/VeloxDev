@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Media;
+using VeloxDev.Core.TransitionSystem;
 using VeloxDev.WPF.HotKey;
 using VeloxDev.WPF.TransitionSystem;
 
@@ -31,6 +32,7 @@ namespace WpfTest
                 .Effect((p) =>
                 {
                     p.Duration = TimeSpan.FromSeconds(1);
+                    p.EaseCalculator = Eases.Sine.InOut;
                     p.Awaked += (s, e) =>
                     {
 

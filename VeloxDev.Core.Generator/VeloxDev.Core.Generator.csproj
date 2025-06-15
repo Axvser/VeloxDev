@@ -1,10 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<IsAnalyzer>true</IsAnalyzer>
 		<TargetFramework>netstandard2.0</TargetFramework>
 		<LangVersion>latest</LangVersion>
-		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core.Generator</Title>
@@ -14,8 +12,6 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
-		<None Remove="bin\Debug\netstandard2.0\\VeloxDev.Core.Generator.dll" />
-		<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="true" />
 	</ItemGroup>
 
 </Project>
