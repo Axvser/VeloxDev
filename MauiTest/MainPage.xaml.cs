@@ -1,4 +1,5 @@
-﻿using VeloxDev.MAUI.TransitionSystem;
+﻿using VeloxDev.Core.TransitionSystem;
+using VeloxDev.MAUI.TransitionSystem;
 
 namespace MauiTest
 {
@@ -27,16 +28,28 @@ namespace MauiTest
                 GradientStops = [new GradientStop(Colors.Lime,0), new GradientStop(Colors.Cyan, 1)]
             };
 
-            Transition.Create(lb)// 等待 5s 后执行第一段动画
-                .Property(x => x.Background, lgb)
+            var transition = Transition.Create(this)
+                .Await(TimeSpan.FromSeconds(3))// (可选) 等待 3s 后执行第一段动画
+                .Property(x => x.Background, Brush.Red)
                 .Property(x => x.Opacity, 0.5d)
-                .Effect(p=>p.Duration = TimeSpan.FromSeconds(2))
-                .Then() // 等待 3s 后执行下一段动画
-                .Await(TimeSpan.FromSeconds(3))
+                .Effect(TransitionEffects.Theme) // 效果参数
+                .Then() // 执行下一段动画 > (可选) AwaitThen()以延迟启动下一段动画
                 .Property(x => x.Background, Brush.Cyan)
                 .Property(x => x.Opacity, 1d)
-                .Effect(TransitionEffects.Theme)
-                .Start();
+                .Effect((p) =>
+                {
+                    p.Duration = TimeSpan.FromSeconds(1);
+                    p.EaseCalculator = Eases.Sine.InOut;
+                    p.Awaked += (s, e) =>
+                    {
+
+                    };
+                    p.Update += (s, e) =>
+                    {
+
+                    };
+                }); // 使用自定义的效果参数
+            transition.Start();
         }
     }
 

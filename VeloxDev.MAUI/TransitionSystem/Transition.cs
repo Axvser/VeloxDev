@@ -136,10 +136,10 @@ namespace VeloxDev.MAUI.TransitionSystem
                 if (targetref?.TryGetTarget(out var target) ?? false)
                 {
                     var cts = RefreshCts();
-                    var scheduler = TransitionScheduler.FindOrCreate(target);
+                    var scheduler = TransitionScheduler<T>.FindOrCreate(target);
                     scheduler.Exit();
                     await Task.Delay(delay, cts.Token);
-                    var copyEffect = effect.DeepCopy();
+                    var copyEffect = effect.Clone();
                     copyEffect.Completed += (s, e) =>
                     {
                         next?.StartAsync();
@@ -150,9 +150,9 @@ namespace VeloxDev.MAUI.TransitionSystem
             internal async Task StartAsync(T target)
             {
                 var cts = RefreshCts();
-                var scheduler = TransitionScheduler.FindOrCreate(target);
+                var scheduler = TransitionScheduler<T>.FindOrCreate(target);
                 scheduler.Exit();
-                var copyEffect = effect.DeepCopy();
+                var copyEffect = effect.Clone();
                 copyEffect.Completed += (s, e) =>
                 {
                     next?.StartAsync(target);

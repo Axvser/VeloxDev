@@ -2,11 +2,11 @@
 
 namespace VeloxDev.MAUI.TransitionSystem
 {
-    public class InterpolatorOutput : InterpolatorOutputCore<DispatcherPriority>
+    public class InterpolatorOutput : InterpolatorOutputCore
     {
         private readonly IDispatcher? dispatcher = Dispatcher.GetForCurrentThread();
 
-        public override void Update(object target, int frameIndex, bool isUIAccess, DispatcherPriority priority)
+        public override void Update(object target, int frameIndex, bool isUIAccess)
         {
             if (isUIAccess)
             {

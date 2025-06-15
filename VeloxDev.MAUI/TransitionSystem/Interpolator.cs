@@ -2,7 +2,7 @@
 
 namespace VeloxDev.MAUI.TransitionSystem
 {
-    public class Interpolator : InterpolatorCore<InterpolatorOutput, DispatcherPriority>
+    public class Interpolator : InterpolatorCore<InterpolatorOutput>
     {
         static Interpolator()
         {

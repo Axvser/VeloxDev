@@ -152,10 +152,10 @@ namespace VeloxDev.Avalonia.TransitionSystem
                 if (targetref?.TryGetTarget(out var target) ?? false)
                 {
                     var cts = RefreshCts();
-                    var scheduler = TransitionScheduler.FindOrCreate<T>(target);
+                    var scheduler = TransitionScheduler<T>.FindOrCreate(target);
                     scheduler.Exit();
                     await Task.Delay(delay, cts.Token);
-                    var copyEffect = effect.DeepCopy();
+                    var copyEffect = effect.Clone();
                     copyEffect.Completed += (s, e) =>
                     {
                         next?.StartAsync();
@@ -166,9 +166,9 @@ namespace VeloxDev.Avalonia.TransitionSystem
             internal async Task StartAsync(T target)
             {
                 var cts = RefreshCts();
-                var scheduler = TransitionScheduler.FindOrCreate<T>(target);
+                var scheduler = TransitionScheduler<T>.FindOrCreate(target);
                 scheduler.Exit();
-                var copyEffect = effect.DeepCopy();
+                var copyEffect = effect.Clone();
                 copyEffect.Completed += (s, e) =>
                 {
                     next?.StartAsync(target);
