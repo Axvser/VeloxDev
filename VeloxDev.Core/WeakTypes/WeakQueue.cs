@@ -2,12 +2,6 @@
 
 namespace VeloxDev.Core.WeakTypes
 {
-    /// <summary>
-    /// 🧰 > Weak reference queue
-    /// <para><see cref="Enqueue(T)"/></para>
-    /// <para><see cref="TryDequeue(out T?)"/></para>
-    /// <para><see cref="TryPeek(out T?)"/></para>
-    /// </summary>
     public sealed class WeakQueue<T> : IEnumerable<T> where T : class
     {
         private readonly Queue<WeakReference<T>> _references = new();

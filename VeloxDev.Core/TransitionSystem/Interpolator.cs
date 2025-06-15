@@ -1,32 +1,15 @@
 ﻿using System.Collections.Concurrent;
+using System.Reflection;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 插值器
-    /// <para>解释 : </para>
-    /// <para>在不同平台实现过渡系统时，您需要具体地实现此核心以构建用于计算过渡过程的插值器</para>
-    /// </summary>
-    /// <typeparam name="TTransitionEffectCore">您在具体框架对ITransitionEffect的实现类</typeparam>
-    /// <typeparam name="TOutputCore">帧计算完成后，需要一个统一的结构用于存储结果并按索引更新帧</typeparam>
-    /// <typeparam name="TPriorityCore">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
-    /// <typeparam name="TStateCore">您在具体框架对StateCore的实现类</typeparam>
     public abstract class InterpolatorCore<
         TOutputCore,
-        TTransitionEffectCore,
-        TStateCore,
-        TPriorityCore> : InterpolatorCore, IFrameInterpolator<
-            TTransitionEffectCore,
-            TStateCore,
-            TOutputCore,
-            TPriorityCore>
-        where TStateCore : IFrameState<TStateCore>
-        where TTransitionEffectCore : ITransitionEffect<TTransitionEffectCore>
+        TPriorityCore> : InterpolatorCore, IFrameInterpolator<TPriorityCore>
         where TOutputCore : IFrameSequence<TPriorityCore>, new()
     {
-        public virtual TOutputCore Interpolate(object target, IFrameState<TStateCore> state, ITransitionEffect<TTransitionEffectCore, TPriorityCore> effect)
+        public virtual IFrameSequence<TPriorityCore> Interpolate(object target, IFrameState state, ITransitionEffect<TPriorityCore> effect)
         {
             var output = new TOutputCore();
             var count = (int)(effect.FPS * effect.Duration.TotalSeconds);
@@ -69,27 +52,10 @@ namespace VeloxDev.Core.TransitionSystem
         }
     }
 
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 插值器
-    /// <para>解释 : </para>
-    /// <para>在不同平台实现过渡系统时，您需要具体地实现此核心以构建用于计算过渡过程的插值器</para>
-    /// </summary>
-    /// <typeparam name="TTransitionEffectCore">您在具体框架对ITransitionEffect的实现类</typeparam>
-    /// <typeparam name="TOutputCore">帧计算完成后，需要一个统一的结构用于存储结果并按索引更新帧</typeparam>
-    /// <typeparam name="TStateCore">您在具体框架对StateCore的实现类</typeparam>
-    public abstract class InterpolatorCore<
-        TTransitionEffectCore,
-        TStateCore,
-        TOutputCore> : InterpolatorCore, IFrameInterpolator<
-            TTransitionEffectCore,
-            TStateCore,
-            TOutputCore>
-        where TStateCore : IFrameState<TStateCore>
-        where TTransitionEffectCore : ITransitionEffect<TTransitionEffectCore>
+    public abstract class InterpolatorCore<TOutputCore> : InterpolatorCore, IFrameInterpolator
         where TOutputCore : IFrameSequence, new()
     {
-        public virtual TOutputCore Interpolate(object target, IFrameState<TStateCore> state, ITransitionEffect<TTransitionEffectCore> effect)
+        public virtual IFrameSequence Interpolate(object target, IFrameState state, ITransitionEffectCore effect)
         {
             var output = new TOutputCore();
             var count = (int)(effect.FPS * effect.Duration.TotalSeconds);
@@ -132,12 +98,6 @@ namespace VeloxDev.Core.TransitionSystem
         }
     }
 
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 插值器
-    /// <para>解释 : </para>
-    /// <para>在不同平台实现过渡系统时，此核心的多个泛型子类可帮助你构建具体的插值器</para>
-    /// </summary>
     public abstract class InterpolatorCore : IFrameInterpolatorCore
     {
         public static ConcurrentDictionary<Type, IValueInterpolator> NativeInterpolators { get; protected set; } = [];

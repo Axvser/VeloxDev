@@ -2,12 +2,6 @@
 
 namespace VeloxDev.Core.WeakTypes
 {
-    /// <summary>
-    /// 🧰 > Weak reference stack
-    /// <para><see cref="Push(T)"/></para>
-    /// <para><see cref="TryPop(out T?)"/></para>
-    /// <para><see cref="TryPeek(out T?)"/></para>
-    /// </summary>
     public sealed class WeakStack<T> : IEnumerable<T> where T : class
     {
         private readonly Stack<WeakReference<T>> _references = new();

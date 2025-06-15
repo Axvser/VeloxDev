@@ -1,23 +1,21 @@
 ﻿namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
-    public interface ITransitionInterpreter<TTransitionEffectCore, TPriorityCore> : ITransitionInterpreterCore
-        where TTransitionEffectCore : ITransitionEffect<TTransitionEffectCore>
+    public interface ITransitionInterpreter<TPriorityCore> : ITransitionInterpreterCore
     {
         public Task Execute(
             object target,
             IFrameSequence<TPriorityCore> frameSequence,
-            ITransitionEffect<TTransitionEffectCore, TPriorityCore> effect,
+            ITransitionEffect<TPriorityCore> effect,
             bool isUIAccess,
             CancellationTokenSource cts);
     }
 
-    public interface ITransitionInterpreter<TTransitionEffectCore> : ITransitionInterpreterCore
-        where TTransitionEffectCore : ITransitionEffect<TTransitionEffectCore>
+    public interface ITransitionInterpreter : ITransitionInterpreterCore
     {
         public Task Execute(
             object target,
             IFrameSequence frameSequence,
-            ITransitionEffect<TTransitionEffectCore> effect,
+            ITransitionEffectCore effect,
             bool isUIAccess,
             CancellationTokenSource cts);
     }

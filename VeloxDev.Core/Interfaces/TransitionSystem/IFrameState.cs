@@ -4,17 +4,7 @@ using System.Reflection;
 
 namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
-    public interface IFrameState<TStateCore> : IFrameStateCore
-    {
-        public TStateCore Clone();
-    }
-
-    public interface IFrameState : IFrameStateCore
-    {
-        public IFrameState Clone();
-    }
-
-    public interface IFrameStateCore
+    public interface IFrameState
     {
         public ConcurrentDictionary<PropertyInfo, object?> Values { get; }
         public ConcurrentDictionary<PropertyInfo, IValueInterpolator> Interpolators { get; }
@@ -26,5 +16,7 @@ namespace VeloxDev.Core.Interfaces.TransitionSystem
         public void SetValue(PropertyInfo propertyInfo, object? value);
         public bool TryGetInterpolator(PropertyInfo propertyInfo, out IValueInterpolator? interpolator);
         public bool TryGetValue(PropertyInfo propertyInfo, out object? value);
+
+        public IFrameState Clone();
     }
 }

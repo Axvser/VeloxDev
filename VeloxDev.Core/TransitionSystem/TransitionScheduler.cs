@@ -1,49 +1,29 @@
-﻿using VeloxDev.Core.Interfaces.TransitionSystem;
+﻿using System.Runtime.CompilerServices;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 过渡调度器
-    /// <para>解释 : </para>
-    /// <para>1. 在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于调度过渡的启动和终止</para>
-    /// <para>2. Execute 和 Exit 方法可以重写，通常您不需要这么做，内部已有完善的实现</para>
-    /// </summary>
-    /// <typeparam name="TTarget">保留此抽象，不要指定具体内容</typeparam>
-    /// <typeparam name="TOutputCore">帧计算完成后，需要一个统一的结构用于存储结果并按索引更新帧</typeparam>
-    /// <typeparam name="TPriorityCore">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
-    /// <typeparam name="TUIThreadInspectorCore">在不同框架中，使用不同的方式来检查是否位于UI线程</typeparam>
-    /// <typeparam name="TStateCore">您在具体框架对StateCore的实现类</typeparam>
-    /// <typeparam name="TTransitionEffectCore">您在具体框架对TransitionEffect的实现类</typeparam>
-    /// <typeparam name="TTransitionInterpreterCore">解释器负责动画帧的实际控制</typeparam>
-    public abstract class TransitionSchedulerCore<
+    public class TransitionSchedulerCore<
         TTarget,
-        TOutputCore,
-        TPriorityCore,
         TUIThreadInspectorCore,
-        TStateCore,
-        TTransitionEffectCore,
-        TTransitionInterpreterCore> : TransitionSchedulerCore, ITransitionScheduler<
-            TTarget, 
-            TUIThreadInspectorCore, 
-            TOutputCore, 
-            TStateCore, 
-            TTransitionEffectCore, 
-            TPriorityCore>
-        where TStateCore : IFrameState<TStateCore>
-        where TTransitionEffectCore : ITransitionEffect<TTransitionEffectCore>
+        TTransitionInterpreterCore,
+        TPriorityCore> : TransitionSchedulerCore, ITransitionScheduler<TPriorityCore>
         where TTarget : class
-        where TOutputCore : IFrameSequence<TPriorityCore>
         where TUIThreadInspectorCore : IUIThreadInspector, new()
-        where TTransitionInterpreterCore : ITransitionInterpreter<TTransitionEffectCore, TPriorityCore>, new()
+        where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
     {
         protected WeakReference<TTarget>? targetref = null;
         protected CancellationTokenSource? cts = null;
-        protected ITransitionInterpreter<TTransitionEffectCore, TPriorityCore>? interpreter = null;
+        protected TTransitionInterpreterCore? interpreter = null;
         protected TUIThreadInspectorCore uIThreadInspector = new();
-        protected TTransitionInterpreterCore transitionInterpreter = new();
 
-        public virtual async void Execute(IFrameInterpolator<TTransitionEffectCore, TStateCore, TOutputCore, TPriorityCore> interpolator, IFrameState<TStateCore> state, ITransitionEffect<TTransitionEffectCore, TPriorityCore> effect)
+        public virtual WeakReference<TTarget>? TargetRef
+        {
+            get => targetref;
+            protected set => targetref = value;
+        }
+
+        public virtual async void Execute(IFrameInterpolator<TPriorityCore> interpolator, IFrameState state, ITransitionEffect<TPriorityCore> effect)
         {
             Exit();
             if (targetref is null || !targetref.TryGetTarget(out var target))
@@ -66,47 +46,60 @@ namespace VeloxDev.Core.TransitionSystem
             var oldCts = Interlocked.Exchange(ref cts, null);
             oldCts?.Cancel();
         }
+
+        public static TransitionSchedulerCore<
+            TTarget,
+            TUIThreadInspectorCore,
+            TTransitionInterpreterCore,
+            TPriorityCore> FindOrCreate(TTarget source, bool CanSTAThread = true)
+        {
+            if (TryGetScheduler(source, out var item))
+            {
+                return item as TransitionSchedulerCore<
+                    TTarget,
+                    TUIThreadInspectorCore,
+                    TTransitionInterpreterCore,
+                    TPriorityCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(TTarget)}> ⌋.");
+            }
+            else
+            {
+                var scheduler = new TransitionSchedulerCore<
+                    TTarget,
+                    TUIThreadInspectorCore,
+                    TTransitionInterpreterCore,
+                    TPriorityCore>()
+                {
+                    TargetRef = new WeakReference<TTarget>(source)
+                };
+                if (CanSTAThread)
+                {
+                    Schedulers.Add(source, scheduler);
+                }
+                return scheduler;
+            }
+        }
     }
 
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 过渡调度器
-    /// <para>解释 : </para>
-    /// <para>1. 在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于调度过渡的启动和终止</para>
-    /// <para>2. Execute 和 Exit 方法可以重写，通常您不需要这么做，内部已有完善的实现</para>
-    /// </summary>
-    /// <typeparam name="TTarget">保留此抽象，不要指定具体内容</typeparam>
-    /// <typeparam name="TOutputCore">帧计算完成后，需要一个统一的结构用于存储结果并按索引更新帧</typeparam>
-    /// <typeparam name="TUIThreadInspectorCore">在不同框架中，使用不同的方式来检查是否位于UI线程</typeparam>
-    /// <typeparam name="TStateCore">您在具体框架对StateCore的实现类</typeparam>
-    /// <typeparam name="TTransitionEffectCore">您在具体框架对TransitionEffect的实现类</typeparam>
-    /// <typeparam name="TTransitionInterpreterCore">解释器负责动画帧的实际控制</typeparam>
-    public abstract class TransitionSchedulerCore<
+    public class TransitionSchedulerCore<
         TTarget,
-        TOutputCore,
         TUIThreadInspectorCore,
-        TStateCore,
-        TTransitionEffectCore,
-        TTransitionInterpreterCore> : TransitionSchedulerCore, ITransitionScheduler<
-            TTarget, 
-            TUIThreadInspectorCore, 
-            TOutputCore, 
-            TStateCore, 
-            TTransitionEffectCore>
-        where TStateCore : IFrameState<TStateCore>
-        where TTransitionEffectCore : ITransitionEffect<TTransitionEffectCore>
+        TTransitionInterpreterCore> : TransitionSchedulerCore, ITransitionScheduler
         where TTarget : class
-        where TOutputCore : IFrameSequence
         where TUIThreadInspectorCore : IUIThreadInspector, new()
-        where TTransitionInterpreterCore : ITransitionInterpreter<TTransitionEffectCore>, new()
+        where TTransitionInterpreterCore : class, ITransitionInterpreter, new()
     {
         protected WeakReference<TTarget>? targetref = null;
         protected CancellationTokenSource? cts = null;
-        protected ITransitionInterpreter<TTransitionEffectCore>? interpreter = null;
+        protected TTransitionInterpreterCore? interpreter = null;
         protected TUIThreadInspectorCore uIThreadInspector = new();
-        protected TTransitionInterpreterCore transitionInterpreter = new();
 
-        public virtual async void Execute(IFrameInterpolator<TTransitionEffectCore, TStateCore, TOutputCore> interpolator, IFrameState<TStateCore> state, ITransitionEffect<TTransitionEffectCore> effect)
+        public virtual WeakReference<TTarget>? TargetRef
+        {
+            get => targetref;
+            protected set => targetref = value;
+        }
+
+        public virtual async void Execute(IFrameInterpolator interpolator, IFrameState state, ITransitionEffectCore effect)
         {
             Exit();
             if (targetref is null || !targetref.TryGetTarget(out var target))
@@ -129,17 +122,52 @@ namespace VeloxDev.Core.TransitionSystem
             var oldCts = Interlocked.Exchange(ref cts, null);
             oldCts?.Cancel();
         }
+
+        public static TransitionSchedulerCore<
+            TTarget,
+            TUIThreadInspectorCore,
+            TTransitionInterpreterCore> FindOrCreate(TTarget source, bool CanSTAThread = true)
+        {
+            if (TryGetScheduler(source, out var item))
+            {
+                return item as TransitionSchedulerCore<
+                    TTarget,
+                    TUIThreadInspectorCore,
+                    TTransitionInterpreterCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(TTarget)}> ⌋.");
+            }
+            else
+            {
+                var scheduler = new TransitionSchedulerCore<
+                    TTarget,
+                    TUIThreadInspectorCore,
+                    TTransitionInterpreterCore>()
+                {
+                    TargetRef = new WeakReference<TTarget>(source)
+                };
+                if (CanSTAThread)
+                {
+                    Schedulers.Add(source, scheduler);
+                }
+                return scheduler;
+            }
+        }
     }
 
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 过渡调度器
-    /// <para>解释 : </para>
-    /// <para>1. 在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于调度过渡的启动和终止</para>
-    /// <para>2. 请使用带有泛型的Core子类以构建调度器</para>
-    /// </summary>
     public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     {
+        public static ConditionalWeakTable<object, ITransitionSchedulerCore> Schedulers { get; protected set; } = new();
+
+        public static bool TryGetScheduler(object source, out ITransitionSchedulerCore? scheduler)
+        {
+            if (Schedulers.TryGetValue(source, out scheduler)) return true;
+            scheduler = null;
+            return false;
+        }
+        public static bool RemoveScheduler(object source)
+        {
+            return Schedulers.Remove(source);
+        }
+
         public abstract void Exit();
     }
 }

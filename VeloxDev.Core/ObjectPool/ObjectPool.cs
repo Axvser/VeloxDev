@@ -3,10 +3,6 @@ using VeloxDev.Core.Interfaces.ObjectPool;
 
 namespace VeloxDev.Core.ObjectPool
 {
-    /// <summary>
-    /// 🧰 > Provide a simple object pool structure and methods can be rewritten as needed
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
     public class ObjectPool<T>() : IObjectPool<T> where T : class
     {
         private static readonly Type _type = typeof(T);

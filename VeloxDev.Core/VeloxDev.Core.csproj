@@ -3,14 +3,13 @@
 	<PropertyGroup>
 		<NoWarn>1573</NoWarn>
 		<NoWarn>1591</NoWarn>
-		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<TargetFrameworks>netstandard2.0;netframework4.6.1;net5.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core</Title>
-		<Version>1.0.37-beta</Version>
+		<Version>1.0.80</Version>
 		<Authors>Axvser</Authors>
 		<Description>The Core of VeloxDev. Shared those components that can optimize the development experience of WPF/Avalonia/……</Description>
 		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>

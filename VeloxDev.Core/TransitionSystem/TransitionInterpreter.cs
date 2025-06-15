@@ -2,29 +2,17 @@
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 过渡解释器
-    /// <para>解释 : </para>
-    /// <para>1. 在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于控制动画帧的执行细节</para>
-    /// <para>2. Execute 和 Exit 方法可以重写，通常您不需要这么做，内部已有完善的实现</para>
-    /// </summary>
-    /// <typeparam name="TTransitionEffectCore">您在具体框架对ITransitionEffect的实现类</typeparam>
-    /// <typeparam name="TOutputCore">帧计算完成后，需要一个统一的结构用于存储结果并按索引更新帧</typeparam>
-    /// <typeparam name="TPriorityCore">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
     public abstract class TransitionInterpreterCore<
         TOutputCore,
         TTransitionEffectCore,
-        TPriorityCore> : TransitionInterpreterCore, ITransitionInterpreter<
-            TTransitionEffectCore, 
-            TPriorityCore>
-        where TTransitionEffectCore : ITransitionEffect<TTransitionEffectCore>
+        TPriorityCore> : TransitionInterpreterCore, ITransitionInterpreter<TPriorityCore>
+        where TTransitionEffectCore : ITransitionEffect<TPriorityCore>
         where TOutputCore : IFrameSequence<TPriorityCore>
     {
         public virtual async Task Execute(
             object target,
             IFrameSequence<TPriorityCore> frameSequence,
-            ITransitionEffect<TTransitionEffectCore, TPriorityCore> effect,
+            ITransitionEffect<TPriorityCore> effect,
             bool isUIAccess,
             CancellationTokenSource cts)
         {
@@ -81,11 +69,11 @@ namespace VeloxDev.Core.TransitionSystem
             }
         }
 
-        private static int GetDeltaTime(ITransitionEffect<TTransitionEffectCore, TPriorityCore> effect)
+        private static int GetDeltaTime(ITransitionEffect<TPriorityCore> effect)
             => (int)(1000d / effect.FPS);
 
         private static List<int> GetEaseIndex(
-            ITransitionEffect<TTransitionEffectCore, TPriorityCore> effect,
+            ITransitionEffect<TPriorityCore> effect,
             int steps)
         {
             List<int> result = [];
@@ -102,25 +90,16 @@ namespace VeloxDev.Core.TransitionSystem
         }
     }
 
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 过渡解释器
-    /// <para>解释 : </para>
-    /// <para>1. 在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于控制动画帧的执行细节</para>
-    /// <para>2. Execute 和 Exit 方法可以重写，通常您不需要这么做，内部已有完善的实现</para>
-    /// </summary>
-    /// <typeparam name="TTransitionEffectCore">您在具体框架对ITransitionEffect的实现类</typeparam>
-    /// <typeparam name="TOutputCore">帧计算完成后，需要一个统一的结构用于存储结果并按索引更新帧</typeparam>
     public abstract class TransitionInterpreterCore<
         TOutputCore,
-        TTransitionEffectCore> : TransitionInterpreterCore, ITransitionInterpreter<TTransitionEffectCore>
-        where TTransitionEffectCore : ITransitionEffect<TTransitionEffectCore>
+        TTransitionEffectCore> : TransitionInterpreterCore, ITransitionInterpreter
+        where TTransitionEffectCore : ITransitionEffectCore
         where TOutputCore : IFrameSequence
     {
         public virtual async Task Execute(
             object target,
             IFrameSequence frameSequence,
-            ITransitionEffect<TTransitionEffectCore> effect,
+            ITransitionEffectCore effect,
             bool isUIAccess,
             CancellationTokenSource cts)
         {
@@ -175,11 +154,11 @@ namespace VeloxDev.Core.TransitionSystem
             }
         }
 
-        private static int GetDeltaTime(ITransitionEffect<TTransitionEffectCore> effect)
+        private static int GetDeltaTime(ITransitionEffectCore effect)
             => (int)(1000d / effect.FPS);
 
         private static List<int> GetEaseIndex(
-            ITransitionEffect<TTransitionEffectCore> effect,
+            ITransitionEffectCore effect,
             int steps)
         {
             List<int> result = [];

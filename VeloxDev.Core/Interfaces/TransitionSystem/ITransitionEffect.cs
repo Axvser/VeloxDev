@@ -5,16 +5,11 @@
         public bool Handled { get; set; } = false;
     }
 
-    public interface ITransitionEffect<TTransitionEffectCore, TPriorityCore> : ITransitionEffectCore
+    public interface ITransitionEffect<TPriorityCore> : ITransitionEffectCore
     {
         public TPriorityCore Priority { get; set; }
 
-        public TTransitionEffectCore Clone();
-    }
-
-    public interface ITransitionEffect<TTransitionEffectCore> : ITransitionEffectCore
-    {
-        public TTransitionEffectCore Clone();
+        public new ITransitionEffect<TPriorityCore> Clone();
     }
 
     public interface ITransitionEffectCore
@@ -40,5 +35,7 @@
         public void InvokeCompleted(object sender, FrameEventArgs e);
         public void InvokeCancled(object sender, FrameEventArgs e);
         public void InvokeFinally(object sender, FrameEventArgs e);
+
+        public ITransitionEffectCore Clone();
     }
 }

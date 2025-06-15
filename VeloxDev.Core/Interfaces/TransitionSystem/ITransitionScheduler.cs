@@ -1,35 +1,20 @@
 ﻿namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
-    public interface ITransitionScheduler<
-        TSchedulerTargetCore, 
-        TUIThreadInspectorCore, 
-        TOutputCore, 
-        TStateCore, 
-        TTransitionEffectCore, 
-        TPriorityCore> : ITransitionSchedulerCore
-        where TStateCore : IFrameState<TStateCore>
-        where TTransitionEffectCore : ITransitionEffect<TTransitionEffectCore>
-        where TSchedulerTargetCore : class
-        where TUIThreadInspectorCore : new()
-        where TOutputCore : IFrameSequence<TPriorityCore>
+    public interface ITransitionScheduler<TPriorityCore> : ITransitionSchedulerCore
     {
-        public void Execute(IFrameInterpolator<TTransitionEffectCore, TStateCore, TOutputCore, TPriorityCore> interpolator, IFrameState<TStateCore> state, ITransitionEffect<TTransitionEffectCore, TPriorityCore> effect);
+        public void Execute(
+            IFrameInterpolator<TPriorityCore> interpolator,
+            IFrameState state,
+            ITransitionEffect<TPriorityCore> effect);
         public void Exit();
     }
 
-    public interface ITransitionScheduler<
-        TSchedulerTargetCore, 
-        TUIThreadInspectorCore, 
-        TOutputCore, 
-        TStateCore, 
-        TTransitionEffectCore> : ITransitionSchedulerCore
-        where TStateCore : IFrameState<TStateCore>
-        where TTransitionEffectCore : ITransitionEffect<TTransitionEffectCore>
-        where TSchedulerTargetCore : class
-        where TUIThreadInspectorCore : new()
-        where TOutputCore : IFrameSequence
+    public interface ITransitionScheduler : ITransitionSchedulerCore
     {
-        public void Execute(IFrameInterpolator<TTransitionEffectCore, TStateCore, TOutputCore> interpolator, IFrameState<TStateCore> state, ITransitionEffect<TTransitionEffectCore> effect);
+        public void Execute(
+            IFrameInterpolator interpolator,
+            IFrameState state, 
+            ITransitionEffectCore effect);
         public void Exit();
     }
 

@@ -1,5 +1,4 @@
 ﻿using System.Windows.Threading;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.WPF.TransitionSystem

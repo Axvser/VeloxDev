@@ -1,8 +1,5 @@
 ﻿namespace VeloxDev.Core.Generators
 {
-    /// <summary>
-    /// ✨ Generator >>> Enable the Class to have a MonoBehaviour
-    /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public class MonoBehaviourAttribute : Attribute
     {

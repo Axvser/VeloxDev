@@ -2,7 +2,7 @@
 
 namespace VeloxDev.WPF.TransitionSystem
 {
-    public class State() : StateCore
+    public class State : StateCore
     {
 
     }

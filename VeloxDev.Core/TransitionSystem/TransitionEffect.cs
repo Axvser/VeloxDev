@@ -3,24 +3,15 @@ using VeloxDev.Core.WeakTypes;
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 过渡解释器
-    /// <para>解释 : </para>
-    /// <para>在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于描述过渡效果的细节</para>
-    /// </summary>
-    /// <typeparam name="TTransitionEffectCore">您在具体框架对TransitionEffectCore的实现类</typeparam>
-    /// <typeparam name="TPriorityCore">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
-    public abstract class TransitionEffectCore<TTransitionEffectCore, TPriorityCore> : TransitionEffectCore, ITransitionEffect<TTransitionEffectCore, TPriorityCore>
-        where TTransitionEffectCore : TransitionEffectCore<TTransitionEffectCore, TPriorityCore>, new()
+    public class TransitionEffectCore<TPriorityCore> : TransitionEffectCore, ITransitionEffect<TPriorityCore>
     {
 #pragma warning disable CS8618
         public virtual TPriorityCore Priority { get; set; }
 #pragma warning restore CS8618
 
-        public TTransitionEffectCore Clone()
+        public new ITransitionEffect<TPriorityCore> Clone()
         {
-            var copy = new TTransitionEffectCore()
+            var copy = new TransitionEffectCore<TPriorityCore>()
             {
                 _awaked = _awaked.Clone(),
                 _start = _start.Clone(),
@@ -40,44 +31,7 @@ namespace VeloxDev.Core.TransitionSystem
         }
     }
 
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 过渡解释器
-    /// <para>解释 : </para>
-    /// <para>在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于描述过渡效果的细节</para>
-    /// </summary>
-    /// <typeparam name="TTransitionEffectCore">您在具体框架对TransitionEffectCore的实现类</typeparam>
-    public abstract class TransitionEffectCore<TTransitionEffectCore> : TransitionEffectCore, ITransitionEffect<TTransitionEffectCore>
-        where TTransitionEffectCore : TransitionEffectCore<TTransitionEffectCore>, new()
-    {
-        public TTransitionEffectCore Clone()
-        {
-            var copy = new TTransitionEffectCore()
-            {
-                _awaked = _awaked.Clone(),
-                _start = _start.Clone(),
-                _update = _update.Clone(),
-                _lateupdate = _lateupdate.Clone(),
-                _cancled = _cancled.Clone(),
-                _completed = _completed.Clone(),
-                _finally = _finally.Clone(),
-                IsAutoReverse = IsAutoReverse,
-                LoopTime = LoopTime,
-                Duration = Duration,
-                FPS = FPS,
-                EaseCalculator = EaseCalculator
-            };
-            return copy;
-        }
-    }
-
-    /// <summary>
-    /// <para>---</para>
-    /// ✨ ⌈ 核心 ⌋ 过渡解释器
-    /// <para>解释 : </para>
-    /// <para>在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于描述过渡效果的细节</para>
-    /// </summary>
-    public abstract class TransitionEffectCore : ITransitionEffectCore
+    public class TransitionEffectCore : ITransitionEffectCore
     {
         protected WeakDelegate<EventHandler<FrameEventArgs>> _awaked = new();
         protected WeakDelegate<EventHandler<FrameEventArgs>> _start = new();
@@ -157,6 +111,26 @@ namespace VeloxDev.Core.TransitionSystem
         public virtual void InvokeFinally(object sender, FrameEventArgs e)
         {
             _finally.Invoke([sender, e]);
+        }
+
+        public ITransitionEffectCore Clone()
+        {
+            var copy = new TransitionEffectCore()
+            {
+                _awaked = _awaked.Clone(),
+                _start = _start.Clone(),
+                _update = _update.Clone(),
+                _lateupdate = _lateupdate.Clone(),
+                _cancled = _cancled.Clone(),
+                _completed = _completed.Clone(),
+                _finally = _finally.Clone(),
+                IsAutoReverse = IsAutoReverse,
+                LoopTime = LoopTime,
+                Duration = Duration,
+                FPS = FPS,
+                EaseCalculator = EaseCalculator
+            };
+            return copy;
         }
     }
 }

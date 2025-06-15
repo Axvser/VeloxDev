@@ -2,16 +2,6 @@
 
 namespace VeloxDev.Core.WeakTypes
 {
-    /// <summary>
-    /// 🧰 > Weak reference cache for objects
-    /// <para>Scenarios applicable to context caching for storing objects and periodically using the cache in batches to perform tasks.</para>
-    /// <para><see cref="ForeachCache(Action{TTargetKey, TCacheKey})"/> - For all the instances that are still alive, read their context cache and then perform the delegation</para>
-    /// <para><see cref="AddOrUpdate(TTargetKey, TCacheKey)"/></para>
-    /// <para><see cref="TryGetCache(TTargetKey, out TCacheKey?)"/></para>
-    /// <para><see cref="Remove"/></para>
-    /// </summary>
-    /// <typeparam name="TTargetKey">the class that has cache.</typeparam>
-    /// <typeparam name="TCacheKey">the class of context cache</typeparam>
     public sealed class WeakCache<TTargetKey, TCacheKey> where TTargetKey : class where TCacheKey : class
     {
         private readonly ConditionalWeakTable<TTargetKey, TCacheKey> _caches = new();

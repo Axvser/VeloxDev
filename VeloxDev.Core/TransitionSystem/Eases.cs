@@ -2,9 +2,6 @@
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    /// <summary>
-    /// ✨ ⌈ 核心 ⌋ 缓动函数
-    /// </summary>
     public static class Eases
     {
         public static IEaseCalculator Default => new EaseDefault();
