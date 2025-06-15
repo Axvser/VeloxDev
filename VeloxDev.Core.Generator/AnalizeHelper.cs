@@ -82,7 +82,7 @@ namespace VeloxDev.Core.Generator
         /// </summary>
         internal static string GetInterfaceName(ClassDeclarationSyntax classDeclarationSyntax)
         {
-            return $"{classDeclarationSyntax.Identifier.Text}_{GetNamespace(classDeclarationSyntax).Replace('.', '_')}_Aop";
+            return $"IAop_{classDeclarationSyntax.Identifier.Text}_{GetNamespace(classDeclarationSyntax).Replace('.', '_')}";
         }
 
         internal static string GetPropertyNameByFieldName(VariableDeclaratorSyntax variable)

@@ -5,9 +5,20 @@
         public bool Handled { get; set; } = false;
     }
 
-    public interface ITransitionEffect<TPriority> : ICloneable
+    public interface ITransitionEffect<TTransitionEffectCore, TPriorityCore> : ITransitionEffectCore
     {
-        public TPriority Priority { get; set; }
+        public TPriorityCore Priority { get; set; }
+
+        public TTransitionEffectCore Clone();
+    }
+
+    public interface ITransitionEffect<TTransitionEffectCore> : ITransitionEffectCore
+    {
+        public TTransitionEffectCore Clone();
+    }
+
+    public interface ITransitionEffectCore
+    {
         public int FPS { get; set; }
         public TimeSpan Duration { get; set; }
         public bool IsAutoReverse { get; set; }
@@ -29,7 +40,5 @@
         public void InvokeCompleted(object sender, FrameEventArgs e);
         public void InvokeCancled(object sender, FrameEventArgs e);
         public void InvokeFinally(object sender, FrameEventArgs e);
-
-        public ITransitionEffect<TPriority> DeepCopy();
     }
 }

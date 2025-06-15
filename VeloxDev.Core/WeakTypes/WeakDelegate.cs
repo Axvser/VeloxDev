@@ -6,23 +6,24 @@
     /// <para><see cref="RemoveHandler(TDelegate)"/></para>
     /// <para><see cref="GetInvocationList"/> - Release invalid elements and return valid TDelegate </para>
     /// </summary>
-    public sealed class WeakDelegate<TDelegate> : ICloneable where TDelegate : Delegate
+    public sealed class WeakDelegate<TDelegate> 
+        where TDelegate : Delegate
     {
         private TDelegate? _combinedDelegate;
         private readonly List<WeakReference<Delegate>> _handlers = [];
         private readonly object _lock = new();
 
-        public void AddHandler(TDelegate? handler)
+        public void AddHandler(TDelegate? handler, bool CanUpdateCache = true)
         {
             lock (_lock)
             {
                 if (handler == null) return;
                 _handlers.Add(new WeakReference<Delegate>(handler));
-                _combinedDelegate = GetInvocationList();
+                if (CanUpdateCache) _combinedDelegate = GetInvocationList();
             }
         }
 
-        public void RemoveHandler(TDelegate? handler)
+        public void RemoveHandler(TDelegate? handler, bool CanUpdateCache = true)
         {
             lock (_lock)
             {
@@ -31,7 +32,7 @@
                     if (_handlers[i].TryGetTarget(out var target) && target == handler)
                     {
                         _handlers.RemoveAt(i);
-                        _combinedDelegate = GetInvocationList();
+                        if (CanUpdateCache) _combinedDelegate = GetInvocationList();
                     }
                 }
             }
@@ -78,15 +79,7 @@
             }
         }
 
-        public object Clone()
-        {
-            lock (_lock)
-            {
-                return DeepCopy();
-            }
-        }
-
-        public WeakDelegate<TDelegate> DeepCopy()
+        public WeakDelegate<TDelegate> Clone()
         {
             lock (_lock)
             {

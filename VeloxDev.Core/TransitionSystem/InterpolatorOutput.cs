@@ -9,12 +9,40 @@ namespace VeloxDev.Core.TransitionSystem
     /// <para>解释 : </para>
     /// <para>在不同平台实现过渡系统时，您需要具体地实现此核心以用于定义动画帧的数据结构以及动画帧的按索引更新操作</para>
     /// </summary>
-    /// <typeparam name="TPriority">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
-    public abstract class InterpolatorOutputCore<TPriority> : IFrameSequence<TPriority>
+    /// <typeparam name="TPriorityCore">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
+    public abstract class InterpolatorOutputCore<TPriorityCore> : IFrameSequence<TPriorityCore>
     {
         public virtual Dictionary<PropertyInfo, List<object?>> Frames { get; protected set; } = [];
         public virtual int Count { get; protected set; } = 0;
-        public abstract void Update(object target, int frameIndex, bool isUIAccess, TPriority priority);
+        public abstract void Update(object target, int frameIndex, bool isUIAccess, TPriorityCore priority);
+        public virtual void AddPropertyInterpolations(PropertyInfo propertyInfo, List<object?> objects)
+        {
+            if (Frames.TryGetValue(propertyInfo, out _))
+            {
+                Frames[propertyInfo] = objects;
+            }
+            else
+            {
+                Frames.Add(propertyInfo, objects);
+            }
+        }
+        public virtual void SetCount(int count)
+        {
+            Count = count;
+        }
+    }
+
+    /// <summary>
+    /// <para>---</para>
+    /// ✨ ⌈ 核心 ⌋ 插值输出
+    /// <para>解释 : </para>
+    /// <para>在不同平台实现过渡系统时，您需要具体地实现此核心以用于定义动画帧的数据结构以及动画帧的按索引更新操作</para>
+    /// </summary>
+    public abstract class InterpolatorOutputCore : IFrameSequence
+    {
+        public virtual Dictionary<PropertyInfo, List<object?>> Frames { get; protected set; } = [];
+        public virtual int Count { get; protected set; } = 0;
+        public abstract void Update(object target, int frameIndex, bool isUIAccess);
         public virtual void AddPropertyInterpolations(PropertyInfo propertyInfo, List<object?> objects)
         {
             if (Frames.TryGetValue(propertyInfo, out _))

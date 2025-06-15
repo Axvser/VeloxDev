@@ -39,6 +39,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MauiTest", "MauiTest\MauiTe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeloxDev.NET", "VeloxDev.NET\VeloxDev.NET.csproj", "{4E216D72-64ED-4A02-B7FA-747B8D4A68CF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeloxDev.Core.Generator", "VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj", "{E0C20CC2-4065-1ADF-A301-63BFCEC1EA09}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -91,6 +93,10 @@ Global
 		{4E216D72-64ED-4A02-B7FA-747B8D4A68CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4E216D72-64ED-4A02-B7FA-747B8D4A68CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4E216D72-64ED-4A02-B7FA-747B8D4A68CF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E0C20CC2-4065-1ADF-A301-63BFCEC1EA09}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E0C20CC2-4065-1ADF-A301-63BFCEC1EA09}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E0C20CC2-4065-1ADF-A301-63BFCEC1EA09}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E0C20CC2-4065-1ADF-A301-63BFCEC1EA09}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -110,6 +116,7 @@ Global
 		{AF665DBA-A076-4D9C-88BA-45F9A1D453D6} = {E66A6BC7-F8E2-461F-8BE0-D35A7479B3BC}
 		{7BD3B136-659C-49A0-96A4-ACD276F3D6AD} = {2A8092C3-3B4C-4F81-A141-16E6A50CB131}
 		{4E216D72-64ED-4A02-B7FA-747B8D4A68CF} = {E66A6BC7-F8E2-461F-8BE0-D35A7479B3BC}
+		{E0C20CC2-4065-1ADF-A301-63BFCEC1EA09} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BB798447-5A6A-4215-84F8-A0A86077D0EC}

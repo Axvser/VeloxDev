@@ -9,8 +9,75 @@ namespace VeloxDev.Core.TransitionSystem
     /// <para>解释 : </para>
     /// <para>在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于描述过渡效果的细节</para>
     /// </summary>
-    /// <typeparam name="TPriority">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
-    public class TransitionEffectCore<TPriority> : ITransitionEffect<TPriority>
+    /// <typeparam name="TTransitionEffectCore">您在具体框架对TransitionEffectCore的实现类</typeparam>
+    /// <typeparam name="TPriorityCore">在不同框架中，使用不同的结构来表示UI更新操作的优先级</typeparam>
+    public abstract class TransitionEffectCore<TTransitionEffectCore, TPriorityCore> : TransitionEffectCore, ITransitionEffect<TTransitionEffectCore, TPriorityCore>
+        where TTransitionEffectCore : TransitionEffectCore<TTransitionEffectCore, TPriorityCore>, new()
+    {
+#pragma warning disable CS8618
+        public virtual TPriorityCore Priority { get; set; }
+#pragma warning restore CS8618
+
+        public TTransitionEffectCore Clone()
+        {
+            var copy = new TTransitionEffectCore()
+            {
+                _awaked = _awaked.Clone(),
+                _start = _start.Clone(),
+                _update = _update.Clone(),
+                _lateupdate = _lateupdate.Clone(),
+                _cancled = _cancled.Clone(),
+                _completed = _completed.Clone(),
+                _finally = _finally.Clone(),
+                IsAutoReverse = IsAutoReverse,
+                LoopTime = LoopTime,
+                Duration = Duration,
+                FPS = FPS,
+                EaseCalculator = EaseCalculator,
+                Priority = Priority,
+            };
+            return copy;
+        }
+    }
+
+    /// <summary>
+    /// <para>---</para>
+    /// ✨ ⌈ 核心 ⌋ 过渡解释器
+    /// <para>解释 : </para>
+    /// <para>在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于描述过渡效果的细节</para>
+    /// </summary>
+    /// <typeparam name="TTransitionEffectCore">您在具体框架对TransitionEffectCore的实现类</typeparam>
+    public abstract class TransitionEffectCore<TTransitionEffectCore> : TransitionEffectCore, ITransitionEffect<TTransitionEffectCore>
+        where TTransitionEffectCore : TransitionEffectCore<TTransitionEffectCore>, new()
+    {
+        public TTransitionEffectCore Clone()
+        {
+            var copy = new TTransitionEffectCore()
+            {
+                _awaked = _awaked.Clone(),
+                _start = _start.Clone(),
+                _update = _update.Clone(),
+                _lateupdate = _lateupdate.Clone(),
+                _cancled = _cancled.Clone(),
+                _completed = _completed.Clone(),
+                _finally = _finally.Clone(),
+                IsAutoReverse = IsAutoReverse,
+                LoopTime = LoopTime,
+                Duration = Duration,
+                FPS = FPS,
+                EaseCalculator = EaseCalculator
+            };
+            return copy;
+        }
+    }
+
+    /// <summary>
+    /// <para>---</para>
+    /// ✨ ⌈ 核心 ⌋ 过渡解释器
+    /// <para>解释 : </para>
+    /// <para>在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于描述过渡效果的细节</para>
+    /// </summary>
+    public abstract class TransitionEffectCore : ITransitionEffectCore
     {
         protected WeakDelegate<EventHandler<FrameEventArgs>> _awaked = new();
         protected WeakDelegate<EventHandler<FrameEventArgs>> _start = new();
@@ -20,14 +87,12 @@ namespace VeloxDev.Core.TransitionSystem
         protected WeakDelegate<EventHandler<FrameEventArgs>> _completed = new();
         protected WeakDelegate<EventHandler<FrameEventArgs>> _finally = new();
 
-#pragma warning disable CS8618
-        public virtual TPriority Priority { get; set; }
-#pragma warning restore CS8618
         public virtual int FPS { get; set; } = 60;
         public virtual TimeSpan Duration { get; set; } = TimeSpan.FromMilliseconds(0);
         public virtual bool IsAutoReverse { get; set; } = false;
         public virtual int LoopTime { get; set; } = 0;
         public virtual IEaseCalculator EaseCalculator { get; set; } = Eases.Default;
+
 
         public virtual event EventHandler<FrameEventArgs> Awaked
         {
@@ -92,31 +157,6 @@ namespace VeloxDev.Core.TransitionSystem
         public virtual void InvokeFinally(object sender, FrameEventArgs e)
         {
             _finally.Invoke([sender, e]);
-        }
-
-        public virtual object Clone()
-        {
-            return DeepCopy();
-        }
-        public virtual ITransitionEffect<TPriority> DeepCopy()
-        {
-            var copy = new TransitionEffectCore<TPriority>
-            {
-                _awaked = _awaked.DeepCopy(),
-                _start = _start.DeepCopy(),
-                _update = _update.DeepCopy(),
-                _lateupdate = _lateupdate.DeepCopy(),
-                _cancled = _cancled.DeepCopy(),
-                _completed = _completed.DeepCopy(),
-                _finally = _finally.DeepCopy(),
-                IsAutoReverse = IsAutoReverse,
-                LoopTime = LoopTime,
-                Duration = Duration,
-                FPS = FPS,
-                EaseCalculator = EaseCalculator,
-                Priority = Priority,
-            };
-            return copy;
         }
     }
 }

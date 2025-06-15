@@ -9,7 +9,7 @@ using System.Text;
 
 namespace VeloxDev.Core.Generator.Generator
 {
-    [Generator(LanguageNames.CSharp)] // AOP 支持
+    [Generator(LanguageNames.CSharp)]
     public class AopModule : GeneratorBase
     {
         public const string NAMESPACE = "global::VeloxDev.Core.Interfaces.AspectOriented";

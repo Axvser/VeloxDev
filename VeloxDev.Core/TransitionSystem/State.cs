@@ -11,7 +11,8 @@ namespace VeloxDev.Core.TransitionSystem
     /// <para>解释 : </para>
     /// <para>在不同平台实现过渡系统时，您仅需一个此核心的具体实现就能用于记录一个实例在某一时刻的状态，以及，如果要加载指向此状态的过渡，对于每个属性是否采取自定义的插值器而非系统默认插值器</para>
     /// </summary>
-    public class StateCore : IFrameState, ICloneable
+    /// <typeparam name="TStateCore">您在具体框架对StateCore的实现类</typeparam>
+    public abstract class StateCore<TStateCore> where TStateCore : IFrameState<TStateCore>, new()
     {
         protected ConcurrentDictionary<PropertyInfo, object?> _values = [];
         protected ConcurrentDictionary<PropertyInfo, IValueInterpolator> _interpolators = [];
@@ -153,25 +154,21 @@ namespace VeloxDev.Core.TransitionSystem
             return false;
         }
 
-        public virtual IFrameState DeepCopy()
+        public virtual TStateCore Clone()
         {
-            var value = new StateCore();
+            var value = new TStateCore();
 
             foreach (var kvp in _values)
             {
-                value._values.TryAdd(kvp.Key, kvp.Value);
+                value.Values.TryAdd(kvp.Key, kvp.Value);
             }
 
             foreach (var kvp in _interpolators)
             {
-                value._interpolators.TryAdd(kvp.Key, kvp.Value);
+                value.Interpolators.TryAdd(kvp.Key, kvp.Value);
             }
 
             return value;
-        }
-        public virtual object Clone()
-        {
-            return DeepCopy();
         }
     }
 }
