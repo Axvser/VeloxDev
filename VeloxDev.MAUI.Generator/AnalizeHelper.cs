@@ -51,37 +51,16 @@ namespace VeloxDev.MAUI.Generator
             return compilationAndClasses;
         }
 
-        /// <summary>
-        /// 获取类所指向的AOP接口
-        /// </summary>
-        internal static string GetInterfaceName(ClassDeclarationSyntax classDeclarationSyntax)
-        {
-            return $"{classDeclarationSyntax.Identifier.Text}_{GetNamespace(classDeclarationSyntax).Replace('.', '_')}_Aop";
-        }
-
         internal static string GetPropertyNameByFieldName(VariableDeclaratorSyntax variable)
         {
-            if (variable.Identifier.Text.StartsWith('_'))
+            if (variable.Identifier.Text.StartsWith("_"))
             {
-                return char.ToUpper(variable.Identifier.Text[1]) + variable.Identifier.Text[2..];
+                return char.ToUpper(variable.Identifier.Text[1]) + variable.Identifier.Text.Substring(2);
             }
             else
             {
-                return char.ToUpper(variable.Identifier.Text[0]) + variable.Identifier.Text[1..];
+                return char.ToUpper(variable.Identifier.Text[0]) + variable.Identifier.Text.Substring(1);
             }
-        }
-
-        public static string GetNamespace(ClassDeclarationSyntax classDeclaration)
-        {
-            SyntaxNode? current = classDeclaration;
-            while (current != null && current is not NamespaceDeclarationSyntax)
-            {
-                current = current.Parent;
-            }
-
-            return current is NamespaceDeclarationSyntax namespaceDeclaration
-                ? namespaceDeclaration.Name.ToString()
-                : "Global";
         }
     }
 }

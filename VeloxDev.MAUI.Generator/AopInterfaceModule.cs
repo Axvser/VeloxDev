@@ -3,7 +3,10 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using System.Collections.Immutable;
+using System.Reflection;
 using System.Text;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace VeloxDev.MAUI.Generator
 {
@@ -20,8 +23,11 @@ namespace VeloxDev.MAUI.Generator
         {
             foreach (var classDeclaration in input.Classes)
             {
-                if (!AnalizeHelper.IsAopClass(classDeclaration)) continue;
-                string interfaceName = AnalizeHelper.GetInterfaceName(classDeclaration);
+                SemanticModel model = input.Compilation.GetSemanticModel(classDeclaration.SyntaxTree);
+                var classSymbol = model.GetDeclaredSymbol(classDeclaration);
+                if (!AnalizeHelper.IsAopClass(classDeclaration) || classSymbol is null) continue;
+
+                string interfaceName = $"{classDeclaration.Identifier.Text}_{classSymbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop";
                 var baseList = SyntaxFactory.BaseList(
                     SyntaxFactory.SingletonSeparatedList<BaseTypeSyntax>(
                         SyntaxFactory.SimpleBaseType(

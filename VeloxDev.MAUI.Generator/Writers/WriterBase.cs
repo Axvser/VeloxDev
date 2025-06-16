@@ -22,14 +22,14 @@ namespace VeloxDev.MAUI.Generator.Writers
 
         public string GenerateHead()
         {
-            if (Syntax == null)
+            if (Symbol == null)
             {
                 return string.Empty;
             }
             StringBuilder sourceBuilder = new();
             sourceBuilder.AppendLine("#nullable enable");
             sourceBuilder.AppendLine();
-            sourceBuilder.AppendLine($"namespace {AnalizeHelper.GetNamespace(Syntax)}");
+            sourceBuilder.AppendLine($"namespace {Symbol.ContainingNamespace}");
             sourceBuilder.AppendLine("{");
             return sourceBuilder.ToString();
         }
