@@ -1,9 +1,9 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Text;
-using VeloxDev.Core.Generator.Base;
+using VeloxDev.Avalonia.Generator.Base;
 
-namespace VeloxDev.Core.Generator.Writers
+namespace VeloxDev.Avalonia.Generator.Writers
 {
     public abstract class WriterBase : ICodeWriter
     {

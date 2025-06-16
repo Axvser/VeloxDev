@@ -7,16 +7,17 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using VeloxDev.Core.Generator.Base;
 
-namespace VeloxDev.Core.Generator
+namespace VeloxDev.Avalonia.Generator
 {
     [Generator]
     public class AopInterfaceModule : IIncrementalGenerator
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            context.RegisterSourceOutput(Analizer.Filters.FilterContext(context), GenerateSource);
+            var classDeclarations = AnalizeHelper.DefiningFilter(context);
+            var compilationAndClasses = AnalizeHelper.GetValue(context, classDeclarations);
+            context.RegisterSourceOutput(compilationAndClasses, GenerateSource);
         }
         private static void GenerateSource(SourceProductionContext context, (Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes) input)
         {
@@ -26,7 +27,7 @@ namespace VeloxDev.Core.Generator
                 var classSymbol = model.GetDeclaredSymbol(classDeclaration);
                 if (!AnalizeHelper.IsAopClass(classDeclaration) || classSymbol is null) continue;
 
-                string interfaceName = $"{classDeclaration.Identifier.Text}_{classSymbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop";
+                string interfaceName = $"{classDeclaration.Identifier.Text}_{classSymbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop" ;
                 var baseList = SyntaxFactory.BaseList(
                     SyntaxFactory.SingletonSeparatedList<BaseTypeSyntax>(
                         SyntaxFactory.SimpleBaseType(

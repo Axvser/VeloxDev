@@ -7,7 +7,7 @@
 		<Nullable>enable</Nullable>
 		<LangVersion>latest</LangVersion>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<Title>VeloxDev.Core.Generator</Title>
+		<Title>VeloxDev.Avalonia.Generator</Title>
 		<Version>1.0.120</Version>
 		<Authors>Axvser</Authors>
 	</PropertyGroup>

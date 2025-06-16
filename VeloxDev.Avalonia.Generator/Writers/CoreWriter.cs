@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace VeloxDev.Core.Generator.Writers
+namespace VeloxDev.Avalonia.Generator.Writers
 {
     public class CoreWriter : WriterBase
     {
@@ -13,7 +13,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         public bool IsAop { get; set; } = false;
         public bool IsMono { get; set; } = false;
-        public double MonoSpan { get; set; } = 17;
+        public int MonoSpan { get; set; } = 17;
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
@@ -33,16 +33,19 @@ namespace VeloxDev.Core.Generator.Writers
 
         private void ReadMonoConfig(INamedTypeSymbol symbol)
         {
+            // 只处理直接标记的特性（通过语法树检查）
             var attributeData = symbol.GetAttributes()
                 .FirstOrDefault(ad =>
                     ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == FULLNAME_MONOCONFIG &&
-                    ad.ApplicationSyntaxReference != null // 确保是直接标记的特性
+                    ad.ApplicationSyntaxReference?.GetSyntax() is AttributeSyntax attrSyntax && // 确保是语法节点
+                    attrSyntax.Parent?.Parent is ClassDeclarationSyntax // 确保是直接标记在类上
                 );
-            if (attributeData != null)
+
+            IsMono = attributeData != null;
+            if (IsMono)
             {
-                IsMono = true;
-                var num = (int)attributeData.ConstructorArguments[0].Value!;
-                MonoSpan = 1000d / num > 0 ? num : 1;
+                var value = (int)attributeData!.ConstructorArguments[0].Value!;
+                MonoSpan = (int)(1000d / value > 0 ? value : 1);
             }
         }
 

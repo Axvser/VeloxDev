@@ -1,9 +1,9 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Text;
-using VeloxDev.Core.Generator.Base;
+using VeloxDev.MAUI.Generator.Base;
 
-namespace VeloxDev.Core.Generator.Writers
+namespace VeloxDev.MAUI.Generator.Writers
 {
     public abstract class WriterBase : ICodeWriter
     {
@@ -22,14 +22,14 @@ namespace VeloxDev.Core.Generator.Writers
 
         public string GenerateHead()
         {
-            if (Symbol == null)
+            if (Syntax == null)
             {
                 return string.Empty;
             }
             StringBuilder sourceBuilder = new();
             sourceBuilder.AppendLine("#nullable enable");
             sourceBuilder.AppendLine();
-            sourceBuilder.AppendLine($"namespace {Symbol.ContainingNamespace}");
+            sourceBuilder.AppendLine($"namespace {AnalizeHelper.GetNamespace(Syntax)}");
             sourceBuilder.AppendLine("{");
             return sourceBuilder.ToString();
         }

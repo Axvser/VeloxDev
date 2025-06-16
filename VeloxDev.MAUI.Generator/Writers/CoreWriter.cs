@@ -1,10 +1,8 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
-namespace VeloxDev.Core.Generator.Writers
+namespace VeloxDev.MAUI.Generator.Writers
 {
     public class CoreWriter : WriterBase
     {
@@ -53,11 +51,11 @@ namespace VeloxDev.Core.Generator.Writers
 
         public override string GetFileName()
         {
-            if (Syntax == null || Symbol == null)
+            if (Syntax == null)
             {
                 return string.Empty;
             }
-            return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_VeloxCore.g.cs";
+            return $"{Syntax.Identifier.Text}_{AnalizeHelper.GetNamespace(Syntax).Replace('.', '_')}_VeloxCore.g.cs";
         }
 
         public override string Write()
@@ -74,7 +72,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         private string GeneratePartial()
         {
-            if (Syntax == null || Symbol == null)
+            if (Syntax == null)
             {
                 return string.Empty;
             }
@@ -85,7 +83,7 @@ namespace VeloxDev.Core.Generator.Writers
 
             if (IsAop)
             {
-                list.Add($"{NAMESPACE_AOP}{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop");
+                list.Add($"{NAMESPACE_AOP}{AnalizeHelper.GetInterfaceName(Syntax)}");
             }
             if (list.Count > 0)
             {
@@ -110,12 +108,12 @@ namespace VeloxDev.Core.Generator.Writers
 
         private string GenerateBody()
         {
-            if (Syntax == null || Symbol == null)
+            if (Syntax == null)
             {
                 return string.Empty;
             }
             StringBuilder builder = new();
-            var strAop = $"{NAMESPACE_AOP}{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop";
+            var strAop = $"{NAMESPACE_AOP}{AnalizeHelper.GetInterfaceName(Syntax)}";
             if (IsAop)
             {
                 builder.AppendLine($$"""
