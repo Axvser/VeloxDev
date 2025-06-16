@@ -60,7 +60,11 @@
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.1" />
-		<PackageReference Include="VeloxDev.MAUI" Version="1.0.90" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
+	  <ProjectReference Include="..\VeloxDev.MAUI.Generator\VeloxDev.MAUI.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"  />
 	</ItemGroup>
 
 </Project>

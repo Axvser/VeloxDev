@@ -1,15 +1,12 @@
-﻿using VeloxDev.Core.AspectOriented;
-using VeloxDev.Core.Generators;
-using VeloxDev.Core.TransitionSystem;
-using VeloxDev.MAUI.TransitionSystem;
+﻿using VeloxDev.Core.Generators;
+using VeloxDev.Core.AspectOriented;
+using VeloxDev.Core.AopInterfaces;
 
 namespace MauiTest
 {
     [MonoBehaviour(60)]
-    public partial class MainPage : ContentPage
+    public partial class MainPage : ContentPage, MainPage_MauiTest_Aop // 此处必须显示实现动态生成的AOP接口
     {
-        int count = 0;
-
         [AspectOriented]
         public void Do()
         {
@@ -19,7 +16,19 @@ namespace MauiTest
         public MainPage()
         {
             InitializeComponent();
+
+            var proxy = this.CreateProxy<MainPage_MauiTest_Aop>(); // 此处必须显示指定AOP接口
+
+            proxy.SetProxy(ProxyMembers.Method, nameof(Do), null, null, (s, e) =>
+            {
+                Background = Brush.Violet;
+                return null;
+            });
+
+            proxy.Do(); // 通过代理调用 Do 方法
         }
+
+        int count = 0;
 
         private void OnCounterClicked(object sender, EventArgs e)
         {
@@ -37,29 +46,6 @@ namespace MauiTest
             {
                 GradientStops = [new GradientStop(Colors.Lime, 0), new GradientStop(Colors.Cyan, 1)]
             };
-
-            var transition = Transition.Create(this)
-                .Await(TimeSpan.FromSeconds(3))// (可选) 等待 3s 后执行第一段动画
-                .Property(x => x.Background, Brush.Red)
-                .Property(x => x.Opacity, 0.5d)
-                .Effect(TransitionEffects.Theme) // 效果参数
-                .Then() // 执行下一段动画 > (可选) AwaitThen()以延迟启动下一段动画
-                .Property(x => x.Background, Brush.Cyan)
-                .Property(x => x.Opacity, 1d)
-                .Effect((p) =>
-                {
-                    p.Duration = TimeSpan.FromSeconds(1);
-                    p.EaseCalculator = Eases.Sine.InOut;
-                    p.Awaked += (s, e) =>
-                    {
-
-                    };
-                    p.Update += (s, e) =>
-                    {
-
-                    };
-                }); // 使用自定义的效果参数
-            transition.Start();
         }
     }
 
