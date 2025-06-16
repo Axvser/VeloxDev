@@ -24,25 +24,30 @@
 
 # VeloxDev.×××
 
-### VeloxDev.WPF 
+> 注意，由于作者难以一人掌握多个平台的特性，源生成功能并不总是完全的，您在选择下述产品时需要仔细查看
 
-[![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/)
+### VeloxDev.WPF [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/)
 
-### VeloxDev.Avalonia
+- Generator ✔
 
-[![NuGet](https://img.shields.io/nuget/v/VeloxDev.Avalonia?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Avalonia/)
 
-### VeloxDev.MAUI
+### VeloxDev.Avalonia [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Avalonia?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Avalonia/)
 
-[![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/)
+- Generator ✔
+
+
+### VeloxDev.MAUI  [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/)
+
+- Generator
+  - AOP Interfaces ✔ 
+  - Proxy Property ❌
+  - MonoBehaviour ❌
 
 ---
 
 # API
 
 > VeloxDev.××× 是作者基于 VeloxDev.Core 实现的简易封装 , 可在 WPF / Avalonia / MAUI 使用统一的 API 去实现属性值过渡、AOP编程等功能
-
-> 注意 : 一些功能基于源生成器，您需要在实例初始化时调用 LoadVeloxDevCore 方法
 
 ## Ⅰ 过渡
 
@@ -86,7 +91,10 @@
 
 > 对于公开可读写的属性或者公开可调用的方法,我们借助源生成器的力量即可对其动态代理,接着,这些属性或方法将能被我们拦截
 
-- 源生成器依赖 ✔
+- 源生成器依赖的写法
+  - WPF ✔
+  - Avalonia ✔
+  - MAUI ❌
 
 ```csharp
     public class ObservableAttribute : Attribute
@@ -157,11 +165,45 @@
     }
 ```
 
+- 若您选择MAUI，目前仅支持代理接口的动态生成，需要您在接口生成后执行如下操作
+  - WPF ✔
+  - Avalonia ✔
+  - MAUI ✔
+
+```csharp
+    public partial class MainPage : ContentPage, MainPage_MauiTest_Aop // 此处必须显式实现动态生成的AOP接口
+    {
+        [AspectOriented]
+        public void Do()
+        {
+
+        }
+
+        public MainPage()
+        {
+            InitializeComponent();
+
+            var proxy = this.CreateProxy<MainPage_MauiTest_Aop>(); // 此处必须显式指定AOP接口
+
+            proxy.SetProxy(ProxyMembers.Method, nameof(Do), null, null, (s, e) =>
+            {
+                Background = Brush.Violet;
+                return null;
+            });
+
+            proxy.Do(); // 通过代理调用 Do 方法
+        }
+    }
+```
+
 ## Ⅲ MonoBehaviour
 
 > 自动创建、维护一个实时循环任务，可以修改其 FPS 以控制刷新频率，示例中的 MonoBehaviour 不传入参数代表使用默认的 60 FPS
 
-- 源生成器依赖 ✔
+- 支持平台
+  - WPF ✔
+  - Avalonia ✔
+  - MAUI ❌
 
 ```csharp
     [MonoBehaviour] // 默认 MonoBehaviour(60) 也就是 60 FPS
