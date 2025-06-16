@@ -89,35 +89,39 @@
 - 源生成器依赖 ✔
 
 ```csharp
-    public partial class MyClass
+    public partial class MainWindow : Window
     {
-        [AspectOriented] // 标记为可AOP编程的,源生成器将产生动态代理Proxy属性
-        public void SaveData()
+        public MainWindow()
         {
+            InitializeComponent();
 
+            Proxy.SetProxy(
+                ProxyMembers.Setter, // 代理成员的类型
+                nameof(UID), // 代理成员的名称
+                null, // 拦截
+                (calls, result) => // 覆写
+                {
+                    var oldValue = UID;
+                    var newValue = calls[0].ToString(); // 对于 Setter器，必定有一个参数 value
+                    UID = newValue;
+                    return Tuple.Create(oldValue, newValue); // 返回新值与旧值用于日志记录
+                },
+                (calls, result) => // 回调
+                {
+                    var value = result as Tuple<string, string?>; // 接收上一个节点的返回值
+                    MessageBox.Show($"值已更新 {value.Item1} → {value.Item2}"); // 编写日志
+                    return null;
+                });
+
+            Do();
         }
 
-        public void SetProxy() // 可以在运行时动态编辑Proxy的行为,并通过Proxy访问,即 Proxy.SaveData()
-        {
-            Proxy.SetMethod(nameof(SaveData),
-            (paras, prevs) =>
-            {
-                MessageBox.Show("拦截，发生在方法调用前");
-                return null;
-            },
-            (paras, prevs) =>
-            {
-                MessageBox.Show("覆盖，不再使用方法的原始逻辑");
-                return null;
-            },
-            (paras, prevs) =>
-            {
-                MessageBox.Show("回调，发生在方法调用后");
-                return null;
-            });
+        [AspectOriented]
+        public string UID { get; set; } = "default";
 
-            // paras : 本次方法接收的参数
-            // prevs : 上一个节点的返回值
+        public void Do()
+        {
+            Proxy.UID = "newValue"; // 通过代理访问 UID 属性的 Setter
         }
     }
 ```
@@ -129,14 +133,11 @@
 - 源生成器依赖 ✔
 
 ```csharp
-    [MonoBehaviour]
+    [MonoBehaviour] // 默认 MonoBehaviour(60) 也就是 60 FPS
     public partial class MainWindow : Window
     {
-        partial void Awake()
-        {
-            // 默认开启,但这里可以设置初始状态为关闭
-            // CanMonoBehaviour = false;
-        }
+        // 默认关闭,可以设置CanMonoBehaviour = true开启
+        
         partial void Start()
         {
 

@@ -1,18 +1,22 @@
 ﻿using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
+using VeloxDev.Core.Generator.Base;
+using VeloxDev.Core.Generator.Writers;
 
-namespace VeloxDev.Core.Generators.Base
+namespace VeloxDev.Core.Generator
 {
-    public abstract class GeneratorCore : IIncrementalGenerator
+    [Generator(LanguageNames.CSharp)]
+    public class VeloxDevCoreModule : IIncrementalGenerator
     {
         protected readonly List<ICodeWriter> codeWriters = [];
 
         public virtual void Initialize(IncrementalGeneratorInitializationContext context)
         {
+            AddCodeWriter(new CoreWriter());
             context.RegisterSourceOutput(Analizer.Filters.FilterContext(context), GenerateSource);
         }
 
@@ -31,9 +35,9 @@ namespace VeloxDev.Core.Generators.Base
             {
                 for (int i = 0; i < codeWriters.Count; i++)
                 {
+                    codeWriters[i].Initialize(kvp.Value, kvp.Key);
                     if (codeWriters[i].CanWrite())
                     {
-                        codeWriters[i].Initialize(kvp.Value, kvp.Key);
                         context.AddSource(
                             codeWriters[i].GetFileName(),
                             SourceText.From(
@@ -50,7 +54,7 @@ namespace VeloxDev.Core.Generators.Base
             foreach (var classDeclaration in input.Classes)
             {
                 SemanticModel model = input.Compilation.GetSemanticModel(classDeclaration.SyntaxTree);
-                var classSymbol = model.GetDeclaredSymbol(classDeclaration);
+                var classSymbol = model.GetDeclaredSymbol(classDeclaration) as INamedTypeSymbol;
                 if (classSymbol == null)
                     continue;
 

@@ -1,6 +1,5 @@
 ﻿#if NET
 
-using System.Collections.Concurrent;
 using System.Reflection;
 using VeloxDev.Core.Interfaces.AspectOriented;
 
@@ -19,113 +18,86 @@ namespace VeloxDev.Core.AspectOriented
         {
             var type = typeof(T);
             dynamic proxy = DispatchProxy.Create<T, ProxyInstance>() ?? throw new InvalidOperationException();
-            proxy._target = new WeakReference(target);
+            proxy._target = target;
             proxy._targetType = type;
-            ProxyInstance.ProxyInstances.Add(target, proxy);
+            ProxyInstance.ProxyIDs.Add(proxy, proxy._localid);
             return proxy;
         }
-
-        public static T AddProxy<T>(
-            this T source,
-            ProxyMembers memberType,
-            string memberName,
-            ProxyHandler? start = null,
-            ProxyHandler? coverage = null,
-            ProxyHandler? end = null) where T : IProxy
+        public static void SetProxy<T>(this T target, ProxyMembers memberType, string memberName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end)
+           where T : class, IProxy
         {
-            if (!ProxyInstance.ProxyInstances.TryGetValue(source, out var proxy))
+            switch (memberType)
+            {
+                case ProxyMembers.Getter:
+                    SetPropertyGetter(target, memberName, start, coverage, end);
+                    break;
+                case ProxyMembers.Setter:
+                    SetPropertySetter(target, memberName, start, coverage, end);
+                    break;
+                case ProxyMembers.Method:
+                    SetMethod(target, memberName, start, coverage, end);
+                    break;
+            }
+        }
+
+        internal static T SetPropertyGetter<T>(this T source, string propertyName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IProxy
+        {
+            if (!ProxyInstance.ProxyIDs.TryGetValue(source, out var id))
+            {
                 return source;
-
-            var (actionDict, fullName) = GetProxyInfo(proxy, memberType, memberName);
-            var manager = GetOrCreateProxyManager(actionDict, fullName);
-
-            AddHandlersToManager(manager, start, coverage, end);
-
+            }
+            if (ProxyInstance.ProxyInstances.TryGetValue(id, out var instance))
+            {
+                var Name = $"get_{propertyName}";
+                if (instance.GetterActions.ContainsKey(Name))
+                {
+                    instance.GetterActions[Name] = Tuple.Create(start, coverage, end);
+                }
+                else
+                {
+                    instance.GetterActions.Add(Name, Tuple.Create(start, coverage, end));
+                }
+            }
             return source;
         }
-
-        public static T RemoveProxy<T>(
-            this T source,
-            ProxyMembers memberType,
-            string memberName,
-            ProxyHandler?[]? starts = null,
-            ProxyHandler?[]? coverages = null,
-            ProxyHandler?[]? ends = null) where T : IProxy
+        internal static T SetPropertySetter<T>(this T source, string propertyName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IProxy
         {
-            if (!ProxyInstance.ProxyInstances.TryGetValue(source, out var proxy))
-                return source;
-
-            var (actionDict, fullName) = GetProxyInfo(proxy, memberType, memberName);
-
-            if (actionDict.TryGetValue(fullName, out var manager))
+            if (!ProxyInstance.ProxyIDs.TryGetValue(source, out var id))
             {
-                RemoveHandlersFromManager(manager, starts, coverages, ends);
+                return source;
             }
-
+            if (ProxyInstance.ProxyInstances.TryGetValue(id, out var instance))
+            {
+                var Name = $"set_{propertyName}";
+                if (instance.SetterActions.ContainsKey(Name))
+                {
+                    instance.SetterActions[Name] = Tuple.Create(start, coverage, end);
+                }
+                else
+                {
+                    instance.SetterActions.Add(Name, Tuple.Create(start, coverage, end));
+                }
+            }
             return source;
         }
-
-        private static void RemoveHandlersFromManager(
-            ProxyManager manager,
-            ProxyHandler?[]? starts,
-            ProxyHandler?[]? coverages,
-            ProxyHandler?[]? ends)
+        internal static T SetMethod<T>(this T source, string methodName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IProxy
         {
-            if (starts is not null)
+            if (!ProxyInstance.ProxyIDs.TryGetValue(source, out var id))
             {
-                foreach (var start in starts)
+                return source;
+            }
+            if (ProxyInstance.ProxyInstances.TryGetValue(id, out var instance))
+            {
+                if (instance.MethodActions.ContainsKey(methodName))
                 {
-                    manager.Intercept.RemoveHandler(start);
+                    instance.MethodActions[methodName] = Tuple.Create(start, coverage, end);
+                }
+                else
+                {
+                    instance.MethodActions.Add(methodName, Tuple.Create(start, coverage, end));
                 }
             }
-            if (coverages is not null)
-            {
-                foreach (var coverage in coverages)
-                {
-                    manager.Cover.RemoveHandler(coverage);
-                }
-            }
-            if (ends is not null)
-            {
-                foreach (var end in ends)
-                {
-                    manager.CallBack.RemoveHandler(end);
-                }
-            }
-        }
-
-        private static (ConcurrentDictionary<string, ProxyManager> dict, string name) GetProxyInfo(
-            ProxyInstance proxy,
-            ProxyMembers memberType,
-            string memberName) => memberType switch
-            {
-                ProxyMembers.Getter => (proxy.GetterActions, $"get_{memberName}"),
-                ProxyMembers.Setter => (proxy.SetterActions, $"set_{memberName}"),
-                ProxyMembers.Method => (proxy.MethodActions, memberName),
-                _ => throw new ArgumentOutOfRangeException(nameof(memberType))
-            };
-
-        private static ProxyManager GetOrCreateProxyManager(
-            ConcurrentDictionary<string, ProxyManager> actionDict,
-            string fullName)
-        {
-            if (!actionDict.TryGetValue(fullName, out var manager))
-            {
-                manager = new ProxyManager();
-                actionDict.TryAdd(fullName, manager);
-            }
-            return manager;
-        }
-
-        private static void AddHandlersToManager(
-            ProxyManager manager,
-            ProxyHandler? start,
-            ProxyHandler? coverage,
-            ProxyHandler? end)
-        {
-            if (start is not null) manager.Intercept.AddHandler(start);
-            if (coverage is not null) manager.Cover.AddHandler(coverage);
-            if (end is not null) manager.CallBack.AddHandler(end);
+            return source;
         }
     }
 }

@@ -5,14 +5,9 @@
     {
         private readonly TimeSpan _delay;
 
-        public MonoBehaviourAttribute(int fps)
+        public MonoBehaviourAttribute(int fps = 60)
         {
-            _delay = TimeSpan.FromMilliseconds(1000d / fps);
-        }
-
-        public MonoBehaviourAttribute()
-        {
-            _delay = TimeSpan.FromMilliseconds(16.667);
+            _delay = TimeSpan.FromMilliseconds(1000d / fps > 0 ? fps : 1);
         }
     }
 }

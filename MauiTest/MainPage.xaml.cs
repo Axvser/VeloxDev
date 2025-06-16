@@ -1,11 +1,19 @@
-﻿using VeloxDev.Core.TransitionSystem;
+﻿using VeloxDev.Core.Generators;
+using VeloxDev.Core.TransitionSystem;
 using VeloxDev.MAUI.TransitionSystem;
 
 namespace MauiTest
 {
+    [MonoBehaviour(60)]
     public partial class MainPage : ContentPage
     {
         int count = 0;
+
+        [AspectOriented]
+        public void Do()
+        {
+
+        }
 
         public MainPage()
         {

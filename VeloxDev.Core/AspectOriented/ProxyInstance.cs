@@ -1,58 +1,56 @@
 ﻿#if NET
-
-using System.Collections.Concurrent;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 
 namespace VeloxDev.Core.AspectOriented
 {
     public delegate object? ProxyHandler(object?[]? parameters, object? previous);
 
-    public class ProxyInstance() : DispatchProxy, IDisposable
+    public class ProxyInstance : DispatchProxy
     {
-        public static ConditionalWeakTable<object, ProxyInstance> ProxyInstances { get; internal set; } = [];
+        internal static int _id = 0;
+        public static Dictionary<int, ProxyInstance> ProxyInstances { get; internal set; } = [];
+        public static Dictionary<object, int> ProxyIDs { get; internal set; } = [];
 
-        internal WeakReference<object>? _target = null;
+        public ProxyInstance() { _localid = _id; _id++; ProxyInstances.Add(_localid, this); }
+
+        internal object? _target = null;
         internal Type? _targetType = null;
+        internal int _localid = 0;
 
-        internal ConcurrentDictionary<string, ProxyManager> GetterActions { get; set; } = [];
-        internal ConcurrentDictionary<string, ProxyManager> SetterActions { get; set; } = [];
-        internal ConcurrentDictionary<string, ProxyManager> MethodActions { get; set; } = [];
+        internal Dictionary<string, Tuple<ProxyHandler?, ProxyHandler?, ProxyHandler?>> GetterActions { get; set; } = [];
+        internal Dictionary<string, Tuple<ProxyHandler?, ProxyHandler?, ProxyHandler?>> SetterActions { get; set; } = [];
+        internal Dictionary<string, Tuple<ProxyHandler?, ProxyHandler?, ProxyHandler?>> MethodActions { get; set; } = [];
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
             var Name = targetMethod?.Name ?? string.Empty;
-            if (Name == string.Empty || _targetType is null) return null;
-            if (_target is not null && _target.TryGetTarget(out var target))
+
+            if (Name == string.Empty) return null;
+
+            if (Name.StartsWith("get_"))
             {
-                var actions = Name switch
-                {
-                    string n when n.StartsWith("get_") => GetterActions.TryGetValue(n, out var a) ? a : null,
-                    string n when n.StartsWith("set_") => SetterActions.TryGetValue(n, out var a) ? a : null,
-                    _ => MethodActions.TryGetValue(Name, out var a) ? a : null
-                };
-
-                var intercept = actions?.Intercept?.GetInvocationList();
-                var coverage = actions?.Cover?.GetInvocationList();
-                var callback = actions?.CallBack?.GetInvocationList();
-
-                var R0 = intercept?.Invoke(args, null);
-                var R1 = coverage == null
-                    ? _targetType.GetMethod(Name)?.Invoke(target, args)
-                    : coverage.Invoke(args, R0);
-                callback?.Invoke(args, R1);
-
+                GetterActions.TryGetValue(Name, out var actions);
+                var R0 = actions?.Item1?.Invoke(args, null);
+                var R1 = actions?.Item2 == null ? _targetType?.GetMethod(Name)?.Invoke(_target, args) : actions.Item2.Invoke(args, R0);
+                actions?.Item3?.Invoke(args, R1);
+                return R1;
+            }
+            else if (Name.StartsWith("set_"))
+            {
+                SetterActions.TryGetValue(Name, out var actions);
+                var R0 = actions?.Item1?.Invoke(args, null);
+                var R1 = actions?.Item2 == null ? _targetType?.GetMethod(Name)?.Invoke(_target, args) : actions.Item2.Invoke(args, R0);
+                actions?.Item3?.Invoke(args, R1);
                 return R1;
             }
             else
             {
-                return null;
+                MethodActions.TryGetValue(Name, out var actions);
+                var R0 = actions?.Item1?.Invoke(args, null);
+                var R1 = actions?.Item2 == null ? _targetType?.GetMethod(Name)?.Invoke(_target, args) : actions.Item2.Invoke(args, R0);
+                actions?.Item3?.Invoke(args, R1);
+                return R1;
             }
-        }
-
-        public void Dispose()
-        {
-            GC.SuppressFinalize(this);
         }
     }
 }

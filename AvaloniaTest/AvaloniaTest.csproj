@@ -21,6 +21,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\VeloxDev.Avalonia\VeloxDev.Avalonia.csproj" />
+    <ProjectReference Include="..\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

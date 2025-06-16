@@ -63,7 +63,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\VeloxDev.MAUI\VeloxDev.MAUI.csproj" />
+		<ProjectReference Include="..\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+		<ProjectReference Include="..\VeloxDev.MAUI\VeloxDev.MAUI.csproj" />
 	</ItemGroup>
 
 </Project>

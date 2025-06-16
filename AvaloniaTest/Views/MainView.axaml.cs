@@ -3,11 +3,19 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using System;
 using VeloxDev.Avalonia.TransitionSystem;
+using VeloxDev.Core.Generators;
 
 namespace AvaloniaTest.Views;
 
+[MonoBehaviour]
 public partial class MainView : UserControl
 {
+    [AspectOriented]
+    public void Do()
+    {
+
+    }
+
     public MainView()
     {
         InitializeComponent();

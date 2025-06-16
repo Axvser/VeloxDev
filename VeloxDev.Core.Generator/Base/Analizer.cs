@@ -2,8 +2,9 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Immutable;
+using System.Linq;
 
-namespace VeloxDev.Core.Generators.Base
+namespace VeloxDev.Core.Generator.Base
 {
     public static class Analizer
     {
