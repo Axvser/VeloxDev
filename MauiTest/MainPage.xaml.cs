@@ -1,4 +1,5 @@
-﻿using VeloxDev.Core.Generators;
+﻿using VeloxDev.Core.AspectOriented;
+using VeloxDev.Core.Generators;
 using VeloxDev.Core.TransitionSystem;
 using VeloxDev.MAUI.TransitionSystem;
 
@@ -22,6 +23,7 @@ namespace MauiTest
 
         private void OnCounterClicked(object sender, EventArgs e)
         {
+
             count++;
 
             if (count == 1)
@@ -33,7 +35,7 @@ namespace MauiTest
 
             LinearGradientBrush lgb = new()
             {
-                GradientStops = [new GradientStop(Colors.Lime,0), new GradientStop(Colors.Cyan, 1)]
+                GradientStops = [new GradientStop(Colors.Lime, 0), new GradientStop(Colors.Cyan, 1)]
             };
 
             var transition = Transition.Create(this)

@@ -6,13 +6,19 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace WpfTest
 {
+    public class ObservableAttribute : Attribute
+    {
+
+    }
+
     [MonoBehaviour(60)]
     public partial class MainWindow : Window
     {
         public MainWindow()
         {
             InitializeComponent();
-            Proxy.SetProxy(ProxyMembers.Setter, nameof(UID),
+
+            Proxy.SetProxy(ProxyMembers.Setter, nameof(UID), // Setter 的 AOP
                 null,
                 (calls, result) =>
                 {
@@ -27,41 +33,44 @@ namespace WpfTest
                     MessageBox.Show($"值已更新 {value.Item1} → {value.Item2}"); // 编写日志
                     return null;
                 });
-            Do();
+
+            Proxy.SetProxy(ProxyMembers.Getter, nameof(Id), // Getter 的 AOP
+                null,
+                null,
+                null);
+
+            Proxy.SetProxy(ProxyMembers.Method,nameof(Do), // Method 的 AOP
+                null,
+                null,
+                (calls, result) =>
+                {
+                    MessageBox.Show($"Do方法已执行过"); // 编写日志
+                    return null;
+                });
         }
 
         [AspectOriented]
         public string UID { get; set; } = "default";
 
+        [AspectOriented]
         public void Do()
         {
             Proxy.UID = "newValue"; // 通过代理访问 UID 属性的 Setter
         }
 
+        [Observable] // 若特性包含 Observable 字样，则 AOP 接口会要求你实现其公开可读写属性 ID
+        [AspectOriented]
+        private int id = 3;
+
+        public int Id
+        {
+            get => id;
+            set => id = value;
+        }
+
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            //var transition = Transition.Create(this)
-            //    .Await(TimeSpan.FromSeconds(3))// (可选) 等待 3s 后执行第一段动画
-            //    .Property(x => x.Background, Brushes.Red)
-            //    .Property(x => x.Opacity, 0.5d)
-            //    .Effect(TransitionEffects.Theme) // 效果参数
-            //    .Then() // 执行下一段动画 > (可选) AwaitThen()以延迟启动下一段动画
-            //    .Property(x => x.Background, Brushes.Cyan)
-            //    .Property(x => x.Opacity, 1d)
-            //    .Effect((p) =>
-            //    {
-            //        p.Duration = TimeSpan.FromSeconds(1);
-            //        p.EaseCalculator = Eases.Sine.InOut;
-            //        p.Awaked += (s, e) =>
-            //        {
-
-            //        };
-            //        p.Update += (s, e) =>
-            //        {
-
-            //        };
-            //    }); // 使用自定义的效果参数
-            //transition.Start();
+            Proxy.Do(); // 通过代理调用 Do 方法
         }
     }
 }

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace VeloxDev.Core.Generator.Writers
+namespace VeloxDev.WPF.Generator.Writers
 {
     public class CoreWriter : WriterBase
     {

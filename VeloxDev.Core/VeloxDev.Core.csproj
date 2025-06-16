@@ -9,7 +9,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core</Title>
-		<Version>1.0.90</Version>
+		<Version>1.0.100</Version>
 		<Authors>Axvser</Authors>
 		<Description>The Core of VeloxDev. Shared those components that can optimize the development experience of WPF/Avalonia/……</Description>
 		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
@@ -36,7 +36,6 @@
 	    <PrivateAssets>all</PrivateAssets>
 	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 	  </PackageReference>
-	  <PackageReference Include="VeloxDev.Core.Generator" Version="1.0.90" />
 	</ItemGroup>
 
 </Project>

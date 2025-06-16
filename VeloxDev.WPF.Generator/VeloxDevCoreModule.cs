@@ -4,10 +4,10 @@ using Microsoft.CodeAnalysis.Text;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
-using VeloxDev.Core.Generator.Base;
-using VeloxDev.Core.Generator.Writers;
+using VeloxDev.WPF.Generator.Base;
+using VeloxDev.WPF.Generator.Writers;
 
-namespace VeloxDev.Core.Generator
+namespace VeloxDev.WPF.Generator
 {
     [Generator]
     public class VeloxDevCoreModule : IIncrementalGenerator
