@@ -13,7 +13,7 @@
     {
         public void Execute(
             IFrameInterpolator interpolator,
-            IFrameState state, 
+            IFrameState state,
             ITransitionEffectCore effect);
         public void Exit();
     }

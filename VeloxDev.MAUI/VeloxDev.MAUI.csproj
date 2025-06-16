@@ -18,7 +18,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.MAUI</Title>
-		<Version>1.0.10</Version>
+		<Version>1.0.90</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + MAUI</Description>
 	</PropertyGroup>
@@ -26,7 +26,11 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
-		<PackageReference Include="VeloxDev.Core" Version="1.0.80" />
+		<PackageReference Include="NuGet.Build.Tasks.Pack" Version="6.14.0">
+		  <PrivateAssets>all</PrivateAssets>
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="VeloxDev.Core" Version="1.0.90" />
 	</ItemGroup>
 
 </Project>

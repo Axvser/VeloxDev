@@ -1,6 +1,6 @@
 ﻿namespace VeloxDev.Core.WeakTypes
 {
-    public sealed class WeakDelegate<TDelegate> 
+    public sealed class WeakDelegate<TDelegate>
         where TDelegate : Delegate
     {
         private TDelegate? _combinedDelegate;
