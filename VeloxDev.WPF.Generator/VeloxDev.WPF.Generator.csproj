@@ -8,7 +8,7 @@
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WPF.Generator</Title>
-		<Version>1.0.120</Version>
+		<Version>1.0.130</Version>
 		<Authors>Axvser</Authors>
 	</PropertyGroup>
 
