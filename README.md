@@ -12,7 +12,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/)
 
-> VeloxDev.Core 是 VeloxDev 框架核心，包含一切必要的抽象，对于其中跨平台不变的部分进行了抽象类实现。实际使用时无需安装此项目，而是安装相应平台的 VeloxDev.×××
+> VeloxDev.Core 是 VeloxDev 框架核心，包含一切必要的抽象并对其中跨平台不变的部分进行了抽象类实现。实际使用时无需安装此项目，而是安装相应平台的 VeloxDev.×××
 
 > 如果您希望使用 VeloxDev.Core 对指定框架构建自定义的库，可以参考 VeloxDev 在 github 的 Wiki
 
@@ -22,9 +22,9 @@
   - ⌈ MonoBehaviour ⌋ , 实时帧刷新行为 ✔
   - ⌈ Visual Workflow Builder ⌋ ，拖拽式工作流构建器 ❌ 【 预计 V2 实装此项 】
 
-# VeloxDev.×××
+# Product
 
-> 若您不想手动封装 VeloxDev.Core，此处也提供了一些现成的包
+> 若您不想手动封装 VeloxDev.Core，可以直接选择下方列出的封装
 
 ### VeloxDev.WPF [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/)
 
