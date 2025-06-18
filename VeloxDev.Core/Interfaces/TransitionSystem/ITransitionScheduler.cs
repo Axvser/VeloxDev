@@ -6,7 +6,6 @@
             IFrameInterpolator<TPriorityCore> interpolator,
             IFrameState state,
             ITransitionEffect<TPriorityCore> effect);
-        public void Exit();
     }
 
     public interface ITransitionScheduler : ITransitionSchedulerCore
@@ -15,11 +14,10 @@
             IFrameInterpolator interpolator,
             IFrameState state,
             ITransitionEffectCore effect);
-        public void Exit();
     }
 
     public interface ITransitionSchedulerCore
     {
-
+        public void Exit();
     }
 }

@@ -8,6 +8,7 @@ namespace VeloxDev.Core.Interfaces.TransitionSystem
     {
         public ConcurrentDictionary<PropertyInfo, object?> Values { get; }
         public ConcurrentDictionary<PropertyInfo, IValueInterpolator> Interpolators { get; }
+
         public void SetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, IValueInterpolator interpolator);
         public void SetValue<TSource, TValue>(Expression<Func<TSource, TValue>> expression, TValue? value);
         public bool TryGetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, out IValueInterpolator? interpolator);

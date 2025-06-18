@@ -4,24 +4,14 @@ using VeloxDev.Core.Interfaces.TransitionSystem;
 namespace VeloxDev.Core.TransitionSystem
 {
     public class TransitionSchedulerCore<
-        TTarget,
         TUIThreadInspectorCore,
         TTransitionInterpreterCore,
         TPriorityCore> : TransitionSchedulerCore, ITransitionScheduler<TPriorityCore>
-        where TTarget : class
         where TUIThreadInspectorCore : IUIThreadInspector, new()
         where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
     {
-        protected WeakReference<TTarget>? targetref = null;
-        protected CancellationTokenSource? cts = null;
         protected TTransitionInterpreterCore? interpreter = null;
         protected TUIThreadInspectorCore uIThreadInspector = new();
-
-        public virtual WeakReference<TTarget>? TargetRef
-        {
-            get => targetref;
-            protected set => targetref = value;
-        }
 
         public virtual async void Execute(IFrameInterpolator<TPriorityCore> interpolator, IFrameState state, ITransitionEffect<TPriorityCore> effect)
         {
@@ -47,29 +37,23 @@ namespace VeloxDev.Core.TransitionSystem
             oldCts?.Cancel();
         }
 
-        public static TransitionSchedulerCore<
-            TTarget,
-            TUIThreadInspectorCore,
-            TTransitionInterpreterCore,
-            TPriorityCore> FindOrCreate(TTarget source, bool CanSTAThread = true)
+        public static ITransitionScheduler<TPriorityCore> FindOrCreate<T>(T source, bool CanSTAThread = true) where T : class
         {
             if (TryGetScheduler(source, out var item))
             {
                 return item as TransitionSchedulerCore<
-                    TTarget,
                     TUIThreadInspectorCore,
                     TTransitionInterpreterCore,
-                    TPriorityCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(TTarget)}> ⌋.");
+                    TPriorityCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
             }
             else
             {
                 var scheduler = new TransitionSchedulerCore<
-                    TTarget,
                     TUIThreadInspectorCore,
                     TTransitionInterpreterCore,
                     TPriorityCore>()
                 {
-                    TargetRef = new WeakReference<TTarget>(source)
+                    TargetRef = new WeakReference<object>(source)
                 };
                 if (CanSTAThread)
                 {
@@ -81,23 +65,13 @@ namespace VeloxDev.Core.TransitionSystem
     }
 
     public class TransitionSchedulerCore<
-        TTarget,
         TUIThreadInspectorCore,
         TTransitionInterpreterCore> : TransitionSchedulerCore, ITransitionScheduler
-        where TTarget : class
         where TUIThreadInspectorCore : IUIThreadInspector, new()
         where TTransitionInterpreterCore : class, ITransitionInterpreter, new()
     {
-        protected WeakReference<TTarget>? targetref = null;
-        protected CancellationTokenSource? cts = null;
         protected TTransitionInterpreterCore? interpreter = null;
         protected TUIThreadInspectorCore uIThreadInspector = new();
-
-        public virtual WeakReference<TTarget>? TargetRef
-        {
-            get => targetref;
-            protected set => targetref = value;
-        }
 
         public virtual async void Execute(IFrameInterpolator interpolator, IFrameState state, ITransitionEffectCore effect)
         {
@@ -123,26 +97,21 @@ namespace VeloxDev.Core.TransitionSystem
             oldCts?.Cancel();
         }
 
-        public static TransitionSchedulerCore<
-            TTarget,
-            TUIThreadInspectorCore,
-            TTransitionInterpreterCore> FindOrCreate(TTarget source, bool CanSTAThread = true)
+        public static ITransitionScheduler FindOrCreate<T>(T source, bool CanSTAThread = true) where T : class
         {
             if (TryGetScheduler(source, out var item))
             {
                 return item as TransitionSchedulerCore<
-                    TTarget,
                     TUIThreadInspectorCore,
-                    TTransitionInterpreterCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(TTarget)}> ⌋.");
+                    TTransitionInterpreterCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
             }
             else
             {
                 var scheduler = new TransitionSchedulerCore<
-                    TTarget,
                     TUIThreadInspectorCore,
                     TTransitionInterpreterCore>()
                 {
-                    TargetRef = new WeakReference<TTarget>(source)
+                    TargetRef = new WeakReference<object>(source)
                 };
                 if (CanSTAThread)
                 {
@@ -166,6 +135,14 @@ namespace VeloxDev.Core.TransitionSystem
         public static bool RemoveScheduler(object source)
         {
             return Schedulers.Remove(source);
+        }
+
+        protected CancellationTokenSource? cts = null;
+        protected WeakReference<object>? targetref = null;
+        public virtual WeakReference<object>? TargetRef
+        {
+            get => targetref;
+            protected set => targetref = value;
         }
 
         public abstract void Exit();
