@@ -195,7 +195,6 @@ namespace VeloxDev.Avalonia.TransitionSystem
                 return CreateBlendedBrush(start, end, t);
             }
 
-            // 基于RenderTargetBitmap的混合
             private static IBrush CreateBlendedBrush(IBrush start, IBrush end, double t)
             {
                 const int renderSize = 100; // 可根据需要调整

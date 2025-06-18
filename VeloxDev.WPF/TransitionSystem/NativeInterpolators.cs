@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.WPF.Tools.SolidColor;
 
@@ -35,118 +36,85 @@ namespace VeloxDev.WPF.TransitionSystem
         }
         public class BrushInterpolator : IValueInterpolator
         {
+            private const int RenderSize = 100;
+
             public List<object?> Interpolate(object? start, object? end, int steps)
             {
-                object startBrush = start ?? new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
-                object endBrush = end ?? new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+                if (steps <= 0)
+                    return [];
+
+                Brush startBrush = (start as Brush) ?? Brushes.Transparent;
+                Brush endBrush = (end as Brush) ?? Brushes.Transparent;
+
                 if (steps == 1)
-                {
-                    return [endBrush as Brush ?? Brushes.Transparent];
-                }
-                return (startBrush.GetType().Name, endBrush.GetType().Name) switch
-                {
-                    (nameof(SolidColorBrush), nameof(SolidColorBrush)) => InterpolateSolidColorBrush((SolidColorBrush)startBrush, (SolidColorBrush)endBrush, steps),
-                    _ => InterpolateBrushOpacity(startBrush as Brush ?? Brushes.Transparent, endBrush as Brush ?? Brushes.Transparent, steps, endBrush)
-                };
-            }
+                    return [endBrush];
 
-            private static List<object?> InterpolateSolidColorBrush(SolidColorBrush start, SolidColorBrush end, int steps)
-            {
-                var rgb1 = RGB.FromBrush(start);
-                var rgb2 = RGB.FromBrush(end);
-                return [.. rgb1.Interpolate(rgb1, rgb2, steps).Select(rgb => (object?)(rgb as RGB ?? RGB.Empty).Brush)];
-            }
-            private static List<object?> InterpolateBrushOpacity(Brush start, Brush end, int steps, object oriEnd)
-            {
                 var result = new List<object?>(steps);
-                if (steps <= 0) return result;
 
-                // 计算实际透明度
-                double startAlpha = GetEffectiveOpacity(start);
-                double endAlpha = GetEffectiveOpacity(end);
-
-                int halfSteps = (int)Math.Ceiling(steps / 2.0);
-
-                for (int i = 0; i < steps; i++)
+                if (startBrush is SolidColorBrush startColor && endBrush is SolidColorBrush endColor)
                 {
-                    // 每帧独立克隆
-                    var frameStart = start.CloneCurrentValue() ?? Brushes.Transparent;
-                    var frameEnd = end.CloneCurrentValue() ?? Brushes.Transparent;
-
-                    if (i < halfSteps)
+                    for (int i = 0; i < steps; i++)
                     {
-                        // 阶段1：双画刷统一向0.5过渡
-                        double t = (double)i / halfSteps;
-                        SetCompositeOpacity(frameStart, Lerp(startAlpha, 0.5, t));
-                        SetCompositeOpacity(frameEnd, Lerp(0, 0.5, t));
+                        double t = (double)i / (steps - 1);
+                        result.Add(InterpolateSolidColorBrush(startColor, endColor, t));
                     }
-                    else
-                    {
-                        // 阶段2：start→透明，end→目标值
-                        double t = (double)(i - halfSteps) / (steps - halfSteps);
-                        SetCompositeOpacity(frameStart, Lerp(0.5, 0, t));
-                        SetCompositeOpacity(frameEnd, Lerp(0.5, endAlpha, t));
-                    }
-
-                    // 使用DrawingBrush实现完美混合
-                    result.Add(new DrawingBrush(new DrawingGroup
-                    {
-                        Children =
-                    {
-                        new GeometryDrawing(frameStart, null, new RectangleGeometry(new Rect(0, 0, 1, 1))),
-                        new GeometryDrawing(frameEnd, null, new RectangleGeometry(new Rect(0, 0, 1, 1)))
-                    }
-                    }));
-                }
-
-                return ApplyEdgeCases(result, steps, start, oriEnd);
-            }
-            private static double Lerp(double a, double b, double t) => a + (b - a) * t;
-            private static double GetEffectiveOpacity(Brush brush)
-            {
-                if (brush == null) return 0;
-
-                double opacity = brush.Opacity;
-                if (brush is SolidColorBrush scb)
-                {
-                    opacity *= scb.Color.A / 255.0;
-                }
-                return Clamp(opacity, 0, 1);
-            }
-            private static void SetCompositeOpacity(Brush brush, double targetOpacity)
-            {
-                if (brush == null) return;
-                targetOpacity = Clamp(targetOpacity, 0, 1);
-                if (brush is SolidColorBrush scb)
-                {
-                    var color = scb.Color;
-                    scb.Color = Color.FromArgb(
-                        (byte)(targetOpacity * 255),
-                        color.R,
-                        color.G,
-                        color.B
-                    );
-                    brush.Opacity = 1;
                 }
                 else
                 {
-                    brush.Opacity = targetOpacity;
+                    for (int i = 0; i < steps; i++)
+                    {
+                        double t = (double)i / (steps - 1);
+                        result.Add(CreateBlendedBrush(startBrush, endBrush, t));
+                    }
                 }
-            }
-            private static List<object?> ApplyEdgeCases(List<object?> result, int steps, object start, object end)
-            {
-                if (steps == 1) return [end];
-                result[0] = start;
-                result[steps - 1] = end;
+
+                result[0] = startBrush;
+                result[steps - 1] = endBrush;
+
                 return result;
             }
 
-            private static double Clamp(double value, double minus, double max)
+            private static Brush InterpolateSolidColorBrush(SolidColorBrush start, SolidColorBrush end, double t)
             {
-                if (max < minus) throw new InvalidOperationException();
-                if (value < minus) return minus;
-                if (value > max) return max;
-                return value;
+                Color startColor = start.Color;
+                Color endColor = end.Color;
+
+                return new SolidColorBrush(Color.FromArgb(
+                    (byte)(startColor.A + (endColor.A - startColor.A) * t),
+                    (byte)(startColor.R + (endColor.R - startColor.R) * t),
+                    (byte)(startColor.G + (endColor.G - startColor.G) * t),
+                    (byte)(startColor.B + (endColor.B - startColor.B) * t)
+                ));
+            }
+
+            private static Brush CreateBlendedBrush(Brush start, Brush end, double t)
+            {
+                var renderTarget = new RenderTargetBitmap(
+                    RenderSize, RenderSize,
+                    96, 96,
+                    PixelFormats.Pbgra32);
+
+                var drawingVisual = new DrawingVisual();
+                using (var drawingContext = drawingVisual.RenderOpen())
+                {
+                    // 绘制start画刷(带透明度)
+                    drawingContext.PushOpacity(1 - t);
+                    drawingContext.DrawRectangle(start, null, new Rect(0, 0, RenderSize, RenderSize));
+                    drawingContext.Pop();
+
+                    // 绘制end画刷(带透明度)
+                    drawingContext.PushOpacity(t);
+                    drawingContext.DrawRectangle(end, null, new Rect(0, 0, RenderSize, RenderSize));
+                    drawingContext.Pop();
+                }
+
+                renderTarget.Render(drawingVisual);
+
+                return new ImageBrush(renderTarget)
+                {
+                    Stretch = Stretch.Fill,
+                    TileMode = TileMode.None
+                };
             }
         }
         public class ThicknessInterpolator : IValueInterpolator

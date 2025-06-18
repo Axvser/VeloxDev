@@ -118,7 +118,6 @@ namespace VeloxDev.MAUI.TransitionSystem
             {
                 var result = new List<object?>();
 
-                // 处理空值情况
                 Brush startBrush = (start as Brush) ?? new SolidColorBrush(Colors.Transparent);
                 Brush endBrush = (end as Brush) ?? new SolidColorBrush(Colors.Transparent);
 
@@ -128,22 +127,10 @@ namespace VeloxDev.MAUI.TransitionSystem
                     return result;
                 }
 
-                // 情况1：两个都是纯色画刷 - 完全RGBA插值
                 if (startBrush is SolidColorBrush startSolid && endBrush is SolidColorBrush endSolid)
                 {
                     result.AddRange(InterpolateSolidColors(startSolid, endSolid, steps));
                 }
-                // 情况2：两个都是线性渐变画刷
-                else if (startBrush is LinearGradientBrush startLinear && endBrush is LinearGradientBrush endLinear)
-                {
-                    result.AddRange(InterpolateGradientBrushes(startLinear, endLinear, steps));
-                }
-                // 情况3：两个都是径向渐变画刷
-                else if (startBrush is RadialGradientBrush startRadial && endBrush is RadialGradientBrush endRadial)
-                {
-                    result.AddRange(InterpolateGradientBrushes(startRadial, endRadial, steps));
-                }
-                // 情况4：类型不匹配或混合类型 - 使用透明度混合
                 else
                 {
                     result.AddRange(InterpolateWithAlphaBlending(startBrush, endBrush, steps));
@@ -167,53 +154,6 @@ namespace VeloxDev.MAUI.TransitionSystem
                     var a = (byte)(startColor.Alpha * 255 + (endColor.Alpha * 255 - startColor.Alpha * 255) * ratio);
 
                     yield return new SolidColorBrush(Color.FromRgba(r, g, b, a));
-                }
-            }
-
-            private static IEnumerable<Brush> InterpolateGradientBrushes(GradientBrush start, GradientBrush end, int steps)
-            {
-                // 确保渐变点数量相同
-                var startStops = start.GradientStops.OrderBy(gs => gs.Offset).ToArray();
-                var endStops = end.GradientStops.OrderBy(gs => gs.Offset).ToArray();
-
-                // 如果渐变点数量不同，取两者中较多的数量
-                int maxStops = Math.Max(startStops.Length, endStops.Length);
-
-                for (int i = 0; i < steps; i++)
-                {
-                    float ratio = (float)i / (steps - 1);
-
-                    var gradientStops = new GradientStopCollection();
-
-                    for (int j = 0; j < maxStops; j++)
-                    {
-                        var startStop = j < startStops.Length ? startStops[j] : GetNearestStop(startStops, (float)j / maxStops);
-                        var endStop = j < endStops.Length ? endStops[j] : GetNearestStop(endStops, (float)j / maxStops);
-
-                        // 插值offset和color
-                        float offset = startStop.Offset + (endStop.Offset - startStop.Offset) * ratio;
-                        Color color = InterpolateColor(startStop.Color, endStop.Color, ratio);
-
-                        gradientStops.Add(new GradientStop(color, offset));
-                    }
-
-                    // 创建相同类型的渐变画刷
-                    if (start is LinearGradientBrush startLinear && end is LinearGradientBrush endLinear)
-                    {
-                        yield return new LinearGradientBrush(gradientStops)
-                        {
-                            StartPoint = InterpolatePoint(startLinear.StartPoint, endLinear.StartPoint, ratio),
-                            EndPoint = InterpolatePoint(startLinear.EndPoint, endLinear.EndPoint, ratio)
-                        };
-                    }
-                    else if (start is RadialGradientBrush startRadial && end is RadialGradientBrush endRadial)
-                    {
-                        yield return new RadialGradientBrush(gradientStops)
-                        {
-                            Center = InterpolatePoint(startRadial.Center, endRadial.Center, ratio),
-                            Radius = startRadial.Radius + (endRadial.Radius - startRadial.Radius) * ratio
-                        };
-                    }
                 }
             }
 
@@ -282,30 +222,6 @@ namespace VeloxDev.MAUI.TransitionSystem
                         }
                         break;
                 }
-            }
-
-            private static GradientStop GetNearestStop(GradientStop[] stops, float offset)
-            {
-                if (stops.Length == 0) return new GradientStop(Colors.Transparent, offset);
-
-                var nearest = stops.OrderBy(gs => Math.Abs(gs.Offset - offset)).First();
-                return new GradientStop(nearest.Color, offset);
-            }
-
-            private static Color InterpolateColor(Color start, Color end, float ratio)
-            {
-                return new Color(
-                    start.Red + (end.Red - start.Red) * ratio,
-                    start.Green + (end.Green - start.Green) * ratio,
-                    start.Blue + (end.Blue - start.Blue) * ratio,
-                    start.Alpha + (end.Alpha - start.Alpha) * ratio);
-            }
-
-            private static Point InterpolatePoint(Point start, Point end, float ratio)
-            {
-                return new Point(
-                    start.X + (end.X - start.X) * ratio,
-                    start.Y + (end.Y - start.Y) * ratio);
             }
         }
     }
