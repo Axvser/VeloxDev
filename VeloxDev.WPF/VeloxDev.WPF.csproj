@@ -11,7 +11,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WPF</Title>
-		<Version>1.0.110</Version>
+		<Version>1.0.130</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WPF</Description>
 	</PropertyGroup>
@@ -24,7 +24,7 @@
 		</PackageReference>
 		<PackageReference Include="System.ValueTuple" Version="4.6.1" />
 		<PackageReference Include="VeloxDev.Core" Version="1.0.120" />
-		<PackageReference Include="VeloxDev.WPF.Generator" Version="1.0.120" />
+		<PackageReference Include="VeloxDev.WPF.Generator" Version="1.0.130" />
 	</ItemGroup>
 
 </Project>
