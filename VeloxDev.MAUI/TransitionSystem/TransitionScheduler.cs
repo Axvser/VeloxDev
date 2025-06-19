@@ -2,8 +2,7 @@
 
 namespace VeloxDev.MAUI.TransitionSystem
 {
-    public class TransitionScheduler<TTarget> : TransitionSchedulerCore<TTarget, UIThreadInspector, TransitionInterpreter>
-        where TTarget : class
+    public class TransitionScheduler : TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter>
     {
 
     }
