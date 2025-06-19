@@ -4,8 +4,6 @@ namespace VeloxDev.MAUI.TransitionSystem
 {
     public class InterpolatorOutput : InterpolatorOutputCore
     {
-        private readonly IDispatcher? dispatcher = Dispatcher.GetForCurrentThread();
-
         public override void Update(object target, int frameIndex, bool isUIAccess)
         {
             if (isUIAccess)
@@ -14,7 +12,7 @@ namespace VeloxDev.MAUI.TransitionSystem
             }
             else
             {
-                dispatcher?.DispatchAsync(() => Update(target, frameIndex));
+                Dispatcher.GetForCurrentThread()?.DispatchAsync(() => Update(target, frameIndex));
             }
         }
     }

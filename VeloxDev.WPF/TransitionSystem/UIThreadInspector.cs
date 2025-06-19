@@ -7,7 +7,7 @@ namespace VeloxDev.WPF.TransitionSystem
 {
     public class UIThreadInspector() : IUIThreadInspector<DispatcherPriority>
     {
-        public bool IsUIThread() => Application.Current.Dispatcher.CheckAccess();
+        public bool IsUIThread() => Application.Current?.Dispatcher?.CheckAccess() ?? default;
         public object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
         {
             if (isUIThread)
@@ -16,7 +16,7 @@ namespace VeloxDev.WPF.TransitionSystem
             }
             else
             {
-                return Application.Current.Dispatcher.Invoke(() => propertyInfo.GetValue(target));
+                return Application.Current?.Dispatcher?.Invoke(() => propertyInfo.GetValue(target));
             }
         }
         public List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
@@ -27,7 +27,7 @@ namespace VeloxDev.WPF.TransitionSystem
             }
             else
             {
-                return Application.Current.Dispatcher.Invoke(interpolate);
+                return Application.Current?.Dispatcher?.Invoke(interpolate) ?? [];
             }
         }
         public void ProtectedInvoke(bool isUIThread, Action action, DispatcherPriority priority)
@@ -38,7 +38,7 @@ namespace VeloxDev.WPF.TransitionSystem
             }
             else
             {
-                Application.Current.Dispatcher.InvokeAsync(action, priority);
+                Application.Current?.Dispatcher?.InvokeAsync(action, priority);
             }
         }
     }

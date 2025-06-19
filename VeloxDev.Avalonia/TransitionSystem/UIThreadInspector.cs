@@ -8,7 +8,7 @@ namespace VeloxDev.Avalonia.TransitionSystem
 {
     public class UIThreadInspector() : IUIThreadInspector<DispatcherPriority>
     {
-        public bool IsUIThread() => Dispatcher.UIThread.CheckAccess();
+        public bool IsUIThread() => Dispatcher.UIThread?.CheckAccess() ?? default;
 
         public object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
         {
@@ -18,7 +18,7 @@ namespace VeloxDev.Avalonia.TransitionSystem
             }
             else
             {
-                return Dispatcher.UIThread.Invoke(() => propertyInfo.GetValue(target));
+                return Dispatcher.UIThread?.Invoke(() => propertyInfo.GetValue(target));
             }
         }
 
@@ -30,7 +30,7 @@ namespace VeloxDev.Avalonia.TransitionSystem
             }
             else
             {
-                return Dispatcher.UIThread.Invoke(interpolate);
+                return Dispatcher.UIThread?.Invoke(interpolate) ?? [];
             }
         }
 
@@ -42,7 +42,7 @@ namespace VeloxDev.Avalonia.TransitionSystem
             }
             else
             {
-                Dispatcher.UIThread.InvokeAsync(action, priority);
+                Dispatcher.UIThread?.InvokeAsync(action, priority);
             }
         }
     }

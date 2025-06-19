@@ -18,7 +18,9 @@ namespace VeloxDev.MAUI.TransitionSystem
             }
             else
             {
-                return Dispatcher.GetForCurrentThread()?.Dispatch(() => propertyInfo.GetValue(target));
+                object? result = null;
+                _ = Dispatcher.GetForCurrentThread()?.Dispatch(() => result = propertyInfo.GetValue(target));
+                return result;
             }
         }
 
@@ -30,7 +32,9 @@ namespace VeloxDev.MAUI.TransitionSystem
             }
             else
             {
-                return [Dispatcher.GetForCurrentThread()?.Dispatch(() => interpolate.Invoke())];
+                List<object?> result = [];
+                _ = Dispatcher.GetForCurrentThread()?.Dispatch(() => result = interpolate.Invoke());
+                return result;
             }
         }
 
@@ -42,7 +46,7 @@ namespace VeloxDev.MAUI.TransitionSystem
             }
             else
             {
-                Dispatcher.GetForCurrentThread()?.Dispatch(action);
+                _ = Dispatcher.GetForCurrentThread()?.Dispatch(action);
             }
         }
     }

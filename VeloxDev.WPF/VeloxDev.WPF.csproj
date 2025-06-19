@@ -11,7 +11,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WPF</Title>
-		<Version>1.2.60</Version>
+		<Version>1.2.100</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WPF</Description>
 	</PropertyGroup>

@@ -14,7 +14,7 @@ namespace VeloxDev.WPF.TransitionSystem
             }
             else
             {
-                Application.Current.Dispatcher.InvokeAsync(() => Update(target, frameIndex), priority);
+                Application.Current?.Dispatcher?.InvokeAsync(() => Update(target, frameIndex), priority);
             }
         }
     }

@@ -13,7 +13,7 @@ namespace VeloxDev.Avalonia.TransitionSystem
             }
             else
             {
-                Dispatcher.UIThread.InvokeAsync(() => Update(target, frameIndex), priority);
+                Dispatcher.UIThread?.InvokeAsync(() => Update(target, frameIndex), priority);
             }
         }
     }
