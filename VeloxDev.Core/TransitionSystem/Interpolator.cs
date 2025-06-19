@@ -8,7 +8,7 @@ namespace VeloxDev.Core.TransitionSystem
         TPriorityCore> : InterpolatorCore, IFrameInterpolator<TPriorityCore>
         where TOutputCore : IFrameSequence<TPriorityCore>, new()
     {
-        public virtual async Task<IFrameSequence<TPriorityCore>> Interpolate(
+        public virtual IFrameSequence<TPriorityCore> Interpolate(
             object target,
             IFrameState state,
             ITransitionEffect<TPriorityCore> effect,
@@ -21,7 +21,7 @@ namespace VeloxDev.Core.TransitionSystem
             output.SetCount(count);
             foreach (var kvp in state.Values)
             {
-                var currentValue = isUIAccess ? kvp.Key.GetValue(target) : inspector.ProtectedGetValue(isUIAccess, target, kvp.Key);
+                var currentValue = inspector.ProtectedGetValue(isUIAccess, target, kvp.Key);
                 var newValue = kvp.Value;
                 if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator))
                 {
@@ -29,7 +29,7 @@ namespace VeloxDev.Core.TransitionSystem
                     {
                         if (item != null)
                         {
-                            var frames = await Task.Run(() => item.Interpolate(currentValue, newValue, count));
+                            var frames = inspector.ProtectedInterpolate(isUIAccess, () => item.Interpolate(currentValue, newValue, count));
                             output.AddPropertyInterpolations(kvp.Key, frames);
                         }
                     }
@@ -37,7 +37,7 @@ namespace VeloxDev.Core.TransitionSystem
                     {
                         if (interpolator != null)
                         {
-                            var frames = await Task.Run(() => interpolator.Interpolate(currentValue, newValue, count));
+                            var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
                             output.AddPropertyInterpolations(kvp.Key, frames);
                         }
                     }
@@ -46,12 +46,12 @@ namespace VeloxDev.Core.TransitionSystem
                 {
                     if (currentValue is IInterpolable v1)
                     {
-                        var frames = await Task.Run(() => v1.Interpolate(currentValue, newValue, count));
+                        var frames = inspector.ProtectedInterpolate(isUIAccess, () => v1.Interpolate(currentValue, newValue, count));
                         output.AddPropertyInterpolations(kvp.Key, frames);
                     }
                     else if (newValue is IInterpolable v2)
                     {
-                        var frames = await Task.Run(() => v2.Interpolate(currentValue, newValue, count));
+                        var frames = inspector.ProtectedInterpolate(isUIAccess, () => v2.Interpolate(currentValue, newValue, count));
                         output.AddPropertyInterpolations(kvp.Key, frames);
                     }
                 }
@@ -63,7 +63,7 @@ namespace VeloxDev.Core.TransitionSystem
     public abstract class InterpolatorCore<TOutputCore> : InterpolatorCore, IFrameInterpolator
         where TOutputCore : IFrameSequence, new()
     {
-        public virtual async Task<IFrameSequence> Interpolate(
+        public virtual IFrameSequence Interpolate(
             object target,
             IFrameState state,
             ITransitionEffectCore effect,
@@ -84,7 +84,7 @@ namespace VeloxDev.Core.TransitionSystem
                     {
                         if (item != null)
                         {
-                            var frames = await Task.Run(() => item.Interpolate(currentValue, newValue, count));
+                            var frames = inspector.ProtectedInterpolate(isUIAccess, () => item.Interpolate(currentValue, newValue, count));
                             output.AddPropertyInterpolations(kvp.Key, frames);
                         }
                     }
@@ -92,7 +92,7 @@ namespace VeloxDev.Core.TransitionSystem
                     {
                         if (interpolator != null)
                         {
-                            var frames = await Task.Run(() => interpolator.Interpolate(currentValue, newValue, count));
+                            var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
                             output.AddPropertyInterpolations(kvp.Key, frames);
                         }
                     }
@@ -101,12 +101,12 @@ namespace VeloxDev.Core.TransitionSystem
                 {
                     if (currentValue is IInterpolable v1)
                     {
-                        var frames = await Task.Run(() => v1.Interpolate(currentValue, newValue, count));
+                        var frames = inspector.ProtectedInterpolate(isUIAccess, () => v1.Interpolate(currentValue, newValue, count));
                         output.AddPropertyInterpolations(kvp.Key, frames);
                     }
                     else if (newValue is IInterpolable v2)
                     {
-                        var frames = await Task.Run(() => v2.Interpolate(currentValue, newValue, count));
+                        var frames = inspector.ProtectedInterpolate(isUIAccess, () => v2.Interpolate(currentValue, newValue, count));
                         output.AddPropertyInterpolations(kvp.Key, frames);
                     }
                 }

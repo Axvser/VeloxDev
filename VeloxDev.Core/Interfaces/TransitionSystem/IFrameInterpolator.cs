@@ -2,7 +2,7 @@
 {
     public interface IFrameInterpolator<TPriorityCore> : IFrameInterpolatorCore
     {
-        public Task<IFrameSequence<TPriorityCore>> Interpolate(
+        public IFrameSequence<TPriorityCore> Interpolate(
             object target,
             IFrameState state,
             ITransitionEffect<TPriorityCore> effect,
@@ -12,7 +12,7 @@
 
     public interface IFrameInterpolator : IFrameInterpolatorCore
     {
-        public Task<IFrameSequence> Interpolate(
+        public IFrameSequence Interpolate(
             object target,
             IFrameState state,
             ITransitionEffectCore effect,

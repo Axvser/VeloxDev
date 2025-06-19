@@ -1,5 +1,4 @@
 ﻿using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
@@ -32,7 +31,7 @@ namespace VeloxDev.Core.TransitionSystem
                 effect.InvokeAwake(target, newInterpreter.Args);
             }, effect.Priority);
 
-            var frames = await interpolator.Interpolate(target, state, effect, isUIThread, uIThreadInspector);
+            var frames = interpolator.Interpolate(target, state, effect, isUIThread, uIThreadInspector);
             if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
             await newInterpreter.Execute(target, frames, effect, isUIThread, newCts);
         }
@@ -97,7 +96,7 @@ namespace VeloxDev.Core.TransitionSystem
             {
                 effect.InvokeAwake(target, newInterpreter.Args);
             });
-            var frames = await interpolator.Interpolate(target, state, effect, isUIThread, uIThreadInspector);
+            var frames = interpolator.Interpolate(target, state, effect, isUIThread, uIThreadInspector);
             if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
             await newInterpreter.Execute(target, frames, effect, isUIThread, newCts);
         }

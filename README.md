@@ -75,7 +75,7 @@
                     };
                 }); // 使用自定义的效果参数
 
-            transition.Start(); // (可选) 为 Start 传入其它同类型的实例以改变动画生效目标 
+            transition.Execute(); // (可选) 为 Execute 传入其它同类型的实例以改变动画生效目标 
 ```
 
 ## Ⅱ AOP编程

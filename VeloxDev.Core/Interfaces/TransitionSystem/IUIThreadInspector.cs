@@ -16,5 +16,6 @@ namespace VeloxDev.Core.Interfaces.TransitionSystem
     {
         public bool IsUIThread();
         public object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo);
+        public abstract List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate);
     }
 }

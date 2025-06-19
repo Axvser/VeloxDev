@@ -8,6 +8,7 @@ namespace VeloxDev.Core.TransitionSystem
         public abstract bool IsUIThread();
         public abstract void ProtectedInvoke(bool isUIThread, Action action, TPriorityCore priority);
         public abstract object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo);
+        public abstract List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate);
     }
 
     public abstract class UIThreadInspectorCore : IUIThreadInspector
@@ -15,5 +16,6 @@ namespace VeloxDev.Core.TransitionSystem
         public abstract bool IsUIThread();
         public abstract void ProtectedInvoke(bool isUIThread, Action action);
         public abstract object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo);
+        public abstract List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate);
     }
 }
