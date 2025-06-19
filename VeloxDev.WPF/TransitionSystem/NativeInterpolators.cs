@@ -2,7 +2,6 @@
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using VeloxDev.Core.Interfaces.TransitionSystem;
-using VeloxDev.WPF.Tools.SolidColor;
 
 namespace VeloxDev.WPF.TransitionSystem
 {

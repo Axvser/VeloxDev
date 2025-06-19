@@ -1,23 +1,24 @@
 ﻿using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    public class TransitionCore<TStateSnapshotCore> : TransitionCore
+    public class TransitionCore<TTarget, TStateSnapshotCore> : TransitionCore
+        where TTarget : class
         where TStateSnapshotCore : new()
     {
-        public static TStateSnapshotCore Create<T>()
-            where T : class
+        public static TStateSnapshotCore Create()
         {
             var value = new TStateSnapshotCore();
-            if (value is StateSnapshotCore<T> snapshot)
+            if (value is StateSnapshotCore<TTarget> snapshot)
             {
                 snapshot.AsRoot();
             }
             return value;
         }
         public static TStateSnapshotCore Create<T>(T target)
-            where T : class
+            where T : class, TTarget
         {
             var value = new TStateSnapshotCore();
             if (value is StateSnapshotCore<T> snapshot)
