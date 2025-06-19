@@ -1,4 +1,5 @@
-﻿using VeloxDev.Core.TransitionSystem;
+﻿using Microsoft.Maui.Controls.Shapes;
+using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.MAUI.TransitionSystem
 {
@@ -11,6 +12,7 @@ namespace VeloxDev.MAUI.TransitionSystem
             RegisterInterpolator(typeof(Thickness), new NativeInterpolators.ThicknessInterpolator());
             RegisterInterpolator(typeof(Point), new NativeInterpolators.PointInterpolator());
             RegisterInterpolator(typeof(CornerRadius), new NativeInterpolators.CornerRadiusInterpolator());
+            RegisterInterpolator(typeof(Transform), new NativeInterpolators.TransformInterpolator());
         }
     }
 }
