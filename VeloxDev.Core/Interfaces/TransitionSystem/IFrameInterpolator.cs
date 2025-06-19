@@ -2,18 +2,22 @@
 {
     public interface IFrameInterpolator<TPriorityCore> : IFrameInterpolatorCore
     {
-        public IFrameSequence<TPriorityCore> Interpolate(
+        public Task<IFrameSequence<TPriorityCore>> Interpolate(
             object target,
             IFrameState state,
-            ITransitionEffect<TPriorityCore> effect);
+            ITransitionEffect<TPriorityCore> effect,
+            bool isUIAccess,
+            IUIThreadInspector<TPriorityCore> inspector);
     }
 
     public interface IFrameInterpolator : IFrameInterpolatorCore
     {
-        public IFrameSequence Interpolate(
+        public Task<IFrameSequence> Interpolate(
             object target,
             IFrameState state,
-            ITransitionEffectCore effect);
+            ITransitionEffectCore effect,
+            bool isUIAccess,
+            IUIThreadInspector inspector);
     }
 
     public interface IFrameInterpolatorCore

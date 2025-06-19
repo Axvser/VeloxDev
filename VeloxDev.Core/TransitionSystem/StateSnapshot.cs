@@ -1,5 +1,4 @@
-﻿using System.Data.SqlTypes;
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
@@ -105,12 +104,12 @@ namespace VeloxDev.Core.TransitionSystem
             return newNode;
         }
 
-        public override async void Excute(bool CanSTAThread = true)
+        public override async void Execute(bool CanSTAThread = true)
         {
             root ??= this;
             await root.StartAsync(CanSTAThread);
         }
-        public override async void Excute(T target, bool CanSTAThread = true)
+        public override async void Execute(T target, bool CanSTAThread = true)
         {
             root ??= this;
             await root.StartAsync(target, CanSTAThread);
@@ -187,7 +186,7 @@ namespace VeloxDev.Core.TransitionSystem
         where TStateCore : IFrameState, new()
         where TEffectCore : ITransitionEffect<TPriorityCore>, new()
         where TInterpolatorCore : IFrameInterpolator<TPriorityCore>, new()
-        where TUIThreadInspectorCore : IUIThreadInspector, new()
+        where TUIThreadInspectorCore : IUIThreadInspector<TPriorityCore>, new()
         where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
     {
         protected TStateCore state = new();
@@ -277,12 +276,12 @@ namespace VeloxDev.Core.TransitionSystem
             return newNode;
         }
 
-        public override async void Excute(bool CanSTAThread = true)
+        public override async void Execute(bool CanSTAThread = true)
         {
             root ??= this;
             await root.StartAsync(CanSTAThread);
         }
-        public override async void Excute(T target, bool CanSTAThread = true)
+        public override async void Execute(T target, bool CanSTAThread = true)
         {
             root ??= this;
             await root.StartAsync(target, CanSTAThread);
@@ -363,7 +362,7 @@ namespace VeloxDev.Core.TransitionSystem
         {
             targetref = new WeakReference<T>(target);
         }
-        public abstract void Excute(bool CanSTAThread = true);
-        public abstract void Excute(T target, bool CanSTAThread = true);
+        public abstract void Execute(bool CanSTAThread = true);
+        public abstract void Execute(T target, bool CanSTAThread = true);
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
@@ -7,7 +8,7 @@ namespace VeloxDev.Core.TransitionSystem
         TUIThreadInspectorCore,
         TTransitionInterpreterCore,
         TPriorityCore> : TransitionSchedulerCore, ITransitionScheduler<TPriorityCore>
-        where TUIThreadInspectorCore : IUIThreadInspector, new()
+        where TUIThreadInspectorCore : IUIThreadInspector<TPriorityCore>, new()
         where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
     {
         protected TTransitionInterpreterCore? interpreter = null;
@@ -25,9 +26,15 @@ namespace VeloxDev.Core.TransitionSystem
             TTransitionInterpreterCore newInterpreter = new();
             cts = newCts;
             interpreter = newInterpreter;
-            effect.InvokeAwake(target, newInterpreter.Args);
-            var frames = interpolator.Interpolate(target, state, effect);
-            await newInterpreter.Execute(target, frames, effect, uIThreadInspector.IsUIThread(), newCts);
+            var isUIThread = uIThreadInspector.IsUIThread();
+            uIThreadInspector.ProtectedInvoke(isUIThread, () =>
+            {
+                effect.InvokeAwake(target, newInterpreter.Args);
+            }, effect.Priority);
+
+            var frames = await interpolator.Interpolate(target, state, effect, isUIThread, uIThreadInspector);
+            if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
+            await newInterpreter.Execute(target, frames, effect, isUIThread, newCts);
         }
 
         public override void Exit()
@@ -85,9 +92,14 @@ namespace VeloxDev.Core.TransitionSystem
             TTransitionInterpreterCore newInterpreter = new();
             cts = newCts;
             interpreter = newInterpreter;
-            effect.InvokeAwake(target, newInterpreter.Args);
-            var frames = interpolator.Interpolate(target, state, effect);
-            await newInterpreter.Execute(target, frames, effect, uIThreadInspector.IsUIThread(), newCts);
+            var isUIThread = uIThreadInspector.IsUIThread();
+            uIThreadInspector.ProtectedInvoke(isUIThread, () =>
+            {
+                effect.InvokeAwake(target, newInterpreter.Args);
+            });
+            var frames = await interpolator.Interpolate(target, state, effect, isUIThread, uIThreadInspector);
+            if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
+            await newInterpreter.Execute(target, frames, effect, isUIThread, newCts);
         }
 
         public override void Exit()

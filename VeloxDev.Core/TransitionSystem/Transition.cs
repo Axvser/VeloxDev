@@ -1,5 +1,4 @@
 ﻿using System.Runtime.CompilerServices;
-using System.Security.Claims;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
@@ -29,20 +28,20 @@ namespace VeloxDev.Core.TransitionSystem
             return value;
         }
 
-        public static void Excute<T>(T target, IEnumerable<TStateSnapshotCore> values, bool CanSTAThread = true)
+        public static void Execute<T>(T target, IEnumerable<TStateSnapshotCore> values, bool CanSTAThread = true)
             where T : class
         {
             foreach (var snapshot in values.OfType<StateSnapshotCore<T>>())
             {
-                snapshot.Excute(target, CanSTAThread);
+                snapshot.Execute(target, CanSTAThread);
             }
         }
-        public static void Excute<T>(IEnumerable<TStateSnapshotCore> values, bool CanSTAThread = true)
+        public static void Execute<T>(IEnumerable<TStateSnapshotCore> values, bool CanSTAThread = true)
             where T : class
         {
             foreach (var snapshot in values.OfType<StateSnapshotCore<T>>())
             {
-                snapshot.Excute(CanSTAThread);
+                snapshot.Execute(CanSTAThread);
             }
         }
     }
