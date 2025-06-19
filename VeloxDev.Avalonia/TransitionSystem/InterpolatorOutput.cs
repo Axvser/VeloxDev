@@ -16,12 +16,5 @@ namespace VeloxDev.Avalonia.TransitionSystem
                 Dispatcher.UIThread.InvokeAsync(() => Update(target, frameIndex), priority);
             }
         }
-        private void Update(object target, int frameIndex)
-        {
-            foreach (var kvp in Frames)
-            {
-                kvp.Key.SetValue(target, kvp.Value[frameIndex]);
-            }
-        }
     }
 }

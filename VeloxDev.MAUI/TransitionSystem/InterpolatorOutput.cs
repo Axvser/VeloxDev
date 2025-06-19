@@ -14,17 +14,7 @@ namespace VeloxDev.MAUI.TransitionSystem
             }
             else
             {
-                dispatcher?.Dispatch(() =>
-                {
-                    Update(target, frameIndex);
-                });
-            }
-        }
-        private void Update(object target, int frameIndex)
-        {
-            foreach (var kvp in Frames)
-            {
-                kvp.Key.SetValue(target, kvp.Value[frameIndex]);
+                dispatcher?.DispatchAsync(() => Update(target, frameIndex));
             }
         }
     }
