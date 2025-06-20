@@ -80,8 +80,12 @@
                 var value = new WeakDelegate<TDelegate>();
                 foreach (var weakRef in _handlers)
                 {
-                    value._handlers.Add(weakRef);
+                    if (weakRef.TryGetTarget(out var handler))
+                    {
+                        value.AddHandler(handler as TDelegate, CanUpdateCache: false);
+                    }
                 }
+                value._combinedDelegate = value.GetInvocationList();
                 return value;
             }
         }

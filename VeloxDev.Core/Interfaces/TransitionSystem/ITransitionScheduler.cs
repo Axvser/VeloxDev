@@ -2,7 +2,7 @@
 {
     public interface ITransitionScheduler<TPriorityCore> : ITransitionSchedulerCore
     {
-        public void Execute(
+        public Task Execute(
             IFrameInterpolator<TPriorityCore> interpolator,
             IFrameState state,
             ITransitionEffect<TPriorityCore> effect);
@@ -10,7 +10,7 @@
 
     public interface ITransitionScheduler : ITransitionSchedulerCore
     {
-        public void Execute(
+        public Task Execute(
             IFrameInterpolator interpolator,
             IFrameState state,
             ITransitionEffectCore effect);

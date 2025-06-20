@@ -13,9 +13,8 @@ namespace VeloxDev.Core.TransitionSystem
         protected TTransitionInterpreterCore? interpreter = null;
         protected TUIThreadInspectorCore uIThreadInspector = new();
 
-        public virtual async void Execute(IFrameInterpolator<TPriorityCore> interpolator, IFrameState state, ITransitionEffect<TPriorityCore> effect)
+        public virtual async Task Execute(IFrameInterpolator<TPriorityCore> interpolator, IFrameState state, ITransitionEffect<TPriorityCore> effect)
         {
-            Exit();
             if (targetref is null || !targetref.TryGetTarget(out var target))
             {
                 targetref = null;
@@ -79,9 +78,8 @@ namespace VeloxDev.Core.TransitionSystem
         protected TTransitionInterpreterCore? interpreter = null;
         protected TUIThreadInspectorCore uIThreadInspector = new();
 
-        public virtual async void Execute(IFrameInterpolator interpolator, IFrameState state, ITransitionEffectCore effect)
+        public virtual async Task Execute(IFrameInterpolator interpolator, IFrameState state, ITransitionEffectCore effect)
         {
-            Exit();
             if (targetref is null || !targetref.TryGetTarget(out var target))
             {
                 targetref = null;

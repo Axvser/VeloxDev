@@ -50,32 +50,27 @@
 - 源生成器依赖 ❌
 
 ```csharp
-            var transition = Transition.Create(this)
-                .Await(TimeSpan.FromSeconds(3))// (可选) 等待 3s 后执行第一段动画
-                .Property(x => x.Background, Brushes.Red)
-                .Property(x => x.Opacity, 0.5d)
-                .Effect(TransitionEffects.Theme) // 效果参数
-                .Then() // 执行下一段动画 > (可选) AwaitThen()以延迟启动下一段动画
-                .Property(x => x.Background, Brushes.Cyan)
-                .Property(x => x.Opacity, 1d)
-                .Effect((p) =>
+                var effect1 = new TransitionEffect()
                 {
-                    p.Duration = TimeSpan.FromSeconds(1);
+                    Duration = TimeSpan.FromSeconds(2),
+                    LoopTime = 1,
+                    EaseCalculator = Eases.Cubic.InOut,
+                };
 
-                    p.EaseCalculator = Eases.Sine.InOut; 
-                    // 此处为系统内缓动封装，你也可从接口派生自定义缓动函数
+                effect1.Completed += (s, e) =>
+                {
+                    MessageBox.Show("Animation Completed");
+                };
 
-                    p.Awaked += (s, e) =>
-                    {
+                var animation = Transition<Window>.Create()
+                    .Property(w => w.Background, Brushes.Violet)
+                    .Effect(effect1)
+                    .Then()
+                    .Property(w => w.Background, Brushes.Lime)
+                    .Effect(effect1)
+                    .Execute(this);
 
-                    };
-                    p.Update += (s, e) =>
-                    {
-
-                    };
-                }); // 使用自定义的效果参数
-
-            transition.Execute(); // (可选) 为 Execute 传入其它同类型的实例以改变动画生效目标 
+                // Transition<Window>.Execute(this);
 ```
 
 ## Ⅱ AOP编程

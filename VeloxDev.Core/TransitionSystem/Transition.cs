@@ -16,14 +16,12 @@ namespace VeloxDev.Core.TransitionSystem
         public static T Then<T>(this T snapshot)
             where T : StateSnapshotCore, new()
         {
-            snapshot.CoreThen<T>();
-            return snapshot;
+            return snapshot.CoreThen<T>();
         }
         public static T AwaitThen<T>(this T snapshot, TimeSpan timeSpan)
             where T : StateSnapshotCore, new()
         {
-            snapshot.CoreAwaitThen<T>(timeSpan);
-            return snapshot;
+            return snapshot.CoreAwaitThen<T>(timeSpan);
         }
 
         public static T Effect<T, T1>(this T snapshot, T1 effect)

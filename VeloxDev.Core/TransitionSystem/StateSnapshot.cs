@@ -74,85 +74,26 @@ namespace VeloxDev.Core.TransitionSystem
         {
             if (targetref?.TryGetTarget(out var target) ?? false)
             {
-                var cts = RefreshCts();
-                if (!cts.IsCancellationRequested)
-                {
-                    var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore>.FindOrCreate(target, CanSTAThread);
-                    if (CanSTAThread) scheduler.Exit();
-                    var copyEffect = effect.Clone();
-                    copyEffect.Completed += (s, e) =>
-                    {
-                        next?.StartAsync(CanSTAThread);
-                    };
-                    if (!CanSTAThread)
-                    {
-                        TransitionCore.AddNoSTA(target, [scheduler]);
-                        copyEffect.Finally += (s, e) =>
-                        {
-                            TransitionCore.RemoveNoSTA(target, [scheduler]);
-                        };
-                    }
-                    try
-                    {
-                        await Task.Delay(delay, cts.Token);
-                    }
-                    catch
-                    {
-
-                    }
-                    finally
-                    {
-                        if (!cts.IsCancellationRequested)
-                        {
-                            scheduler.Execute(interpolator, state, copyEffect);
-                        }
-                    }
-                }
+                await StartAsync(target, CanSTAThread);
             }
         }
         internal async Task StartAsync(T target, bool CanSTAThread = true)
         {
-            var cts = RefreshCts();
-            if (!cts.IsCancellationRequested)
+            await Task.Delay(delay);
+            var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore>.FindOrCreate(target, CanSTAThread);
+            if (CanSTAThread) scheduler.Exit();
+            var copyEffect = effect.Clone();
+            if (!CanSTAThread)
             {
-                var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore>.FindOrCreate(target, CanSTAThread);
-                if (CanSTAThread) scheduler.Exit();
-                var copyEffect = effect.Clone();
-                copyEffect.Completed += (s, e) =>
+                TransitionCore.AddNoSTA(target, [scheduler]);
+                copyEffect.Finally += (s, e) =>
                 {
-                    next?.StartAsync(target, CanSTAThread);
+                    TransitionCore.RemoveNoSTA(target, [scheduler]);
                 };
-                if (!CanSTAThread)
-                {
-                    TransitionCore.AddNoSTA(target, [scheduler]);
-                    copyEffect.Finally += (s, e) =>
-                    {
-                        TransitionCore.RemoveNoSTA(target, [scheduler]);
-                    };
-                }
-                try
-                {
-                    await Task.Delay(delay, cts.Token);
-                }
-                catch
-                {
-
-                }
-                finally
-                {
-                    if (!cts.IsCancellationRequested)
-                    {
-                        scheduler.Execute(interpolator, state, copyEffect);
-                    }
-                }
             }
-        }
-        internal CancellationTokenSource RefreshCts(bool CanSTAThread = true)
-        {
-            var newCts = new CancellationTokenSource();
-            var oldCts = Interlocked.Exchange(ref cts, newCts);
-            if (oldCts is not null && CanSTAThread && !oldCts.IsCancellationRequested) oldCts.Cancel();
-            return newCts;
+            await scheduler.Execute(interpolator, state, copyEffect);
+            if (next is null) return;
+            await next.StartAsync(target, CanSTAThread);
         }
 
         internal override T1 CoreThen<T1>()
@@ -291,87 +232,27 @@ namespace VeloxDev.Core.TransitionSystem
         {
             if (targetref?.TryGetTarget(out var target) ?? false)
             {
-                var cts = RefreshCts();
-                if (!cts.IsCancellationRequested)
-                {
-                    var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>.FindOrCreate(target, CanSTAThread);
-                    if (CanSTAThread) scheduler.Exit();
-                    var copyEffect = effect.Clone();
-                    copyEffect.Completed += (s, e) =>
-                    {
-                        next?.StartAsync(CanSTAThread);
-                    };
-                    if (!CanSTAThread)
-                    {
-                        TransitionCore.AddNoSTA(target, [scheduler]);
-                        copyEffect.Finally += (s, e) =>
-                        {
-                            TransitionCore.RemoveNoSTA(target, [scheduler]);
-                        };
-                    }
-                    try
-                    {
-                        await Task.Delay(delay, cts.Token);
-                    }
-                    catch
-                    {
-
-                    }
-                    finally
-                    {
-                        if (!cts.IsCancellationRequested)
-                        {
-                            scheduler.Execute(interpolator, state, copyEffect);
-                        }
-                    }
-                }
+                await StartAsync(target, CanSTAThread);
             }
         }
         internal async Task StartAsync(T target, bool CanSTAThread = true)
         {
-            var cts = RefreshCts();
-            if (!cts.IsCancellationRequested)
+            await Task.Delay(delay);
+            var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>.FindOrCreate(target, CanSTAThread);
+            if (CanSTAThread) scheduler.Exit();
+            var copyEffect = effect.Clone();
+            if (!CanSTAThread)
             {
-                var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>.FindOrCreate(target, CanSTAThread);
-                if (CanSTAThread) scheduler.Exit();
-                var copyEffect = effect.Clone();
-                copyEffect.Completed += (s, e) =>
+                TransitionCore.AddNoSTA(target, [scheduler]);
+                copyEffect.Finally += (s, e) =>
                 {
-                    next?.StartAsync(target, CanSTAThread);
+                    TransitionCore.RemoveNoSTA(target, [scheduler]);
                 };
-                if (!CanSTAThread)
-                {
-                    TransitionCore.AddNoSTA(target, [scheduler]);
-                    copyEffect.Finally += (s, e) =>
-                    {
-                        TransitionCore.RemoveNoSTA(target, [scheduler]);
-                    };
-                }
-                try
-                {
-                    await Task.Delay(delay, cts.Token);
-                }
-                catch
-                {
-
-                }
-                finally
-                {
-                    if (!cts.IsCancellationRequested)
-                    {
-                        scheduler.Execute(interpolator, state, copyEffect);
-                    }
-                }
             }
+            await scheduler.Execute(interpolator, state, copyEffect);
+            if (next is null) return;
+            await next.StartAsync(target, CanSTAThread);
         }
-        internal CancellationTokenSource RefreshCts(bool CanSTAThread = true)
-        {
-            var newCts = new CancellationTokenSource();
-            var oldCts = Interlocked.Exchange(ref cts, newCts);
-            if (oldCts is not null && CanSTAThread && !oldCts.IsCancellationRequested) oldCts.Cancel();
-            return newCts;
-        }
-
         internal override T1 CoreThen<T1>()
         {
             var newNode = new T1();
@@ -380,7 +261,7 @@ namespace VeloxDev.Core.TransitionSystem
                 throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
             }
             converted.root = root;
-            converted.targetref = targetref;
+            converted.targetref = root?.targetref;
             next = converted;
             return newNode;
         }
@@ -393,7 +274,7 @@ namespace VeloxDev.Core.TransitionSystem
             }
             converted.root = root;
             converted.delay = timeSpan;
-            converted.targetref = targetref;
+            converted.targetref = root?.targetref;
             next = converted;
             return newNode;
         }
@@ -441,7 +322,6 @@ namespace VeloxDev.Core.TransitionSystem
     {
         internal WeakReference<T>? targetref = null;
         internal TimeSpan delay = TimeSpan.Zero;
-        internal CancellationTokenSource? cts = null;
         internal abstract IFrameState Merge(StateSnapshotCore<T> snapshot);
         internal virtual void SetTarget(T target)
         {
