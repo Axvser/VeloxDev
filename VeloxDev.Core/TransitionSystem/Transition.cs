@@ -80,7 +80,7 @@ namespace VeloxDev.Core.TransitionSystem
             where T : class, TTarget
         {
             var value = new TStateSnapshotCore();
-            if (value is StateSnapshotCore<T> snapshot)
+            if (value is StateSnapshotCore<TTarget> snapshot)
             {
                 snapshot.AsRoot();
                 snapshot.SetTarget(target);
@@ -93,8 +93,7 @@ namespace VeloxDev.Core.TransitionSystem
         {
             value.CoreExecute(target, CanSTAThread);
         }
-        public static void Execute<T>(StateSnapshotCore values, bool CanSTAThread = true)
-            where T : class, TTarget
+        public static void Execute(StateSnapshotCore values, bool CanSTAThread = true)
         {
             values.CoreExecute(CanSTAThread);
         }
@@ -106,8 +105,7 @@ namespace VeloxDev.Core.TransitionSystem
                 snapshot.CoreExecute(target, CanSTAThread);
             }
         }
-        public static void Execute<T>(IEnumerable<StateSnapshotCore> values, bool CanSTAThread = false)
-            where T : class, TTarget
+        public static void Execute(IEnumerable<StateSnapshotCore> values, bool CanSTAThread = false)
         {
             foreach (var snapshot in values)
             {
