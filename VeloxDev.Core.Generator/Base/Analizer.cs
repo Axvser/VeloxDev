@@ -4,16 +4,12 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace VeloxDev.Avalonia.Generator.Base
+namespace VeloxDev.Core.Generator.Base
 {
     public static class Analizer
     {
         public static class Filters
         {
-            public static bool IsPartialClass(SyntaxNode node)
-            {
-                return node is ClassDeclarationSyntax classDecl && classDecl.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword));
-            }
             public static IncrementalValueProvider<(Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes)> FilterContext(IncrementalGeneratorInitializationContext context)
             {
                 IncrementalValuesProvider<ClassDeclarationSyntax> classDeclarations =
@@ -25,6 +21,10 @@ namespace VeloxDev.Avalonia.Generator.Base
             }
         }
 
+        private static bool IsPartialClass(SyntaxNode node)
+        {
+            return node is ClassDeclarationSyntax classDecl && classDecl.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword));
+        }
         private static IncrementalValueProvider<(Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes)> GetFilteredValue(IncrementalGeneratorInitializationContext context, IncrementalValuesProvider<ClassDeclarationSyntax> classDeclarations)
         {
             IncrementalValueProvider<(Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes)> compilationAndClasses =

@@ -7,19 +7,19 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using VeloxDev.Core.Generator.Base;
 
-namespace VeloxDev.WPF.Generator
+namespace VeloxDev.Core.Generator
 {
-    [Generator]
+    [Generator(LanguageNames.CSharp)]
     public class AopInterfaceModule : IIncrementalGenerator
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            var classDeclarations = AnalizeHelper.DefiningFilter(context);
-            var compilationAndClasses = AnalizeHelper.GetValue(context, classDeclarations);
-            context.RegisterSourceOutput(compilationAndClasses, GenerateSource);
+            context.RegisterSourceOutput(Analizer.Filters.FilterContext(context), GenerateSource);
         }
-        private static void GenerateSource(SourceProductionContext context, (Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes) input)
+
+        private void GenerateSource(SourceProductionContext context, (Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes) input)
         {
             foreach (var classDeclaration in input.Classes)
             {
@@ -27,7 +27,7 @@ namespace VeloxDev.WPF.Generator
                 var classSymbol = model.GetDeclaredSymbol(classDeclaration);
                 if (!AnalizeHelper.IsAopClass(classDeclaration) || classSymbol is null) continue;
 
-                string interfaceName = $"{classDeclaration.Identifier.Text}_{classSymbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop" ;
+                string interfaceName = $"{classDeclaration.Identifier.Text}_{classSymbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop";
                 var baseList = SyntaxFactory.BaseList(
                     SyntaxFactory.SingletonSeparatedList<BaseTypeSyntax>(
                         SyntaxFactory.SimpleBaseType(

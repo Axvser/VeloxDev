@@ -4,12 +4,12 @@ using Microsoft.CodeAnalysis.Text;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
-using VeloxDev.WPF.Generator.Base;
-using VeloxDev.WPF.Generator.Writers;
+using VeloxDev.Core.Generator.Base;
+using VeloxDev.Core.Generator.Writers;
 
-namespace VeloxDev.WPF.Generator
+namespace VeloxDev.Core.Generator
 {
-    [Generator]
+    [Generator(LanguageNames.CSharp)]
     public class VeloxDevCoreModule : IIncrementalGenerator
     {
         protected static readonly List<ICodeWriter> codeWriters = [];
@@ -21,7 +21,6 @@ namespace VeloxDev.WPF.Generator
 
         public virtual void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            
             context.RegisterSourceOutput(Analizer.Filters.FilterContext(context), GenerateSource);
         }
 
@@ -51,8 +50,7 @@ namespace VeloxDev.WPF.Generator
             foreach (var classDeclaration in input.Classes)
             {
                 SemanticModel model = input.Compilation.GetSemanticModel(classDeclaration.SyntaxTree);
-                var classSymbol = model.GetDeclaredSymbol(classDeclaration) as INamedTypeSymbol;
-                if (classSymbol == null)
+                if (model.GetDeclaredSymbol(classDeclaration) is not INamedTypeSymbol classSymbol)
                     continue;
 
                 if (!uniqueTargets.TryGetValue(classSymbol, out _))

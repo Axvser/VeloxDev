@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeloxDev.MAUI.Generator", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeloxDev.Avalonia.Generator", "VeloxDev.Avalonia.Generator\VeloxDev.Avalonia.Generator.csproj", "{3DCC8505-CBB3-44C7-B795-C92A50E56A0C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeloxDev.Core.Generator", "VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj", "{8C949AD0-6A1B-40E4-B62D-322041DA394F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -57,6 +59,10 @@ Global
 		{3DCC8505-CBB3-44C7-B795-C92A50E56A0C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3DCC8505-CBB3-44C7-B795-C92A50E56A0C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3DCC8505-CBB3-44C7-B795-C92A50E56A0C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C949AD0-6A1B-40E4-B62D-322041DA394F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C949AD0-6A1B-40E4-B62D-322041DA394F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C949AD0-6A1B-40E4-B62D-322041DA394F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C949AD0-6A1B-40E4-B62D-322041DA394F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -69,6 +75,7 @@ Global
 		{D627272D-7BC6-47A9-98BF-0469D9E0108D} = {29EB0CAC-33BD-4814-8658-49C0909752D8}
 		{8CA0E805-165A-42DF-9E83-38C73852C2EE} = {29EB0CAC-33BD-4814-8658-49C0909752D8}
 		{3DCC8505-CBB3-44C7-B795-C92A50E56A0C} = {29EB0CAC-33BD-4814-8658-49C0909752D8}
+		{8C949AD0-6A1B-40E4-B62D-322041DA394F} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {BB798447-5A6A-4215-84F8-A0A86077D0EC}

@@ -38,9 +38,4 @@
 	  </PackageReference>
 	</ItemGroup>
 
-	<ItemGroup>
-	  <Folder Include="Interfaces\Workflow\" />
-	  <Folder Include="Workflow\" />
-	</ItemGroup>
-
 </Project>
