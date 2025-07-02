@@ -14,11 +14,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="1.0.130" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <None Remove="bin\Release\netstandard2.0\\VeloxDev.Avalonia.Generator.dll" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="1.0.2" />
 	</ItemGroup>
 
 	<ItemGroup>
