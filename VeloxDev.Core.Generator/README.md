@@ -10,7 +10,6 @@
 
 - ⌈ AspectOriented ⌋ 动态拦截/编辑属性、方法调用 ✔
 - ⌈ MonoBehaviour ⌋ 实时帧刷新行为 ✔
-- ⌈ DynamicTheme ⌋ 主题切换 ✔
 
 ## 不受支持
 

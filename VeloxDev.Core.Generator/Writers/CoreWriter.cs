@@ -68,13 +68,12 @@ namespace VeloxDev.Core.Generator.Writers
             StringBuilder builder = new();
 
             builder.AppendLine(GenerateHead());
-            builder.AppendLine(GeneratePartial());
-            builder.AppendLine(GenerateBody());
+            builder.AppendLine(GeneratePartial(GenerateBody()));
 
             return builder.ToString();
         }
 
-        private string GeneratePartial()
+        private string GeneratePartial(string body)
         {
             if (Syntax == null || Symbol == null)
             {
@@ -93,19 +92,22 @@ namespace VeloxDev.Core.Generator.Writers
             {
                 var result = string.Join(", ", list);
                 var source = $$"""
-                              {{share}} : {{result}}
-                              {
+                           {{share}} : {{result}}
+                           {
                            """;
                 sourceBuilder.AppendLine(source);
             }
             else
             {
                 var source = $$"""
-                              {{share}}
-                              {
+                           {{share}}
+                           {
                            """;
                 sourceBuilder.AppendLine(source);
             }
+
+            sourceBuilder.AppendLine(body);
+            sourceBuilder.AppendLine("}");
 
             return sourceBuilder.ToString();
         }
@@ -121,99 +123,99 @@ namespace VeloxDev.Core.Generator.Writers
             if (IsAop)
             {
                 builder.AppendLine($$"""
-                                           private {{strAop}}? _proxy = null;
-                                           public {{strAop}} Proxy
-                                           {
-                                               get
-                                               {
-                                                   if (_proxy == null)
-                                                   {
-                                                       var newproxy = global::VeloxDev.Core.AspectOriented.ProxyEx.CreateProxy<{{strAop}}>(this);
-                                                       _proxy = newproxy;
-                                                       return newproxy;
-                                                   }
-                                                   return _proxy;
-                                               }
-                                           }
+                                        private {{strAop}}? _proxy = null;
+                                        public {{strAop}} Proxy
+                                        {
+                                            get
+                                            {
+                                                if (_proxy == null)
+                                                {
+                                                    var newproxy = global::VeloxDev.Core.AspectOriented.ProxyEx.CreateProxy<{{strAop}}>(this);
+                                                    _proxy = newproxy;
+                                                    return newproxy;
+                                                }
+                                                return _proxy;
+                                            }
+                                        }
                                      """);
                 builder.AppendLine();
             }
             if (IsMono)
             {
                 builder.AppendLine($$"""
-                          private global::System.Threading.CancellationTokenSource? cts_mono = null;
+                       private global::System.Threading.CancellationTokenSource? cts_mono = null;
 
-                          private bool _canmonobehaviour = false;
-                          public bool CanMonoBehaviour
-                          {
-                              get => _canmonobehaviour;
-                              set
+                       private bool _canmonobehaviour = false;
+                       public bool CanMonoBehaviour
+                       {
+                           get => _canmonobehaviour;
+                           set
+                           {
+                               if(_canmonobehaviour != value)
+                               {
+                                   _canmonobehaviour = value;
+                                   if (value)
+                                   {
+                                       var monofunc = new global::System.Func<global::System.Threading.Tasks.Task>(async () =>
+                                       {
+                                           await _inner_Update();
+                                       });
+                                       monofunc?.Invoke();
+                                   }
+                                   else
+                                   {
+                                       _innerCleanMonoToken();
+                                   }
+                               }
+                           }
+                       }
+
+                       private async global::System.Threading.Tasks.Task _inner_Update()
+                       {
+                           _innerCleanMonoToken();
+
+                           var newmonocts = new global::System.Threading.CancellationTokenSource();
+                           cts_mono = newmonocts;
+
+                           try
+                           {
+                              if(CanMonoBehaviour) Start();
+
+                              while (CanMonoBehaviour && !newmonocts.Token.IsCancellationRequested)
                               {
-                                  if(_canmonobehaviour != value)
-                                  {
-                                      _canmonobehaviour = value;
-                                      if (value)
-                                      {
-                                          var monofunc = new global::System.Func<global::System.Threading.Tasks.Task>(async () =>
-                                          {
-                                              await _inner_Update();
-                                          });
-                                          monofunc?.Invoke();
-                                      }
-                                      else
-                                      {
-                                          _innerCleanMonoToken();
-                                      }
-                                  }
+                                  Update();
+                                  LateUpdate();
+                                  await global::System.Threading.Tasks.Task.Delay({{MonoSpan}},newmonocts.Token);
                               }
-                          }
+                           }
+                           catch (global::System.Exception ex)
+                           {
+                               global::System.Diagnostics.Debug.WriteLine(ex.Message);
+                           }
+                           finally
+                           {
+                               if (global::System.Threading.Interlocked.CompareExchange(ref cts_mono, null, newmonocts) == newmonocts) 
+                               {
+                                   newmonocts.Dispose();
+                               }
+                               ExitMonoBehaviour();
+                           }
+                       }
 
-                          private async global::System.Threading.Tasks.Task _inner_Update()
-                          {
-                              _innerCleanMonoToken();
+                       partial void Start();
+                       partial void Update();
+                       partial void LateUpdate();
+                       partial void ExitMonoBehaviour();
 
-                              var newmonocts = new global::System.Threading.CancellationTokenSource();
-                              cts_mono = newmonocts;
-
-                              try
-                              {
-                                 if(CanMonoBehaviour) Start();
-
-                                 while (CanMonoBehaviour && !newmonocts.Token.IsCancellationRequested)
-                                 {
-                                     Update();
-                                     LateUpdate();
-                                     await global::System.Threading.Tasks.Task.Delay({{MonoSpan}},newmonocts.Token);
-                                 }
-                              }
-                              catch (global::System.Exception ex)
-                              {
-                                  global::System.Diagnostics.Debug.WriteLine(ex.Message);
-                              }
-                              finally
-                              {
-                                  if (global::System.Threading.Interlocked.CompareExchange(ref cts_mono, null, newmonocts) == newmonocts) 
-                                  {
-                                      newmonocts.Dispose();
-                                  }
-                                  ExitMonoBehaviour();
-                              }
-                          }
-
-                          partial void Start();
-                          partial void Update();
-                          partial void LateUpdate();
-                          partial void ExitMonoBehaviour();
-
-                          private void _innerCleanMonoToken()
-                          {
-                              var oldCts = global::System.Threading.Interlocked.Exchange(ref cts_mono, null);
-                              if (oldCts != null)
-                              {
-                                  try { oldCts.Cancel(); } catch { }
-                                  oldCts.Dispose();
-                              }
-                          }
+                       private void _innerCleanMonoToken()
+                       {
+                           var oldCts = global::System.Threading.Interlocked.Exchange(ref cts_mono, null);
+                           if (oldCts != null)
+                           {
+                               try { oldCts.Cancel(); } catch { }
+                               oldCts.Dispose();
+                           }
+                       }
 
                     """);
             }
