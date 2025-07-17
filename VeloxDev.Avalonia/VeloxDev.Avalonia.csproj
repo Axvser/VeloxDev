@@ -31,4 +31,8 @@
 		<PackageReference Include="VeloxDev.Core" Version="1.2.310" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="WorkflowSystem\" />
+	</ItemGroup>
+
 </Project>

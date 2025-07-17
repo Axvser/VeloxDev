@@ -8,7 +8,7 @@ namespace VeloxDev.Core.Generator.Writers
 {
     public class CoreWriter : WriterBase
     {
-        public const string FULLNAME_MONOCONFIG = "global::VeloxDev.Core.Generators.MonoBehaviourAttribute";
+        public const string FULLNAME_MONOCONFIG = "global::VeloxDev.Core.Extensions.MonoBehaviourAttribute";
         public const string NAMESPACE_AOP = "global::VeloxDev.Core.AopInterfaces.";
 
         public bool IsAop { get; set; } = false;
