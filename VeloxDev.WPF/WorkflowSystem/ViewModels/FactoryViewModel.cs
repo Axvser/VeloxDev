@@ -1,22 +1,20 @@
-﻿using System.Collections.Concurrent;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
-using VeloxDev.Core.Interfaces.WorkflowSystem.Helper;
+using System.Windows;
+using System.Windows.Controls;
+using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem.ViewModel;
+using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 using VeloxDev.WPF.WorkflowSystem.Views;
 
 namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 {
     [Workflow.ContextTree]
-    [Workflow.ViewMapping<FactoryViewModel>(typeof(Factory))]
-    [Workflow.ViewMapping<ShowerNodeViewModel>(typeof(Shower))]
     public partial class FactoryViewModel : IContextTree
     {
-        /* 阶段 1: 源生成上下文到视图的映射关系
-         * (1) 使用 Dictionary<Type, Type> 来存储上下文类型到视图类型的映射
-         * (2) 在静态构造函数中初始化映射关系
-         */
+        private ObservableCollection<IContext> children = [];
+        private ObservableCollection<IContextConnector> connectors = [];
         private static readonly Dictionary<Type, Type> viewMappings = [];
         static FactoryViewModel()
         {
@@ -24,8 +22,6 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             viewMappings.Add(typeof(ShowerNodeViewModel), typeof(Shower));
         }
 
-        /* 阶段 2: 源生成 INotifyPropertyChanging 和 INotifyPropertyChanged 接口
-         */
         public event PropertyChangingEventHandler? PropertyChanging;
         public event PropertyChangedEventHandler? PropertyChanged;
         public void OnPropertyChanging(string propertyName)
@@ -37,12 +33,6 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        /* 阶段 3: 源生成 Workflow 核心数据块
-         * (1) Chidren 用于存储工作节点
-         * (2) Connectors 用于呈现工作节点之间的连接 ( 例如，使用装饰器来基于Connector上下文渲染连线 )
-         */
-        private ObservableCollection<IContext> children = [];
-        private ObservableCollection<IContextConnector> connectors = [];
         public ObservableCollection<IContext> Children
         {
             get => children;
@@ -65,68 +55,37 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
                 OnPropertyChanged(nameof(Connectors));
             }
         }
-        public ConcurrentDictionary<IContext, HashSet<IContext>> SourceLinks { get; set; } = [];
-        public ConcurrentDictionary<IContext, HashSet<IContext>> ProcessorLinks { get; set; } = [];
 
-        /* 阶段 4: 源生成开放API对Tree进行操作
-         * (2) 在 CreateNode<TContext>() 方法中使用映射关系创建节点
-         */
-        public void BroadcastTask(IContext sender, params object?[] args)
+        [VeloxCommand(CanValidate: true)] // 异步锁地
+        public async Task SaveAsync(object? parameter, CancellationToken ct)
         {
-            if (ProcessorLinks.TryGetValue(sender, out var processors))
+            await Task.Delay(3000);
+            if(parameter is Button)
             {
-                foreach (var processor in processors)
-                {
-                    processor.ExecuteTask(sender, args);
-                }
+                MessageBox.Show("命令来自Button1");
             }
         }
-        public void BuildConnection(IContext sender, IContext processor)
+        [VeloxCommand(CanConcurrent: true)] // 并发地
+        public Task LoadAsync(object? parameter, CancellationToken ct)
         {
-            if (SourceLinks.TryGetValue(sender, out var sources) && !sources.Contains(processor))
+            if (parameter is Button)
             {
-                sources.Add(processor);
+                MessageBox.Show("命令来自Button2");
             }
-            else
-            {
-                SourceLinks[sender] = [processor];
-            }
-            OnConnectionBuilded(sender, processor);
-        }
-        public void RemoveConnection(IContext sender, IContext processor)
-        {
-            OnConnectionRemoved(sender, processor);
-        }
-        public bool CreateNode<TContext>(params object?[] args) where TContext : IContext, new()
-        {
-            throw new NotImplementedException();
-        }
-        public bool RemoveNode(IContext context)
-        {
-            throw new NotImplementedException();
-        }
-        public bool TryGetTaskFuse(Type exceptionType, out ITaskFuse? fuse)
-        {
-            throw new NotImplementedException();
-        }
-        public bool RegisterTaskFuse(Type exceptionType, ITaskFuse fuse)
-        {
-            throw new NotImplementedException();
-        }
-        public bool UnregisterTaskFuse(Type exceptionType, out ITaskFuse? fuse)
-        {
-            throw new NotImplementedException();
-        }
-        public void UpdateAnchor(IContext sender, Anchor anchor)
-        {
-            throw new NotImplementedException();
-        }
-        public void UpdateConnectors(IContext sender)
-        {
-            throw new NotImplementedException();
+            return Task.CompletedTask;
         }
 
-        partial void OnConnectionBuilded(IContext sender, IContext processor);
-        partial void OnConnectionRemoved(IContext sender, IContext processor);
+        // 源生成器可以生成类似以下的代码
+        public IVeloxCommand SaveCommand => new VeloxCommand(
+            executeAsync: SaveAsync,
+            canExecute: CanExecuteSaveCommand);
+        private partial bool CanExecuteSaveCommand(object? parameter);
+        private partial bool CanExecuteSaveCommand(object? parameter)  // 这一条是为了演示思路，实际应由用户实现
+        {
+            return true;
+        }
+        public IVeloxCommand LoadCommand => new ConcurrentVeloxCommand(
+            executeAsync: LoadAsync,
+            canExecute: _ => true);
     }
 }

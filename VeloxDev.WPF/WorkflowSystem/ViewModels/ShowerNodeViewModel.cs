@@ -60,7 +60,6 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         public void BroadcastTask(params object?[] args)
         {
             IsEnabled = false;
-            Tree?.BroadcastTask(this, args);
             IsEnabled = true;
         }
         public async void ExecuteTask(IContext sender, params object?[] args)
@@ -103,10 +102,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
                     }
                     catch (Exception ex)
                     {
-                        if (tree?.TryGetTaskFuse(ex.GetType(), out var fuse) ?? false)
-                        {
-                            fuse?.Fuse(task.Item2, this, task.Item3, ex);
-                        }
+
                     }
                 }
             }

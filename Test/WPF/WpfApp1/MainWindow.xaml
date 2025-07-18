@@ -4,13 +4,8 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WpfApp1"
-        xmlns:vd="clr-namespace:VeloxDev.WPF.WorkflowSystem;assembly=VeloxDev.WPF"
+        xmlns:vs="clr-namespace:VeloxDev.WPF.WorkflowSystem.Views;assembly=VeloxDev.WPF"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800" Background="#1e1e1e">
-    <Canvas>
-        <vd:WorkflowNode Height="100" Width="100" Background="#FFAABBCC" Canvas.Left="507" Canvas.Top="138"/>
-        <vd:WorkflowNode Height="100" Width="100" Background="#FFAABBCC" Canvas.Left="272" Canvas.Top="78"/>
-        <vd:WorkflowConnector Canvas.ZIndex="-1"  Width="50" Height="50" Background="#FFAABBCC" Canvas.Left="130" Canvas.Top="153"/>
-        <vd:WorkflowConnector Canvas.ZIndex="-1" Width="50" Height="50" Background="#FFAABBCC" Canvas.Left="400" Canvas.Top="227"/>
-    </Canvas>
+    <vs:Factory x:Name="container"/>
 </Window>

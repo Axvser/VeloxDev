@@ -2,13 +2,12 @@
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
-using VeloxDev.Core.Interfaces.WorkflowSystem.View;
 using VeloxDev.Core.Interfaces.WorkflowSystem.ViewModel;
 using VeloxDev.Core.WorkflowSystem;
 
-namespace VeloxDev.WPF.WorkflowSystem.Adorners
+namespace VeloxDev.WPF.WorkflowSystem.Decorators
 {
-    public partial class ConnectionDecorator : Control, IViewConnector
+    public partial class ConnectionDecorator : Control
     {
         public static readonly DependencyProperty StartAnchorProperty =
             DependencyProperty.Register(
@@ -117,7 +116,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Adorners
             }
 
             // 渲染箭头
-            dc.DrawGeometry(Brushes.Black, null, arrowGeometry);
+            dc.DrawGeometry(Brushes.Cyan, pen, arrowGeometry);
         }
         public void InitializeWorkflow(IContextConnector context)
         {

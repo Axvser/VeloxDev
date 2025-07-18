@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.Extensions
+﻿namespace VeloxDev.Core.Mono
 {
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public class MonoBehaviourAttribute(int fps = 60) : Attribute
