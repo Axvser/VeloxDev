@@ -1,5 +1,11 @@
 ﻿namespace VeloxDev.Core.WorkflowSystem
 {
+    /// <summary>
+    /// Describe the position and hierarchy in the view system. Note that the origin is located in the upper left corner
+    /// </summary>
+    /// <param name="left">Horizontal offset</param>
+    /// <param name="top">Vertical offset</param>
+    /// <param name="layer">Rendering ZIndex</param>
     public readonly struct Anchor(double left, double top, int layer)
     {
         public static readonly Anchor Default = new(0, 0, 0);

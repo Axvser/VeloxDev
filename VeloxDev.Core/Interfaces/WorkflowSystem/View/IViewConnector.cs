@@ -1,6 +1,6 @@
 ﻿namespace VeloxDev.Core.Interfaces.WorkflowSystem.View
 {
-    public interface IViewTree
+    public interface IViewConnector
     {
 
     }

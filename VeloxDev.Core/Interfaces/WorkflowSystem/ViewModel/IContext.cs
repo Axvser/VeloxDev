@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.Core.Interfaces.WorkflowSystem.ViewModel
@@ -8,7 +9,11 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem.ViewModel
         public bool IsEnabled { get; set; }
         public Anchor Anchor { get; set; }
         public IContextTree? Tree { get; set; }
-        public void BroadcastTask(params object?[] args);
-        public void ExecuteTask(IContext sender, params object?[] args);
+
+        public IVeloxCommand MoveCommand { get; }
+        public IVeloxCommand BroadcastCommand { get; }
+        public IVeloxCommand DeleteCommand { get; }
+        public IVeloxCommand BeginConnectCommand { get; }
+        public IVeloxCommand FinishConnectCommand { get; }
     }
 }
