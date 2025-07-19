@@ -378,24 +378,40 @@ namespace VeloxDev.Core.Generator.Writers
 
             foreach (var config in CommandConfig)
             {
-                if (config.Item3) // 是否并发
+                if (config.Item3)
                 {
-                    if (config.Item2) // 是否验证
+                    if (config.Item2)
                     {
                         builder.AppendLine($$"""
-                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command => new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
-                         executeAsync: {{config.Item4}},
-                         canExecute: CanExecute{{config.Item1}}Command);
+                         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
+                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
+                         {
+                             get
+                             {
+                                 _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
+                                     executeAsync: {{config.Item4}},
+                                     canExecute: CanExecute{{config.Item1}}Command);
+                                 return _buffer_{{config.Item1}}Command;
+                             }
+                         }
                          private partial bool CanExecute{{config.Item1}}Command(object? parameter);
-                     """);
+                      """);
                     }
                     else
                     {
                         builder.AppendLine($$"""
-                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command => new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
-                         executeAsync: {{config.Item4}},
-                         canExecute: _ => true);
-                     """);
+                         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
+                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
+                         {
+                             get
+                             {
+                                 _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
+                                     executeAsync: {{config.Item4}},
+                                     canExecute: _ => true);
+                                 return _buffer_{{config.Item1}}Command;
+                             }
+                         }
+                      """);
                     }
 
                 }
@@ -404,19 +420,35 @@ namespace VeloxDev.Core.Generator.Writers
                     if (config.Item2)
                     {
                         builder.AppendLine($$"""
-                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command => new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                         executeAsync: {{config.Item4}},
-                         canExecute: CanExecute{{config.Item1}}Command);
+                         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
+                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
+                         {
+                             get
+                             {
+                                _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                                    executeAsync: {{config.Item4}},
+                                    canExecute: CanExecute{{config.Item1}}Command);
+                                return _buffer_{{config.Item1}}Command;
+                             }
+                         }
                          private partial bool CanExecute{{config.Item1}}Command(object? parameter);
-                     """);
+                      """);
                     }
                     else
                     {
                         builder.AppendLine($$"""
-                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command => new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                         executeAsync: {{config.Item4}},
-                         canExecute: _ => true);
-                     """);
+                         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
+                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
+                         {
+                            get
+                            {
+                               _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                                   executeAsync: {{config.Item4}},
+                                   canExecute: _ => true);
+                               return _buffer_{{config.Item1}}Command;
+                            }
+                         }
+                      """);
                     }
                 }
             }

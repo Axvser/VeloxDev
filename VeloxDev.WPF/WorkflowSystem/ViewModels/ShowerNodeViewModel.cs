@@ -17,8 +17,6 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             await EnqueueTask(async () => { await OnTaskExecute(sender, args); }, sender, args);
         }
 
-        private readonly ConcurrentQueue<Tuple<Func<Task>, IContext, object?[]>> workflowTasksBuffer = [];
-        private readonly SemaphoreSlim workflowTasksSemaphore = new(1, 1);
         private async Task EnqueueTask(Func<Task> taskFactory, IContext sender, object?[] args)
         {
             workflowTasksBuffer.Enqueue(Tuple.Create(taskFactory, sender, args));
