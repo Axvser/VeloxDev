@@ -26,6 +26,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <ProjectReference Include="..\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj"
+						OutputItemType="Analyzer"
+                        ReferenceOutputAssembly="True"/>
 	  <ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
 	</ItemGroup>
 

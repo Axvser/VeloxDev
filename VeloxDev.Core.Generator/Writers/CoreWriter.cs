@@ -1,5 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,18 +9,23 @@ namespace VeloxDev.Core.Generator.Writers
 {
     public class CoreWriter : WriterBase
     {
-        public const string FULLNAME_MONOCONFIG = "global::VeloxDev.Core.Mono.MonoBehaviourAttribute";
-        public const string NAMESPACE_AOP = "global::VeloxDev.Core.AopInterfaces.";
+        public const string NAMESPACE_VELOX_MONO = "global::VeloxDev.Core.Mono.MonoBehaviourAttribute";
+        public const string NAMESPACE_VELOX_IMVVM = "global::VeloxDev.Core.Interfaces.MVVM";
+        public const string NAMESPACE_VELOX_MVVM = "global::VeloxDev.Core.MVVM";
+        public const string NAMESPACE_VELOX_AOP = "global::VeloxDev.Core.AopInterfaces";
+        public const string NAMESPACE_VELOX_WORKFLOW = "global::VeloxDev.Core.WorkflowSystem";
 
         public bool IsAop { get; set; } = false;
         public bool IsMono { get; set; } = false;
         public int MonoSpan { get; set; } = 17;
+        List<Tuple<string, bool, bool, string>> CommandConfig { get; set; } = [];
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
             ReadAopConfig(classDeclaration);
             ReadMonoConfig(namedTypeSymbol);
+            ReadCommandConfig(namedTypeSymbol);
         }
 
         private void ReadAopConfig(ClassDeclarationSyntax classDeclaration)
@@ -30,13 +36,12 @@ namespace VeloxDev.Core.Generator.Writers
                     .SelectMany(al => al.Attributes)
                     .Any(attr => attr.Name.ToString() == AnalizeHelper.NAME_ASPECTORIENTED));
         }
-
         private void ReadMonoConfig(INamedTypeSymbol symbol)
         {
             // 只处理直接标记的特性（通过语法树检查）
             var attributeData = symbol.GetAttributes()
                 .FirstOrDefault(ad =>
-                    ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == FULLNAME_MONOCONFIG &&
+                    ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_MONO &&
                     ad.ApplicationSyntaxReference?.GetSyntax() is AttributeSyntax attrSyntax && // 确保是语法节点
                     attrSyntax.Parent?.Parent is ClassDeclarationSyntax // 确保是直接标记在类上
                 );
@@ -48,10 +53,76 @@ namespace VeloxDev.Core.Generator.Writers
                 MonoSpan = (int)(1000d / value > 0 ? value : 1);
             }
         }
+        private void ReadCommandConfig(INamedTypeSymbol symbol)
+        {
+            const string attributeFullName = $"{NAMESPACE_VELOX_MVVM}.VeloxCommandAttribute";
+            var list = new List<Tuple<string, bool, bool, string>>();
+
+            foreach (var methodSymbol in symbol.GetMembers().OfType<IMethodSymbol>())
+            {
+                // 1. 检查是否标记了 VeloxCommandAttribute
+                var attribute = methodSymbol.GetAttributes().FirstOrDefault(attr =>
+                    attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == attributeFullName
+                );
+                if (attribute == null) continue;
+
+                // 2. 生成方法签名（包含参数类型）
+                var signature = $"{methodSymbol.Name}({string.Join(",", methodSymbol.Parameters.Select(p => p.Type?.ToString()))})";
+
+                // 4. 解析命令配置
+                string commandName = "Auto"; // 默认值
+                bool canValidate = false;
+                bool canConcurrent = false;
+
+                // 5. 处理命名参数（优先）
+                foreach (var namedArg in attribute.NamedArguments)
+                {
+                    switch (namedArg.Key)
+                    {
+                        case "Name":
+                            commandName = (string)(namedArg.Value.Value ?? "Auto");
+                            break;
+                        case "CanValidate":
+                            canValidate = (bool)(namedArg.Value.Value ?? false);
+                            break;
+                        case "CanConcurrent":
+                            canConcurrent = (bool)(namedArg.Value.Value ?? false);
+                            break;
+                    }
+                }
+
+                // 6. 处理位置参数（兼容旧写法）
+                if (attribute.ConstructorArguments.Length >= 1)
+                    commandName = (string)(attribute.ConstructorArguments[0].Value ?? "Auto");
+                if (attribute.ConstructorArguments.Length >= 2)
+                    canValidate = (bool)(attribute.ConstructorArguments[1].Value ?? false);
+                if (attribute.ConstructorArguments.Length >= 3)
+                    canConcurrent = (bool)(attribute.ConstructorArguments[2].Value ?? false);
+
+                // 7. 处理"Auto"命名规则
+                if (commandName == "Auto")
+                {
+                    string methodName = methodSymbol.Name;
+                    commandName = methodName.EndsWith("Async")
+                        ? methodName.Substring(0, methodName.Length - 5)  // 移除最后5个字符("Async")
+                        : methodName;
+                }
+
+                // 8. 添加到配置列表
+                list.Add(Tuple.Create(
+                    commandName,
+                    canValidate,
+                    canConcurrent,
+                    methodSymbol.Name
+                ));
+            }
+
+            CommandConfig = list;
+        }
 
         public override bool CanWrite()
         {
-            return IsAop || IsMono;
+            return IsAop || IsMono || CommandConfig.Count > 0;
         }
 
         public override string GetFileName()
@@ -86,7 +157,7 @@ namespace VeloxDev.Core.Generator.Writers
 
             if (IsAop)
             {
-                list.Add($"{NAMESPACE_AOP}{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop");
+                list.Add($"{NAMESPACE_VELOX_AOP}.{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop");
             }
             if (list.Count > 0)
             {
@@ -119,7 +190,7 @@ namespace VeloxDev.Core.Generator.Writers
                 return string.Empty;
             }
             StringBuilder builder = new();
-            var strAop = $"{NAMESPACE_AOP}{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop";
+            var strAop = $"{NAMESPACE_VELOX_AOP}.{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop";
             if (IsAop)
             {
                 builder.AppendLine($$"""
@@ -219,6 +290,61 @@ namespace VeloxDev.Core.Generator.Writers
 
                     """);
             }
+            if(CommandConfig.Count > 0)
+            {
+                builder.AppendLine(GenerateCommand());
+            }
+            return builder.ToString();
+        }
+        private string GenerateCommand()
+        {
+            var builder = new StringBuilder();
+
+            foreach (var config in CommandConfig)
+            {
+                if (config.Item3) // 是否并发
+                {
+                    if (config.Item2) // 是否验证
+                    {
+                        builder.AppendLine($$"""
+                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command => new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
+                         executeAsync: {{config.Item4}},
+                         canExecute: CanExecute{{config.Item1}}Command);
+                         private partial bool CanExecute{{config.Item1}}Command(object? parameter);
+                     """);
+                    }
+                    else
+                    {
+                        builder.AppendLine($$"""
+                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command => new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
+                         executeAsync: {{config.Item4}},
+                         canExecute: _ => true);
+                     """);
+                    }
+
+                }
+                else
+                {
+                    if (config.Item2)
+                    {
+                        builder.AppendLine($$"""
+                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command => new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                         executeAsync: {{config.Item4}},
+                         canExecute: CanExecute{{config.Item1}}Command);
+                         private partial bool CanExecute{{config.Item1}}Command(object? parameter);
+                     """);
+                    }
+                    else
+                    {
+                        builder.AppendLine($$"""
+                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command => new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                         executeAsync: {{config.Item4}},
+                         canExecute: _ => true);
+                     """);
+                    }
+                }
+            }
+
             return builder.ToString();
         }
     }

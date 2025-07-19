@@ -2,8 +2,8 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem.ViewModel;
+using VeloxDev.Core.Mono;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 using VeloxDev.WPF.WorkflowSystem.Views;
@@ -11,6 +11,7 @@ using VeloxDev.WPF.WorkflowSystem.Views;
 namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 {
     [Workflow.ContextTree]
+    [MonoBehaviour]
     public partial class FactoryViewModel : IContextTree
     {
         private ObservableCollection<IContext> children = [];
@@ -56,36 +57,30 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             }
         }
 
-        [VeloxCommand(CanValidate: true)] // 异步锁地
+        [VeloxCommand(CanValidate: true)] // 默认无验证地执行，此处选择性地启用了验证
         public async Task SaveAsync(object? parameter, CancellationToken ct)
         {
             await Task.Delay(3000);
-            if(parameter is Button)
-            {
-                MessageBox.Show("命令来自Button1");
-            }
-        }
-        [VeloxCommand(CanConcurrent: true)] // 并发地
-        public Task LoadAsync(object? parameter, CancellationToken ct)
-        {
             if (parameter is Button)
             {
-                MessageBox.Show("命令来自Button2");
+                MessageBox.Show("命令A ：来自Button");
             }
-            return Task.CompletedTask;
         }
-
-        // 源生成器可以生成类似以下的代码
-        public IVeloxCommand SaveCommand => new VeloxCommand(
-            executeAsync: SaveAsync,
-            canExecute: CanExecuteSaveCommand);
-        private partial bool CanExecuteSaveCommand(object? parameter);
-        private partial bool CanExecuteSaveCommand(object? parameter)  // 这一条是为了演示思路，实际应由用户实现
+        private partial bool CanExecuteSaveCommand(object? parameter) // 启用验证则要求用户实现此分部方法
         {
             return true;
         }
-        public IVeloxCommand LoadCommand => new ConcurrentVeloxCommand(
-            executeAsync: LoadAsync,
-            canExecute: _ => true);
+
+        //------------------------------------------------------------------------------------------------
+
+        [VeloxCommand(CanConcurrent: true)] // 默认带异步锁地执行，此处选择性地启用了并发执行（ 无锁 ）
+        public async Task LoadAsync(object? parameter, CancellationToken ct)
+        {
+            await Task.Delay(3000);
+            if (parameter is Button)
+            {
+                MessageBox.Show("命令B：来自Button");
+            }
+        }
     }
 }

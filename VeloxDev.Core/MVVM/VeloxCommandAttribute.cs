@@ -4,11 +4,12 @@ using VeloxDev.Core.Interfaces.MVVM;
 namespace VeloxDev.Core.MVVM
 {
     /// <summary>
-    /// Execute the command using the specified Task method
-    /// <para> Define ➤ public Task Method(object? parameter, CancellationToken ct)</para>
-    /// <paramref name="CanValidate" discribtion=" ➤ True indicates that the executability verification of this command is enabled"/>
-    /// <paramref name="CanConcurrent" discribtoin=" ➤ True indicates that the command is concurrent"/>
+    /// Task ➤ Command
+    /// <para><strong>Task Format : </strong> <c>public Task MethodName(object? parameter, CancellationToken ct)</c></para>
     /// </summary>
+    /// <param name="Name">The name of the command, if not specified, it will be automatically generated</param>
+    /// <param name="CanValidate">True indicates that the executability verification of this command is enabled</param>
+    /// <param name="CanConcurrent">True indicates that the command is concurrent</param>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
     public sealed class VeloxCommandAttribute(string Name = "Auto", bool CanValidate = false, bool CanConcurrent = false) : Attribute
     {
@@ -46,6 +47,11 @@ namespace VeloxDev.Core.MVVM
             {
                 Debug.WriteLine($"Error executing command: {ex.Message}");
             }
+        }
+
+        public void OnCanExecuteChanged()
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -86,6 +92,11 @@ namespace VeloxDev.Core.MVVM
             {
                 _queueSemaphore.Release();
             }
+        }
+
+        public void OnCanExecuteChanged()
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 }
