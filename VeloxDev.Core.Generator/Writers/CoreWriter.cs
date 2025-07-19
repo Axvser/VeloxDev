@@ -4,21 +4,25 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using VeloxDev.Core.Generator.Base;
 
 namespace VeloxDev.Core.Generator.Writers
 {
     public class CoreWriter : WriterBase
     {
-        public const string NAMESPACE_VELOX_MONO = "global::VeloxDev.Core.Mono.MonoBehaviourAttribute";
+        public const string NAMESPACE_VELOX_MONO = "global::VeloxDev.Core.Mono";
         public const string NAMESPACE_VELOX_IMVVM = "global::VeloxDev.Core.Interfaces.MVVM";
         public const string NAMESPACE_VELOX_MVVM = "global::VeloxDev.Core.MVVM";
         public const string NAMESPACE_VELOX_AOP = "global::VeloxDev.Core.AopInterfaces";
         public const string NAMESPACE_VELOX_WORKFLOW = "global::VeloxDev.Core.WorkflowSystem";
+        public const string NAMESPACE_SYSTEM_MVVM = "global::System.ComponentModel";
 
+        public bool IsMVVM { get; set; } = false;
         public bool IsAop { get; set; } = false;
         public bool IsMono { get; set; } = false;
         public int MonoSpan { get; set; } = 17;
         List<Tuple<string, bool, bool, string>> CommandConfig { get; set; } = [];
+        List<Analizer.MVVMPropertyFactory> MVVMProperties { get; set; } = [];
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
@@ -26,8 +30,28 @@ namespace VeloxDev.Core.Generator.Writers
             ReadAopConfig(classDeclaration);
             ReadMonoConfig(namedTypeSymbol);
             ReadCommandConfig(namedTypeSymbol);
+            ReadMVVMConfig(namedTypeSymbol);
         }
 
+        private void ReadMVVMConfig(INamedTypeSymbol symbol)
+        {
+            var res = symbol.GetAttributes()
+                .Any(ad =>
+                     ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_WORKFLOW + ".Workflow.ContextAttribute" ||
+                     ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_WORKFLOW + ".Workflow.ContextTreeAttribute"
+                );
+            MVVMProperties = [.. symbol.GetMembers()
+                .OfType<IFieldSymbol>()
+                .Where(field => field.GetAttributes().Any(attr =>
+                    attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
+                .Select(field => new Analizer.MVVMFieldAnalizer(field))
+                .Select(analizer => new Analizer.MVVMPropertyFactory(analizer, "public", false)
+                {
+                    SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
+                    SetteredBody = [$"OnPropertyChanged(nameof({analizer.PropertyName}));"],
+                })];
+            IsMVVM = res || MVVMProperties.Count > 0;
+        }
         private void ReadAopConfig(ClassDeclarationSyntax classDeclaration)
         {
             IsAop = classDeclaration.Members
@@ -38,12 +62,11 @@ namespace VeloxDev.Core.Generator.Writers
         }
         private void ReadMonoConfig(INamedTypeSymbol symbol)
         {
-            // 只处理直接标记的特性（通过语法树检查）
             var attributeData = symbol.GetAttributes()
                 .FirstOrDefault(ad =>
-                    ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_MONO &&
-                    ad.ApplicationSyntaxReference?.GetSyntax() is AttributeSyntax attrSyntax && // 确保是语法节点
-                    attrSyntax.Parent?.Parent is ClassDeclarationSyntax // 确保是直接标记在类上
+                    ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_MONO + ".MonoBehaviourAttribute" &&
+                    ad.ApplicationSyntaxReference?.GetSyntax() is AttributeSyntax attrSyntax &&
+                    attrSyntax.Parent?.Parent is ClassDeclarationSyntax
                 );
 
             IsMono = attributeData != null;
@@ -122,7 +145,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         public override bool CanWrite()
         {
-            return IsAop || IsMono || CommandConfig.Count > 0;
+            return IsAop || IsMono || CommandConfig.Count > 0 || IsMVVM;
         }
 
         public override string GetFileName()
@@ -158,6 +181,11 @@ namespace VeloxDev.Core.Generator.Writers
             if (IsAop)
             {
                 list.Add($"{NAMESPACE_VELOX_AOP}.{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop");
+            }
+            if (IsMVVM)
+            {
+                list.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanging");
+                list.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanged");
             }
             if (list.Count > 0)
             {
@@ -290,9 +318,37 @@ namespace VeloxDev.Core.Generator.Writers
 
                     """);
             }
-            if(CommandConfig.Count > 0)
+            if (IsMVVM)
+            {
+                builder.AppendLine($$"""
+                       public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventHandler? PropertyChanging;
+                       public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventHandler? PropertyChanged;
+                       public void OnPropertyChanging(string propertyName)
+                       {
+                           PropertyChanging?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventArgs(propertyName));
+                       }
+                       public void OnPropertyChanged(string propertyName)
+                       {
+                           PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
+                       }
+                    """);
+            }
+            if (CommandConfig.Count > 0)
             {
                 builder.AppendLine(GenerateCommand());
+            }
+            if (IsMVVM)
+            {
+                builder.AppendLine(GenerateProperty());
+            }
+            return builder.ToString();
+        }
+        private string GenerateProperty()
+        {
+            StringBuilder builder = new();
+            foreach (var factory in MVVMProperties)
+            {
+                builder.AppendLine(factory.Generate());
             }
             return builder.ToString();
         }
