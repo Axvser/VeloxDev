@@ -1,6 +1,4 @@
 ﻿using System.Collections.ObjectModel;
-using System.Windows;
-using System.Windows.Controls;
 using VeloxDev.Core.Interfaces.WorkflowSystem.ViewModel;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;

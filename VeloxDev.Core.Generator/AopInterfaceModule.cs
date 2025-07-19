@@ -39,7 +39,7 @@ namespace VeloxDev.Core.Generator
                     .WithBaseList(baseList);
 
                 foreach (var field in classDeclaration.Members.OfType<FieldDeclarationSyntax>()
-                    .Where(fd => fd.AttributeLists.Any(atts => atts.Attributes.Any(att => att.ToString().Contains("Observable")))
+                    .Where(fd => fd.AttributeLists.Any(atts => atts.Attributes.Any(att => att.ToString().Contains("Observable") || att.ToString().Contains("Property")))
                               && fd.AttributeLists.Any(atts => atts.Attributes.Any(att => att.ToString() == "AspectOriented"))))
                 {
                     foreach (var variable in field.Declaration.Variables)

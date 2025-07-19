@@ -12,15 +12,17 @@
 
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/)
 
-> VeloxDev.Core 是 VeloxDev 框架核心，包含一切必要的抽象并对其中跨平台不变的部分进行了抽象类实现。实际使用时无需安装此项目，而是安装相应平台的 VeloxDev.×××
+> VeloxDev.Core 是 VeloxDev 核心，包含一切必要的抽象并对其中跨平台不变的部分进行了抽象类实现。实际使用时无需安装此项目，而是安装相应平台的 VeloxDev.×××
 
-> 如果您希望使用 VeloxDev.Core 对指定框架构建自定义的库，可以参考 VeloxDev 在 github 的 Wiki
+> 同时，你也可以使用 VeloxDev.Core 对指定框架构建自定义的工具包
 
 # Core
+  - ⌈ MVVM Toolkit ⌋ , 自动化属性生成与命令生成 ✔
   - ⌈ TransitionSystem ⌋ , 使用Fluent API构建过渡效果 ✔
   - ⌈ AspectOriented ⌋ , 动态拦截/编辑属性、方法调用 ✔
   - ⌈ MonoBehaviour ⌋ , 实时帧刷新行为 ✔
-  - ⌈ Visual Workflow Builder ⌋ ，拖拽式工作流构建器 ❌ 【 预计 V2 实装此项 】
+  - ⌈ WeakTypes ⌋ , 弱引用封装类 ✔
+  - ⌈ Visual Workflow Builder ⌋ ，拖拽式工作流构建器 ✔
 
 # Product
 
@@ -47,7 +49,6 @@
 - 线程安全 ✔
 - 缓动函数 ✔
 - 生命周期 ✔
-- 源生成器依赖 ❌
 
 ```csharp
                 var effect1 = new TransitionEffect()
@@ -79,20 +80,31 @@
 
 > 但因其本质是对 DispatchProxy 的封装,此功能仅在 .NET5 + 项目可用
 
-- 完全依赖源生成器的写法
-
 ```csharp
-    public class ObservableAttribute : Attribute
+    public partial class Factory
     {
+        [AspectOriented]
+        public string UID { get; set; } = "default";
 
-    }
-
-    public partial class MainWindow : Window
-    {
-        public MainWindow()
+        [AspectOriented]
+        public void Do()
         {
-            InitializeComponent();
+            
+        }
 
+        [AspectOriented]
+        private int id = 3;
+
+        // 也可以给字段标记，但这么做就必须实现对应的可读可写属性
+        public int Id
+        {
+            get => id;
+            set => id = value;
+        }
+
+        // 这里是一些编辑代理逻辑的示例，你在初始化类型后可对实例的Proxy进行编辑
+        private void SetProxy()
+        {
             Proxy.SetProxy(ProxyMembers.Setter, nameof(UID), // Setter 的 AOP
                 null,
                 (calls, result) =>
@@ -124,56 +136,10 @@
                 });
         }
 
-        [AspectOriented]
-        public string UID { get; set; } = "default";
-
-        [AspectOriented]
-        public void Do()
-        {
-            Proxy.UID = "newValue"; // 通过代理访问 UID 属性的 Setter
-        }
-
-        [Observable] // 若字段的某个特性包含 Observable 字样，则 AOP 接口会要求你实现其公开可读写属性 Id
-        [AspectOriented]
-        private int id = 3;
-
-        public int Id
-        {
-            get => id;
-            set => id = value;
-        }
-
         private void Button_Click(object sender, RoutedEventArgs e)
         {
+            Proxy.UID = "newUID"; // 通过代理设置 UID 属性
             Proxy.Do(); // 通过代理调用 Do 方法
-        }
-    }
-```
-
-- 仅依靠动态生成的AOP接口
-
-```csharp
-    public partial class MainPage : ContentPage, MainPage_MauiTest_Aop // 此处必须显式实现动态生成的AOP接口
-    {
-        [AspectOriented]
-        public void Do()
-        {
-
-        }
-
-        public MainPage()
-        {
-            InitializeComponent();
-
-            var proxy = this.CreateProxy<MainPage_MauiTest_Aop>(); // 此处必须显式指定AOP接口
-
-            proxy.SetProxy(ProxyMembers.Method, nameof(Do), null, null, (s, e) =>
-            {
-                Background = Brush.Violet;
-                return null;
-            });
-
-            proxy.Do(); // 通过代理调用 Do 方法
         }
     }
 ```
