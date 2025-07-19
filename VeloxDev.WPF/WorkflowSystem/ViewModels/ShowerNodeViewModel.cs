@@ -6,19 +6,11 @@ using VeloxDev.Core.WorkflowSystem;
 namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 {
     [Workflow.Context]
-    public partial class ShowerNodeViewModel : IContext
+    public partial class ShowerNodeViewModel
     {
-        [VeloxProperty]
-        private bool isEnabled = true;
-        [VeloxProperty]
-        private Anchor anchor = Anchor.Default;
-        [VeloxProperty]
-        private IContextTree? tree;
-
         public void BroadcastTask(params object?[] args)
         {
-            IsEnabled = false;
-            IsEnabled = true;
+            
         }
         public async void ExecuteTask(IContext sender, params object?[] args)
         {

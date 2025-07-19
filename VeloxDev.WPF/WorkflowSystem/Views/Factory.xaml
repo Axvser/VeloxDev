@@ -9,9 +9,9 @@
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800"
              d:DataContext="{d:DesignInstance Type=vm:FactoryViewModel, IsDesignTimeCreatable=True}">
-
+    
     <Button Width="200" Height="100"
-            Command="{Binding LoadCommand}" 
+            Command="{Binding LoadCommand}"
             CommandParameter="{Binding RelativeSource={RelativeSource Self}}"/>
 
     <!--Children 提供【节点】视图模型-->
