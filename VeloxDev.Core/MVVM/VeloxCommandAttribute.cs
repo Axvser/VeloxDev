@@ -5,7 +5,7 @@ namespace VeloxDev.Core.MVVM
 {
     /// <summary>
     /// Task ➤ Command
-    /// <para><strong>Task Format : </strong> <c>public Task MethodName(object? parameter, CancellationToken ct)</c></para>
+    /// <para><strong>Format : </strong> <c>Task MethodName(object? parameter, CancellationToken ct)</c></para>
     /// </summary>
     /// <param name="Name">The name of the command, if not specified, it will be automatically generated</param>
     /// <param name="CanValidate">True indicates that the executability verification of this command is enabled</param>

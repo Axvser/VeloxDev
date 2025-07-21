@@ -24,5 +24,13 @@
         public override string ToString() => $"Anchor({Left},{Top},{Layer})";
         public static bool operator ==(Anchor left, Anchor right) => left.Equals(right);
         public static bool operator !=(Anchor left, Anchor right) => !left.Equals(right);
+        public static Anchor operator +(Anchor left, Anchor right)
+        {
+            return new Anchor(left.Left + right.Left, left.Top + right.Top, left.Layer);
+        }
+        public static Anchor operator -(Anchor left, Anchor right)
+        {
+            return new Anchor(left.Left - right.Left, left.Top - right.Top, left.Layer);
+        }
     }
 }

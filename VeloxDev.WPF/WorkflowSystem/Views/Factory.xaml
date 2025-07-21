@@ -9,34 +9,47 @@
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800"
              d:DataContext="{d:DesignInstance Type=vm:FactoryViewModel, IsDesignTimeCreatable=True}">
-    
-    <Button Width="200" Height="100"
-            Command="{Binding LoadCommand}"
-            CommandParameter="{Binding RelativeSource={RelativeSource Self}}"/>
 
-    <!--Children 提供【节点】视图模型-->
-    <!--Tips : 使用【 TemplateSelector 】以实现多样的节点交互视图-->
+    <!--【节点】-->
     <ItemsControl ItemsSource="{Binding Children}">
+        <!--请使用【绝对坐标】定位的布局容器-->
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <Canvas />
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <!--WPF中，注意Anchor需要以这种方式才能正确生效-->
+        <ItemsControl.ItemContainerStyle>
+            <Style>
+                <Setter Property="Canvas.Left" Value="{Binding Anchor.Left}"/>
+                <Setter Property="Canvas.Top" Value="{Binding Anchor.Top}"/>
+                <Setter Property="Panel.ZIndex" Value="{Binding Anchor.Layer}"/>
+            </Style>
+        </ItemsControl.ItemContainerStyle>
         <ItemsControl.ItemTemplate>
             <DataTemplate>
-                <!--单个节点的渲染、交互逻辑,使用Anchor来锚定元素-->
-                <Button Canvas.Left="{Binding Anchor.Left}"
-                        Canvas.Top="{Binding Anchor.Top}"
-                        Panel.ZIndex="{Binding Anchor.Layer}"
-                        IsEnabled="{Binding IsEnabled}"/>
+                <local:Shower Width="100"
+                    Height="100"
+                    IsEnabled="{Binding IsEnabled}"
+                    ConnectCommand="{Binding ConnectCommand}"
+                    ConnectCommandParameter="{Binding RelativeSource={RelativeSource Self}}"
+                    Background="White"/>
             </DataTemplate>
         </ItemsControl.ItemTemplate>
     </ItemsControl>
 
-    <!--Connectors 提供【节点连接关系】视图模型-->
-    <!--Tips : 使用【 TemplateSelector + 装饰器模式 】以实现多样的连接绘制-->
+    <!--【真实连接】-->
     <ItemsControl ItemsSource="{Binding Connectors}">
         <ItemsControl.ItemTemplate>
             <DataTemplate>
-                <!--单个连接的渲染、交互逻辑,使用两个Anchor来描述连接信息-->
-                <dc:ConnectionDecorator StartAnchor="{Binding StartAnchor}"
-                                        EndAnchor="{Binding EndAnchor}"/>
+                <dc:ConnectionDecorator StartAnchor="{Binding Start.Anchor}"
+                                        EndAnchor="{Binding End.Anchor}"/>
             </DataTemplate>
         </ItemsControl.ItemTemplate>
     </ItemsControl>
+
+    <!--【虚拟连接】-->
+    <dc:ConnectionDecorator StartAnchor="{Binding VirtualConnector.Start.Anchor}"
+                            EndAnchor="{Binding VirtualConnector.End.Anchor}"
+                            CanRender="{Binding VirtualConnector.IsEnabled}"/>
 </Canvas>

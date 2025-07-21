@@ -18,11 +18,10 @@
 
 # Core
   - ⌈ MVVM Toolkit ⌋ , 自动化属性生成与命令生成 ✔
-  - ⌈ TransitionSystem ⌋ , 使用Fluent API构建过渡效果 ✔
+  - ⌈ Workflow ⌋ ，拖拽式工作流构建器 ✔
+  - ⌈ Transition ⌋ , 使用Fluent API构建过渡效果 ✔
   - ⌈ AspectOriented ⌋ , 动态拦截/编辑属性、方法调用 ✔
   - ⌈ MonoBehaviour ⌋ , 实时帧刷新行为 ✔
-  - ⌈ WeakTypes ⌋ , 弱引用封装类 ✔
-  - ⌈ Visual Workflow Builder ⌋ ，拖拽式工作流构建器 ✔
 
 # Product
 

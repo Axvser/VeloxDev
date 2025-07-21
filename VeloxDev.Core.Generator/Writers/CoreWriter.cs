@@ -14,7 +14,7 @@ namespace VeloxDev.Core.Generator.Writers
         public const string NAMESPACE_VELOX_IMVVM = "global::VeloxDev.Core.Interfaces.MVVM";
         public const string NAMESPACE_VELOX_MVVM = "global::VeloxDev.Core.MVVM";
         public const string NAMESPACE_VELOX_AOP = "global::VeloxDev.Core.AopInterfaces";
-        public const string NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL = "global::VeloxDev.Core.Interfaces.WorkflowSystem.ViewModel";
+        public const string NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL = "global::VeloxDev.Core.Interfaces.WorkflowSystem";
         public const string NAMESPACE_VELOX_WORKFLOW = "global::VeloxDev.Core.WorkflowSystem";
         public const string NAMESPACE_SYSTEM_MVVM = "global::System.ComponentModel";
 
@@ -353,14 +353,6 @@ namespace VeloxDev.Core.Generator.Writers
             {
                 builder.AppendLine(GenerateProperty());
             }
-            if (IsWorkflowContext)
-            {
-                builder.AppendLine(GenerateWorkflowContext());
-            }
-            if (IsWorkflowContextTree)
-            {
-                builder.AppendLine(GenerateWorkflowContextTree());
-            }
             return builder.ToString();
         }
         private string GenerateProperty()
@@ -454,102 +446,6 @@ namespace VeloxDev.Core.Generator.Writers
             }
 
             return builder.ToString();
-        }
-        private string GenerateWorkflowContext()
-        {
-            return $$"""
-                    private bool isEnabled = true;
-                    public bool IsEnabled
-                    {
-                        get => isEnabled;
-                        set
-                        {
-                            if (object.Equals(isEnabled, value)) return;
-                            var old = isEnabled;
-                            OnPropertyChanging(nameof(IsEnabled));
-                            OnIsEnabledChanging(old, value);
-                            isEnabled = value;
-                            OnIsEnabledChanged(old, value);
-                            OnPropertyChanged(nameof(IsEnabled));
-                        }
-                    }
-                    partial void OnIsEnabledChanging(bool oldValue, bool newValue);
-                    partial void OnIsEnabledChanged(bool oldValue, bool newValue);
-                    private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = {{NAMESPACE_VELOX_WORKFLOW}}.Anchor.Default;
-                    public {{NAMESPACE_VELOX_WORKFLOW}}.Anchor Anchor
-                    {
-                        get => anchor;
-                        set
-                        {
-                            if (object.Equals(anchor, value)) return;
-                            var old = anchor;
-                            OnPropertyChanging(nameof(Anchor));
-                            OnAnchorChanging(old, value);
-                            anchor = value;
-                            OnAnchorChanged(old, value);
-                            OnPropertyChanged(nameof(Anchor));
-                        }
-                    }
-                    partial void OnAnchorChanging({{NAMESPACE_VELOX_WORKFLOW}}.Anchor oldValue, {{NAMESPACE_VELOX_WORKFLOW}}.Anchor newValue);
-                    partial void OnAnchorChanged({{NAMESPACE_VELOX_WORKFLOW}}.Anchor oldValue, {{NAMESPACE_VELOX_WORKFLOW}}.Anchor newValue);
-                    private {{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextTree? tree = null;
-                    public {{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextTree Tree
-                    {
-                        get => tree;
-                        set
-                        {
-                            if (object.Equals(tree, value)) return;
-                            var old = tree;
-                            OnPropertyChanging(nameof(Tree));
-                            OnTreeChanging(old, value);
-                            tree = value;
-                            OnTreeChanged(old, value);
-                            OnPropertyChanged(nameof(Tree));
-                        }
-                    }
-                    partial void OnTreeChanging({{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextTree oldValue, {{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextTree newValue);
-                    partial void OnTreeChanged({{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextTree oldValue, {{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextTree newValue);
-                 """;
-        }
-        private string GenerateWorkflowContextTree()
-        {
-            return $$"""
-                    private global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContext> children = [];
-                    public global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContext> Children
-                    {
-                        get => children;
-                        set
-                        {
-                            if (object.Equals(children, value)) return;
-                            var old = children;
-                            OnPropertyChanging(nameof(Children));
-                            OnChildrenChanging(old, value);
-                            children = value;
-                            OnChildrenChanged(old, value);
-                            OnPropertyChanged(nameof(Children));
-                        }
-                    }
-                    partial void OnChildrenChanging(global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContext> oldValue, global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContext> newValue);
-                    partial void OnChildrenChanged(global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContext> oldValue, global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContext> newValue);
-
-                    private global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextConnector> connectors = [];
-                    public global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextConnector> Connectors
-                    {
-                        get => connectors;
-                        set
-                        {
-                            if (object.Equals(connectors, value)) return;
-                            var old = connectors;
-                            OnPropertyChanging(nameof(Connectors));
-                            OnConnectorsChanging(old, value);
-                            connectors = value;
-                            OnConnectorsChanged(old, value);
-                            OnPropertyChanged(nameof(Connectors));
-                        }
-                    }
-                    partial void OnConnectorsChanging(global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextConnector> oldValue, global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextConnector> newValue);
-                    partial void OnConnectorsChanged(global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextConnector> oldValue, global::System.Collections.ObjectModel.ObservableCollection<{{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}}.IContextConnector> newValue);
-                 """;
         }
     }
 }

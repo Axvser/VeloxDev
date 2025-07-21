@@ -15,15 +15,9 @@
         public sealed class ContextTreeAttribute : Attribute;
 
         /// <summary>
-        /// In a workflow system, a view model must hold a mapping with a view, and this mapping must be unique within a tree structure
+        /// In a workflow system, use a connector view model to connect two node view models
         /// </summary>
-        /// <param name="leftType">type of the view model or view in the mapping relationship</param>
-        /// <param name="rightType">type of the view model or view in the mapping relationship</param>
-        [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
-        public sealed class ViewMappingAttribute(Type leftType, Type rightType) : Attribute
-        {
-            public Type LeftType { get; } = leftType;
-            public Type RightType { get; } = rightType;
-        }
+        [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+        public sealed class ContextcConnectorAttribute : Attribute;
     }
 }

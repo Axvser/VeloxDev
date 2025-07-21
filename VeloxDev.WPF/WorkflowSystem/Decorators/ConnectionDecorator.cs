@@ -2,13 +2,18 @@
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
-using VeloxDev.Core.Interfaces.WorkflowSystem.ViewModel;
+using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.Decorators
 {
     public partial class ConnectionDecorator : Control
     {
+        public ConnectionDecorator()
+        {
+            IsHitTestVisible = false;
+        }
+
         public static readonly DependencyProperty StartAnchorProperty =
             DependencyProperty.Register(
                 "StartAnchor",
@@ -37,6 +42,19 @@ namespace VeloxDev.WPF.WorkflowSystem.Decorators
                 decorator.InvalidateVisual();
             }
         }
+        public static readonly DependencyProperty CanRenderProperty =
+            DependencyProperty.Register(
+                "CanRender",
+                typeof(bool),
+                typeof(ConnectionDecorator),
+                new PropertyMetadata(false));
+        public static void _1nner_OnCanRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is ConnectionDecorator decorator)
+            {
+                decorator.InvalidateVisual();
+            }
+        }
         public Anchor StartAnchor
         {
             get => (Anchor)GetValue(StartAnchorProperty);
@@ -47,9 +65,15 @@ namespace VeloxDev.WPF.WorkflowSystem.Decorators
             get => (Anchor)GetValue(EndAnchorProperty);
             set => SetValue(EndAnchorProperty, value);
         }
+        public bool CanRender
+        {
+            get { return (bool)GetValue(CanRenderProperty); }
+            set { SetValue(CanRenderProperty, value); }
+        }
 
         protected override void OnRender(DrawingContext dc)
         {
+            base.OnRender(dc);
             OnRender(dc, StartAnchor, EndAnchor);
 
             // 计算差距

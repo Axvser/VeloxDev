@@ -1,6 +1,4 @@
-﻿using VeloxDev.Core.Interfaces.WorkflowSystem.ViewModel;
-
-namespace VeloxDev.Core.Interfaces.WorkflowSystem.Helper
+﻿namespace VeloxDev.Core.Interfaces.WorkflowSystem
 {
     public interface ITaskFuse
     {

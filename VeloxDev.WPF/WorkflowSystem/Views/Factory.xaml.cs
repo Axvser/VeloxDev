@@ -1,66 +1,39 @@
-﻿using System.Windows;
-using System.Windows.Controls;
-using VeloxDev.Core.Interfaces.WorkflowSystem.View;
-using VeloxDev.Core.WorkflowSystem;
+﻿using System.Windows.Controls;
+using VeloxDev.Core.Interfaces.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.Views
 {
-    public partial class Factory : Canvas, IViewTree
+    public partial class Factory : Canvas
     {
         public Factory()
         {
             InitializeComponent();
+            InitializeWorkflow();
         }
 
-        public bool MoveNode(object node, Anchor anchor)
+        private void InitializeWorkflow()
         {
-            if (node is UIElement element && Children.Contains(element))
-            {
-                SetLeft(element, anchor.Left);
-                SetTop(element, anchor.Top);
-                SetZIndex(element, anchor.Layer);
-                return true;
-            }
-            return false;
+            MouseMove += _01_MouseMove;
+            //MouseRightButtonDown += _02_CreateNode;
         }
-        public bool InstallConnector(object connector)
+        private void _01_MouseMove(object sender, global::System.Windows.Input.MouseEventArgs e)
         {
-            if (connector is UIElement element && !Children.Contains(element))
+            if (sender is global::System.Windows.UIElement element &&
+                DataContext is global::VeloxDev.Core.Interfaces.WorkflowSystem.IContextTree contextTree)
             {
-                Children.Add(element);
-                return true;
+                var point = global::System.Windows.Input.Mouse.GetPosition(element);
+                if (contextTree.VirtualConnector.End != null)
+                {
+                    contextTree.VirtualConnector.End.Anchor = new(point.X, point.Y, 0);
+                }
             }
-            return false;
         }
-        public bool InstallNode(object node, Anchor anchor)
+        private void _02_CreateNode(object sender, global::System.Windows.Input.MouseEventArgs e)
         {
-            if (node is UIElement element && !Children.Contains(element))
+            if (DataContext is IContextTree contextTree)
             {
-                SetLeft(element, anchor.Left);
-                SetTop(element, anchor.Top);
-                SetZIndex(element, anchor.Layer);
-                Children.Add(element);
-                return true;
+                contextTree.CreateNodeCommand.Execute(this);
             }
-            return false;
-        }
-        public bool UninstallConnector(object connector)
-        {
-            if (connector is UIElement element && Children.Contains(element))
-            {
-                Children.Remove(element);
-                return true;
-            }
-            return false;
-        }
-        public bool UninstallNode(object node)
-        {
-            if (node is UIElement element && Children.Contains(element))
-            {
-                Children.Remove(element);
-                return true;
-            }
-            return false;
         }
     }
 }

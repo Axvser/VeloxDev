@@ -20,7 +20,15 @@ namespace WpfApp1
         public MainWindow()
         {
             InitializeComponent();
-            container.DataContext = new FactoryViewModel();
+            var node1 = new ShowerNodeViewModel();
+            var node2 = new ShowerNodeViewModel();
+            node1.Anchor = new(50, 100, 2);
+            node2.Anchor = new(100, 50, 1);
+            var tree = new FactoryViewModel()
+            {
+                Children = [node1, node2],
+            };
+            container.DataContext = tree;
         }
     }
 }
