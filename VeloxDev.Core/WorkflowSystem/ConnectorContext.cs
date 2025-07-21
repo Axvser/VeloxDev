@@ -38,7 +38,7 @@ namespace VeloxDev.Core.WorkflowSystem
                 if (Equals(start, value)) return;
                 OnPropertyChanging(nameof(Start));
                 start = value;
-                isEnabled = start != null && end != null;
+                IsEnabled = start != null && end != null;
                 OnPropertyChanged(nameof(Start));
             }
         }
@@ -50,7 +50,7 @@ namespace VeloxDev.Core.WorkflowSystem
                 if (Equals(end, value)) return;
                 OnPropertyChanging(nameof(End));
                 end = value;
-                isEnabled = end != null && start != null;
+                IsEnabled = end != null && start != null;
                 OnPropertyChanged(nameof(End));
             }
         }

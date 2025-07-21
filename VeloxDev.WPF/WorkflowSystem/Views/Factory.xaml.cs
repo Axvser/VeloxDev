@@ -14,7 +14,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         private void InitializeWorkflow()
         {
             MouseMove += _01_MouseMove;
-            //MouseRightButtonDown += _02_CreateNode;
+            MouseRightButtonDown += _02_CreateNode;
         }
         private void _01_MouseMove(object sender, global::System.Windows.Input.MouseEventArgs e)
         {

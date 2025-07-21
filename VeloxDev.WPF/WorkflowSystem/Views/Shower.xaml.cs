@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using VeloxDev.Core.Interfaces.MVVM;
@@ -8,16 +9,15 @@ using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.Views
 {
-    public partial class Shower : UserControl
+    public partial class Shower : Thumb
     {
         public Shower()
         {
             InitializeComponent();
-            MouseDown += (s, e) =>
+            PreviewMouseDown += (s, e) =>
             {
                 ConnectCommand.Execute(ConnectCommandParameter);
             };
-
         }
 
         public IVeloxCommand ConnectCommand
@@ -96,12 +96,11 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
             BindingOperations.SetBinding(this, AnchorProperty, bindingAnchor); // VeloxDev
         }
 
-        private void UserControl_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        private void Thumb_DragDelta(object sender, DragDeltaEventArgs e)
         {
             if (DataContext is IContext context)
             {
-                var newAnchor = new Anchor(context.Anchor.Left + 20, context.Anchor.Top + 10, 0);
-                context.Anchor = newAnchor;
+                context.Anchor = new Anchor(context.Anchor.Left + e.HorizontalChange, context.Anchor.Top + e.VerticalChange, context.Anchor.Layer);
             }
         }
     }

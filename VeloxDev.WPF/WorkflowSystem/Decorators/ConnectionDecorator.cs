@@ -47,11 +47,12 @@ namespace VeloxDev.WPF.WorkflowSystem.Decorators
                 "CanRender",
                 typeof(bool),
                 typeof(ConnectionDecorator),
-                new PropertyMetadata(false));
+                new PropertyMetadata(true));
         public static void _1nner_OnCanRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is ConnectionDecorator decorator)
             {
+                MessageBox.Show("CanRender Changed");
                 decorator.InvalidateVisual();
             }
         }
@@ -74,6 +75,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Decorators
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
+            if (!CanRender) return;
             OnRender(dc, StartAnchor, EndAnchor);
 
             // 计算差距
