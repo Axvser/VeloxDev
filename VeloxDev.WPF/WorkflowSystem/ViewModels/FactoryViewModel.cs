@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Xml;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
@@ -19,14 +20,8 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 
         [VeloxProperty]
         private bool isEnabled = true;
-        [VeloxProperty]
-        private IContextConnector virtualConnector = new ConnectorContext()
-        {
-            End = new NodeContext()
-        };
-        [VeloxProperty]
-        private ObservableCollection<IContextConnector> connectors = [];
 
+        /*节点上下文集合*/
         private ObservableCollection<IContext> children = [];
         public ObservableCollection<IContext> Children
         {
@@ -84,6 +79,18 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             }
         }
 
+        [VeloxProperty]
+        private ObservableCollection<IContextConnector> connectors = [];
+
+        private IContextSlot? senderSlot = null;
+        private IContextSlot? processorSlot = null;
+        [VeloxProperty]
+        private Dictionary<int, IContextConnector> slotPairs = [];
+        [VeloxProperty]
+        private IContextConnector virtualConnector = new ConnectorContext()
+        {
+            End = new NodeContext()
+        };
         [VeloxCommand]
         private Task CreateNode(object? parameter, CancellationToken ct)
         {
@@ -99,6 +106,18 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         {
             virtualConnector.End = null;
             return Task.CompletedTask;
+        }
+        public void SetSenderSlot(IContextSlot slot)
+        {
+
+        }
+        public void SetProcessorSlot(IContextSlot slot)
+        {
+
+        }
+        public void RemoveSlotPairFrom(IContextSlot slot)
+        {
+
         }
     }
 }

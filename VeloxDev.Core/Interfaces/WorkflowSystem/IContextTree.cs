@@ -10,6 +10,10 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public ObservableCollection<IContext> Children { get; set; }
         public ObservableCollection<IContextConnector> Connectors { get; set; }
 
+        public void SetSenderSlot(IContextSlot slot);
+        public void SetProcessorSlot(IContextSlot slot);
+        public void RemoveSlotPairFrom(IContextSlot slot);
+
         public IVeloxCommand CreateNodeCommand { get; }
     }
 }

@@ -5,6 +5,16 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:VeloxDev.WPF.WorkflowSystem.Views"
              mc:Ignorable="d"
-             DragDelta="Thumb_DragDelta"
-             d:DesignHeight="450" d:DesignWidth="800">
+             xmlns:vm="clr-namespace:VeloxDev.WPF.WorkflowSystem.ViewModels"
+             d:DesignHeight="450" d:DesignWidth="800"
+             d:DataContext="{d:DesignInstance Type=vm:ShowerNodeViewModel, IsDesignTimeCreatable=True}">
+    <Thumb.Template>
+        <ControlTemplate>
+            <Grid Background="{TemplateBinding Background}">
+                <local:Slot UID="0" Width="50" Height="50" Margin="0,70,750,330" Background="Yellow"/>
+                <local:Slot UID="1" Width="50" Height="50" Margin="0,330,750,70" Background="Yellow"/>
+                <local:Slot UID="2" Width="50" Height="50" Margin="750,200,0,200" Background="Yellow"/>
+            </Grid>
+        </ControlTemplate>
+    </Thumb.Template>
 </Thumb>

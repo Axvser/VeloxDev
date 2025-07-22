@@ -43,7 +43,8 @@
         <ItemsControl.ItemTemplate>
             <DataTemplate>
                 <dc:ConnectionDecorator StartAnchor="{Binding Start.Anchor}"
-                                        EndAnchor="{Binding End.Anchor}"/>
+                                        EndAnchor="{Binding End.Anchor}"
+                                        CanRender="{Binding IsEnabled}"/>
             </DataTemplate>
         </ItemsControl.ItemTemplate>
     </ItemsControl>

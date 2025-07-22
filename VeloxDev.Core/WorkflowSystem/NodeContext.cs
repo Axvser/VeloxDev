@@ -19,6 +19,7 @@ namespace VeloxDev.Core.WorkflowSystem
         private Anchor anchor = Anchor.Default;
         private IContextTree? tree = null;
         private bool isEnabled = true;
+        private Dictionary<int, IContextSlot> slots = [];
         public bool IsEnabled
         {
             get => isEnabled;
@@ -50,6 +51,17 @@ namespace VeloxDev.Core.WorkflowSystem
                 OnPropertyChanging(nameof(Tree));
                 tree = value;
                 OnPropertyChanged(nameof(Tree));
+            }
+        }
+        public Dictionary<int, IContextSlot> Slots
+        {
+            get => slots;
+            set
+            {
+                if (Equals(slots, value)) return;
+                OnPropertyChanging(nameof(Slots));
+                slots = value;
+                OnPropertyChanged(nameof(Slots));
             }
         }
 

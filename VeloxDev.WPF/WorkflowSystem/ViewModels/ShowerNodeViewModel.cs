@@ -6,7 +6,7 @@ using VeloxDev.Core.WorkflowSystem;
 namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 {
     [Workflow.Context]
-    public partial class ShowerNodeViewModel : IContext
+    public partial class ShowerNodeViewModel
     {
         [VeloxProperty]
         private bool isEnabled = true;
@@ -16,6 +16,8 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         private IContextTree? tree = null;
         [VeloxProperty]
         private ObservableCollection<IContext> targets = [];
+        [VeloxProperty]
+        private Dictionary<int, IContextSlot> slots = [];
 
         [VeloxCommand]
         public Task Move(object? parameter, CancellationToken ct)

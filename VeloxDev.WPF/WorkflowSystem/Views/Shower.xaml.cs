@@ -18,6 +18,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
             {
                 ConnectCommand.Execute(ConnectCommandParameter);
             };
+            DragDelta += Thumb_DragDelta;
         }
 
         public IVeloxCommand ConnectCommand

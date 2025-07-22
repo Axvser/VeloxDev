@@ -15,9 +15,15 @@
         public sealed class ContextTreeAttribute : Attribute;
 
         /// <summary>
-        /// In a workflow system, use a connector view model to connect two node view models
+        /// In a workflow system, use a connector view model to describe the connection between two node view models
         /// </summary>
         [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
         public sealed class ContextcConnectorAttribute : Attribute;
+
+        /// <summary>
+        /// In a workflow system, use a slot to connect two node view models
+        /// </summary>
+        [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+        public sealed class ContextcSlotAttribute : Attribute;
     }
 }
