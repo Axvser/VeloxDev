@@ -1,8 +1,10 @@
-﻿namespace VeloxDev.Core.Interfaces.WorkflowSystem
+﻿using VeloxDev.Core.WorkflowSystem;
+
+namespace VeloxDev.Core.Interfaces.WorkflowSystem
 {
     public interface IWorkflowLink : IWorkflowContext
     {
-        IWorkflowSlot? Sender { get; set; }
-        IWorkflowSlot? Processor { get; set; }
+        public IWorkflowSlot? Sender { get; set; }
+        public IWorkflowSlot? Processor { get; set; }
     }
 }

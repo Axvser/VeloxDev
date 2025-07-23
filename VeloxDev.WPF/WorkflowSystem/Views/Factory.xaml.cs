@@ -36,7 +36,13 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         {
             if (DataContext is IWorkflowTree contextTree)
             {
-                contextTree.CreateNodeCommand.Execute(new ShowerNodeViewModel());
+                var position = Mouse.GetPosition(this);
+                contextTree.CreateNodeCommand.Execute(
+                    new ShowerNodeViewModel()
+                    {
+                        Size = new(100, 100),
+                        Anchor = new(position.X, position.Y)
+                    });
             }
         }
     }

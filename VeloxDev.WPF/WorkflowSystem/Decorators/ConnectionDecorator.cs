@@ -19,7 +19,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Decorators
                 "StartAnchor",
                 typeof(Anchor),
                 typeof(ConnectionDecorator),
-                new PropertyMetadata(Anchor.Default, _1nner_OnStartAnchorChanged));
+                new PropertyMetadata(new Anchor(), _1nner_OnStartAnchorChanged));
         public static void _1nner_OnStartAnchorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is ConnectionDecorator decorator)
@@ -33,7 +33,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Decorators
                 "EndAnchor",
                 typeof(Anchor),
                 typeof(ConnectionDecorator),
-                new PropertyMetadata(Anchor.Default, _1nner_OnEndAnchorChanged));
+                new PropertyMetadata(new Anchor(), _1nner_OnEndAnchorChanged));
         public static void _1nner_OnEndAnchorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is ConnectionDecorator decorator)

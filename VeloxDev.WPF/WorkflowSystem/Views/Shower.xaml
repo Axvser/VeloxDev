@@ -7,7 +7,8 @@
              mc:Ignorable="d"
              xmlns:vm="clr-namespace:VeloxDev.WPF.WorkflowSystem.ViewModels"
              d:DesignHeight="50" d:DesignWidth="50"
-             d:DataContext="{d:DesignInstance Type=vm:ShowerNodeViewModel, IsDesignTimeCreatable=True}">
+             d:DataContext="{d:DesignInstance Type=vm:ShowerNodeViewModel, IsDesignTimeCreatable=True}"
+             local:ThumbBehavior.EnableChildMouseEvents="True">
     <Thumb.Template>
         <ControlTemplate>
             <Grid Background="{TemplateBinding Background}">

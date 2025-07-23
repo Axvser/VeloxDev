@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 
@@ -17,9 +18,11 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         {
             LayoutUpdated += _01_LayoutUpdated;
             Loaded += _02_FindContextParent;
+            MouseLeftButtonDown += _03_SlotMouseLeftButtonDown;
         }
         private void _01_LayoutUpdated(object? sender, EventArgs e)
         {
+            MessageBox.Show("布局刷新");
             if (DataContext is IWorkflowSlot slot &&
                 slot.Parent is IWorkflowNode node &&
                 Parent is UIElement element)
@@ -38,6 +41,18 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
                element.DataContext is IWorkflowNode node)
             {
                 slot.Parent = node;
+            }
+        }
+        private void _03_SlotMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            MessageBox.Show("准备");
+            if (TemplatedParent is Panel gird &&
+                gird.TemplatedParent is FrameworkElement node &&
+                node.Parent is Panel canvas &&
+                canvas.DataContext is IWorkflowTree tree)
+            {
+                MessageBox.Show("开始连线");
+                tree.SetVirtualSenderCommand.Execute(DataContext);
             }
         }
     }

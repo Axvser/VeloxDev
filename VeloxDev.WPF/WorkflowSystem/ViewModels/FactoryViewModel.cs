@@ -13,12 +13,17 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             nodes.CollectionChanged += OnNodesCollectionChanged;
         }
 
+        private IWorkflowSlot? actualSender = null;
+        private IWorkflowSlot? actualProcessor = null;
+
         [VeloxProperty]
         private IWorkflowLink virtualLink = new Link() { Processor = new Slot() };
         [VeloxProperty]
         private ObservableCollection<IWorkflowNode> nodes = [];
         [VeloxProperty]
         private ObservableCollection<IWorkflowLink> links = [];
+        [VeloxProperty]
+        private Dictionary<IWorkflowNode, HashSet<IWorkflowNode>> linkMapping = [];
         [VeloxProperty]
         public bool isEnabled = true;
         [VeloxProperty]
@@ -74,21 +79,57 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxCommand]
         private Task SetVirtualSender(object? parameter, CancellationToken ct)
         {
-            if(parameter is IWorkflowSlot slot)
+            if (parameter is IWorkflowSlot slot &&
+                slot.Capacity.HasFlag(SlotCapacity.Sender) &&
+                actualProcessor != slot)
             {
-
+                actualProcessor = slot;
+                VirtualLink.Sender = slot;
+                slot.State = SlotState.PreviewSender;
             }
+            Connect();
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task SetVirtualProcessor(object? parameter, CancellationToken ct)
         {
+            if (parameter is IWorkflowSlot slot &&
+                slot.Capacity.HasFlag(SlotCapacity.Processor) &&
+                actualSender != slot)
+            {
+                actualSender = slot;
+                slot.State = SlotState.PreviewProcessor;
+            }
+            Connect();
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task ClearVirtualLink(object? parameter, CancellationToken ct)
         {
+            VirtualLink.Sender = null;
             return Task.CompletedTask;
+        }
+
+        private void Connect()
+        {
+            if (actualSender != null &&
+                actualProcessor != null &&
+                actualSender.Parent != null &&
+                actualProcessor.Parent != null)
+            {
+                Links.Add(new Link() { Sender = actualSender, Processor = actualProcessor });
+                if (LinkMapping.TryGetValue(actualSender.Parent, out var mapping))
+                {
+                    mapping.Add(actualProcessor.Parent);
+                }
+                else
+                {
+                    LinkMapping.Add(actualSender.Parent, [actualProcessor.Parent]);
+                }
+                actualSender = null;
+                actualProcessor = null;
+                VirtualLink.Sender = null;
+            }
         }
     }
 }

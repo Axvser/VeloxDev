@@ -12,7 +12,7 @@ namespace VeloxDev.Core.WorkflowSystem
         [VeloxProperty]
         private SlotState state = SlotState.StandBy;
         [VeloxProperty]
-        private Anchor anchor = Anchor.Default;
+        private Anchor anchor = new();
         [VeloxProperty]
         private bool isEnabled = true;
         [VeloxProperty]
