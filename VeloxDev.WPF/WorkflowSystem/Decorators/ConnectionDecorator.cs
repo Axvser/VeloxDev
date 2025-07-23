@@ -142,7 +142,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Decorators
             }
 
             // 渲染箭头
-            dc.DrawGeometry(Brushes.Cyan, pen, arrowGeometry);
+            dc.DrawGeometry(Brushes.Red, null, arrowGeometry);
         }
         public void InitializeWorkflow(IWorkflowLink context)
         {

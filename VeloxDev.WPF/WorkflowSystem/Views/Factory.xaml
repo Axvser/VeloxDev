@@ -37,6 +37,11 @@
 
     <!--【真实连接】-->
     <ItemsControl ItemsSource="{Binding Links}">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <Canvas />
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
             <DataTemplate>
                 <dc:ConnectionDecorator StartAnchor="{Binding Sender.Anchor}"

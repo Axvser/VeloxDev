@@ -14,6 +14,10 @@ namespace VeloxDev.Core.WorkflowSystem
         [VeloxProperty]
         private Anchor anchor = new();
         [VeloxProperty]
+        private Anchor offset = new();
+        [VeloxProperty]
+        private Size size = new();
+        [VeloxProperty]
         private bool isEnabled = true;
         [VeloxProperty]
         private string uID = string.Empty;
@@ -28,11 +32,13 @@ namespace VeloxDev.Core.WorkflowSystem
         [VeloxCommand]
         private Task Connecting(object? parameter, CancellationToken ct)
         {
+            Parent?.Parent?.SetVirtualSenderCommand?.Execute(parameter);
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task Connected(object? parameter, CancellationToken ct)
         {
+            Parent?.Parent?.SetVirtualProcessorCommand?.Execute(parameter);
             return Task.CompletedTask;
         }
     }

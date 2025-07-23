@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Windows;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
@@ -83,7 +84,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
                 slot.Capacity.HasFlag(SlotCapacity.Sender) &&
                 actualProcessor != slot)
             {
-                actualProcessor = slot;
+                actualSender = slot;
                 VirtualLink.Sender = slot;
                 slot.State = SlotState.PreviewSender;
             }
@@ -97,7 +98,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
                 slot.Capacity.HasFlag(SlotCapacity.Processor) &&
                 actualSender != slot)
             {
-                actualSender = slot;
+                actualProcessor = slot;
                 slot.State = SlotState.PreviewProcessor;
             }
             Connect();
@@ -107,6 +108,8 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         private Task ClearVirtualLink(object? parameter, CancellationToken ct)
         {
             VirtualLink.Sender = null;
+            actualSender = null;
+            actualProcessor = null;
             return Task.CompletedTask;
         }
 
@@ -117,6 +120,8 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
                 actualSender.Parent != null &&
                 actualProcessor.Parent != null)
             {
+                actualSender.State = SlotState.Sender;
+                actualProcessor.State = SlotState.Processor;
                 Links.Add(new Link() { Sender = actualSender, Processor = actualProcessor });
                 if (LinkMapping.TryGetValue(actualSender.Parent, out var mapping))
                 {

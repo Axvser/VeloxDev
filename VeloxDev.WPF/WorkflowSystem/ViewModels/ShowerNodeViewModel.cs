@@ -28,6 +28,13 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxProperty]
         private string name = string.Empty;
 
+        partial void OnAnchorChanged(Anchor oldValue, Anchor newValue)
+        {
+            foreach (IWorkflowSlot slot in slots)
+            {
+                slot.Anchor = newValue + slot.Offset + new Anchor(slot.Size.Width / 2, slot.Size.Height / 2);
+            }
+        }
         partial void OnSlotsChanged(ObservableCollection<IWorkflowSlot> oldValue, ObservableCollection<IWorkflowSlot> newValue)
         {
             oldValue.CollectionChanged -= OnSlotsCollectionChanged;
@@ -46,6 +53,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
                     foreach (IWorkflowSlot slot in e.NewItems)
                     {
                         slot.Parent = this;
+                        slot.Anchor = Anchor + slot.Offset + new Anchor(slot.Size.Width / 2, slot.Size.Height / 2);
                     }
                     break;
                 case NotifyCollectionChangedAction.Remove:
@@ -53,6 +61,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
                     foreach (IWorkflowSlot slot in e.OldItems)
                     {
                         slot.Parent = null;
+                        slot.Anchor = Anchor + slot.Offset + new Anchor(slot.Size.Width / 2, slot.Size.Height / 2);
                     }
                     break;
             }

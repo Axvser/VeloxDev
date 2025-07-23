@@ -15,6 +15,8 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxProperty]
         private Anchor anchor = new();
         [VeloxProperty]
+        private Anchor offset = new();
+        [VeloxProperty]
         private Size size = new();
         [VeloxProperty]
         private bool isEnabled = true;
@@ -38,7 +40,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxCommand]
         private Task Connected(object? parameter, CancellationToken ct)
         {
-            Parent?.Parent?.SetVirtualSenderCommand.Execute(this);
+            Parent?.Parent?.SetVirtualProcessorCommand.Execute(this);
             return Task.CompletedTask;
         }
     }

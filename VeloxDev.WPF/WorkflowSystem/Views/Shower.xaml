@@ -7,6 +7,7 @@
              mc:Ignorable="d"
              xmlns:vm="clr-namespace:VeloxDev.WPF.WorkflowSystem.ViewModels"
              d:DesignHeight="50" d:DesignWidth="50"
+             Background="White"
              d:DataContext="{d:DesignInstance Type=vm:ShowerNodeViewModel, IsDesignTimeCreatable=True}">
     <ItemsControl ItemsSource="{Binding Slots}">
         <ItemsControl.ItemsPanel>
@@ -16,9 +17,9 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemContainerStyle>
             <Style>
-                <Setter Property="Canvas.Left" Value="{Binding Anchor.Left}"/>
-                <Setter Property="Canvas.Top" Value="{Binding Anchor.Top}"/>
-                <Setter Property="Panel.ZIndex" Value="{Binding Anchor.Layer}"/>
+                <Setter Property="Canvas.Left" Value="{Binding Offset.Left}"/>
+                <Setter Property="Canvas.Top" Value="{Binding Offset.Top}"/>
+                <Setter Property="Panel.ZIndex" Value="{Binding Offset.Layer}"/>
             </Style>
         </ItemsControl.ItemContainerStyle>
         <ItemsControl.ItemTemplate>
@@ -26,7 +27,7 @@
                 <local:Slot Width="{Binding Size.Width}" 
                             Height="{Binding Size.Height}" 
                             IsEnabled="{Binding IsEnable}" 
-                            Background="Violet"/>
+                            Background="#1e1e1e"/>
             </DataTemplate>
         </ItemsControl.ItemTemplate>
     </ItemsControl>

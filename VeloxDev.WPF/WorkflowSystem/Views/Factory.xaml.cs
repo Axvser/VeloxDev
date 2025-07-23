@@ -2,6 +2,7 @@
 using System.Windows.Controls;
 using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
+using VeloxDev.Core.WorkflowSystem;
 using VeloxDev.WPF.WorkflowSystem.ViewModels;
 
 namespace VeloxDev.WPF.WorkflowSystem.Views
@@ -18,7 +19,17 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         {
             MouseMove += _01_MouseMove;
             MouseRightButtonDown += _02_CreateNode;
+            MouseLeftButtonUp += _03_ClearVirtualLink;
         }
+
+        private void _03_ClearVirtualLink(object sender, MouseButtonEventArgs e)
+        {
+            if (DataContext is IWorkflowTree tree)
+            {
+                tree.ClearVirtualLinkCommand.Execute(null);
+            }
+        }
+
         private void _01_MouseMove(object sender, MouseEventArgs e)
         {
             if (sender is UIElement element &&
@@ -27,8 +38,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
                 var point = Mouse.GetPosition(element);
                 if (contextTree.VirtualLink.Processor != null)
                 {
-                    contextTree.VirtualLink.Processor.Anchor.Left = point.X;
-                    contextTree.VirtualLink.Processor.Anchor.Top = point.Y;
+                    contextTree.SetVirtualMouseCommand.Execute(new Anchor(point.X, point.Y));
                 }
             }
         }

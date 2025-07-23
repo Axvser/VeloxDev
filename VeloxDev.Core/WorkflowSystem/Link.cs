@@ -10,7 +10,7 @@ namespace VeloxDev.Core.WorkflowSystem
         [VeloxProperty]
         private IWorkflowSlot? processor = null;
         [VeloxProperty]
-        public bool isEnabled = true;
+        public bool isEnabled = false;
         [VeloxProperty]
         public string uID = string.Empty;
         [VeloxProperty]

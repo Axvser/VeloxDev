@@ -1,12 +1,13 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.WPF.WorkflowSystem.ViewModels;
 
 namespace VeloxDev.WPF.WorkflowSystem.Views
 {
-    public partial class Shower : Thumb, IWorkflowView
+    public partial class Shower : Canvas, IWorkflowView
     {
         public Shower()
         {
@@ -16,37 +17,50 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
 
         public void InitializeWorkflow()
         {
-            DragDelta += Thumb_DragDelta;
+            MouseRightButtonDown += _05_Node_AddSlot;
+            MouseMove += _01_Node_MouseMove;
+            MouseLeftButtonDown += _02_Node_MouseDown;
+            MouseLeftButtonUp += _03_Node_MouseUp;
+            MouseLeave += _04_Node_MouseLeave;
         }
 
-        public Anchor Anchor
+        private void _05_Node_AddSlot(object sender, MouseButtonEventArgs e)
         {
-            get { return (Anchor)GetValue(AnchorProperty); }
-            set { SetValue(AnchorProperty, value); }
-        }
-        public static readonly DependencyProperty AnchorProperty =
-            DependencyProperty.Register(
-                "Anchor",
-                typeof(Anchor),
-                typeof(Shower),
-                new PropertyMetadata(
-                    new Anchor(),
-                    _1_OnAnchorChanged));
-        private static void _1_OnAnchorChanged(DependencyObject dp, DependencyPropertyChangedEventArgs e)
-        {
-            if (dp is Shower view)
+            if (DataContext is IWorkflowNode node)
             {
-                var newAnchor = (Anchor)e.NewValue;
-                Canvas.SetLeft(view, newAnchor.Left);
-                Canvas.SetTop(view, newAnchor.Top);
+                var point = Mouse.GetPosition(this);
+                var slot = new SlotViewModel() { Offset = new(point.X, point.Y), Size = new(30, 30) };
+                node.Slots.Add(slot);
+                e.Handled = true;
             }
         }
 
-        private void Thumb_DragDelta(object sender, DragDeltaEventArgs e)
+        private Point _dragStartPosition = default;
+        private bool _isDragging = false;
+        private void _04_Node_MouseLeave(object sender, MouseEventArgs e)
         {
-            if (DataContext is IWorkflowNode context)
+            _isDragging = false;
+        }
+
+        private void _03_Node_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            _isDragging = false;
+        }
+
+        private void _02_Node_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            _dragStartPosition = Mouse.GetPosition(this);
+            _isDragging = true;
+        }
+
+        private void _01_Node_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isDragging && DataContext is IWorkflowNode node)
             {
-                context.Anchor = new Anchor(context.Anchor.Left + e.HorizontalChange, context.Anchor.Top + e.VerticalChange, context.Anchor.Layer);
+                var current = e.GetPosition(this);
+                var offset = current - _dragStartPosition;
+                node.Anchor += new Anchor(offset.X, offset.Y);
+                e.Handled = true;
             }
         }
     }
