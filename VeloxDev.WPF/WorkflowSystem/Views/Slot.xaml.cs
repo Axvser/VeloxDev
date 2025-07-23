@@ -1,10 +1,11 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
+using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.Views
 {
-    public partial class Slot : UserControl
+    public partial class Slot : UserControl, IWorkflowView
     {
         public Slot()
         {
@@ -12,46 +13,31 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
             InitializeWorkflow();
         }
 
-        public int UID
+        public void InitializeWorkflow()
         {
-            get { return (int)GetValue(UIDProperty); }
-            set { SetValue(UIDProperty, value); }
+            LayoutUpdated += _01_LayoutUpdated;
+            Loaded += _02_FindContextParent;
         }
-        public static readonly DependencyProperty UIDProperty =
-            DependencyProperty.Register(
-                "UID",
-                typeof(int),
-                typeof(Slot),
-                new PropertyMetadata(0, _001_OnUIDChanged));
-        private static void _001_OnUIDChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private void _01_LayoutUpdated(object? sender, EventArgs e)
         {
-            if (d is Slot slot)
+            if (DataContext is IWorkflowSlot slot &&
+                slot.Parent is IWorkflowNode node &&
+                Parent is UIElement element)
             {
-                slot._01_LoadDependency(slot, new RoutedEventArgs());
+                var offset = TransformToVisual(element)
+                    .Transform(new Point(
+                        double.IsNaN(ActualWidth) ? 0 : ActualWidth / 2,
+                        double.IsNaN(ActualHeight) ? 0 : ActualHeight / 2));
+                slot.Anchor = node.Anchor + new Anchor(offset.X, offset.Y);
             }
         }
-
-        private void InitializeWorkflow()
+        private void _02_FindContextParent(object sender, RoutedEventArgs e)
         {
-            Loaded += _01_LoadDependency;
-            OnWorkflowInitialized();
-        }
-        partial void OnWorkflowInitialized();
-        private void _01_LoadDependency(object sender, RoutedEventArgs e)
-        {
-            if (sender is FrameworkElement element &&
-                element.Parent is FrameworkElement parent &&
-                parent.DataContext is IWorkflowNode context)
+            if (DataContext is IWorkflowSlot slot &&
+               slot.Parent is FrameworkElement element &&
+               element.DataContext is IWorkflowNode node)
             {
-                if (context.Slots.TryGetValue(UID, out var slotContext) &&
-                    slotContext is not null)
-                {
-                    DataContext = slotContext;
-                }
-                else
-                {
-
-                }
+                slot.Parent = node;
             }
         }
     }

@@ -26,7 +26,7 @@ namespace WpfApp1
             node2.Anchor = new(100, 50, 1);
             var tree = new FactoryViewModel()
             {
-                Children = [node1, node2],
+                Nodes = [node1, node2],
             };
             container.DataContext = tree;
         }

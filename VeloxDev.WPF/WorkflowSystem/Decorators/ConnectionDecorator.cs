@@ -144,7 +144,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Decorators
             // 渲染箭头
             dc.DrawGeometry(Brushes.Cyan, pen, arrowGeometry);
         }
-        public void InitializeWorkflow(IWorkflowConnection context)
+        public void InitializeWorkflow(IWorkflowLink context)
         {
             Binding bindingStartAnchor = new(nameof(StartAnchor))
             {

@@ -6,11 +6,16 @@ using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.Views
 {
-    public partial class Shower : Thumb
+    public partial class Shower : Thumb, IWorkflowView
     {
         public Shower()
         {
             InitializeComponent();
+            InitializeWorkflow();
+        }
+
+        public void InitializeWorkflow()
+        {
             DragDelta += Thumb_DragDelta;
         }
 
@@ -25,7 +30,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
                 typeof(Anchor),
                 typeof(Shower),
                 new PropertyMetadata(
-                    Anchor.Default,
+                    new Anchor(),
                     _1_OnAnchorChanged));
         private static void _1_OnAnchorChanged(DependencyObject dp, DependencyPropertyChangedEventArgs e)
         {

@@ -1,9 +1,12 @@
-﻿using System.Windows.Controls;
+﻿using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
+using VeloxDev.WPF.WorkflowSystem.ViewModels;
 
 namespace VeloxDev.WPF.WorkflowSystem.Views
 {
-    public partial class Factory : Canvas
+    public partial class Factory : Canvas, IWorkflowView
     {
         public Factory()
         {
@@ -11,28 +14,29 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
             InitializeWorkflow();
         }
 
-        private void InitializeWorkflow()
+        public void InitializeWorkflow()
         {
             MouseMove += _01_MouseMove;
             MouseRightButtonDown += _02_CreateNode;
         }
-        private void _01_MouseMove(object sender, global::System.Windows.Input.MouseEventArgs e)
+        private void _01_MouseMove(object sender, MouseEventArgs e)
         {
-            if (sender is global::System.Windows.UIElement element &&
-                DataContext is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree contextTree)
+            if (sender is UIElement element &&
+                DataContext is IWorkflowTree contextTree)
             {
-                var point = global::System.Windows.Input.Mouse.GetPosition(element);
-                if (contextTree.VirtualConnector.End != null)
+                var point = Mouse.GetPosition(element);
+                if (contextTree.VirtualLink.Processor != null)
                 {
-                    contextTree.VirtualConnector.End.Anchor = new(point.X, point.Y, 0);
+                    contextTree.VirtualLink.Processor.Anchor.Left = point.X;
+                    contextTree.VirtualLink.Processor.Anchor.Top = point.Y;
                 }
             }
         }
-        private void _02_CreateNode(object sender, global::System.Windows.Input.MouseEventArgs e)
+        private void _02_CreateNode(object sender, MouseEventArgs e)
         {
             if (DataContext is IWorkflowTree contextTree)
             {
-                contextTree.CreateNodeCommand.Execute(this);
+                contextTree.CreateNodeCommand.Execute(new ShowerNodeViewModel());
             }
         }
     }

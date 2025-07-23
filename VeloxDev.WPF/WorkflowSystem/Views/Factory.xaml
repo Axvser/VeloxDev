@@ -11,7 +11,7 @@
              d:DataContext="{d:DesignInstance Type=vm:FactoryViewModel, IsDesignTimeCreatable=True}">
 
     <!--【节点】-->
-    <ItemsControl ItemsSource="{Binding Children}">
+    <ItemsControl ItemsSource="{Binding Nodes}">
         <!--请使用【绝对坐标】定位的布局容器-->
         <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
@@ -28,27 +28,26 @@
         </ItemsControl.ItemContainerStyle>
         <ItemsControl.ItemTemplate>
             <DataTemplate>
-                <local:Shower Width="100"
-                    Height="100"
-                    IsEnabled="{Binding IsEnabled}"
-                    Background="White"/>
+                <local:Shower Width="{Binding Size.Width}"
+                    Height="{Binding Size.Height}"
+                    IsEnabled="{Binding IsEnabled}"/>
             </DataTemplate>
         </ItemsControl.ItemTemplate>
     </ItemsControl>
 
     <!--【真实连接】-->
-    <ItemsControl ItemsSource="{Binding Connectors}">
+    <ItemsControl ItemsSource="{Binding Links}">
         <ItemsControl.ItemTemplate>
             <DataTemplate>
-                <dc:ConnectionDecorator StartAnchor="{Binding Start.Anchor}"
-                                        EndAnchor="{Binding End.Anchor}"
+                <dc:ConnectionDecorator StartAnchor="{Binding Sender.Anchor}"
+                                        EndAnchor="{Binding Processor.Anchor}"
                                         CanRender="{Binding IsEnabled}"/>
             </DataTemplate>
         </ItemsControl.ItemTemplate>
     </ItemsControl>
 
     <!--【虚拟连接】-->
-    <dc:ConnectionDecorator StartAnchor="{Binding VirtualConnector.Start.Anchor}"
-                            EndAnchor="{Binding VirtualConnector.End.Anchor}"
-                            CanRender="{Binding VirtualConnector.IsEnabled}"/>
+    <dc:ConnectionDecorator StartAnchor="{Binding VirtualLink.Sender.Anchor}"
+                            EndAnchor="{Binding VirtualLink.Processor.Anchor}"
+                            CanRender="{Binding VirtualLink.IsEnabled}"/>
 </Canvas>

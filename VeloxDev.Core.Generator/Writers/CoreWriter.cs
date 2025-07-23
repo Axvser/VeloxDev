@@ -14,15 +14,11 @@ namespace VeloxDev.Core.Generator.Writers
         public const string NAMESPACE_VELOX_IMVVM = "global::VeloxDev.Core.Interfaces.MVVM";
         public const string NAMESPACE_VELOX_MVVM = "global::VeloxDev.Core.MVVM";
         public const string NAMESPACE_VELOX_AOP = "global::VeloxDev.Core.AopInterfaces";
-        public const string NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL = "global::VeloxDev.Core.Interfaces.WorkflowSystem";
-        public const string NAMESPACE_VELOX_WORKFLOW = "global::VeloxDev.Core.WorkflowSystem";
         public const string NAMESPACE_SYSTEM_MVVM = "global::System.ComponentModel";
 
         public bool IsMVVM { get; set; } = false;
         public bool IsAop { get; set; } = false;
         public bool IsMono { get; set; } = false;
-        public bool IsWorkflowContext { get; set; } = false;
-        public bool IsWorkflowContextTree { get; set; } = false;
         public int MonoSpan { get; set; } = 17;
         List<Tuple<string, bool, bool, string>> CommandConfig { get; set; } = [];
         List<Analizer.MVVMPropertyFactory> MVVMProperties { get; set; } = [];
@@ -38,12 +34,6 @@ namespace VeloxDev.Core.Generator.Writers
 
         private void ReadMVVMConfig(INamedTypeSymbol symbol)
         {
-            IsWorkflowContext = symbol.GetAttributes()
-                .Any(ad => ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_WORKFLOW + ".Workflow.ContextAttribute"
-                );
-            IsWorkflowContextTree = symbol.GetAttributes()
-                .Any(ad => ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_WORKFLOW + ".Workflow.ContextTreeAttribute"
-                );
             MVVMProperties = [.. symbol.GetMembers()
                 .OfType<IFieldSymbol>()
                 .Where(field => field.GetAttributes().Any(attr =>
@@ -54,7 +44,7 @@ namespace VeloxDev.Core.Generator.Writers
                     SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
                     SetteredBody = [$"OnPropertyChanged(nameof({analizer.PropertyName}));"],
                 })];
-            IsMVVM = MVVMProperties.Count > 0 || IsWorkflowContext || IsWorkflowContextTree;
+            IsMVVM = MVVMProperties.Count > 0;
         }
         private void ReadAopConfig(ClassDeclarationSyntax classDeclaration)
         {
@@ -186,18 +176,10 @@ namespace VeloxDev.Core.Generator.Writers
             {
                 list.Add($"{NAMESPACE_VELOX_AOP}.{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop");
             }
-            if (IsMVVM && !(IsWorkflowContext || IsWorkflowContextTree))
+            if (IsMVVM)
             {
                 list.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanging");
                 list.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanged");
-            }
-            if (IsWorkflowContextTree)
-            {
-                list.Add($"{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}.IContextTree");
-            }
-            if (IsWorkflowContext)
-            {
-                list.Add($"{NAMESPACE_VELOX_IWORKFLOW_VIEWMODEL}.IContext");
             }
             if (list.Count > 0)
             {

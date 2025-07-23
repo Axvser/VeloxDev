@@ -11,9 +11,9 @@
     <Thumb.Template>
         <ControlTemplate>
             <Grid Background="{TemplateBinding Background}">
-                <local:Slot UID="0" VerticalAlignment="Top" HorizontalAlignment="Left" Height="20" Width="20" Background="Violet"/>
-                <local:Slot UID="1" VerticalAlignment="Center" HorizontalAlignment="Right" Height="20" Width="20" Background="Violet"/>
-                <local:Slot UID="2" VerticalAlignment="Bottom" HorizontalAlignment="Left" Height="20" Width="20" Background="Violet" Margin="0,30,0,0"/>
+                <local:Slot VerticalAlignment="Top" HorizontalAlignment="Left" Height="20" Width="20" Background="Violet"/>
+                <local:Slot VerticalAlignment="Center" HorizontalAlignment="Right" Height="20" Width="20" Background="Violet"/>
+                <local:Slot VerticalAlignment="Bottom" HorizontalAlignment="Left" Height="20" Width="20" Background="Violet" Margin="0,30,0,0"/>
             </Grid>
         </ControlTemplate>
     </Thumb.Template>

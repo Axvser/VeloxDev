@@ -1,183 +1,94 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.Xml;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 {
-    [Workflow.ContextTree]
     public partial class FactoryViewModel : IWorkflowTree
     {
         public FactoryViewModel()
         {
-            children.CollectionChanged += OnChildrenChanged;
+            nodes.CollectionChanged += OnNodesCollectionChanged;
         }
 
         [VeloxProperty]
-        private bool isEnabled = true;
+        private IWorkflowLink virtualLink = new Link() { Processor = new Slot() };
+        [VeloxProperty]
+        private ObservableCollection<IWorkflowNode> nodes = [];
+        [VeloxProperty]
+        private ObservableCollection<IWorkflowLink> links = [];
+        [VeloxProperty]
+        public bool isEnabled = true;
+        [VeloxProperty]
+        public string uID = string.Empty;
+        [VeloxProperty]
+        public string name = string.Empty;
 
-        /*节点上下文集合*/
-        private ObservableCollection<IWorkflowNode> children = [];
-        public ObservableCollection<IWorkflowNode> Children
+        partial void OnNodesChanged(ObservableCollection<IWorkflowNode> oldValue, ObservableCollection<IWorkflowNode> newValue)
         {
-            get => children;
-            set
+            oldValue.CollectionChanged -= OnNodesCollectionChanged;
+            newValue.CollectionChanged += OnNodesCollectionChanged;
+            foreach (IWorkflowNode node in newValue)
             {
-                if (Equals(children, value)) return;
-                if (children is INotifyCollectionChanged oldCollection)
-                {
-                    oldCollection.CollectionChanged -= OnChildrenChanged;
-                }
-                children = value;
-                if (children is INotifyCollectionChanged newCollection)
-                {
-                    newCollection.CollectionChanged += OnChildrenChanged;
-                    foreach (IWorkflowNode child in children)
-                    {
-                        child.Tree = this;
-                    }
-                }
-                OnPropertyChanged(nameof(Children));
+                node.Parent = this;
             }
         }
-        private void OnChildrenChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        private void OnNodesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            switch (e.Action)
+            if (e.NewItems != null)
             {
-                case NotifyCollectionChangedAction.Add:
-                    if (e.NewItems == null) return;
-                    foreach (IWorkflowNode newItem in e.NewItems)
-                    {
-                        newItem.Tree = this;
-                    }
-                    break;
-
-                case NotifyCollectionChangedAction.Remove:
-                    if (e.OldItems == null) return;
-                    foreach (IWorkflowNode oldItem in e.OldItems)
-                    {
-                        oldItem.Tree = null;
-                    }
-                    break;
-                case NotifyCollectionChangedAction.Reset:
-                    if (e.NewItems == null) return;
-                    foreach (IWorkflowNode item in e.NewItems)
-                    {
-                        item.Tree = this;
-                    }
-                    if (e.OldItems == null) return;
-                    foreach (IWorkflowNode item in e.OldItems)
-                    {
-                        item.Tree = null;
-                    }
-                    break;
+                foreach (IWorkflowNode node in e.NewItems)
+                {
+                    node.Parent = this;
+                }
+            }
+            if (e.OldItems != null)
+            {
+                foreach (IWorkflowNode node in e.OldItems)
+                {
+                    node.Parent = null;
+                }
             }
         }
 
-        [VeloxProperty]
-        private ObservableCollection<IWorkflowConnection> connectors = [];
-
-        private IWorkflowSlot? senderSlot = null;
-        private IWorkflowSlot? processorSlot = null;
-        [VeloxProperty]
-        private Dictionary<int, IWorkflowConnection> slotPairs = [];
-        [VeloxProperty]
-        private IWorkflowConnection virtualConnector = new ConnectorContext()
-        {
-            End = new NodeContext()
-        };
         [VeloxCommand]
         private Task CreateNode(object? parameter, CancellationToken ct)
         {
-            var context = new ShowerNodeViewModel
+            if (parameter is IWorkflowNode node)
             {
-                Anchor = VirtualConnector.End?.Anchor ?? Anchor.Default
-            };
-            Children.Add(context);
+                nodes.Add(node);
+            }
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        private Task RemoveVirtualConnector(object? parameter, CancellationToken ct)
+        private Task SetVirtualMouse(object? parameter, CancellationToken ct)
         {
-            virtualConnector.End = null;
+            if (parameter is Anchor anchor && VirtualLink.Processor is not null)
+            {
+                VirtualLink.Processor.Anchor = anchor;
+            }
             return Task.CompletedTask;
         }
-        public void SetSenderSlot(IWorkflowSlot slot)
+        [VeloxCommand]
+        private Task SetVirtualSender(object? parameter, CancellationToken ct)
         {
-            if (slot.Capacity.HasFlag(SlotCapacity.Sender))
+            if(parameter is IWorkflowSlot slot)
             {
-                var oldSlot = Interlocked.Exchange(ref senderSlot, slot);
-                if (oldSlot != null && oldSlot != slot)
-                {
-                    oldSlot.State = SlotState.StandBy;
-                }
-                slot.State = SlotState.PreviewSender;
+
             }
-            SetSlotPair();
+            return Task.CompletedTask;
         }
-        public void SetProcessorSlot(IWorkflowSlot slot)
+        [VeloxCommand]
+        private Task SetVirtualProcessor(object? parameter, CancellationToken ct)
         {
-            if (slot.Capacity.HasFlag(SlotCapacity.Processor))
-            {
-                var oldSlot = Interlocked.Exchange(ref processorSlot, slot);
-                if (oldSlot != null && oldSlot != slot)
-                {
-                    oldSlot.State = SlotState.StandBy;
-                }
-                slot.State = SlotState.PreviewProcessor;
-            }
-            SetSlotPair();
+            return Task.CompletedTask;
         }
-        public void RemoveSlotPairFrom(IWorkflowSlot slot)
+        [VeloxCommand]
+        private Task ClearVirtualLink(object? parameter, CancellationToken ct)
         {
-            if (slot.State == SlotState.Sender && slot.Target?.State == SlotState.Processor)
-            {
-                RemoveSlotPair(slot, slot.Target);
-            }
-            else if (slot.State == SlotState.Processor && slot.Target?.State == SlotState.Sender)
-            {
-                RemoveSlotPair(slot.Target, slot);
-            }
-        }
-        private void SetSlotPair()
-        {
-            if (senderSlot is not null && processorSlot is not null)
-            {
-                if (senderSlot != processorSlot)
-                {
-                    var code = HashCode.Combine(senderSlot.UID, processorSlot.UID);
-                    senderSlot.State = SlotState.Sender;
-                    processorSlot.State = SlotState.Processor;
-                    var connector = new ConnectorContext
-                    {
-                        Start = senderSlot.Parent,
-                        End = processorSlot.Parent
-                    };
-                    if (SlotPairs.TryGetValue(code, out var existingConnector))
-                    {
-                        existingConnector.Start = senderSlot.Parent;
-                        existingConnector.End = processorSlot.Parent;
-                    }
-                    else
-                    {
-                        SlotPairs.Add(code, connector);
-                        Connectors.Add(connector);
-                    }
-                }
-                senderSlot = null;
-                processorSlot = null;
-            }
-        }
-        private void RemoveSlotPair(IWorkflowSlot sender, IWorkflowSlot processor)
-        {
-            var code = HashCode.Combine(sender.UID, processor.UID);
-            if (SlotPairs.TryGetValue(code, out var connector))
-            {
-                SlotPairs.Remove(code);
-                Connectors.Remove(connector);
-            }
+            return Task.CompletedTask;
         }
     }
 }

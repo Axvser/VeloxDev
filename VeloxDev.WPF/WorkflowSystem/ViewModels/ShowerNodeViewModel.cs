@@ -1,37 +1,36 @@
-﻿using System.Collections.ObjectModel;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
+﻿using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 {
-    [Workflow.Context]
-    public partial class ShowerNodeViewModel
+    public partial class ShowerNodeViewModel : IWorkflowNode
     {
+        [VeloxProperty]
+        private IWorkflowTree? parent = null;
+        [VeloxProperty]
+        private Anchor anchor = new();
+        [VeloxProperty]
+        private Size size = new();
         [VeloxProperty]
         private bool isEnabled = true;
         [VeloxProperty]
-        private Anchor anchor = Anchor.Default;
+        private string uID = string.Empty;
         [VeloxProperty]
-        private IWorkflowTree? tree = null;
-        [VeloxProperty]
-        private ObservableCollection<IWorkflowNode> targets = [];
-        [VeloxProperty]
-        private ObservableCollection<IWorkflowSlot> slots = [];
+        private string name = string.Empty;
 
         [VeloxCommand]
-        public Task Move(object? parameter, CancellationToken ct)
+        public Task Delete(object? parameter, CancellationToken ct)
         {
-            if (parameter is Anchor anchor)
+            if (parent is IWorkflowTree tree)
             {
-                Anchor = anchor;
+                tree.Nodes.Remove(this);
             }
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        public Task Delete(object? parameter, CancellationToken ct)
+        private Task Broadcast(object? parameter, CancellationToken ct)
         {
-            Tree?.Children.Remove(this);
             return Task.CompletedTask;
         }
     }

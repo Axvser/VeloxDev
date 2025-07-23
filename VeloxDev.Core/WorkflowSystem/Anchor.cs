@@ -1,53 +1,16 @@
 ﻿using System.ComponentModel;
+using VeloxDev.Core.MVVM;
 
 namespace VeloxDev.Core.WorkflowSystem
 {
-    public sealed class Anchor(double left = 0d, double top = 0d, int layer = 0) : INotifyPropertyChanging, INotifyPropertyChanged
+    public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0)
     {
-        public static readonly Anchor Default = new(0, 0, 0);
-
-        public event PropertyChangingEventHandler? PropertyChanging;
-        public event PropertyChangedEventHandler? PropertyChanged;
-        public void OnPropertyChanging(string propertyName) => PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
-        public void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-
+        [VeloxProperty]
         private double _left = left;
+        [VeloxProperty]
         private double _top = top;
+        [VeloxProperty]
         private int _layer = layer;
-
-        public double Left
-        {
-            get => _left;
-            set
-            {
-                if (Equals(_left, value)) return;
-                OnPropertyChanging(nameof(Left));
-                _left = value;
-                OnPropertyChanged(nameof(Left));
-            }
-        }
-        public double Top
-        {
-            get => _top;
-            set
-            {
-                if (Equals(_top, value)) return;
-                OnPropertyChanging(nameof(Top));
-                _top = value;
-                OnPropertyChanged(nameof(Top));
-            }
-        }
-        public int Layer
-        {
-            get => _layer;
-            set
-            {
-                if (Equals(_layer, value)) return;
-                OnPropertyChanging(nameof(Layer));
-                _layer = value;
-                OnPropertyChanged(nameof(Layer));
-            }
-        }
 
         public override bool Equals(object? obj)
         {

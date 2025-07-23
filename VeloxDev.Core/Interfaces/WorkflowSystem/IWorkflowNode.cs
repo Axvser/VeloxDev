@@ -7,6 +7,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
     {
         public IWorkflowTree? Parent { get; set; }
         public Anchor Anchor { get; set; }
+        public Size Size { get; set; }
 
         public IVeloxCommand DeleteCommand { get; }
         public IVeloxCommand BroadcastCommand { get; }

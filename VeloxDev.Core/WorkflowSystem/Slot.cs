@@ -1,10 +1,9 @@
 ﻿using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
-using VeloxDev.Core.WorkflowSystem;
 
-namespace VeloxDev.WPF.WorkflowSystem.ViewModels
+namespace VeloxDev.Core.WorkflowSystem
 {
-    public partial class SlotViewModel : IWorkflowSlot
+    public sealed partial class Slot : IWorkflowSlot
     {
         [VeloxProperty]
         private IWorkflowNode? parent = null;
@@ -13,7 +12,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxProperty]
         private SlotState state = SlotState.StandBy;
         [VeloxProperty]
-        private Anchor anchor = new();
+        private Anchor anchor = Anchor.Default;
         [VeloxProperty]
         private bool isEnabled = true;
         [VeloxProperty]
