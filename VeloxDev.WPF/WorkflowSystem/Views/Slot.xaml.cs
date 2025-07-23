@@ -1,5 +1,4 @@
-﻿using System.Windows;
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
@@ -17,42 +16,31 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         public void InitializeWorkflow()
         {
             LayoutUpdated += _01_LayoutUpdated;
-            Loaded += _02_FindContextParent;
             MouseLeftButtonDown += _03_SlotMouseLeftButtonDown;
+            MouseLeftButtonUp += _04_SlotMouseLeftButtonUp;
         }
         private void _01_LayoutUpdated(object? sender, EventArgs e)
         {
-            MessageBox.Show("布局刷新");
-            if (DataContext is IWorkflowSlot slot &&
-                slot.Parent is IWorkflowNode node &&
-                Parent is UIElement element)
+            if (DataContext is IWorkflowSlot slot)
             {
-                var offset = TransformToVisual(element)
-                    .Transform(new Point(
-                        double.IsNaN(ActualWidth) ? 0 : ActualWidth / 2,
-                        double.IsNaN(ActualHeight) ? 0 : ActualHeight / 2));
-                slot.Anchor = node.Anchor + new Anchor(offset.X, offset.Y);
-            }
-        }
-        private void _02_FindContextParent(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is IWorkflowSlot slot &&
-               slot.Parent is FrameworkElement element &&
-               element.DataContext is IWorkflowNode node)
-            {
-                slot.Parent = node;
+                var x = Canvas.GetLeft(this);
+                var y = Canvas.GetTop(this);
+                var z = Canvas.GetZIndex(this);
+                slot.Anchor = new Anchor(x, y, z);
             }
         }
         private void _03_SlotMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            MessageBox.Show("准备");
-            if (TemplatedParent is Panel gird &&
-                gird.TemplatedParent is FrameworkElement node &&
-                node.Parent is Panel canvas &&
-                canvas.DataContext is IWorkflowTree tree)
+            if (DataContext is IWorkflowSlot slot)
             {
-                MessageBox.Show("开始连线");
-                tree.SetVirtualSenderCommand.Execute(DataContext);
+                slot.ConnectingCommand.Execute(DataContext);
+            }
+        }
+        private void _04_SlotMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (DataContext is IWorkflowSlot slot)
+            {
+                slot.ConnectedCommand.Execute(DataContext);
             }
         }
     }

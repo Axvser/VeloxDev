@@ -1,4 +1,4 @@
-﻿<Thumb x:Class="VeloxDev.WPF.WorkflowSystem.Views.Shower"
+﻿<Canvas x:Class="VeloxDev.WPF.WorkflowSystem.Views.Shower"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -7,15 +7,27 @@
              mc:Ignorable="d"
              xmlns:vm="clr-namespace:VeloxDev.WPF.WorkflowSystem.ViewModels"
              d:DesignHeight="50" d:DesignWidth="50"
-             d:DataContext="{d:DesignInstance Type=vm:ShowerNodeViewModel, IsDesignTimeCreatable=True}"
-             local:ThumbBehavior.EnableChildMouseEvents="True">
-    <Thumb.Template>
-        <ControlTemplate>
-            <Grid Background="{TemplateBinding Background}">
-                <local:Slot VerticalAlignment="Top" HorizontalAlignment="Left" Height="20" Width="20" Background="Violet"/>
-                <local:Slot VerticalAlignment="Center" HorizontalAlignment="Right" Height="20" Width="20" Background="Violet"/>
-                <local:Slot VerticalAlignment="Bottom" HorizontalAlignment="Left" Height="20" Width="20" Background="Violet" Margin="0,30,0,0"/>
-            </Grid>
-        </ControlTemplate>
-    </Thumb.Template>
-</Thumb>
+             d:DataContext="{d:DesignInstance Type=vm:ShowerNodeViewModel, IsDesignTimeCreatable=True}">
+    <ItemsControl ItemsSource="{Binding Slots}">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <Canvas/>
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemContainerStyle>
+            <Style>
+                <Setter Property="Canvas.Left" Value="{Binding Anchor.Left}"/>
+                <Setter Property="Canvas.Top" Value="{Binding Anchor.Top}"/>
+                <Setter Property="Panel.ZIndex" Value="{Binding Anchor.Layer}"/>
+            </Style>
+        </ItemsControl.ItemContainerStyle>
+        <ItemsControl.ItemTemplate>
+            <DataTemplate>
+                <local:Slot Width="{Binding Size.Width}" 
+                            Height="{Binding Size.Height}" 
+                            IsEnabled="{Binding IsEnable}" 
+                            Background="Violet"/>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</Canvas>

@@ -20,8 +20,8 @@ namespace WpfApp1
         public MainWindow()
         {
             InitializeComponent();
-            var node1 = new ShowerNodeViewModel() { Size = new(100, 100) };
-            var node2 = new ShowerNodeViewModel() { Size = new(100, 100) };
+            var node1 = new ShowerNodeViewModel() { Size = new(100, 200) };
+            var node2 = new ShowerNodeViewModel() { Size = new(100, 200) };
             node1.Anchor = new(50, 100, 2);
             node2.Anchor = new(100, 50, 1);
             var tree = new FactoryViewModel()

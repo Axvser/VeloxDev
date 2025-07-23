@@ -27,6 +27,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public SlotCapacity Capacity { get; set; }
         public SlotState State { get; set; }
         public Anchor Anchor { get; set; }
+        public Size Size { get; set; }
 
         public IVeloxCommand DeleteCommand { get; }
         public IVeloxCommand ConnectingCommand { get; }

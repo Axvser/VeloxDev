@@ -1,4 +1,6 @@
-﻿using VeloxDev.Core.Interfaces.WorkflowSystem;
+﻿using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
@@ -6,6 +8,11 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 {
     public partial class ShowerNodeViewModel : IWorkflowNode
     {
+        public ShowerNodeViewModel()
+        {
+            slots.CollectionChanged += OnSlotsCollectionChanged;
+        }
+
         [VeloxProperty]
         private IWorkflowTree? parent = null;
         [VeloxProperty]
@@ -13,14 +20,55 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxProperty]
         private Size size = new();
         [VeloxProperty]
+        private ObservableCollection<IWorkflowSlot> slots = [];
+        [VeloxProperty]
         private bool isEnabled = true;
         [VeloxProperty]
         private string uID = string.Empty;
         [VeloxProperty]
         private string name = string.Empty;
 
+        partial void OnSlotsChanged(ObservableCollection<IWorkflowSlot> oldValue, ObservableCollection<IWorkflowSlot> newValue)
+        {
+            oldValue.CollectionChanged -= OnSlotsCollectionChanged;
+            newValue.CollectionChanged += OnSlotsCollectionChanged;
+            foreach (var slot in newValue)
+            {
+                slot.Parent = this;
+            }
+        }
+        private void OnSlotsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            switch (e.Action)
+            {
+                case NotifyCollectionChangedAction.Add:
+                    if (e.NewItems is null) return;
+                    foreach (IWorkflowSlot slot in e.NewItems)
+                    {
+                        slot.Parent = this;
+                    }
+                    break;
+                case NotifyCollectionChangedAction.Remove:
+                    if (e.OldItems is null) return;
+                    foreach (IWorkflowSlot slot in e.OldItems)
+                    {
+                        slot.Parent = null;
+                    }
+                    break;
+            }
+        }
+
         [VeloxCommand]
-        public Task Delete(object? parameter, CancellationToken ct)
+        private Task CreateSlot(object? parameter, CancellationToken ct)
+        {
+            if (parameter is IWorkflowSlot slot)
+            {
+                Slots.Add(slot);
+            }
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task Delete(object? parameter, CancellationToken ct)
         {
             if (parent is IWorkflowTree tree)
             {

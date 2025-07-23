@@ -15,6 +15,8 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxProperty]
         private Anchor anchor = new();
         [VeloxProperty]
+        private Size size = new();
+        [VeloxProperty]
         private bool isEnabled = true;
         [VeloxProperty]
         private string uID = string.Empty;
@@ -24,16 +26,19 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxCommand]
         private Task Delete(object? parameter, CancellationToken ct)
         {
+            Parent?.Slots?.Remove(this);
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task Connecting(object? parameter, CancellationToken ct)
         {
+            Parent?.Parent?.SetVirtualSenderCommand.Execute(this);
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task Connected(object? parameter, CancellationToken ct)
         {
+            Parent?.Parent?.SetVirtualSenderCommand.Execute(this);
             return Task.CompletedTask;
         }
     }
