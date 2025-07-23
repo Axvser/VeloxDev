@@ -1,5 +1,4 @@
-﻿using System.ComponentModel;
-using VeloxDev.Core.Interfaces.MVVM;
+﻿using VeloxDev.Core.Interfaces.MVVM;
 
 namespace VeloxDev.Core.Interfaces.WorkflowSystem
 {
