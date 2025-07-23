@@ -2,6 +2,7 @@
 {
     public interface IWorkflowLink : IWorkflowContext
     {
-
+        IWorkflowSlot? Sender { get; set; }
+        IWorkflowSlot? Processor { get; set; }
     }
 }

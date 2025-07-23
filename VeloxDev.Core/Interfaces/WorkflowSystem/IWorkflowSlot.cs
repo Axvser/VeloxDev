@@ -1,4 +1,5 @@
 ﻿using VeloxDev.Core.Interfaces.MVVM;
+using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.Core.Interfaces.WorkflowSystem
 {
@@ -25,7 +26,9 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IWorkflowNode? Parent { get; set; }
         public SlotCapacity Capacity { get; set; }
         public SlotState State { get; set; }
+        public Anchor Anchor { get; set; }
 
+        public IVeloxCommand DeleteCommand { get; }
         public IVeloxCommand ConnectingCommand { get; }
         public IVeloxCommand ConnectedCommand { get; }
     }
