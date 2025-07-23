@@ -1,24 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.Views
 {
-    /// <summary>
-    /// Slot.xaml 的交互逻辑
-    /// </summary>
     public partial class Slot : UserControl
     {
         public Slot()
@@ -56,7 +41,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         {
             if (sender is FrameworkElement element &&
                 element.Parent is FrameworkElement parent &&
-                parent.DataContext is IContext context)
+                parent.DataContext is IWorkflowNode context)
             {
                 if (context.Slots.TryGetValue(UID, out var slotContext) &&
                     slotContext is not null)

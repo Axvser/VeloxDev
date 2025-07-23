@@ -6,14 +6,14 @@
              xmlns:local="clr-namespace:VeloxDev.WPF.WorkflowSystem.Views"
              mc:Ignorable="d"
              xmlns:vm="clr-namespace:VeloxDev.WPF.WorkflowSystem.ViewModels"
-             d:DesignHeight="450" d:DesignWidth="800"
+             d:DesignHeight="50" d:DesignWidth="50"
              d:DataContext="{d:DesignInstance Type=vm:ShowerNodeViewModel, IsDesignTimeCreatable=True}">
     <Thumb.Template>
         <ControlTemplate>
             <Grid Background="{TemplateBinding Background}">
-                <local:Slot UID="0" Width="50" Height="50" Margin="0,70,750,330" Background="Yellow"/>
-                <local:Slot UID="1" Width="50" Height="50" Margin="0,330,750,70" Background="Yellow"/>
-                <local:Slot UID="2" Width="50" Height="50" Margin="750,200,0,200" Background="Yellow"/>
+                <local:Slot UID="0" VerticalAlignment="Top" HorizontalAlignment="Left" Height="20" Width="20" Background="Violet"/>
+                <local:Slot UID="1" VerticalAlignment="Center" HorizontalAlignment="Right" Height="20" Width="20" Background="Violet"/>
+                <local:Slot UID="2" VerticalAlignment="Bottom" HorizontalAlignment="Left" Height="20" Width="20" Background="Violet" Margin="0,30,0,0"/>
             </Grid>
         </ControlTemplate>
     </Thumb.Template>

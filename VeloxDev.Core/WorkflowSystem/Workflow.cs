@@ -2,28 +2,34 @@
 {
     public sealed class Workflow
     {
-        /// <summary>
-        /// In a workflow system, a node view must hold a view model
-        /// </summary>
-        [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-        public sealed class ContextAttribute : Attribute;
+        public sealed class Context
+        {
+            [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+            public sealed class TreeAttribute : Attribute;
 
-        /// <summary>
-        /// In a workflow system, several node view models must form a tree-structured view model
-        /// </summary>
-        [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-        public sealed class ContextTreeAttribute : Attribute;
+            [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+            public sealed class NodeAttribute : Attribute;
 
-        /// <summary>
-        /// In a workflow system, use a connector view model to describe the connection between two node view models
-        /// </summary>
-        [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-        public sealed class ContextcConnectorAttribute : Attribute;
+            [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+            public sealed class SlotAttribute : Attribute;
 
-        /// <summary>
-        /// In a workflow system, use a slot to connect two node view models
-        /// </summary>
-        [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-        public sealed class ContextcSlotAttribute : Attribute;
+            [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+            public sealed class ConnectionAttribute : Attribute;
+        }
+
+        public sealed class View
+        {
+            [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+            public sealed class TreeAttribute : Attribute;
+
+            [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+            public sealed class NodeAttribute : Attribute;
+
+            [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+            public sealed class SlotAttribute : Attribute;
+
+            [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+            public sealed class ConnectionAttribute : Attribute;
+        }
     }
 }

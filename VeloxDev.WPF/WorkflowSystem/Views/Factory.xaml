@@ -31,8 +31,6 @@
                 <local:Shower Width="100"
                     Height="100"
                     IsEnabled="{Binding IsEnabled}"
-                    ConnectCommand="{Binding ConnectCommand}"
-                    ConnectCommandParameter="{Binding RelativeSource={RelativeSource Self}}"
                     Background="White"/>
             </DataTemplate>
         </ItemsControl.ItemTemplate>

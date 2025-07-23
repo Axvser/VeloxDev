@@ -4,18 +4,18 @@ using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 {
-    public partial class SlotViewModel : IContextSlot
+    public partial class SlotViewModel : IWorkflowSlot
     {
         [VeloxProperty]
-        private SlotCapacity capacity = SlotCapacity.Default;
+        private SlotCapacity capacity = SlotCapacity.Universal;
         [VeloxProperty]
         private SlotState state = SlotState.StandBy;
         [VeloxProperty]
         private bool isEnabled = true;
         [VeloxProperty]
-        private IContext? _parent;
+        private IWorkflowNode? _parent;
         [VeloxProperty]
-        private IContextSlot? _target;
+        private IWorkflowSlot? _target;
         [VeloxProperty]
         private int _uID;
         [VeloxProperty]

@@ -19,7 +19,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         private void _01_MouseMove(object sender, global::System.Windows.Input.MouseEventArgs e)
         {
             if (sender is global::System.Windows.UIElement element &&
-                DataContext is global::VeloxDev.Core.Interfaces.WorkflowSystem.IContextTree contextTree)
+                DataContext is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree contextTree)
             {
                 var point = global::System.Windows.Input.Mouse.GetPosition(element);
                 if (contextTree.VirtualConnector.End != null)
@@ -30,7 +30,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         }
         private void _02_CreateNode(object sender, global::System.Windows.Input.MouseEventArgs e)
         {
-            if (DataContext is IContextTree contextTree)
+            if (DataContext is IWorkflowTree contextTree)
             {
                 contextTree.CreateNodeCommand.Execute(this);
             }
