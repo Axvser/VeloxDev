@@ -30,6 +30,8 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public Anchor Offset { get; set; }
         public Size Size { get; set; }
 
+        public IVeloxCommand CreateLinkCommand { get; }
+        public IVeloxCommand RemoveLinkCommand { get; }
         public IVeloxCommand DeleteCommand { get; }
         public IVeloxCommand ConnectingCommand { get; }
         public IVeloxCommand ConnectedCommand { get; }

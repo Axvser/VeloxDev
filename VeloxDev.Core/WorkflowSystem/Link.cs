@@ -24,5 +24,12 @@ namespace VeloxDev.Core.WorkflowSystem
         {
             IsEnabled = Sender != null && newValue != null;
         }
+
+        [VeloxCommand]
+        private Task Delete(object? parameter, CancellationToken ct)
+        {
+            sender?.Parent?.Parent?.RemoveLinkCommand?.Execute(parameter);
+            return Task.CompletedTask;
+        }
     }
 }

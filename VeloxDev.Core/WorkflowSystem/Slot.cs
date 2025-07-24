@@ -25,8 +25,21 @@ namespace VeloxDev.Core.WorkflowSystem
         private string name = string.Empty;
 
         [VeloxCommand]
+        private Task CreateLink(object? parameter, CancellationToken ct)
+        {
+            Parent?.Parent?.CreateLinkCommand.Execute(parameter);
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task RemoveLink(object? parameter, CancellationToken ct)
+        {
+            Parent?.Parent?.RemoveLinkCommand.Execute(parameter);
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
         private Task Delete(object? parameter, CancellationToken ct)
         {
+            Parent?.Parent?.RemoveSlotCommand.Execute(parameter);
             return Task.CompletedTask;
         }
         [VeloxCommand]

@@ -69,6 +69,21 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             return Task.CompletedTask;
         }
         [VeloxCommand]
+        private Task RemoveNode(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task CreateLink(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task RemoveLink(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
         private Task SetVirtualMouse(object? parameter, CancellationToken ct)
         {
             if (parameter is Anchor anchor && VirtualLink.Processor is not null)

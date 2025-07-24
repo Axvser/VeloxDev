@@ -10,6 +10,11 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public ObservableCollection<IWorkflowLink> Links { get; set; }
 
         public IVeloxCommand CreateNodeCommand { get; }
+        public IVeloxCommand RemoveNodeCommand { get; }
+        public IVeloxCommand CreateSlotCommand { get; }
+        public IVeloxCommand RemoveSlotCommand { get; }
+        public IVeloxCommand CreateLinkCommand { get; }
+        public IVeloxCommand RemoveLinkCommand { get; }
         public IVeloxCommand SetVirtualMouseCommand { get; }
         public IVeloxCommand SetVirtualSenderCommand { get; }
         public IVeloxCommand SetVirtualProcessorCommand { get; }

@@ -1,4 +1,4 @@
-﻿using VeloxDev.Core.WorkflowSystem;
+﻿using VeloxDev.Core.Interfaces.MVVM;
 
 namespace VeloxDev.Core.Interfaces.WorkflowSystem
 {
@@ -6,5 +6,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
     {
         public IWorkflowSlot? Sender { get; set; }
         public IWorkflowSlot? Processor { get; set; }
+
+        public IVeloxCommand DeleteCommand { get; }
     }
 }

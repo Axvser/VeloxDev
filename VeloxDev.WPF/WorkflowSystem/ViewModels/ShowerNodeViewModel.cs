@@ -67,6 +67,11 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             }
         }
 
+        public void Execute(object? parameter)
+        {
+
+        }
+
         [VeloxCommand]
         private Task CreateSlot(object? parameter, CancellationToken ct)
         {
@@ -74,6 +79,11 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             {
                 Slots.Add(slot);
             }
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task RemoveSlot(object? parameter, CancellationToken ct)
+        {
             return Task.CompletedTask;
         }
         [VeloxCommand]
@@ -87,6 +97,21 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         }
         [VeloxCommand]
         private Task Broadcast(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task Execute(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task Cancel(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task Interrupt(object? parameter, CancellationToken ct)
         {
             return Task.CompletedTask;
         }

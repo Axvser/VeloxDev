@@ -24,13 +24,7 @@ namespace VeloxDev.Core.WorkflowSystem
         public override string ToString() => $"Anchor({Left},{Top},{Layer})";
         public static bool operator ==(Anchor left, Anchor right) => left.Equals(right);
         public static bool operator !=(Anchor left, Anchor right) => !left.Equals(right);
-        public static Anchor operator +(Anchor left, Anchor right)
-        {
-            return new Anchor(left.Left + right.Left, left.Top + right.Top, left.Layer + right.Layer);
-        }
-        public static Anchor operator -(Anchor left, Anchor right)
-        {
-            return new Anchor(left.Left - right.Left, left.Top - right.Top, left.Layer - right._layer);
-        }
+        public static Anchor operator +(Anchor left, Anchor right) => new(left.Left + right.Left, left.Top + right.Top, left.Layer + right.Layer);
+        public static Anchor operator -(Anchor left, Anchor right) => new(left.Left - right.Left, left.Top - right.Top, left.Layer - right._layer);
     }
 }
