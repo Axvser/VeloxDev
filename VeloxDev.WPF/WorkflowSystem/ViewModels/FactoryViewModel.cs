@@ -1,6 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Windows;
+using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
@@ -60,6 +61,16 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         }
 
         [VeloxCommand]
+        private Task CreateSlot(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task RemoveSlot(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
         private Task CreateNode(object? parameter, CancellationToken ct)
         {
             if (parameter is IWorkflowNode node)
@@ -104,7 +115,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
                 VirtualLink.Sender = slot;
                 slot.State = SlotState.PreviewSender;
             }
-            Connect();
+            TryConnect();
             return Task.CompletedTask;
         }
         [VeloxCommand]
@@ -121,7 +132,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             {
                 ClearVirtualLinkCommand.Execute(null);
             }
-            Connect();
+            TryConnect();
             return Task.CompletedTask;
         }
         [VeloxCommand]
@@ -132,8 +143,13 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             actualProcessor = null;
             return Task.CompletedTask;
         }
+        [VeloxCommand]
+        private Task Undo(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
 
-        private void Connect()
+        private void TryConnect()
         {
 
         }

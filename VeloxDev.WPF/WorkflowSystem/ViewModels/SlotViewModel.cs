@@ -1,4 +1,5 @@
-﻿using VeloxDev.Core.Interfaces.WorkflowSystem;
+﻿using VeloxDev.Core.Interfaces.MVVM;
+using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
@@ -26,6 +27,16 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         private string name = string.Empty;
 
         [VeloxCommand]
+        private Task CreateLink(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task RemoveLink(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
         private Task Delete(object? parameter, CancellationToken ct)
         {
             Parent?.Slots?.Remove(this);
@@ -41,6 +52,12 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         private Task Connected(object? parameter, CancellationToken ct)
         {
             Parent?.Parent?.SetVirtualProcessorCommand.Execute(this);
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task Undo(object? parameter, CancellationToken ct)
+        {
+            Parent?.Parent?.UndoCommand.Execute(null);
             return Task.CompletedTask;
         }
     }

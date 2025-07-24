@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
@@ -73,6 +74,16 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         }
 
         [VeloxCommand]
+        private Task CreateLink(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task RemoveLink(object? parameter, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
         private Task CreateSlot(object? parameter, CancellationToken ct)
         {
             if (parameter is IWorkflowSlot slot)
@@ -113,6 +124,12 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxCommand]
         private Task Interrupt(object? parameter, CancellationToken ct)
         {
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        private Task Undo(object? parameter, CancellationToken ct)
+        {
+            Parent?.UndoCommand.Execute(null);
             return Task.CompletedTask;
         }
     }

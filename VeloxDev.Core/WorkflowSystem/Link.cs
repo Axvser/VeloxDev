@@ -31,5 +31,11 @@ namespace VeloxDev.Core.WorkflowSystem
             sender?.Parent?.Parent?.RemoveLinkCommand?.Execute(parameter);
             return Task.CompletedTask;
         }
+        [VeloxCommand]
+        private Task Undo(object? parameter, CancellationToken ct)
+        {
+            sender?.Parent?.Parent?.UndoCommand?.Execute(null);
+            return Task.CompletedTask;
+        }
     }
 }

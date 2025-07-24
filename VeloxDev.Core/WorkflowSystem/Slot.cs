@@ -54,5 +54,11 @@ namespace VeloxDev.Core.WorkflowSystem
             Parent?.Parent?.SetVirtualProcessorCommand?.Execute(parameter);
             return Task.CompletedTask;
         }
+        [VeloxCommand]
+        private Task Undo(object? parameter, CancellationToken ct)
+        {
+            parent?.Parent?.UndoCommand?.Execute(null);
+            return Task.CompletedTask;
+        }
     }
 }
