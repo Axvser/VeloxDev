@@ -77,19 +77,30 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxCommand]
         private Task CreateSlot(object? parameter, CancellationToken ct)
         {
-            Parent?.CreateSlotCommand.Execute(parameter);
+            if (parameter is IWorkflowSlot slot)
+            {
+                slots.Add(slot);
+                Parent?.PushUndo(() => { slots.Remove(slot); });
+            }
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task Delete(object? parameter, CancellationToken ct)
         {
-            Parent?.RemoveNodeCommand.Execute(parameter);
+            
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task Broadcast(object? parameter, CancellationToken ct)
         {
-
+            var senders = slots.Where(s => s.State == SlotState.Sender).ToArray();
+            foreach (var slot in senders)
+            {
+                foreach (var target in slot.Targets)
+                {
+                    target.Execute(parameter);
+                }
+            }
             return Task.CompletedTask;
         }
         [VeloxCommand]

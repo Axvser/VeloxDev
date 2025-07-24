@@ -23,7 +23,6 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         {
             if (DataContext is IWorkflowSlot slot)
             {
-                slot.Parent?.Parent?.ClearVirtualLinkCommand.Execute(null);
                 slot.ConnectingCommand.Execute(DataContext);
                 e.Handled = true;
             }

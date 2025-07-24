@@ -20,13 +20,11 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         private readonly ConcurrentStack<Action> undos = [];
 
         [VeloxProperty]
-        private IWorkflowLink virtualLink = new Link() { Processor = new Slot() };
+        private IWorkflowLink virtualLink = new LinkContext() { Processor = new SlotContext() };
         [VeloxProperty]
         private ObservableCollection<IWorkflowNode> nodes = [];
         [VeloxProperty]
         private ObservableCollection<IWorkflowLink> links = [];
-        [VeloxProperty]
-        private Dictionary<IWorkflowSlot, Dictionary<IWorkflowSlot, IWorkflowLink>> linkGraph = [];
         [VeloxProperty]
         public bool isEnabled = true;
         [VeloxProperty]
@@ -61,18 +59,18 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             }
         }
 
-
         [VeloxCommand]
         private Task CreateNode(object? parameter, CancellationToken ct)
         {
             if (parameter is IWorkflowNode node)
             {
                 nodes.Add(node);
+                PushUndo(() => { nodes.Remove(node); });
             }
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        private Task SetVirtualMouse(object? parameter, CancellationToken ct)
+        private Task SetMouse(object? parameter, CancellationToken ct)
         {
             if (parameter is Anchor anchor && VirtualLink.Processor is not null)
             {
@@ -81,43 +79,54 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        private Task SetVirtualSender(object? parameter, CancellationToken ct)
+        private Task SetSender(object? parameter, CancellationToken ct)
         {
-            ClearVirtualLinkCommand.Execute(null);
-            if (parameter is IWorkflowSlot slot &&
-                slot.Capacity.HasFlag(SlotCapacity.Sender) &&
-                actualProcessor != slot)
+            if (parameter is IWorkflowSlot slot)
             {
                 actualSender = slot;
                 VirtualLink.Sender = slot;
-                slot.State = SlotState.PreviewSender;
+                VirtualLink.IsEnabled = true;
             }
-            TryConnect();
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        private Task SetVirtualProcessor(object? parameter, CancellationToken ct)
+        private Task SetProcessor(object? parameter, CancellationToken ct)
         {
-            if (parameter is IWorkflowSlot slot &&
-                slot.Capacity.HasFlag(SlotCapacity.Processor) &&
-                actualSender != slot)
+            if (parameter is IWorkflowSlot slot && actualSender != null)
             {
-                actualProcessor = slot;
-                slot.State = SlotState.PreviewProcessor;
+                // 检查是否允许连接
+                if (actualSender.Capacity.HasFlag(SlotCapacity.Sender) &&
+                    slot.Capacity.HasFlag(SlotCapacity.Processor))
+                {
+                    // 创建新连接
+                    var newLink = new LinkContext
+                    {
+                        Sender = actualSender,
+                        Processor = slot,
+                        IsEnabled = true
+                    };
+
+                    // 更新连接关系
+                    links.Add(newLink);
+                    actualSender.Targets.Add(slot.Parent!);
+                    slot.Sources.Add(actualSender.Parent!);
+
+                    var old_actualSender = actualSender;
+
+                    // 设置撤销操作
+                    PushUndo(() =>
+                    {
+                        slot.Sources.Remove(old_actualSender.Parent!);
+                        old_actualSender.Targets.Remove(slot.Parent!);
+                        links.Remove(newLink);
+                    });
+                }
+
+                // 重置连接状态
+                actualSender = null;
+                VirtualLink.Sender = null;
+                VirtualLink.IsEnabled = false;
             }
-            else
-            {
-                ClearVirtualLinkCommand.Execute(null);
-            }
-            TryConnect();
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        private Task ClearVirtualLink(object? parameter, CancellationToken ct)
-        {
-            VirtualLink.Sender = null;
-            actualSender = null;
-            actualProcessor = null;
             return Task.CompletedTask;
         }
         [VeloxCommand]
@@ -130,13 +139,16 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             return Task.CompletedTask;
         }
 
-        private void TryConnect()
+        public void PushUndo(Action undo)
         {
-
+            undos.Push(undo);
         }
-        private void TryDisconnect()
-        {
 
+        public IWorkflowLink? FindLink(IWorkflowNode sender, IWorkflowNode processor)
+        {
+            return Links.FirstOrDefault(link =>
+                link.Sender?.Parent == sender &&
+                link.Processor?.Parent == processor);
         }
     }
 }

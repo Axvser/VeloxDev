@@ -29,7 +29,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
             if (DataContext is IWorkflowNode node)
             {
                 var point = Mouse.GetPosition(this);
-                var slot = new SlotViewModel() { Offset = new(point.X, point.Y), Size = new(30, 30) };
+                var slot = new SlotContext() { Offset = new(point.X, point.Y), Size = new(30, 30) };
                 node.CreateSlotCommand.Execute(slot);
                 e.Handled = true;
             }

@@ -26,7 +26,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         {
             if (DataContext is IWorkflowTree tree)
             {
-                tree.ClearVirtualLinkCommand.Execute(null);
+                tree.VirtualLink.Sender = null;
             }
         }
 
@@ -38,7 +38,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
                 var point = Mouse.GetPosition(element);
                 if (contextTree.VirtualLink.Processor != null)
                 {
-                    contextTree.SetVirtualMouseCommand.Execute(new Anchor(point.X, point.Y));
+                    contextTree.SetMouseCommand.Execute(new Anchor(point.X, point.Y));
                 }
             }
         }
