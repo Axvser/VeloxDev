@@ -6,5 +6,8 @@ namespace VeloxDev.Core.Interfaces.MVVM
     {
         void OnCanExecuteChanged();
         Task ExecuteAsync(object? parameter);
+        Task CancelCurrentAsync();
+        Task InterruptAsync();
+        bool IsExecuting { get; }
     }
 }

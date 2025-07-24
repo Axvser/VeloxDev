@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using VeloxDev.Core.Interfaces.MVVM;
+﻿using VeloxDev.Core.Interfaces.MVVM;
 
 namespace VeloxDev.Core.MVVM
 {
@@ -23,32 +22,79 @@ namespace VeloxDev.Core.MVVM
         Predicate<object?>? canExecute = null) : IVeloxCommand
     {
         private readonly Func<object?, CancellationToken, Task> _executeAsync = executeAsync;
+        private readonly List<CancellationTokenSource> _activeExecutions = [];
+        private readonly SemaphoreSlim _asyncLock = new(1, 1);
 
         public event EventHandler? CanExecuteChanged;
+        public bool IsExecuting { get; private set; }
 
         public bool CanExecute(object? parameter)
         {
             return canExecute?.Invoke(parameter) ?? true;
         }
-
         public async void Execute(object? parameter)
         {
             await ExecuteAsync(parameter);
         }
-
         public async Task ExecuteAsync(object? parameter)
         {
+            var cts = new CancellationTokenSource();
+
+            await _asyncLock.WaitAsync();
             try
             {
-                var cts = new CancellationTokenSource();
+                _activeExecutions.Add(cts);
+                IsExecuting = true;
+            }
+            finally
+            {
+                _asyncLock.Release();
+            }
+
+            try
+            {
                 await _executeAsync.Invoke(parameter, cts.Token);
             }
-            catch (Exception ex)
+            catch
             {
-                Debug.WriteLine($"Error executing command: {ex.Message}");
+
+            }
+            finally
+            {
+                await _asyncLock.WaitAsync();
+                try
+                {
+                    _activeExecutions.Remove(cts);
+                    IsExecuting = _activeExecutions.Count > 0;
+                }
+                finally
+                {
+                    _asyncLock.Release();
+                }
             }
         }
+        public async Task CancelCurrentAsync()
+        {
+            List<CancellationTokenSource> executionsToCancel;
 
+            await _asyncLock.WaitAsync();
+            try
+            {
+                executionsToCancel = [.. _activeExecutions];
+                _activeExecutions.Clear();
+                IsExecuting = false;
+            }
+            finally
+            {
+                _asyncLock.Release();
+            }
+
+            foreach (var cts in executionsToCancel)
+            {
+                cts.Cancel();
+            }
+        }
+        public Task InterruptAsync() => CancelCurrentAsync();
         public void OnCanExecuteChanged()
         {
             CanExecuteChanged?.Invoke(this, EventArgs.Empty);
@@ -61,42 +107,121 @@ namespace VeloxDev.Core.MVVM
     {
         private readonly SemaphoreSlim _queueSemaphore = new(1, 1);
         private readonly Func<object?, CancellationToken, Task> _executeAsync = executeAsync;
-        private CancellationTokenSource? _cancellationTokenSource = null;
+        private CancellationTokenSource? _currentExecutionCts = null;
+        private readonly Queue<TaskCompletionSource<bool>> _pendingExecutions = new();
+        private bool _isInterrupted = false;
+        private int _activeExecutionCount = 0;
 
         public event EventHandler? CanExecuteChanged;
+        public bool IsExecuting => _activeExecutionCount > 0;
 
         public bool CanExecute(object? parameter)
         {
             return canExecute?.Invoke(parameter) ?? true;
         }
-
         public async void Execute(object? parameter)
         {
             await ExecuteAsync(parameter);
         }
-
         public async Task ExecuteAsync(object? parameter)
         {
+            if (_isInterrupted)
+            {
+                return;
+            }
+
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pendingExecutions.Enqueue(tcs);
+
             await _queueSemaphore.WaitAsync();
             try
             {
-                var oldCts = Interlocked.Exchange(ref _cancellationTokenSource, new CancellationTokenSource());
-                oldCts?.Cancel();
-                await _executeAsync.Invoke(parameter, _cancellationTokenSource!.Token);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error executing command: {ex.Message}");
+                if (_isInterrupted)
+                {
+                    TrySetResultSafe(tcs, false);
+                    return;
+                }
+
+                Interlocked.Increment(ref _activeExecutionCount);
+                _currentExecutionCts?.Cancel();
+                _currentExecutionCts = new CancellationTokenSource();
+
+                while (_pendingExecutions.Count > 0)
+                {
+                    var pendingTask = _pendingExecutions.Dequeue();
+                    TrySetResultSafe(pendingTask, false);
+                }
+
+                try
+                {
+                    await _executeAsync.Invoke(parameter, _currentExecutionCts.Token);
+                    TrySetResultSafe(tcs, true);
+                }
+                catch
+                {
+                    TrySetResultSafe(tcs, false);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _activeExecutionCount);
+                }
             }
             finally
             {
                 _queueSemaphore.Release();
             }
         }
+        public async Task CancelCurrentAsync()
+        {
+            await _queueSemaphore.WaitAsync();
+            try
+            {
+                _currentExecutionCts?.Cancel();
+            }
+            finally
+            {
+                _queueSemaphore.Release();
+            }
+        }
+        public async Task InterruptAsync()
+        {
+            await _queueSemaphore.WaitAsync();
+            try
+            {
+                _isInterrupted = true;
+                _currentExecutionCts?.Cancel();
 
+                // 安全地清空队列
+                while (_pendingExecutions.Count > 0)
+                {
+                    var pendingTask = _pendingExecutions.Dequeue();
+                    TrySetResultSafe(pendingTask, false);
+                }
+
+                _isInterrupted = false;
+            }
+            finally
+            {
+                _queueSemaphore.Release();
+            }
+        }
         public void OnCanExecuteChanged()
         {
             CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        }
+        private static void TrySetResultSafe(TaskCompletionSource<bool> tcs, bool result)
+        {
+            try
+            {
+                if (!tcs.Task.IsCompleted)
+                {
+                    tcs.SetResult(result);
+                }
+            }
+            catch
+            {
+
+            }
         }
     }
 }
