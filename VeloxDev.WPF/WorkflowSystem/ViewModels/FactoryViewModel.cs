@@ -1,7 +1,6 @@
-﻿using System.Collections.ObjectModel;
+﻿using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.Windows;
-using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
@@ -17,6 +16,8 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 
         private IWorkflowSlot? actualSender = null;
         private IWorkflowSlot? actualProcessor = null;
+
+        private readonly ConcurrentStack<Action> undos = [];
 
         [VeloxProperty]
         private IWorkflowLink virtualLink = new Link() { Processor = new Slot() };
@@ -60,16 +61,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             }
         }
 
-        [VeloxCommand]
-        private Task CreateSlot(object? parameter, CancellationToken ct)
-        {
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        private Task RemoveSlot(object? parameter, CancellationToken ct)
-        {
-            return Task.CompletedTask;
-        }
+
         [VeloxCommand]
         private Task CreateNode(object? parameter, CancellationToken ct)
         {
@@ -77,21 +69,6 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             {
                 nodes.Add(node);
             }
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        private Task RemoveNode(object? parameter, CancellationToken ct)
-        {
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        private Task CreateLink(object? parameter, CancellationToken ct)
-        {
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        private Task RemoveLink(object? parameter, CancellationToken ct)
-        {
             return Task.CompletedTask;
         }
         [VeloxCommand]
@@ -146,10 +123,18 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxCommand]
         private Task Undo(object? parameter, CancellationToken ct)
         {
+            if (undos.TryPop(out var recipient))
+            {
+                recipient.Invoke();
+            }
             return Task.CompletedTask;
         }
 
         private void TryConnect()
+        {
+
+        }
+        private void TryDisconnect()
         {
 
         }

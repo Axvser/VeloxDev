@@ -1,4 +1,5 @@
-﻿using VeloxDev.Core.Interfaces.MVVM;
+﻿using System.Collections.ObjectModel;
+using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.Core.Interfaces.WorkflowSystem
@@ -23,6 +24,8 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
     public interface IWorkflowSlot : IWorkflowContext
     {
+        public ObservableCollection<IWorkflowNode> Targets { get; set; }
+        public ObservableCollection<IWorkflowNode> Sources { get; set; }
         public IWorkflowNode? Parent { get; set; }
         public SlotCapacity Capacity { get; set; }
         public SlotState State { get; set; }
@@ -30,8 +33,6 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public Anchor Offset { get; set; }
         public Size Size { get; set; }
 
-        public IVeloxCommand CreateLinkCommand { get; }
-        public IVeloxCommand RemoveLinkCommand { get; }
         public IVeloxCommand DeleteCommand { get; }
         public IVeloxCommand ConnectingCommand { get; }
         public IVeloxCommand ConnectedCommand { get; }

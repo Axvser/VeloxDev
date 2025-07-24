@@ -1,6 +1,5 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
@@ -70,60 +69,33 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 
         public void Execute(object? parameter)
         {
+            OnExecute(parameter);
+        }
+        partial void OnExecute(object? parameter);
 
-        }
 
-        [VeloxCommand]
-        private Task CreateLink(object? parameter, CancellationToken ct)
-        {
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        private Task RemoveLink(object? parameter, CancellationToken ct)
-        {
-            return Task.CompletedTask;
-        }
         [VeloxCommand]
         private Task CreateSlot(object? parameter, CancellationToken ct)
         {
-            if (parameter is IWorkflowSlot slot)
-            {
-                Slots.Add(slot);
-            }
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        private Task RemoveSlot(object? parameter, CancellationToken ct)
-        {
+            Parent?.CreateSlotCommand.Execute(parameter);
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task Delete(object? parameter, CancellationToken ct)
         {
-            if (parent is IWorkflowTree tree)
-            {
-                tree.Nodes.Remove(this);
-            }
+            Parent?.RemoveNodeCommand.Execute(parameter);
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task Broadcast(object? parameter, CancellationToken ct)
         {
+
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task Execute(object? parameter, CancellationToken ct)
         {
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        private Task Cancel(object? parameter, CancellationToken ct)
-        {
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        private Task Interrupt(object? parameter, CancellationToken ct)
-        {
+            Execute(parameter);
             return Task.CompletedTask;
         }
         [VeloxCommand]

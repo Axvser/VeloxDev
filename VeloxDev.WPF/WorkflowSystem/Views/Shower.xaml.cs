@@ -30,7 +30,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
             {
                 var point = Mouse.GetPosition(this);
                 var slot = new SlotViewModel() { Offset = new(point.X, point.Y), Size = new(30, 30) };
-                node.Slots.Add(slot);
+                node.CreateSlotCommand.Execute(slot);
                 e.Handled = true;
             }
         }

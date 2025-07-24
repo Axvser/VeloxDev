@@ -27,31 +27,21 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         private string name = string.Empty;
 
         [VeloxCommand]
-        private Task CreateLink(object? parameter, CancellationToken ct)
-        {
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        private Task RemoveLink(object? parameter, CancellationToken ct)
-        {
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
         private Task Delete(object? parameter, CancellationToken ct)
         {
-            Parent?.Slots?.Remove(this);
+            Parent?.Parent?.RemoveSlotCommand.Execute(parameter);
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task Connecting(object? parameter, CancellationToken ct)
         {
-            Parent?.Parent?.SetVirtualSenderCommand.Execute(this);
+            Parent?.Parent?.SetVirtualSenderCommand.Execute(parameter);
             return Task.CompletedTask;
         }
         [VeloxCommand]
         private Task Connected(object? parameter, CancellationToken ct)
         {
-            Parent?.Parent?.SetVirtualProcessorCommand.Execute(this);
+            Parent?.Parent?.SetVirtualProcessorCommand.Execute(parameter);
             return Task.CompletedTask;
         }
         [VeloxCommand]

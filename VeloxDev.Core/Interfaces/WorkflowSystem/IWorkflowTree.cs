@@ -9,15 +9,12 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public ObservableCollection<IWorkflowNode> Nodes { get; set; }
         public ObservableCollection<IWorkflowLink> Links { get; set; }
 
+        public void PushUndo(Action undo);
+        public IWorkflowLink? FindLink(IWorkflowNode sender, IWorkflowNode processor);
+
         public IVeloxCommand CreateNodeCommand { get; }
-        public IVeloxCommand RemoveNodeCommand { get; }
-        public IVeloxCommand CreateSlotCommand { get; }
-        public IVeloxCommand RemoveSlotCommand { get; }
-        public IVeloxCommand CreateLinkCommand { get; }
-        public IVeloxCommand RemoveLinkCommand { get; }
-        public IVeloxCommand SetVirtualMouseCommand { get; }
-        public IVeloxCommand SetVirtualSenderCommand { get; }
-        public IVeloxCommand SetVirtualProcessorCommand { get; }
-        public IVeloxCommand ClearVirtualLinkCommand { get; }
+        public IVeloxCommand SetMouseCommand { get; }
+        public IVeloxCommand SetSenderCommand { get; }
+        public IVeloxCommand SetProcessorCommand { get; }
     }
 }
