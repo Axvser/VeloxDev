@@ -24,7 +24,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxProperty]
         private ObservableCollection<IWorkflowLink> links = [];
         [VeloxProperty]
-        private Dictionary<IWorkflowNode, Dictionary<IWorkflowNode, IWorkflowLink>> linkGraph = [];
+        private Dictionary<IWorkflowSlot, Dictionary<IWorkflowSlot, IWorkflowLink>> linkGraph = [];
         [VeloxProperty]
         public bool isEnabled = true;
         [VeloxProperty]
@@ -80,6 +80,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         [VeloxCommand]
         private Task SetVirtualSender(object? parameter, CancellationToken ct)
         {
+            ClearVirtualLinkCommand.Execute(null);
             if (parameter is IWorkflowSlot slot &&
                 slot.Capacity.HasFlag(SlotCapacity.Sender) &&
                 actualProcessor != slot)
@@ -101,6 +102,10 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
                 actualProcessor = slot;
                 slot.State = SlotState.PreviewProcessor;
             }
+            else
+            {
+                ClearVirtualLinkCommand.Execute(null);
+            }
             Connect();
             return Task.CompletedTask;
         }
@@ -115,86 +120,7 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 
         private void Connect()
         {
-            if (actualSender?.Parent is not IWorkflowNode senderParent ||
-                actualProcessor?.Parent is not IWorkflowNode processorParent)
-                return;
 
-            if(senderParent == processorParent)
-            {
-                actualSender = actualProcessor = null;
-                VirtualLink.Sender = null;
-                return;
-            }
-
-            actualSender.State = SlotState.Sender;
-            actualProcessor.State = SlotState.Processor;
-
-            var (existingLink, isReverse) = FindExistingConnection(senderParent, processorParent);
-
-            switch (existingLink)
-            {
-                case null:
-                    AddNewConnection(senderParent, processorParent);
-                    break;
-
-                case IWorkflowLink link when !isReverse:
-                    UpdateSenderSlot(link, actualSender);
-                    break;
-
-                case IWorkflowLink link when isReverse:
-                    RemoveConnection(link, isReverse ? processorParent : senderParent,
-                                          isReverse ? senderParent : processorParent);
-                    AddNewConnection(senderParent, processorParent);
-                    break;
-            }
-
-            actualSender = actualProcessor = null;
-            VirtualLink.Sender = null;
-
-            (IWorkflowLink? link, bool isReverse) FindExistingConnection(IWorkflowNode from, IWorkflowNode to)
-            {
-                if (linkGraph.TryGetValue(from, out var outgoing) && outgoing.TryGetValue(to, out var forwardLink))
-                    return (forwardLink, false);
-
-                if (linkGraph.TryGetValue(to, out var incoming) && incoming.TryGetValue(from, out var reverseLink))
-                    return (reverseLink, true);
-
-                return (null, false);
-            }
-
-            void AddNewConnection(IWorkflowNode from, IWorkflowNode to)
-            {
-                var newLink = new Link { Sender = actualSender!, Processor = actualProcessor! };
-
-                if (!linkGraph.TryGetValue(from, out var links))
-                {
-                    links = [];
-                    linkGraph[from] = links;
-                }
-                links[to] = newLink;
-                Links.Add(newLink);
-            }
-
-            void UpdateSenderSlot(IWorkflowLink existingLink, IWorkflowSlot newSender)
-            {
-                existingLink.Sender = newSender;
-
-                if (existingLink.Sender.Parent != newSender.Parent)
-                {
-                    RemoveConnection(existingLink, existingLink.Sender!.Parent!, existingLink.Processor!.Parent!);
-                    AddNewConnection(newSender.Parent!, existingLink.Processor.Parent!);
-                }
-            }
-
-            void RemoveConnection(IWorkflowLink link, IWorkflowNode from, IWorkflowNode to)
-            {
-                if (linkGraph.TryGetValue(from, out var links))
-                {
-                    links.Remove(to);
-                    if (links.Count == 0) linkGraph.Remove(from);
-                }
-                Links.Remove(link);
-            }
         }
     }
 }

@@ -36,6 +36,18 @@ namespace VeloxDev.Core.MVVM
         {
             await ExecuteAsync(parameter);
         }
+        public async void Cancel()
+        {
+            await CancelCurrentAsync();
+        }
+        public async void Interrupt()
+        {
+            await InterruptAsync();
+        }
+        public void OnCanExecuteChanged()
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        }
         public async Task ExecuteAsync(object? parameter)
         {
             var cts = new CancellationTokenSource();
@@ -95,10 +107,6 @@ namespace VeloxDev.Core.MVVM
             }
         }
         public Task InterruptAsync() => CancelCurrentAsync();
-        public void OnCanExecuteChanged()
-        {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
-        }
     }
 
     public sealed class VeloxCommand(
@@ -122,6 +130,18 @@ namespace VeloxDev.Core.MVVM
         public async void Execute(object? parameter)
         {
             await ExecuteAsync(parameter);
+        }
+        public async void Cancel()
+        {
+            await CancelCurrentAsync();
+        }
+        public async void Interrupt()
+        {
+            await InterruptAsync();
+        }
+        public void OnCanExecuteChanged()
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
         public async Task ExecuteAsync(object? parameter)
         {
@@ -204,10 +224,6 @@ namespace VeloxDev.Core.MVVM
             {
                 _queueSemaphore.Release();
             }
-        }
-        public void OnCanExecuteChanged()
-        {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
         private static void TrySetResultSafe(TaskCompletionSource<bool> tcs, bool result)
         {
