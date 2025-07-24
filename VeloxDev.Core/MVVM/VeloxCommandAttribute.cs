@@ -44,7 +44,7 @@ namespace VeloxDev.Core.MVVM
         {
             await InterruptAsync();
         }
-        public void OnCanExecuteChanged()
+        public void Notify()
         {
             CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -139,7 +139,7 @@ namespace VeloxDev.Core.MVVM
         {
             await InterruptAsync();
         }
-        public void OnCanExecuteChanged()
+        public void Notify()
         {
             CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
