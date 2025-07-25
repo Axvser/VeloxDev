@@ -85,9 +85,70 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        private Task Delete(object? parameter, CancellationToken ct)
+        private static Task Delete(object? parameter, CancellationToken ct)
         {
-            
+            if (parameter is IWorkflowNode node && node.Parent is IWorkflowTree tree)
+            {
+                var affectedLinks = new List<IWorkflowLink>();
+                var linkRemovalActions = new List<Action>();
+
+                foreach (var link in tree.Links.ToList())
+                {
+                    if (link.Sender?.Parent == node || link.Processor?.Parent == node)
+                    {
+                        affectedLinks.Add(link);
+                        tree.Links.Remove(link);
+
+                        var sender = link.Sender;
+                        var processor = link.Processor;
+                        var senderNode = sender?.Parent;
+                        var processorNode = processor?.Parent;
+
+                        if (sender != null && processorNode != null)
+                        {
+                            sender.Targets.Remove(processorNode);
+                        }
+                        if (processor != null && senderNode != null)
+                        {
+                            processor.Sources.Remove(senderNode);
+                        }
+
+                        linkRemovalActions.Add(() =>
+                        {
+                            tree.Links.Add(link);
+                            if (sender != null && processorNode != null)
+                            {
+                                sender.Targets.Add(processorNode);
+                            }
+                            if (processor != null && senderNode != null)
+                            {
+                                processor.Sources.Add(senderNode);
+                            }
+                        });
+                    }
+                }
+
+                int nodeIndex = tree.Nodes.IndexOf(node);
+                var nodeRemovalAction = new Action(() =>
+                {
+                    tree.Nodes.Insert(nodeIndex, node);
+                    foreach (var slot in node.Slots)
+                    {
+                        slot.Parent = node;
+                    }
+                });
+
+                tree.Nodes.Remove(node);
+
+                tree.PushUndo(() =>
+                {
+                    nodeRemovalAction();
+                    foreach (var undoAction in linkRemovalActions)
+                    {
+                        undoAction();
+                    }
+                });
+            }
             return Task.CompletedTask;
         }
         [VeloxCommand]

@@ -15,7 +15,6 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         }
 
         private IWorkflowSlot? actualSender = null;
-        private IWorkflowSlot? actualProcessor = null;
 
         private readonly ConcurrentStack<Action> undos = [];
 
