@@ -30,17 +30,16 @@ namespace VeloxDev.Core.WorkflowSystem
         private string name = string.Empty;
 
         [VeloxCommand]
-        private static Task Delete(object? parameter, CancellationToken ct)
+        private Task Delete(object? parameter, CancellationToken ct)
         {
-            if (parameter is IWorkflowSlot slot &&
-                slot.Parent?.Parent is IWorkflowTree tree)
+            if (Parent?.Parent is IWorkflowTree tree)
             {
                 List<IWorkflowNode> removed_targets = [];
                 List<IWorkflowNode> removed_sources = [];
                 List<IWorkflowLink> removed_links = [];
-                foreach (var target in slot.Targets)
+                foreach (var target in Targets)
                 {
-                    var link = tree.FindLink(slot.Parent, target);
+                    var link = tree.FindLink(Parent, target);
                     if (link != null)
                     {
                         tree.Links.Remove(link);
@@ -50,11 +49,11 @@ namespace VeloxDev.Core.WorkflowSystem
                 }
                 foreach (var target in removed_targets)
                 {
-                    slot.Targets.Remove(target);
+                    Targets.Remove(target);
                 }
-                foreach (var source in slot.Sources)
+                foreach (var source in Sources)
                 {
-                    var link = tree.FindLink(source, slot.Parent);
+                    var link = tree.FindLink(source, Parent);
                     if (link != null)
                     {
                         tree.Links.Remove(link);
@@ -64,17 +63,17 @@ namespace VeloxDev.Core.WorkflowSystem
                 }
                 foreach (var source in removed_sources)
                 {
-                    slot.Sources.Remove(source);
+                    Sources.Remove(source);
                 }
                 tree.PushUndo(() =>
                 {
                     foreach (var rm in removed_sources)
                     {
-                        slot.Sources.Add(rm);
+                        Sources.Add(rm);
                     }
                     foreach (var rm in removed_targets)
                     {
-                        slot.Targets.Add(rm);
+                        Targets.Add(rm);
                     }
                     foreach (var rm in removed_links)
                     {
@@ -85,32 +84,27 @@ namespace VeloxDev.Core.WorkflowSystem
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        private static Task Connecting(object? parameter, CancellationToken ct)
+        private Task Connecting(object? parameter, CancellationToken ct)
         {
-            if (parameter is IWorkflowSlot slot &&
-                slot.Parent?.Parent is IWorkflowTree tree)
+            if (Parent?.Parent is IWorkflowTree tree)
             {
                 tree.SetSenderCommand.Execute(parameter);
             }
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        private static Task Connected(object? parameter, CancellationToken ct)
+        private Task Connected(object? parameter, CancellationToken ct)
         {
-            if (parameter is IWorkflowSlot slot &&
-                slot.Parent?.Parent is IWorkflowTree tree)
+            if (Parent?.Parent is IWorkflowTree tree)
             {
                 tree.SetProcessorCommand.Execute(parameter);
             }
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        private static Task Undo(object? parameter, CancellationToken ct)
+        private Task Undo(object? parameter, CancellationToken ct)
         {
-            if(parameter is IWorkflowSlot slot)
-            {
-                slot.Parent?.Parent?.UndoCommand?.Execute(null);
-            }
+            Parent?.Parent?.UndoCommand?.Execute(null);
             return Task.CompletedTask;
         }
     }

@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Xml.Linq;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
@@ -73,7 +74,6 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
         }
         partial void OnExecute(object? parameter);
 
-
         [VeloxCommand]
         private Task CreateSlot(object? parameter, CancellationToken ct)
         {
@@ -85,16 +85,16 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        private static Task Delete(object? parameter, CancellationToken ct)
+        private Task Delete(object? parameter, CancellationToken ct)
         {
-            if (parameter is IWorkflowNode node && node.Parent is IWorkflowTree tree)
+            if (Parent is IWorkflowTree tree)
             {
                 var affectedLinks = new List<IWorkflowLink>();
                 var linkRemovalActions = new List<Action>();
 
                 foreach (var link in tree.Links.ToList())
                 {
-                    if (link.Sender?.Parent == node || link.Processor?.Parent == node)
+                    if (link.Sender?.Parent == this || link.Processor?.Parent == this)
                     {
                         affectedLinks.Add(link);
                         tree.Links.Remove(link);
@@ -128,17 +128,17 @@ namespace VeloxDev.WPF.WorkflowSystem.ViewModels
                     }
                 }
 
-                int nodeIndex = tree.Nodes.IndexOf(node);
+                int nodeIndex = tree.Nodes.IndexOf(this);
                 var nodeRemovalAction = new Action(() =>
                 {
-                    tree.Nodes.Insert(nodeIndex, node);
-                    foreach (var slot in node.Slots)
+                    tree.Nodes.Insert(nodeIndex, this);
+                    foreach (var slot in Slots)
                     {
-                        slot.Parent = node;
+                        slot.Parent = this;
                     }
                 });
 
-                tree.Nodes.Remove(node);
+                tree.Nodes.Remove(this);
 
                 tree.PushUndo(() =>
                 {

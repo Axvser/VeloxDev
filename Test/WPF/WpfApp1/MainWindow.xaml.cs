@@ -15,8 +15,8 @@ namespace WpfApp1
             InitializeComponent();
             var node1 = new ShowerNodeViewModel() { Anchor = new(250, 100, 2), Size = new(100, 200) };
             var node2 = new ShowerNodeViewModel() { Anchor = new(100, 50, 1), Size = new(100, 200) };
-            var slot1 = new SlotContext() { Offset = new(10, 100), Size = new(30, 30) };
-            var slot2 = new SlotContext() { Offset = new(70, 100), Size = new(30, 30) };
+            var slot1 = new SlotContext() { Offset = new(10, 100), Size = new(30, 30), Capacity = VeloxDev.Core.Interfaces.WorkflowSystem.SlotCapacity.Sender };
+            var slot2 = new SlotContext() { Offset = new(70, 100), Size = new(30, 30), Capacity = VeloxDev.Core.Interfaces.WorkflowSystem.SlotCapacity.Processor };
             node1.Slots.Add(slot1);
             node2.Slots.Add(slot2);
             var tree = new FactoryViewModel()
@@ -27,9 +27,8 @@ namespace WpfApp1
             container.DataContext = tree;
         }
 
-        private void Window_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            MessageBox.Show("撤销");
             fc.UndoCommand.Execute(null);
         }
     }

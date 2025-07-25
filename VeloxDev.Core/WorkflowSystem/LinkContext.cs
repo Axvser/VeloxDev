@@ -26,14 +26,13 @@ namespace VeloxDev.Core.WorkflowSystem
         }
 
         [VeloxCommand]
-        private static Task Delete(object? parameter, CancellationToken ct)
+        private Task Delete(object? parameter, CancellationToken ct)
         {
-            if (parameter is IWorkflowLink link &&
-                link.Sender is IWorkflowSlot sender &&
-                link.Sender.Parent is IWorkflowNode s_node &&
-                link.Processor is IWorkflowSlot processor &&
-                link.Processor.Parent is IWorkflowNode p_node &&
-                link.Sender.Parent.Parent is IWorkflowTree tree)
+            if (Sender is IWorkflowSlot sender &&
+                Sender.Parent is IWorkflowNode s_node &&
+                Processor is IWorkflowSlot processor &&
+                Processor.Parent is IWorkflowNode p_node &&
+                Sender.Parent.Parent is IWorkflowTree tree)
             {
                 var rm = tree.FindLink(s_node, p_node);
                 if (rm != null)
@@ -52,12 +51,9 @@ namespace VeloxDev.Core.WorkflowSystem
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        private static Task Undo(object? parameter, CancellationToken ct)
+        private Task Undo(object? parameter, CancellationToken ct)
         {
-            if(parameter is IWorkflowLink link)
-            {
-                link.Sender?.Parent?.Parent?.UndoCommand?.Execute(null);
-            }
+            Sender?.Parent?.Parent?.UndoCommand?.Execute(null);
             return Task.CompletedTask;
         }
     }

@@ -7,6 +7,6 @@
         xmlns:vs="clr-namespace:VeloxDev.WPF.WorkflowSystem.Views;assembly=VeloxDev.WPF"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800" Background="#1e1e1e"
-        MouseDown="Window_MouseDown">
+        KeyDown="Window_KeyDown">
     <vs:Factory x:Name="container" Background="#1e1e1e"/>
 </Window>
