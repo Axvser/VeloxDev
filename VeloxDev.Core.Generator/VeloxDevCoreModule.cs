@@ -12,13 +12,6 @@ namespace VeloxDev.Core.Generator
     [Generator(LanguageNames.CSharp)]
     public class VeloxDevCoreModule : IIncrementalGenerator
     {
-        protected static readonly List<ICodeWriter> codeWriters = [];
-
-        static VeloxDevCoreModule()
-        {
-            codeWriters.Add(new CoreWriter());
-        }
-
         public virtual void Initialize(IncrementalGeneratorInitializationContext context)
         {
             context.RegisterSourceOutput(Analizer.Filters.FilterContext(context), GenerateSource);
@@ -29,17 +22,15 @@ namespace VeloxDev.Core.Generator
             var values = GetFilteredContext(input);
             foreach (var kvp in values)
             {
-                for (int i = 0; i < codeWriters.Count; i++)
+                var writer = new CoreWriter();
+                writer.Initialize(kvp.Value, kvp.Key);
+                if (writer.CanWrite())
                 {
-                    codeWriters[i].Initialize(kvp.Value, kvp.Key);
-                    if (codeWriters[i].CanWrite())
-                    {
-                        context.AddSource(
-                            codeWriters[i].GetFileName(),
-                            SourceText.From(
-                                codeWriters[i].Write(),
-                                Encoding.UTF8));
-                    }
+                    context.AddSource(
+                        writer.GetFileName(),
+                        SourceText.From(
+                            writer.Write(),
+                            Encoding.UTF8));
                 }
             }
         }

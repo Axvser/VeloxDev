@@ -39,11 +39,12 @@ namespace VeloxDev.Core.Generator.Writers
 
         private void ReadWorkflowConfig(INamedTypeSymbol symbol)
         {
+            WorkflowType = 0;
             var configs = symbol.GetAttributes();
-            var s1 = NAMESPACE_VELOX_WORKFLOW + "Workflow.Context.TreeAttribute";
-            var s2 = NAMESPACE_VELOX_WORKFLOW + "Workflow.Context.NodeAttribute";
-            var s3 = NAMESPACE_VELOX_WORKFLOW + "Workflow.Context.SlotAttribute";
-            var s4 = NAMESPACE_VELOX_WORKFLOW + "Workflow.Context.LinkAttribute";
+            var s1 = NAMESPACE_VELOX_WORKFLOW + ".Workflow.Context.TreeAttribute";
+            var s2 = NAMESPACE_VELOX_WORKFLOW + ".Workflow.Context.NodeAttribute";
+            var s3 = NAMESPACE_VELOX_WORKFLOW + ".Workflow.Context.SlotAttribute";
+            var s4 = NAMESPACE_VELOX_WORKFLOW + ".Workflow.Context.LinkAttribute";
             foreach (var config in configs)
             {
                 var name = config.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -181,7 +182,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         public override bool CanWrite()
         {
-            return IsAop || IsMono || CommandConfig.Count > 0 || IsMVVM;
+            return IsAop || IsMono || CommandConfig.Count > 0 || IsMVVM || WorkflowType != 0;
         }
         public override string GetFileName()
         {
@@ -220,6 +221,21 @@ namespace VeloxDev.Core.Generator.Writers
             {
                 list.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanging");
                 list.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanged");
+            }
+            switch (WorkflowType)
+            {
+                case 1:
+                    list.Add(NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowTree");
+                    break;
+                case 2:
+                    list.Add(NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowNode");
+                    break;
+                case 3:
+                    list.Add(NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowSlot");
+                    break;
+                case 4:
+                    list.Add(NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowLink");
+                    break;
             }
             if (list.Count > 0)
             {

@@ -9,7 +9,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core</Title>
-		<Version>1.6.4-preview</Version>
+		<Version>1.8.300-preview</Version>
 		<Authors>Axvser</Authors>
 		<Description>The Core of VeloxDev. Shared those components that can optimize the development experience of WPF/Avalonia/……</Description>
 		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
@@ -19,7 +19,7 @@
 		<RepositoryType>git</RepositoryType>
 		<PackageProjectUrl>https://www.nuget.org/packages/VeloxDev.Core/</PackageProjectUrl>
 	</PropertyGroup>
-
+	
 	<ItemGroup>
 	  <None Include="..\LICENSE.txt">
 	    <Pack>True</Pack>
@@ -30,14 +30,10 @@
 	    <PackagePath>\</PackagePath>
 	  </None>
 	</ItemGroup>
-
+	
 	<ItemGroup>
 	  <PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
-	  <PackageReference Include="NuGet.Build.Tasks.Pack" Version="6.14.0">
-	    <PrivateAssets>all</PrivateAssets>
-	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-	  </PackageReference>
-	  <PackageReference Include="VeloxDev.Core.Generator" Version="1.9.0" />
+	  <PackageReference Include="VeloxDev.Core.Generator" Version="1.9.531" />
 	</ItemGroup>
 
 </Project>
