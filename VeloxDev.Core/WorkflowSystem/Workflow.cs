@@ -14,7 +14,7 @@
             public sealed class SlotAttribute : Attribute;
 
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class ConnectionAttribute : Attribute;
+            public sealed class LinkAttribute : Attribute;
         }
 
         public sealed class View
@@ -29,7 +29,7 @@
             public sealed class SlotAttribute : Attribute;
 
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class ConnectionAttribute : Attribute;
+            public sealed class LinkAttribute : Attribute;
         }
     }
 }

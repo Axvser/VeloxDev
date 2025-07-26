@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using VeloxDev.Core.Generator.Base;
+using VeloxDev.Core.Generator.Templates.Workflow;
 
 namespace VeloxDev.Core.Generator.Writers
 {
@@ -15,11 +16,14 @@ namespace VeloxDev.Core.Generator.Writers
         public const string NAMESPACE_VELOX_MVVM = "global::VeloxDev.Core.MVVM";
         public const string NAMESPACE_VELOX_AOP = "global::VeloxDev.Core.AopInterfaces";
         public const string NAMESPACE_SYSTEM_MVVM = "global::System.ComponentModel";
+        public const string NAMESPACE_VELOX_IWORKFLOW = "global::VeloxDev.Core.Interfaces.WorkflowSystem";
+        public const string NAMESPACE_VELOX_WORKFLOW = "global::VeloxDev.Core.WorkflowSystem";
 
         public bool IsMVVM { get; set; } = false;
         public bool IsAop { get; set; } = false;
         public bool IsMono { get; set; } = false;
         public int MonoSpan { get; set; } = 17;
+        public int WorkflowType { get; set; } = 0;
         List<Tuple<string, bool, bool, string>> CommandConfig { get; set; } = [];
         List<Analizer.MVVMPropertyFactory> MVVMProperties { get; set; } = [];
 
@@ -28,10 +32,48 @@ namespace VeloxDev.Core.Generator.Writers
             base.Initialize(classDeclaration, namedTypeSymbol);
             ReadAopConfig(classDeclaration);
             ReadMonoConfig(namedTypeSymbol);
-            ReadCommandConfig(namedTypeSymbol);
             ReadMVVMConfig(namedTypeSymbol);
+            ReadCommandConfig(namedTypeSymbol);
+            ReadWorkflowConfig(namedTypeSymbol);
         }
 
+        private void ReadWorkflowConfig(INamedTypeSymbol symbol)
+        {
+            var configs = symbol.GetAttributes();
+            var s1 = NAMESPACE_VELOX_WORKFLOW + "Workflow.Context.TreeAttribute";
+            var s2 = NAMESPACE_VELOX_WORKFLOW + "Workflow.Context.NodeAttribute";
+            var s3 = NAMESPACE_VELOX_WORKFLOW + "Workflow.Context.SlotAttribute";
+            var s4 = NAMESPACE_VELOX_WORKFLOW + "Workflow.Context.LinkAttribute";
+            foreach (var config in configs)
+            {
+                var name = config.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                if (name == s2)
+                {
+                    WorkflowType = 2;
+                    return;
+                }
+                else if (name == s3)
+                {
+                    WorkflowType = 3;
+                    return;
+                }
+                else if (name == s1)
+                {
+                    WorkflowType = 1;
+                    return;
+                }
+                else if (name == s4)
+                {
+                    WorkflowType = 4;
+                    return;
+                }
+                else
+                {
+                    WorkflowType = 0;
+                    return;
+                }
+            }
+        }
         private void ReadMVVMConfig(INamedTypeSymbol symbol)
         {
             MVVMProperties = [.. symbol.GetMembers()
@@ -44,7 +86,7 @@ namespace VeloxDev.Core.Generator.Writers
                     SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
                     SetteredBody = [$"OnPropertyChanged(nameof({analizer.PropertyName}));"],
                 })];
-            IsMVVM = MVVMProperties.Count > 0;
+            IsMVVM = MVVMProperties.Count > 0 || WorkflowType != 0;
         }
         private void ReadAopConfig(ClassDeclarationSyntax classDeclaration)
         {
@@ -141,7 +183,6 @@ namespace VeloxDev.Core.Generator.Writers
         {
             return IsAop || IsMono || CommandConfig.Count > 0 || IsMVVM;
         }
-
         public override string GetFileName()
         {
             if (Syntax == null || Symbol == null)
@@ -150,7 +191,6 @@ namespace VeloxDev.Core.Generator.Writers
             }
             return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_VeloxCore.g.cs";
         }
-
         public override string Write()
         {
             StringBuilder builder = new();
@@ -204,7 +244,6 @@ namespace VeloxDev.Core.Generator.Writers
 
             return sourceBuilder.ToString();
         }
-
         private string GenerateBody()
         {
             if (Syntax == null || Symbol == null)
@@ -326,14 +365,15 @@ namespace VeloxDev.Core.Generator.Writers
                            PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
                        }
                     """);
+                builder.AppendLine(GenerateProperty());
+            }
+            if (WorkflowType != 0)
+            {
+                builder.AppendLine(GenerateWorkflow());
             }
             if (CommandConfig.Count > 0)
             {
                 builder.AppendLine(GenerateCommand());
-            }
-            if (IsMVVM)
-            {
-                builder.AppendLine(GenerateProperty());
             }
             return builder.ToString();
         }
@@ -429,5 +469,13 @@ namespace VeloxDev.Core.Generator.Writers
 
             return builder.ToString();
         }
+        private string GenerateWorkflow() => WorkflowType switch
+        {
+            1 => TreeTemplate.Normal,
+            2 => NodeTemplate.Normal,
+            3 => SlotTemplate.Normal,
+            4 => LinkTemplate.Normal,
+            _ => string.Empty
+        };
     }
 }

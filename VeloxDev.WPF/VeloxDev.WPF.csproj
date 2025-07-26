@@ -26,4 +26,8 @@
 		<PackageReference Include="VeloxDev.Core" Version="1.6.4-preview" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="WorkflowSystem\ViewModels\" />
+	</ItemGroup>
+
 </Project>

@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using VeloxDev.Core.WorkflowSystem;
 using VeloxDev.WPF.WorkflowSystem.ViewModels;
+using WpfApp1.ViewModels;
 
 namespace WpfApp1
 {
