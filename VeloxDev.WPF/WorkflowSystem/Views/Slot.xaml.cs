@@ -1,8 +1,6 @@
-﻿using System.Windows;
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
-using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.Views
 {
@@ -21,18 +19,18 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
         }
         private void _03_SlotMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            e.Handled = true;
             if (DataContext is IWorkflowSlot slot)
             {
-                slot.ConnectingCommand.Execute(DataContext);
-                e.Handled = true;
+                slot.ConnectingCommand.Execute(null);
             }
         }
         private void _04_SlotMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
+            e.Handled = true;
             if (DataContext is IWorkflowSlot slot)
             {
-                slot.ConnectedCommand.Execute(DataContext);
-                e.Handled = true;
+                slot.ConnectedCommand.Execute(null);        
             }
         }
     }

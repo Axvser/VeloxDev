@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
-using VeloxDev.WPF.WorkflowSystem.ViewModels;
 
 namespace VeloxDev.WPF.WorkflowSystem.Views
 {

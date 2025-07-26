@@ -1,5 +1,4 @@
-﻿using VeloxDev.Core.MVVM;
-using VeloxDev.Core.WorkflowSystem;
+﻿using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.WPF.WorkflowSystem.ViewModels
 {

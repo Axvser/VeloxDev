@@ -32,9 +32,9 @@ namespace VeloxDev.Core.Generator.Writers
             base.Initialize(classDeclaration, namedTypeSymbol);
             ReadAopConfig(classDeclaration);
             ReadMonoConfig(namedTypeSymbol);
+            ReadWorkflowConfig(namedTypeSymbol);
             ReadMVVMConfig(namedTypeSymbol);
             ReadCommandConfig(namedTypeSymbol);
-            ReadWorkflowConfig(namedTypeSymbol);
         }
 
         private void ReadWorkflowConfig(INamedTypeSymbol symbol)
@@ -217,7 +217,7 @@ namespace VeloxDev.Core.Generator.Writers
             {
                 list.Add($"{NAMESPACE_VELOX_AOP}.{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop");
             }
-            if (IsMVVM)
+            if (IsMVVM && WorkflowType == 0)
             {
                 list.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanging");
                 list.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanged");

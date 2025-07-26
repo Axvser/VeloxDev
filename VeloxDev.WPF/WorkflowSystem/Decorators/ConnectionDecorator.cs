@@ -144,23 +144,6 @@ namespace VeloxDev.WPF.WorkflowSystem.Decorators
             // 渲染箭头
             dc.DrawGeometry(Brushes.Red, null, arrowGeometry);
         }
-        public void InitializeWorkflow(IWorkflowLink context)
-        {
-            Binding bindingStartAnchor = new(nameof(StartAnchor))
-            {
-                Source = DataContextProperty,
-                Mode = BindingMode.TwoWay,
-                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
-            };
-            Binding bindingEndAnchor = new(nameof(EndAnchor))
-            {
-                Source = DataContextProperty,
-                Mode = BindingMode.TwoWay,
-                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
-            };
-            BindingOperations.SetBinding(this, StartAnchorProperty, bindingStartAnchor);
-            BindingOperations.SetBinding(this, EndAnchorProperty, bindingEndAnchor);
-        }
 
         partial void OnRender(DrawingContext dc, Anchor start, Anchor end);
         partial void OnStartAnchorChanged(Anchor oldValue, Anchor newValue);

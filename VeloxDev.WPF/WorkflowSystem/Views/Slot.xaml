@@ -6,6 +6,5 @@
              xmlns:local="clr-namespace:VeloxDev.WPF.WorkflowSystem.Views"
              xmlns:vm="clr-namespace:VeloxDev.WPF.WorkflowSystem.ViewModels"
              mc:Ignorable="d"
-             d:DesignHeight="450" d:DesignWidth="800"
-             d:DataContext="{d:DesignInstance Type=vm:SlotViewModel, IsDesignTimeCreatable=True}">
+             d:DesignHeight="450" d:DesignWidth="800">
 </UserControl>

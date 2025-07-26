@@ -1,5 +1,4 @@
-﻿using System.Windows;
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
@@ -32,14 +31,10 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
 
         private void _01_MouseMove(object sender, MouseEventArgs e)
         {
-            if (sender is UIElement element &&
-                DataContext is IWorkflowTree contextTree)
+            if (DataContext is IWorkflowTree contextTree)
             {
-                var point = Mouse.GetPosition(element);
-                if (contextTree.VirtualLink.Processor != null)
-                {
-                    contextTree.SetMouseCommand.Execute(new Anchor(point.X, point.Y));
-                }
+                var point = Mouse.GetPosition(this);
+                contextTree.SetMouseCommand.Execute(new Anchor(point.X, point.Y));
             }
         }
         private void _02_CreateNode(object sender, MouseEventArgs e)
@@ -50,7 +45,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
                 contextTree.CreateNodeCommand.Execute(
                     new ShowerNodeViewModel()
                     {
-                        Size = new(100, 100),
+                        Size = new(100, 200),
                         Anchor = new(position.X, position.Y)
                     });
             }

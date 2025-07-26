@@ -88,7 +88,7 @@ namespace VeloxDev.Core.WorkflowSystem
         {
             if (Parent?.Parent is IWorkflowTree tree)
             {
-                tree.SetSenderCommand.Execute(parameter);
+                tree.SetSenderCommand.Execute(this);
             }
             return Task.CompletedTask;
         }
@@ -97,7 +97,7 @@ namespace VeloxDev.Core.WorkflowSystem
         {
             if (Parent?.Parent is IWorkflowTree tree)
             {
-                tree.SetProcessorCommand.Execute(parameter);
+                tree.SetProcessorCommand.Execute(this);
             }
             return Task.CompletedTask;
         }
