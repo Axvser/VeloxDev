@@ -1,298 +1,244 @@
-﻿namespace WpfApp1.ViewModels;
-
-public partial class FactoryViewModel : VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree
+﻿namespace WpfApp1.ViewModels
 {
-    private void InitializeWorkflow()
+    public partial class FactoryViewModel : global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree
     {
-        nodes.CollectionChanged += OnNodesCollectionChanged;
-    }
-
-    private VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot? actualSender = null;
-
-    private readonly System.Collections.Concurrent.ConcurrentStack<Action> undos = [];
-
-    private VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink virtualLink = new VeloxDev.Core.WorkflowSystem.LinkContext() { Processor = new VeloxDev.Core.WorkflowSystem.SlotContext() };
-    private System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> nodes = [];
-    private System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink> links = [];
-    public bool isEnabled = true;
-    public string uID = string.Empty;
-    public string name = string.Empty;
-
-    public event System.ComponentModel.PropertyChangingEventHandler? PropertyChanging;
-    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-    public void OnPropertyChanging(string propertyName)
-    {
-        PropertyChanging?.Invoke(this, new System.ComponentModel.PropertyChangingEventArgs(propertyName));
-    }
-    public void OnPropertyChanged(string propertyName)
-    {
-        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
-    }
-
-    public VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink VirtualLink
-    {
-        get => virtualLink;
-        set
+        public FactoryViewModel()
         {
-            if (Equals(virtualLink, value)) return;
-            var old = virtualLink;
-            OnPropertyChanging(nameof(VirtualLink));
-            OnVirtualLinkChanging(old, value);
-            virtualLink = value;
-            OnVirtualLinkChanged(old, value);
-            OnPropertyChanged(nameof(VirtualLink));
+            InitializeWorkflow();
         }
-    }
-    partial void OnVirtualLinkChanging(VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink oldValue, VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink newValue);
-    partial void OnVirtualLinkChanged(VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink oldValue, VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink newValue);
-    public System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> Nodes
-    {
-        get => nodes;
-        set
+
+        private void InitializeWorkflow()
         {
-            if (Equals(nodes, value)) return;
-            var old = nodes;
-            OnPropertyChanging(nameof(Nodes));
-            OnNodesChanging(old, value);
-            nodes = value;
-            old.CollectionChanged -= OnNodesCollectionChanged;
-            value.CollectionChanged += OnNodesCollectionChanged;
-            foreach (VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node in value)
+            nodes.CollectionChanged += OnNodesCollectionChanged;
+        }
+
+        private readonly global::System.Collections.Concurrent.ConcurrentStack<global::System.Action> undos = new();
+
+        private global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink virtualLink =
+            new global::VeloxDev.Core.WorkflowSystem.LinkContext()
             {
-                node.Parent = this;
-            }
-            OnNodesChanged(old, value);
-            OnPropertyChanged(nameof(Nodes));
-        }
-    }
-    partial void OnNodesChanging(System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> oldValue, System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> newValue);
-    partial void OnNodesChanged(System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> oldValue, System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> newValue);
-    public System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink> Links
-    {
-        get => links;
-        set
-        {
-            if (Equals(links, value)) return;
-            var old = links;
-            OnPropertyChanging(nameof(Links));
-            OnLinksChanging(old, value);
-            links = value;
-            OnLinksChanged(old, value);
-            OnPropertyChanged(nameof(Links));
-        }
-    }
-    partial void OnLinksChanging(System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink> oldValue, System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink> newValue);
-    partial void OnLinksChanged(System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink> oldValue, System.Collections.ObjectModel.ObservableCollection<VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink> newValue);
-    public bool IsEnabled
-    {
-        get => isEnabled;
-        set
-        {
-            if (Equals(isEnabled, value)) return;
-            var old = isEnabled;
-            OnPropertyChanging(nameof(IsEnabled));
-            OnIsEnabledChanging(old, value);
-            isEnabled = value;
-            OnIsEnabledChanged(old, value);
-            OnPropertyChanged(nameof(IsEnabled));
-        }
-    }
-    partial void OnIsEnabledChanging(bool oldValue, bool newValue);
-    partial void OnIsEnabledChanged(bool oldValue, bool newValue);
-    public string UID
-    {
-        get => uID;
-        set
-        {
-            if (Equals(uID, value)) return;
-            var old = uID;
-            OnPropertyChanging(nameof(UID));
-            OnUIDChanging(old, value);
-            uID = value;
-            OnUIDChanged(old, value);
-            OnPropertyChanged(nameof(UID));
-        }
-    }
-    partial void OnUIDChanging(string oldValue, string newValue);
-    partial void OnUIDChanged(string oldValue, string newValue);
-    public string Name
-    {
-        get => name;
-        set
-        {
-            if (Equals(name, value)) return;
-            var old = name;
-            OnPropertyChanging(nameof(Name));
-            OnNameChanging(old, value);
-            name = value;
-            OnNameChanged(old, value);
-            OnPropertyChanged(nameof(Name));
-        }
-    }
-    partial void OnNameChanging(string oldValue, string newValue);
-    partial void OnNameChanged(string oldValue, string newValue);
+                Processor = new global::VeloxDev.Core.WorkflowSystem.SlotContext()
+            };
 
-    private void OnNodesCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
-    {
-        if (e.NewItems != null)
+        private global::System.Collections.ObjectModel.ObservableCollection<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> nodes = [];
+        private global::System.Collections.ObjectModel.ObservableCollection<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink> links = [];
+        private bool isEnabled = true;
+        private string uID = string.Empty;
+        private string name = string.Empty;
+
+        public event global::System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        public event global::System.ComponentModel.PropertyChangingEventHandler? PropertyChanging;
+
+        public void OnPropertyChanged(string propertyName) =>
+            PropertyChanged?.Invoke(this, new global::System.ComponentModel.PropertyChangedEventArgs(propertyName));
+
+        public void OnPropertyChanging(string propertyName) =>
+            PropertyChanging?.Invoke(this, new global::System.ComponentModel.PropertyChangingEventArgs(propertyName));
+
+        public global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink VirtualLink
         {
-            foreach (VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node in e.NewItems)
+            get => virtualLink;
+            set
             {
-                node.Parent = this;
-                OnNodeAdded(node);
+                if (global::System.Collections.Generic.EqualityComparer<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink>.Default.Equals(virtualLink, value))
+                    return;
+                OnPropertyChanging(nameof(VirtualLink));
+                virtualLink = value;
+                OnPropertyChanged(nameof(VirtualLink));
             }
         }
-        if (e.OldItems != null)
-        {
-            foreach (VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node in e.OldItems)
-            {
-                node.Parent = null;
-                OnNodeRemoved(node);
-            }
-        }
-    }
-    partial void OnNodeAdded(VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node);
-    partial void OnNodeRemoved(VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node);
 
-    private Task CreateNode(object? parameter, CancellationToken ct)
-    {
-        if (parameter is VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node)
+        public global::System.Collections.ObjectModel.ObservableCollection<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> Nodes
         {
-            nodes.Add(node);
-            PushUndo(() => { nodes.Remove(node); });
-        }
-        return Task.CompletedTask;
-    }
-    private Task SetMouse(object? parameter, CancellationToken ct)
-    {
-        if (parameter is VeloxDev.Core.WorkflowSystem.Anchor anchor && VirtualLink.Processor is not null)
-        {
-            VirtualLink.Processor.Anchor = anchor;
-        }
-        return Task.CompletedTask;
-    }
-    private Task SetSender(object? parameter, CancellationToken ct)
-    {
-        if (parameter is VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot)
-        {
-            actualSender = slot;
-            VirtualLink.Sender = slot;
-            VirtualLink.IsEnabled = true;
-        }
-        return Task.CompletedTask;
-    }
-    private Task SetProcessor(object? parameter, CancellationToken ct)
-    {
-        if (parameter is VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot && actualSender != null)
-        {
-            // 检查是否允许连接
-            if (actualSender.Capacity.HasFlag(VeloxDev.Core.Interfaces.WorkflowSystem.SlotCapacity.Sender) &&
-                slot.Capacity.HasFlag(VeloxDev.Core.Interfaces.WorkflowSystem.SlotCapacity.Processor))
+            get => nodes;
+            set
             {
-                // 创建新连接
-                var newLink = new VeloxDev.Core.WorkflowSystem.LinkContext
+                if (global::System.Collections.Generic.EqualityComparer<global::System.Collections.ObjectModel.ObservableCollection<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode>>.Default.Equals(nodes, value))
+                    return;
+
+                var old = nodes;
+                OnPropertyChanging(nameof(Nodes));
+                nodes = value;
+                old.CollectionChanged -= OnNodesCollectionChanged;
+                value.CollectionChanged += OnNodesCollectionChanged;
+
+                foreach (var node in value)
                 {
-                    Sender = actualSender,
-                    Processor = slot,
-                    IsEnabled = true
-                };
+                    node.Parent = this;
+                }
 
-                // 更新连接关系
-                links.Add(newLink);
-                actualSender.Targets.Add(slot.Parent!);
-                slot.Sources.Add(actualSender.Parent!);
+                OnPropertyChanged(nameof(Nodes));
+            }
+        }
 
-                var old_actualSender = actualSender;
+        public global::System.Collections.ObjectModel.ObservableCollection<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink> Links
+        {
+            get => links;
+            set
+            {
+                if (global::System.Collections.Generic.EqualityComparer<global::System.Collections.ObjectModel.ObservableCollection<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink>>.Default.Equals(links, value))
+                    return;
 
-                // 设置撤销操作
-                PushUndo(() =>
+                OnPropertyChanging(nameof(Links));
+                links = value;
+                OnPropertyChanged(nameof(Links));
+            }
+        }
+
+        public bool IsEnabled
+        {
+            get => isEnabled;
+            set
+            {
+                if (global::System.Collections.Generic.EqualityComparer<bool>.Default.Equals(isEnabled, value))
+                    return;
+
+                OnPropertyChanging(nameof(IsEnabled));
+                isEnabled = value;
+                OnPropertyChanged(nameof(IsEnabled));
+            }
+        }
+
+        public string UID
+        {
+            get => uID;
+            set
+            {
+                if (global::System.Collections.Generic.EqualityComparer<string>.Default.Equals(uID, value))
+                    return;
+
+                OnPropertyChanging(nameof(UID));
+                uID = value;
+                OnPropertyChanged(nameof(UID));
+            }
+        }
+
+        public string Name
+        {
+            get => name;
+            set
+            {
+                if (global::System.Collections.Generic.EqualityComparer<string>.Default.Equals(name, value))
+                    return;
+
+                OnPropertyChanging(nameof(Name));
+                name = value;
+                OnPropertyChanged(nameof(Name));
+            }
+        }
+
+        public bool CanUndo => !undos.IsEmpty;
+
+        private void OnNodesCollectionChanged(object? sender, global::System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (e.NewItems != null)
+            {
+                foreach (global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node in e.NewItems)
                 {
-                    slot.Sources.Remove(old_actualSender.Parent!);
-                    old_actualSender.Targets.Remove(slot.Parent!);
-                    links.Remove(newLink);
-                });
+                    node.Parent = this;
+                }
             }
 
-            // 重置连接状态
-            actualSender = null;
-            VirtualLink.Sender = null;
-            VirtualLink.IsEnabled = false;
+            if (e.OldItems != null)
+            {
+                foreach (global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node in e.OldItems)
+                {
+                    node.Parent = null;
+                }
+            }
         }
-        return Task.CompletedTask;
-    }
-    private Task Undo(object? parameter, CancellationToken ct)
-    {
-        if (undos.TryPop(out var recipient))
-        {
-            recipient.Invoke();
-        }
-        return Task.CompletedTask;
-    }
 
-    private VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_CreateNodeCommand = null;
-    public VeloxDev.Core.Interfaces.MVVM.IVeloxCommand CreateNodeCommand
-    {
-        get
+        private global::System.Threading.Tasks.Task CreateNode(object? parameter, global::System.Threading.CancellationToken ct)
         {
-            _buffer_CreateNodeCommand ??= new VeloxDev.Core.MVVM.VeloxCommand(
+            if (parameter is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node)
+            {
+                nodes.Add(node);
+                PushUndo(() => nodes.Remove(node));
+            }
+            return global::System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        private global::System.Threading.Tasks.Task SetMouse(object? parameter, global::System.Threading.CancellationToken ct)
+        {
+            if (parameter is global::VeloxDev.Core.WorkflowSystem.Anchor anchor && VirtualLink.Processor != null)
+            {
+                VirtualLink.Processor.Anchor = anchor;
+            }
+            return global::System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        private global::System.Threading.Tasks.Task SetSender(object? parameter, global::System.Threading.CancellationToken ct)
+        {
+            if (parameter is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot)
+            {
+
+            }
+            return global::System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        private global::System.Threading.Tasks.Task SetProcessor(object? parameter, global::System.Threading.CancellationToken ct)
+        {
+            if (parameter is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot processorSlot &&
+                VirtualLink.Sender is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot senderSlot)
+            {
+
+            }
+            return global::System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        public void PushUndo(global::System.Action undoAction)
+        {
+            undos.Push(undoAction);
+            OnPropertyChanged(nameof(CanUndo));
+        }
+
+        private global::System.Threading.Tasks.Task Undo(object? parameter, global::System.Threading.CancellationToken ct)
+        {
+            if (undos.TryPop(out var action))
+            {
+                action.Invoke();
+                OnPropertyChanged(nameof(CanUndo));
+            }
+            return global::System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        public global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink? FindLink(
+            global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode sender,
+            global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode processor)
+        {
+            return Links.FirstOrDefault(link =>
+                link.Sender?.Parent == sender &&
+                link.Processor?.Parent == processor);
+        }
+
+        private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_CreateNodeCommand;
+        public global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand CreateNodeCommand =>
+            _buffer_CreateNodeCommand ??= new global::VeloxDev.Core.MVVM.VeloxCommand(
                 executeAsync: CreateNode,
                 canExecute: _ => true);
-            return _buffer_CreateNodeCommand;
-        }
-    }
-    private VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_SetMouseCommand = null;
-    public VeloxDev.Core.Interfaces.MVVM.IVeloxCommand SetMouseCommand
-    {
-        get
-        {
-            _buffer_SetMouseCommand ??= new VeloxDev.Core.MVVM.VeloxCommand(
+
+        private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_SetMouseCommand;
+        public global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand SetMouseCommand =>
+            _buffer_SetMouseCommand ??= new global::VeloxDev.Core.MVVM.VeloxCommand(
                 executeAsync: SetMouse,
                 canExecute: _ => true);
-            return _buffer_SetMouseCommand;
-        }
-    }
-    private VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_SetSenderCommand = null;
-    public VeloxDev.Core.Interfaces.MVVM.IVeloxCommand SetSenderCommand
-    {
-        get
-        {
-            _buffer_SetSenderCommand ??= new VeloxDev.Core.MVVM.VeloxCommand(
+
+        private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_SetSenderCommand;
+        public global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand SetSenderCommand =>
+            _buffer_SetSenderCommand ??= new global::VeloxDev.Core.MVVM.VeloxCommand(
                 executeAsync: SetSender,
                 canExecute: _ => true);
-            return _buffer_SetSenderCommand;
-        }
-    }
-    private VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_SetProcessorCommand = null;
-    public VeloxDev.Core.Interfaces.MVVM.IVeloxCommand SetProcessorCommand
-    {
-        get
-        {
-            _buffer_SetProcessorCommand ??= new VeloxDev.Core.MVVM.VeloxCommand(
+
+        private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_SetProcessorCommand;
+        public global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand SetProcessorCommand =>
+            _buffer_SetProcessorCommand ??= new global::VeloxDev.Core.MVVM.VeloxCommand(
                 executeAsync: SetProcessor,
                 canExecute: _ => true);
-            return _buffer_SetProcessorCommand;
-        }
-    }
-    private VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_UndoCommand = null;
-    public VeloxDev.Core.Interfaces.MVVM.IVeloxCommand UndoCommand
-    {
-        get
-        {
-            _buffer_UndoCommand ??= new VeloxDev.Core.MVVM.VeloxCommand(
-                executeAsync: Undo,
-                canExecute: _ => true);
-            return _buffer_UndoCommand;
-        }
-    }
 
-    public void PushUndo(Action undo)
-    {
-        undos.Push(undo);
-    }
-    public VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink? FindLink(VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode sender, VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode processor)
-    {
-        return Links.FirstOrDefault(link =>
-            link.Sender?.Parent == sender &&
-            link.Processor?.Parent == processor);
+        private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_UndoCommand;
+        public global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand UndoCommand =>
+            _buffer_UndoCommand ??= new global::VeloxDev.Core.MVVM.VeloxCommand(
+                executeAsync: Undo,
+                canExecute: _ => CanUndo);
     }
 }

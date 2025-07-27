@@ -41,6 +41,47 @@
 
 > 使用完全一致的 API 在 WPF / Avalonia / MAUI 等框架中加载动画、实施AOP编程 …… 
 
+## Ⅰ MVVM Toolkit
+
+> 标记 [ VeloxProperty ] 与 [ VeloxCommand ] 以更快构建 ViewModel
+
+> 注意 : 这将生成 MVVM 接口实现，与其它 MVVM 工具混用可能导致生成内容重复
+
+```csharp
+    public sealed partial class SlotContext
+    {
+        [VeloxProperty]
+        private string name = string.Empty;
+
+        partial void OnNameChanged(string oldValue,string newValue)
+        {
+            DeleteCommand.Notify(); // 通知命令可执行态的改变
+        }
+
+        [VeloxCommand]
+        private Task Delete(object? parameter, CancellationToken ct)
+        {
+            // …… 此处执行你的命令逻辑
+            // 可在 VeloxCommand 的参数中选择是否手动验证命令可执行性
+            // 可在 VeloxCommand 的参数中选择排队执行或并发执行
+            return Task.CompletedTask;
+        }
+
+        private void Test()
+        {
+            var state = DeleteCommand.IsExecuting; // 查询是否有执行中的 Task
+            DeleteCommand.Execute(null); // 执行
+            DeleteCommand.Cancel();      // 取消当前执行中的 Task
+            DeleteCommand.Interrupt();   // 取消包含排队 Task 在内的所有 Task
+        }
+    }
+```
+
+## Ⅱ Workflow
+
+> 思维导图、流程控制、电路模拟 …… 等诸多场景都会要求有可拖拽的流程编辑器。VeloxDev 提供了纯 MVVM 模式的功能实现。（ 其实功能已经有了，但是这种系统还需要大量测试、优化，文档再等俩天，会有的 ）
+
+
 ## Ⅰ 过渡
 
 > WPF / Avalonia / MAUI 虽然各自使用不同的属性系统,但最终都会以标准CLR属性暴露给用户,基于这一特点,我们可以使用下述API来实现跨平台一致的动画创建

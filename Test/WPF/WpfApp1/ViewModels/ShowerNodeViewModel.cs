@@ -2,6 +2,10 @@
 
 public partial class ShowerNodeViewModel : VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode
 {
+    public ShowerNodeViewModel()
+    {
+        InitializeWorkflow();
+    }
     private void InitializeWorkflow()
     {
         slots.CollectionChanged += OnSlotsCollectionChanged;

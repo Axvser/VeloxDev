@@ -4,7 +4,7 @@ using VeloxDev.Core.MVVM;
 
 namespace VeloxDev.Core.WorkflowSystem
 {
-    public sealed partial class SlotContext : IWorkflowSlot
+    public partial class SlotContext : IWorkflowSlot
     {
         [VeloxProperty]
         private ObservableCollection<IWorkflowNode> targets = [];

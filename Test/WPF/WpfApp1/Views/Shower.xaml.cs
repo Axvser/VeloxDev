@@ -4,9 +4,9 @@ using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 
-namespace VeloxDev.WPF.WorkflowSystem.Views
+namespace WpfApp1.Views
 {
-    public partial class Shower : Canvas, IWorkflowView
+    public partial class Shower : Canvas
     {
         public Shower()
         {
@@ -28,7 +28,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
             if (DataContext is IWorkflowNode node)
             {
                 var point = Mouse.GetPosition(this);
-                var slot = new SlotContext() { Offset = new(point.X, point.Y), Size = new(30, 30) };
+                var slot = new ViewModels.SlotContext() { Offset = new(point.X, point.Y), Size = new(30, 30) };
                 node.CreateSlotCommand.Execute(slot);
                 e.Handled = true;
             }

@@ -257,18 +257,12 @@ public sealed partial class SlotContext : VeloxDev.Core.Interfaces.WorkflowSyste
     }
     private Task Connecting(object? parameter, CancellationToken ct)
     {
-        if (Parent?.Parent is VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree tree)
-        {
-            tree.SetSenderCommand.Execute(parameter);
-        }
+        Parent?.Parent?.SetSenderCommand.Execute(this);
         return Task.CompletedTask;
     }
     private Task Connected(object? parameter, CancellationToken ct)
     {
-        if (Parent?.Parent is VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree tree)
-        {
-            tree.SetProcessorCommand.Execute(parameter);
-        }
+        Parent?.Parent?.SetProcessorCommand.Execute(this);
         return Task.CompletedTask;
     }
     private Task Undo(object? parameter, CancellationToken ct)

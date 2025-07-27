@@ -1,12 +1,11 @@
 ﻿using System.Windows.Controls;
 using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
-using VeloxDev.Core.WorkflowSystem;
-using VeloxDev.WPF.WorkflowSystem.ViewModels;
+using WpfApp1.ViewModels;
 
-namespace VeloxDev.WPF.WorkflowSystem.Views
+namespace WpfApp1.Views
 {
-    public partial class Factory : Canvas, IWorkflowView
+    public partial class Factory : Canvas
     {
         public Factory()
         {
@@ -34,7 +33,7 @@ namespace VeloxDev.WPF.WorkflowSystem.Views
             if (DataContext is IWorkflowTree contextTree)
             {
                 var point = Mouse.GetPosition(this);
-                contextTree.SetMouseCommand.Execute(new Anchor(point.X, point.Y));
+                contextTree.SetMouseCommand.Execute(new VeloxDev.Core.WorkflowSystem.Anchor(point.X, point.Y));
             }
         }
         private void _02_CreateNode(object sender, MouseEventArgs e)

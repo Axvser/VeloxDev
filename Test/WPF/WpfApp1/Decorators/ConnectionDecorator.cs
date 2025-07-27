@@ -1,11 +1,9 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Media;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 
-namespace VeloxDev.WPF.WorkflowSystem.Decorators
+namespace WpfApp1.Decorators
 {
     public partial class ConnectionDecorator : Control
     {

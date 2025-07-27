@@ -3,7 +3,7 @@ using VeloxDev.Core.MVVM;
 
 namespace VeloxDev.Core.WorkflowSystem
 {
-    public sealed partial class LinkContext : IWorkflowLink
+    public partial class LinkContext : IWorkflowLink
     {
         [VeloxProperty]
         private IWorkflowSlot? sender = null;

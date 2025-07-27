@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\VeloxDev.WPF\VeloxDev.WPF.csproj" />
+    <PackageReference Include="VeloxDev.Core" Version="1.8.730-preview" />
   </ItemGroup>
 
 </Project>
