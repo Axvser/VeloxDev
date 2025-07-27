@@ -1,4 +1,6 @@
-﻿namespace WpfApp1.ViewModels
+﻿using System.Windows.Input;
+
+namespace WpfApp1.ViewModels
 {
     public partial class FactoryViewModel : global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree
     {
@@ -171,19 +173,181 @@
         {
             if (parameter is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot)
             {
+                // 强制状态修复（关键修改）
+                if (slot.State == global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.PreviewSender)
+                {
+                    // 检查是否真实存在虚拟连接
+                    if (VirtualLink.Sender != slot)
+                    {
+                        slot.State = global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
+                    }
+                }
 
+                if (!slot.Capacity.HasFlag(global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotCapacity.Sender))
+                    return global::System.Threading.Tasks.Task.CompletedTask;
+
+                // 原子化状态处理（关键修改）
+                switch (slot.State)
+                {
+                    case global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy:
+                        // 新连接：确保清理旧连接
+                        RemoveAllSlotConnections(slot);
+                        slot.State = global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.PreviewSender;
+                        VirtualLink.Sender = slot;
+                        break;
+
+                    case global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender:
+                        // 点击已激活发送者：转为就绪态
+                        RemoveAllSlotConnections(slot);
+                        slot.State = global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
+                        VirtualLink.Sender = null;
+                        break;
+
+                    case global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Processor:
+                        // 处理器转发送者：先清理再转换
+                        RemoveAllSlotConnections(slot);
+                        slot.State = global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.PreviewSender;
+                        VirtualLink.Sender = slot;
+                        break;
+
+                    case global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.PreviewSender:
+                        // 保持状态等待连接完成
+                        break;
+                }
+
+                // 立即刷新UI状态
+                OnPropertyChanged(nameof(VirtualLink));
+                CommandManager.InvalidateRequerySuggested();
             }
             return global::System.Threading.Tasks.Task.CompletedTask;
         }
 
         private global::System.Threading.Tasks.Task SetProcessor(object? parameter, global::System.Threading.CancellationToken ct)
         {
-            if (parameter is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot processorSlot &&
-                VirtualLink.Sender is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot senderSlot)
+            if (VirtualLink.Sender is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot sender &&
+                parameter is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot processor)
             {
+                // 最终状态保障（关键修改）
+                try
+                {
+                    // 验证连接有效性
+                    if (sender.Parent == processor.Parent ||
+                        !processor.Capacity.HasFlag(global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotCapacity.Processor))
+                    {
+                        sender.State = global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
+                        ResetConnection();
+                        return global::System.Threading.Tasks.Task.CompletedTask;
+                    }
 
+                    // 清理处理器现有连接
+                    RemoveAllSlotConnections(processor);
+
+                    // 检查重复连接
+                    var existingLink = Links.FirstOrDefault(l =>
+                        l.Sender?.Parent == sender.Parent &&
+                        l.Processor?.Parent == processor.Parent);
+
+                    if (existingLink != null)
+                    {
+                        Links.Remove(existingLink);
+                        PushUndo(() => Links.Add(existingLink));
+                    }
+
+                    // 创建新连接
+                    var newLink = new global::VeloxDev.Core.WorkflowSystem.LinkContext
+                    {
+                        Sender = sender,
+                        Processor = processor
+                    };
+                    Links.Add(newLink);
+                    sender.Targets.Add(processor.Parent!);
+                    processor.Sources.Add(sender.Parent!);
+
+                    // 更新状态
+                    sender.State = global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender;
+                    processor.State = global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Processor;
+
+                    // 撤销支持
+                    PushUndo(() => {
+                        Links.Remove(newLink);
+                        sender.Targets.Remove(processor.Parent!);
+                        processor.Sources.Remove(sender.Parent!);
+                        sender.State = Links.Any(l => l.Sender == sender)
+                            ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender
+                            : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
+                        processor.State = Links.Any(l => l.Processor == processor)
+                            ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Processor
+                            : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
+                    });
+                }
+                finally
+                {
+                    // 确保最终清除虚拟连接
+                    ResetConnection();
+                }
             }
             return global::System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        private void RemoveAllSlotConnections(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot)
+        {
+            var affectedLinks = Links.Where(l => l.Sender == slot || l.Processor == slot).ToList();
+            if (affectedLinks.Count == 0) return;
+
+            var undoActions = new List<global::System.Action>();
+            foreach (var link in affectedLinks)
+            {
+                link.Sender?.Targets.Remove(link.Processor?.Parent!);
+                link.Processor?.Sources.Remove(link.Sender?.Parent!);
+                Links.Remove(link);
+
+                undoActions.Add(() => {
+                    Links.Add(link);
+                    link.Sender?.Targets.Add(link.Processor?.Parent!);
+                    link.Processor?.Sources.Add(link.Sender?.Parent!);
+                });
+            }
+
+            PushUndo(() => {
+                foreach (var action in undoActions) action();
+                slot.State = affectedLinks.Any(l => l.Sender == slot)
+                    ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender
+                    : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
+            });
+
+            // 立即更新受影响插槽状态
+            foreach (var link in affectedLinks)
+            {
+                if (link.Sender != null && link.Sender != slot)
+                {
+                    link.Sender.State = Links.Any(l => l.Sender == link.Sender)
+                        ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender
+                        : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
+                }
+                if (link.Processor != null && link.Processor != slot)
+                {
+                    link.Processor.State = Links.Any(l => l.Processor == link.Processor)
+                        ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Processor
+                        : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
+                }
+            }
+        }
+        private void ResetConnection()
+        {
+            if (VirtualLink.Sender != null)
+            {
+                VirtualLink.Sender.State = Links.Any(l => l.Sender == VirtualLink.Sender)
+                    ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender
+                    : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
+                VirtualLink.Sender = null;
+            }
+
+            if (VirtualLink.Processor != null)
+            {
+                VirtualLink.Processor.Anchor = new global::VeloxDev.Core.WorkflowSystem.Anchor(-1000, -1000);
+            }
+
+            OnPropertyChanged(nameof(VirtualLink));
         }
 
         public void PushUndo(global::System.Action undoAction)

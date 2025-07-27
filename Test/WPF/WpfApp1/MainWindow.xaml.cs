@@ -12,12 +12,8 @@ namespace WpfApp1
         public MainWindow()
         {
             InitializeComponent();
-            var node1 = new ShowerNodeViewModel() { Anchor = new (250, 100, 2), Size = new(100, 200) };
-            var node2 = new ShowerNodeViewModel() { Anchor = new(100, 50, 1), Size = new(100, 200) };
-            var slot1 = new SlotContext() { Offset = new(10, 100), Size = new(30, 30), Capacity = VeloxDev.Core.Interfaces.WorkflowSystem.SlotCapacity.Universal };
-            var slot2 = new SlotContext() { Offset = new(70, 100), Size = new(30, 30), Capacity = VeloxDev.Core.Interfaces.WorkflowSystem.SlotCapacity.Universal };
-            node1.Slots.Add(slot1);
-            node2.Slots.Add(slot2);
+            var node1 = new ShowerNodeViewModel() { Anchor = new(100, 100, 2), Size = new(200, 200), Name = "节点1" };
+            var node2 = new ShowerNodeViewModel() { Anchor = new(400, 100, 1), Size = new(200, 200), Name = "节点2" };
             var tree = new FactoryViewModel()
             {
                 Nodes = [node1, node2]

@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="MinimalisticWPF.Controls" Version="2.2.0" />
     <PackageReference Include="VeloxDev.Core" Version="1.8.730-preview" />
   </ItemGroup>
 

@@ -36,6 +36,7 @@ namespace WpfApp1.Views
                 contextTree.SetMouseCommand.Execute(new VeloxDev.Core.WorkflowSystem.Anchor(point.X, point.Y));
             }
         }
+        private static int counter = 3;
         private void _02_CreateNode(object sender, MouseEventArgs e)
         {
             if (DataContext is IWorkflowTree contextTree)
@@ -44,8 +45,9 @@ namespace WpfApp1.Views
                 contextTree.CreateNodeCommand.Execute(
                     new ShowerNodeViewModel()
                     {
-                        Size = new(100, 200),
-                        Anchor = new(position.X, position.Y)
+                        Size = new(200, 200),
+                        Anchor = new(position.X, position.Y),
+                        Name = $"节点{counter++}"
                     });
             }
         }
