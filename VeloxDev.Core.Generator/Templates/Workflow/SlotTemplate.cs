@@ -249,7 +249,7 @@ public static class SlotTemplate
     {
         if (Parent?.Parent is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree tree)
         {
-            tree.SetSenderCommand.Execute(parameter);
+            tree.SetSenderCommand.Execute(this);
         }
         return global::System.Threading.Tasks.Task.CompletedTask;
     }
@@ -257,7 +257,7 @@ public static class SlotTemplate
     {
         if (Parent?.Parent is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree tree)
         {
-            tree.SetProcessorCommand.Execute(parameter);
+            tree.SetProcessorCommand.Execute(this);
         }
         return global::System.Threading.Tasks.Task.CompletedTask;
     }

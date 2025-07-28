@@ -19,16 +19,16 @@ namespace WpfApp2.Views
             MouseRightButtonDown += _05_Node_AddSlot;
             MouseMove += _01_Node_MouseMove;
             MouseLeftButtonDown += _02_Node_MouseDown;
-            MouseLeftButtonUp += _03_Node_MouseUp; 
+            MouseLeftButtonUp += _03_Node_MouseUp;
             MouseLeave += _04_Node_MouseLeave;
             MouseWheel += Shower_MouseWheel;
         }
 
         private void Shower_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if(DataContext is IWorkflowNode node)
+            if (DataContext is IWorkflowNode node)
             {
-                node.ExecuteCommand.Execute(null);
+                node.BroadcastCommand.Execute(null);
             }
         }
 

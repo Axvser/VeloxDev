@@ -264,7 +264,8 @@
                     processor.State = global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Processor;
 
                     // 撤销支持
-                    PushUndo(() => {
+                    PushUndo(() =>
+                    {
                         Links.Remove(newLink);
                         sender.Targets.Remove(processor.Parent!);
                         processor.Sources.Remove(sender.Parent!);
@@ -297,14 +298,16 @@
                 link.Processor?.Sources.Remove(link.Sender?.Parent!);
                 Links.Remove(link);
 
-                undoActions.Add(() => {
+                undoActions.Add(() =>
+                {
                     Links.Add(link);
                     link.Sender?.Targets.Add(link.Processor?.Parent!);
                     link.Processor?.Sources.Add(link.Sender?.Parent!);
                 });
             }
 
-            PushUndo(() => {
+            PushUndo(() =>
+            {
                 foreach (var action in undoActions) action();
                 slot.State = affectedLinks.Any(l => l.Sender == slot)
                     ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender

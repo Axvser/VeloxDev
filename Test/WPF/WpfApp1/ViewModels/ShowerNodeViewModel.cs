@@ -184,7 +184,7 @@ public partial class ShowerNodeViewModel : VeloxDev.Core.Interfaces.WorkflowSyst
 
     public void Execute(object? parameter)
     {
-        MessageBox.Show(Name+"的任务已执行");
+        MessageBox.Show(Name + "的任务已执行");
         BroadcastCommand.Execute(parameter);
         OnExecute(parameter);
     }
