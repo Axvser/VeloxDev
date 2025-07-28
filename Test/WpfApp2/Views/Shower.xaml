@@ -13,7 +13,7 @@
 
 
 
-    <mnv:FlowingCard Width="200" Height="200">
+    <mnv:FlowingCard Width="200" Height="200" x:Name="card">
         <TextBlock HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="20" Foreground="White" Margin="0,10,0,0" Text="{Binding Name}"/> 
     </mnv:FlowingCard>
 

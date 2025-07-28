@@ -30,7 +30,8 @@
             <DataTemplate>
                 <local:Shower Width="{Binding Size.Width}"
                     Height="{Binding Size.Height}"
-                    IsEnabled="{Binding IsEnabled}"/>
+                    IsEnabled="{Binding IsEnabled}"
+                    IsWorking="{Binding IsWorking}"/>
             </DataTemplate>
         </ItemsControl.ItemTemplate>
     </ItemsControl>

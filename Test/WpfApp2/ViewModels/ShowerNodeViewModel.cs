@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace WpfApp2.ViewModels;
@@ -8,9 +9,14 @@ public partial class ShowerNodeViewModel
 {
     public ShowerNodeViewModel() { InitializeWorkflow(); }
 
-    partial void OnExecute(object? parameter)
+    [VeloxProperty]
+    private bool isWorking = false;
+
+    async partial void OnExecute(object? parameter)
     {
-        MessageBox.Show(Name);
+        IsWorking = true;
+        await Task.Delay(3000);
         BroadcastCommand.Execute(null);
+        IsWorking = false;
     }
 }

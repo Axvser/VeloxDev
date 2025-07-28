@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\VeloxDev.Core\VeloxDev.Core.csproj" />
+    <ProjectReference Include="..\..\VeloxDev.WPF\VeloxDev.WPF.csproj" />
   </ItemGroup>
 
   <ItemGroup>

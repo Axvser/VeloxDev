@@ -1,7 +1,9 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using VeloxDev.Core.TransitionSystem;
 using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.WPF.TransitionSystem;
 
 namespace WpfApp2.Decorators
 {
@@ -140,7 +142,7 @@ namespace WpfApp2.Decorators
             }
 
             // 渲染箭头
-            dc.DrawGeometry(Brushes.Red, null, arrowGeometry);
+            dc.DrawGeometry(Brushes.Violet, null, arrowGeometry);
         }
 
         partial void OnRender(DrawingContext dc, Anchor start, Anchor end);

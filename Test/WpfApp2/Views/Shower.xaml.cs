@@ -14,6 +14,20 @@ namespace WpfApp2.Views
             InitializeWorkflow();
         }
 
+        public bool IsWorking
+        {
+            get { return (bool)GetValue(IsWorkingProperty); }
+            set { SetValue(IsWorkingProperty, value); }
+        }
+        public static readonly DependencyProperty IsWorkingProperty =
+            DependencyProperty.Register("IsWorking", typeof(bool), typeof(Shower), new PropertyMetadata(false, (s, e) =>
+            {
+                if (s is Shower shower)
+                {
+                    shower.card.CanMonoBehaviour = (bool)e.NewValue;
+                }
+            }));
+
         public void InitializeWorkflow()
         {
             MouseRightButtonDown += _05_Node_AddSlot;
