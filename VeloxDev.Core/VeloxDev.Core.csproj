@@ -33,7 +33,7 @@
 	
 	<ItemGroup>
 	  <PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
-	  <PackageReference Include="VeloxDev.Core.Generator" Version="1.9.820" />
+	  <PackageReference Include="VeloxDev.Core.Generator" Version="1.9.900" />
 	</ItemGroup>
 
 </Project>

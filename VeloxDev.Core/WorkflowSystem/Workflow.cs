@@ -5,7 +5,11 @@
         public sealed class Context
         {
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class TreeAttribute : Attribute;
+            public sealed class TreeAttribute(Type? slotType = default, Type? linkType = default) : Attribute
+            {
+                public Type? SlotType { get; } = slotType;
+                public Type? LinkType { get; } = linkType;
+            }
 
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
             public sealed class NodeAttribute : Attribute;

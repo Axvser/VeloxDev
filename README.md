@@ -77,12 +77,180 @@
     }
 ```
 
+---
+
 ## Ⅱ Workflow
 
-> 思维导图、流程控制、电路模拟 …… 等诸多场景都会要求有可拖拽的流程编辑器。VeloxDev 提供了纯 MVVM 模式的功能实现。（ 其实功能已经有了，但是这种系统还需要大量测试、优化，文档再等俩天，会有的 ）
+> 思维导图、流程控制、电路模拟 …… 等诸多场景都会要求有可拖拽的流程编辑器。VeloxDev 提供了纯 MVVM 模式的功能实现，并且支持源代码生成。
 
+## 核心接口
 
-## Ⅰ 过渡
+### IWorkflowContext
+
+所有工作流元素的基接口，继承自 `INotifyPropertyChanging` 和 `INotifyPropertyChanged`。
+
+**属性：**
+- `IsEnabled` - 控制元素是否可用
+- `UID` - 元素的唯一标识符
+- `Name` - 元素的显示名称
+- `UndoCommand` - 撤销操作的命令
+
+### IWorkflowLink
+
+表示工作流中节点之间的连接线，继承自 `IWorkflowContext`。
+
+**属性：**
+- `Sender` - 连接的发送端槽位
+- `Processor` - 连接的接收端槽位
+- `DeleteCommand` - 删除连接的命令
+
+### IWorkflowNode
+
+表示工作流中的节点，继承自 `IWorkflowContext`。
+
+**属性：**
+- `Parent` - 所属的工作流树
+- `Anchor` - 节点的位置坐标
+- `Size` - 节点的大小
+- `Slots` - 节点包含的所有槽位集合
+
+**方法：**
+- `Execute` - 执行节点逻辑
+
+**命令：**
+- `CreateSlotCommand` - 创建新槽位的命令
+- `DeleteCommand` - 删除节点的命令
+- `BroadcastCommand` - 广播消息的命令
+- `ExecuteCommand` - 执行节点的命令
+
+### IWorkflowSlot
+
+表示节点上的连接点，继承自 `IWorkflowContext`。
+
+**枚举：**
+- `SlotCapacity` - 槽位能力标志
+  - `None` - 无能力
+  - `Processor` - 可接收连接
+  - `Sender` - 可发送连接
+  - `Universal` - 可发送和接收连接
+- `SlotState` - 槽位状态
+  - `StandBy` - 待机状态
+  - `PreviewProcessor` - 预览接收状态
+  - `PreviewSender` - 预览发送状态
+  - `Processor` - 接收状态
+  - `Sender` - 发送状态
+
+**属性：**
+- `Targets` - 此槽位连接的目标节点集合
+- `Sources` - 此槽位连接的源节点集合
+- `Parent` - 所属的节点
+- `Capacity` - 槽位能力
+- `State` - 当前状态
+- `Anchor` - 槽位位置
+- `Offset` - 相对于节点的偏移量
+- `Size` - 槽位大小
+
+**命令：**
+- `DeleteCommand` - 删除槽位的命令
+- `ConnectingCommand` - 开始连接时的命令
+- `ConnectedCommand` - 完成连接时的命令
+
+### IWorkflowTree
+
+表示整个工作流树，继承自 `IWorkflowContext`。
+
+**属性：**
+- `VirtualLink` - 虚拟连接线（用于预览）
+- `Nodes` - 所有节点集合
+- `Links` - 所有连接线集合
+
+**方法：**
+- `PushUndo` - 压入撤销操作
+- `FindLink` - 查找两个节点之间的连接线
+
+**命令：**
+- `CreateNodeCommand` - 创建新节点的命令
+- `SetMouseCommand` - 设置鼠标状态命令
+- `SetSenderCommand` - 设置发送端命令
+- `SetProcessorCommand` - 设置接收端命令
+
+### IWorkflowView
+
+工作流视图接口，用于初始化工作流。
+
+**方法：**
+- `InitializeWorkflow` - 初始化工作流
+
+## 核心实现类
+
+### Anchor
+
+表示二维坐标系中的锚点，包含位置和层级信息。
+
+**属性：**
+- `Left` - X坐标
+- `Top` - Y坐标
+- `Layer` - 层级
+
+**运算符重载：**
+- `+`、`-` - 支持锚点加减运算
+- `==`、`!=` - 支持相等性比较
+
+### Size
+
+表示二维尺寸。
+
+**属性：**
+- `Width` - 宽度
+- `Height` - 高度
+
+**运算符重载：**
+- `+`、`-` - 支持尺寸加减运算
+- `==`、`!=` - 支持相等性比较
+
+### LinkContext
+
+`IWorkflowLink` 的默认实现类，处理连接线的逻辑。
+
+**特性：**
+- 自动处理 `Sender` 和 `Processor` 变更时的 `IsEnabled` 状态更新
+- 实现删除连接和撤销操作
+
+### SlotContext
+
+`IWorkflowSlot` 的默认实现类，处理槽位的逻辑。
+
+**特性：**
+- 实现槽位删除时的连接清理
+- 处理连接建立过程
+- 支持撤销操作
+
+## 源代码生成特性
+
+`Workflow.Context` 命名空间下的特性用于支持源代码生成：
+
+### TreeAttribute
+- 应用于工作流树类
+- 参数：
+  - `slotType` - 自定义槽位类型
+  - `linkType` - 自定义连接线类型
+
+### NodeAttribute
+- 应用于工作流节点类
+
+### SlotAttribute
+- 应用于工作流槽位类
+
+### LinkAttribute
+- 应用于工作流连接线类
+
+这些特性允许开发者为工作流元素提供自定义实现，同时保持与核心框架的兼容性。
+
+后续计划会对WPF/Avalonia等.NET的UI框架做View的源代码生成，短期内会优先在github的Wiki上传一些WPF的开发示例，当然，目前的首要任务依然是优化ViewModel实现，在此期间一些破坏性更新可能发生，见谅 ~
+
+---
+
+## Ⅲ 过渡
 
 > WPF / Avalonia / MAUI 虽然各自使用不同的属性系统,但最终都会以标准CLR属性暴露给用户,基于这一特点,我们可以使用下述API来实现跨平台一致的动画创建
 
@@ -114,7 +282,7 @@
                 // Transition<Window>.Execute(this);
 ```
 
-## Ⅱ AOP编程
+## Ⅳ AOP编程
 
 > 对于公开可读写的属性或者公开可调用的方法,我们借助源生成器的力量即可对其动态代理,接着,这些属性或方法将能被我们拦截
 
@@ -184,7 +352,7 @@
     }
 ```
 
-## Ⅲ MonoBehaviour
+## Ⅴ MonoBehaviour
 
 > 自动创建、维护一个实时循环任务，可以修改其 FPS 以控制刷新频率，示例中的 MonoBehaviour 不传入参数代表使用默认的 60 FPS
 

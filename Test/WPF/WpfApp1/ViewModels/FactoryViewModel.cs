@@ -1,6 +1,4 @@
-﻿using System.Windows.Input;
-
-namespace WpfApp1.ViewModels
+﻿namespace WpfApp1.ViewModels
 {
     public partial class FactoryViewModel : global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree
     {
@@ -217,7 +215,6 @@ namespace WpfApp1.ViewModels
 
                 // 立即刷新UI状态
                 OnPropertyChanged(nameof(VirtualLink));
-                CommandManager.InvalidateRequerySuggested();
             }
             return global::System.Threading.Tasks.Task.CompletedTask;
         }
@@ -227,7 +224,6 @@ namespace WpfApp1.ViewModels
             if (VirtualLink.Sender is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot sender &&
                 parameter is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot processor)
             {
-                // 最终状态保障（关键修改）
                 try
                 {
                     // 验证连接有效性

@@ -24,6 +24,8 @@ namespace VeloxDev.Core.Generator.Writers
         public bool IsMono { get; set; } = false;
         public int MonoSpan { get; set; } = 17;
         public int WorkflowType { get; set; } = 0;
+        public string? SlotType { get; set; } = default;
+        public string? LinkType { get; set; } = default;
         List<Tuple<string, bool, bool, string>> CommandConfig { get; set; } = [];
         List<Analizer.MVVMPropertyFactory> MVVMProperties { get; set; } = [];
 
@@ -61,6 +63,8 @@ namespace VeloxDev.Core.Generator.Writers
                 else if (name == s1)
                 {
                     WorkflowType = 1;
+                    SlotType = (config.ConstructorArguments[0].Value as INamedTypeSymbol)?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    LinkType = (config.ConstructorArguments[1].Value as INamedTypeSymbol)?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     return;
                 }
                 else if (name == s4)
@@ -70,8 +74,7 @@ namespace VeloxDev.Core.Generator.Writers
                 }
                 else
                 {
-                    WorkflowType = 0;
-                    return;
+                    continue;
                 }
             }
         }
@@ -487,7 +490,7 @@ namespace VeloxDev.Core.Generator.Writers
         }
         private string GenerateWorkflow() => WorkflowType switch
         {
-            1 => TreeTemplate.Normal,
+            1 => TreeTemplate.FromTypeConfig(SlotType,LinkType),
             2 => NodeTemplate.Normal,
             3 => SlotTemplate.Normal,
             4 => LinkTemplate.Normal,
