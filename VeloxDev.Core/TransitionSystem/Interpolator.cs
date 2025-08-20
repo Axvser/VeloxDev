@@ -138,7 +138,7 @@ namespace VeloxDev.Core.TransitionSystem
                 return NativeInterpolators.TryAdd(type, interpolator);
             }
         }
-        public static bool RemoveInterpolator(Type type, out IValueInterpolator? interpolator)
+        public static bool UnregisterInterpolator(Type type, out IValueInterpolator? interpolator)
         {
             return NativeInterpolators.TryRemove(type, out interpolator);
         }

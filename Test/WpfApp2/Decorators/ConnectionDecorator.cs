@@ -12,6 +12,7 @@ namespace WpfApp2.Decorators
         public ConnectionDecorator()
         {
             IsHitTestVisible = false;
+            Panel.SetZIndex(this, -100);
         }
 
         public static readonly DependencyProperty StartAnchorProperty =
@@ -101,48 +102,6 @@ namespace WpfApp2.Decorators
             // 渲染连接线
             var pen = new Pen(Brushes.Cyan, 2);
             dc.DrawGeometry(null, pen, geometry);
-
-            // 计算曲线在终点的切线方向（导数）
-            // 贝塞尔曲线的导数公式：B'(t) = 3(1-t)^2(P1-P0) + 6(1-t)t(P2-P1) + 3t^2(P3-P2)
-            // 在终点处 t=1，所以 B'(1) = 3(P3-P2)
-            var tangentX = 3 * (EndAnchor.Left - cp2.X);
-            var tangentY = 3 * (EndAnchor.Top - cp2.Y);
-
-            // 归一化切线向量
-            var tangentLength = Math.Sqrt(tangentX * tangentX + tangentY * tangentY);
-            if (tangentLength > 0)
-            {
-                tangentX /= tangentLength;
-                tangentY /= tangentLength;
-            }
-
-            // 计算垂直于切线的向量（用于箭头两侧点）
-            var perpendicularX = -tangentY;
-            var perpendicularY = tangentX;
-
-            // 箭头大小
-            double arrowSize = 20;
-
-            // 计算箭头三个点
-            var arrowTip = new Point(EndAnchor.Left, EndAnchor.Top);
-            var arrowLeft = new Point(
-                EndAnchor.Left - arrowSize * tangentX + arrowSize * 0.5 * perpendicularX,
-                EndAnchor.Top - arrowSize * tangentY + arrowSize * 0.5 * perpendicularY);
-            var arrowRight = new Point(
-                EndAnchor.Left - arrowSize * tangentX - arrowSize * 0.5 * perpendicularX,
-                EndAnchor.Top - arrowSize * tangentY - arrowSize * 0.5 * perpendicularY);
-
-            // 绘制箭头
-            var arrowGeometry = new StreamGeometry();
-            using (var ctx = arrowGeometry.Open())
-            {
-                ctx.BeginFigure(arrowTip, true, true);
-                ctx.LineTo(arrowLeft, true, false);
-                ctx.LineTo(arrowRight, true, false);
-            }
-
-            // 渲染箭头
-            dc.DrawGeometry(Brushes.Violet, null, arrowGeometry);
         }
 
         partial void OnRender(DrawingContext dc, Anchor start, Anchor end);

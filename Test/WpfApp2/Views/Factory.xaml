@@ -37,7 +37,7 @@
     </ItemsControl>
 
     <!--【真实连接】-->
-    <ItemsControl ItemsSource="{Binding Links}">
+    <ItemsControl ItemsSource="{Binding Links}" Panel.ZIndex="-100">
         <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
                 <Canvas />
@@ -47,7 +47,8 @@
             <DataTemplate>
                 <dc:ConnectionDecorator StartAnchor="{Binding Sender.Anchor}"
                                         EndAnchor="{Binding Processor.Anchor}"
-                                        CanRender="{Binding IsEnabled}"/>
+                                        CanRender="{Binding IsEnabled}"
+                                        Panel.ZIndex="-100"/>
             </DataTemplate>
         </ItemsControl.ItemTemplate>
     </ItemsControl>
@@ -55,5 +56,6 @@
     <!--【虚拟连接】-->
     <dc:ConnectionDecorator StartAnchor="{Binding VirtualLink.Sender.Anchor}"
                             EndAnchor="{Binding VirtualLink.Processor.Anchor}"
-                            CanRender="{Binding VirtualLink.IsEnabled}"/>
+                            CanRender="{Binding VirtualLink.IsEnabled}"
+                            Panel.ZIndex="-100"/>
 </Canvas>

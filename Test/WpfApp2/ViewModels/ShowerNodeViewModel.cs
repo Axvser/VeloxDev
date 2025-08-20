@@ -1,5 +1,4 @@
-﻿using System.Windows;
-using VeloxDev.Core.MVVM;
+﻿using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace WpfApp2.ViewModels;
@@ -15,7 +14,7 @@ public partial class ShowerNodeViewModel
     async partial void OnExecute(object? parameter)
     {
         IsWorking = true;
-        await Task.Delay(3000);
+        await Task.Delay(3000); // 假设这个节点有个耗时3秒的工作
         BroadcastCommand.Execute(null);
         IsWorking = false;
     }

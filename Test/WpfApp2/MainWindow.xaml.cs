@@ -21,7 +21,7 @@ namespace WpfApp2
         {
             InitializeComponent();
             string json = File.ReadAllText(@"E:\\tree.json");
-            var result = JsonConvert.DeserializeObject<FactoryViewModel>(json, settings);
+            var result = JsonConvert.DeserializeObject<FactoryViewModel>(json, settings) ?? new FactoryViewModel();
             container.DataContext = result;
             fc = result;
         }

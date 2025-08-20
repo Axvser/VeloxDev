@@ -51,7 +51,7 @@ namespace WpfApp2.Views
             if (DataContext is IWorkflowNode node)
             {
                 var point = Mouse.GetPosition(this);
-                var slot = new ViewModels.SlotContext() { Offset = new(point.X, point.Y), Size = new(30, 30) };
+                var slot = new ViewModels.SlotContext() { Offset = new(point.X, point.Y), Size = new(10, 10) };
                 node.CreateSlotCommand.Execute(slot);
                 e.Handled = true;
             }
