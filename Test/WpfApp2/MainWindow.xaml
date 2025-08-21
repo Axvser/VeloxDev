@@ -8,5 +8,5 @@
         xmlns:vs="clr-namespace:WpfApp2.Views"
         Title="MainWindow" Height="450" Width="800"
         KeyDown="Window_KeyDown">
-    <vs:Factory x:Name="container" Background="#1e1e1e"/>
+    <vs:Factory x:Name="container" Background="#1e1e1e" Margin="43,35,0,0"/>
 </Window>
