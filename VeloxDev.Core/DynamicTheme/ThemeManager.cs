@@ -7,8 +7,10 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Core.DynamicTheme
 {
-    public static class ThemeManager
+    public class ThemeManager
     {
+        private static InterpolatorCore? _interpolator;
+
         // 按类型快速访问静态主题资源
         private static readonly Dictionary<Type, Dictionary<string, Dictionary<PropertyInfo, Dictionary<Type, object?>>>> _def_cache = new();
         // 按引用快速访问动态主题资源,每次做主题相关操作时优先清理activeThemes,而后再执行主题切换
@@ -17,6 +19,12 @@ namespace VeloxDev.Core.DynamicTheme
 
         // 当前主题类型,仅在完成主题切换后更新
         public static Type Current { get; internal set; } = typeof(Dark);
+
+        // 设定平台特定插值器
+        public static void SetPlatformInterpolator(InterpolatorCore interpolator)
+        {
+            _interpolator = interpolator;
+        }
 
         // 注册主题对象
         public static void Register(IThemeObject target)
@@ -40,6 +48,11 @@ namespace VeloxDev.Core.DynamicTheme
         public static async void Transition<T>(ITransitionEffectCore effect) where T : ITheme
         {
             CancleTransition();
+            if (typeof(T) == Current)
+            {
+                Jump<T>();
+                return;
+            }
             activeThemes.RemoveAll(x => !x.TryGetTarget(out _));
             var actives = activeThemes.Select(x => x.TryGetTarget(out var obj) ? obj : null).Where(x => x != null).ToArray();
             int steps = effect.FPS * (int)effect.Duration.TotalSeconds;
@@ -53,11 +66,11 @@ namespace VeloxDev.Core.DynamicTheme
                 themeObject?.ExecuteThemeChanging(Current, typeof(T));
             }
             await ExecuteTransition(CalculateFrames(actives, steps, effect.EaseCalculator), deltaTime);
+            Current = typeof(T);
             foreach (var themeObject in actives)
             {
                 themeObject?.ExecuteThemeChanged(Current, typeof(T));
             }
-            Current = typeof(T);
         }
 
         // 跳转到目标主题
@@ -189,7 +202,7 @@ namespace VeloxDev.Core.DynamicTheme
                             if (activeCache.TryGetValue(propEntry.Key, out var activePropCache) &&
                                 activePropCache.TryGetValue(propertyInfo, out var activeTypeCache))
                             {
-                                var targetEntry = activeTypeCache.FirstOrDefault(x => x.Key != ThemeManager.Current);
+                                var targetEntry = activeTypeCache.FirstOrDefault(x => x.Key != Current);
                                 if (targetEntry.Value != null)
                                 {
                                     targetValue = targetEntry.Value;
@@ -199,7 +212,7 @@ namespace VeloxDev.Core.DynamicTheme
 
                             if (!hasTargetValue)
                             {
-                                var targetEntry = typeValues.FirstOrDefault(x => x.Key != ThemeManager.Current);
+                                var targetEntry = typeValues.FirstOrDefault(x => x.Key != Current);
                                 if (targetEntry.Value != null)
                                 {
                                     targetValue = targetEntry.Value;
@@ -224,7 +237,7 @@ namespace VeloxDev.Core.DynamicTheme
 
                         try
                         {
-                            if (InterpolatorCore.TryGetInterpolator(propertyInfo.PropertyType, out var interpolator))
+                            if (_interpolator?.TryGetValue(propertyInfo.PropertyType, out var interpolator) ?? false)
                             {
                                 var interpolated = interpolator!.Interpolate(currentValue, targetValue, steps);
                                 for (int i = 0; i < steps && i < interpolated.Count; i++)

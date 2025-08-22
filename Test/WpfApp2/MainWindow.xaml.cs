@@ -2,8 +2,8 @@
 using System.IO;
 using System.Windows;
 using VeloxDev.Core.DynamicTheme;
-using VeloxDev.WPF.ThemeValueConverters;
-using VeloxDev.WPF.TransitionSystem;
+using VeloxDev.Core.TransitionSystem;
+using VeloxDev.WPF.PlatformAdapters;
 using WpfApp2.ViewModels;
 
 namespace WpfApp2
@@ -27,16 +27,22 @@ namespace WpfApp2
         {
             InitializeComponent();
             InitializeTheme();
+            ThemeManager.SetPlatformInterpolator(new Interpolator());
             string json = File.ReadAllText(@"E:\\tree.json");
             var result = JsonConvert.DeserializeObject<FactoryViewModel>(json, settings) ?? new FactoryViewModel();
             container.DataContext = result;
             fc = result;
         }
-
+        
         private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             fc?.UndoCommand.Execute(null);
-            ThemeManager.Transition<Light>(new TransitionEffect() { FPS = 60, Duration = TimeSpan.FromSeconds(3) });
+            ThemeManager.Transition<Light>(new TransitionEffect() 
+            { 
+                FPS = 120, 
+                Duration = TimeSpan.FromSeconds(3),
+                EaseCalculator = Eases.Circ.InOut }
+            );
         }
     }
 }

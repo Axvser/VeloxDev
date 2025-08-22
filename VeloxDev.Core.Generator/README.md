@@ -13,10 +13,11 @@
 - ⌈ VeloxProperty ⌋ 自动化ViewModel属性生成 ✔
 - ⌈ VeloxCommand ⌋ 自动化ViewModel命令生成 ✔
 - ⌈ Workflow - ViewModel ⌋ 拖拽式工作流构建器 - 视图模型 ✔
+- ⌈ ThemeManager ⌋ 特性标记式主题切换支持 ✔
 
 ## 补充生成支持
 
-> 以下生成依托具体框架对应的具体生成器
+> 以下生成依托具体框架对应的具体生成器,它们不是核心,仅随版本升级逐步支持
 
-- ⌈ Workflow - View ⌋ 拖拽式工作流构建器 -  视图 ✔
+- ⌈ Workflow - View ⌋ 拖拽式工作流构建器 -  视图 
 

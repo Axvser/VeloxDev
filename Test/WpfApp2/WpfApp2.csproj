@@ -15,10 +15,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\VeloxDev.Core\VeloxDev.Core.csproj" />
-		<ProjectReference Include="..\..\VeloxDev.WPF.Generator\VeloxDev.WPF.Generator.csproj" 
-						  OutputItemType="Analyzer"
-					      ReferenceOutputAssembly="false"/>
 		<ProjectReference Include="..\..\VeloxDev.WPF\VeloxDev.WPF.csproj" />
 	</ItemGroup>
 

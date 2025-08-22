@@ -142,5 +142,29 @@ namespace VeloxDev.Core.TransitionSystem
         {
             return NativeInterpolators.TryRemove(type, out interpolator);
         }
+        public bool TryGetValue(Type type, out IValueInterpolator? interpolator)
+        {
+            if (NativeInterpolators.TryGetValue(type, out interpolator))
+            {
+                return true;
+            }
+            interpolator = null;
+            return false;
+        }
+        public bool Register(Type type, IValueInterpolator interpolator)
+        {
+            if (NativeInterpolators.TryGetValue(type, out var oldValue))
+            {
+                return NativeInterpolators.TryUpdate(type, interpolator, oldValue);
+            }
+            else
+            {
+                return NativeInterpolators.TryAdd(type, interpolator);
+            }
+        }
+        public bool Unregister(Type type, out IValueInterpolator? interpolator)
+        {
+            return NativeInterpolators.TryRemove(type, out interpolator);
+        }
     }
 }
