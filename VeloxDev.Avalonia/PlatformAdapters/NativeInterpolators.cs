@@ -194,24 +194,26 @@ namespace VeloxDev.Avalonia.PlatformAdapters
 
             private static IBrush CreateBlendedBrush(IBrush start, IBrush end, double t)
             {
-                const int renderSize = 100; // 可根据需要调整
-
+                const int renderSize = 100;
                 var bmp = new RenderTargetBitmap(new PixelSize(renderSize, renderSize));
+
                 using (var ctx = bmp.CreateDrawingContext())
                 {
-                    // 先绘制start画刷（带透明度）
+                    // 绘制底层画刷
                     using (ctx.PushOpacity(1 - t))
-                    {
                         ctx.DrawRectangle(start, null, new Rect(0, 0, renderSize, renderSize));
-                    }
 
-                    // 再绘制end画刷（带透明度）
+                    // 绘制上层画刷
                     using (ctx.PushOpacity(t))
-                    {
                         ctx.DrawRectangle(end, null, new Rect(0, 0, renderSize, renderSize));
-                    }
                 }
-                return new ImageBrush(bmp);
+
+                return new ImageBrush(bmp)
+                {
+                    Stretch = Stretch.UniformToFill,
+                    AlignmentX = AlignmentX.Center,
+                    AlignmentY = AlignmentY.Center
+                };
             }
         }
         public class TransformInterpolator : IValueInterpolator

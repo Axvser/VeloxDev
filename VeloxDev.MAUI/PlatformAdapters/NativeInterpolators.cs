@@ -128,13 +128,15 @@ namespace VeloxDev.MAUI.PlatformAdapters
                     return result;
                 }
 
+                // 双纯色：使用 RGBA 插值
                 if (startBrush is SolidColorBrush startSolid && endBrush is SolidColorBrush endSolid)
                 {
                     result.AddRange(InterpolateSolidColors(startSolid, endSolid, steps));
                 }
+                // 复杂画刷：使用颜色 Alpha 混合
                 else
                 {
-                    result.AddRange(InterpolateWithAlphaBlending(startBrush, endBrush, steps));
+                    result.AddRange(InterpolateComplexBrushes(startBrush, endBrush, steps));
                 }
 
                 return result;
@@ -142,89 +144,159 @@ namespace VeloxDev.MAUI.PlatformAdapters
 
             private static IEnumerable<Brush> InterpolateSolidColors(SolidColorBrush start, SolidColorBrush end, int steps)
             {
-                Color startColor = start.Color ?? Colors.Transparent;
-                Color endColor = end.Color ?? startColor;
+                Color startColor = start.Color;
+                Color endColor = end.Color;
 
                 for (int i = 0; i < steps; i++)
                 {
-                    float ratio = (float)i / (steps - 1);
-
-                    var r = (byte)(startColor.Red * 255 + (endColor.Red * 255 - startColor.Red * 255) * ratio);
-                    var g = (byte)(startColor.Green * 255 + (endColor.Green * 255 - startColor.Green * 255) * ratio);
-                    var b = (byte)(startColor.Blue * 255 + (endColor.Blue * 255 - startColor.Blue * 255) * ratio);
-                    var a = (byte)(startColor.Alpha * 255 + (endColor.Alpha * 255 - startColor.Alpha * 255) * ratio);
-
-                    yield return new SolidColorBrush(Color.FromRgba(r, g, b, a));
+                    double ratio = (double)i / (steps - 1);
+                    var color = new Color(
+                        startColor.Red + (float)(ratio * (endColor.Red - startColor.Red)),
+                        startColor.Green + (float)(ratio * (endColor.Green - startColor.Green)),
+                        startColor.Blue + (float)(ratio * (endColor.Blue - startColor.Blue)),
+                        startColor.Alpha + (float)(ratio * (endColor.Alpha - startColor.Alpha))
+                    );
+                    yield return new SolidColorBrush(color);
                 }
             }
 
-            private static IEnumerable<Brush> InterpolateWithAlphaBlending(Brush start, Brush end, int steps)
+            private static IEnumerable<Brush> InterpolateComplexBrushes(Brush start, Brush end, int steps)
             {
-                // 提取主要颜色（对于渐变画刷取第一个渐变点）
-                Color startColor = GetPrimaryColor(start);
-                Color endColor = GetPrimaryColor(end);
-
                 for (int i = 0; i < steps; i++)
                 {
-                    float ratio = (float)i / (steps - 1);
-                    float alpha = startColor.Alpha + (endColor.Alpha - startColor.Alpha) * ratio;
+                    double ratio = (double)i / (steps - 1);
 
-                    // 保持结束画刷的类型和属性，只改变透明度
-                    var brush = CloneBrush(end);
-                    SetBrushAlpha(brush, alpha);
-
-                    yield return brush;
+                    // 创建混合画刷
+                    Brush blendedBrush = BlendBrushes(start, end, ratio);
+                    yield return blendedBrush;
                 }
             }
 
-            private static Color GetPrimaryColor(Brush brush)
+            private static Brush BlendBrushes(Brush brushA, Brush brushB, double ratio)
             {
-                return brush switch
+                // 纯色画刷混合
+                if (brushA is SolidColorBrush solidA && brushB is SolidColorBrush solidB)
                 {
-                    SolidColorBrush solid => solid.Color,
-                    LinearGradientBrush linear => linear.GradientStops.OrderBy(gs => gs.Offset).FirstOrDefault()?.Color ?? Colors.Transparent,
-                    RadialGradientBrush radial => radial.GradientStops.OrderBy(gs => gs.Offset).FirstOrDefault()?.Color ?? Colors.Transparent,
-                    _ => Colors.Transparent
-                };
-            }
-
-            private static Brush CloneBrush(Brush original)
-            {
-                return original switch
-                {
-                    SolidColorBrush solid => new SolidColorBrush(solid.Color),
-                    LinearGradientBrush linear => new LinearGradientBrush
-                    {
-                        StartPoint = linear.StartPoint,
-                        EndPoint = linear.EndPoint,
-                        GradientStops = [.. linear.GradientStops.Select(gs => new GradientStop(gs.Color, gs.Offset))]
-                    },
-                    RadialGradientBrush radial => new RadialGradientBrush
-                    {
-                        Center = radial.Center,
-                        Radius = radial.Radius,
-                        GradientStops = [.. radial.GradientStops.Select(gs => new GradientStop(gs.Color, gs.Offset))]
-                    },
-                    _ => new SolidColorBrush(Colors.Transparent)
-                };
-            }
-
-            private static void SetBrushAlpha(Brush brush, float alpha)
-            {
-                switch (brush)
-                {
-                    case SolidColorBrush solid:
-                        solid.Color = new Color(solid.Color.Red, solid.Color.Green, solid.Color.Blue, alpha);
-                        break;
-                    case GradientBrush gradient:
-                        foreach (var stop in gradient.GradientStops)
-                        {
-                            stop.Color = new Color(stop.Color.Red, stop.Color.Green, stop.Color.Blue, alpha * stop.Color.Alpha);
-                        }
-                        break;
+                    return BlendSolidColors(solidA, solidB, ratio);
                 }
+
+                // 渐变画刷混合
+                if (brushA is GradientBrush gradientA && brushB is GradientBrush gradientB)
+                {
+                    return BlendGradientBrushes(gradientA, gradientB, ratio);
+                }
+
+                // 默认回退：返回第一个画刷
+                return brushA;
+            }
+
+            private static SolidColorBrush BlendSolidColors(SolidColorBrush brushA, SolidColorBrush brushB, double ratio)
+            {
+                Color colorA = brushA.Color;
+                Color colorB = brushB.Color;
+
+                Color blendedColor = new(
+                    colorA.Red + (float)(ratio * (colorB.Red - colorA.Red)),
+                    colorA.Green + (float)(ratio * (colorB.Green - colorA.Green)),
+                    colorA.Blue + (float)(ratio * (colorB.Blue - colorA.Blue)),
+                    colorA.Alpha + (float)(ratio * (colorB.Alpha - colorA.Alpha))
+                );
+
+                return new SolidColorBrush(blendedColor);
+            }
+
+            private static GradientBrush BlendGradientBrushes(GradientBrush brushA, GradientBrush brushB, double ratio)
+            {
+                // 创建混合后的渐变画刷
+                GradientBrush blendedBrush = brushA switch
+                {
+                    LinearGradientBrush linearA when brushB is LinearGradientBrush linearB =>
+                        BlendLinearGradients(linearA, linearB, ratio),
+                    RadialGradientBrush radialA when brushB is RadialGradientBrush radialB =>
+                        BlendRadialGradients(radialA, radialB, ratio),
+                    _ => brushA
+                };
+
+                return blendedBrush;
+            }
+
+            private static LinearGradientBrush BlendLinearGradients(LinearGradientBrush brushA, LinearGradientBrush brushB, double ratio)
+            {
+                // 插值起点和终点
+                Point startPoint = new(
+                    brushA.StartPoint.X + ratio * (brushB.StartPoint.X - brushA.StartPoint.X),
+                    brushA.StartPoint.Y + ratio * (brushB.StartPoint.Y - brushA.StartPoint.Y));
+
+                Point endPoint = new(
+                    brushA.EndPoint.X + ratio * (brushB.EndPoint.X - brushA.EndPoint.X),
+                    brushA.EndPoint.Y + ratio * (brushB.EndPoint.Y - brushA.EndPoint.Y));
+
+                // 创建新画刷
+                var blendedBrush = new LinearGradientBrush
+                {
+                    StartPoint = startPoint,
+                    EndPoint = endPoint,
+                    GradientStops = BlendGradientStops(brushA.GradientStops, brushB.GradientStops, ratio)
+                };
+
+                return blendedBrush;
+            }
+
+            private static RadialGradientBrush BlendRadialGradients(RadialGradientBrush brushA, RadialGradientBrush brushB, double ratio)
+            {
+                // 插值圆心和半径
+                Point center = new(
+                    brushA.Center.X + ratio * (brushB.Center.X - brushA.Center.X),
+                    brushA.Center.Y + ratio * (brushB.Center.Y - brushA.Center.Y));
+
+                double radius = brushA.Radius + ratio * (brushB.Radius - brushA.Radius);
+
+                // 创建新画刷
+                var blendedBrush = new RadialGradientBrush
+                {
+                    Center = center,
+                    Radius = radius,
+                    GradientStops = BlendGradientStops(brushA.GradientStops, brushB.GradientStops, ratio)
+                };
+
+                return blendedBrush;
+            }
+
+            private static GradientStopCollection BlendGradientStops(GradientStopCollection stopsA, GradientStopCollection stopsB, double ratio)
+            {
+                var blendedStops = new GradientStopCollection();
+
+                // 确定最大停止点数
+                int maxStops = Math.Max(stopsA.Count, stopsB.Count);
+
+                for (int i = 0; i < maxStops; i++)
+                {
+                    GradientStop stopA = i < stopsA.Count ? stopsA[i] : stopsA.Last();
+                    GradientStop stopB = i < stopsB.Count ? stopsB[i] : stopsB.Last();
+
+                    // 插值偏移量
+                    float offset = (float)(stopA.Offset + ratio * (stopB.Offset - stopA.Offset));
+
+                    // 插值颜色
+                    Color color = BlendColors(stopA.Color, stopB.Color, ratio);
+
+                    blendedStops.Add(new GradientStop(color, offset));
+                }
+
+                return blendedStops;
+            }
+
+            private static Color BlendColors(Color colorA, Color colorB, double ratio)
+            {
+                return new Color(
+                    colorA.Red + (float)(ratio * (colorB.Red - colorA.Red)),
+                    colorA.Green + (float)(ratio * (colorB.Green - colorA.Green)),
+                    colorA.Blue + (float)(ratio * (colorB.Blue - colorA.Blue)),
+                    colorA.Alpha + (float)(ratio * (colorB.Alpha - colorA.Alpha))
+                );
             }
         }
+
         public class TransformInterpolator : IValueInterpolator
         {
             public List<object?> Interpolate(object? start, object? end, int steps)

@@ -1,7 +1,6 @@
 ﻿using Newtonsoft.Json;
 using System.IO;
 using System.Windows;
-using System.Windows.Media;
 using VeloxDev.Core.DynamicTheme;
 using VeloxDev.Core.Interfaces.DynamicTheme;
 using VeloxDev.WPF.PlatformAdapters;
@@ -14,7 +13,7 @@ namespace WpfApp2
 
     }
 
-    [ThemeConfig<ObjectConverter, Dark, Light, Glass>(nameof(Background), ["#1e1e1e"], ["#00ffff"], ["#ff0000"])]
+    [ThemeConfig<BrushConverter, Dark, Light, Glass>(nameof(Background), ["#1e1e1e"], ["#00ffff"], ["msrc"])]
     [ThemeConfig<ObjectConverter, Dark, Light, Glass>(nameof(Foreground), ["#ffffff"], ["#1e1e1e"], ["#AAFFFFFF"])]
     [ThemeConfig<ObjectConverter, Dark, Light, Glass>(nameof(Width), ["800"], ["400"], ["1000"])]
     public partial class MainWindow : Window
