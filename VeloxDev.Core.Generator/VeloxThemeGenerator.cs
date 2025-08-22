@@ -96,7 +96,7 @@ namespace VeloxDev.Core.Generator
                     var sourceCode = GenerateThemeConfigClass(symbol, attributes);
                     if (!string.IsNullOrEmpty(sourceCode))
                     {
-                        spc.AddSource($"{symbol.Name}_ThemeConfig.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
+                        spc.AddSource($"{symbol.Name}_{symbol.ContainingNamespace.ToString().Replace(".", "_")}_ThemeConfig.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
                     }
                 }
             });

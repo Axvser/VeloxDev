@@ -1,16 +1,22 @@
 ﻿using Newtonsoft.Json;
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using VeloxDev.Core.DynamicTheme;
-using VeloxDev.Core.TransitionSystem;
+using VeloxDev.Core.Interfaces.DynamicTheme;
 using VeloxDev.WPF.PlatformAdapters;
 using WpfApp2.ViewModels;
 
 namespace WpfApp2
 {
-    [ThemeConfig<ObjectConverter, Dark, Light>(nameof(Background), ["#1e1e1e"], ["#00ffff"])]
-    [ThemeConfig<ObjectConverter, Dark, Light>(nameof(Foreground), ["#ffffff"], ["#1e1e1e"])]
-    [ThemeConfig<ObjectConverter, Dark, Light>(nameof(Width), ["800"], ["400"])]
+    public class Glass : ITheme
+    {
+
+    }
+
+    [ThemeConfig<ObjectConverter, Dark, Light, Glass>(nameof(Background), ["#1e1e1e"], ["#00ffff"], ["#ff0000"])]
+    [ThemeConfig<ObjectConverter, Dark, Light, Glass>(nameof(Foreground), ["#ffffff"], ["#1e1e1e"], ["#AAFFFFFF"])]
+    [ThemeConfig<ObjectConverter, Dark, Light, Glass>(nameof(Width), ["800"], ["400"], ["1000"])]
     public partial class MainWindow : Window
     {
         private readonly JsonSerializerSettings settings = new()
@@ -33,16 +39,11 @@ namespace WpfApp2
             container.DataContext = result;
             fc = result;
         }
-        
+
         private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             fc?.UndoCommand.Execute(null);
-            ThemeManager.Transition<Light>(new TransitionEffect() 
-            { 
-                FPS = 120, 
-                Duration = TimeSpan.FromSeconds(3),
-                EaseCalculator = Eases.Circ.InOut }
-            );
+            ThemeManager.Transition<Glass>(new TransitionEffect() { FPS = 60, Duration = TimeSpan.FromSeconds(3) });
         }
     }
 }

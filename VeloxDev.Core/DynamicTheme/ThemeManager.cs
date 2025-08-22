@@ -11,22 +11,29 @@ namespace VeloxDev.Core.DynamicTheme
     {
         private static InterpolatorCore? _interpolator;
 
-        // 按类型快速访问静态主题资源
         private static readonly Dictionary<Type, Dictionary<string, Dictionary<PropertyInfo, Dictionary<Type, object?>>>> _def_cache = new();
-        // 按引用快速访问动态主题资源,每次做主题相关操作时优先清理activeThemes,而后再执行主题切换
         private static readonly ConditionalWeakTable<IThemeObject, Dictionary<string, Dictionary<PropertyInfo, Dictionary<Type, object?>>>> _act_cache = new();
         private static readonly List<WeakReference<IThemeObject>> activeThemes = [];
 
-        // 当前主题类型,仅在完成主题切换后更新
+        /// <summary>
+        /// The current theme in use and Default is <see cref="Dark"/>
+        /// </summary>
         public static Type Current { get; internal set; } = typeof(Dark);
 
-        // 设定平台特定插值器
-        public static void SetPlatformInterpolator(InterpolatorCore interpolator)
+        /// <summary>
+        /// Sets the platform-specific interpolator to be used by the system
+        /// <para>This method only needs to be called once</para>
+        /// </summary>
+        /// <param name="interpolator">It is usually the Interpolator provided by the adaptation layer of each platform</param>
+        public static void SetPlatformInterpolator<T>(T interpolator) where T : InterpolatorCore
         {
             _interpolator = interpolator;
         }
 
-        // 注册主题对象
+        /// <summary>
+        /// Declaration elements can use the theme system
+        /// </summary>
+        /// <param name="target">target element</param>
         public static void Register(IThemeObject target)
         {
             if (!_act_cache.TryGetValue(target, out _))
@@ -37,22 +44,30 @@ namespace VeloxDev.Core.DynamicTheme
             }
         }
 
-        // 注销主题对象
+        /// <summary>
+        /// Cancel the registration of elements for the theme system
+        /// </summary>
+        /// <param name="target">target element</param>
         public static void Unregister(IThemeObject target)
         {
             _act_cache.Remove(target);
             activeThemes.RemoveAll(x => x.TryGetTarget(out var obj) && obj == target);
         }
 
-        // 渐变至目标主题
-        public static async void Transition<T>(ITransitionEffectCore effect) where T : ITheme
+        /// <summary>
+        /// Change theme with transition effect
+        /// </summary>
+        /// <param name="themeType">target theme</param>
+        /// <param name="effect">transition effect</param>
+        public static async void Transition(Type themeType, ITransitionEffectCore effect)
         {
-            CancleTransition();
-            if (typeof(T) == Current)
+            var current = Current;
+            if (themeType == current || !typeof(ITheme).IsAssignableFrom(themeType))
             {
-                Jump<T>();
+                Debug.WriteLine("[ThemeManager] Invalid theme type, jumping to current theme.");
                 return;
             }
+            CancleTransition();
             activeThemes.RemoveAll(x => !x.TryGetTarget(out _));
             var actives = activeThemes.Select(x => x.TryGetTarget(out var obj) ? obj : null).Where(x => x != null).ToArray();
             int steps = effect.FPS * (int)effect.Duration.TotalSeconds;
@@ -63,23 +78,36 @@ namespace VeloxDev.Core.DynamicTheme
             int deltaTime = (int)(1000.0 / effect.FPS);
             foreach (var themeObject in actives)
             {
-                themeObject?.ExecuteThemeChanging(Current, typeof(T));
+                themeObject?.ExecuteThemeChanging(current, themeType);
             }
-            await ExecuteTransition(CalculateFrames(actives, steps, effect.EaseCalculator), deltaTime);
-            Current = typeof(T);
+            await ExecuteTransition(CalculateFrames(actives, steps, effect.EaseCalculator, themeType), deltaTime, themeType);
             foreach (var themeObject in actives)
             {
-                themeObject?.ExecuteThemeChanged(Current, typeof(T));
+                themeObject?.ExecuteThemeChanged(current, themeType);
             }
         }
-
-        // 跳转到目标主题
-        public static void Jump<T>() where T : ITheme
+        /// <summary>
+        /// Change theme with transition effect
+        /// </summary>
+        /// <typeparam name="T">target theme</typeparam>
+        /// <param name="effect">transition effect</param>
+        public static void Transition<T>(ITransitionEffectCore effect) where T : ITheme
         {
-            Jump(typeof(T));
+            Transition(typeof(T), effect);
         }
+
+        /// <summary>
+        /// Change theme without transition effect
+        /// </summary>
+        /// <param name="themeType">target theme</param>
         public static async void Jump(Type themeType)
         {
+            var current = Current;
+            if (themeType == current || !typeof(ITheme).IsAssignableFrom(themeType))
+            {
+                Debug.WriteLine("[ThemeManager] Invalid theme type, jumping to current theme.");
+                return;
+            }
             CancleTransition();
             activeThemes.RemoveAll(x => !x.TryGetTarget(out _));
             var actives = activeThemes.Select(x => x.TryGetTarget(out var obj) ? obj : null).Where(x => x != null).ToArray();
@@ -87,17 +115,24 @@ namespace VeloxDev.Core.DynamicTheme
             int deltaTime = 0;
             foreach (var themeObject in actives)
             {
-                themeObject?.ExecuteThemeChanging(Current, themeType);
+                themeObject?.ExecuteThemeChanging(current, themeType);
             }
-            await ExecuteTransition(CalculateFrames(actives, steps, Eases.Default), deltaTime);
+            await ExecuteTransition(CalculateFrames(actives, steps, Eases.Default, themeType), deltaTime, themeType);
             foreach (var themeObject in actives)
             {
-                themeObject?.ExecuteThemeChanged(Current, themeType);
+                themeObject?.ExecuteThemeChanged(current, themeType);
             }
-            Current = themeType;
+        }
+        /// <summary>
+        /// Change theme without transition effect
+        /// </summary>
+        /// <typeparam name="T">target theme</typeparam>
+        public static void Jump<T>() where T : ITheme
+        {
+            Jump(typeof(T));
         }
 
-        private static Queue<Action> CalculateFrames(IThemeObject?[] targets, int steps, IEaseCalculator ease)
+        private static Queue<Action> CalculateFrames(IThemeObject?[] targets, int steps, IEaseCalculator ease, Type targetThemeType)
         {
             var updates = new Queue<Action>(steps);
             if (steps <= 0) return updates;
@@ -193,31 +228,21 @@ namespace VeloxDev.Core.DynamicTheme
                             continue;
                         }
 
-                        // 获取目标值（优先动态缓存）
+                        // 获取目标值（优先动态缓存，使用明确的targetThemeType）
                         object? targetValue = null;
                         bool hasTargetValue = false;
 
                         try
                         {
                             if (activeCache.TryGetValue(propEntry.Key, out var activePropCache) &&
-                                activePropCache.TryGetValue(propertyInfo, out var activeTypeCache))
+                                activePropCache.TryGetValue(propertyInfo, out var activeTypeCache) &&
+                                activeTypeCache.TryGetValue(targetThemeType, out targetValue))
                             {
-                                var targetEntry = activeTypeCache.FirstOrDefault(x => x.Key != Current);
-                                if (targetEntry.Value != null)
-                                {
-                                    targetValue = targetEntry.Value;
-                                    hasTargetValue = true;
-                                }
+                                hasTargetValue = true;
                             }
-
-                            if (!hasTargetValue)
+                            else if (typeValues.TryGetValue(targetThemeType, out targetValue))
                             {
-                                var targetEntry = typeValues.FirstOrDefault(x => x.Key != Current);
-                                if (targetEntry.Value != null)
-                                {
-                                    targetValue = targetEntry.Value;
-                                    hasTargetValue = true;
-                                }
+                                hasTargetValue = true;
                             }
                         }
                         catch (Exception ex)
@@ -348,7 +373,7 @@ namespace VeloxDev.Core.DynamicTheme
         {
             Interlocked.Exchange(ref _cts_transition, null)?.Cancel();
         }
-        private static async Task ExecuteTransition(Queue<Action> updates, int deltaTime)
+        private static async Task ExecuteTransition(Queue<Action> updates, int deltaTime, Type themeType)
         {
             await _asyncLock_transition.WaitAsync();
 
@@ -367,10 +392,19 @@ namespace VeloxDev.Core.DynamicTheme
                     action.Invoke();
                     await Task.Delay(deltaTime, cts.Token);
                 }
+                if (!cts.IsCancellationRequested)
+                {
+                    Current = themeType;
+                    return;
+                }
             }
-            catch
+            catch (OperationCanceledException)
             {
-                Jump(Current);
+
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ThemeManager] Error during transition execution: {ex.Message}");
             }
             finally
             {

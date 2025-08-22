@@ -1,9 +1,8 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using VeloxDev.Core.TransitionSystem;
 using VeloxDev.Core.WorkflowSystem;
-using VeloxDev.WPF.TransitionSystem;
+using VeloxDev.WPF.PlatformAdapters;
 
 namespace WpfApp2.Decorators
 {
