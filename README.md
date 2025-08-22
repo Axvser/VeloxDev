@@ -26,7 +26,7 @@
 
 > 通常不直接使用 VeloxDev.Core，因为平台需要一些适配工作，但请放心，这个过程非常轻松
 
-> 此处提供几个直接可用的包,您可使用它们或者参考它们的实现来构建自己的平台适配
+> 此处提供几个直接可用的包，您可使用它们或者参考它们的实现来构建自己的平台适配
 
 ### VeloxDev.WPF [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/)
 
@@ -235,10 +235,13 @@
     public partial class MainWindow : Window
 ```
 
-> 标记了特性后，类已经自动实现 IThemeObject 接口，你可使用下述方法来加载其主题切换
+> 标记了特性后，类已经自动实现 IThemeObject 接口，你可使用下述方法来加载其主题功能
 
 ```csharp
+    // [ 每个实例都需要 ] -> 初始化主题功能
     InitializeTheme();
+    // [ 全局仅执行一次 ] -> 设置平台插值器（ 由 VeloxDev.WPF / VeloxDev.MAUI … 等封装提供 ）
+    ThemeManager.SetPlatformInterpolator(new Interpolator());
 ```
 
 > 可以使用下述API来切换主题，注意需要特定平台的适配

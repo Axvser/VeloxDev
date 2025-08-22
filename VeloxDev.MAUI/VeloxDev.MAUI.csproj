@@ -25,11 +25,10 @@
 
 	<ItemGroup>
 		<PackageReference Include="NuGet.Build.Tasks.Pack" Version="6.14.0">
-		  <PrivateAssets>all</PrivateAssets>
-		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="VeloxDev.Core" Version="2.0.0-rc.4" />
-		<PackageReference Include="VeloxDev.MAUI.Generator" Version="1.0.130" />
+		<PackageReference Include="VeloxDev.Core" Version="2.0.0-rc.4" PrivateAssets="all" />
 	</ItemGroup>
 
 </Project>
