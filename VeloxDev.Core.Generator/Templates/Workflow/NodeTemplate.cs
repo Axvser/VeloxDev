@@ -185,8 +185,8 @@ public static class NodeTemplate
     {
         if (Parent is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree tree)
         {
-            var affectedLinks = new List<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink>();
-            var linkRemovalActions = new List<Action>();
+            var affectedLinks = new global::System.Collections.Generic.List<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink>();
+            var linkRemovalActions = new global::System.Collections.Generic.List<global::System.Action>();
 
             foreach (var link in tree.Links.ToList())
             {
@@ -225,7 +225,7 @@ public static class NodeTemplate
             }
 
             int nodeIndex = tree.Nodes.IndexOf(this);
-            var nodeRemovalAction = new Action(() =>
+            var nodeRemovalAction = new global::System.Action(() =>
             {
                 tree.Nodes.Insert(nodeIndex, this);
                 foreach (var slot in Slots)
@@ -249,7 +249,9 @@ public static class NodeTemplate
     }
     private global::System.Threading.Tasks.Task Broadcast(object? parameter, global::System.Threading.CancellationToken ct)
     {
-        var senders = slots.Where(s => s.State == global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender).ToArray();
+        var senders = global::System.Linq.Enumerable.ToArray(
+            global::System.Linq.Enumerable.Where(slots, s => s.State == global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender)
+        );
         foreach (var slot in senders)
         {
             foreach (var target in slot.Targets)

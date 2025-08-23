@@ -281,10 +281,12 @@ public static class TreeTemplate
 
      private void RemoveAllSlotConnections(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot)
      {
-         var affectedLinks = Links.Where(l => l.Sender == slot || l.Processor == slot).ToList();
+         var affectedLinks = global::System.Linq.Enumerable.ToList(
+             global::System.Linq.Enumerable.Where(Links, l => l.Sender == slot || l.Processor == slot)
+         );
          if (affectedLinks.Count == 0) return;
 
-         var undoActions = new List<global::System.Action>();
+         var undoActions = new global::System.Collections.Generic.List<global::System.Action>();
          foreach (var link in affectedLinks)
          {
              link.Sender?.Targets.Remove(link.Processor?.Parent!);

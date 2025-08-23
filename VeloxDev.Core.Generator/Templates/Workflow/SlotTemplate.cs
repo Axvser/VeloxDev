@@ -196,9 +196,9 @@ public static class SlotTemplate
     {
         if (Parent?.Parent is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree tree)
         {
-            List<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> removed_targets = [];
-            List<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> removed_sources = [];
-            List<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink> removed_links = [];
+            global::System.Collections.Generic.List<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> removed_targets = [];
+            global::System.Collections.Generic.List<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode> removed_sources = [];
+            global::System.Collections.Generic.List<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink> removed_links = [];
             foreach (var target in Targets)
             {
                 var link = tree.FindLink(Parent, target);
