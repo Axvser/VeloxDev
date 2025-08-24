@@ -137,12 +137,12 @@ public static class LinkTemplate
                 });
             }
         }
-        return Task.CompletedTask;
+        return global::System.Threading.Tasks.Task.CompletedTask;
     }
     private global::System.Threading.Tasks.Task Undo(object? parameter, global::System.Threading.CancellationToken ct)
     {
         Sender?.Parent?.Parent?.UndoCommand?.Execute(null);
-        return Task.CompletedTask;
+        return global::System.Threading.Tasks.Task.CompletedTask;
     }
 """;
 }

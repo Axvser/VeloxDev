@@ -233,7 +233,7 @@ public static class TreeTemplate
                  RemoveAllSlotConnections(processor);
 
                  // 检查重复连接
-                 var existingLink = Links.FirstOrDefault(l =>
+                 var existingLink = global::System.Linq.Enumerable.FirstOrDefault(Links, l =>
                      l.Sender?.Parent == sender.Parent &&
                      l.Processor?.Parent == processor.Parent);
 
@@ -262,10 +262,10 @@ public static class TreeTemplate
                      Links.Remove(newLink);
                      sender.Targets.Remove(processor.Parent!);
                      processor.Sources.Remove(sender.Parent!);
-                     sender.State = Links.Any(l => l.Sender == sender)
+                     sender.State = global::System.Linq.Enumerable.Any(Links, l => l.Sender == sender)
                          ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender
                          : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
-                     processor.State = Links.Any(l => l.Processor == processor)
+                     processor.State = global::System.Linq.Enumerable.Any(Links, l => l.Processor == processor)
                          ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Processor
                          : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
                  });
@@ -302,7 +302,7 @@ public static class TreeTemplate
 
          PushUndo(() => {
              foreach (var action in undoActions) action();
-             slot.State = affectedLinks.Any(l => l.Sender == slot)
+             slot.State = global::System.Linq.Enumerable.Any(affectedLinks, l => l.Sender == slot)
                  ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender
                  : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
          });
@@ -312,13 +312,13 @@ public static class TreeTemplate
          {
              if (link.Sender != null && link.Sender != slot)
              {
-                 link.Sender.State = Links.Any(l => l.Sender == link.Sender)
+                 link.Sender.State = global::System.Linq.Enumerable.Any(Links, l => l.Sender == link.Sender)
                      ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender
                      : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
              }
              if (link.Processor != null && link.Processor != slot)
              {
-                 link.Processor.State = Links.Any(l => l.Processor == link.Processor)
+                 link.Processor.State = global::System.Linq.Enumerable.Any(Links, l => l.Processor == link.Processor)
                      ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Processor
                      : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
              }
@@ -328,7 +328,7 @@ public static class TreeTemplate
      {
          if (VirtualLink.Sender != null)
          {
-             VirtualLink.Sender.State = Links.Any(l => l.Sender == VirtualLink.Sender)
+             VirtualLink.Sender.State = global::System.Linq.Enumerable.Any(Links, l => l.Sender == VirtualLink.Sender)
                  ? global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender
                  : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
              VirtualLink.Sender = null;
@@ -362,7 +362,7 @@ public static class TreeTemplate
          global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode sender,
          global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode processor)
      {
-         return Links.FirstOrDefault(link =>
+         return global::System.Linq.Enumerable.FirstOrDefault(Links, link =>
              link.Sender?.Parent == sender &&
              link.Processor?.Parent == processor);
      }

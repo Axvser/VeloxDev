@@ -17,9 +17,9 @@
 # Core
   - ⌈ MVVM Toolkit ⌋ , 自动化属性生成与命令生成 ✔
   - ⌈ Workflow ⌋ ，拖拽式工作流构建器 ✔
-  - ⌈ Transition ⌋ , 使用Fluent API构建过渡效果 ✔
-  - ⌈ ThemeManager ⌋ , 仅需一个特性标记即可实现主题切换 ✔
-  - ⌈ AspectOriented ⌋ , 动态拦截/编辑属性、方法调用 ✔
+  - ⌈ Transition ⌋ , 使用Fluent API构建过渡效果 ✔ （ 依赖平台特定适配层 ）
+  - ⌈ ThemeManager ⌋ , 仅需一个特性标记即可实现主题切换 ✔ （ 依赖平台特定适配层 ）
+  - ⌈ AspectOriented ⌋ , 动态拦截/编辑属性、方法调用 ✔ （ 限 .NET5 + ）
   - ⌈ MonoBehaviour ⌋ , 实时帧刷新行为 ✔
 
 # Product
