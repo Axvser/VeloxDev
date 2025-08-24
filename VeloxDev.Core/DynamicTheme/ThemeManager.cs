@@ -48,6 +48,11 @@ namespace VeloxDev.Core.DynamicTheme
         }
 
         /// <summary>
+        /// Set the current theme without transition effectk
+        /// </summary>
+        public static void SetCurrent<T>() where T : ITheme => Current = typeof(T);
+
+        /// <summary>
         /// Declaration elements can use the theme system
         /// </summary>
         /// <param name="target">target element</param>

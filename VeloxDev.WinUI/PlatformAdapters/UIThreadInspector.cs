@@ -22,72 +22,51 @@ namespace VeloxDev.WinUI.PlatformAdapters
 
         public object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
         {
-            if (isUIThread || _uiDispatcher.HasThreadAccess)
-            {
-                return propertyInfo.GetValue(target);
-            }
-            else
-            {
-                object? result = null;
-                var waitEvent = new ManualResetEventSlim(false);
+            object? result = null;
+            var waitEvent = new ManualResetEventSlim(false);
 
-                // 使用正确的异步执行
-                _uiDispatcher.TryEnqueue(DispatcherQueuePriority.Normal, () =>
+            // 使用正确的异步执行
+            _uiDispatcher.TryEnqueue(DispatcherQueuePriority.Normal, () =>
+            {
+                try
                 {
-                    try
-                    {
-                        result = propertyInfo.GetValue(target);
-                    }
-                    finally
-                    {
-                        waitEvent.Set();
-                    }
-                });
+                    result = propertyInfo.GetValue(target);
+                }
+                finally
+                {
+                    waitEvent.Set();
+                }
+            });
 
-                waitEvent.Wait();
-                return result;
-            }
+            waitEvent.Wait();
+            return result;
         }
 
         public List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
         {
-            if (isUIThread || _uiDispatcher.HasThreadAccess)
-            {
-                return interpolate.Invoke();
-            }
-            else
-            {
-                List<object?>? result = null;
-                var waitEvent = new ManualResetEventSlim(false);
+            List<object?>? result = null;
+            var waitEvent = new ManualResetEventSlim(false);
 
-                _uiDispatcher.TryEnqueue(DispatcherQueuePriority.Normal, () =>
+            _uiDispatcher.TryEnqueue(DispatcherQueuePriority.Normal, () =>
+            {
+                try
                 {
-                    try
-                    {
-                        result = interpolate.Invoke();
-                    }
-                    finally
-                    {
-                        waitEvent.Set();
-                    }
-                });
+                    result = interpolate.Invoke();
+                }
+                finally
+                {
+                    waitEvent.Set();
+                }
+            });
 
-                waitEvent.Wait();
-                return result ?? [];
-            }
+            waitEvent.Wait();
+            return result ?? [];
         }
 
         public void ProtectedInvoke(bool isUIThread, Action action, DispatcherQueuePriority priority)
         {
-            if (isUIThread || _uiDispatcher.HasThreadAccess)
-            {
-                action.Invoke();
-            }
-            else
-            {
-                // 直接提交到队列，无需等待
-                _uiDispatcher.TryEnqueue(priority, () => action.Invoke());
-            }
+            // 直接提交到队列，无需等待
+            _uiDispatcher.TryEnqueue(priority, () => action.Invoke());
         }
     }
 }

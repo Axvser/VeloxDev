@@ -55,7 +55,7 @@ namespace WpfApp2
         {
             Transition<MainWindow>.Create()
                 .Property(x => x.Background,System.Windows.Media.Brushes.Red)
-                .Effect(new TransitionEffect() { FPS = 144, Duration = TimeSpan.FromSeconds(0.6) })
+                .Effect(new TransitionEffect() { FPS = 20, Duration = TimeSpan.FromSeconds(0.6) })
                 .Execute(this);
         }
     }

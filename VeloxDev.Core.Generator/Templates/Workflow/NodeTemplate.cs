@@ -188,7 +188,10 @@ public static class NodeTemplate
             var affectedLinks = new global::System.Collections.Generic.List<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink>();
             var linkRemovalActions = new global::System.Collections.Generic.List<global::System.Action>();
 
-            foreach (var link in tree.Links.ToList())
+            var links = new global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink[tree.Links.Count];
+            tree.Links.CopyTo(links, 0);
+
+            foreach (var link in links)
             {
                 if (link.Sender?.Parent == this || link.Processor?.Parent == this)
                 {

@@ -123,12 +123,6 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 // 创建渲染目标
                 var renderTarget = new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();
 
-                // 异步渲染（WinUI 3 需要异步加载）
-                _ = DispatcherQueue.GetForCurrentThread().TryEnqueue(DispatcherQueuePriority.Normal, async () =>
-                {
-                    await renderTarget.RenderAsync(container);
-                });
-
                 // 返回图像画刷
                 return new ImageBrush
                 {

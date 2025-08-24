@@ -12,7 +12,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/)
 
-> VeloxDev.Core 是 VeloxDev 核心，包含一切必要的抽象并对其中跨平台不变的部分进行了实现 
+> 我们构建了一组核心功能模块，主要以接口和抽象类暴露，于是在不同框架中我们只需实现少量的适配代码即可使用这些功能
 
 # Core
   - ⌈ MVVM Toolkit ⌋ , 自动化属性生成与命令生成 ✔
@@ -26,21 +26,15 @@
 
 > 通常不直接使用 VeloxDev.Core，因为平台需要一些适配工作，但请放心，这个过程非常轻松
 
-> 此处提供几个直接可用的包，您可使用它们或者参考它们的实现来构建自己的平台适配
+> 以下是几个简易的平台适配层，主要差异在于UI操作优先级机制与插值计算机制 ，您可使用它们或者参考它们的实现来构建自己的平台适配
 
 ### VeloxDev.WPF [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/)
 
-
 ### VeloxDev.Avalonia [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Avalonia?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Avalonia/)
-
 
 ### VeloxDev.MAUI  [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/)
 
 ---
-
-# API
-
-> 使用完全一致的 API 在 WPF / Avalonia / MAUI 等框架中加载动画、实施AOP编程、创建拖拽式工作流 …… 
 
 ## Ⅰ MVVM Toolkit
 
@@ -123,10 +117,6 @@
 ## Ⅲ 过渡
 
 > WPF / Avalonia / MAUI 虽然各自使用不同的属性系统,但最终都会以标准CLR属性暴露给用户,基于这一特点,我们可以使用下述API来实现跨平台一致的动画创建
-
-- 线程安全 ✔
-- 缓动函数 ✔
-- 生命周期 ✔
 
 ```csharp
                 var effect1 = new TransitionEffect()
@@ -240,6 +230,10 @@
 ```csharp
     // [ 每个实例都需要 ] -> 初始化主题功能
     InitializeTheme();
+    // [ 全局状态 ] -> 当前主题类型，只读，若要修改请在所有元素初始化主题前使用SetCurrent()修改
+    ThemeManager.Current = typeof(Dark);
+    // [ 全局选项 ] -> 主题切换时，初始值从 [ 反射 / 缓存 ] 获取
+    ThemeManager.StartModel = StartModel.Reflect;
     // [ 全局仅执行一次 ] -> 设置平台插值器（ 由 VeloxDev.WPF / VeloxDev.MAUI … 等封装提供 ）
     ThemeManager.SetPlatformInterpolator(new Interpolator());
 ```
