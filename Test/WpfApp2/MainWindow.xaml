@@ -7,6 +7,7 @@
         mc:Ignorable="d"
         xmlns:vs="clr-namespace:WpfApp2.Views"
         Title="MainWindow" Height="450" Width="800"
-        KeyDown="Window_KeyDown">
-    <vs:Factory x:Name="container" Background="#1e1e1e" Margin="43,35,0,0"/>
+        MouseLeftButtonDown="Window_KeyDown"
+        MouseRightButtonDown="Window_MouseRightButtonDown">
+    <vs:Factory x:Name="container" Background="#1e1e1e" Margin="43,35,0,0" Visibility="Hidden"/>
 </Window>

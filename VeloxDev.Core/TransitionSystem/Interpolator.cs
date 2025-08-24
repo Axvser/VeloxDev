@@ -16,7 +16,7 @@ namespace VeloxDev.Core.TransitionSystem
             IUIThreadInspector<TPriorityCore> inspector)
         {
             var output = new TOutputCore();
-            var count = (int)(effect.FPS * effect.Duration.TotalSeconds);
+            var count = (int)(effect.Duration.TotalMilliseconds / (1000.0 / effect.FPS));
             count = count > 0 ? count : 1;
             output.SetCount(count);
             foreach (var kvp in state.Values)
@@ -71,7 +71,7 @@ namespace VeloxDev.Core.TransitionSystem
             IUIThreadInspector inspector)
         {
             var output = new TOutputCore();
-            var count = (int)(effect.FPS * effect.Duration.TotalSeconds);
+            var count = (int)(effect.Duration.TotalMilliseconds / (1000.0 / effect.FPS));
             count = count > 0 ? count : 1;
             output.SetCount(count);
             foreach (var kvp in state.Values)

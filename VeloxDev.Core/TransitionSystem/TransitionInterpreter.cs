@@ -18,7 +18,7 @@ namespace VeloxDev.Core.TransitionSystem
         {
             this.cts = cts;
             var indexs = GetEaseIndex(effect, frameSequence.Count);
-            var span = GetDeltaTime(effect);
+            var span = (int)(effect.Duration.TotalMilliseconds / frameSequence.Count);
             var foreverloop = effect.LoopTime == int.MaxValue;
             try
             {
@@ -69,9 +69,6 @@ namespace VeloxDev.Core.TransitionSystem
             }
         }
 
-        private static int GetDeltaTime(ITransitionEffect<TPriorityCore> effect)
-            => (int)(1000d / effect.FPS);
-
         private static List<int> GetEaseIndex(
             ITransitionEffect<TPriorityCore> effect,
             int steps)
@@ -105,7 +102,7 @@ namespace VeloxDev.Core.TransitionSystem
         {
             this.cts = cts;
             var indexs = GetEaseIndex(effect, frameSequence.Count);
-            var span = GetDeltaTime(effect);
+            var span = (int)(effect.Duration.TotalMilliseconds / frameSequence.Count);
             var foreverloop = effect.LoopTime == int.MaxValue;
             try
             {
@@ -153,9 +150,6 @@ namespace VeloxDev.Core.TransitionSystem
                 Exit();
             }
         }
-
-        private static int GetDeltaTime(ITransitionEffectCore effect)
-            => (int)(1000d / effect.FPS);
 
         private static List<int> GetEaseIndex(
             ITransitionEffectCore effect,

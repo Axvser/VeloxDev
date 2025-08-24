@@ -7,6 +7,18 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Core.DynamicTheme
 {
+    /// <summary>
+    /// Select how to get the initial value when the theme animation starts
+    /// <para><see cref="Reflect"/> -> current value of the object</para>
+    /// <para><see cref="Cache"/> -> value in cache</para>
+    /// </summary>
+    [Flags]
+    public enum StartModel : int
+    {
+        Reflect = 1,
+        Cache = 2,
+    }
+
     public class ThemeManager
     {
         private static InterpolatorCore? _interpolator;
@@ -19,6 +31,11 @@ namespace VeloxDev.Core.DynamicTheme
         /// The current theme in use and Default is <see cref="Dark"/>
         /// </summary>
         public static Type Current { get; internal set; } = typeof(Dark);
+
+        /// <summary>
+        /// Select how to get the initial value when the theme animation starts
+        /// </summary>
+        public static StartModel StartModel { get; set; } = StartModel.Cache;
 
         /// <summary>
         /// Sets the platform-specific interpolator to be used by the system
@@ -70,12 +87,9 @@ namespace VeloxDev.Core.DynamicTheme
             CancleTransition();
             activeThemes.RemoveAll(x => !x.TryGetTarget(out _));
             var actives = activeThemes.Select(x => x.TryGetTarget(out var obj) ? obj : null).Where(x => x != null).ToArray();
-            int steps = effect.FPS * (int)effect.Duration.TotalSeconds;
-            if (steps <= 0)
-            {
-                steps = 1;
-            }
-            int deltaTime = (int)(1000.0 / effect.FPS);
+            int steps = (int)(effect.Duration.TotalMilliseconds / (1000.0 / effect.FPS));
+            if (steps <= 0) steps = 1;
+            int deltaTime = (int)(effect.Duration.TotalMilliseconds / steps);
             foreach (var themeObject in actives)
             {
                 themeObject?.ExecuteThemeChanging(current, themeType);
@@ -206,15 +220,36 @@ namespace VeloxDev.Core.DynamicTheme
 
                         try
                         {
-                            if (activeCache.TryGetValue(propEntry.Key, out var activePropCache) &&
-                                activePropCache.TryGetValue(propertyInfo, out var activeTypeCache) &&
-                                activeTypeCache.TryGetValue(Current, out currentValue))
+                            // 根据StartModel决定获取方式
+                            switch (StartModel)
                             {
-                                hasCurrentValue = true;
-                            }
-                            else if (typeValues.TryGetValue(Current, out currentValue))
-                            {
-                                hasCurrentValue = true;
+                                case StartModel.Reflect:
+                                    // 反射模式
+                                    try
+                                    {
+                                        currentValue = propertyInfo.GetValue(target);
+                                        hasCurrentValue = true;
+                                        Debug.WriteLine($"[Reflect] Got value for {propEntry.Key}");
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Debug.WriteLine($"[Reflect] Error getting value for {propEntry.Key}: {ex.Message}");
+                                    }
+                                    break;
+
+                                case StartModel.Cache:
+                                    // 缓存模式
+                                    if (activeCache.TryGetValue(propEntry.Key, out var activePropCache) &&
+                                        activePropCache.TryGetValue(propertyInfo, out var activeTypeCache) &&
+                                        activeTypeCache.TryGetValue(Current, out currentValue))
+                                    {
+                                        hasCurrentValue = true;
+                                    }
+                                    else if (typeValues.TryGetValue(Current, out currentValue))
+                                    {
+                                        hasCurrentValue = true;
+                                    }
+                                    break;
                             }
                         }
                         catch (Exception ex)
@@ -366,7 +401,6 @@ namespace VeloxDev.Core.DynamicTheme
 
             return updates;
         }
-
         private static CancellationTokenSource? _cts_transition = null;
         private static readonly SemaphoreSlim _asyncLock_transition = new(1, 1);
         private static void CancleTransition()
