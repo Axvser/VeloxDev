@@ -1,6 +1,8 @@
-﻿namespace Demo.ViewModels;
+﻿using VeloxDev.Core.MVVM;
 
-public partial class MainWindowViewModel : ViewModelBase
+namespace Demo.ViewModels;
+
+public partial class MainWindowViewModel
 {
-    public string Greeting { get; } = "Welcome to Avalonia!";
+    [VeloxProperty] private string _greeting = "Welcome to Avalonia!";
 }

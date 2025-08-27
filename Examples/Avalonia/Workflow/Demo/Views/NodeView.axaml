@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Demo.ViewModels"
+             xmlns:v="clr-namespace:Demo.Views"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="Demo.Views.NodeView"
+             Background="#aaffffff"
+             x:DataType="vm:NodeViewModel"
+             CornerRadius="5">
+    <Grid RowDefinitions="12*,90*">
+        <Grid Row="0">
+            <Border Background="#aa1e1e1e"
+                    PointerPressed="OnPointerPressed"
+                    PointerReleased="OnPointerReleased"
+                    PointerMoved="OnPointerMoved">
+                <TextBlock Text="{Binding Name}"
+                           Foreground="White"
+                           TextAlignment="Center"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center" />
+            </Border>
+        </Grid>
+        <Grid Row="0" RowSpan="2">
+            <!--插槽-->
+            <ItemsControl ItemsSource="{Binding Slots}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <Canvas Width="{Binding $parent[Grid].Bounds.Width}"
+                                Height="{Binding $parent[Grid].Bounds.Height}" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemContainerTheme>
+                    <ControlTheme TargetType="ContentPresenter" x:DataType="vm:SlotViewModel">
+                        <Setter Property="Canvas.Left"
+                                Value="{Binding Offset.Left}" />
+                        <Setter Property="Canvas.Top"
+                                Value="{Binding Offset.Top}" />
+                        <Setter Property="Canvas.ZIndex"
+                                Value="{Binding Offset.Layer}" />
+                    </ControlTheme>
+                </ItemsControl.ItemContainerTheme>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SlotViewModel">
+                        <v:SlotView Width="{Binding Size.Width}"
+                                    Height="{Binding Size.Height}"
+                                    IsEnabled="{Binding IsEnabled}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Grid>
+    </Grid>
+</UserControl>
