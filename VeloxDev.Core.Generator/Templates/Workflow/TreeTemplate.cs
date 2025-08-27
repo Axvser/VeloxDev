@@ -206,9 +206,6 @@ public static class TreeTemplate
                      // 保持状态等待连接完成
                      break;
              }
-
-             // 立即刷新UI状态
-             OnPropertyChanged(nameof(VirtualLink));
          }
          return global::System.Threading.Tasks.Task.CompletedTask;
      }
@@ -333,13 +330,6 @@ public static class TreeTemplate
                  : global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy;
              VirtualLink.Sender = null;
          }
-
-         if (VirtualLink.Processor != null)
-         {
-             VirtualLink.Processor.Anchor = new global::VeloxDev.Core.WorkflowSystem.Anchor(-1000, -1000);
-         }
-
-         OnPropertyChanged(nameof(VirtualLink));
      }
 
      public void PushUndo(global::System.Action undoAction)

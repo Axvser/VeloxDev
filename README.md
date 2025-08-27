@@ -12,7 +12,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/)
 
-> 我们构建了一组核心功能模块，主要以接口和抽象类暴露，于是在不同框架中我们只需实现少量的适配代码即可使用这些功能
+> 定义一组核心接口与抽象类，并辅以源代码生成器加速项目开发
 
 # Core
   - ⌈ MVVM Toolkit ⌋ , 自动化属性生成与命令生成 ✔
@@ -24,9 +24,9 @@
 
 # Product
 
-> 通常不直接使用 VeloxDev.Core，因为平台需要一些适配工作，但请放心，这个过程非常轻松
+> 通常不直接使用 VeloxDev.Core，因为动画相关的功能需要一些平台适配工作，但如果您不打算使用动画功能组，的确可以直接使用 VeloxDev.Core
 
-> 以下是几个简易的平台适配层，主要差异在于UI操作优先级机制与插值计算机制 ，您可使用它们或者参考它们的实现来构建自己的平台适配
+> 我们已经封装了几个适配层，对 WPF / Avalonia 的支持比较完善，您可直接使用它们，或者参考其源码来实现属于您自己的平台适配 ( 差异主要集中在动画插值计算与UI线程调度，AI通常可以胜任其中的大部分工作 ) 
 
 ### VeloxDev.WPF [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/)
 
@@ -35,6 +35,8 @@
 ### VeloxDev.MAUI  [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/)
 
 ---
+
+# API
 
 ## Ⅰ MVVM Toolkit
 
