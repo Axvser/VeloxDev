@@ -51,7 +51,7 @@ public partial class NodeView : UserControl
     {
         if (!_isDragging || _parentCanvas == null) return;
 
-        // 计算鼠标位置偏移量
+        // 计算触点位置偏移量
         var currentPosition = e.GetPosition(_parentCanvas);
         var delta = currentPosition - _lastPosition;
 
