@@ -34,7 +34,12 @@ public partial class MainWindow
     private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(2))
-            .Property(r => r.RenderTransform, [new TranslateTransform(200,0),new ScaleTransform(1.3, 1.3)])
+            .Property(r => r.RenderTransform, 
+                [
+                    new TranslateTransform(200,0),
+                    new Rotate3DTransform(210,30,50,0,0,0,1),
+                    new ScaleTransform(1.3, 1.3)
+                ])
             .Property(r => r.Fill, new SolidColorBrush(Colors.Red))
             .Effect(new TransitionEffect()
             {

@@ -330,6 +330,7 @@ namespace VeloxDev.Avalonia.PlatformAdapters
                     RotateTransform _ => new RotateTransform(0, 0, 0),
                     ScaleTransform _ => new ScaleTransform(1, 1),
                     SkewTransform _ => new SkewTransform(0, 0),
+                    Rotate3DTransform _ => new Rotate3DTransform(0, 0, 0, 0, 0, 0, 0),
                     _ => new MatrixTransform(Matrix.Identity)
                 };
 
@@ -364,6 +365,16 @@ namespace VeloxDev.Avalonia.PlatformAdapters
                         new SkewTransform(
                             Lerp(st.AngleX, et.AngleX, t),
                             Lerp(st.AngleY, et.AngleY, t)),
+
+                    Rotate3DTransform st when end is Rotate3DTransform et =>
+                        new Rotate3DTransform(
+                            Lerp(st.AngleX, et.AngleX, t),
+                            Lerp(st.AngleY, et.AngleY, t),
+                            Lerp(st.AngleZ, et.AngleZ, t),
+                            Lerp(st.CenterX, et.CenterX, t),
+                            Lerp(st.CenterY, et.CenterY, t),
+                            Lerp(st.CenterZ, et.CenterZ, t),
+                            Lerp(st.Depth, et.Depth, t)),
 
                     MatrixTransform st when end is MatrixTransform et =>
                         new MatrixTransform(
