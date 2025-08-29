@@ -3,18 +3,15 @@
         xmlns:vm="using:Demo.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" Width="800" Height="450"
         x:Class="Demo.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Demo">
-
-    <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainWindowViewModel/>
-    </Design.DataContext>
-
-    <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-
+        Title="Demo"
+        Background="#1e1e1e">
+    <Grid RowDefinitions="*,100,*,100,*,100,*">
+        <Rectangle Grid.Row="1" x:Name="Rec1" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
+        <Rectangle Grid.Row="3" x:Name="Rec2" Fill="Cyan" Width="100"></Rectangle>
+        <Rectangle Grid.Row="5" x:Name="Rec3" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
+    </Grid>
 </Window>
