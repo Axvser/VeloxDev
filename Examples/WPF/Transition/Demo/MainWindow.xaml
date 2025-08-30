@@ -5,8 +5,26 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Demo"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="MainWindow" Height="450" Width="800"
+        Background="#1e1e1e">
+    <Window.Resources>
+        <LinearGradientBrush x:Key="Bs1" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="Yellow" Offset="0"></GradientStop>
+            <GradientStop Color="Violet" Offset="1"></GradientStop>
+        </LinearGradientBrush>
+    </Window.Resources>
     <Grid>
-
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="*"></RowDefinition>
+        </Grid.RowDefinitions>
+        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
+        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="100" HorizontalAlignment="Right"></Rectangle>
+        <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" Width="100"></Rectangle>
     </Grid>
 </Window>

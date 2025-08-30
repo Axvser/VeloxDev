@@ -9,9 +9,15 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="Demo"
         Background="#1e1e1e">
+    <Window.Resources>
+        <LinearGradientBrush x:Key="Bs1" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="Yellow" Offset="0"></GradientStop>
+            <GradientStop Color="Violet" Offset="1"></GradientStop>
+        </LinearGradientBrush>
+    </Window.Resources>
     <Grid RowDefinitions="*,100,*,100,*,100,*">
-        <Rectangle Grid.Row="1" x:Name="Rec1" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
-        <Rectangle Grid.Row="3" x:Name="Rec2" Fill="Cyan" Width="100"></Rectangle>
-        <Rectangle Grid.Row="5" x:Name="Rec3" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
+        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
+        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="100" HorizontalAlignment="Right"></Rectangle>
+        <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" Width="100"></Rectangle>
     </Grid>
 </Window>
