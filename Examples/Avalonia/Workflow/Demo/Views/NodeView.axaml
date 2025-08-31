@@ -8,7 +8,9 @@
              x:Class="Demo.Views.NodeView"
              Background="#aaffffff"
              x:DataType="vm:NodeViewModel"
-             CornerRadius="5">
+             CornerRadius="5"
+             IsWorking="{Binding IsExecuting}">
+    
     <Grid RowDefinitions="12*,90*">
         <Grid Row="0">
             <Border Background="#aa1e1e1e"

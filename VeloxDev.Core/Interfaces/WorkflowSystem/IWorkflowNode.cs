@@ -14,6 +14,6 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IVeloxCommand CreateSlotCommand { get; }
         public IVeloxCommand DeleteCommand { get; }
         public IVeloxCommand BroadcastCommand { get; }
-        public IVeloxCommand ExecuteCommand { get; }
+        public IVeloxCommand WorkCommand { get; }
     }
 }

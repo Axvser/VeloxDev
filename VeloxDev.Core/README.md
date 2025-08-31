@@ -80,39 +80,36 @@
 
 > 思维导图、流程控制、电路模拟 …… 等诸多场景都会要求有可拖拽的流程编辑器。VeloxDev 提供了纯 MVVM 模式的功能实现，并且支持源代码生成
 
+[![GitHub](https://img.shields.io/badge/GitHub-Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Workflow/Demo)  
+
+[![GitHub](https://img.shields.io/badge/GitHub-WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Workflow/Demo)  
+
 ![](https://s3.bmp.ovh/imgs/2025/07/28/824c68b88eb1f5ec.png)
 
-### 工作流核心接口表格
+### ViewModel 生成支持
 
-| **接口** | **关键属性** | **关键命令** | **核心功能** |
-|----------|--------------|--------------|--------------|
-| **IWorkflowContext** | `IsEnabled` - 启用状态<br>`UID` - 唯一标识<br>`Name` - 显示名称 | `UndoCommand` - 撤销操作 | 基础行为控制 |
-| **IWorkflowLink** | `Sender` - 发送端槽位<br>`Processor` - 接收端槽位 | `DeleteCommand` - 删除连接 | 连接关系管理 |
-| **IWorkflowNode** | `Parent` - 所属工作流树<br>`Anchor` - 节点坐标<br>`Size` - 节点尺寸<br>`Slots` - 槽位集合 | `CreateSlotCommand` - 创建槽位<br>`DeleteCommand` - 删除节点<br>`BroadcastCommand` - 广播消息<br>`ExecuteCommand` - 执行命令 | 节点核心功能 |
-| **IWorkflowSlot** | `Targets` - 目标节点集合<br>`Sources` - 源节点集合<br>`Capacity` - 槽位能力类型<br>`State` - 当前状态<br>`Offset` - 槽位偏移坐标 | `ConnectingCommand` - 开始连接<br>`ConnectedCommand` - 完成连接 | 槽位连接管理 |
-| **IWorkflowTree** | `VirtualLink` - 虚拟连接线<br>`Nodes` - 节点集合<br>`Links` - 连接线集合 | `CreateNodeCommand` - 创建节点<br>`SetMouseCommand` - 设置鼠标状态<br>`SetSenderCommand` - 设置发送端<br>`SetProcessorCommand` - 设置接收端 | 工作流树控制 |
-
-### 核心实现类表格
-
-| **类名** | **关键特性** | **运算符/方法** | **核心能力** |
-|----------|--------------|-----------------|--------------|
-| **Anchor** | 二维坐标管理 (Left/Top/Layer) | `+`/`-` 运算符<br>`Equals`/`GetHashCode` | 空间定位能力 |
-| **Size** | 尺寸管理 (Width/Height) | `+`/`-` 运算符<br>NaN值特殊处理 | 自适应尺寸支持 |
-| **LinkContext** | 连接状态自动检测<br>双向关系维护 | `DeleteCommand` - 连接删除<br>`OnSenderChanged` - 状态同步 | 连接生命周期管理 |
-| **SlotContext** | 动态坐标偏移<br>连接状态跟踪 | `ConnectingCommand` - 启动连接<br>`ConnectedCommand` - 完成连接 | 智能连接调度 |
-
-## 源代码生成特性
-
-> Context 生成是通用的，我们在此处用表格列出生成支持，但是需要注意，若你启用这些生成，最好不要与其它MVVM工具混用，否则可能出现生成冲突，该库自身提供的 MVVM 功能是推荐的
-
-> View 因其在各个框架间的实现差异大，我们会延后在各个框架的适配包中实现其专属的生成器以辅助您实现用户交互
+> 我们的工作流是 MVVM 的，建议您使用下述特性快速生成多个包含可选项的模板
 
 | 特性 | 应用对象 | 参数 | 描述 |
 |------|----------|------|------|
-| `Workflow.Context.Tree` | 工作流树类 | `slotType`, `linkType` | 自定义槽位和连接线类型 |
-| `Workflow.Context.Node` | 工作流节点类 | 无 | 标记自定义节点类型 |
+| `Workflow.Context.Tree` | 工作流树类 | `slotType` - 自定义槽位<br>`linkType` -连接线类型 | 标记自定义工作树类型 |
+| `Workflow.Context.Node` | 工作流节点类 | `CanConcurrent` - 是否启用并发 | 标记自定义节点类型 |
 | `Workflow.Context.Slot` | 工作流槽位类 | 无 | 标记自定义槽位类型 |
 | `Workflow.Context.Link` | 工作流连接线类 | 无 | 标记自定义连接线类型 |
+
+### ViewModel 生成结果
+
+> 关键的属性、命令、扩展点，在您使用源生成特性后，即可参考这些信息来扩展功能
+
+> IWorkflowContext 是所有工作流视图模型的共有接口，所以它的一切对其它工作流视图模型均适用
+
+| **接口** | **关键属性** | **关键命令** | **核心功能** | **回调方法** | **重要方法** |
+|----------|--------------|--------------|--------------|--------------|--------------|
+| **IWorkflowContext** | `IsEnabled` - 启用状态<br>`UID` - 唯一标识<br>`Name` - 显示名称 | `UndoCommand` - 撤销操作 | 基础行为控制 | `OnPropertyChanging`<br>`OnPropertyChanged`<br>`OnIsEnabledChanging/Changed`<br>`OnUIDChanging/Changed`<br>`OnNameChanging/Changed` | 无 |
+| **IWorkflowLink** | `Sender` - 发送端槽位<br>`Processor` - 接收端槽位<br>`IsEnabled` - 启用状态<br>`UID` - 唯一标识<br>`Name` - 显示名称 | `DeleteCommand` - 删除连接<br>`UndoCommand` - 撤销操作 | 连接关系管理 | `OnSenderChanging/Changed`<br>`OnProcessorChanging/Changed` | 无 |
+| **IWorkflowNode** | `Parent` - 所属工作流树<br>`Anchor` - 节点坐标<br>`Size` - 节点尺寸<br>`Slots` - 槽位集合<br>`IsEnabled` - 启用状态<br>`UID` - 唯一标识<br>`Name` - 显示名称 | `CreateSlotCommand` - 创建槽位<br>`DeleteCommand` - 删除节点<br>`BroadcastCommand` - 广播消息<br>`WorkCommand` - 执行节点工作任务<br>`UndoCommand` - 撤销操作 | 节点核心功能 | `OnParentChanging/Changed`<br>`OnAnchorChanging/Changed`<br>`OnSizeChanging/Changed`<br>`OnSlotAdded/Removed/Created`<br>`OnWorkExecuting/Canceled/Finished`<br>`OnFlowing/FlowCanceled/FlowFinished` | `FindLink()` - 查找连接 |
+| **IWorkflowSlot** | `Parent` - 所属工作流节点<br>`Targets` - 目标节点集合<br>`Sources` - 源节点集合<br>`Capacity` - 槽位能力<br>`State` - 当前状态<br>`Anchor` - 绝对坐标<br>`Offset` - 槽位偏移坐标<br>`Size` - 槽位尺寸<br>`IsEnabled` - 启用状态<br>`UID` - 唯一标识<br>`Name` - 显示名称 | `ConnectingCommand` - 开始连接<br>`ConnectedCommand` - 完成连接<br>`DeleteCommand` - 删除槽位<br>`UndoCommand` - 撤销操作 | 槽位连接管理 | <br>`OnParentChanging/Changed`<br>`OnCapacityChanging/Changed`<br>`OnStateChanging/Changed`<br>`OnAnchorChanging/Changed`<br>`OnOffsetChanging/Changed`<br>`OnSizeChanging/Changed` | 无 |
+| **IWorkflowTree** | `VirtualLink` - 虚拟连接线<br>`Nodes` - 节点集合<br>`Links` - 连接线集合<br>`IsEnabled` - 启用状态<br>`UID` - 唯一标识<br>`Name` - 显示名称 | `CreateNodeCommand` - 创建节点<br>`SetPointerCommand` - 设置触点位置<br>`SetSenderCommand` - 设置发送端<br>`SetProcessorCommand` - 设置接收端<br>`ResetStateCommand` - 重置状态<br>`UndoCommand` - 撤销操作 | 工作流树控制 | `OnNodeAdded/Removed/Created`<br>`OnLinkAdded/Removed/Created`<br>`OnPointerChanging/Changed`<br>`OnNodeReseting/Reseted`<br>`OnLinkReseted` | `PushUndo()` - 压入撤销操作<br>`FindLink()` - 查找连接 |
 
 ---
 
@@ -120,12 +117,18 @@
 
 > WPF / Avalonia / MAUI 虽然各自使用不同的属性系统,但最终都会以标准CLR属性暴露给用户,基于这一特点,我们可以使用下述API来实现跨平台一致的动画创建
 
+
+[![GitHub](https://img.shields.io/badge/GitHub-Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Transition/Demo)  
+
+[![GitHub](https://img.shields.io/badge/GitHub-WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Transition/Demo)  
+
 ```csharp
                 var effect1 = new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(2),
                     LoopTime = 1,
-                    EaseCalculator = Eases.Cubic.InOut,
+                    FPS = 144,
+                    Ease = Eases.Cubic.InOut,
                 };
 
                 effect1.Completed += (s, e) =>

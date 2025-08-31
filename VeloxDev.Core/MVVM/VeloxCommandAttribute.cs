@@ -24,65 +24,61 @@ namespace VeloxDev.Core.MVVM
         private readonly Func<object?, CancellationToken, Task> _executeAsync = executeAsync;
         private readonly List<CancellationTokenSource> _activeExecutions = [];
         private readonly SemaphoreSlim _asyncLock = new(1, 1);
+        private bool _isForceLocked = false;
 
         public event EventHandler? CanExecuteChanged;
 
         public bool CanExecute(object? parameter)
         {
-            return canExecute?.Invoke(parameter) ?? true;
+            return (canExecute?.Invoke(parameter) ?? true) && !_isForceLocked;
         }
         public async void Execute(object? parameter)
         {
             await ExecuteAsync(parameter);
         }
+        public void Notify()
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        }
         public async void Cancel()
         {
-            await CancelCurrentAsync();
+            await CancelAsync();
         }
         public async void Interrupt()
         {
             await InterruptAsync();
         }
-        public void Notify()
-        {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
-        }
         public async Task ExecuteAsync(object? parameter)
         {
-            var cts = new CancellationTokenSource();
-
             await _asyncLock.WaitAsync();
             try
             {
+                if (_isForceLocked)
+                {
+                    var canceledCts = new CancellationTokenSource();
+                    canceledCts.Cancel();
+                    await _executeAsync.Invoke(parameter, canceledCts.Token);
+                    return;
+                }
+
+                var cts = new CancellationTokenSource();
                 _activeExecutions.Add(cts);
+
+                try
+                {
+                    await _executeAsync.Invoke(parameter, cts.Token);
+                }
+                finally
+                {
+                    _activeExecutions.Remove(cts);
+                }
             }
             finally
             {
                 _asyncLock.Release();
             }
-
-            try
-            {
-                await _executeAsync.Invoke(parameter, cts.Token);
-            }
-            catch
-            {
-
-            }
-            finally
-            {
-                await _asyncLock.WaitAsync();
-                try
-                {
-                    _activeExecutions.Remove(cts);
-                }
-                finally
-                {
-                    _asyncLock.Release();
-                }
-            }
         }
-        public async Task CancelCurrentAsync()
+        public async Task CancelAsync()
         {
             List<CancellationTokenSource> executionsToCancel;
 
@@ -102,7 +98,33 @@ namespace VeloxDev.Core.MVVM
                 cts.Cancel();
             }
         }
-        public Task InterruptAsync() => CancelCurrentAsync();
+        public async Task InterruptAsync() => await CancelAsync();
+
+        public void Lock()
+        {
+            _asyncLock.Wait();
+            try
+            {
+                _isForceLocked = true;
+                var executionsToCancel = new List<CancellationTokenSource>(_activeExecutions);
+                _activeExecutions.Clear();
+
+                foreach (var cts in executionsToCancel)
+                {
+                    cts.Cancel();
+                }
+            }
+            finally
+            {
+                _asyncLock.Release();
+            }
+            Notify();
+        }
+        public void UnLock()
+        {
+            _isForceLocked = false;
+            Notify();
+        }
     }
 
     public sealed class VeloxCommand(
@@ -115,46 +137,52 @@ namespace VeloxDev.Core.MVVM
         private readonly Queue<TaskCompletionSource<bool>> _pendingExecutions = new();
         private bool _isInterrupted = false;
         private int _activeExecutionCount = 0;
+        private bool _isForceLocked = false;
 
         public event EventHandler? CanExecuteChanged;
 
         public bool CanExecute(object? parameter)
         {
-            return canExecute?.Invoke(parameter) ?? true;
+            return (canExecute?.Invoke(parameter) ?? true) && !_isForceLocked;
         }
         public async void Execute(object? parameter)
         {
             await ExecuteAsync(parameter);
         }
+        public void Notify()
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        }
         public async void Cancel()
         {
-            await CancelCurrentAsync();
+            await CancelAsync();
         }
         public async void Interrupt()
         {
             await InterruptAsync();
         }
-        public void Notify()
-        {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
-        }
         public async Task ExecuteAsync(object? parameter)
         {
-            if (_isInterrupted)
-            {
-                return;
-            }
-
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _pendingExecutions.Enqueue(tcs);
 
             await _queueSemaphore.WaitAsync();
             try
             {
+                if (_isForceLocked)
+                {
+                    var canceledCts = new CancellationTokenSource();
+                    canceledCts.Cancel();
+                    await _executeAsync.Invoke(parameter, canceledCts.Token);
+                    TrySetResultSafe(tcs, false);
+                    return;
+                }
+
+                _pendingExecutions.Enqueue(tcs);
+
                 if (_isInterrupted)
                 {
                     TrySetResultSafe(tcs, false);
-                    return;
+                    throw new TaskCanceledException();
                 }
 
                 Interlocked.Increment(ref _activeExecutionCount);
@@ -186,7 +214,7 @@ namespace VeloxDev.Core.MVVM
                 _queueSemaphore.Release();
             }
         }
-        public async Task CancelCurrentAsync()
+        public async Task CancelAsync()
         {
             await _queueSemaphore.WaitAsync();
             try
@@ -206,7 +234,6 @@ namespace VeloxDev.Core.MVVM
                 _isInterrupted = true;
                 _currentExecutionCts?.Cancel();
 
-                // 安全地清空队列
                 while (_pendingExecutions.Count > 0)
                 {
                     var pendingTask = _pendingExecutions.Dequeue();
@@ -220,6 +247,32 @@ namespace VeloxDev.Core.MVVM
                 _queueSemaphore.Release();
             }
         }
+        public void Lock()
+        {
+            _queueSemaphore.Wait();
+            try
+            {
+                _isForceLocked = true;
+                _currentExecutionCts?.Cancel();
+
+                while (_pendingExecutions.Count > 0)
+                {
+                    var pendingTask = _pendingExecutions.Dequeue();
+                    TrySetResultSafe(pendingTask, false);
+                }
+            }
+            finally
+            {
+                _queueSemaphore.Release();
+            }
+            Notify();
+        }
+        public void UnLock()
+        {
+            _isForceLocked = false;
+            Notify();
+        }
+
         private static void TrySetResultSafe(TaskCompletionSource<bool> tcs, bool result)
         {
             try
@@ -229,10 +282,7 @@ namespace VeloxDev.Core.MVVM
                     tcs.SetResult(result);
                 }
             }
-            catch
-            {
-
-            }
+            catch { }
         }
     }
 }

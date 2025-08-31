@@ -36,13 +36,11 @@ public partial class MainWindow
     private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(5))
-            .Property(r => r.RenderTransform, [new TranslateTransform(-800, 0), new RotateTransform(180)])
+            .Property(r => r.RenderTransform, [new RotateTransform(180)])
             .Effect(new TransitionEffect()
             {
                 Duration = TimeSpan.FromSeconds(2),
                 IsAutoReverse = true,
-                FPS = 144, // 若启用缓动函数，则推荐设置高帧率以获取更丝滑的视觉效果
-                EaseCalculator = Eases.Circ.InOut,
                 LoopTime = 2,
             });
 
@@ -59,7 +57,7 @@ public partial class MainWindow
                 Duration = TimeSpan.FromSeconds(2),
                 IsAutoReverse = true,
                 FPS = 144,
-                EaseCalculator = Eases.Circ.InOut,
+                Ease = Eases.Circ.InOut,
                 LoopTime = 2,
             })
             .AwaitThen(TimeSpan.FromSeconds(5)) // 等待 5秒再开始下一段动画
@@ -67,6 +65,6 @@ public partial class MainWindow
             .Effect(new TransitionEffect()
             {
                 Duration = TimeSpan.FromSeconds(2),
-                EaseCalculator = Eases.Sine.In
+                Ease = Eases.Sine.In
             });
 }

@@ -169,21 +169,27 @@ public static class NodeTemplate
     partial void OnSlotAdded(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot);
     partial void OnSlotRemoved(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot);
 
-    private async global::System.Threading.Tasks.Task ExecuteNodeTask(object? parameter, global::System.Threading.CancellationToken ct)
+    private async global::System.Threading.Tasks.Task ExecuteWorkTask(object? parameter, global::System.Threading.CancellationToken ct)
     {
-        await OnExecute(parameter,ct);
+        if(!ct.IsCancellationRequested) OnWorkExecuting(parameter);
+        await Work(parameter,ct);
+        if(ct.IsCancellationRequested) OnWorkCanceled(parameter); else OnWorkFinished(parameter);
     }
-    private partial global::System.Threading.Tasks.Task OnExecute(object? parameter, global::System.Threading.CancellationToken ct);
-
+    private partial global::System.Threading.Tasks.Task Work(object? parameter, global::System.Threading.CancellationToken ct);
+    partial void OnWorkExecuting(object? parameter);
+    partial void OnWorkCanceled(object? parameter);
+    partial void OnWorkFinished(object? parameter);
     private global::System.Threading.Tasks.Task CreateSlot(object? parameter, global::System.Threading.CancellationToken ct)
     {
         if (parameter is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot)
         {
+            OnSlotCreated(slot);
             slots.Add(slot);
             Parent?.PushUndo(() => { slots.Remove(slot); });
         }
         return global::System.Threading.Tasks.Task.CompletedTask;
     }
+    partial void OnSlotCreated(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot);
     private global::System.Threading.Tasks.Task Delete(object? parameter, global::System.Threading.CancellationToken ct)
     {
         if (Parent is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTree tree)
@@ -258,18 +264,36 @@ public static class NodeTemplate
         var senders = global::System.Linq.Enumerable.ToArray(
             global::System.Linq.Enumerable.Where(slots, s => s.State == global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.Sender)
         );
-        foreach (var slot in senders)
+        foreach (var sender in senders)
         {
-            foreach (var target in slot.Targets)
+            foreach (var processor in sender.Targets)
             {
-                target.ExecuteCommand.Execute(parameter);
+                if (FindLink(this,processor) is {} link)
+                {
+                    if (!ct.IsCancellationRequested) OnFlowing(parameter, link);
+                    processor.WorkCommand.Execute(parameter);
+                    if (ct.IsCancellationRequested) OnFlowCanceled(parameter, link); else OnFlowFinished(parameter, link);
+                }
             }
         }
         return global::System.Threading.Tasks.Task.CompletedTask;
     }
-    private async global::System.Threading.Tasks.Task Execute(object? parameter, global::System.Threading.CancellationToken ct)
+    partial void OnFlowing(object? parameter, global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink link);
+    partial void OnFlowCanceled(object? parameter,global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink link);
+    partial void OnFlowFinished(object? parameter,global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink link);
+    public global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink? FindLink(
+        global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode sender,
+        global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode processor)
     {
-        await ExecuteNodeTask(parameter,ct);
+        return (Parent is { } tree)
+            ? global::System.Linq.Enumerable.FirstOrDefault(tree.Links, link =>
+                link.Sender?.Parent == sender &&
+                link.Processor?.Parent == processor)
+            : null;
+    }
+    private async global::System.Threading.Tasks.Task WorkTask(object? parameter, global::System.Threading.CancellationToken ct)
+    {
+        await ExecuteWorkTask(parameter,ct);
     }
     private global::System.Threading.Tasks.Task Undo(object? parameter, global::System.Threading.CancellationToken ct)
     {
@@ -310,15 +334,15 @@ public static class NodeTemplate
             return _buffer_BroadcastCommand;
         }
     }
-    private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_ExecuteCommand = null;
-    public global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand ExecuteCommand
+    private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_WorkCommand = null;
+    public global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand WorkCommand
     {
         get
         {
-            _buffer_ExecuteCommand ??= new global::VeloxDev.Core.MVVM.{{command}}(
-                executeAsync: Execute,
+            _buffer_WorkCommand ??= new global::VeloxDev.Core.MVVM.{{command}}(
+                executeAsync: WorkTask,
                 canExecute: _ => true);
-            return _buffer_ExecuteCommand;
+            return _buffer_WorkCommand;
         }
     }
     private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_UndoCommand = null;

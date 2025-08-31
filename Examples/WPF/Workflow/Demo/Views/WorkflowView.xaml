@@ -33,7 +33,8 @@
                 <DataTemplate>
                     <local:NodeView Width="{Binding Size.Width}"
                                     Height="{Binding Size.Height}"
-                                    IsEnabled="{Binding IsEnabled}" />
+                                    IsEnabled="{Binding IsEnabled}"
+                                    IsWorking="{Binding Path=IsExecuting}"/>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>

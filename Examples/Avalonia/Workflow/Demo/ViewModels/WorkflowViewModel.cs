@@ -1,4 +1,3 @@
-using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.ViewModels;
@@ -12,8 +11,6 @@ public partial class WorkflowViewModel
         // 必须执行此项
         InitializeWorkflow();
     }
-    
+
     // …… 自由扩展您的工作流树视图模型
-    
-    
 }

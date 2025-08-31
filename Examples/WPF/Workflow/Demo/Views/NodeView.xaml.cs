@@ -1,8 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using Demo.ViewModels;
+using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.Views;
@@ -18,6 +20,29 @@ public partial class NodeView : UserControl
         InitializeComponent();
     }
 
+    public static readonly DependencyProperty IsWorkingProperty = DependencyProperty.Register(
+        nameof(IsWorking), typeof(bool), typeof(NodeView), new PropertyMetadata(false, (dp, e) =>
+        {
+            if (dp is NodeView nodeView && nodeView.DataContext is IWorkflowNode nodeContext)
+            {
+                if ((bool)e.NewValue)
+                {
+                    nodeView.Background = Brushes.Red;
+                    nodeContext.Name = "任务 < 执行中 >";
+                }
+                else
+                {
+                    nodeView.Background = Brushes.Lime;
+                    nodeContext.Name = "任务";
+                }
+            }
+        }));
+    public bool IsWorking
+    {
+        get => (bool)GetValue(IsWorkingProperty);
+        set => SetValue(IsWorkingProperty, value);
+    }
+
     protected override void OnVisualParentChanged(DependencyObject oldParent)
     {
         base.OnVisualParentChanged(oldParent);
@@ -30,7 +55,7 @@ public partial class NodeView : UserControl
     {
         var parentObject = VisualTreeHelper.GetParent(child);
         if (parentObject == null) return null;
-        
+
         if (parentObject is T parent) return parent;
         return FindVisualParent<T>(parentObject);
     }

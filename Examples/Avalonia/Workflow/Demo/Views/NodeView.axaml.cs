@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using Demo.ViewModels;
+using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.Views;
@@ -13,9 +15,27 @@ public partial class NodeView : UserControl
     private Point _lastPosition;
     private Canvas? _parentCanvas;
 
+    private static readonly StyledProperty<bool> IsWorkingProperty = AvaloniaProperty.Register<NodeView, bool>(
+        nameof(IsWorking), defaultValue: false);
+
+    public bool IsWorking
+    {
+        get => GetValue(IsWorkingProperty);
+        set => SetValue(IsWorkingProperty, value);
+    }
+
     public NodeView()
     {
         InitializeComponent();
+        IsWorkingProperty.Changed.AddClassHandler<NodeView>((x, e) =>
+        {
+            var value = (bool)e.NewValue!;
+            if (x.DataContext is IWorkflowNode nodeContext)
+            {
+                nodeContext.Name = value ? "任务 < 执行中 >" : "任务";
+            }
+            x.Background = value ? Brushes.Red : Brushes.Lime;
+        });
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)

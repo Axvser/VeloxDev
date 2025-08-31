@@ -334,7 +334,7 @@ namespace VeloxDev.WPF.PlatformAdapters
 
                     RotateTransform st when end is RotateTransform et =>
                         new RotateTransform(
-                            LerpAngle(st.Angle, et.Angle, t),
+                            Lerp(st.Angle, et.Angle, t),
                             Lerp(st.CenterX, et.CenterX, t),
                             Lerp(st.CenterY, et.CenterY, t)),
 
@@ -360,11 +360,6 @@ namespace VeloxDev.WPF.PlatformAdapters
             }
 
             private static double Lerp(double a, double b, double t) => a + t * (b - a);
-            private static double LerpAngle(double a, double b, double t)
-            {
-                double delta = ((b - a + 180) % 360 + 360) % 360 - 180;
-                return a + t * delta;
-            }
             private static Matrix LerpMatrix(Matrix m1, Matrix m2, double t)
             {
                 return new Matrix(

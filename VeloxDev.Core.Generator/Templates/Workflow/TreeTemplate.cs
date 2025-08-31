@@ -387,6 +387,34 @@ public static class TreeTemplate
          return global::System.Threading.Tasks.Task.CompletedTask;
      }
 
+     private async global::System.Threading.Tasks.Task ResetState(object? parameter,
+         global::System.Threading.CancellationToken ct)
+     {
+         foreach (var node in Nodes)
+         {
+             OnNodeReseting(node);
+             node.WorkCommand.Lock();
+             node.BroadcastCommand.Lock();
+         }
+
+         foreach (var node in Nodes)
+         {
+             await node.WorkCommand.InterruptAsync();
+             await node.BroadcastCommand.InterruptAsync();
+             node.WorkCommand.UnLock();
+             node.BroadcastCommand.UnLock();
+             OnNodeReseted(node);
+         }
+
+         foreach (var link in Links)
+         {
+             OnLinkReseted(link);
+         }
+     }
+     partial void OnNodeReseting(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node);
+     partial void OnNodeReseted(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node);
+     partial void OnLinkReseted(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink link);
+
      public global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink? FindLink(
          global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode sender,
          global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode processor)
@@ -425,6 +453,18 @@ public static class TreeTemplate
          _buffer_UndoCommand ??= new global::VeloxDev.Core.MVVM.VeloxCommand(
              executeAsync: Undo,
              canExecute: _ => CanUndo);
+
+     private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_ResetStateCommand = null;
+     public global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand ResetStateCommand
+     {
+         get
+         {
+             _buffer_ResetStateCommand ??= new global::VeloxDev.Core.MVVM.VeloxCommand(
+                 executeAsync: ResetState,
+                 canExecute: _ => true);
+             return _buffer_ResetStateCommand;
+         }
+     }
 """;
     }
 }

@@ -1,3 +1,4 @@
+using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.ViewModels;
@@ -13,12 +14,19 @@ public partial class NodeViewModel
     
     // …… 自由扩展您的节点视图模型
 
-    async partial void OnExecute(object? parameter)
+    // 例子 ：自定义一个属性来监听任务执行情况
+    [VeloxProperty] private bool _isExecuting = false;
+
+    // 例子 ：假设有一个耗时3秒的任务
+    private async partial Task Work(object? parameter, CancellationToken ct)
     {
-        // 假设节点工作了三秒钟
-        await Task.Delay(3000); 
+        // 任务执行
+        await Task.Delay(3000);
+        IsExecuting = true;
+        await Task.Delay(3000);
+        IsExecuting = false;
         
-        // 递归执行 输出口 -> 输入口 -> 输入口所在节点 -> 节点逻辑执行 -> 输入口 ……
-        BroadcastCommand.Execute("任务来喽！");
+        // 任务结束后可以继续向下传播
+        BroadcastCommand.Execute(parameter);
     }
 }

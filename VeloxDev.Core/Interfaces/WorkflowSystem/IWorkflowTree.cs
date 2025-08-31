@@ -16,5 +16,6 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IVeloxCommand SetPointerCommand { get; }
         public IVeloxCommand SetSenderCommand { get; }
         public IVeloxCommand SetProcessorCommand { get; }
+        public IVeloxCommand ResetStateCommand { get; }
     }
 }

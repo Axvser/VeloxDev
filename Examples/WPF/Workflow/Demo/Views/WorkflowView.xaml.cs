@@ -30,13 +30,13 @@ public partial class WorkflowView : UserControl
         {
             Size = new Size(200, 200),
             Anchor = new Anchor(50, 50, 1),
-            Name = "光敏触发器"
+            Name = "任务"
         };
         var node2 = new NodeViewModel()
         {
             Size = new Size(300, 300),
             Anchor = new Anchor(250, 250, 1),
-            Name = "机械调度组"
+            Name = "任务"
         };
         node1.Slots.Add(slot1);
         node2.Slots.Add(slot2);
@@ -46,6 +46,9 @@ public partial class WorkflowView : UserControl
         _workflowViewModel.Nodes.Add(node2);
         // 使用数据上下文
         DataContext = _workflowViewModel;
+        
+        // 执行并在 3s 内用拖拽建立连接即可看到传播效果 （ 取决于 NodeViewMolde 中的 Work 实现 ）
+        node1.WorkCommand.Execute(null);
     }
 
     // 当鼠标移动时，更新 工作流Tree 中记录的鼠标位点
@@ -53,7 +56,7 @@ public partial class WorkflowView : UserControl
     {
         if (DataContext is not IWorkflowTree tree) return;
         var point = e.GetPosition(this);
-        tree.SetMouseCommand.Execute(new Anchor(point.X, point.Y, 0));
+        tree.SetPointerCommand.Execute(new Anchor(point.X, point.Y, 0));
     }
 
     // 当鼠标离开时，清除 工作流Tree 中记录的起始 输入/输出口

@@ -43,7 +43,7 @@ public partial class MainWindow
                 Duration = TimeSpan.FromSeconds(2),
                 IsAutoReverse = true,
                 FPS = 144, // 若启用缓动函数，则推荐设置高帧率以获取更丝滑的视觉效果
-                EaseCalculator = Eases.Circ.InOut,
+                Ease = Eases.Circ.InOut,
                 LoopTime = 2,
             });
 
@@ -53,7 +53,7 @@ public partial class MainWindow
             .Property(r => r.RenderTransform,
             [
                 new TranslateTransform(200, 0),
-                new Rotate3DTransform(360, 180, 180, 0, 0, 0, 1),
+                new Rotate3DTransform(180, 180, 0, 0, 0, 0, 0),
                 new ScaleTransform(1.3, 1.3)
             ])
             .Effect(new TransitionEffect()
@@ -61,7 +61,7 @@ public partial class MainWindow
                 Duration = TimeSpan.FromSeconds(2),
                 IsAutoReverse = true,
                 FPS = 144,
-                EaseCalculator = Eases.Circ.InOut,
+                Ease = Eases.Circ.InOut,
                 LoopTime = 2,
             })
             .AwaitThen(TimeSpan.FromSeconds(5)) // 等待 5秒再开始下一段动画
@@ -69,6 +69,6 @@ public partial class MainWindow
             .Effect(new TransitionEffect()
             {
                 Duration = TimeSpan.FromSeconds(2),
-                EaseCalculator = Eases.Sine.In
+                Ease = Eases.Sine.In
             });
 }
