@@ -13,7 +13,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IWorkflowLink? FindLink(IWorkflowNode sender, IWorkflowNode processor);
 
         public IVeloxCommand CreateNodeCommand { get; }
-        public IVeloxCommand SetMouseCommand { get; }
+        public IVeloxCommand SetPointerCommand { get; }
         public IVeloxCommand SetSenderCommand { get; }
         public IVeloxCommand SetProcessorCommand { get; }
     }

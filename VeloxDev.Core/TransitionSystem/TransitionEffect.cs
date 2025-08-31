@@ -24,7 +24,7 @@ namespace VeloxDev.Core.TransitionSystem
                 LoopTime = LoopTime,
                 Duration = Duration,
                 FPS = FPS,
-                EaseCalculator = EaseCalculator,
+                Ease = Ease,
                 Priority = Priority,
             };
             return copy;
@@ -45,7 +45,7 @@ namespace VeloxDev.Core.TransitionSystem
         public virtual TimeSpan Duration { get; set; } = TimeSpan.FromMilliseconds(0);
         public virtual bool IsAutoReverse { get; set; } = false;
         public virtual int LoopTime { get; set; } = 0;
-        public virtual IEaseCalculator EaseCalculator { get; set; } = Eases.Default;
+        public virtual IEaseCalculator Ease { get; set; } = Eases.Default;
 
 
         public virtual event EventHandler<FrameEventArgs> Awaked
@@ -128,7 +128,7 @@ namespace VeloxDev.Core.TransitionSystem
                 LoopTime = LoopTime,
                 Duration = Duration,
                 FPS = FPS,
-                EaseCalculator = EaseCalculator
+                Ease = Ease
             };
             return copy;
         }

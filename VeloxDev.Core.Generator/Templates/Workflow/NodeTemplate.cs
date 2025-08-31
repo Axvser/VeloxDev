@@ -2,7 +2,10 @@
 
 public static class NodeTemplate
 {
-    public const string Normal = $$"""
+    public static string FromTaskConfig(bool CanConcurrent)
+    {
+        string command = CanConcurrent ? "ConcurrentVeloxCommand" : "VeloxCommand";
+        return $$"""
     private void InitializeWorkflow()
     {
         slots.CollectionChanged += OnSlotsCollectionChanged;
@@ -166,11 +169,11 @@ public static class NodeTemplate
     partial void OnSlotAdded(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot);
     partial void OnSlotRemoved(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot);
 
-    public void Execute(object? parameter)
+    private async global::System.Threading.Tasks.Task ExecuteNodeTask(object? parameter, global::System.Threading.CancellationToken ct)
     {
-        OnExecute(parameter);
+        await OnExecute(parameter,ct);
     }
-    partial void OnExecute(object? parameter);
+    private partial global::System.Threading.Tasks.Task OnExecute(object? parameter, global::System.Threading.CancellationToken ct);
 
     private global::System.Threading.Tasks.Task CreateSlot(object? parameter, global::System.Threading.CancellationToken ct)
     {
@@ -259,15 +262,14 @@ public static class NodeTemplate
         {
             foreach (var target in slot.Targets)
             {
-                target.Execute(parameter);
+                target.ExecuteCommand.Execute(parameter);
             }
         }
         return global::System.Threading.Tasks.Task.CompletedTask;
     }
-    private global::System.Threading.Tasks.Task Execute(object? parameter, global::System.Threading.CancellationToken ct)
+    private async global::System.Threading.Tasks.Task Execute(object? parameter, global::System.Threading.CancellationToken ct)
     {
-        Execute(parameter);
-        return global::System.Threading.Tasks.Task.CompletedTask;
+        await ExecuteNodeTask(parameter,ct);
     }
     private global::System.Threading.Tasks.Task Undo(object? parameter, global::System.Threading.CancellationToken ct)
     {
@@ -313,7 +315,7 @@ public static class NodeTemplate
     {
         get
         {
-            _buffer_ExecuteCommand ??= new global::VeloxDev.Core.MVVM.VeloxCommand(
+            _buffer_ExecuteCommand ??= new global::VeloxDev.Core.MVVM.{{command}}(
                 executeAsync: Execute,
                 canExecute: _ => true);
             return _buffer_ExecuteCommand;
@@ -331,4 +333,5 @@ public static class NodeTemplate
         }
     }
 """;
+    }
 }

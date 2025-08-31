@@ -11,8 +11,6 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public Size Size { get; set; }
         public ObservableCollection<IWorkflowSlot> Slots { get; set; }
 
-        public void Execute(object? parameter);
-
         public IVeloxCommand CreateSlotCommand { get; }
         public IVeloxCommand DeleteCommand { get; }
         public IVeloxCommand BroadcastCommand { get; }

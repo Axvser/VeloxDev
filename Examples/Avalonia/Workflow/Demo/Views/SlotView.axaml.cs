@@ -35,7 +35,7 @@ public partial class SlotView : UserControl
         
         // 无鼠标设备需要在此处更新一次当前位置，否则连接线可能有一帧异常数据
         var point = e.GetPosition(_parentCanvas);
-        tree.SetMouseCommand.Execute(new Anchor(point.X, point.Y, 0));
+        tree.SetPointerCommand.Execute(new Anchor(point.X, point.Y, 0));
 
         context.ConnectingCommand.Execute(null);
 

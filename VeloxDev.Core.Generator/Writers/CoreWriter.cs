@@ -24,6 +24,7 @@ namespace VeloxDev.Core.Generator.Writers
         public bool IsMono { get; set; } = false;
         public int MonoSpan { get; set; } = 17;
         public int WorkflowType { get; set; } = 0;
+        public bool NodeTaskType { get; set; } = false;
         public string? SlotType { get; set; } = default;
         public string? LinkType { get; set; } = default;
         List<Tuple<string, bool, bool, string>> CommandConfig { get; set; } = [];
@@ -53,6 +54,7 @@ namespace VeloxDev.Core.Generator.Writers
                 if (name == s2)
                 {
                     WorkflowType = 2;
+                    NodeTaskType = (bool)config.ConstructorArguments[0].Value!;
                     return;
                 }
                 else if (name == s3)
@@ -490,8 +492,8 @@ namespace VeloxDev.Core.Generator.Writers
         }
         private string GenerateWorkflow() => WorkflowType switch
         {
-            1 => TreeTemplate.FromTypeConfig(SlotType,LinkType),
-            2 => NodeTemplate.Normal,
+            1 => TreeTemplate.FromTypeConfig(SlotType, LinkType),
+            2 => NodeTemplate.FromTaskConfig(NodeTaskType),
             3 => SlotTemplate.Normal,
             4 => LinkTemplate.Normal,
             _ => string.Empty

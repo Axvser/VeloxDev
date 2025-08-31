@@ -1,18 +1,17 @@
-﻿using System;
-
-namespace VeloxDev.Core.Generator.Templates.Workflow;
+﻿namespace VeloxDev.Core.Generator.Templates.Workflow;
 
 public static class TreeTemplate
 {
     public static string FromTypeConfig(string? slotstring, string? linkstring)
     {
-        string slotTypeName = slotstring  ?? "global::VeloxDev.Core.WorkflowSystem.SlotContext";
-        string linkTypeName = linkstring  ?? "global::VeloxDev.Core.WorkflowSystem.LinkContext";
+        string slotTypeName = slotstring ?? "global::VeloxDev.Core.WorkflowSystem.SlotContext";
+        string linkTypeName = linkstring ?? "global::VeloxDev.Core.WorkflowSystem.LinkContext";
 
         return $$"""
      private void InitializeWorkflow()
      {
          nodes.CollectionChanged += OnNodesCollectionChanged;
+         links.CollectionChanged += OnLinksCollectionChanged;
      }
 
      private readonly global::System.Collections.Concurrent.ConcurrentStack<global::System.Action> undos = new();
@@ -34,8 +33,7 @@ public static class TreeTemplate
          get => virtualLink;
          set
          {
-             if (global::System.Collections.Generic.EqualityComparer<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink>.Default.Equals(virtualLink, value))
-                 return;
+             if (object.Equals(virtualLink, value)) return;
              OnPropertyChanging(nameof(VirtualLink));
              virtualLink = value;
              OnPropertyChanged(nameof(VirtualLink));
@@ -47,9 +45,7 @@ public static class TreeTemplate
          get => nodes;
          set
          {
-             if (global::System.Collections.Generic.EqualityComparer<global::System.Collections.ObjectModel.ObservableCollection<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode>>.Default.Equals(nodes, value))
-                 return;
-
+             if (object.Equals(nodes, value)) return;
              var old = nodes;
              OnPropertyChanging(nameof(Nodes));
              nodes = value;
@@ -70,56 +66,64 @@ public static class TreeTemplate
          get => links;
          set
          {
-             if (global::System.Collections.Generic.EqualityComparer<global::System.Collections.ObjectModel.ObservableCollection<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink>>.Default.Equals(links, value))
-                 return;
-
+             if (object.Equals(links, value)) return;
+             var old = links;
              OnPropertyChanging(nameof(Links));
              links = value;
+             old.CollectionChanged -= OnLinksCollectionChanged;
+             value.CollectionChanged += OnLinksCollectionChanged;
              OnPropertyChanged(nameof(Links));
          }
      }
 
-     public bool IsEnabled
-     {
-         get => isEnabled;
-         set
-         {
-             if (global::System.Collections.Generic.EqualityComparer<bool>.Default.Equals(isEnabled, value))
-                 return;
-
-             OnPropertyChanging(nameof(IsEnabled));
-             isEnabled = value;
-             OnPropertyChanged(nameof(IsEnabled));
-         }
-     }
-
-     public string UID
-     {
-         get => uID;
-         set
-         {
-             if (global::System.Collections.Generic.EqualityComparer<string>.Default.Equals(uID, value))
-                 return;
-
-             OnPropertyChanging(nameof(UID));
-             uID = value;
-             OnPropertyChanged(nameof(UID));
-         }
-     }
-
-     public string Name
-     {
-         get => name;
-         set
-         {
-             if (global::System.Collections.Generic.EqualityComparer<string>.Default.Equals(name, value))
-                 return;
-
-             OnPropertyChanging(nameof(Name));
-             name = value;
-             OnPropertyChanged(nameof(Name));
-         }
-     }
+    public bool IsEnabled
+    {
+        get => isEnabled;
+        set
+        {
+            if (object.Equals(isEnabled, value)) return;
+            var old = isEnabled;
+            OnPropertyChanging(nameof(IsEnabled));
+            OnIsEnabledChanging(old, value);
+            isEnabled = value;
+            OnIsEnabledChanged(old, value);
+            OnPropertyChanged(nameof(IsEnabled));
+        }
+    }
+    partial void OnIsEnabledChanging(bool oldValue, bool newValue);
+    partial void OnIsEnabledChanged(bool oldValue, bool newValue);
+    public string UID
+    {
+        get => uID;
+        set
+        {
+            if (object.Equals(uID, value)) return;
+            var old = uID;
+            OnPropertyChanging(nameof(UID));
+            OnUIDChanging(old, value);
+            uID = value;
+            OnUIDChanged(old, value);
+            OnPropertyChanged(nameof(UID));
+        }
+    }
+    partial void OnUIDChanging(string oldValue, string newValue);
+    partial void OnUIDChanged(string oldValue, string newValue);
+    public string Name
+    {
+        get => name;
+        set
+        {
+            if (object.Equals(name, value)) return;
+            var old = name;
+            OnPropertyChanging(nameof(Name));
+            OnNameChanging(old, value);
+            name = value;
+            OnNameChanged(old, value);
+            OnPropertyChanged(nameof(Name));
+        }
+    }
+    partial void OnNameChanging(string oldValue, string newValue);
+    partial void OnNameChanged(string oldValue, string newValue);
 
      public bool CanUndo => !undos.IsEmpty;
 
@@ -130,6 +134,7 @@ public static class TreeTemplate
              foreach (global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node in e.NewItems)
              {
                  node.Parent = this;
+                 OnNodeAdded(node);
              }
          }
 
@@ -138,34 +143,65 @@ public static class TreeTemplate
              foreach (global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node in e.OldItems)
              {
                  node.Parent = null;
+                OnNodeRemoved(node);
              }
          }
      }
+     partial void OnNodeAdded(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node);
+     partial void OnNodeRemoved(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node);
+
+     private void OnLinksCollectionChanged(object? sender,global::System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+     {
+         if (e.NewItems != null)
+         {
+             foreach (global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink link in e.NewItems)
+             {
+                 OnLinkAdded(link);
+             }
+         }
+
+         if (e.OldItems != null)
+         {
+             foreach (global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink link in e.OldItems)
+             {
+                 OnLinkRemoved(link);
+             }
+         }
+     }
+     partial void OnLinkAdded(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink link);
+     partial void OnLinkRemoved(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink link);
 
      private global::System.Threading.Tasks.Task CreateNode(object? parameter, global::System.Threading.CancellationToken ct)
      {
          if (parameter is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node)
          {
+             OnNodeCreated(node);
              nodes.Add(node);
              PushUndo(() => nodes.Remove(node));
          }
          return global::System.Threading.Tasks.Task.CompletedTask;
      }
+     partial void OnNodeCreated(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowNode node);
 
-     private global::System.Threading.Tasks.Task SetMouse(object? parameter, global::System.Threading.CancellationToken ct)
+     private global::System.Threading.Tasks.Task SetPointer(object? parameter, global::System.Threading.CancellationToken ct)
      {
          if (parameter is global::VeloxDev.Core.WorkflowSystem.Anchor anchor && VirtualLink.Processor != null)
          {
+             var old = VirtualLink.Processor.Anchor;
+             OnPointerChanging(old, anchor);
              VirtualLink.Processor.Anchor = anchor;
+             OnPointerChanged(old, anchor);
          }
          return global::System.Threading.Tasks.Task.CompletedTask;
      }
+     partial void OnPointerChanging(global::VeloxDev.Core.WorkflowSystem.Anchor oldValue, global::VeloxDev.Core.WorkflowSystem.Anchor newValue);
+     partial void OnPointerChanged(global::VeloxDev.Core.WorkflowSystem.Anchor oldValue, global::VeloxDev.Core.WorkflowSystem.Anchor newValue);
 
      private global::System.Threading.Tasks.Task SetSender(object? parameter, global::System.Threading.CancellationToken ct)
      {
          if (parameter is global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot)
          {
-             // 强制状态修复（关键修改）
+             // 强制状态修复
              if (slot.State == global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.PreviewSender)
              {
                  // 检查是否真实存在虚拟连接
@@ -178,7 +214,7 @@ public static class TreeTemplate
              if (!slot.Capacity.HasFlag(global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotCapacity.Sender))
                  return global::System.Threading.Tasks.Task.CompletedTask;
 
-             // 原子化状态处理（关键修改）
+             // 原子化状态处理
              switch (slot.State)
              {
                  case global::VeloxDev.Core.Interfaces.WorkflowSystem.SlotState.StandBy:
@@ -246,6 +282,7 @@ public static class TreeTemplate
                      Sender = sender,
                      Processor = processor
                  };
+                 OnLinkCreated(newLink);
                  Links.Add(newLink);
                  sender.Targets.Add(processor.Parent!);
                  processor.Sources.Add(sender.Parent!);
@@ -275,6 +312,7 @@ public static class TreeTemplate
          }
          return global::System.Threading.Tasks.Task.CompletedTask;
      }
+     partial void OnLinkCreated(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLink link);
 
      private void RemoveAllSlotConnections(global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlot slot)
      {
@@ -321,6 +359,7 @@ public static class TreeTemplate
              }
          }
      }
+
      private void ResetConnection()
      {
          if (VirtualLink.Sender != null)
@@ -363,10 +402,10 @@ public static class TreeTemplate
              executeAsync: CreateNode,
              canExecute: _ => true);
 
-     private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_SetMouseCommand;
-     public global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand SetMouseCommand =>
-         _buffer_SetMouseCommand ??= new global::VeloxDev.Core.MVVM.VeloxCommand(
-             executeAsync: SetMouse,
+     private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_SetPointerCommand;
+     public global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand SetPointerCommand =>
+         _buffer_SetPointerCommand ??= new global::VeloxDev.Core.MVVM.VeloxCommand(
+             executeAsync: SetPointer,
              canExecute: _ => true);
 
      private global::VeloxDev.Core.Interfaces.MVVM.IVeloxCommand? _buffer_SetSenderCommand;

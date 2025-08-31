@@ -99,7 +99,7 @@ namespace VeloxDev.Core.DynamicTheme
             {
                 themeObject?.ExecuteThemeChanging(current, themeType);
             }
-            await ExecuteTransition(CalculateFrames(actives, steps, effect.EaseCalculator, themeType), deltaTime, themeType);
+            await ExecuteTransition(CalculateFrames(actives, steps, effect.Ease, themeType), deltaTime, themeType);
             foreach (var themeObject in actives)
             {
                 themeObject?.ExecuteThemeChanged(current, themeType);

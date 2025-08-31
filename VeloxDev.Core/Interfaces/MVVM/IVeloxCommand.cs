@@ -7,6 +7,5 @@ namespace VeloxDev.Core.Interfaces.MVVM
         public void Notify();
         public void Cancel();
         public void Interrupt();
-        public bool IsExecuting { get; }
     }
 }

@@ -12,7 +12,10 @@
             }
 
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class NodeAttribute : Attribute;
+            public sealed class NodeAttribute(bool CanConcurrent = false) : Attribute
+            {
+                public bool CanConcurrent { get; } = CanConcurrent;
+            }
 
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
             public sealed class SlotAttribute : Attribute;

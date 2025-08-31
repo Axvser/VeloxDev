@@ -2,6 +2,9 @@
 
 namespace VeloxDev.Core.DynamicTheme
 {
+    /// <summary>
+    /// Configure the context for dynamic theme switching
+    /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public class ThemeConfigAttribute<TConverter, TTheme1, TTheme2> : Attribute
         where TConverter : class, IThemeValueConverter
@@ -15,6 +18,9 @@ namespace VeloxDev.Core.DynamicTheme
 #pragma warning restore IDE0060
     }
 
+    /// <summary>
+    /// Configure the context for dynamic theme switching
+    /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public class ThemeConfigAttribute<TConverter, TTheme1, TTheme2, TTheme3> : Attribute
         where TConverter : class, IThemeValueConverter
@@ -29,6 +35,9 @@ namespace VeloxDev.Core.DynamicTheme
 #pragma warning restore IDE0060
     }
 
+    /// <summary>
+    /// Configure the context for dynamic theme switching
+    /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public class ThemeConfigAttribute<TConverter, TTheme1, TTheme2, TTheme3, TTheme4> : Attribute
         where TConverter : class, IThemeValueConverter
@@ -44,6 +53,9 @@ namespace VeloxDev.Core.DynamicTheme
 #pragma warning restore IDE0060
     }
 
+    /// <summary>
+    /// Configure the context for dynamic theme switching
+    /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public class ThemeConfigAttribute<TConverter, TTheme1, TTheme2, TTheme3, TTheme4, TTheme5> : Attribute
         where TConverter : class, IThemeValueConverter
@@ -60,6 +72,9 @@ namespace VeloxDev.Core.DynamicTheme
 #pragma warning restore IDE0060
     }
 
+    /// <summary>
+    /// Configure the context for dynamic theme switching
+    /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public class ThemeConfigAttribute<TConverter, TTheme1, TTheme2, TTheme3, TTheme4, TTheme5, TTheme6> : Attribute
         where TConverter : class, IThemeValueConverter
@@ -77,6 +92,9 @@ namespace VeloxDev.Core.DynamicTheme
 #pragma warning restore IDE0060
     }
 
+    /// <summary>
+    /// Configure the context for dynamic theme switching
+    /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public class ThemeConfigAttribute<TConverter, TTheme1, TTheme2, TTheme3, TTheme4, TTheme5, TTheme6, TTheme7> : Attribute
         where TConverter : class, IThemeValueConverter

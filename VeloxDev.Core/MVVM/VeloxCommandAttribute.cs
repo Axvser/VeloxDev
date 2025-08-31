@@ -26,7 +26,6 @@ namespace VeloxDev.Core.MVVM
         private readonly SemaphoreSlim _asyncLock = new(1, 1);
 
         public event EventHandler? CanExecuteChanged;
-        public bool IsExecuting { get; private set; }
 
         public bool CanExecute(object? parameter)
         {
@@ -56,7 +55,6 @@ namespace VeloxDev.Core.MVVM
             try
             {
                 _activeExecutions.Add(cts);
-                IsExecuting = true;
             }
             finally
             {
@@ -77,7 +75,6 @@ namespace VeloxDev.Core.MVVM
                 try
                 {
                     _activeExecutions.Remove(cts);
-                    IsExecuting = _activeExecutions.Count > 0;
                 }
                 finally
                 {
@@ -94,7 +91,6 @@ namespace VeloxDev.Core.MVVM
             {
                 executionsToCancel = [.. _activeExecutions];
                 _activeExecutions.Clear();
-                IsExecuting = false;
             }
             finally
             {
@@ -121,7 +117,6 @@ namespace VeloxDev.Core.MVVM
         private int _activeExecutionCount = 0;
 
         public event EventHandler? CanExecuteChanged;
-        public bool IsExecuting => _activeExecutionCount > 0;
 
         public bool CanExecute(object? parameter)
         {

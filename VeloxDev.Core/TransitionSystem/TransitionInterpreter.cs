@@ -77,7 +77,7 @@ namespace VeloxDev.Core.TransitionSystem
             var endIndex = steps - 1d;
             for (int i = 0; i < steps; i++)
             {
-                var ease = effect.EaseCalculator.Ease(i / endIndex);
+                var ease = effect.Ease.Ease(i / endIndex);
                 var index = (int)(steps * ease);
                 if (index < 0) result.Add(0);
                 else if (index >= steps) result.Add(steps - 1);
@@ -159,7 +159,7 @@ namespace VeloxDev.Core.TransitionSystem
             var endIndex = steps - 1d;
             for (int i = 0; i < steps; i++)
             {
-                var ease = effect.EaseCalculator.Ease(i / endIndex);
+                var ease = effect.Ease.Ease(i / endIndex);
                 var index = (int)(steps * ease);
                 if (index < 0) result.Add(0);
                 else if (index >= steps) result.Add(steps - 1);

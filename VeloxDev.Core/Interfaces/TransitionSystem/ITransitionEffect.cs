@@ -18,7 +18,7 @@
         public TimeSpan Duration { get; set; }
         public bool IsAutoReverse { get; set; }
         public int LoopTime { get; set; }
-        public IEaseCalculator EaseCalculator { get; set; }
+        public IEaseCalculator Ease { get; set; }
 
         public event EventHandler<FrameEventArgs> Awaked;
         public event EventHandler<FrameEventArgs> Start;
