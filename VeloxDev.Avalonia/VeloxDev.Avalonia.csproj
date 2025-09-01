@@ -10,6 +10,7 @@
 		<Version>2.1.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + Avalonia</Description>
+		<AvaloniaVersion>11.1.0</AvaloniaVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
