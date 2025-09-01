@@ -27,17 +27,21 @@
         private Task Delete(object? parameter, CancellationToken ct)
         {
             // …… 此处执行你的命令逻辑
+            // 可在 VeloxCommand 的参数中选择 Command名称，默认 “Auto”
             // 可在 VeloxCommand 的参数中选择是否手动验证命令可执行性
-            // 可在 VeloxCommand 的参数中选择排队执行或并发执行
+            // 可在 VeloxCommand 的参数中选择信号量以启用并发
             return Task.CompletedTask;
         }
 
         private void Test()
         {
-            var state = DeleteCommand.IsExecuting; // 查询是否有执行中的 Task
+            // 下述三个方法均有 Async 版本
             DeleteCommand.Execute(null); // 执行
             DeleteCommand.Cancel();      // 取消当前执行中的 Task
             DeleteCommand.Interrupt();   // 取消包含排队 Task 在内的所有 Task
+            
+            DeleteCommand.Lock();        // 锁定命令以阻止所有任务继续
+            DeleteCommand.UnLock();      // 解锁命令
         }
     }
 ```
@@ -58,12 +62,12 @@
 
 > 我们的工作流是 MVVM 的，建议您使用下述特性快速生成多个包含可选项的模板
 
-| 特性 | 应用对象 | 参数 | 描述 |
-|------|----------|------|------|
-| `Workflow.Context.Tree` | 工作流树类 | `slotType` - 自定义槽位<br>`linkType` -连接线类型 | 标记自定义工作树类型 |
-| `Workflow.Context.Node` | 工作流节点类 | `CanConcurrent` - 是否启用并发 | 标记自定义节点类型 |
-| `Workflow.Context.Slot` | 工作流槽位类 | 无 | 标记自定义槽位类型 |
-| `Workflow.Context.Link` | 工作流连接线类 | 无 | 标记自定义连接线类型 |
+| 特性 | 应用对象 | 参数                                       | 描述 |
+|------|----------|------------------------------------------|------|
+| `Workflow.Context.Tree` | 工作流树类 | `slotType` - 自定义槽位<br>`linkType` - 连接线类型 | 标记自定义工作树类型 |
+| `Workflow.Context.Node` | 工作流节点类 | `semaphore` - 节点最大任务并发数                  | 标记自定义节点类型 |
+| `Workflow.Context.Slot` | 工作流槽位类 | 无                                        | 标记自定义槽位类型 |
+| `Workflow.Context.Link` | 工作流连接线类 | 无                                        | 标记自定义连接线类型 |
 
 ### ViewModel 生成结果
 

@@ -5,7 +5,7 @@ using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[Workflow.Context.Node]
+[Workflow.Context.Node(semaphore:10)] // 允许 10 个任务并发
 public partial class NodeViewModel
 {
     public NodeViewModel()

@@ -3,7 +3,7 @@ using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[Workflow.Context.Node]
+[Workflow.Context.Node(semaphore: 10)]  // 允许 10 个任务并发
 public partial class NodeViewModel
 {
     public NodeViewModel()
@@ -11,7 +11,7 @@ public partial class NodeViewModel
         // 必须执行此项
         InitializeWorkflow();
     }
-    
+
     // …… 自由扩展您的节点视图模型
 
     // 例子 ：自定义一个属性来监听任务执行情况
@@ -25,7 +25,7 @@ public partial class NodeViewModel
         IsExecuting = true;
         await Task.Delay(3000);
         IsExecuting = false;
-        
+
         // 任务结束后可以继续向下传播
         BroadcastCommand.Execute(parameter);
     }

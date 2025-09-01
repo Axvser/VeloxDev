@@ -12,9 +12,9 @@
             }
 
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class NodeAttribute(bool CanConcurrent = false) : Attribute
+            public sealed class NodeAttribute(int semaphore = 1) : Attribute
             {
-                public bool CanConcurrent { get; } = CanConcurrent;
+                public int Semaphore { get; } = semaphore;
             }
 
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]

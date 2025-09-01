@@ -6,24 +6,28 @@ namespace VeloxDev.Core.MVVM
     /// Task ➤ Command
     /// <para><strong>Format : </strong> <c>Task MethodName(object? parameter, CancellationToken ct)</c></para>
     /// </summary>
-    /// <param name="Name">The name of the command, if not specified, it will be automatically generated</param>
-    /// <param name="CanValidate">True indicates that the executability verification of this command is enabled</param>
-    /// <param name="CanConcurrent">True indicates that the command is concurrent</param>
+    /// <param name="name">The name of the command, if not specified, it will be automatically generated</param>
+    /// <param name="canValidate">True indicates that the executability verification of this command is enabled</param>
+    /// <param name="semaphore">Concurrent Capacity</param>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
-    public sealed class VeloxCommandAttribute(string Name = "Auto", bool CanValidate = false, bool CanConcurrent = false) : Attribute
+    public sealed class VeloxCommandAttribute(
+        string name = "Auto",
+        bool canValidate = false,
+        int semaphore = 1) : Attribute
     {
-        public string Name { get; } = Name;
-        public bool CanValidate { get; } = CanValidate;
-        public bool CanConcurrent { get; } = CanConcurrent;
+        public string Name { get; } = name;
+        public bool CanValidate { get; } = canValidate;
+        public int Semaphore { get; } = semaphore;
     }
 
     public sealed class ConcurrentVeloxCommand(
         Func<object?, CancellationToken, Task> executeAsync,
-        Predicate<object?>? canExecute = null) : IVeloxCommand
+        Predicate<object?>? canExecute = null,
+        int semaphore = 1) : IVeloxCommand
     {
         private readonly Func<object?, CancellationToken, Task> _executeAsync = executeAsync;
         private readonly List<CancellationTokenSource> _activeExecutions = [];
-        private readonly SemaphoreSlim _asyncLock = new(1, 1);
+        private readonly SemaphoreSlim _asyncLock = new(semaphore, semaphore);
         private bool _isForceLocked = false;
 
         public event EventHandler? CanExecuteChanged;
@@ -32,22 +36,27 @@ namespace VeloxDev.Core.MVVM
         {
             return (canExecute?.Invoke(parameter) ?? true) && !_isForceLocked;
         }
+
         public async void Execute(object? parameter)
         {
             await ExecuteAsync(parameter);
         }
+
         public void Notify()
         {
             CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
+
         public async void Cancel()
         {
             await CancelAsync();
         }
+
         public async void Interrupt()
         {
             await InterruptAsync();
         }
+
         public async Task ExecuteAsync(object? parameter)
         {
             await _asyncLock.WaitAsync();
@@ -78,6 +87,7 @@ namespace VeloxDev.Core.MVVM
                 _asyncLock.Release();
             }
         }
+
         public async Task CancelAsync()
         {
             List<CancellationTokenSource> executionsToCancel;
@@ -98,6 +108,7 @@ namespace VeloxDev.Core.MVVM
                 cts.Cancel();
             }
         }
+
         public async Task InterruptAsync() => await CancelAsync();
 
         public void Lock()
@@ -118,8 +129,10 @@ namespace VeloxDev.Core.MVVM
             {
                 _asyncLock.Release();
             }
+
             Notify();
         }
+
         public void UnLock()
         {
             _isForceLocked = false;
@@ -145,22 +158,27 @@ namespace VeloxDev.Core.MVVM
         {
             return (canExecute?.Invoke(parameter) ?? true) && !_isForceLocked;
         }
+
         public async void Execute(object? parameter)
         {
             await ExecuteAsync(parameter);
         }
+
         public void Notify()
         {
             CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
+
         public async void Cancel()
         {
             await CancelAsync();
         }
+
         public async void Interrupt()
         {
             await InterruptAsync();
         }
+
         public async Task ExecuteAsync(object? parameter)
         {
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -214,6 +232,7 @@ namespace VeloxDev.Core.MVVM
                 _queueSemaphore.Release();
             }
         }
+
         public async Task CancelAsync()
         {
             await _queueSemaphore.WaitAsync();
@@ -226,6 +245,7 @@ namespace VeloxDev.Core.MVVM
                 _queueSemaphore.Release();
             }
         }
+
         public async Task InterruptAsync()
         {
             await _queueSemaphore.WaitAsync();
@@ -247,6 +267,7 @@ namespace VeloxDev.Core.MVVM
                 _queueSemaphore.Release();
             }
         }
+
         public void Lock()
         {
             _queueSemaphore.Wait();
@@ -265,8 +286,10 @@ namespace VeloxDev.Core.MVVM
             {
                 _queueSemaphore.Release();
             }
+
             Notify();
         }
+
         public void UnLock()
         {
             _isForceLocked = false;
@@ -282,7 +305,9 @@ namespace VeloxDev.Core.MVVM
                     tcs.SetResult(result);
                 }
             }
-            catch { }
+            catch
+            {
+            }
         }
     }
 }

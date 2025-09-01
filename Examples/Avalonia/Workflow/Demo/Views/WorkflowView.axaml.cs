@@ -47,6 +47,8 @@ public partial class WorkflowView : UserControl
         DataContext = _workflowViewModel;
         
         // 执行并在 3s 内用拖拽建立连接即可看到传播效果 （ 取决于 NodeViewMolde 中的 Work 实现 ）
+        // 你可观察 NodeViewModel 使用不同信号量时的效果差异
+        node1.WorkCommand.Execute(null);
         node1.WorkCommand.Execute(null);
     }
 

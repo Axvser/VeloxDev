@@ -24,10 +24,10 @@ namespace VeloxDev.Core.Generator.Writers
         public bool IsMono { get; set; } = false;
         public int MonoSpan { get; set; } = 17;
         public int WorkflowType { get; set; } = 0;
-        public bool NodeTaskType { get; set; } = false;
+        public int NodeTaskSemaphore { get; set; } = 1;
         public string? SlotType { get; set; } = default;
         public string? LinkType { get; set; } = default;
-        List<Tuple<string, bool, bool, string>> CommandConfig { get; set; } = [];
+        List<Tuple<string, bool, int, string>> CommandConfig { get; set; } = [];
         List<Analizer.MVVMPropertyFactory> MVVMProperties { get; set; } = [];
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
@@ -54,7 +54,7 @@ namespace VeloxDev.Core.Generator.Writers
                 if (name == s2)
                 {
                     WorkflowType = 2;
-                    NodeTaskType = (bool)config.ConstructorArguments[0].Value!;
+                    NodeTaskSemaphore = (int)config.ConstructorArguments[0].Value!;
                     return;
                 }
                 else if (name == s3)
@@ -65,8 +65,10 @@ namespace VeloxDev.Core.Generator.Writers
                 else if (name == s1)
                 {
                     WorkflowType = 1;
-                    SlotType = (config.ConstructorArguments[0].Value as INamedTypeSymbol)?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    LinkType = (config.ConstructorArguments[1].Value as INamedTypeSymbol)?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    SlotType = (config.ConstructorArguments[0].Value as INamedTypeSymbol)?.ToDisplayString(
+                        SymbolDisplayFormat.FullyQualifiedFormat);
+                    LinkType = (config.ConstructorArguments[1].Value as INamedTypeSymbol)?.ToDisplayString(
+                        SymbolDisplayFormat.FullyQualifiedFormat);
                     return;
                 }
                 else if (name == s4)
@@ -80,33 +82,41 @@ namespace VeloxDev.Core.Generator.Writers
                 }
             }
         }
+
         private void ReadMVVMConfig(INamedTypeSymbol symbol)
         {
-            MVVMProperties = [.. symbol.GetMembers()
-                .OfType<IFieldSymbol>()
-                .Where(field => field.GetAttributes().Any(attr =>
-                    attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
-                .Select(field => new Analizer.MVVMFieldAnalizer(field))
-                .Select(analizer => new Analizer.MVVMPropertyFactory(analizer, "public", false)
-                {
-                    SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
-                    SetteredBody = [$"OnPropertyChanged(nameof({analizer.PropertyName}));"],
-                })];
+            MVVMProperties =
+            [
+                .. symbol.GetMembers()
+                    .OfType<IFieldSymbol>()
+                    .Where(field => field.GetAttributes().Any(attr =>
+                        attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                        NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
+                    .Select(field => new Analizer.MVVMFieldAnalizer(field))
+                    .Select(analizer => new Analizer.MVVMPropertyFactory(analizer, "public", false)
+                    {
+                        SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
+                        SetteredBody = [$"OnPropertyChanged(nameof({analizer.PropertyName}));"],
+                    })
+            ];
             IsMVVM = MVVMProperties.Count > 0 || WorkflowType != 0;
         }
+
         private void ReadAopConfig(ClassDeclarationSyntax classDeclaration)
         {
             IsAop = classDeclaration.Members
-                    .OfType<MemberDeclarationSyntax>()
-                    .Any(member => member.AttributeLists
+                .OfType<MemberDeclarationSyntax>()
+                .Any(member => member.AttributeLists
                     .SelectMany(al => al.Attributes)
                     .Any(attr => attr.Name.ToString() == AnalizeHelper.NAME_ASPECTORIENTED));
         }
+
         private void ReadMonoConfig(INamedTypeSymbol symbol)
         {
             var attributeData = symbol.GetAttributes()
                 .FirstOrDefault(ad =>
-                    ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_MONO + ".MonoBehaviourAttribute" &&
+                    ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                    NAMESPACE_VELOX_MONO + ".MonoBehaviourAttribute" &&
                     ad.ApplicationSyntaxReference?.GetSyntax() is AttributeSyntax attrSyntax &&
                     attrSyntax.Parent?.Parent is ClassDeclarationSyntax
                 );
@@ -118,10 +128,11 @@ namespace VeloxDev.Core.Generator.Writers
                 MonoSpan = (int)(1000d / value > 0 ? value : 1);
             }
         }
+
         private void ReadCommandConfig(INamedTypeSymbol symbol)
         {
             const string attributeFullName = $"{NAMESPACE_VELOX_MVVM}.VeloxCommandAttribute";
-            var list = new List<Tuple<string, bool, bool, string>>();
+            var list = new List<Tuple<string, bool, int, string>>();
 
             foreach (var methodSymbol in symbol.GetMembers().OfType<IMethodSymbol>())
             {
@@ -132,26 +143,27 @@ namespace VeloxDev.Core.Generator.Writers
                 if (attribute == null) continue;
 
                 // 2. 生成方法签名（包含参数类型）
-                var signature = $"{methodSymbol.Name}({string.Join(",", methodSymbol.Parameters.Select(p => p.Type?.ToString()))})";
+                var signature =
+                    $"{methodSymbol.Name}({string.Join(",", methodSymbol.Parameters.Select(p => p.Type?.ToString()))})";
 
                 // 4. 解析命令配置
                 string commandName = "Auto"; // 默认值
                 bool canValidate = false;
-                bool canConcurrent = false;
+                int semaphore = 1;
 
                 // 5. 处理命名参数（优先）
                 foreach (var namedArg in attribute.NamedArguments)
                 {
                     switch (namedArg.Key)
                     {
-                        case "Name":
+                        case "name":
                             commandName = (string)(namedArg.Value.Value ?? "Auto");
                             break;
-                        case "CanValidate":
+                        case "canValidate":
                             canValidate = (bool)(namedArg.Value.Value ?? false);
                             break;
-                        case "CanConcurrent":
-                            canConcurrent = (bool)(namedArg.Value.Value ?? false);
+                        case "semaphore":
+                            semaphore = (int)(namedArg.Value.Value ?? false);
                             break;
                     }
                 }
@@ -162,14 +174,16 @@ namespace VeloxDev.Core.Generator.Writers
                 if (attribute.ConstructorArguments.Length >= 2)
                     canValidate = (bool)(attribute.ConstructorArguments[1].Value ?? false);
                 if (attribute.ConstructorArguments.Length >= 3)
-                    canConcurrent = (bool)(attribute.ConstructorArguments[2].Value ?? false);
+                    semaphore = (int)(attribute.ConstructorArguments[2].Value ?? false);
+                if (semaphore <= 0)
+                    semaphore = 1;
 
                 // 7. 处理"Auto"命名规则
                 if (commandName == "Auto")
                 {
                     string methodName = methodSymbol.Name;
                     commandName = methodName.EndsWith("Async")
-                        ? methodName.Substring(0, methodName.Length - 5)  // 移除最后5个字符("Async")
+                        ? methodName.Substring(0, methodName.Length - 5) // 移除最后5个字符("Async")
                         : methodName;
                 }
 
@@ -177,7 +191,7 @@ namespace VeloxDev.Core.Generator.Writers
                 list.Add(Tuple.Create(
                     commandName,
                     canValidate,
-                    canConcurrent,
+                    semaphore,
                     methodSymbol.Name
                 ));
             }
@@ -189,14 +203,18 @@ namespace VeloxDev.Core.Generator.Writers
         {
             return IsAop || IsMono || CommandConfig.Count > 0 || IsMVVM || WorkflowType != 0;
         }
+
         public override string GetFileName()
         {
             if (Syntax == null || Symbol == null)
             {
                 return string.Empty;
             }
-            return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_VeloxCore.g.cs";
+
+            return
+                $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_VeloxCore.g.cs";
         }
+
         public override string Write()
         {
             StringBuilder builder = new();
@@ -213,6 +231,7 @@ namespace VeloxDev.Core.Generator.Writers
             {
                 return string.Empty;
             }
+
             StringBuilder sourceBuilder = new();
             string share = $"{Syntax.Modifiers} class {Syntax.Identifier.Text}";
 
@@ -220,13 +239,16 @@ namespace VeloxDev.Core.Generator.Writers
 
             if (IsAop)
             {
-                list.Add($"{NAMESPACE_VELOX_AOP}.{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop");
+                list.Add(
+                    $"{NAMESPACE_VELOX_AOP}.{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop");
             }
+
             if (IsMVVM && WorkflowType == 0)
             {
                 list.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanging");
                 list.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanged");
             }
+
             switch (WorkflowType)
             {
                 case 1:
@@ -242,21 +264,22 @@ namespace VeloxDev.Core.Generator.Writers
                     list.Add(NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowLink");
                     break;
             }
+
             if (list.Count > 0)
             {
                 var result = string.Join(", ", list);
                 var source = $$"""
-                           {{share}} : {{result}}
-                           {
-                           """;
+                               {{share}} : {{result}}
+                               {
+                               """;
                 sourceBuilder.AppendLine(source);
             }
             else
             {
                 var source = $$"""
-                           {{share}}
-                           {
-                           """;
+                               {{share}}
+                               {
+                               """;
                 sourceBuilder.AppendLine(source);
             }
 
@@ -265,14 +288,17 @@ namespace VeloxDev.Core.Generator.Writers
 
             return sourceBuilder.ToString();
         }
+
         private string GenerateBody()
         {
             if (Syntax == null || Symbol == null)
             {
                 return string.Empty;
             }
+
             StringBuilder builder = new();
-            var strAop = $"{NAMESPACE_VELOX_AOP}.{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop";
+            var strAop =
+                $"{NAMESPACE_VELOX_AOP}.{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop";
             if (IsAop)
             {
                 builder.AppendLine($$"""
@@ -293,111 +319,117 @@ namespace VeloxDev.Core.Generator.Writers
                                      """);
                 builder.AppendLine();
             }
+
             if (IsMono)
             {
                 builder.AppendLine($$"""
-                       private global::System.Threading.CancellationTokenSource? cts_mono = null;
+                                        private global::System.Threading.CancellationTokenSource? cts_mono = null;
 
-                       private bool _canmonobehaviour = false;
-                       public bool CanMonoBehaviour
-                       {
-                           get => _canmonobehaviour;
-                           set
-                           {
-                               if(_canmonobehaviour != value)
-                               {
-                                   _canmonobehaviour = value;
-                                   if (value)
-                                   {
-                                       var monofunc = new global::System.Func<global::System.Threading.Tasks.Task>(async () =>
-                                       {
-                                           await _inner_Update();
-                                       });
-                                       monofunc?.Invoke();
-                                   }
-                                   else
-                                   {
-                                       _innerCleanMonoToken();
-                                   }
-                               }
-                           }
-                       }
+                                        private bool _canmonobehaviour = false;
+                                        public bool CanMonoBehaviour
+                                        {
+                                            get => _canmonobehaviour;
+                                            set
+                                            {
+                                                if(_canmonobehaviour != value)
+                                                {
+                                                    _canmonobehaviour = value;
+                                                    if (value)
+                                                    {
+                                                        var monofunc = new global::System.Func<global::System.Threading.Tasks.Task>(async () =>
+                                                        {
+                                                            await _inner_Update();
+                                                        });
+                                                        monofunc?.Invoke();
+                                                    }
+                                                    else
+                                                    {
+                                                        _innerCleanMonoToken();
+                                                    }
+                                                }
+                                            }
+                                        }
 
-                       private async global::System.Threading.Tasks.Task _inner_Update()
-                       {
-                           _innerCleanMonoToken();
+                                        private async global::System.Threading.Tasks.Task _inner_Update()
+                                        {
+                                            _innerCleanMonoToken();
 
-                           var newmonocts = new global::System.Threading.CancellationTokenSource();
-                           cts_mono = newmonocts;
+                                            var newmonocts = new global::System.Threading.CancellationTokenSource();
+                                            cts_mono = newmonocts;
 
-                           try
-                           {
-                              if(CanMonoBehaviour) Start();
+                                            try
+                                            {
+                                               if(CanMonoBehaviour) Start();
 
-                              while (CanMonoBehaviour && !newmonocts.Token.IsCancellationRequested)
-                              {
-                                  Update();
-                                  LateUpdate();
-                                  await global::System.Threading.Tasks.Task.Delay({{MonoSpan}},newmonocts.Token);
-                              }
-                           }
-                           catch (global::System.Exception ex)
-                           {
-                               global::System.Diagnostics.Debug.WriteLine(ex.Message);
-                           }
-                           finally
-                           {
-                               if (global::System.Threading.Interlocked.CompareExchange(ref cts_mono, null, newmonocts) == newmonocts) 
-                               {
-                                   newmonocts.Dispose();
-                               }
-                               ExitMonoBehaviour();
-                           }
-                       }
+                                               while (CanMonoBehaviour && !newmonocts.Token.IsCancellationRequested)
+                                               {
+                                                   Update();
+                                                   LateUpdate();
+                                                   await global::System.Threading.Tasks.Task.Delay({{MonoSpan}},newmonocts.Token);
+                                               }
+                                            }
+                                            catch (global::System.Exception ex)
+                                            {
+                                                global::System.Diagnostics.Debug.WriteLine(ex.Message);
+                                            }
+                                            finally
+                                            {
+                                                if (global::System.Threading.Interlocked.CompareExchange(ref cts_mono, null, newmonocts) == newmonocts) 
+                                                {
+                                                    newmonocts.Dispose();
+                                                }
+                                                ExitMonoBehaviour();
+                                            }
+                                        }
 
-                       partial void Start();
-                       partial void Update();
-                       partial void LateUpdate();
-                       partial void ExitMonoBehaviour();
+                                        partial void Start();
+                                        partial void Update();
+                                        partial void LateUpdate();
+                                        partial void ExitMonoBehaviour();
 
-                       private void _innerCleanMonoToken()
-                       {
-                           var oldCts = global::System.Threading.Interlocked.Exchange(ref cts_mono, null);
-                           if (oldCts != null)
-                           {
-                               try { oldCts.Cancel(); } catch { }
-                               oldCts.Dispose();
-                           }
-                       }
+                                        private void _innerCleanMonoToken()
+                                        {
+                                            var oldCts = global::System.Threading.Interlocked.Exchange(ref cts_mono, null);
+                                            if (oldCts != null)
+                                            {
+                                                try { oldCts.Cancel(); } catch { }
+                                                oldCts.Dispose();
+                                            }
+                                        }
 
-                    """);
+                                     """);
             }
+
             if (IsMVVM)
             {
                 builder.AppendLine($$"""
-                       public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventHandler? PropertyChanging;
-                       public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventHandler? PropertyChanged;
-                       public void OnPropertyChanging(string propertyName)
-                       {
-                           PropertyChanging?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventArgs(propertyName));
-                       }
-                       public void OnPropertyChanged(string propertyName)
-                       {
-                           PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
-                       }
-                    """);
+                                        public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventHandler? PropertyChanging;
+                                        public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventHandler? PropertyChanged;
+                                        public void OnPropertyChanging(string propertyName)
+                                        {
+                                            PropertyChanging?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventArgs(propertyName));
+                                        }
+                                        public void OnPropertyChanged(string propertyName)
+                                        {
+                                            PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
+                                        }
+                                     """);
                 builder.AppendLine(GenerateProperty());
             }
+
             if (WorkflowType != 0)
             {
                 builder.AppendLine(GenerateWorkflow());
             }
+
             if (CommandConfig.Count > 0)
             {
                 builder.AppendLine(GenerateCommand());
             }
+
             return builder.ToString();
         }
+
         private string GenerateProperty()
         {
             StringBuilder builder = new();
@@ -405,95 +437,99 @@ namespace VeloxDev.Core.Generator.Writers
             {
                 builder.AppendLine(factory.Generate());
             }
+
             return builder.ToString();
         }
+
         private string GenerateCommand()
         {
             var builder = new StringBuilder();
 
             foreach (var config in CommandConfig)
             {
-                if (config.Item3)
+                if (config.Item3 > 1)
                 {
                     if (config.Item2)
                     {
                         builder.AppendLine($$"""
-                         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
-                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
-                         {
-                             get
-                             {
-                                 _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
-                                     executeAsync: {{config.Item4}},
-                                     canExecute: CanExecute{{config.Item1}}Command);
-                                 return _buffer_{{config.Item1}}Command;
-                             }
-                         }
-                         private partial bool CanExecute{{config.Item1}}Command(object? parameter);
-                      """);
+                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
+                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
+                                                {
+                                                    get
+                                                    {
+                                                        _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
+                                                            executeAsync: {{config.Item4}},
+                                                            canExecute: CanExecute{{config.Item1}}Command,
+                                                            semaphore: {{config.Item3}});
+                                                        return _buffer_{{config.Item1}}Command;
+                                                    }
+                                                }
+                                                private partial bool CanExecute{{config.Item1}}Command(object? parameter);
+                                             """);
                     }
                     else
                     {
                         builder.AppendLine($$"""
-                         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
-                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
-                         {
-                             get
-                             {
-                                 _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
-                                     executeAsync: {{config.Item4}},
-                                     canExecute: _ => true);
-                                 return _buffer_{{config.Item1}}Command;
-                             }
-                         }
-                      """);
+                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
+                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
+                                                {
+                                                    get
+                                                    {
+                                                        _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
+                                                            executeAsync: {{config.Item4}},
+                                                            canExecute: _ => true,
+                                                            semaphore: {{config.Item3}});
+                                                        return _buffer_{{config.Item1}}Command;
+                                                    }
+                                                }
+                                             """);
                     }
-
                 }
                 else
                 {
                     if (config.Item2)
                     {
                         builder.AppendLine($$"""
-                         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
-                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
-                         {
-                             get
-                             {
-                                _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                                    executeAsync: {{config.Item4}},
-                                    canExecute: CanExecute{{config.Item1}}Command);
-                                return _buffer_{{config.Item1}}Command;
-                             }
-                         }
-                         private partial bool CanExecute{{config.Item1}}Command(object? parameter);
-                      """);
+                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
+                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
+                                                {
+                                                    get
+                                                    {
+                                                       _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                                                           executeAsync: {{config.Item4}},
+                                                           canExecute: CanExecute{{config.Item1}}Command);
+                                                       return _buffer_{{config.Item1}}Command;
+                                                    }
+                                                }
+                                                private partial bool CanExecute{{config.Item1}}Command(object? parameter);
+                                             """);
                     }
                     else
                     {
                         builder.AppendLine($$"""
-                         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
-                         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
-                         {
-                            get
-                            {
-                               _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                                   executeAsync: {{config.Item4}},
-                                   canExecute: _ => true);
-                               return _buffer_{{config.Item1}}Command;
-                            }
-                         }
-                      """);
+                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
+                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
+                                                {
+                                                   get
+                                                   {
+                                                      _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                                                          executeAsync: {{config.Item4}},
+                                                          canExecute: _ => true);
+                                                      return _buffer_{{config.Item1}}Command;
+                                                   }
+                                                }
+                                             """);
                     }
                 }
             }
 
             return builder.ToString();
         }
+
         private string GenerateWorkflow() => WorkflowType switch
         {
             1 => TreeTemplate.FromTypeConfig(SlotType, LinkType),
-            2 => NodeTemplate.FromTaskConfig(NodeTaskType),
+            2 => NodeTemplate.FromTaskConfig(NodeTaskSemaphore),
             3 => SlotTemplate.Normal,
             4 => LinkTemplate.Normal,
             _ => string.Empty

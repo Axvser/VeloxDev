@@ -8,9 +8,14 @@
 		<LangVersion>latest</LangVersion>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core.Generator</Title>
-		<Version>2.1.0</Version>
+		<Version>2.1.4</Version>
 		<Authors>Axvser</Authors>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+	  <DebugType>none</DebugType>
+	  <WarningLevel>0</WarningLevel>
 	</PropertyGroup>
 
 	<ItemGroup>
