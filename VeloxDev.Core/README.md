@@ -7,6 +7,14 @@
 
 ---
 
+## Url
+
+[![GitHub](https://img.shields.io/badge/GitHub-Home-blue?logo=github)](https://github.com/Axvser/VeloxDev)
+
+[![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/)
+
+---
+
 ### 🪶 MVVM 示例
 
 [![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/MVVM/Demo)
