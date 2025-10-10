@@ -39,11 +39,12 @@ namespace VeloxDev.Core.TransitionSystem
             return snapshot;
         }
 
-        public static T Property<T, T1>(this T snapshot, Expression<Func<T, T1>> expression, T1 value)
+        public static T Property<T, T1, T2>(this T snapshot, Expression<Func<T1, T2>> expression, T2 value)
             where T : StateSnapshotCore
-            where T1 : IInterpolable
+            where T1 : class
+            where T2 : IInterpolable
         {
-            snapshot.CoreProperty<T, T1>(expression, value);
+            snapshot.CoreProperty<T1, T2>(expression, value);
             return snapshot;
         }
 

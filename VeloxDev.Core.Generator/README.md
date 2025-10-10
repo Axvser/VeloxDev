@@ -8,12 +8,13 @@
 
 > 以下生成运行在所有使用 VeloxDev.Core 的项目中
 
-- ⌈ AspectOriented ⌋ 动态拦截/编辑属性、方法调用 ✔
+- ⌈ AspectOriented ⌋ 动态拦截或编辑属性、方法的调用 ✔
 - ⌈ MonoBehaviour ⌋ 实时帧刷新行为 ✔
 - ⌈ VeloxProperty ⌋ 自动化ViewModel属性生成 ✔
 - ⌈ VeloxCommand ⌋ 自动化ViewModel命令生成 ✔
 - ⌈ Workflow - ViewModel ⌋ 拖拽式工作流构建器 - 视图模型 ✔
 - ⌈ ThemeManager ⌋ 特性标记式主题切换支持 ✔
+- ⌈ AOT Reflection ⌋ 为AOT编译提供类型反射支持 ✔
 
 ## 补充生成支持
 
