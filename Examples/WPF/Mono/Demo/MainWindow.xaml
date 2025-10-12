@@ -7,6 +7,6 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
     <Grid>
-
+        <TextBlock Text="Keep the window focused | The hotkey [ Ctrl + H ] can be checked every frame" VerticalAlignment="Center" HorizontalAlignment="Center"/>
     </Grid>
 </Window>
