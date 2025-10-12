@@ -8,4 +8,9 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="VeloxDev.Core" Version="2.3.0" />
+    <PackageReference Include="VeloxDev.WPF" Version="2.1.4" />
+  </ItemGroup>
+
 </Project>

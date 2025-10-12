@@ -9,12 +9,28 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="Demo">
 
-    <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
+	<Design.DataContext>
+		<!-- This only sets the DataContext for the previewer in an IDE,
              to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainWindowViewModel/>
-    </Design.DataContext>
+		<vm:MainWindowViewModel/>
+	</Design.DataContext>
 
-    <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+	<Grid>
+		<Grid.RowDefinitions>
+			<RowDefinition/>
+			<RowDefinition/>
+			<RowDefinition/>
+		</Grid.RowDefinitions>
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition/>
+			<ColumnDefinition/>
+			<ColumnDefinition/>
+		</Grid.ColumnDefinitions>
+		<Button Grid.Row="0" Grid.Column="0" Content="模拟 Team.Members 移除" Click="Click0"/>
+		<Button Grid.Row="0" Grid.Column="2" Content="模拟 Team.Members 添加" Click="Click1"/>
+		<Button Grid.Row="2" Grid.Column="0" Content="模拟 Team.Name 读取" Click="Click2"/>
+		<Button Grid.Row="2" Grid.Column="2" Content="模拟 Team.Name 属性设置" Click="Click3"/>
+		<Button Grid.Row="1" Grid.Column="1" Content="模拟 Team.Reset 方法调用" Click="Click4"/>
+	</Grid>
 
 </Window>
