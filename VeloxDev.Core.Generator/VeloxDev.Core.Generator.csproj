@@ -8,19 +8,30 @@
 		<LangVersion>latest</LangVersion>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core.Generator</Title>
-		<Version>2.3.0</Version>
+		<Version>2.3.3</Version>
 		<Authors>Axvser</Authors>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<!-- 不要把 Roslyn 的 DLL 放进 lib -->
+		<IncludeBuildOutput>false</IncludeBuildOutput>
+	</PropertyGroup>
+	
+	<!-- 保持编译信息干净 -->
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<DebugType>none</DebugType>
+		<WarningLevel>0</WarningLevel>
 	</PropertyGroup>
 
-	<PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
-	  <DebugType>none</DebugType>
-	  <WarningLevel>0</WarningLevel>
-	</PropertyGroup>
-
+	<!-- Roslyn 依赖：编译时需要，运行时不导出 -->
 	<ItemGroup>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all" />
-		<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="true" />
+	</ItemGroup>
+
+	<!-- 手动打包 DLL 到 analyzers 文件夹 -->
+	<ItemGroup>
+		<None Include="$(OutputPath)\$(AssemblyName).dll"
+			  Pack="true"
+			  PackagePath="analyzers/dotnet/cs"
+			  Visible="false" />
 	</ItemGroup>
 
 	<ItemGroup>
