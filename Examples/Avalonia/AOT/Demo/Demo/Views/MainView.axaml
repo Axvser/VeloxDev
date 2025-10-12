@@ -6,14 +6,11 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="Demo.Views.MainView"
              x:DataType="vm:MainViewModel">
-	<Design.DataContext>
-		<!-- This only sets the DataContext for the previewer in an IDE,
+  <Design.DataContext>
+    <!-- This only sets the DataContext for the previewer in an IDE,
          to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-		<vm:MainViewModel />
-	</Design.DataContext>
+    <vm:MainViewModel />
+  </Design.DataContext>
 
-	<Grid>
-		<Button x:Name="bt" Content="反射获取新文本" Click="Click0"/>
-	</Grid>
-
+    <Button x:Name="Bt0" Content="Click me to get new value with reflection" Click="User_Click"/>
 </UserControl>

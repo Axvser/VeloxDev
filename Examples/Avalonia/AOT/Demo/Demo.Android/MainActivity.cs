@@ -15,9 +15,8 @@ public class MainActivity : AvaloniaMainActivity<App>
 {
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
     {
-        /* 保留 Demo 项目中的反射上下文以支持在 AOT 后仍可使用反射 */
-        AOTReflection.Init();
-
+        // AOTReflection.Init();
+        
         return base.CustomizeAppBuilder(builder)
             .WithInterFont();
     }

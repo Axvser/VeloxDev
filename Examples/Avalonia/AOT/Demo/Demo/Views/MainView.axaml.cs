@@ -10,16 +10,13 @@ public partial class MainView : UserControl
         InitializeComponent();
     }
 
-    private void Click0(object? sender, RoutedEventArgs e)
+    private void User_Click(object? sender, RoutedEventArgs e)
     {
-        object instance = new ReflectiveInstance
-        {
-            Name = "Hello, AOT Reflection!"
-        };
-        var type = instance.GetType();
-        var prop = type.GetProperty("Name");
-        var value = prop?.GetValue(instance);
-        if (value != null)
-            bt.Content = value.ToString();
+        object student = new Student();
+        var type = student.GetType();
+        var property = type.GetProperty("Name");
+        var propertyValue = property?.GetValue(student);
+        if (propertyValue != null)
+            Bt0.Content = propertyValue.ToString();
     }
 }
