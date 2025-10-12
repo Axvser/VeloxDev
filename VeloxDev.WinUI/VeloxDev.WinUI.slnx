@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="../VeloxDev.WinUI.Test/VeloxDev.WinUI.Test.csproj">
+    <Platform Project="x64" />
+    <Deploy />
+  </Project>
+  <Project Path="VeloxDev.WinUI.csproj" />
+</Solution>
