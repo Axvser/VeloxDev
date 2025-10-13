@@ -16,6 +16,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
             RegisterInterpolator(typeof(Point), new NativeInterpolators.PointInterpolator());
             RegisterInterpolator(typeof(CornerRadius), new NativeInterpolators.CornerRadiusInterpolator());
             RegisterInterpolator(typeof(Transform), new NativeInterpolators.TransformInterpolator());
+            RegisterInterpolator(typeof(Projection), new NativeInterpolators.ProjectionInterpolator());
         }
     }
 }

@@ -22,15 +22,15 @@ namespace VeloxDev.WinUI.PlatformAdapters
         {
             public List<object?> Interpolate(object? start, object? end, int steps)
             {
-                double d1 = start is double s ? s : 0;
-                double d2 = end is double e ? e : d1;
+                var d1 = start is double s ? s : 0;
+                var d2 = end is double e ? e : d1;
 
                 if (steps <= 1) return [d2];
 
                 List<object?> result = new(steps);
-                for (int i = 0; i < steps; i++)
+                for (var i = 0; i < steps; i++)
                 {
-                    double t = (i + 1d) / steps;
+                    var t = (i + 1d) / steps;
                     result.Add(Lerp(d1, d2, t));
                 }
 
@@ -45,15 +45,15 @@ namespace VeloxDev.WinUI.PlatformAdapters
         {
             public List<object?> Interpolate(object? start, object? end, int steps)
             {
-                Thickness t1 = start is Thickness s ? s : new(0);
-                Thickness t2 = end is Thickness e ? e : t1;
+                var t1 = start is Thickness s ? s : new(0);
+                var t2 = end is Thickness e ? e : t1;
 
                 if (steps <= 1) return [t2];
 
                 List<object?> result = new(steps);
-                for (int i = 0; i < steps; i++)
+                for (var i = 0; i < steps; i++)
                 {
-                    double t = (i + 1d) / steps;
+                    var t = (i + 1d) / steps;
                     result.Add(new Thickness(
                         Lerp(t1.Left, t2.Left, t),
                         Lerp(t1.Top, t2.Top, t),
@@ -72,15 +72,15 @@ namespace VeloxDev.WinUI.PlatformAdapters
         {
             public List<object?> Interpolate(object? start, object? end, int steps)
             {
-                CornerRadius c1 = start is CornerRadius s ? s : new(0);
-                CornerRadius c2 = end is CornerRadius e ? e : c1;
+                var c1 = start is CornerRadius s ? s : new(0);
+                var c2 = end is CornerRadius e ? e : c1;
 
                 if (steps <= 1) return [c2];
 
                 List<object?> result = new(steps);
-                for (int i = 0; i < steps; i++)
+                for (var i = 0; i < steps; i++)
                 {
-                    double t = (i + 1d) / steps;
+                    var t = (i + 1d) / steps;
                     result.Add(new CornerRadius(
                         Lerp(c1.TopLeft, c2.TopLeft, t),
                         Lerp(c1.TopRight, c2.TopRight, t),
@@ -99,15 +99,15 @@ namespace VeloxDev.WinUI.PlatformAdapters
         {
             public List<object?> Interpolate(object? start, object? end, int steps)
             {
-                Point p1 = start is Point s ? s : new(0, 0);
-                Point p2 = end is Point e ? e : p1;
+                var p1 = start is Point s ? s : new(0, 0);
+                var p2 = end is Point e ? e : p1;
 
                 if (steps <= 1) return [p2];
 
                 List<object?> result = new(steps);
-                for (int i = 0; i < steps; i++)
+                for (var i = 0; i < steps; i++)
                 {
-                    double t = (i + 1d) / steps;
+                    var t = (i + 1d) / steps;
                     result.Add(new Point(Lerp(p1.X, p2.X, t), Lerp(p1.Y, p2.Y, t)));
                 }
 
@@ -123,17 +123,17 @@ namespace VeloxDev.WinUI.PlatformAdapters
         {
             public List<object?> Interpolate(object? start, object? end, int steps)
             {
-                Brush s = Normalize(start);
-                Brush e = Normalize(end);
+                var s = Normalize(start);
+                var e = Normalize(end);
 
                 if (steps <= 1) return [e];
 
-                (Brush alignedS, Brush alignedE) = AlignBrushTypes(s, e);
+                (var alignedS, var alignedE) = AlignBrushTypes(s, e);
 
                 List<object?> result = new(steps);
-                for (int i = 0; i < steps; i++)
+                for (var i = 0; i < steps; i++)
                 {
-                    double t = (double)i / (steps - 1);
+                    var t = (double)i / (steps - 1);
                     result.Add(InterpolateAligned(alignedS, alignedE, t));
                 }
 
@@ -264,8 +264,8 @@ namespace VeloxDev.WinUI.PlatformAdapters
                     Opacity = Lerp(s.Opacity, e.Opacity, t)
                 };
 
-                int count = Math.Min(s.GradientStops.Count, e.GradientStops.Count);
-                for (int i = 0; i < count; i++)
+                var count = Math.Min(s.GradientStops.Count, e.GradientStops.Count);
+                for (var i = 0; i < count; i++)
                 {
                     result.GradientStops.Add(new GradientStop
                     {
@@ -291,8 +291,8 @@ namespace VeloxDev.WinUI.PlatformAdapters
                     Opacity = Lerp(s.Opacity, e.Opacity, t)
                 };
 
-                int count = Math.Min(s.GradientStops.Count, e.GradientStops.Count);
-                for (int i = 0; i < count; i++)
+                var count = Math.Min(s.GradientStops.Count, e.GradientStops.Count);
+                for (var i = 0; i < count; i++)
                 {
                     result.GradientStops.Add(new GradientStop
                     {
@@ -304,8 +304,6 @@ namespace VeloxDev.WinUI.PlatformAdapters
             }
 
             //----------- 基础辅助 -----------
-
-            private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
             private static Point LerpPoint(Point a, Point b, double t)
                 => new(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t));
@@ -319,31 +317,31 @@ namespace VeloxDev.WinUI.PlatformAdapters
 
             private static Color LerpColorPremultiplied(Color a, Color b, double t)
             {
-                double aA = a.A / 255.0;
-                double bA = b.A / 255.0;
+                var aA = a.A / 255.0;
+                var bA = b.A / 255.0;
 
-                double ar = a.R * aA;
-                double ag = a.G * aA;
-                double ab = a.B * aA;
+                var ar = a.R * aA;
+                var ag = a.G * aA;
+                var ab = a.B * aA;
 
-                double br = b.R * bA;
-                double bg = b.G * bA;
-                double bb = b.B * bA;
+                var br = b.R * bA;
+                var bg = b.G * bA;
+                var bb = b.B * bA;
 
-                double rr = ar * (1 - t) + br * t;
-                double gg = ag * (1 - t) + bg * t;
-                double bbC = ab * (1 - t) + bb * t;
-                double aa = aA * (1 - t) + bA * t;
+                var rr = ar * (1 - t) + br * t;
+                var gg = ag * (1 - t) + bg * t;
+                var bbC = ab * (1 - t) + bb * t;
+                var aa = aA * (1 - t) + bA * t;
 
                 if (aa > 0)
                 {
                     rr /= aa; gg /= aa; bbC /= aa;
                 }
 
-                byte A = (byte)Math.Clamp(aa * 255.0, 0, 255);
-                byte R = (byte)Math.Clamp(rr, 0, 255);
-                byte G = (byte)Math.Clamp(gg, 0, 255);
-                byte B = (byte)Math.Clamp(bbC, 0, 255);
+                var A = (byte)Math.Clamp(aa * 255.0, 0, 255);
+                var R = (byte)Math.Clamp(rr, 0, 255);
+                var G = (byte)Math.Clamp(gg, 0, 255);
+                var B = (byte)Math.Clamp(bbC, 0, 255);
 
                 return Color.FromArgb(A, R, G, B);
             }
@@ -356,8 +354,8 @@ namespace VeloxDev.WinUI.PlatformAdapters
 
             public List<object?> Interpolate(object? start, object? end, int steps)
             {
-                Transform s = Normalize(start);
-                Transform e = Normalize(end);
+                var s = Normalize(start);
+                var e = Normalize(end);
                 if (steps <= 1) return [e];
 
                 var startList = ExtractTransforms(s);
@@ -365,9 +363,9 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 var pairs = MatchPairs(startList, endList);
 
                 List<object?> result = new(steps);
-                for (int i = 0; i < steps; i++)
+                for (var i = 0; i < steps; i++)
                 {
-                    double t = (double)i / (steps - 1);
+                    var t = (double)i / (steps - 1);
                     result.Add(CombineTransforms(pairs, t));
                 }
 
@@ -390,12 +388,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
             private static List<(Transform? s, Transform? e)> MatchPairs(List<Transform> s, List<Transform> e)
             {
                 var types = s.Select(t => t.GetType()).Union(e.Select(t => t.GetType())).Distinct();
-                var pairs = new List<(Transform?, Transform?)>();
-                foreach (var t in types)
-                {
-                    pairs.Add((s.LastOrDefault(x => x.GetType() == t), e.LastOrDefault(x => x.GetType() == t)));
-                }
-                return pairs;
+                return types.Select(t => (s.LastOrDefault(x => x.GetType() == t), e.LastOrDefault(x => x.GetType() == t))).ToList();
             }
 
             private static Transform CombineTransforms(List<(Transform? s, Transform? e)> pairs, double t)
@@ -408,11 +401,13 @@ namespace VeloxDev.WinUI.PlatformAdapters
                         list.Add(interpolated);
                 }
 
-                if (list.Count == 0)
-                    return new TransformGroup();
-
-                if (list.Count == 1)
-                    return list[0];
+                switch (list.Count)
+                {
+                    case 0:
+                        return new TransformGroup();
+                    case 1:
+                        return list[0];
+                }
 
                 var g = new TransformGroup();
                 foreach (var tr in list)
@@ -459,8 +454,6 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 };
             }
 
-            private static double Lerp(double a, double b, double t) => a + (b - a) * t;
-
             private static Matrix LerpMatrix(Matrix m1, Matrix m2, double t)
             {
                 return new Matrix(
@@ -471,6 +464,64 @@ namespace VeloxDev.WinUI.PlatformAdapters
                     Lerp(m1.OffsetX, m2.OffsetX, t),
                     Lerp(m1.OffsetY, m2.OffsetY, t)
                 );
+            }
+        }
+        
+        //===================== PlaneProjection =====================
+        
+        public class ProjectionInterpolator : IValueInterpolator
+        {
+            public List<object?> Interpolate(object? start, object? end, int steps)
+            {
+                var s = Normalize(start);
+                var e = Normalize(end);
+
+                if (steps <= 1) return [e];
+
+                List<object?> result = new(steps);
+                for (var i = 0; i < steps; i++)
+                {
+                    var t = (double)i / (steps - 1);
+
+                    result.Add(new PlaneProjection
+                    {
+                        RotationX = Lerp(s.RotationX, e.RotationX, t),
+                        RotationY = Lerp(s.RotationY, e.RotationY, t),
+                        RotationZ = Lerp(s.RotationZ, e.RotationZ, t),
+
+                        CenterOfRotationX = Lerp(s.CenterOfRotationX, e.CenterOfRotationX, t),
+                        CenterOfRotationY = Lerp(s.CenterOfRotationY, e.CenterOfRotationY, t),
+                        CenterOfRotationZ = Lerp(s.CenterOfRotationZ, e.CenterOfRotationZ, t),
+
+                        GlobalOffsetX = Lerp(s.GlobalOffsetX, e.GlobalOffsetX, t),
+                        GlobalOffsetY = Lerp(s.GlobalOffsetY, e.GlobalOffsetY, t),
+                        GlobalOffsetZ = Lerp(s.GlobalOffsetZ, e.GlobalOffsetZ, t)
+                    });
+                }
+
+                result[0] = s;
+                result[^1] = e;
+                return result;
+            }
+
+            private static PlaneProjection Normalize(object? obj)
+            {
+                if (obj is PlaneProjection p)
+                    return p;
+
+                // 默认初始状态：无旋转、无偏移
+                return new PlaneProjection
+                {
+                    RotationX = 0,
+                    RotationY = 0,
+                    RotationZ = 0,
+                    CenterOfRotationX = 0.5,
+                    CenterOfRotationY = 0.5,
+                    CenterOfRotationZ = 0,
+                    GlobalOffsetX = 0,
+                    GlobalOffsetY = 0,
+                    GlobalOffsetZ = 0
+                };
             }
         }
     }

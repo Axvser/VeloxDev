@@ -28,10 +28,10 @@ namespace VeloxDev.WinUI.PlatformAdapters
         public override bool IsUIThread() =>
             DispatcherQueue.GetForCurrentThread()?.HasThreadAccess == true;
 
-        public override object ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
+        public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
         {
             if (isUIThread)
-                return propertyInfo?.GetValue(target) ?? throw new InvalidOperationException("Failed to Get Value While Reflecting");
+                return propertyInfo?.GetValue(target);
 
             var tcs = new TaskCompletionSource<object?>();
             Dispatcher.TryEnqueue(() =>
@@ -46,7 +46,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
                     tcs.SetException(ex);
                 }
             });
-            return tcs.Task.GetAwaiter().GetResult() ?? throw new InvalidOperationException("Failed to Get Value While Reflecting");
+            return tcs.Task.GetAwaiter().GetResult();
         }
 
         public override List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
@@ -77,11 +77,10 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 return;
             }
 
-            if (!Dispatcher.TryEnqueue(priority, () =>
+            Dispatcher.TryEnqueue(priority, () =>
             {
                 action();
-            }))
-                throw new InvalidOperationException("Failed to enqueue action to UI thread dispatcher.");
+            });
         }
     }
 }

@@ -55,6 +55,12 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
+
+            public StateSnapshot Property(Expression<Func<T, Projection>> propertyLambda, Projection newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
         }
     }
 }
