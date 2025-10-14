@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Demo.ViewModels;
 
 namespace Demo.Views;
 

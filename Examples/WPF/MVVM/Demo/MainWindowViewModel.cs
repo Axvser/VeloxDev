@@ -1,8 +1,6 @@
-﻿using System.Threading;
-using System.Threading.Tasks;
 using VeloxDev.Core.MVVM;
 
-namespace Demo.ViewModels;
+namespace Demo;
 
 /* 不需要继承任何类，也不需要显示声明接口 */
 /* 提示：你可以继承其它类，但是请不要与 MVVM 相关，因为此工具集已经生成了完整的 MVVM 支持，需要避免与其它工具产生冲突 */
