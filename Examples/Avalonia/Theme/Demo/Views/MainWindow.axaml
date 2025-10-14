@@ -18,9 +18,10 @@
     </Design.DataContext>
 
     <Grid Background="{Binding Background,RelativeSource={RelativeSource AncestorType=views:MainWindow}}">
-        <Button Click="User_Click"
+        <Button Click="ChangeTheme"
                 Content="CLick me to changed the theme"
-                Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=views:MainWindow}}" />
+                Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=views:MainWindow}}" 
+				Background="{Binding Background,RelativeSource={RelativeSource AncestorType=views:MainWindow}}"/>
     </Grid>
 
 </Window>

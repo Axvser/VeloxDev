@@ -6,7 +6,15 @@
         xmlns:local="clr-namespace:Demo"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
+    
     <Grid>
-
+        <TextBlock Text="Theme Manager" 
+                   Foreground="{Binding RelativeSource={RelativeSource AncestorType=Window},Path=Foreground}"
+                   FontSize="80"/>
+        <Button Grid.Column="0" 
+                Click="ChangeTheme" 
+                Margin="200,300,200,0">
+            反转主题
+        </Button>
     </Grid>
 </Window>

@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\VeloxDev.WPF.Generator\VeloxDev.WPF.Generator.csproj" />
     <ProjectReference Include="..\..\..\..\VeloxDev.WPF\VeloxDev.WPF.csproj" />
   </ItemGroup>
 
