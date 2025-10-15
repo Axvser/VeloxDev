@@ -12,29 +12,25 @@
 
     <Grid Background="White">
         <!-- 节点 -->
-        <ItemsControl ItemsSource="{Binding Nodes}" Canvas.ZIndex="2">
+        <local:CanvasItemsControl ItemsSource="{Binding Nodes}" Canvas.ZIndex="2">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                     <Canvas />
                 </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemContainerStyle>
-                <Style TargetType="ContentPresenter">
-                    <Setter Property="Canvas.Left" Value="{Binding Anchor.Left}"/>
-                    <Setter Property="Canvas.Top" Value="{Binding Anchor.Top}"/>
-                    <Setter Property="Canvas.ZIndex" Value="{Binding Anchor.Layer}"/>
-                </Style>
-            </ItemsControl.ItemContainerStyle>
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="viewmodels:NodeViewModel">
                     <local:NodeView 
                         Width="{Binding Size.Width}" 
                         Height="{Binding Size.Height}" 
-                        IsEnabled="{Binding IsEnabled}">
+                        IsEnabled="{Binding IsEnabled}"
+                        Canvas.Left="{Binding Anchor.Left}"
+                        Canvas.Top="{Binding Anchor.Top}"
+                        Canvas.ZIndex="{Binding Anchor.Layer}">
                     </local:NodeView>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        </local:CanvasItemsControl>
         <!-- 真实连线，仅在实际发生连接后建立 -->
         <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="2">
             <ItemsControl.ItemsPanel>

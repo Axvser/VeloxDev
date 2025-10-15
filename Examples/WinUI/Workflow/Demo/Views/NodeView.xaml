@@ -25,23 +25,26 @@
                 BorderBrush="#1e1e1e">
             <!-- 插槽区域 -->
             <Grid>
-                <ItemsControl ItemsSource="{Binding Slots}">
+                <local:CanvasItemsControl ItemsSource="{Binding Slots}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <Canvas />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
 
-                    <ItemsControl.ItemTemplate>
+                    <local:CanvasItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="viewmodels:SlotViewModel">
                             <local:SlotView 
                                 Width="{x:Bind Size.Width}"
                                 Height="{x:Bind Size.Height}"
-                                IsEnabled="{x:Bind IsEnabled}">
+                                IsEnabled="{x:Bind IsEnabled}"
+                                Canvas.Left="{Binding Offset.Left}"
+                                Canvas.Top="{Binding Offset.Top}"
+                                Canvas.ZIndex="{Binding Offset.Layer}">
                             </local:SlotView>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </local:CanvasItemsControl.ItemTemplate>
+                </local:CanvasItemsControl>
             </Grid>
         </Border>
     </Grid>
