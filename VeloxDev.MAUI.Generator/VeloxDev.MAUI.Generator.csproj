@@ -8,14 +8,28 @@
 		<LangVersion>latest</LangVersion>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.MAUI.Generator</Title>
-		<Version>2.0.0-rc.2</Version>
+		<Version>2.3.0</Version>
 		<Authors>Axvser</Authors>
+		<!-- 不要把 Roslyn 的 dll 放进 lib -->
+		<IncludeBuildOutput>false</IncludeBuildOutput>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="2.0.0-rc.2" />
-		<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="true" />
+	</ItemGroup>
+
+	<!-- 保持编译信息干净 -->
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<DebugType>none</DebugType>
+		<WarningLevel>0</WarningLevel>
+	</PropertyGroup>
+
+	<!-- 手动打包 dll 到 analyzers 文件夹 -->
+	<ItemGroup>
+		<None Include="$(OutputPath)\$(AssemblyName).dll"
+			  Pack="true"
+			  PackagePath="analyzers/dotnet/cs"
+			  Visible="false" />
 	</ItemGroup>
 
 </Project>
