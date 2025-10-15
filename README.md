@@ -22,12 +22,24 @@
 
 ## ⬇️ 获取
 
-| 框架 | 适配层 | NuGet |
-|--------|------|-------|
-| WPF | VeloxDev.WPF | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/) |
-| Avalonia | VeloxDev.Avalonia | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Avalonia?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Avalonia/) |
-| WinUI | VeloxDev.WinUI | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinUI/) |
-| MAUI | VeloxDev.MAUI | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) |
+> 大部分功能由 VeloxDev.Core 直接支持 
+
+|  框架  | 项目 | NuGet |  是否必须  |
+|--------|------|-------|------------|
+| .NET | VeloxDev.Core | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/)| ✔ |
+| WPF | VeloxDev.WPF | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/) | ❌ |
+| Avalonia | VeloxDev.Avalonia | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Avalonia?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Avalonia/) | ❌ |
+| WinUI | VeloxDev.WinUI | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinUI/) | ❌ |
+| MAUI | VeloxDev.MAUI | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) | ❌ |
+
+> 小部分功能需要UI框架适配层支持
+
+|  组件 | 描述 |
+|-------|------|
+| 插值动画 | 兼容指定平台指定类型的插值计算，为 Fluent API 构建动画提供支持 |
+| 主题渐变切换 | 如果仅仅是跳转主题，直接用核心层即可，但是，加载带渐变效果的主题则必须有插值动画支持 |
+| View代码生成 | 例如，处理 Workflow 的 View 时，一些交互可以由源代码生成器自动完成，作为一种扩展功能，它随版本更新会逐步支持 |
+
 
 ---
 
@@ -108,6 +120,8 @@ VeloxDev.Core 专为 **多UI框架API一致性** 而设计
 [![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Workflow/Demo)
 
 [![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Workflow/Demo)
+
+[![GitHub](https://img.shields.io/badge/GitHub-Demo_WinUI-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WinUI/Workflow/Demo)
 
 #### Workflow 生成支持
 
