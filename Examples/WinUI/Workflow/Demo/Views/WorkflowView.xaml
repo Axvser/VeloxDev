@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Demo.Views.WorkflowView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Demo.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+    xmlns:viewmodels="using:Demo.ViewModels"
+    mc:Ignorable="d"
+    x:Name="Root">
+
+    <Grid Background="White">
+        <!-- 节点 -->
+        <ItemsControl ItemsSource="{Binding Nodes}" Canvas.ZIndex="2">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Canvas />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemContainerStyle>
+                <Style TargetType="ContentPresenter">
+                    <Setter Property="Canvas.Left" Value="{Binding Anchor.Left}"/>
+                    <Setter Property="Canvas.Top" Value="{Binding Anchor.Top}"/>
+                    <Setter Property="Canvas.ZIndex" Value="{Binding Anchor.Layer}"/>
+                </Style>
+            </ItemsControl.ItemContainerStyle>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="viewmodels:NodeViewModel">
+                    <local:NodeView 
+                        Width="{Binding Size.Width}" 
+                        Height="{Binding Size.Height}" 
+                        IsEnabled="{Binding IsEnabled}">
+                    </local:NodeView>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <!-- 真实连线，仅在实际发生连接后建立 -->
+        <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="2">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Canvas />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="viewmodels:LinkViewModel">
+                    <local:BezierCurveView
+                        StartAnchor="{Binding Sender.Anchor}" 
+                        EndAnchor="{Binding Processor.Anchor}" 
+                        CanRender="{Binding IsEnabled}">
+                    </local:BezierCurveView>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <!-- 虚拟连线，仅在创建连接的过程中提供预览曲线 -->
+        <local:BezierCurveView DataContext="{Binding VirtualLink}"
+                               StartAnchor="{Binding Sender.Anchor}" 
+                               EndAnchor="{Binding Processor.Anchor}" 
+                               CanRender="{Binding IsEnabled}"/>
+    </Grid>
+</UserControl>

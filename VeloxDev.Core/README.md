@@ -65,7 +65,5 @@
 
 ### 📦 AOT 反射支持示例
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/AOT/Demo)  
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/AOT/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/AOT/Demo)
 
