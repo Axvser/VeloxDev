@@ -10,7 +10,7 @@
     mc:Ignorable="d"
     x:Name="Root">
 
-    <Grid Background="White">
+    <Canvas Background="White">
         <!-- 节点 -->
         <local:CanvasItemsControl ItemsSource="{Binding Nodes}" Canvas.ZIndex="2">
             <ItemsControl.ItemsPanel>
@@ -53,5 +53,5 @@
                                StartAnchor="{Binding Sender.Anchor}" 
                                EndAnchor="{Binding Processor.Anchor}" 
                                CanRender="{Binding IsEnabled}"/>
-    </Grid>
+    </Canvas>
 </UserControl>

@@ -1,4 +1,5 @@
-﻿using Microsoft.UI.Xaml;
+﻿using Demo.ViewModels;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
@@ -43,6 +44,7 @@ namespace Demo
         /// <param name="args">Details about the launch request and process.</param>
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
+            AOTReflection.Init(); // 初始化 AOT 反射
             _window = new MainWindow();
             _window.Activate();
         }

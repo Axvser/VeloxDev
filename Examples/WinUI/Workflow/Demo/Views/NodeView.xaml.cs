@@ -1,37 +1,51 @@
-﻿using Microsoft.UI.Xaml.Controls;
+﻿using Demo.ViewModels;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using VeloxDev.Core.WorkflowSystem;
-using Demo.ViewModels;
+using Windows.Foundation;
 
 namespace Demo.Views
 {
     public sealed partial class NodeView : UserControl
     {
+        private Point _dragStart;       // 拖拽起点
+        private bool _isDragging;
+
+        public NodeViewModel? ViewModel => DataContext as NodeViewModel;
+
         public NodeView()
         {
             InitializeComponent();
+
+            ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY;
         }
 
-        /// <summary>
-        /// 示例 : 【节点】视图模型常用命令
-        /// </summary>
-        public void NodeCommands()
+        private void OnManipulationStarted(object sender, ManipulationStartedRoutedEventArgs e)
         {
-            if (DataContext is NodeViewModel node)
-            {
-                node.WorkCommand.Execute(null);           // 执行节点的工作任务       | param : nullable
-                node.BroadcastCommand.Execute(null);      // 广播任务到所有连接的节点 | param : nullable
-                node.CreateSlotCommand.Execute(null);     // 创建一个新的插槽         | param : ViewModels.SlotViewModel
-                node.DeleteCommand.Execute(null);         // 删除此节点               | param : null
-                node.MoveCommand.Execute(null);           // 移动节点                 | param : VeloxDev.Core.WorkflowSystem.Anchor or Windows.Foundation.Point
-                node.UndoCommand.Execute(null);           // 撤销                     | param : null
-            }
+            if (ViewModel == null)
+                return;
 
-            // 附 : 创建一个新的 SlotViewModel
-            var slot = new SlotViewModel()
-            {
-                Offset = new Anchor(left: 0, top: 0, layer: 1), // Slot相对于Node的偏移位置与层级
-                Size = new Size(width: 20, height: 20)          // Slot的尺寸
-            };
+            _isDragging = true;
+            _dragStart = new Point(ViewModel.Anchor.Left, ViewModel.Anchor.Top);
+        }
+
+        private void OnManipulationDelta(object sender, ManipulationDeltaRoutedEventArgs e)
+        {
+            if (!_isDragging || ViewModel == null)
+                return;
+
+            var total = e.Cumulative.Translation;
+            ViewModel.Anchor = new Anchor(_dragStart.X + total.X, _dragStart.Y + total.Y);
+        }
+
+        private void OnManipulationCompleted(object sender, ManipulationCompletedRoutedEventArgs e)
+        {
+            if (!_isDragging)
+                return;
+
+            _isDragging = false;
         }
     }
 }

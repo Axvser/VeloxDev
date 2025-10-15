@@ -10,10 +10,13 @@
     d:DataContext="{d:DesignInstance Type=viewmodels:NodeViewModel}"
     mc:Ignorable="d">
 
-    <Grid>
-        <Border x:Name="RootBorder"
-                Background="#1e1e1e"
-                VerticalAlignment="Top">
+    <Grid Background="Transparent">
+        <Border Background="#1e1e1e"
+                VerticalAlignment="Top"               
+                ManipulationMode="TranslateX,TranslateY"
+                ManipulationStarted="OnManipulationStarted"
+                ManipulationDelta="OnManipulationDelta"
+                ManipulationCompleted="OnManipulationCompleted">
             <TextBlock x:Name="TitleText"
                    Text="{Binding Name}"
                    Foreground="White"

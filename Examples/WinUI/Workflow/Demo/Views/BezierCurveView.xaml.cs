@@ -1,9 +1,10 @@
-using Microsoft.Graphics.Canvas.UI.Xaml;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using System.Numerics;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
+using System;
 using VeloxDev.Core.WorkflowSystem;
+using Windows.Foundation;
 
 namespace Demo.Views
 {
@@ -11,22 +12,18 @@ namespace Demo.Views
     {
         public BezierCurveView()
         {
-            this.InitializeComponent();
-            Canvas.ClearColor = Colors.Transparent;
+            InitializeComponent();
         }
 
-        // ========= 依赖属性定义 =========
+        #region 依赖属性
 
         public Anchor StartAnchor
         {
             get => (Anchor)GetValue(StartAnchorProperty);
             set => SetValue(StartAnchorProperty, value);
         }
-
         public static readonly DependencyProperty StartAnchorProperty =
-            DependencyProperty.Register(nameof(StartAnchor),
-                typeof(Anchor),
-                typeof(BezierCurveView),
+            DependencyProperty.Register(nameof(StartAnchor), typeof(Anchor), typeof(BezierCurveView),
                 new PropertyMetadata(new Anchor(), OnAnchorChanged));
 
         public Anchor EndAnchor
@@ -34,11 +31,8 @@ namespace Demo.Views
             get => (Anchor)GetValue(EndAnchorProperty);
             set => SetValue(EndAnchorProperty, value);
         }
-
         public static readonly DependencyProperty EndAnchorProperty =
-            DependencyProperty.Register(nameof(EndAnchor),
-                typeof(Anchor),
-                typeof(BezierCurveView),
+            DependencyProperty.Register(nameof(EndAnchor), typeof(Anchor), typeof(BezierCurveView),
                 new PropertyMetadata(new Anchor(), OnAnchorChanged));
 
         public bool CanRender
@@ -46,60 +40,60 @@ namespace Demo.Views
             get => (bool)GetValue(CanRenderProperty);
             set => SetValue(CanRenderProperty, value);
         }
-
         public static readonly DependencyProperty CanRenderProperty =
-            DependencyProperty.Register(nameof(CanRender),
-                typeof(bool),
-                typeof(BezierCurveView),
+            DependencyProperty.Register(nameof(CanRender), typeof(bool), typeof(BezierCurveView),
                 new PropertyMetadata(true, OnCanRenderChanged));
 
-        // ========= 属性变更处理 =========
+        #endregion
 
         private static void OnAnchorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is BezierCurveView view)
-                view.Canvas.Invalidate();
+                view.UpdateCurve();
         }
 
         private static void OnCanRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is BezierCurveView view)
-                view.Canvas.Invalidate();
+                view.UpdateVisibility();
         }
 
-        // ========= 绘制 =========
+        private void UpdateVisibility()
+        {
+            CurvePath.Visibility = CanRender ? Visibility.Visible : Visibility.Collapsed;
+        }
 
-        private void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
+        private void UpdateCurve()
         {
             if (!CanRender)
+            {
+                CurvePath.Visibility = Visibility.Collapsed;
                 return;
+            }
 
-            var ds = args.DrawingSession;
-            ds.Antialiasing = Microsoft.Graphics.Canvas.CanvasAntialiasing.Antialiased;
+            var start = new Point(StartAnchor.Left, StartAnchor.Top);
+            var end = new Point(EndAnchor.Left, EndAnchor.Top);
 
-            // 计算差距
-            float diffx = (float)(EndAnchor.Left - StartAnchor.Left);
-            float diffy = (float)(EndAnchor.Top - StartAnchor.Top);
+            // 控制点计算逻辑（根据 X 方向距离自动拉伸）
+            double dx = Math.Abs(end.X - start.X);
+            double controlOffset = Math.Max(40, dx * 0.5);
 
-            // 控制点
-            var cp1 = new Vector2(
-                (float)(StartAnchor.Left + diffx * 0.618),
-                (float)(StartAnchor.Top + diffy * 0.1));
-            var cp2 = new Vector2(
-                (float)(EndAnchor.Left - diffx * 0.618),
-                (float)(EndAnchor.Top - diffy * 0.1));
+            var c1 = new Point(start.X + controlOffset, start.Y);
+            var c2 = new Point(end.X - controlOffset, end.Y);
 
-            var start = new Vector2((float)StartAnchor.Left, (float)StartAnchor.Top);
-            var end = new Vector2((float)EndAnchor.Left, (float)EndAnchor.Top);
+            var figure = new PathFigure { StartPoint = start };
+            figure.Segments.Add(new BezierSegment
+            {
+                Point1 = c1,
+                Point2 = c2,
+                Point3 = end
+            });
 
-            // 用 PathBuilder 构造贝塞尔几何
-            using var pathBuilder = new Microsoft.Graphics.Canvas.Geometry.CanvasPathBuilder(sender);
-            pathBuilder.BeginFigure(start);
-            pathBuilder.AddCubicBezier(cp1, cp2, end);
-            pathBuilder.EndFigure(Microsoft.Graphics.Canvas.Geometry.CanvasFigureLoop.Open);
+            var geometry = new PathGeometry();
+            geometry.Figures.Add(figure);
+            CurvePath.Data = geometry;
 
-            using var geometry = Microsoft.Graphics.Canvas.Geometry.CanvasGeometry.CreatePath(pathBuilder);
-            ds.DrawGeometry(geometry, Colors.Cyan, 2f);
+            CurvePath.Visibility = Visibility.Visible;
         }
     }
 }

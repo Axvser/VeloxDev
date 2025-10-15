@@ -20,5 +20,21 @@ namespace Demo.Views
                 slot.UndoCommand.Execute(null);       // ³·Ïú                       | param : null
             }
         }
+
+        private void Grid_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (DataContext is SlotViewModel slot)
+            {
+                slot.ConnectingCommand.Execute(null);
+            }
+        }
+
+        private void Grid_PointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (DataContext is SlotViewModel slot)
+            {
+                slot.ConnectedCommand.Execute(null);
+            }
+        }
     }
 }

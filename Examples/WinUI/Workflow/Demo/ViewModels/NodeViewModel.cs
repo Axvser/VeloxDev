@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.Core.AOT;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
@@ -7,6 +8,7 @@ using Windows.Foundation;
 
 namespace Demo.ViewModels;
 
+[AOTReflection(Properties:true)]       // 保留 AOT 中的反射上下文
 [Workflow.Context.Node(semaphore: 10)] // 允许 10 个任务并发
 public partial class NodeViewModel
 {
@@ -28,10 +30,10 @@ public partial class NodeViewModel
         switch (parameter)
         {
             case Anchor anchor:
-                Anchor += anchor;
+                Anchor = anchor;
                 break;
             case Point point:
-                Anchor += new Anchor(point.X, point.Y);
+                Anchor = new Anchor(point.X, point.Y);
                 break;
         }
         return Task.CompletedTask;

@@ -8,5 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid   Background="Gray"/>
+    <Grid   Background="Gray"
+            PointerPressed="Grid_PointerPressed"
+            PointerReleased="Grid_PointerReleased"/>
 </UserControl>
