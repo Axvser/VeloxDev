@@ -7,16 +7,15 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IWorkflowSlotViewModel? Sender { get; set; }
         public IWorkflowSlotViewModel? Receiver { get; set; }
 
-        public IVeloxCommand DeleteCommand { get; }  // 通知两端的Slot断开连接并删除此Link
+        public IVeloxCommand DeleteCommand { get; }  // 删除 | parameter Null
 
         public IWorkflowLinkViewModelHelper GetHelper();
-        public Task SetHelperAsync(IWorkflowLinkViewModelHelper helper);
+        public void SetHelper(IWorkflowLinkViewModelHelper helper);
     }
 
-    public interface IWorkflowLinkViewModelHelper : IDisposable
+    public interface IWorkflowLinkViewModelHelper : IWorkflowHelper
     {
-        public Task InitializeAsync(IWorkflowLinkViewModel viewModel);
-        public Task CloseAsync();
-        public Task DeleteAsync();
+        public void Initialize(IWorkflowLinkViewModel link); // 初始化不允许异步
+        public void Delete(); // 工作流元素变更不允许异步
     }
 }

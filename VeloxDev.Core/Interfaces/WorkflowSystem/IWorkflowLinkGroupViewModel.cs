@@ -9,15 +9,14 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public ObservableCollection<IWorkflowLinkViewModel> Links { get; set; }
 
         public IVeloxCommand DeleteCommand { get; }
-
+        
         public IWorkflowLinkGroupViewModelHelper GetHelper();
-        public Task SetHelperAsync(IWorkflowLinkGroupViewModelHelper helper);
+        public void SetHelper(IWorkflowLinkGroupViewModelHelper helper);
     }
 
-    public interface IWorkflowLinkGroupViewModelHelper : IDisposable
+    public interface IWorkflowLinkGroupViewModelHelper : IWorkflowHelper
     {
-        public Task InitializeAsync(IWorkflowLinkGroupViewModel viewModel);
-        public Task CloseAsync();
-        public Task DeleteAsync();
+        public void Initialize(IWorkflowLinkGroupViewModel linkGroup);
+        public void Delete();
     }
 }

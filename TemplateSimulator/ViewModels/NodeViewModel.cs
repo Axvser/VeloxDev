@@ -15,10 +15,42 @@ public partial class NodeViewModel : IWorkflowNodeViewModel
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> slots = [];
 
     [VeloxCommand]
-    private async Task CreateSlot(object? parameter, CancellationToken ct)
+    private Task Press(object? parameter, CancellationToken ct)
     {
-        await Helper.CreateSlotAsync(parameter);
+        if (parameter is not Anchor anchor) return Task.CompletedTask;
+        Helper.Press(anchor);
+        return Task.CompletedTask;
     }
+    [VeloxCommand]
+    private Task Move(object? parameter, CancellationToken ct)
+    {
+        if (parameter is not Anchor anchor) return Task.CompletedTask;
+        Helper.Move(anchor);
+        return Task.CompletedTask;
+    }
+    [VeloxCommand]
+    private Task Scale(object? parameter, CancellationToken ct)
+    {
+        if (parameter is not Size size) return Task.CompletedTask;
+        Helper.Scale(size);
+        return Task.CompletedTask;
+    }
+    [VeloxCommand]
+    private Task Release(object? parameter, CancellationToken ct)
+    {
+        if (parameter is not Anchor anchor) return Task.CompletedTask;
+        Helper.Release(anchor);
+        return Task.CompletedTask;
+    }
+
+    [VeloxCommand]
+    private Task CreateSlot(object? parameter, CancellationToken ct)
+    {
+        if (parameter is not IWorkflowSlotViewModel slot) return Task.CompletedTask;
+        Helper.CreateSlot(slot);
+        return Task.CompletedTask;
+    }
+
     [VeloxCommand]
     private Task Work(object? parameter, CancellationToken ct)
     {
@@ -31,15 +63,23 @@ public partial class NodeViewModel : IWorkflowNodeViewModel
         // ºöÂÔ£¬ÓÉÎÒÇ××Ô±àÐ´
         return Task.CompletedTask;
     }
+
     [VeloxCommand]
-    private async Task Delete(object? parameter, CancellationToken ct)
+    private async Task Close(object? parameter, CancellationToken ct)
     {
-        await Helper.DeleteAsync();
+        await Helper.CloseAsync();
+    }
+    [VeloxCommand]
+    private Task Delete(object? parameter, CancellationToken ct)
+    {
+        Helper.Delete();
+        return Task.CompletedTask;
     }
 
-    public async Task InitializeAsync()
+    public Task InitializeAsync()
     {
-        await Helper.InitializeAsync(this);
+        Helper.Initialize(this);
+        return Task.CompletedTask;
     }
 
     public async Task CloseAsync()
@@ -48,9 +88,14 @@ public partial class NodeViewModel : IWorkflowNodeViewModel
     }
 
     public IWorkflowNodeViewModelHelper GetHelper() => Helper;
-    public async Task SetHelperAsync(IWorkflowNodeViewModelHelper helper)
+    public void SetHelperAsync(IWorkflowNodeViewModelHelper helper)
     {
         Helper = helper;
-        await helper.InitializeAsync(this);
+        helper.Initialize(this);
+    }
+
+    public void InitializeWorkflow()
+    {
+        Helper.Initialize(this);
     }
 }

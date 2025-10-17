@@ -32,30 +32,42 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public SlotChannel Channel { get; set; }
         public SlotState State { get; set; }
         public Anchor Anchor { get; set; }
-        public Anchor Offset { get; set; }
+        public Offset Offset { get; set; }
         public Size Size { get; set; }
 
-        public IVeloxCommand PressCommand { get; }     // 按下Slot,更新当前始端位置,进入连接模式
-        public IVeloxCommand MoveCommand { get; }      // 移动触点,更新当前末端位置
-        public IVeloxCommand ReleaseCommand { get; }   // 松开Slot,结束连接模式,验证并处理连接,同步Slot状态
+        public IVeloxCommand PressCommand { get; }      // 开始交互  | parameter Anchor
+        public IVeloxCommand TranslateCommand { get; }  // 设定偏移  | parameter Offset
+        public IVeloxCommand ScaleCommand { get; }      // 设定尺寸  | parameter Size
+        public IVeloxCommand ReleaseCommand { get; }    // 结束交互  | parameter Null
 
-        public IVeloxCommand DeleteCommand { get; }    // 从工作流删除此Slot
+        public IVeloxCommand ApplyConnectionCommand { get; }   // 作为连接构建发起方 | parameter Null
+        public IVeloxCommand ReceiveConnectionCommand { get; } // 作为连接构建接收方 | parameter Null
+
+        public IVeloxCommand DeleteCommand { get; }     // 删除Slot  | parameter Null
 
         public IWorkflowSlotViewModelHelper GetHelper();
-        public Task SetHelperAsync(IWorkflowSlotViewModelHelper helper);
+        public void SetHelper(IWorkflowSlotViewModelHelper helper);
     }
 
-    public interface IWorkflowSlotViewModelHelper : IDisposable
+    public interface IWorkflowSlotViewModelHelper : IWorkflowHelper
     {
-        public Task InitializeAsync(IWorkflowSlotViewModel viewModel);
-        public Task CloseAsync();
+        public void Initialize(IWorkflowSlotViewModel slot);
+
+        public void OnParentChanged(IWorkflowNodeViewModel? oldValue, IWorkflowNodeViewModel? newValue);
         public void OnChannelChanged(SlotChannel oldValue, SlotChannel newValue);
+        public void OnStateChanged(SlotState oldValue, SlotState newValue);
         public void OnAnchorChanged(Anchor oldValue, Anchor newValue);
         public void OnOffsetChanged(Anchor oldValue, Anchor newValue);
         public void OnSizeChanged(Size oldValue, Size newValue);
-        public Task PressAsync();
-        public Task MoveAsync(object? parameter);
-        public Task ReleaseAsync();
-        public Task DeleteAsync();
+
+        public void Press(Anchor anchor);
+        public void Translate(Offset offset);
+        public void Scale(Size size);
+        public void Release(Anchor anchor);
+
+        public void ApplyConnection();
+        public void ReceiveConnection();
+
+        public void Delete();
     }
 }
