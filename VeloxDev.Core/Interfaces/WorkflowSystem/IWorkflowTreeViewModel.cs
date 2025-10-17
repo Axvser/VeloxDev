@@ -21,7 +21,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IVeloxCommand UndoCommand { get; }          // 撤销 | parameter Null
 
         public IWorkflowTreeViewModelHelper GetHelper();
-        public Task SetHelperAsync(IWorkflowTreeViewModelHelper helper);
+        public void SetHelper(IWorkflowTreeViewModelHelper helper);
     }
 
     public interface IWorkflowTreeViewModelHelper : IWorkflowHelper
