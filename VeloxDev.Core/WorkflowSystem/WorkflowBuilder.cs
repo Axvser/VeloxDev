@@ -1,8 +1,8 @@
 ﻿namespace VeloxDev.Core.WorkflowSystem
 {
-    public sealed class Workflow
+    public sealed class WorkflowBuilder
     {
-        public sealed class Context
+        public sealed class ViewModel
         {
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
             public sealed class TreeAttribute(Type? slotType = default, Type? linkType = default) : Attribute
