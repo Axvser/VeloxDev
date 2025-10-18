@@ -30,17 +30,17 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task Move(object? parameter, CancellationToken ct)
+        protected virtual Task SetAnchor(object? parameter, CancellationToken ct)
         {
             if (parameter is not Anchor anchor) return Task.CompletedTask;
-            Helper.Move(anchor);
+            Helper.SetAnchor(anchor);
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task Scale(object? parameter, CancellationToken ct)
+        protected virtual Task SetSize(object? parameter, CancellationToken ct)
         {
             if (parameter is not Size scale) return Task.CompletedTask;
-            Helper.Scale(scale);
+            Helper.SetSize(scale);
             return Task.CompletedTask;
         }
         [VeloxCommand]

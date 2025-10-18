@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.Reflection;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 
@@ -11,7 +12,7 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
 
         public TreeViewModelBase() { InitializeWorkflow(); }
 
-        [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkViewModelBase();
+        [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkViewModelBase() { Sender = new SlotViewModelBase(), Receiver = new SlotViewModelBase() };
         [VeloxProperty] private ObservableCollection<IWorkflowNodeViewModel> nodes = [];
         [VeloxProperty] private ConcurrentDictionary<IWorkflowSlotViewModel, ConcurrentDictionary<IWorkflowSlotViewModel, IWorkflowLinkGroupViewModel>> linkGroupMap = [];
         [VeloxProperty] private ObservableCollection<IWorkflowLinkGroupViewModel> linkGroups = [];

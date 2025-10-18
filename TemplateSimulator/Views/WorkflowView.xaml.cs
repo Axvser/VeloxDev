@@ -9,7 +9,7 @@ namespace TemplateSimulator.Views;
 
 public partial class WorkflowView : UserControl
 {
-    private readonly TreeViewModel _workflowViewModel = new TreeViewModel();
+    private readonly TreeViewModel _workflowViewModel = new();
 
     public WorkflowView()
     {
@@ -18,12 +18,12 @@ public partial class WorkflowView : UserControl
         // 先模拟一些数据
         var slot1 = new SlotViewModel()
         {
-            Offset = new Anchor(170, 120),
+            Offset = new Offset(170, 120),
             Size = new Size(20, 20)
         };
         var slot2 = new SlotViewModel()
         {
-            Offset = new Anchor(10, 200),
+            Offset = new Offset(10, 200),
             Size = new Size(20, 20)
         };
         var node1 = new NodeViewModel()
@@ -36,12 +36,12 @@ public partial class WorkflowView : UserControl
             Size = new Size(300, 300),
             Anchor = new Anchor(250, 250, 1)
         };
-        node1.Slots.Add(slot1);
-        node2.Slots.Add(slot2);
+        node1.GetHelper().CreateSlot(slot1);
+        node2.GetHelper().CreateSlot(slot2);
 
         // 此处为 Nodes 集合增加了了两个 Node 上下文
-        _workflowViewModel.Nodes.Add(node1);
-        _workflowViewModel.Nodes.Add(node2);
+        _workflowViewModel.GetHelper().CreateNode(node1);
+        _workflowViewModel.GetHelper().CreateNode(node2);
         // 使用数据上下文
         DataContext = _workflowViewModel;
 

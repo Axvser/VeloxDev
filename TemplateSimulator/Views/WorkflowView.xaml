@@ -72,7 +72,7 @@
         <local:BezierCurveView DataContext="{Binding VirtualLink}"
                                StartAnchor="{Binding Sender.Anchor}"
                                EndAnchor="{Binding Receiver.Anchor}"
-                               CanRender="{Binding IsEnabled}" />
+                               CanRender="{Binding IsVisible}" />
 
     </Canvas>
 </UserControl>

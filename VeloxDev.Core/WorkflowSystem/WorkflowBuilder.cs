@@ -5,10 +5,11 @@
         public sealed class ViewModel
         {
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class TreeAttribute(Type? helperType = default, Type? virtualLinkType = default, Type? linkGroupType = default) : Attribute
+            public sealed class TreeAttribute(Type? helperType = default, Type? virtualLinkType = default, Type? slotType = default, Type? linkGroupType = default) : Attribute
             {
                 public Type? HelperType { get; } = helperType;
                 public Type? VirtualLinkType { get; } = virtualLinkType;
+                public Type? SlotType { get; } = slotType;
                 public Type? LinkGroupType { get; } = linkGroupType;
             }
 

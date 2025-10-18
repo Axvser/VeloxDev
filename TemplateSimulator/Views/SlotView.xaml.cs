@@ -23,7 +23,7 @@ public partial class SlotView : UserControl
             Mouse.Capture(null);
         }
 
-        context.PressCommand.Execute(null);
+        context.ApplyConnectionCommand.Execute(null);
 
         e.Handled = true;
     }
@@ -33,7 +33,7 @@ public partial class SlotView : UserControl
     {
         if (DataContext is not IWorkflowSlotViewModel context) return;
 
-        context.ReleaseCommand.Execute(null);
+        context.ReceiveConnectionCommand.Execute(null);
 
         // WPF中建议释放鼠标捕获以确保交互正常
         if (Mouse.Captured != null)

@@ -32,17 +32,17 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task Offset(object? parameter, CancellationToken ct)
+        protected virtual Task SetOffset(object? parameter, CancellationToken ct)
         {
             if (parameter is not Offset offset) return Task.CompletedTask;
-            Helper.Translate(offset);
+            Helper.SetOffset(offset);
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task Size(object? parameter, CancellationToken ct)
+        protected virtual Task SetSize(object? parameter, CancellationToken ct)
         {
             if (parameter is not Size scale) return Task.CompletedTask;
-            Helper.Scale(scale);
+            Helper.SetSize(scale);
             return Task.CompletedTask;
         }
         [VeloxCommand]
