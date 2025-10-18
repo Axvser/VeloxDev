@@ -9,8 +9,8 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
 
         public LinkViewModelBase() { InitializeWorkflow(); }
 
-        [VeloxProperty] private IWorkflowSlotViewModel? sender = new SlotViewModelBase();
-        [VeloxProperty] private IWorkflowSlotViewModel? receiver = new SlotViewModelBase();
+        [VeloxProperty] private IWorkflowSlotViewModel sender = new SlotViewModelBase();
+        [VeloxProperty] private IWorkflowSlotViewModel receiver = new SlotViewModelBase();
         [VeloxProperty] private bool isVisible = false;
 
         [VeloxCommand]

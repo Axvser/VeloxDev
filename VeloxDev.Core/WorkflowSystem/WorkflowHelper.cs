@@ -24,7 +24,79 @@ namespace VeloxDev.Core.WorkflowSystem
 
                 public virtual void Delete()
                 {
+                    if (_self?.Sender == null || _self?.Receiver == null || _self?.Sender?.Parent?.Parent == null)
+                        return;
 
+                    var tree = _self.Sender.Parent.Parent;
+                    var sender = _self.Sender;
+                    var receiver = _self.Receiver;
+                    var link = _self;
+
+                    // 保存当前状态用于撤销
+                    var oldSenderTargets = new List<IWorkflowSlotViewModel>(sender.Targets);
+                    var oldReceiverSources = new List<IWorkflowSlotViewModel>(receiver.Sources);
+                    var wasSenderConnected = sender.Targets.Contains(receiver);
+                    var wasReceiverConnected = receiver.Sources.Contains(sender);
+                    var wasLinkInTree = tree.Links.Contains(link);
+
+                    tree.GetHelper().Submit(new WorkflowActionPair(
+                        // Redo: 删除连接
+                        () =>
+                        {
+                            // 从集合中移除连接关系
+                            if (sender.Targets.Contains(receiver))
+                                sender.Targets.Remove(receiver);
+                            if (receiver.Sources.Contains(sender))
+                                receiver.Sources.Remove(sender);
+                            if (tree.Links.Contains(link))
+                                tree.Links.Remove(link);
+
+                            // 更新发送方状态
+                            if (sender.Targets.Count == 0)
+                            {
+                                sender.State &= ~SlotState.Sender;
+                                if (sender.Sources.Count == 0)
+                                    sender.State = SlotState.StandBy;
+                                else
+                                    sender.State &= ~SlotState.PreviewSender;
+                            }
+
+                            // 更新接收方状态
+                            if (receiver.Sources.Count == 0)
+                            {
+                                receiver.State &= ~SlotState.Processor;
+                                if (receiver.Targets.Count == 0)
+                                    receiver.State = SlotState.StandBy;
+                                else
+                                    receiver.State &= ~SlotState.PreviewProcessor;
+                            }
+                        },
+                        // Undo: 恢复连接
+                        () =>
+                        {
+                            // 恢复连接关系
+                            if (wasSenderConnected && !sender.Targets.Contains(receiver))
+                                sender.Targets.Add(receiver);
+                            if (wasReceiverConnected && !receiver.Sources.Contains(sender))
+                                receiver.Sources.Add(sender);
+                            if (wasLinkInTree && !tree.Links.Contains(link))
+                                tree.Links.Add(link);
+
+                            // 恢复发送方状态
+                            if (wasSenderConnected)
+                            {
+                                sender.State |= SlotState.Sender;
+                                sender.State &= ~SlotState.PreviewSender;
+                            }
+
+                            // 恢复接收方状态
+                            if (wasReceiverConnected)
+                            {
+                                receiver.State |= SlotState.Processor;
+                                receiver.State &= ~SlotState.PreviewProcessor;
+                            }
+                        }
+                    ));
                 }
             }
             #endregion
@@ -94,7 +166,148 @@ namespace VeloxDev.Core.WorkflowSystem
 
                 public virtual void Delete()
                 {
+                    if (_self?.Parent?.Parent == null) return;
 
+                    var tree = _self.Parent.Parent;
+                    var slot = _self;
+
+                    // 保存完整状态用于撤销
+                    var oldTargets = new List<IWorkflowSlotViewModel>(slot.Targets);
+                    var oldSources = new List<IWorkflowSlotViewModel>(slot.Sources);
+                    var oldParent = slot.Parent;
+                    var wasInParentCollection = oldParent?.Slots.Contains(slot) == true;
+
+                    // 收集所有相关连接
+                    var affectedLinks = new List<(IWorkflowLinkViewModel Link, IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver)>();
+                    foreach (var link in tree.Links)
+                    {
+                        if (link.Sender == slot || link.Receiver == slot)
+                        {
+                            affectedLinks.Add((link, link.Sender, link.Receiver));
+                        }
+                    }
+
+                    tree.GetHelper().Submit(new WorkflowActionPair(
+                        // Redo: 删除Slot及其所有连接
+                        () =>
+                        {
+                            // 删除所有出站连接（作为发送方）
+                            foreach (var target in new List<IWorkflowSlotViewModel>(slot.Targets))
+                            {
+                                if (slot.Targets.Contains(target))
+                                    slot.Targets.Remove(target);
+                                if (target.Sources.Contains(slot))
+                                    target.Sources.Remove(slot);
+
+                                // 移除对应的连接线
+                                var linkToRemove = tree.Links.FirstOrDefault(l => l.Sender == slot && l.Receiver == target);
+                                if (linkToRemove != null)
+                                    tree.Links.Remove(linkToRemove);
+
+                                // 更新目标Slot状态
+                                if (target.Sources.Count == 0)
+                                {
+                                    target.State &= ~SlotState.Processor;
+                                    if (target.Targets.Count == 0)
+                                        target.State = SlotState.StandBy;
+                                }
+                            }
+
+                            // 删除所有入站连接（作为接收方）
+                            foreach (var source in new List<IWorkflowSlotViewModel>(slot.Sources))
+                            {
+                                if (source.Targets.Contains(slot))
+                                    source.Targets.Remove(slot);
+                                if (slot.Sources.Contains(source))
+                                    slot.Sources.Remove(source);
+
+                                // 移除对应的连接线
+                                var linkToRemove = tree.Links.FirstOrDefault(l => l.Sender == source && l.Receiver == slot);
+                                if (linkToRemove != null)
+                                    tree.Links.Remove(linkToRemove);
+
+                                // 更新源Slot状态
+                                if (source.Targets.Count == 0)
+                                {
+                                    source.State &= ~SlotState.Sender;
+                                    if (source.Sources.Count == 0)
+                                        source.State = SlotState.StandBy;
+                                }
+                            }
+
+                            // 从父节点移除
+                            if (wasInParentCollection)
+                            {
+                                oldParent.Slots.Remove(slot);
+                                slot.Parent = null;
+                            }
+
+                            // 清空集合
+                            slot.Targets.Clear();
+                            slot.Sources.Clear();
+                            slot.State = SlotState.StandBy;
+                        },
+                        // Undo: 恢复Slot及其所有连接
+                        () =>
+                        {
+                            // 恢复父节点关系
+                            slot.Parent = oldParent;
+                            if (wasInParentCollection && !oldParent.Slots.Contains(slot))
+                                oldParent.Slots.Add(slot);
+
+                            // 恢复所有出站连接
+                            foreach (var target in oldTargets)
+                            {
+                                if (!slot.Targets.Contains(target))
+                                    slot.Targets.Add(target);
+                                if (!target.Sources.Contains(slot))
+                                    target.Sources.Add(slot);
+
+                                // 恢复连接线
+                                var existingLink = tree.Links.FirstOrDefault(l => l.Sender == slot && l.Receiver == target);
+                                if (existingLink == null)
+                                {
+                                    var newLink = tree.GetHelper().CreateLink(slot, target);
+                                    if (!tree.Links.Contains(newLink))
+                                        tree.Links.Add(newLink);
+                                }
+
+                                // 恢复目标Slot状态
+                                target.State |= SlotState.Processor;
+                                target.State &= ~SlotState.PreviewProcessor;
+                            }
+
+                            // 恢复所有入站连接
+                            foreach (var source in oldSources)
+                            {
+                                if (!source.Targets.Contains(slot))
+                                    source.Targets.Add(slot);
+                                if (!slot.Sources.Contains(source))
+                                    slot.Sources.Add(source);
+
+                                // 恢复连接线
+                                var existingLink = tree.Links.FirstOrDefault(l => l.Sender == source && l.Receiver == slot);
+                                if (existingLink == null)
+                                {
+                                    var newLink = tree.GetHelper().CreateLink(source, slot);
+                                    if (!tree.Links.Contains(newLink))
+                                        tree.Links.Add(newLink);
+                                }
+
+                                // 恢复源Slot状态
+                                source.State |= SlotState.Sender;
+                                source.State &= ~SlotState.PreviewSender;
+                            }
+
+                            // 恢复Slot状态
+                            if (oldTargets.Count > 0)
+                                slot.State |= SlotState.Sender;
+                            if (oldSources.Count > 0)
+                                slot.State |= SlotState.Processor;
+                            if (oldTargets.Count == 0 && oldSources.Count == 0)
+                                slot.State = SlotState.StandBy;
+                        }
+                    ));
                 }
             }
             #endregion
@@ -230,7 +443,182 @@ namespace VeloxDev.Core.WorkflowSystem
 
                 public virtual void Delete()
                 {
+                    if (_self?.Parent == null) return;
 
+                    var tree = _self.Parent;
+                    var node = _self;
+
+                    // 保存完整状态用于撤销
+                    var oldSlots = new List<IWorkflowSlotViewModel>(node.Slots);
+                    var oldParent = node.Parent;
+                    var wasInTreeCollection = tree.Nodes.Contains(node);
+                    var oldPosition = new Anchor(node.Anchor.Left, node.Anchor.Top, node.Anchor.Layer);
+                    var oldSize = new Size(node.Size.Width, node.Size.Height);
+
+                    // 收集所有Slot的完整状态
+                    var slotStates = new List<(
+                        IWorkflowSlotViewModel Slot,
+                        List<IWorkflowSlotViewModel> Targets,
+                        List<IWorkflowSlotViewModel> Sources,
+                        List<(IWorkflowLinkViewModel Link, IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver)> Links
+                    )>();
+
+                    foreach (var slot in oldSlots)
+                    {
+                        var targets = new List<IWorkflowSlotViewModel>(slot.Targets);
+                        var sources = new List<IWorkflowSlotViewModel>(slot.Sources);
+                        var slotLinks = new List<(IWorkflowLinkViewModel, IWorkflowSlotViewModel, IWorkflowSlotViewModel)>();
+
+                        foreach (var link in tree.Links)
+                        {
+                            if (link.Sender == slot || link.Receiver == slot)
+                            {
+                                slotLinks.Add((link, link.Sender, link.Receiver));
+                            }
+                        }
+
+                        slotStates.Add((slot, targets, sources, slotLinks));
+                    }
+
+                    tree.GetHelper().Submit(new WorkflowActionPair(
+                        // Redo: 删除节点及其所有内容
+                        () =>
+                        {
+                            // 先删除所有Slot的连接
+                            foreach (var slotState in slotStates)
+                            {
+                                var slot = slotState.Slot;
+
+                                // 删除出站连接
+                                foreach (var target in new List<IWorkflowSlotViewModel>(slot.Targets))
+                                {
+                                    if (slot.Targets.Contains(target))
+                                        slot.Targets.Remove(target);
+                                    if (target.Sources.Contains(slot))
+                                        target.Sources.Remove(slot);
+
+                                    var linkToRemove = tree.Links.FirstOrDefault(l => l.Sender == slot && l.Receiver == target);
+                                    if (linkToRemove != null)
+                                        tree.Links.Remove(linkToRemove);
+
+                                    // 更新目标Slot状态
+                                    if (target.Sources.Count == 0)
+                                    {
+                                        target.State &= ~SlotState.Processor;
+                                        if (target.Targets.Count == 0)
+                                            target.State = SlotState.StandBy;
+                                    }
+                                }
+
+                                // 删除入站连接
+                                foreach (var source in new List<IWorkflowSlotViewModel>(slot.Sources))
+                                {
+                                    if (source.Targets.Contains(slot))
+                                        source.Targets.Remove(slot);
+                                    if (slot.Sources.Contains(source))
+                                        slot.Sources.Remove(source);
+
+                                    var linkToRemove = tree.Links.FirstOrDefault(l => l.Sender == source && l.Receiver == slot);
+                                    if (linkToRemove != null)
+                                        tree.Links.Remove(linkToRemove);
+
+                                    // 更新源Slot状态
+                                    if (source.Targets.Count == 0)
+                                    {
+                                        source.State &= ~SlotState.Sender;
+                                        if (source.Sources.Count == 0)
+                                            source.State = SlotState.StandBy;
+                                    }
+                                }
+
+                                slot.Targets.Clear();
+                                slot.Sources.Clear();
+                                slot.State = SlotState.StandBy;
+                            }
+
+                            // 从父节点移除所有Slot
+                            node.Slots.Clear();
+
+                            // 从树中移除节点
+                            if (wasInTreeCollection)
+                            {
+                                tree.Nodes.Remove(node);
+                                node.Parent = null;
+                            }
+                        },
+                        // Undo: 恢复节点及其所有内容
+                        () =>
+                        {
+                            // 恢复节点关系
+                            node.Parent = oldParent;
+                            if (wasInTreeCollection && !tree.Nodes.Contains(node))
+                                tree.Nodes.Add(node);
+
+                            // 恢复位置和尺寸
+                            node.Anchor = oldPosition;
+                            node.Size = oldSize;
+
+                            // 恢复所有Slot到节点
+                            foreach (var slotState in slotStates)
+                            {
+                                var slot = slotState.Slot;
+                                slot.Parent = node;
+                                if (!node.Slots.Contains(slot))
+                                    node.Slots.Add(slot);
+
+                                // 恢复出站连接
+                                foreach (var target in slotState.Targets)
+                                {
+                                    if (!slot.Targets.Contains(target))
+                                        slot.Targets.Add(target);
+                                    if (!target.Sources.Contains(slot))
+                                        target.Sources.Add(slot);
+
+                                    var existingLink = tree.Links.FirstOrDefault(l => l.Sender == slot && l.Receiver == target);
+                                    if (existingLink == null)
+                                    {
+                                        var newLink = tree.GetHelper().CreateLink(slot, target);
+                                        if (!tree.Links.Contains(newLink))
+                                            tree.Links.Add(newLink);
+                                    }
+
+                                    target.State |= SlotState.Processor;
+                                    target.State &= ~SlotState.PreviewProcessor;
+                                }
+
+                                // 恢复入站连接
+                                foreach (var source in slotState.Sources)
+                                {
+                                    if (!source.Targets.Contains(slot))
+                                        source.Targets.Add(slot);
+                                    if (!slot.Sources.Contains(source))
+                                        slot.Sources.Add(source);
+
+                                    var existingLink = tree.Links.FirstOrDefault(l => l.Sender == source && l.Receiver == slot);
+                                    if (existingLink == null)
+                                    {
+                                        var newLink = tree.GetHelper().CreateLink(source, slot);
+                                        if (!tree.Links.Contains(newLink))
+                                            tree.Links.Add(newLink);
+                                    }
+
+                                    source.State |= SlotState.Sender;
+                                    source.State &= ~SlotState.PreviewSender;
+                                }
+
+                                // 恢复Slot状态
+                                if (slotState.Targets.Count > 0)
+                                    slot.State |= SlotState.Sender;
+                                if (slotState.Sources.Count > 0)
+                                    slot.State |= SlotState.Processor;
+                                if (slotState.Targets.Count == 0 && slotState.Sources.Count == 0)
+                                    slot.State = SlotState.StandBy;
+
+                                // 更新锚点
+                                slot.GetHelper().UpdateAnchor();
+                            }
+                        }
+                    ));
                 }
                 #endregion
             }
@@ -315,7 +703,8 @@ namespace VeloxDev.Core.WorkflowSystem
                     new LinkViewModelBase()
                     {
                         Sender = new SlotViewModelBase(),
-                        Receiver = new SlotViewModelBase()
+                        Receiver = new SlotViewModelBase(),
+                        IsVisible = true
                     };
                 public virtual void CreateNode(IWorkflowNodeViewModel node)
                 {
@@ -338,32 +727,27 @@ namespace VeloxDev.Core.WorkflowSystem
                 }
                 public virtual void SetPointer(Anchor anchor)
                 {
-                    _self.VirtualLink.Receiver.Anchor.Left = anchor.Left;
-                    _self.VirtualLink.Receiver.Anchor.Top = anchor.Top;
-                    _self.VirtualLink.Receiver.Anchor.Layer = anchor.Layer;
+                    _self.VirtualLink.Receiver.Anchor = anchor;
                 }
                 #endregion
 
                 #region Connection Manager
                 private IWorkflowSlotViewModel? _sender = null;
                 private IWorkflowSlotViewModel? _receiver = null;
-                private bool _isbuilding = false;
                 public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
+                    if (_self == null) return;
 
                 }
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
+                    if (_self == null || _sender == null) return;
 
                 }
                 public virtual void ResetVirtualLink()
                 {
-                    _self.VirtualLink.Sender.Anchor.Left = 0;
-                    _self.VirtualLink.Sender.Anchor.Top = 0;
-                    _self.VirtualLink.Sender.Anchor.Layer = 0;
-                    _self.VirtualLink.Receiver.Anchor.Left = 0;
-                    _self.VirtualLink.Receiver.Anchor.Top = 0;
-                    _self.VirtualLink.Receiver.Anchor.Layer = 0;
+                    _self.VirtualLink.Sender.Anchor = new Anchor();
+                    _self.VirtualLink.Receiver.Anchor = new Anchor();
                     _self.VirtualLink.IsVisible = false;
                 }
                 #endregion
