@@ -4,6 +4,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 {
     public interface IWorkflowLinkViewModel : IWorkflowViewModel
     {
+        public IWorkflowLinkGroupViewModel? Parent { get; set; }
         public IWorkflowSlotViewModel? Sender { get; set; }
         public IWorkflowSlotViewModel? Receiver { get; set; }
         public bool IsVisible { get; set; }
@@ -16,7 +17,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
     public interface IWorkflowLinkViewModelHelper : IWorkflowHelper
     {
-        public void Initialize(IWorkflowLinkViewModel link); // 初始化不允许异步
-        public void Delete(); // 工作流元素变更不允许异步
+        public void Initialize(IWorkflowLinkViewModel link);
+        public void Delete();
     }
 }

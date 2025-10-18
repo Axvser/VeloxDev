@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+﻿using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
@@ -8,8 +9,9 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
     {
         public IWorkflowLinkViewModel VirtualLink { get; set; }
         public ObservableCollection<IWorkflowNodeViewModel> Nodes { get; set; }
+        public ConcurrentDictionary<IWorkflowSlotViewModel, ConcurrentDictionary<IWorkflowSlotViewModel, IWorkflowLinkGroupViewModel>> LinkGroupMap { get; set; }
         public ObservableCollection<IWorkflowLinkGroupViewModel> LinkGroups { get; set; }
-        
+
         public IVeloxCommand CreateNodeCommand { get; }        // 创建节点           | parameter IWorkflowNodeViewModel
         public IVeloxCommand MovePointerCommand { get; }       // 触点跟踪           | parameter Anchor
         public IVeloxCommand ResetVirtualLinkCommand { get; }  // 重置虚拟连接       | parameter Null
@@ -27,9 +29,9 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
     public interface IWorkflowTreeViewModelHelper : IWorkflowHelper
     {
         public void Initialize(IWorkflowTreeViewModel tree);
-        
+
         public void CreateNode(IWorkflowNodeViewModel node);
-        
+
         public void MovePointer(Anchor anchor);
         public void ApplyConnection(IWorkflowSlotViewModel slot);
         public void ReceiveConnection(IWorkflowSlotViewModel slot);
@@ -38,5 +40,6 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public void Submit(IWorkflowActionPair actionPair);
         public void Redo();
         public void Undo();
+        public void ClearHistory();
     }
 }

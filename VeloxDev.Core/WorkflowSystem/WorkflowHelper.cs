@@ -90,25 +90,20 @@ namespace VeloxDev.Core.WorkflowSystem
                 return value is null;
             }
 
-            #region Link Helper
+            #region Link Helper [ 官方固件 ]
             public class Link : IWorkflowLinkViewModelHelper
             {
                 private IWorkflowLinkViewModel? viewModel = null;
 
-                public virtual Task CloseAsync()
-                {
-                    throw new NotImplementedException();
-                }
+                public virtual Task CloseAsync() => Task.CompletedTask;
 
                 public virtual void Delete()
                 {
-                    throw new NotImplementedException();
+                    if (viewModel == null || !TryFindParentTree(viewModel, out var tree)) return;
+
                 }
 
-                public virtual void Dispose()
-                {
-                    GC.SuppressFinalize(this);
-                }
+                public virtual void Dispose() { }
 
                 public virtual void Initialize(IWorkflowLinkViewModel link)
                 {
@@ -117,25 +112,20 @@ namespace VeloxDev.Core.WorkflowSystem
             }
             #endregion
 
-            #region LinkGroup Helper
+            #region LinkGroup Helper [ 官方固件 ]
             public class LinkGroup : IWorkflowLinkGroupViewModelHelper
             {
                 private IWorkflowLinkGroupViewModel? viewModel = null;
 
-                public virtual Task CloseAsync()
-                {
-                    throw new NotImplementedException();
-                }
+                public virtual Task CloseAsync() => Task.CompletedTask;
 
                 public virtual void Delete()
                 {
-                    throw new NotImplementedException();
+                    if (viewModel == null || !TryFindParentTree(viewModel, out var tree)) return;
+
                 }
 
-                public virtual void Dispose()
-                {
-                    GC.SuppressFinalize(this);
-                }
+                public virtual void Dispose() { }
 
                 public virtual void Initialize(IWorkflowLinkGroupViewModel linkGroup)
                 {
@@ -144,7 +134,7 @@ namespace VeloxDev.Core.WorkflowSystem
             }
             #endregion
 
-            #region Slot Helper
+            #region Slot Helper [ 官方固件 ]
             public class Slot : IWorkflowSlotViewModelHelper
             {
                 private IWorkflowSlotViewModel? viewModel = null;
@@ -231,7 +221,7 @@ namespace VeloxDev.Core.WorkflowSystem
             }
             #endregion
 
-            #region Node Helper
+            #region Node Helper [ 官方固件 ]
             public class Node : IWorkflowNodeViewModelHelper
             {
                 private IWorkflowNodeViewModel? viewModel = null;
@@ -256,10 +246,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     throw new NotImplementedException();
                 }
 
-                public virtual void Dispose()
-                {
-                    GC.SuppressFinalize(this);
-                }
+                public virtual void Dispose() { }
 
                 public virtual void Initialize(IWorkflowNodeViewModel node)
                 {
@@ -303,11 +290,12 @@ namespace VeloxDev.Core.WorkflowSystem
             }
             #endregion
 
-            #region Tree Helper
+            #region Tree Helper [ 官方固件 ]
             public class Tree : IWorkflowTreeViewModelHelper
             {
                 private IWorkflowTreeViewModel? viewModel = null;
 
+                #region Base
                 public virtual void Initialize(IWorkflowTreeViewModel tree)
                 {
                     viewModel = tree;
@@ -403,10 +391,7 @@ namespace VeloxDev.Core.WorkflowSystem
                         }
                     }
                 }
-                public virtual void Dispose()
-                {
-                    GC.SuppressFinalize(this);
-                }
+                public virtual void Dispose() { }
                 public virtual void ResetVirtualLink()
                 {
                     if (viewModel is null) return;
@@ -414,174 +399,41 @@ namespace VeloxDev.Core.WorkflowSystem
                     viewModel.VirtualLink.Receiver.Anchor = new();
                     viewModel.VirtualLink.IsVisible = false;
                 }
-
                 public virtual void CreateNode(IWorkflowNodeViewModel node)
                 {
-                    if (viewModel is null) return;
-
+                    if (viewModel is null || !TryFindParentTree(viewModel, out var tree)) return;
+                    var oldParent = node.Parent;
+                    Submit(new WorkflowActionPair(
+                        () =>
+                        {
+                            node.Parent = viewModel;
+                            tree.Nodes.Add(node);
+                        },
+                        () =>
+                        {
+                            node.Parent = oldParent;
+                            tree.Nodes.Remove(node);
+                        }));
                 }
                 public virtual void MovePointer(Anchor anchor)
                 {
                     if (viewModel is null) return;
                     viewModel.VirtualLink.Receiver.Anchor = anchor;
                 }
+                #endregion
 
                 #region Connection Manager
-                private IWorkflowSlotViewModel currentConnectionSender;
+                private IWorkflowSlotViewModel? sender = null;
+                private IWorkflowSlotViewModel? receiver = null;
                 public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
-                    if (viewModel is null || slot is null) return;
+                    if (viewModel is null) return;
 
-                    // 设置当前连接发送端
-                    currentConnectionSender = slot;
-                    slot.State = SlotState.PreviewSender;
-
-                    // 初始化虚拟连接线
-                    if (viewModel.VirtualLink != null)
-                    {
-                        viewModel.VirtualLink.Sender = slot;
-                        viewModel.VirtualLink.Receiver = null;
-                    }
                 }
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
-                    if (viewModel is null || currentConnectionSender is null || slot is null) return;
+                    if (viewModel is null) return;
 
-                    // 验证连接有效性
-                    if (ValidateConnection(currentConnectionSender, slot))
-                    {
-                        // 创建新连接（支持撤销重做）
-                        CreateConnection(currentConnectionSender, slot);
-                    }
-                    else
-                    {
-                        // 连接无效，取消操作
-                        CancelConnection();
-                    }
-                }
-
-                protected virtual bool ValidateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
-                {
-                    if (sender == null || receiver == null) return false;
-
-                    // 不能连接到同一节点
-                    if (sender.Parent == receiver.Parent) return false;
-
-                    // 通道兼容性检查
-                    bool senderCanOutput = (sender.Channel & (SlotChannel.OneTarget | SlotChannel.MultipleTargets)) != 0;
-                    bool receiverCanInput = (receiver.Channel & (SlotChannel.OneSource | SlotChannel.MultipleSources)) != 0;
-                    if (!senderCanOutput || !receiverCanInput) return false;
-
-                    // 连接限制检查
-                    if ((sender.Channel & SlotChannel.OneTarget) != 0 && sender.Targets.Count >= 1) return false;
-                    if ((receiver.Channel & SlotChannel.OneSource) != 0 && receiver.Sources.Count >= 1) return false;
-
-                    // 重复连接检查
-                    if (IsDuplicateConnection(sender, receiver)) return false;
-
-                    return true;
-                }
-                protected virtual bool IsDuplicateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
-                {
-                    if (viewModel?.LinkGroups == null) return false;
-
-                    foreach (var linkGroup in viewModel.LinkGroups)
-                    {
-                        foreach (var link in linkGroup.Links)
-                        {
-                            if (link.Sender == sender && link.Receiver == receiver)
-                                return true;
-                        }
-                    }
-                    return false;
-                }
-                protected virtual void CreateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
-                {
-                    var newLink = CreateNewLink();
-                    if (newLink == null) return;
-
-                    newLink.Sender = sender;
-                    newLink.Receiver = receiver;
-
-                    var actionPair = new WorkflowActionPair(
-                        redo: () => ExecuteCreateConnection(sender, receiver, newLink),
-                        undo: () => UndoCreateConnection(sender, receiver, newLink)
-                    );
-
-                    Submit(actionPair);
-                    ClearConnectionState();
-                }
-                protected virtual void ExecuteCreateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, IWorkflowLinkViewModel link)
-                {
-                    // 添加到LinkGroup
-                    var linkGroup = GetOrCreateLinkGroup();
-                    linkGroup.Links.Add(link);
-
-                    // 建立Slot关系
-                    if (!sender.Targets.Contains(receiver.Parent))
-                        sender.Targets.Add(receiver.Parent);
-
-                    if (!receiver.Sources.Contains(sender.Parent))
-                        receiver.Sources.Add(sender.Parent);
-
-                    // 更新状态
-                    sender.State = SlotState.Sender;
-                    receiver.State = SlotState.Processor;
-                }
-                protected virtual void UndoCreateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, IWorkflowLinkViewModel link)
-                {
-                    // 从LinkGroup移除
-                    foreach (var linkGroup in viewModel.LinkGroups)
-                    {
-                        if (linkGroup.Links.Contains(link))
-                        {
-                            linkGroup.Links.Remove(link);
-                            break;
-                        }
-                    }
-
-                    // 断开Slot关系
-                    if (sender.Targets.Contains(receiver.Parent))
-                        sender.Targets.Remove(receiver.Parent);
-
-                    if (receiver.Sources.Contains(sender.Parent))
-                        receiver.Sources.Remove(sender.Parent);
-
-                    // 恢复状态
-                    sender.State = SlotState.StandBy;
-                    receiver.State = SlotState.StandBy;
-                }
-                protected virtual IWorkflowLinkGroupViewModel GetOrCreateLinkGroup()
-                {
-                    var linkGroup = viewModel.LinkGroups.FirstOrDefault();
-                    if (linkGroup == null)
-                    {
-                        linkGroup = new LinkGroupViewModelBase();
-                        viewModel.LinkGroups.Add(linkGroup);
-                    }
-                    return linkGroup;
-                }
-                protected virtual IWorkflowLinkViewModel CreateNewLink()
-                {
-                    return new LinkViewModelBase();
-                }
-                protected virtual void ClearConnectionState()
-                {
-                    currentConnectionSender = null;
-
-                    if (viewModel?.VirtualLink != null)
-                    {
-                        viewModel.VirtualLink.Sender = null;
-                        viewModel.VirtualLink.Receiver = null;
-                    }
-                }
-                protected virtual void CancelConnection()
-                {
-                    if (currentConnectionSender != null)
-                    {
-                        currentConnectionSender.State = SlotState.StandBy;
-                    }
-                    ClearConnectionState();
                 }
                 #endregion
 
@@ -608,6 +460,11 @@ namespace VeloxDev.Core.WorkflowSystem
                         pair.Undo.Invoke();
                         redoStack.Push(pair);
                     }
+                }
+                public virtual void ClearHistory()
+                {
+                    redoStack.Clear();
+                    undoStack.Clear();
                 }
                 #endregion
             }

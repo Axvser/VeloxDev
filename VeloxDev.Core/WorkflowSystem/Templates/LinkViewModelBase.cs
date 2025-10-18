@@ -9,6 +9,7 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
 
         public LinkViewModelBase() { InitializeWorkflow(); }
 
+        [VeloxProperty] private IWorkflowLinkGroupViewModel? parent = null;
         [VeloxProperty] private IWorkflowSlotViewModel? sender = null;
         [VeloxProperty] private IWorkflowSlotViewModel? receiver = null;
         [VeloxProperty] private bool isVisible = false;

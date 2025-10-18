@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+﻿using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 
@@ -12,6 +13,7 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
 
         [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkViewModelBase();
         [VeloxProperty] private ObservableCollection<IWorkflowNodeViewModel> nodes = [];
+        [VeloxProperty] private ConcurrentDictionary<IWorkflowSlotViewModel, ConcurrentDictionary<IWorkflowSlotViewModel, IWorkflowLinkGroupViewModel>> linkGroupMap = [];
         [VeloxProperty] private ObservableCollection<IWorkflowLinkGroupViewModel> linkGroups = [];
 
         [VeloxCommand]
