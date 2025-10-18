@@ -1,5 +1,4 @@
-﻿using System.Collections.Concurrent;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
@@ -9,8 +8,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
     {
         public IWorkflowLinkViewModel VirtualLink { get; set; }
         public ObservableCollection<IWorkflowNodeViewModel> Nodes { get; set; }
-        public ConcurrentDictionary<IWorkflowSlotViewModel, ConcurrentDictionary<IWorkflowSlotViewModel, IWorkflowLinkGroupViewModel>> LinkGroupMap { get; set; }
-        public ObservableCollection<IWorkflowLinkGroupViewModel> LinkGroups { get; set; }
+        public ObservableCollection<IWorkflowLinkViewModel> Links { get; set; }
 
         public IVeloxCommand CreateNodeCommand { get; }        // 创建节点           | parameter IWorkflowNodeViewModel
         public IVeloxCommand MovePointerCommand { get; }       // 触点跟踪           | parameter Anchor

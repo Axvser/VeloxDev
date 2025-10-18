@@ -12,188 +12,18 @@ namespace VeloxDev.Core.WorkflowSystem
     {
         public static class ViewModel
         {
-            public static bool TryFindParentTree(object viewModel, out IWorkflowTreeViewModel? value)
-            {
-                switch (viewModel)
-                {
-                    case IWorkflowLinkViewModel link:
-                        if (link.Sender is not null)
-                        {
-                            value = link.Sender.Parent?.Parent;
-                            return value is not null;
-                        }
-                        else if (link.Receiver is not null)
-                        {
-                            value = link.Receiver.Parent?.Parent;
-                            return value is not null;
-                        }
-                        else
-                        {
-                            value = null;
-                            return false;
-                        }
-                    case IWorkflowLinkGroupViewModel linkGroup:
-                        {
-                            value = linkGroup.Parent;
-                            return value is not null;
-                        }
-                    case IWorkflowSlotViewModel slot:
-                        {
-                            value = slot.Parent?.Parent;
-                            return value is not null;
-                        }
-                    case IWorkflowNodeViewModel node:
-                        {
-                            value = node.Parent;
-                            return value is not null;
-                        }
-                    default:
-                        value = null;
-                        return false;
-                }
-            }
-            public static bool TryFindParentTree(IWorkflowLinkViewModel link, out IWorkflowTreeViewModel? value)
-            {
-                if (link.Sender is not null)
-                {
-                    value = link.Sender.Parent?.Parent;
-                    return value is not null;
-                }
-                else if (link.Receiver is not null)
-                {
-                    value = link.Receiver.Parent?.Parent;
-                    return value is not null;
-                }
-                else
-                {
-                    value = null;
-                    return false;
-                }
-            }
-            public static bool TryFindParentTree(IWorkflowLinkGroupViewModel linkGroup, out IWorkflowTreeViewModel? value)
-            {
-                value = linkGroup.Parent;
-                return value is not null;
-            }
-            public static bool TryFindParentTree(IWorkflowSlotViewModel slot, out IWorkflowTreeViewModel? value)
-            {
-                value = slot.Parent?.Parent;
-                return value is not null;
-            }
-            public static bool TryFindParentTree(IWorkflowNodeViewModel node, out IWorkflowTreeViewModel? value)
-            {
-                value = node.Parent;
-                return value is not null;
-            }
-
             #region Link Helper [ 官方固件 ]
             public class Link : IWorkflowLinkViewModelHelper
             {
-                private IWorkflowLinkViewModel? viewModel = null;
+                private IWorkflowLinkViewModel? _self;
 
-                public virtual void Initialize(IWorkflowLinkViewModel link)
+                public void Initialize(IWorkflowLinkViewModel link) => _self = link;
+                public Task CloseAsync() => Task.CompletedTask;
+                public void Dispose() { }
+
+                public void Delete()
                 {
-                    viewModel = link;
-                }
-                public virtual Task CloseAsync() => Task.CompletedTask;
-                public virtual void Dispose() { }
 
-                public virtual void Delete()
-                {
-                    if (viewModel == null || !TryFindParentTree(viewModel, out var tree)) return;
-
-                    var oldParent = viewModel.Parent;
-                    var oldSender = viewModel.Sender;
-                    var oldReceiver = viewModel.Receiver;
-                    var oldVisible = viewModel.IsVisible;
-
-                    // 从LinkGroup中移除
-                    if (oldParent != null)
-                    {
-                        tree.GetHelper().Submit(new WorkflowActionPair(
-                            () =>
-                            {
-                                if (oldParent != null) oldParent.Links.Remove(viewModel);
-                                if (oldSender != null) oldSender.Targets.Remove(oldReceiver?.Parent);
-                                if (oldReceiver != null) oldReceiver.Sources.Remove(oldSender?.Parent);
-                                viewModel.Parent = null;
-                                viewModel.Sender = null;
-                                viewModel.Receiver = null;
-                                viewModel.IsVisible = false;
-                            },
-                            () =>
-                            {
-                                if (oldParent != null) oldParent.Links.Add(viewModel);
-                                if (oldSender != null) oldSender.Targets.Add(oldReceiver?.Parent);
-                                if (oldReceiver != null) oldReceiver.Sources.Add(oldSender?.Parent);
-                                viewModel.Parent = oldParent;
-                                viewModel.Sender = oldSender;
-                                viewModel.Receiver = oldReceiver;
-                                viewModel.IsVisible = oldVisible;
-                            }));
-                    }
-                }
-            }
-            #endregion
-
-            #region LinkGroup Helper [ 官方固件 ]
-            public class LinkGroup : IWorkflowLinkGroupViewModelHelper
-            {
-                private IWorkflowLinkGroupViewModel? viewModel = null;
-
-                public virtual void Initialize(IWorkflowLinkGroupViewModel linkGroup)
-                {
-                    viewModel = linkGroup;
-                }
-                public virtual Task CloseAsync() => Task.CompletedTask;
-                public virtual void Dispose() { }
-
-                public virtual void Delete()
-                {
-                    if (viewModel == null || !TryFindParentTree(viewModel, out var tree)) return;
-
-                    var oldParent = viewModel.Parent;
-                    var oldLinks = new List<IWorkflowLinkViewModel>(viewModel.Links);
-
-                    tree.GetHelper().Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            if (oldParent != null) oldParent.LinkGroups.Remove(viewModel);
-
-                            // 从LinkGroupMap中移除相关条目
-                            foreach (var link in oldLinks)
-                            {
-                                if (link.Sender != null && link.Receiver != null)
-                                {
-                                    if (tree.LinkGroupMap.TryGetValue(link.Sender, out var receiverMap))
-                                    {
-                                        receiverMap.TryRemove(link.Receiver, out _);
-                                        if (receiverMap.IsEmpty) tree.LinkGroupMap.TryRemove(link.Sender, out _);
-                                    }
-                                }
-                            }
-
-                            viewModel.Parent = null;
-                            viewModel.Links.Clear();
-                        },
-                        () =>
-                        {
-                            if (oldParent != null) oldParent.LinkGroups.Add(viewModel);
-
-                            // 恢复LinkGroupMap
-                            foreach (var link in oldLinks)
-                            {
-                                if (link.Sender != null && link.Receiver != null)
-                                {
-                                    var receiverMap = tree.LinkGroupMap.GetOrAdd(link.Sender,
-                                        new ConcurrentDictionary<IWorkflowSlotViewModel, IWorkflowLinkGroupViewModel>());
-                                    receiverMap[link.Receiver] = viewModel;
-                                }
-                            }
-
-                            viewModel.Parent = oldParent;
-                            viewModel.Links = new ObservableCollection<IWorkflowLinkViewModel>(oldLinks);
-                        }));
                 }
             }
             #endregion
@@ -201,124 +31,123 @@ namespace VeloxDev.Core.WorkflowSystem
             #region Slot Helper [ 官方固件 ]
             public class Slot : IWorkflowSlotViewModelHelper
             {
-                private IWorkflowSlotViewModel? viewModel = null;
+                private IWorkflowSlotViewModel? _self;
 
-                public virtual void Initialize(IWorkflowSlotViewModel slot) => viewModel = slot;
-                public virtual Task CloseAsync() => Task.CompletedTask;
-                public virtual void Dispose() { }
+                #region Simple Components
+                public void Initialize(IWorkflowSlotViewModel slot) => _self = slot;
+                public Task CloseAsync() => Task.CompletedTask;
+                public void Dispose() { }
+                public void ApplyConnection()
+                {
+                    if (_self is null) return;
 
-                public virtual void ApplyConnection()
-                {
-                    if (viewModel is null || !TryFindParentTree(viewModel, out var tree)) return;
-                    tree.GetHelper().ApplyConnection(viewModel);
-                }
-                public virtual void ReceiveConnection()
-                {
-                    if (viewModel is null || !TryFindParentTree(viewModel, out var tree)) return;
-                    tree.GetHelper().ReceiveConnection(viewModel);
-                }
+                    // 通过Parent链向上查找Tree
+                    IWorkflowTreeViewModel? tree = null;
+                    var current = _self.Parent?.Parent as IWorkflowTreeViewModel;
+                    if (current != null)
+                    {
+                        tree = current;
+                    }
 
-                public virtual void SetSize(Size size)
-                {
-                    if (viewModel is null || viewModel.Parent is null) return;
-                    viewModel.Size = new Size(size.Width, size.Height);
-                    UpdateAnchor();
+                    tree?.GetHelper().ApplyConnection(_self);
                 }
-                public virtual void SetOffset(Offset offset)
+                public void ReceiveConnection()
                 {
-                    if (viewModel is null || viewModel.Parent is null) return;
-                    viewModel.Offset = new Offset(offset.Left, offset.Top);
-                    UpdateAnchor();
-                }
-                public virtual void SaveOffset()
-                {
-                    if (viewModel is null || !TryFindParentTree(viewModel, out var tree)) return;
+                    if (_self is null) return;
 
-                    var oldOffset = new Offset(viewModel.Offset.Left, viewModel.Offset.Top);
-                    var newOffset = new Offset(viewModel.Offset.Left, viewModel.Offset.Top);
+                    // 通过Parent链向上查找Tree
+                    IWorkflowTreeViewModel? tree = null;
+                    var current = _self.Parent?.Parent as IWorkflowTreeViewModel;
+                    if (current != null)
+                    {
+                        tree = current;
+                    }
+
+                    tree?.GetHelper().ReceiveConnection(_self);
+                }
+                public void SetSize(Size size)
+                {
+                    if (_self is null) return;
+
+                    // 直接替换引用，确保实时同步
+                    _self.Size = new Size(size.Width, size.Height);
+
+                    // 更新Anchor
+                    if (_self.Parent != null)
+                    {
+                        _self.Anchor = new Anchor(
+                            _self.Parent.Anchor.Left + _self.Offset.Left + _self.Size.Width / 2,
+                            _self.Parent.Anchor.Top + _self.Offset.Top + _self.Size.Height / 2,
+                            _self.Parent.Anchor.Layer + 1
+                        );
+                    }
+                }
+                public void SetOffset(Offset offset)
+                {
+                    if (_self is null) return;
+
+                    // 直接替换引用，确保实时同步
+                    _self.Offset = new Offset(offset.Left, offset.Top);
+
+                    // 更新Anchor
+                    if (_self.Parent != null)
+                    {
+                        _self.Anchor = new Anchor(
+                            _self.Parent.Anchor.Left + _self.Offset.Left + _self.Size.Width / 2,
+                            _self.Parent.Anchor.Top + _self.Offset.Top + _self.Size.Height / 2,
+                            _self.Parent.Anchor.Layer + 1
+                        );
+                    }
+                }
+                public void SaveOffset()
+                {
+                    if (_self is null) return;
+
+                    // 通过Parent链向上查找Tree
+                    IWorkflowTreeViewModel? tree = null;
+                    var current = _self.Parent?.Parent as IWorkflowTreeViewModel;
+                    if (current != null)
+                    {
+                        tree = current;
+                    }
+
+                    if (tree == null) return;
+
+                    var oldOffset = new Offset(_self.Offset.Left, _self.Offset.Top);
+                    var newOffset = new Offset(_self.Offset.Left, _self.Offset.Top);
 
                     tree.GetHelper().Submit(new WorkflowActionPair(
                         () => SetOffset(newOffset),
                         () => SetOffset(oldOffset)
                     ));
                 }
-                public virtual void SaveSize()
+                public void SaveSize()
                 {
-                    if (viewModel is null || !TryFindParentTree(viewModel, out var tree)) return;
+                    if (_self is null) return;
 
-                    var oldSize = new Size(viewModel.Size.Width, viewModel.Size.Height);
-                    var newSize = new Size(viewModel.Size.Width, viewModel.Size.Height);
+                    // 通过Parent链向上查找Tree
+                    IWorkflowTreeViewModel? tree = null;
+                    var current = _self.Parent?.Parent as IWorkflowTreeViewModel;
+                    if (current != null)
+                    {
+                        tree = current;
+                    }
+
+                    if (tree == null) return;
+
+                    var oldSize = new Size(_self.Size.Width, _self.Size.Height);
+                    var newSize = new Size(_self.Size.Width, _self.Size.Height);
 
                     tree.GetHelper().Submit(new WorkflowActionPair(
                         () => SetSize(newSize),
                         () => SetSize(oldSize)
                     ));
                 }
-                private void UpdateAnchor()
+                #endregion
+
+                public void Delete()
                 {
-                    if (viewModel?.Parent == null) return;
-                    viewModel.Anchor = new Anchor(
-                        viewModel.Parent.Anchor.Left + viewModel.Offset.Left + viewModel.Size.Width / 2,
-                        viewModel.Parent.Anchor.Top + viewModel.Offset.Top + viewModel.Size.Height / 2,
-                        viewModel.Parent.Anchor.Layer + 1
-                    );
-                }
 
-                public virtual void Delete()
-                {
-                    if (viewModel is null || viewModel.Parent is null || !TryFindParentTree(viewModel, out var tree)) return;
-
-                    var oldParent = viewModel.Parent;
-                    var oldTargets = new List<IWorkflowNodeViewModel>(viewModel.Targets);
-                    var oldSources = new List<IWorkflowNodeViewModel>(viewModel.Sources);
-                    var oldOffset = new Offset(viewModel.Offset.Left, viewModel.Offset.Top);
-                    var oldSize = new Size(viewModel.Size.Width, viewModel.Size.Height);
-                    var oldAnchor = new Anchor(viewModel.Anchor.Left, viewModel.Anchor.Top, viewModel.Anchor.Layer);
-
-                    // 收集所有相关的连接
-                    var affectedLinks = new List<IWorkflowLinkViewModel>();
-                    foreach (var linkGroup in tree.LinkGroups)
-                    {
-                        foreach (var link in linkGroup.Links)
-                        {
-                            if (link.Sender == viewModel || link.Receiver == viewModel)
-                            {
-                                affectedLinks.Add(link);
-                            }
-                        }
-                    }
-
-                    tree.GetHelper().Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            // 移除所有相关连接
-                            foreach (var link in affectedLinks)
-                            {
-                                link.GetHelper().Delete();
-                            }
-
-                            // 从父节点移除
-                            oldParent.Slots.Remove(viewModel);
-                            viewModel.Parent = null;
-                        },
-                        () =>
-                        {
-                            // 恢复父节点关系
-                            viewModel.Parent = oldParent;
-                            oldParent.Slots.Add(viewModel);
-
-                            // 恢复属性
-                            viewModel.Offset = oldOffset;
-                            viewModel.Size = oldSize;
-                            viewModel.Anchor = oldAnchor;
-
-                            // 恢复连接（需要更复杂的实现，这里简化）
-                            foreach (var link in affectedLinks)
-                            {
-                                if (link.Parent != null) link.Parent.Links.Add(link);
-                            }
-                        }
-                    ));
                 }
             }
             #endregion
@@ -326,74 +155,20 @@ namespace VeloxDev.Core.WorkflowSystem
             #region Node Helper [ 官方固件 ]
             public class Node : IWorkflowNodeViewModelHelper
             {
-                private IWorkflowNodeViewModel? viewModel = null;
+                private IWorkflowNodeViewModel? _self;
 
-                public virtual void Initialize(IWorkflowNodeViewModel node)
+                #region Simple Components
+                public void Initialize(IWorkflowNodeViewModel node) => _self = node;
+                public async Task CloseAsync()
                 {
-                    viewModel = node;
-                }
-                public virtual Task BroadcastAsync(object? parameter) => Task.CompletedTask;
-                public virtual Task WorkAsync(object? parameter) => Task.CompletedTask;
-                public virtual void Dispose() { }
-
-                public virtual void SaveAnchor()
-                {
-                    if (viewModel is null || !TryFindParentTree(viewModel, out var tree)) return;
-                    var oldAnchor = viewModel.Anchor;
-                    var newAnchor = new Anchor(viewModel.Anchor.Left, viewModel.Anchor.Top, viewModel.Anchor.Layer);
-                    tree.GetHelper().Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            SetAnchor(newAnchor);
-                        },
-                        () =>
-                        {
-                            SetAnchor(oldAnchor);
-                        }));
-                }
-                public virtual void SaveSize()
-                {
-                    if (viewModel is null || !TryFindParentTree(viewModel, out var tree)) return;
-                    var oldSize = viewModel.Size;
-                    var newSize = new Size(viewModel.Size.Width, viewModel.Size.Height);
-                    tree.GetHelper().Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            SetSize(newSize);
-                        },
-                        () =>
-                        {
-                            SetSize(oldSize);
-                        }));
-                }
-                public virtual void SetAnchor(Anchor newValue)
-                {
-                    if (viewModel is null) return;
-                    viewModel.Anchor.Left = newValue.Left;
-                    viewModel.Anchor.Top = newValue.Top;
-                    foreach (var slot in viewModel.Slots)
-                    {
-                        slot.Anchor.Left = viewModel.Anchor.Left + slot.Offset.Left + slot.Size.Width / 2;
-                        slot.Anchor.Top = viewModel.Anchor.Top + slot.Offset.Top + slot.Size.Height / 2;
-                    }
-                }
-                public virtual void SetSize(Size newValue)
-                {
-                    if (viewModel is null) return;
-                    viewModel.Size.Width = newValue.Width;
-                    viewModel.Size.Height = newValue.Height;
-                }
-
-                public virtual async Task CloseAsync()
-                {
-                    if (viewModel == null) return;
+                    if (_self == null) return;
 
                     // 锁定所有命令
                     var commands = new[]
                     {
-                        viewModel.SaveAnchorCommand, viewModel.SaveSizeCommand, viewModel.SetAnchorCommand,
-                        viewModel.SetSizeCommand, viewModel.CreateSlotCommand, viewModel.DeleteCommand,
-                        viewModel.WorkCommand, viewModel.BroadcastCommand
+                         _self.SaveAnchorCommand, _self.SaveSizeCommand, _self.SetAnchorCommand,
+                         _self.SetSizeCommand, _self.CreateSlotCommand, _self.DeleteCommand,
+                         _self.WorkCommand, _self.BroadcastCommand
                     };
 
                     foreach (var cmd in commands)
@@ -417,133 +192,92 @@ namespace VeloxDev.Core.WorkflowSystem
                         }
                     }
                 }
-                public virtual void CreateSlot(IWorkflowSlotViewModel slot)
+                public Task BroadcastAsync(object? parameter) => Task.CompletedTask;
+                public Task WorkAsync(object? parameter) => Task.CompletedTask;
+                public void Dispose() { }
+                public void SaveAnchor()
                 {
-                    if (viewModel is null || !TryFindParentTree(viewModel, out var tree)) return;
+                    if (_self is null) return;
 
-                    var oldParent = slot.Parent;
-                    var oldAnchor = new Anchor(slot.Anchor.Left, slot.Anchor.Top, slot.Anchor.Layer);
-                    var oldOffset = new Offset(slot.Offset.Left, slot.Offset.Top);
-                    var oldSize = new Size(slot.Size.Width, slot.Size.Height);
-
-                    var newAnchor = new Anchor(
-                        viewModel.Anchor.Left + slot.Offset.Left + slot.Size.Width / 2,
-                        viewModel.Anchor.Top + slot.Offset.Top + slot.Size.Height / 2,
-                        viewModel.Anchor.Layer + 1
-                    );
-
-                    tree.GetHelper().Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            viewModel.Slots.Add(slot);
-                            slot.Parent = viewModel;
-                            slot.Anchor = newAnchor;
-                        },
-                        () =>
-                        {
-                            viewModel.Slots.Remove(slot);
-                            slot.Parent = oldParent;
-                            slot.Anchor = oldAnchor;
-                            slot.Offset = oldOffset;
-                            slot.Size = oldSize;
-                        }));
                 }
-                public virtual void Delete()
+                public void SaveSize()
                 {
-                    if (viewModel is null || !TryFindParentTree(viewModel, out var tree)) return;
+                    if (_self is null) return;
 
-                    var oldParent = viewModel.Parent;
-                    var oldNodes = new List<IWorkflowNodeViewModel>(tree.Nodes);
-
-                    // 收集所有相关的连接和Slot
-                    var affectedSlots = new List<IWorkflowSlotViewModel>(viewModel.Slots);
-                    var affectedLinks = new List<IWorkflowLinkViewModel>();
-
-                    foreach (var linkGroup in tree.LinkGroups)
-                    {
-                        foreach (var link in linkGroup.Links)
-                        {
-                            if (link.Sender?.Parent == viewModel || link.Receiver?.Parent == viewModel)
-                            {
-                                affectedLinks.Add(link);
-                            }
-                        }
-                    }
-
-                    tree.GetHelper().Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            // 先删除所有相关连接
-                            foreach (var link in affectedLinks)
-                            {
-                                link.GetHelper().Delete();
-                            }
-
-                            // 从树中移除节点
-                            tree.Nodes.Remove(viewModel);
-                            viewModel.Parent = null;
-                        },
-                        () =>
-                        {
-                            // 恢复节点到树中
-                            viewModel.Parent = oldParent;
-                            if (!tree.Nodes.Contains(viewModel))
-                                tree.Nodes.Add(viewModel);
-
-                            // 恢复连接（简化实现，实际需要更复杂的恢复逻辑）
-                            foreach (var link in affectedLinks)
-                            {
-                                if (link.Parent != null && !link.Parent.Links.Contains(link))
-                                    link.Parent.Links.Add(link);
-                            }
-                        }));
                 }
+                public void SetAnchor(Anchor newValue)
+                {
+                    if (_self is null) return;
+
+                }
+                public void SetSize(Size newValue)
+                {
+                    if (_self is null) return;
+
+                }
+                #endregion
+
+                #region Complex Components
+                public void CreateSlot(IWorkflowSlotViewModel slot)
+                {
+
+                }
+
+                public void Delete()
+                {
+
+                }
+                #endregion
             }
             #endregion
 
             #region Tree Helper [ 官方固件 ]
             public class Tree : IWorkflowTreeViewModelHelper
             {
-                private IWorkflowTreeViewModel? viewModel = null;
-                private IWorkflowSlotViewModel? connectionSender = null;
-                private IWorkflowSlotViewModel? connectionReceiver = null;
+                private IWorkflowTreeViewModel? _self = null;
 
-                public virtual void Initialize(IWorkflowTreeViewModel tree) => viewModel = tree;
-                public virtual async Task CloseAsync()
+                #region Simple Components
+                public virtual void Initialize(IWorkflowTreeViewModel tree) => _self = tree;
+                public async Task CloseAsync()
                 {
-                    if (viewModel is null) return;
+                    if (_self is null) return;
 
                     // 收集所有需要操作的命令
                     var commandsToLock = new List<IVeloxCommand>();
 
-                    foreach (var linkGroup in viewModel.LinkGroups)
+                    if (_self.Links != null)
                     {
-                        commandsToLock.Add(linkGroup.DeleteCommand);
-                        foreach (var link in linkGroup.Links)
+                        foreach (var linkGroup in _self.Links)
                         {
-                            commandsToLock.Add(link.DeleteCommand);
+                            commandsToLock.Add(linkGroup.DeleteCommand);
                         }
                     }
 
-                    foreach (var node in viewModel.Nodes)
+                    if (_self.Nodes != null)
                     {
-                        var nodeCommands = new[]
+                        foreach (var node in _self.Nodes)
                         {
-                            node.SaveAnchorCommand, node.SaveSizeCommand, node.SetAnchorCommand,
-                            node.SetSizeCommand, node.CreateSlotCommand, node.DeleteCommand,
-                            node.WorkCommand, node.BroadcastCommand
-                        };
-                        commandsToLock.AddRange(nodeCommands);
-
-                        foreach (var slot in node.Slots)
-                        {
-                            var slotCommands = new[]
+                            var nodeCommands = new[]
                             {
-                                slot.SaveOffsetCommand, slot.SaveSizeCommand, slot.SetOffsetCommand,
-                                slot.SetSizeCommand, slot.ApplyConnectionCommand, slot.ReceiveConnectionCommand,
-                                slot.DeleteCommand
+                                 node.SaveAnchorCommand, node.SaveSizeCommand, node.SetAnchorCommand,
+                                 node.SetSizeCommand, node.CreateSlotCommand, node.DeleteCommand,
+                                 node.WorkCommand, node.BroadcastCommand
                             };
-                            commandsToLock.AddRange(slotCommands);
+                            commandsToLock.AddRange(nodeCommands);
+
+                            if (node.Slots != null)
+                            {
+                                foreach (var slot in node.Slots)
+                                {
+                                    var slotCommands = new[]
+                                    {
+                                         slot.SaveOffsetCommand, slot.SaveSizeCommand, slot.SetOffsetCommand,
+                                         slot.SetSizeCommand, slot.ApplyConnectionCommand, slot.ReceiveConnectionCommand,
+                                         slot.DeleteCommand
+                                    };
+                                    commandsToLock.AddRange(slotCommands);
+                                }
+                            }
                         }
                     }
 
@@ -570,219 +304,96 @@ namespace VeloxDev.Core.WorkflowSystem
                         }
                     }
                 }
-                public virtual void Dispose() { }
-                public virtual void ResetVirtualLink()
+                public void Dispose() { }
+                public void CreateNode(IWorkflowNodeViewModel node)
                 {
-                    if (viewModel is null) return;
-                    viewModel.VirtualLink.Sender = null;
-                    viewModel.VirtualLink.Receiver = null;
-                    viewModel.VirtualLink.IsVisible = false;
-                    connectionSender = null;
-                    connectionReceiver = null;
+
                 }
-                public virtual void CreateNode(IWorkflowNodeViewModel node)
+                public void MovePointer(Anchor anchor)
                 {
-                    if (viewModel is null) return;
 
-                    var oldParent = node.Parent;
-                    var oldNodes = new List<IWorkflowNodeViewModel>(viewModel.Nodes);
-
-                    Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            node.Parent = viewModel;
-                            if (!viewModel.Nodes.Contains(node))
-                                viewModel.Nodes.Add(node);
-                        },
-                        () =>
-                        {
-                            node.Parent = oldParent;
-                            viewModel.Nodes = new ObservableCollection<IWorkflowNodeViewModel>(oldNodes);
-                        }));
                 }
-                public virtual void MovePointer(Anchor anchor)
+                #endregion
+                
+                #region Connection Manager
+                private IWorkflowSlotViewModel? _sender = null;
+                private IWorkflowSlotViewModel? _receiver = null;
+                private bool _isbuilding = false;
+                public void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
-                    if (viewModel is null) return;
 
-                    if (connectionSender != null)
-                    {
-                        viewModel.VirtualLink.Sender = connectionSender;
-                        viewModel.VirtualLink.Receiver = new SlotViewModelBase() { Anchor = anchor };
-                        viewModel.VirtualLink.IsVisible = true;
-                    }
-                    else
-                    {
-                        viewModel.VirtualLink.Receiver.Anchor = anchor;
-                    }
                 }
-
-                #region Connection Manager [ 核心连接逻辑 ]
-                public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
+                public void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
-                    if (viewModel is null) return;
 
-                    if (connectionSender == null)
-                    {
-                        // 开始新连接
-                        connectionSender = slot;
-                        viewModel.VirtualLink.Sender = slot;
-                        viewModel.VirtualLink.IsVisible = true;
-                        slot.State = SlotState.PreviewSender;
-                    }
-                    else if (connectionSender == slot)
-                    {
-                        // 取消连接
-                        ResetVirtualLink();
-                        slot.State = SlotState.StandBy;
-                    }
                 }
-                public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
+                public void ResetVirtualLink()
                 {
-                    if (viewModel is null || connectionSender == null) return;
 
-                    if (CanConnect(connectionSender, slot))
-                    {
-                        connectionReceiver = slot;
-                        slot.State = SlotState.PreviewProcessor;
-
-                        // 创建实际的连接
-                        CreateConnection(connectionSender, slot);
-                        ResetVirtualLink();
-                    }
-                }
-                private bool CanConnect(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
-                {
-                    if (sender == receiver) return false;
-                    if (sender.Parent == receiver.Parent) return false; // 同一节点内的Slot不能连接
-
-                    // 检查Channel兼容性
-                    if (!sender.Channel.HasFlag(SlotChannel.OneSource) &&
-                        !sender.Channel.HasFlag(SlotChannel.MultipleSources)) return false;
-
-                    if (!receiver.Channel.HasFlag(SlotChannel.OneTarget) &&
-                        !receiver.Channel.HasFlag(SlotChannel.MultipleTargets)) return false;
-
-                    // 检查是否已存在连接
-                    if (viewModel?.LinkGroupMap.TryGetValue(sender, out var receiverMap) == true)
-                    {
-                        if (receiverMap.ContainsKey(receiver)) return false;
-                    }
-
-                    return true;
-                }
-                private void CreateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
-                {
-                    if (viewModel == null) return;
-
-                    // 创建LinkGroup（如果不存在）
-                    var linkGroup = new LinkGroupViewModelBase();
-                    var link = new LinkViewModelBase
-                    {
-                        Sender = sender,
-                        Receiver = receiver,
-                        IsVisible = true
-                    };
-
-                    linkGroup.Links.Add(link);
-
-                    // 更新LinkGroupMap
-                    var receiverMap = viewModel.LinkGroupMap.GetOrAdd(sender,
-                        new ConcurrentDictionary<IWorkflowSlotViewModel, IWorkflowLinkGroupViewModel>());
-                    receiverMap[receiver] = linkGroup;
-
-                    // 更新状态
-                    sender.State = SlotState.Sender;
-                    receiver.State = SlotState.Processor;
-
-                    // 添加到树中
-                    viewModel.LinkGroups.Add(linkGroup);
-
-                    // 记录操作以便撤销
-                    Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            // 重做：创建连接
-                            viewModel.LinkGroups.Add(linkGroup);
-                            receiverMap[receiver] = linkGroup;
-                            sender.State = SlotState.Sender;
-                            receiver.State = SlotState.Processor;
-                        },
-                        () =>
-                        {
-                            // 撤销：删除连接
-                            viewModel.LinkGroups.Remove(linkGroup);
-                            receiverMap.TryRemove(receiver, out _);
-                            sender.State = SlotState.StandBy;
-                            receiver.State = SlotState.StandBy;
-                        }
-                    ));
                 }
                 #endregion
 
-                #region Redo & Undo [ 撤销与重做机制 ]
-                private readonly ConcurrentStack<IWorkflowActionPair> redoStack = new();
-                private readonly ConcurrentStack<IWorkflowActionPair> undoStack = new();
-                private readonly object stackLock = new();
-
-                public virtual void Redo()
+                #region Redo & Undo
+                private readonly ConcurrentStack<IWorkflowActionPair> _redoStack = new();
+                private readonly ConcurrentStack<IWorkflowActionPair> _undoStack = new();
+                private readonly object _stackLock = new();
+                public void Redo()
                 {
-                    lock (stackLock)
+                    lock (_stackLock)
                     {
-                        if (redoStack.TryPop(out var pair))
+                        if (_redoStack.TryPop(out var pair))
                         {
                             try
                             {
                                 pair.Redo.Invoke();
-                                undoStack.Push(pair);
+                                _undoStack.Push(pair);
                             }
                             catch (Exception ex)
                             {
-                                // 记录错误，但不中断执行
-                                System.Diagnostics.Debug.WriteLine($"Redo failed: {ex.Message}");
+                                // 记录错误但继续执行
                             }
                         }
                     }
                 }
-                public virtual void Submit(IWorkflowActionPair actionPair)
+                public void Submit(IWorkflowActionPair actionPair)
                 {
-                    lock (stackLock)
+                    lock (_stackLock)
                     {
                         try
                         {
                             actionPair.Redo.Invoke();
-                            undoStack.Push(actionPair);
-                            redoStack.Clear(); // 新操作清空重做栈
+                            _undoStack.Push(actionPair);
                         }
                         catch (Exception ex)
                         {
-                            System.Diagnostics.Debug.WriteLine($"Submit failed: {ex.Message}");
+
                         }
                     }
                 }
-                public virtual void Undo()
+                public void Undo()
                 {
-                    lock (stackLock)
+                    lock (_stackLock)
                     {
-                        if (undoStack.TryPop(out var pair))
+                        if (_undoStack.TryPop(out var pair))
                         {
                             try
                             {
                                 pair.Undo.Invoke();
-                                redoStack.Push(pair);
+                                _redoStack.Push(pair);
                             }
                             catch (Exception ex)
                             {
-                                System.Diagnostics.Debug.WriteLine($"Undo failed: {ex.Message}");
+                                // 记录错误但继续执行
                             }
                         }
                     }
                 }
-                public virtual void ClearHistory()
+                public void ClearHistory()
                 {
-                    lock (stackLock)
+                    lock (_stackLock)
                     {
-                        redoStack.Clear();
-                        undoStack.Clear();
+                        _redoStack.Clear();
+                        _undoStack.Clear();
                     }
                 }
                 #endregion

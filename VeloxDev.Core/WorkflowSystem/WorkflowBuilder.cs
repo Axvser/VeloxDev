@@ -1,36 +1,26 @@
-﻿namespace VeloxDev.Core.WorkflowSystem
+﻿using VeloxDev.Core.Interfaces.WorkflowSystem;
+
+namespace VeloxDev.Core.WorkflowSystem
 {
     public sealed class WorkflowBuilder
     {
         public sealed class ViewModel
         {
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class TreeAttribute(Type? helperType = default, Type? virtualLinkType = default, Type? slotType = default, Type? linkGroupType = default) : Attribute
-            {
-                public Type? HelperType { get; } = helperType;
-                public Type? VirtualLinkType { get; } = virtualLinkType;
-                public Type? SlotType { get; } = slotType;
-                public Type? LinkGroupType { get; } = linkGroupType;
-            }
+            public sealed class TreeAttribute<T> : Attribute
+                where T : IWorkflowTreeViewModelHelper;
 
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class NodeAttribute(Type? helperType = default, int semaphore = 1) : Attribute
-            {
-                public Type? HelperType { get; } = helperType;
-                public int Semaphore { get; } = semaphore;
-            }
+            public sealed class NodeAttribute<T> : Attribute
+                where T : IWorkflowNodeViewModelHelper;
 
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class SlotAttribute(Type? helperType = default) : Attribute
-            {
-                public Type? HelperType { get; } = helperType;
-            }
+            public sealed class SlotAttribute<T> : Attribute
+                where T : IWorkflowSlotViewModelHelper;
 
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class LinkAttribute(Type? helperType = default) : Attribute
-            {
-                public Type? HelperType { get; } = helperType;
-            }
+            public sealed class LinkAttribute<T> : Attribute
+                where T : IWorkflowLinkViewModelHelper;
         }
 
         public sealed class View

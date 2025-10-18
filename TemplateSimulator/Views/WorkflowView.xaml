@@ -38,7 +38,7 @@
         </ItemsControl>
 
         <!-- ObservableCollection<IWorkflowLink> LinkGroups | 所有已经建立的连接视图模型存储于此 -->
-        <ItemsControl ItemsSource="{Binding LinkGroups}" Canvas.ZIndex="-1">
+        <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="-1">
             <!-- 省略 -->
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -48,22 +48,9 @@
             <!-- 省略 -->
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="-1">
-                        <!-- 省略 -->
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <Canvas />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <!-- 省略 -->
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <local:BezierCurveView StartAnchor="{Binding Sender.Anchor}"
-                                           EndAnchor="{Binding Receiver.Anchor}"
-                                           CanRender="{Binding IsVisible}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <local:BezierCurveView StartAnchor="{Binding Sender.Anchor}"
+                       EndAnchor="{Binding Receiver.Anchor}"
+                       CanRender="{Binding IsVisible}" />
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>

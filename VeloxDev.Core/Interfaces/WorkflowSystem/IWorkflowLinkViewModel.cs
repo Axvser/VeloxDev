@@ -4,7 +4,6 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 {
     public interface IWorkflowLinkViewModel : IWorkflowViewModel
     {
-        public IWorkflowLinkGroupViewModel? Parent { get; set; }
         public IWorkflowSlotViewModel? Sender { get; set; }
         public IWorkflowSlotViewModel? Receiver { get; set; }
         public bool IsVisible { get; set; }
