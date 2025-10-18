@@ -33,6 +33,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public void MovePointer(Anchor anchor);
         public void ApplyConnection(IWorkflowSlotViewModel slot);
         public void ReceiveConnection(IWorkflowSlotViewModel slot);
+        public void ResetVirtualLink();
 
         public void Submit(IWorkflowActionPair actionPair);
         public void Redo();

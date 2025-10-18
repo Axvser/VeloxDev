@@ -6,6 +6,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
     {
         public IWorkflowSlotViewModel? Sender { get; set; }
         public IWorkflowSlotViewModel? Receiver { get; set; }
+        public bool IsVisible { get; set; }
 
         public IVeloxCommand DeleteCommand { get; }  // 删除 | parameter Null
 

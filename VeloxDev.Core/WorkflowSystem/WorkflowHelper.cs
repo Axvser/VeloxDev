@@ -416,10 +416,21 @@ namespace VeloxDev.Core.WorkflowSystem
                 {
                     GC.SuppressFinalize(this);
                 }
+                public virtual void ResetVirtualLink()
+                {
+                    if (viewModel is null) return;
+                    OnVirtualLinkReseting();
+                    viewModel.VirtualLink.Sender.Anchor = new();
+                    viewModel.VirtualLink.Receiver.Anchor = new();
+                    viewModel.VirtualLink.IsVisible = false;
+                    OnVirtualLinkReseted();
+                }
                 protected virtual void OnInitializing() { }
                 protected virtual void OnInitialized() { }
                 protected virtual Task OnClosing() => Task.CompletedTask;
                 protected virtual Task OnClosed() => Task.CompletedTask;
+                protected virtual void OnVirtualLinkReseting() { }
+                protected virtual void OnVirtualLinkReseted() { }
 
                 public virtual void CreateNode(IWorkflowNodeViewModel node)
                 {
