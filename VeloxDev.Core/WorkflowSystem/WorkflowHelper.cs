@@ -290,7 +290,13 @@ namespace VeloxDev.Core.WorkflowSystem
                     }
                 }
                 public virtual void Dispose() { }
-                public virtual IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver) => new LinkViewModelBase();
+                public virtual IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+                    =>
+                    new LinkViewModelBase()
+                    {
+                        Sender = new SlotViewModelBase(),
+                        Receiver = new SlotViewModelBase()
+                    };
                 public virtual void CreateNode(IWorkflowNodeViewModel node)
                 {
 
