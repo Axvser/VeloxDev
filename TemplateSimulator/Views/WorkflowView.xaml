@@ -32,14 +32,12 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <local:NodeView Width="{Binding Size.Width}"
-                                    Height="{Binding Size.Height}"
-                                    IsEnabled="{Binding IsEnabled}"
-                                    IsWorking="{Binding Path=IsExecuting}"/>
+                                    Height="{Binding Size.Height}"/>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- ObservableCollection<IWorkflowLink> Links | 所有已经建立的连接视图模型存储于此 -->
+        <!-- ObservableCollection<IWorkflowLink> LinkGroups | 所有已经建立的连接视图模型存储于此 -->
         <ItemsControl ItemsSource="{Binding LinkGroups}" Canvas.ZIndex="-1">
             <!-- 省略 -->
             <ItemsControl.ItemsPanel>
@@ -62,7 +60,7 @@
                             <DataTemplate>
                                 <local:BezierCurveView StartAnchor="{Binding Sender.Anchor}"
                                            EndAnchor="{Binding Receiver.Anchor}"
-                                           CanRender="{Binding IsEnabled}" />
+                                           CanRender="{Binding IsVisible}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

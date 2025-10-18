@@ -18,10 +18,15 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> slots = [];
 
         [VeloxCommand]
-        protected virtual Task Press(object? parameter, CancellationToken ct)
+        protected virtual Task SaveAnchor(object? parameter, CancellationToken ct)
         {
-            if (parameter is not Anchor anchor) return Task.CompletedTask;
-            Helper.Press(anchor);
+            Helper.SaveAnchor();
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        protected virtual Task SaveSize(object? parameter, CancellationToken ct)
+        {
+            Helper.SaveSize();
             return Task.CompletedTask;
         }
         [VeloxCommand]
@@ -36,13 +41,6 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         {
             if (parameter is not Size scale) return Task.CompletedTask;
             Helper.Scale(scale);
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        protected virtual Task Release(object? parameter, CancellationToken ct)
-        {
-            if (parameter is not Anchor anchor) return Task.CompletedTask;
-            Helper.Release(anchor);
             return Task.CompletedTask;
         }
         [VeloxCommand]

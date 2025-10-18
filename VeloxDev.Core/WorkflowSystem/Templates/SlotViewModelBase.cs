@@ -20,31 +20,29 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         [VeloxProperty] private Size size = new();
 
         [VeloxCommand]
-        protected virtual Task Press(object? parameter, CancellationToken ct)
+        protected virtual Task SaveOffset(object? parameter, CancellationToken ct)
         {
-            if (parameter is not Anchor anchor) return Task.CompletedTask;
-            Helper.Press(anchor);
+            Helper.SaveOffset();
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task Translate(object? parameter, CancellationToken ct)
+        protected virtual Task SaveSize(object? parameter, CancellationToken ct)
+        {
+            Helper.SaveSize();
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        protected virtual Task Offset(object? parameter, CancellationToken ct)
         {
             if (parameter is not Offset offset) return Task.CompletedTask;
             Helper.Translate(offset);
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task Scale(object? parameter, CancellationToken ct)
+        protected virtual Task Size(object? parameter, CancellationToken ct)
         {
             if (parameter is not Size scale) return Task.CompletedTask;
             Helper.Scale(scale);
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        protected virtual Task Release(object? parameter, CancellationToken ct)
-        {
-            if (parameter is not Anchor anchor) return Task.CompletedTask;
-            Helper.Release(anchor);
             return Task.CompletedTask;
         }
         [VeloxCommand]

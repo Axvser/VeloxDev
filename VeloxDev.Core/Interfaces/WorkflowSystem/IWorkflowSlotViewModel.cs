@@ -34,16 +34,16 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public Anchor Anchor { get; set; }
         public Offset Offset { get; set; }
         public Size Size { get; set; }
-
-        public IVeloxCommand PressCommand { get; }      // 开始交互  | parameter Anchor
-        public IVeloxCommand TranslateCommand { get; }  // 设定偏移  | parameter Offset
-        public IVeloxCommand ScaleCommand { get; }      // 设定尺寸  | parameter Size
-        public IVeloxCommand ReleaseCommand { get; }    // 结束交互  | parameter Null
+        
+        public IVeloxCommand SaveOffsetCommand { get; }     // 保存偏移 | parameter Null
+        public IVeloxCommand SaveSizeCommand { get; }         // 保存尺寸 | parameter Null
+        public IVeloxCommand OffsetCommand { get; }  // 设定偏移 | parameter Offset
+        public IVeloxCommand SizeCommand { get; }      // 设定尺寸 | parameter Size
 
         public IVeloxCommand ApplyConnectionCommand { get; }   // 作为连接构建发起方 | parameter Null
         public IVeloxCommand ReceiveConnectionCommand { get; } // 作为连接构建接收方 | parameter Null
 
-        public IVeloxCommand DeleteCommand { get; }     // 删除Slot  | parameter Null
+        public IVeloxCommand DeleteCommand { get; }     // 删除Slot | parameter Null
 
         public IWorkflowSlotViewModelHelper GetHelper();
         public void SetHelper(IWorkflowSlotViewModelHelper helper);
@@ -53,17 +53,10 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
     {
         public void Initialize(IWorkflowSlotViewModel slot);
 
-        public void OnParentChanged(IWorkflowNodeViewModel? oldValue, IWorkflowNodeViewModel? newValue);
-        public void OnChannelChanged(SlotChannel oldValue, SlotChannel newValue);
-        public void OnStateChanged(SlotState oldValue, SlotState newValue);
-        public void OnAnchorChanged(Anchor oldValue, Anchor newValue);
-        public void OnOffsetChanged(Anchor oldValue, Anchor newValue);
-        public void OnSizeChanged(Size oldValue, Size newValue);
-
-        public void Press(Anchor anchor);
-        public void Translate(Offset offset);
-        public void Scale(Size size);
-        public void Release(Anchor anchor);
+        public void Offset(Offset offset);
+        public void Size(Size size);
+        public void SaveOffset();
+        public void SaveSize();
 
         public void ApplyConnection();
         public void ReceiveConnection();
