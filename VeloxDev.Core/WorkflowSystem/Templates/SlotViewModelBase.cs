@@ -23,7 +23,7 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         protected virtual Task Press(object? parameter, CancellationToken ct)
         {
             if (parameter is not Anchor anchor) return Task.CompletedTask;
-            Helper.Release(anchor);
+            Helper.Press(anchor);
             return Task.CompletedTask;
         }
         [VeloxCommand]

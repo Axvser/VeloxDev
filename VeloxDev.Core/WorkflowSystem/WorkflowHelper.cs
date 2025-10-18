@@ -11,7 +11,7 @@ namespace VeloxDev.Core.WorkflowSystem
     {
         public static class ViewModel
         {
-            public static bool TryFindTree(object viewModel, out IWorkflowTreeViewModel? value)
+            public static bool TryFindParentTree(object viewModel, out IWorkflowTreeViewModel? value)
             {
                 switch (viewModel)
                 {
@@ -49,14 +49,14 @@ namespace VeloxDev.Core.WorkflowSystem
                     case IWorkflowTreeViewModel tree:
                         {
                             value = tree;
-                            return value is null;
+                            return true;
                         }
                     default:
                         value = null;
                         return false;
                 }
             }
-            public static bool TryFindTree(IWorkflowLinkViewModel link, out IWorkflowTreeViewModel? value)
+            public static bool TryFindParentTree(IWorkflowLinkViewModel link, out IWorkflowTreeViewModel? value)
             {
                 if (link.Sender is not null)
                 {
@@ -74,25 +74,20 @@ namespace VeloxDev.Core.WorkflowSystem
                     return false;
                 }
             }
-            public static bool TryFindTree(IWorkflowLinkGroupViewModel linkGroup, out IWorkflowTreeViewModel? value)
+            public static bool TryFindParentTree(IWorkflowLinkGroupViewModel linkGroup, out IWorkflowTreeViewModel? value)
             {
                 value = linkGroup.Parent;
                 return value is null;
             }
-            public static bool TryFindTree(IWorkflowSlotViewModel slot, out IWorkflowTreeViewModel? value)
+            public static bool TryFindParentTree(IWorkflowSlotViewModel slot, out IWorkflowTreeViewModel? value)
             {
                 value = slot.Parent.Parent;
                 return value is null;
             }
-            public static bool TryFindTree(IWorkflowNodeViewModel node, out IWorkflowTreeViewModel? value)
+            public static bool TryFindParentTree(IWorkflowNodeViewModel node, out IWorkflowTreeViewModel? value)
             {
                 value = node.Parent;
                 return value is null;
-            }
-            public static bool TryFindTree(IWorkflowTreeViewModel tree, out IWorkflowTreeViewModel? value)
-            {
-                value = tree;
-                return true;
             }
 
             #region Link Helper
@@ -315,14 +310,11 @@ namespace VeloxDev.Core.WorkflowSystem
 
                 public virtual void Initialize(IWorkflowTreeViewModel tree)
                 {
-                    OnInitializing();
                     viewModel = tree;
-                    OnInitialized();
                 }
                 public virtual async Task CloseAsync()
                 {
                     if (viewModel is null) return;
-                    await OnClosing();
                     foreach (var linkGroup in viewModel.LinkGroups)
                     {
                         linkGroup.DeleteCommand.Lock();
@@ -410,7 +402,6 @@ namespace VeloxDev.Core.WorkflowSystem
                             slot.DeleteCommand.UnLock();
                         }
                     }
-                    await OnClosed();
                 }
                 public virtual void Dispose()
                 {
@@ -419,18 +410,10 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void ResetVirtualLink()
                 {
                     if (viewModel is null) return;
-                    OnVirtualLinkReseting();
                     viewModel.VirtualLink.Sender.Anchor = new();
                     viewModel.VirtualLink.Receiver.Anchor = new();
                     viewModel.VirtualLink.IsVisible = false;
-                    OnVirtualLinkReseted();
                 }
-                protected virtual void OnInitializing() { }
-                protected virtual void OnInitialized() { }
-                protected virtual Task OnClosing() => Task.CompletedTask;
-                protected virtual Task OnClosed() => Task.CompletedTask;
-                protected virtual void OnVirtualLinkReseting() { }
-                protected virtual void OnVirtualLinkReseted() { }
 
                 public virtual void CreateNode(IWorkflowNodeViewModel node)
                 {
@@ -440,22 +423,14 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void MovePointer(Anchor anchor)
                 {
                     if (viewModel is null) return;
-                    OnPointerMoving(anchor);
                     viewModel.VirtualLink.Receiver.Anchor = anchor;
-                    OnPointerMoved(anchor);
                 }
-                protected virtual void OnNodeCreating(IWorkflowNodeViewModel node) { }
-                protected virtual void OnNodeCreated(IWorkflowNodeViewModel node) { }
-                protected virtual void OnPointerMoving(Anchor anchor) { }
-                protected virtual void OnPointerMoved(Anchor anchor) { }
 
                 #region Connection Manager
                 private IWorkflowSlotViewModel currentConnectionSender;
                 public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
                     if (viewModel is null || slot is null) return;
-
-                    OnConnectionAppling(slot);
 
                     // 设置当前连接发送端
                     currentConnectionSender = slot;
@@ -467,14 +442,10 @@ namespace VeloxDev.Core.WorkflowSystem
                         viewModel.VirtualLink.Sender = slot;
                         viewModel.VirtualLink.Receiver = null;
                     }
-
-                    OnConnectionApplied(slot);
                 }
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
                     if (viewModel is null || currentConnectionSender is null || slot is null) return;
-
-                    OnConnectionReceiving(slot);
 
                     // 验证连接有效性
                     if (ValidateConnection(currentConnectionSender, slot))
@@ -487,8 +458,6 @@ namespace VeloxDev.Core.WorkflowSystem
                         // 连接无效，取消操作
                         CancelConnection();
                     }
-
-                    OnConnectionReceived(slot);
                 }
 
                 protected virtual bool ValidateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
@@ -614,11 +583,6 @@ namespace VeloxDev.Core.WorkflowSystem
                     }
                     ClearConnectionState();
                 }
-
-                protected virtual void OnConnectionAppling(IWorkflowSlotViewModel slot) { }
-                protected virtual void OnConnectionApplied(IWorkflowSlotViewModel slot) { }
-                protected virtual void OnConnectionReceiving(IWorkflowSlotViewModel slot) { }
-                protected virtual void OnConnectionReceived(IWorkflowSlotViewModel slot) { }
                 #endregion
 
                 #region Redo & Undo
@@ -628,35 +592,23 @@ namespace VeloxDev.Core.WorkflowSystem
                 {
                     if (redoStack.TryPop(out var pair))
                     {
-                        OnRedoing(pair);
                         pair.Redo.Invoke();
                         undoStack.Push(pair);
-                        OnRedoed(pair);
                     }
                 }
                 public virtual void Submit(IWorkflowActionPair actionPair)
                 {
-                    OnSubmiting(actionPair);
                     actionPair.Redo.Invoke();
                     undoStack.Push(actionPair);
-                    OnSubmited(actionPair);
                 }
                 public virtual void Undo()
                 {
                     if (undoStack.TryPop(out var pair))
                     {
-                        OnUndoing(pair);
                         pair.Undo.Invoke();
                         redoStack.Push(pair);
-                        OnUndoed(pair);
                     }
                 }
-                protected virtual void OnRedoing(IWorkflowActionPair actionPair) { }
-                protected virtual void OnRedoed(IWorkflowActionPair actionPair) { }
-                protected virtual void OnSubmiting(IWorkflowActionPair actionPair) { }
-                protected virtual void OnSubmited(IWorkflowActionPair actionPair) { }
-                protected virtual void OnUndoing(IWorkflowActionPair actionPair) { }
-                protected virtual void OnUndoed(IWorkflowActionPair actionPair) { }
                 #endregion
             }
             #endregion
