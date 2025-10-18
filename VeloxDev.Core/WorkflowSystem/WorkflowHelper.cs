@@ -703,8 +703,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     new LinkViewModelBase()
                     {
                         Sender = new SlotViewModelBase(),
-                        Receiver = new SlotViewModelBase(),
-                        IsVisible = true
+                        Receiver = new SlotViewModelBase()
                     };
                 public virtual void CreateNode(IWorkflowNodeViewModel node)
                 {
@@ -737,12 +736,14 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
                     if (_self == null) return;
-
+                    _self.VirtualLink.Sender.Anchor = slot.Anchor;
+                    _self.VirtualLink.Receiver.Anchor = slot.Anchor;
+                    _self.VirtualLink.IsVisible = true;
                 }
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
                     if (_self == null || _sender == null) return;
-
+                    ResetVirtualLink();
                 }
                 public virtual void ResetVirtualLink()
                 {

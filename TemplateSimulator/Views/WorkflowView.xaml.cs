@@ -44,7 +44,6 @@ public partial class WorkflowView : UserControl
         node1.GetHelper().CreateSlot(slot1);
         node2.GetHelper().CreateSlot(slot2);
 
-
         // 使用数据上下文
         DataContext = _workflowViewModel;
 
@@ -65,6 +64,6 @@ public partial class WorkflowView : UserControl
     private void OnPointerReleased(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is not IWorkflowTreeViewModel tree) return;
-        tree.VirtualLink.Sender = null;
+        tree.GetHelper().ResetVirtualLink();
     }
 }
