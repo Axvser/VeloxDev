@@ -58,7 +58,7 @@ public partial class WorkflowView : UserControl
     {
         if (DataContext is not IWorkflowTreeViewModel tree) return;
         var point = e.GetPosition(this);
-        tree.MovePointerCommand.Execute(new Anchor(point.X, point.Y, 0));
+        tree.SetPointerCommand.Execute(new Anchor(point.X, point.Y, 0));
     }
 
     // 当鼠标离开时，清除 工作流Tree 中记录的起始 输入/输出口

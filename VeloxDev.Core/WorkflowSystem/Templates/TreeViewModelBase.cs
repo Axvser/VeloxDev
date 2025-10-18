@@ -24,10 +24,10 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task MovePointer(object? parameter, CancellationToken ct)
+        protected virtual Task SetPointer(object? parameter, CancellationToken ct)
         {
             if (parameter is not Anchor anchor) return Task.CompletedTask;
-            Helper.MovePointer(anchor);
+            Helper.SetPointer(anchor);
             return Task.CompletedTask;
         }
         [VeloxCommand]

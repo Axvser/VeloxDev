@@ -205,7 +205,27 @@ namespace VeloxDev.Core.WorkflowSystem
                 #region Complex Components
                 public virtual void CreateSlot(IWorkflowSlotViewModel slot)
                 {
-
+                    if (_self is null) return;
+                    var oldParent = slot.Parent;
+                    var newParent = _self;
+                    slot.GetHelper().Delete();
+                    slot.Parent = newParent;
+                    slot.GetHelper().UpdateAnchor();
+                    if (_self.Parent is null) return;
+                    _self.Parent.GetHelper().Submit(new WorkflowActionPair(
+                        () =>
+                        {
+                            slot.Parent = newParent;
+                            slot.GetHelper().UpdateAnchor();
+                            _self.Slots.Add(slot);
+                        },
+                        () =>
+                        {
+                            slot.GetHelper().Delete();
+                            slot.Parent = oldParent;
+                            slot.GetHelper().UpdateAnchor();
+                            _self.Slots.Remove(slot);
+                        }));
                 }
 
                 public virtual void Delete()
@@ -299,11 +319,28 @@ namespace VeloxDev.Core.WorkflowSystem
                     };
                 public virtual void CreateNode(IWorkflowNodeViewModel node)
                 {
-
+                    if (_self is null) return;
+                    var oldParent = node.Parent;
+                    var newParent = _self;
+                    node.GetHelper().Delete();
+                    Submit(new WorkflowActionPair(
+                        () =>
+                        {
+                            node.Parent = newParent;
+                            _self.Nodes.Add(node);
+                        },
+                        () =>
+                        {
+                            node.GetHelper().Delete();
+                            node.Parent = oldParent;
+                            _self.Nodes.Remove(node);
+                        }));
                 }
-                public virtual void MovePointer(Anchor anchor)
+                public virtual void SetPointer(Anchor anchor)
                 {
-
+                    _self.VirtualLink.Receiver.Anchor.Left = anchor.Left;
+                    _self.VirtualLink.Receiver.Anchor.Top = anchor.Top;
+                    _self.VirtualLink.Receiver.Anchor.Layer = anchor.Layer;
                 }
                 #endregion
 
@@ -321,7 +358,13 @@ namespace VeloxDev.Core.WorkflowSystem
                 }
                 public virtual void ResetVirtualLink()
                 {
-
+                    _self.VirtualLink.Sender.Anchor.Left = 0;
+                    _self.VirtualLink.Sender.Anchor.Top = 0;
+                    _self.VirtualLink.Sender.Anchor.Layer = 0;
+                    _self.VirtualLink.Receiver.Anchor.Left = 0;
+                    _self.VirtualLink.Receiver.Anchor.Top = 0;
+                    _self.VirtualLink.Receiver.Anchor.Layer = 0;
+                    _self.VirtualLink.IsVisible = false;
                 }
                 #endregion
 

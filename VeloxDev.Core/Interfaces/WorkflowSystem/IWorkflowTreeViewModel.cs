@@ -11,7 +11,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public ObservableCollection<IWorkflowLinkViewModel> Links { get; set; }
 
         public IVeloxCommand CreateNodeCommand { get; }        // 创建节点           | parameter IWorkflowNodeViewModel
-        public IVeloxCommand MovePointerCommand { get; }       // 触点跟踪           | parameter Anchor
+        public IVeloxCommand SetPointerCommand { get; }       // 触点跟踪           | parameter Anchor
         public IVeloxCommand ResetVirtualLinkCommand { get; }  // 重置虚拟连接       | parameter Null
         public IVeloxCommand ApplyConnectionCommand { get; }   // 处理连接构建发起方 | parameter Null
         public IVeloxCommand ReceiveConnectionCommand { get; } // 处理连接构建接收方 | parameter Null
@@ -30,7 +30,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public void CreateNode(IWorkflowNodeViewModel node);
         public IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver);
 
-        public void MovePointer(Anchor anchor);
+        public void SetPointer(Anchor anchor);
         public void ApplyConnection(IWorkflowSlotViewModel slot);
         public void ReceiveConnection(IWorkflowSlotViewModel slot);
         public void ResetVirtualLink();
