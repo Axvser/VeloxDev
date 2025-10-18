@@ -57,6 +57,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public void SetSize(Size size);
         public void SaveOffset();
         public void SaveSize();
+        public void UpdateAnchor();
 
         public void ApplyConnection();
         public void ReceiveConnection();

@@ -14,8 +14,7 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
 
         [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkViewModelBase() { Sender = new SlotViewModelBase(), Receiver = new SlotViewModelBase() };
         [VeloxProperty] private ObservableCollection<IWorkflowNodeViewModel> nodes = [];
-        [VeloxProperty] private ConcurrentDictionary<IWorkflowSlotViewModel, ConcurrentDictionary<IWorkflowSlotViewModel, IWorkflowLinkGroupViewModel>> linkGroupMap = [];
-        [VeloxProperty] private ObservableCollection<IWorkflowLinkGroupViewModel> linkGroups = [];
+        [VeloxProperty] private ObservableCollection<IWorkflowLinkViewModel> links = [];
 
         [VeloxCommand]
         protected virtual Task CreateNode(object? parameter, CancellationToken ct)

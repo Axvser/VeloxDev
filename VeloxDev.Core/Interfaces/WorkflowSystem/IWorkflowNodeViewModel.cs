@@ -10,7 +10,8 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public Anchor Anchor { get; set; }
         public Size Size { get; set; }
         public ObservableCollection<IWorkflowSlotViewModel> Slots { get; set; }
-        
+
+        public IVeloxCommand MoveCommand { get; }          // 移动节点     | parameter Offset
         public IVeloxCommand SaveAnchorCommand { get; }    // 存储坐标信息 | parameter Null
         public IVeloxCommand SaveSizeCommand { get; }      // 存储尺寸信息 | parameter Null
         public IVeloxCommand SetAnchorCommand { get; }          // 交互期间移动 | parameter Anchor 新的坐标
@@ -33,6 +34,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
         public void SaveAnchor();
         public void SaveSize();
+        public void Move(Offset offset);
         public void SetAnchor(Anchor newValue);
         public void SetSize(Size newValue);
         public void CreateSlot(IWorkflowSlotViewModel slot);

@@ -89,10 +89,8 @@ public partial class NodeView : UserControl
 
         if (DataContext is NodeViewModel nodeContext)
         {
-            // 转换为 VeloxDev 中的通用 Anchor，它描述 位置 & 层级
-            var deltaAnchor = new Anchor(delta.X, delta.Y, 0);
-            // 注意，必须使用 += 或 = 直接操作 Anchor，否则您的曲线数据无法正确更新
-            nodeContext.Anchor += deltaAnchor;
+            var offset = new Offset(delta.X, delta.Y);
+            nodeContext.GetHelper().Move(offset);
         }
 
         _lastPosition = currentPosition;

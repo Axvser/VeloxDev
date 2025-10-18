@@ -18,6 +18,13 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> slots = [];
 
         [VeloxCommand]
+        protected virtual Task Move(object? parameter, CancellationToken ct)
+        {
+            if (parameter is not Offset offset) return Task.CompletedTask;
+            Helper.Move(offset);
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
         protected virtual Task SaveAnchor(object? parameter, CancellationToken ct)
         {
             Helper.SaveAnchor();

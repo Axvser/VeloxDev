@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.Drawing;
 using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem.Templates;
@@ -17,11 +18,11 @@ namespace VeloxDev.Core.WorkflowSystem
             {
                 private IWorkflowLinkViewModel? _self;
 
-                public void Initialize(IWorkflowLinkViewModel link) => _self = link;
-                public Task CloseAsync() => Task.CompletedTask;
-                public void Dispose() { }
+                public virtual void Initialize(IWorkflowLinkViewModel link) => _self = link;
+                public virtual Task CloseAsync() => Task.CompletedTask;
+                public virtual void Dispose() { }
 
-                public void Delete()
+                public virtual void Delete()
                 {
 
                 }
@@ -34,118 +35,64 @@ namespace VeloxDev.Core.WorkflowSystem
                 private IWorkflowSlotViewModel? _self;
 
                 #region Simple Components
-                public void Initialize(IWorkflowSlotViewModel slot) => _self = slot;
-                public Task CloseAsync() => Task.CompletedTask;
-                public void Dispose() { }
-                public void ApplyConnection()
+                public virtual void Initialize(IWorkflowSlotViewModel slot) => _self = slot;
+                public virtual Task CloseAsync() => Task.CompletedTask;
+                public virtual void Dispose() { }
+                public virtual void ApplyConnection()
                 {
                     if (_self is null) return;
-
-                    // 通过Parent链向上查找Tree
-                    IWorkflowTreeViewModel? tree = null;
-                    var current = _self.Parent?.Parent as IWorkflowTreeViewModel;
-                    if (current != null)
-                    {
-                        tree = current;
-                    }
-
-                    tree?.GetHelper().ApplyConnection(_self);
+                    var tree = _self.Parent?.Parent;
+                    tree?.GetHelper()?.ApplyConnection(_self);
                 }
-                public void ReceiveConnection()
+                public virtual void ReceiveConnection()
                 {
                     if (_self is null) return;
-
-                    // 通过Parent链向上查找Tree
-                    IWorkflowTreeViewModel? tree = null;
-                    var current = _self.Parent?.Parent as IWorkflowTreeViewModel;
-                    if (current != null)
-                    {
-                        tree = current;
-                    }
-
+                    var tree = _self.Parent?.Parent;
                     tree?.GetHelper().ReceiveConnection(_self);
                 }
-                public void SetSize(Size size)
+                public virtual void SetSize(Size size)
                 {
                     if (_self is null) return;
-
-                    // 直接替换引用，确保实时同步
-                    _self.Size = new Size(size.Width, size.Height);
-
-                    // 更新Anchor
-                    if (_self.Parent != null)
-                    {
-                        _self.Anchor = new Anchor(
-                            _self.Parent.Anchor.Left + _self.Offset.Left + _self.Size.Width / 2,
-                            _self.Parent.Anchor.Top + _self.Offset.Top + _self.Size.Height / 2,
-                            _self.Parent.Anchor.Layer + 1
-                        );
-                    }
+                    _self.Size.Width = size.Width;
+                    _self.Size.Height = size.Height;
+                    UpdateAnchor();
                 }
-                public void SetOffset(Offset offset)
+                public virtual void SetOffset(Offset offset)
                 {
                     if (_self is null) return;
-
-                    // 直接替换引用，确保实时同步
-                    _self.Offset = new Offset(offset.Left, offset.Top);
-
-                    // 更新Anchor
-                    if (_self.Parent != null)
-                    {
-                        _self.Anchor = new Anchor(
-                            _self.Parent.Anchor.Left + _self.Offset.Left + _self.Size.Width / 2,
-                            _self.Parent.Anchor.Top + _self.Offset.Top + _self.Size.Height / 2,
-                            _self.Parent.Anchor.Layer + 1
-                        );
-                    }
+                    _self.Offset.Left = offset.Left;
+                    _self.Offset.Top = offset.Top;
+                    UpdateAnchor();
                 }
-                public void SaveOffset()
+                public virtual void SaveOffset()
                 {
-                    if (_self is null) return;
-
-                    // 通过Parent链向上查找Tree
-                    IWorkflowTreeViewModel? tree = null;
-                    var current = _self.Parent?.Parent as IWorkflowTreeViewModel;
-                    if (current != null)
-                    {
-                        tree = current;
-                    }
-
-                    if (tree == null) return;
-
-                    var oldOffset = new Offset(_self.Offset.Left, _self.Offset.Top);
+                    if (_self is null || _self.Parent?.Parent is null) return;
+                    var oldOffset = _self.Offset;
                     var newOffset = new Offset(_self.Offset.Left, _self.Offset.Top);
-
-                    tree.GetHelper().Submit(new WorkflowActionPair(
-                        () => SetOffset(newOffset),
-                        () => SetOffset(oldOffset)
+                    _self.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
+                        () => { _self.Offset = newOffset; },
+                        () => { _self.Offset = oldOffset; }
                     ));
                 }
-                public void SaveSize()
+                public virtual void SaveSize()
                 {
-                    if (_self is null) return;
-
-                    // 通过Parent链向上查找Tree
-                    IWorkflowTreeViewModel? tree = null;
-                    var current = _self.Parent?.Parent as IWorkflowTreeViewModel;
-                    if (current != null)
-                    {
-                        tree = current;
-                    }
-
-                    if (tree == null) return;
-
-                    var oldSize = new Size(_self.Size.Width, _self.Size.Height);
+                    if (_self is null || _self.Parent?.Parent is null) return;
+                    var oldSize = _self.Size;
                     var newSize = new Size(_self.Size.Width, _self.Size.Height);
-
-                    tree.GetHelper().Submit(new WorkflowActionPair(
-                        () => SetSize(newSize),
-                        () => SetSize(oldSize)
+                    _self.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
+                        () => { _self.Size = newSize; },
+                        () => { _self.Size = oldSize; }
                     ));
+                }
+                public void UpdateAnchor()
+                {
+                    if (_self.Parent is null) return;
+                    _self.Anchor.Left = _self.Parent.Anchor.Left + _self.Offset.Left + _self.Size.Width / 2;
+                    _self.Anchor.Top = _self.Parent.Anchor.Top + _self.Offset.Top + _self.Size.Height / 2;
                 }
                 #endregion
 
-                public void Delete()
+                public virtual void Delete()
                 {
 
                 }
@@ -158,8 +105,8 @@ namespace VeloxDev.Core.WorkflowSystem
                 private IWorkflowNodeViewModel? _self;
 
                 #region Simple Components
-                public void Initialize(IWorkflowNodeViewModel node) => _self = node;
-                public async Task CloseAsync()
+                public virtual void Initialize(IWorkflowNodeViewModel node) => _self = node;
+                public virtual async Task CloseAsync()
                 {
                     if (_self == null) return;
 
@@ -192,38 +139,76 @@ namespace VeloxDev.Core.WorkflowSystem
                         }
                     }
                 }
-                public Task BroadcastAsync(object? parameter) => Task.CompletedTask;
-                public Task WorkAsync(object? parameter) => Task.CompletedTask;
-                public void Dispose() { }
-                public void SaveAnchor()
+                public virtual Task BroadcastAsync(object? parameter) => Task.CompletedTask;
+                public virtual Task WorkAsync(object? parameter) => Task.CompletedTask;
+                public virtual void Dispose() { }
+                public virtual void Move(Offset offset)
                 {
                     if (_self is null) return;
-
+                    _self.Anchor.Left += offset.Left;
+                    _self.Anchor.Top += offset.Top;
+                    foreach (var slot in _self.Slots)
+                    {
+                        slot.GetHelper().UpdateAnchor();
+                    }
                 }
-                public void SaveSize()
+                public virtual void SetAnchor(Anchor anchor)
                 {
                     if (_self is null) return;
-
+                    _self.Anchor.Left = anchor.Left;
+                    _self.Anchor.Top = anchor.Top;
+                    foreach (var slot in _self.Slots)
+                    {
+                        slot.GetHelper().UpdateAnchor();
+                    }
                 }
-                public void SetAnchor(Anchor newValue)
+                public virtual void SetSize(Size size)
                 {
                     if (_self is null) return;
-
+                    _self.Size.Width = size.Width;
+                    _self.Size.Height = size.Height;
                 }
-                public void SetSize(Size newValue)
+                public virtual void SaveAnchor()
                 {
-                    if (_self is null) return;
-
+                    if (_self is null || _self.Parent is null) return;
+                    var oldAnchor = _self.Anchor;
+                    var newAnchor = new Anchor(_self.Anchor.Left, _self.Anchor.Top, _self.Anchor.Layer);
+                    _self.Parent.GetHelper().Submit(new WorkflowActionPair(
+                        () =>
+                        {
+                            _self.Anchor = newAnchor;
+                            SetAnchor(newAnchor);
+                        },
+                        () =>
+                        {
+                            _self.Anchor = oldAnchor;
+                            SetAnchor(oldAnchor);
+                        }));
+                }
+                public virtual void SaveSize()
+                {
+                    if (_self is null || _self.Parent is null) return;
+                    var oldSize = _self.Size;
+                    var newSize = new Size(_self.Size.Width, _self.Size.Height);
+                    _self.Parent.GetHelper().Submit(new WorkflowActionPair(
+                        () =>
+                        {
+                            _self.Size = newSize;
+                        },
+                        () =>
+                        {
+                            _self.Size = oldSize;
+                        }));
                 }
                 #endregion
 
                 #region Complex Components
-                public void CreateSlot(IWorkflowSlotViewModel slot)
+                public virtual void CreateSlot(IWorkflowSlotViewModel slot)
                 {
 
                 }
 
-                public void Delete()
+                public virtual void Delete()
                 {
 
                 }
@@ -238,7 +223,7 @@ namespace VeloxDev.Core.WorkflowSystem
 
                 #region Simple Components
                 public virtual void Initialize(IWorkflowTreeViewModel tree) => _self = tree;
-                public async Task CloseAsync()
+                public virtual async Task CloseAsync()
                 {
                     if (_self is null) return;
 
@@ -304,30 +289,31 @@ namespace VeloxDev.Core.WorkflowSystem
                         }
                     }
                 }
-                public void Dispose() { }
-                public void CreateNode(IWorkflowNodeViewModel node)
+                public virtual void Dispose() { }
+                public virtual IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver) => new LinkViewModelBase();
+                public virtual void CreateNode(IWorkflowNodeViewModel node)
                 {
 
                 }
-                public void MovePointer(Anchor anchor)
+                public virtual void MovePointer(Anchor anchor)
                 {
 
                 }
                 #endregion
-                
+
                 #region Connection Manager
                 private IWorkflowSlotViewModel? _sender = null;
                 private IWorkflowSlotViewModel? _receiver = null;
                 private bool _isbuilding = false;
-                public void ApplyConnection(IWorkflowSlotViewModel slot)
+                public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
 
                 }
-                public void ReceiveConnection(IWorkflowSlotViewModel slot)
+                public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
 
                 }
-                public void ResetVirtualLink()
+                public virtual void ResetVirtualLink()
                 {
 
                 }
@@ -337,7 +323,7 @@ namespace VeloxDev.Core.WorkflowSystem
                 private readonly ConcurrentStack<IWorkflowActionPair> _redoStack = new();
                 private readonly ConcurrentStack<IWorkflowActionPair> _undoStack = new();
                 private readonly object _stackLock = new();
-                public void Redo()
+                public virtual void Redo()
                 {
                     lock (_stackLock)
                     {
@@ -355,7 +341,7 @@ namespace VeloxDev.Core.WorkflowSystem
                         }
                     }
                 }
-                public void Submit(IWorkflowActionPair actionPair)
+                public virtual void Submit(IWorkflowActionPair actionPair)
                 {
                     lock (_stackLock)
                     {
@@ -370,7 +356,7 @@ namespace VeloxDev.Core.WorkflowSystem
                         }
                     }
                 }
-                public void Undo()
+                public virtual void Undo()
                 {
                     lock (_stackLock)
                     {
@@ -388,7 +374,7 @@ namespace VeloxDev.Core.WorkflowSystem
                         }
                     }
                 }
-                public void ClearHistory()
+                public virtual void ClearHistory()
                 {
                     lock (_stackLock)
                     {
