@@ -555,6 +555,14 @@ namespace VeloxDev.Core.WorkflowSystem
                 {
                     if (_self == null) return;
 
+                    // 关键修复：只有允许作为发送端的slot才能发起连接
+                    bool canBeSender = slot.Channel.HasFlag(SlotChannel.OneTarget) ||
+                                      slot.Channel.HasFlag(SlotChannel.MultipleTargets) ||
+                                      slot.Channel.HasFlag(SlotChannel.OneBoth) ||
+                                      slot.Channel.HasFlag(SlotChannel.MultipleBoth);
+
+                    if (!canBeSender) return; // 不允许作为发送端，直接返回
+
                     if (_sender is not null && _sender != slot)
                     {
                         _sender.GetHelper().UpdateState();
@@ -596,23 +604,20 @@ namespace VeloxDev.Core.WorkflowSystem
                             ResetVirtualLink();
                             return;
 
-                        case (false, true, false, false, false): // OneTarget - 关键修复：只能有一个目标
-                                                                 // 在Apply时立即删除所有现有的目标连接
+                        case (false, true, false, false, false): // OneTarget - 只能有一个目标
+                                                                 // 立即删除所有现有的目标连接
                             foreach (var link in links_AsSender)
                             {
                                 link.GetHelper().Delete();
                             }
-                            // 同时清理虚拟连接状态
                             _receiver = null;
                             break;
 
-                        case (false, false, true, false, false): // OneSource - 只能有一个源
-                                                                 // 在Apply时立即删除所有现有的源连接
-                            foreach (var link in links_AsReceiver)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            break;
+                        case (false, false, true, false, false): // OneSource - 只能有一个源，但不能发起连接
+                                                                 // OneSource的slot不能作为发送端发起连接
+                            _sender = null;
+                            ResetVirtualLink();
+                            return;
 
                         case (false, true, true, false, false): // OneBoth - 只能有一个连接
                                                                 // 删除所有现有连接
@@ -622,28 +627,14 @@ namespace VeloxDev.Core.WorkflowSystem
                             break;
 
                         case (false, false, false, true, false): // MultipleTargets - 允许多个目标
-                                                                 // 不需要清理目标连接，但需要清理可能存在的源限制
-                            if (slot.Channel.HasFlag(SlotChannel.OneSource))
-                            {
-                                // 如果同时有OneSource限制，清理源连接
-                                for (int i = 1; i < links_AsReceiver.Count; i++)
-                                {
-                                    links_AsReceiver[i].GetHelper().Delete();
-                                }
-                            }
+                                                                 // 不需要清理目标连接
                             break;
 
-                        case (false, false, false, false, true): // MultipleSources - 允许多个源
-                                                                 // 不需要清理源连接，但需要清理可能存在的目标限制
-                            if (slot.Channel.HasFlag(SlotChannel.OneTarget))
-                            {
-                                // 如果同时有OneTarget限制，清理目标连接
-                                for (int i = 1; i < links_AsSender.Count; i++)
-                                {
-                                    links_AsSender[i].GetHelper().Delete();
-                                }
-                            }
-                            break;
+                        case (false, false, false, false, true): // MultipleSources - 允许多个源，但不能发起连接
+                                                                 // MultipleSources的slot不能作为发送端发起连接
+                            _sender = null;
+                            ResetVirtualLink();
+                            return;
 
                         case (false, true, false, true, false): // OneTarget | MultipleTargets
                                                                 // 逻辑冲突，优先执行OneTarget限制
@@ -655,12 +646,10 @@ namespace VeloxDev.Core.WorkflowSystem
                             break;
 
                         case (false, false, true, false, true): // OneSource | MultipleSources  
-                                                                // 逻辑冲突，优先执行OneSource限制
-                            foreach (var link in links_AsReceiver)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            break;
+                                                                // 不能作为发送端发起连接
+                            _sender = null;
+                            ResetVirtualLink();
+                            return;
 
                         case (false, false, false, true, true): // MultipleBoth
                                                                 // 全双工多连接，不清理现有连接
@@ -674,14 +663,38 @@ namespace VeloxDev.Core.WorkflowSystem
 
                     // 更新状态为预览发送端
                     slot.State |= SlotState.PreviewSender;
-                    slot.State &= ~SlotState.Sender; // 清除已连接状态，因为可能刚删除了连接
+                    slot.State &= ~SlotState.Sender;
 
                     // 立即更新状态显示
                     slot.GetHelper().UpdateState();
                 }
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
-                    if (_self == null) return;
+                    if (_self == null || _sender == null) return;
+
+                    // 关键修复：检查同节点内连接
+                    if (_sender.Parent == slot.Parent)
+                    {
+                        // 同节点内不允许连接
+                        ResetVirtualLink();
+                        _sender = null;
+                        _receiver = null;
+                        return;
+                    }
+
+                    // 关键修复：只有允许作为接收端的slot才能接收连接
+                    bool canBeReceiver = slot.Channel.HasFlag(SlotChannel.OneSource) ||
+                                        slot.Channel.HasFlag(SlotChannel.MultipleSources) ||
+                                        slot.Channel.HasFlag(SlotChannel.OneBoth) ||
+                                        slot.Channel.HasFlag(SlotChannel.MultipleBoth);
+
+                    if (!canBeReceiver)
+                    {
+                        ResetVirtualLink();
+                        _sender = null;
+                        _receiver = null;
+                        return;
+                    }
 
                     if (_receiver is not null && _receiver != slot)
                     {
@@ -725,19 +738,11 @@ namespace VeloxDev.Core.WorkflowSystem
                             return;
 
                         case (false, true, false, false, false): // OneTarget - 作为接收方时，如果有OneTarget限制
-                            if (_sender != null && _sender != slot)
-                            {
-                                // 如果发送方有OneTarget限制，需要清理其现有目标连接
-                                var senderLinks = new List<IWorkflowLinkViewModel>();
-                                foreach (var target in _sender.Targets)
-                                {
-                                    if (_self.LinksMap.TryGetValue(_sender, out var pair) &&
-                                        pair.TryGetValue(target, out var link))
-                                        senderLinks.Add(link);
-                                }
-                                foreach (var link in senderLinks) link.GetHelper().Delete();
-                            }
-                            break;
+                                                                 // OneTarget的slot不能作为接收端
+                            ResetVirtualLink();
+                            _sender = null;
+                            _receiver = null;
+                            return;
 
                         case (false, false, true, false, false): // OneSource - 只能有一个源
                                                                  // 作为接收方时，如果有OneSource限制，清理多余的源连接
@@ -753,31 +758,26 @@ namespace VeloxDev.Core.WorkflowSystem
                             foreach (var link in links_AsReceiver) link.GetHelper().Delete();
                             break;
 
-                        case (false, false, false, true, false): // MultipleTargets - 允许多个目标
-                                                                 // 不需要清理目标连接
-                            break;
+                        case (false, false, false, true, false): // MultipleTargets - 允许多个目标，但不能作为接收端
+                                                                 // MultipleTargets的slot不能作为接收端
+                            ResetVirtualLink();
+                            _sender = null;
+                            _receiver = null;
+                            return;
 
                         case (false, false, false, false, true): // MultipleSources - 允许多个源
                                                                  // 不需要清理源连接
                             break;
 
                         case (false, true, false, true, false): // OneTarget | MultipleTargets
-                                                                // 逻辑冲突，优先执行OneTarget限制
-                            if (_sender != null && _sender != slot)
-                            {
-                                var senderLinks = new List<IWorkflowLinkViewModel>();
-                                foreach (var target in _sender.Targets)
-                                {
-                                    if (_self.LinksMap.TryGetValue(_sender, out var pair) &&
-                                        pair.TryGetValue(target, out var link))
-                                        senderLinks.Add(link);
-                                }
-                                foreach (var link in senderLinks) link.GetHelper().Delete();
-                            }
-                            break;
+                                                                // 不能作为接收端
+                            ResetVirtualLink();
+                            _sender = null;
+                            _receiver = null;
+                            return;
 
                         case (false, false, true, false, true): // OneSource | MultipleSources  
-                                                                // 逻辑冲突，优先执行OneSource限制
+                                                                // 作为接收方时，优先执行OneSource限制
                             for (int i = 1; i < links_AsReceiver.Count; i++)
                             {
                                 links_AsReceiver[i].GetHelper().Delete();
@@ -811,7 +811,7 @@ namespace VeloxDev.Core.WorkflowSystem
                             _self.LinksMap[_sender][_receiver] = newLink;
                             _self.Links.Add(newLink);
 
-                            // 修复：使用正确的状态常量
+                            // 更新状态
                             _sender.State |= SlotState.Sender;
                             _sender.State &= ~SlotState.PreviewSender;
                             _receiver.State |= SlotState.Receiver;
