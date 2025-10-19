@@ -21,15 +21,15 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
     {
         StandBy = 1,             // 空闲状态,未连接
         PreviewSender = 2,       // 预览发送端状态,正在连接过程中,作为发送端
-        PreviewProcessor = 4,    // 预览处理端状态,正在连接过程中,作为处理端
+        PreviewReceiver = 4,     // 预览处理端状态,正在连接过程中,作为处理端
         Sender = 8,              // 已连接状态,作为发送端
-        Processor = 16           // 已连接状态,作为处理端
+        Receiver = 16            // 已连接状态,作为处理端
     }
 
     public interface IWorkflowSlotViewModel : IWorkflowViewModel
     {
-        public ObservableCollection<IWorkflowSlotViewModel> Targets { get; set; }
-        public ObservableCollection<IWorkflowSlotViewModel> Sources { get; set; }
+        public HashSet<IWorkflowSlotViewModel> Targets { get; set; }
+        public HashSet<IWorkflowSlotViewModel> Sources { get; set; }
         public IWorkflowNodeViewModel? Parent { get; set; }
         public SlotChannel Channel { get; set; }
         public SlotState State { get; set; }
@@ -62,6 +62,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public void SaveSize();
         public void SetChannel(SlotChannel channel);
         public void UpdateAnchor();
+        public void UpdateState();
 
         public void ApplyConnection();
         public void ReceiveConnection();

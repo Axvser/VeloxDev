@@ -14,10 +14,9 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         [VeloxProperty] private bool isVisible = false;
 
         [VeloxCommand]
-        protected virtual Task Delete(object? parameter, CancellationToken ct)
+        protected virtual async Task Delete(object? parameter, CancellationToken ct)
         {
-            Helper.Delete();
-            return Task.CompletedTask;
+            await Helper.Delete();
         }
         [VeloxCommand]
         protected virtual async Task Close(object? parameter, CancellationToken ct)
