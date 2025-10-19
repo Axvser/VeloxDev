@@ -8,7 +8,7 @@ using System.Text;
 namespace VeloxDev.Core.Generator
 {
     [Generator(LanguageNames.CSharp)]
-    public sealed class AOTReflectionGenerator : IIncrementalGenerator
+    public sealed class AOTReflection : IIncrementalGenerator
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {

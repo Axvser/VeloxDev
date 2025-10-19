@@ -1,8 +1,12 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
+using VeloxDev;
+using VeloxDev.Core;
+using VeloxDev.Core.Generator;
+using VeloxDev.Core.Generator.Base;
 
-namespace VeloxDev.Core.Generator
+namespace VeloxDev.Core.Generator.Base
 {
     internal static class AnalizeHelper
     {

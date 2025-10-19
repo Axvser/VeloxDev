@@ -12,7 +12,7 @@ using System.Threading;
 namespace VeloxDev.Core.Generator
 {
     [Generator(LanguageNames.CSharp)]
-    public class VeloxThemeGenerator : IIncrementalGenerator
+    public class Theme : IIncrementalGenerator
     {
         private const string ThemeManagerFullName = "global::VeloxDev.Core.DynamicTheme.ThemeManager";
         private const string IThemeFullName = "global::VeloxDev.Core.Interfaces.DynamicTheme.ITheme";

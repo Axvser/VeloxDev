@@ -12,7 +12,7 @@ using VeloxDev.Core.Generator.Base;
 namespace VeloxDev.Core.Generator
 {
     [Generator(LanguageNames.CSharp)]
-    public class AopInterfaceModule : IIncrementalGenerator
+    public class AopInterface : IIncrementalGenerator
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {

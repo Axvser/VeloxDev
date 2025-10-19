@@ -11,22 +11,11 @@ namespace VeloxDev.Core.Generator.Writers
 {
     public class CoreWriter : WriterBase
     {
-        public const string NAMESPACE_VELOX_MONO = "global::VeloxDev.Core.Mono";
-        public const string NAMESPACE_VELOX_IMVVM = "global::VeloxDev.Core.Interfaces.MVVM";
-        public const string NAMESPACE_VELOX_MVVM = "global::VeloxDev.Core.MVVM";
-        public const string NAMESPACE_VELOX_AOP = "global::VeloxDev.Core.AopInterfaces";
-        public const string NAMESPACE_SYSTEM_MVVM = "global::System.ComponentModel";
-        public const string NAMESPACE_VELOX_IWORKFLOW = "global::VeloxDev.Core.Interfaces.WorkflowSystem";
-        public const string NAMESPACE_VELOX_WORKFLOW = "global::VeloxDev.Core.WorkflowSystem";
-
         public bool IsMVVM { get; set; } = false;
         public bool IsAop { get; set; } = false;
         public bool IsMono { get; set; } = false;
         public int MonoSpan { get; set; } = 17;
         public int WorkflowType { get; set; } = 0;
-        public int NodeTaskSemaphore { get; set; } = 1;
-        public string? SlotType { get; set; } = default;
-        public string? LinkType { get; set; } = default;
         List<Tuple<string, bool, int, string>> CommandConfig { get; set; } = [];
         List<Analizer.MVVMPropertyFactory> MVVMProperties { get; set; } = [];
 
@@ -35,52 +24,8 @@ namespace VeloxDev.Core.Generator.Writers
             base.Initialize(classDeclaration, namedTypeSymbol);
             ReadAopConfig(classDeclaration);
             ReadMonoConfig(namedTypeSymbol);
-            ReadWorkflowConfig(namedTypeSymbol);
             ReadMVVMConfig(namedTypeSymbol);
             ReadCommandConfig(namedTypeSymbol);
-        }
-
-        private void ReadWorkflowConfig(INamedTypeSymbol symbol)
-        {
-            WorkflowType = 0;
-            var configs = symbol.GetAttributes();
-            var s1 = NAMESPACE_VELOX_WORKFLOW + ".Workflow.Context.TreeAttribute";
-            var s2 = NAMESPACE_VELOX_WORKFLOW + ".Workflow.Context.NodeAttribute";
-            var s3 = NAMESPACE_VELOX_WORKFLOW + ".Workflow.Context.SlotAttribute";
-            var s4 = NAMESPACE_VELOX_WORKFLOW + ".Workflow.Context.LinkAttribute";
-            foreach (var config in configs)
-            {
-                var name = config.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                if (name == s2)
-                {
-                    WorkflowType = 2;
-                    NodeTaskSemaphore = (int)config.ConstructorArguments[0].Value!;
-                    return;
-                }
-                else if (name == s3)
-                {
-                    WorkflowType = 3;
-                    return;
-                }
-                else if (name == s1)
-                {
-                    WorkflowType = 1;
-                    SlotType = (config.ConstructorArguments[0].Value as INamedTypeSymbol)?.ToDisplayString(
-                        SymbolDisplayFormat.FullyQualifiedFormat);
-                    LinkType = (config.ConstructorArguments[1].Value as INamedTypeSymbol)?.ToDisplayString(
-                        SymbolDisplayFormat.FullyQualifiedFormat);
-                    return;
-                }
-                else if (name == s4)
-                {
-                    WorkflowType = 4;
-                    return;
-                }
-                else
-                {
-                    continue;
-                }
-            }
         }
 
         private void ReadMVVMConfig(INamedTypeSymbol symbol)
@@ -417,11 +362,6 @@ namespace VeloxDev.Core.Generator.Writers
                 builder.AppendLine(GenerateProperty());
             }
 
-            if (WorkflowType != 0)
-            {
-                builder.AppendLine(GenerateWorkflow());
-            }
-
             if (CommandConfig.Count > 0)
             {
                 builder.AppendLine(GenerateCommand());
@@ -525,14 +465,5 @@ namespace VeloxDev.Core.Generator.Writers
 
             return builder.ToString();
         }
-
-        private string GenerateWorkflow() => WorkflowType switch
-        {
-            1 => TreeTemplate.FromTypeConfig(SlotType, LinkType),
-            2 => NodeTemplate.FromTaskConfig(NodeTaskSemaphore),
-            3 => SlotTemplate.Normal,
-            4 => LinkTemplate.Normal,
-            _ => string.Empty
-        };
     }
 }
