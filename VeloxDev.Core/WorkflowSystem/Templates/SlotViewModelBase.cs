@@ -1,4 +1,5 @@
 ﻿using System.Collections.ObjectModel;
+using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 
@@ -13,7 +14,7 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> targets = [];
         [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> sources = [];
         [VeloxProperty] private IWorkflowNodeViewModel? parent = null;
-        [VeloxProperty] private SlotChannel channel = SlotChannel.Default;
+        [VeloxProperty] private SlotChannel channel = SlotChannel.OneBoth;
         [VeloxProperty] private SlotState state = SlotState.StandBy;
         [VeloxProperty] private Anchor anchor = new();
         [VeloxProperty] private Offset offset = new();
@@ -43,6 +44,13 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         {
             if (parameter is not Size scale) return Task.CompletedTask;
             Helper.SetSize(scale);
+            return Task.CompletedTask;
+        }
+        [VeloxCommand]
+        protected virtual Task SetChannel(object? parameter, CancellationToken ct)
+        {
+            if (parameter is not SlotChannel slotChannel) return Task.CompletedTask;
+            Helper.SetChannel(slotChannel);
             return Task.CompletedTask;
         }
         [VeloxCommand]

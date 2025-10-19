@@ -38,9 +38,10 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public Size Size { get; set; }
 
         public IVeloxCommand SaveOffsetCommand { get; }     // 保存偏移 | parameter Null
-        public IVeloxCommand SaveSizeCommand { get; }         // 保存尺寸 | parameter Null
-        public IVeloxCommand SetOffsetCommand { get; }  // 设定偏移 | parameter Offset
-        public IVeloxCommand SetSizeCommand { get; }      // 设定尺寸 | parameter Size
+        public IVeloxCommand SaveSizeCommand { get; }       // 保存尺寸 | parameter Null
+        public IVeloxCommand SetOffsetCommand { get; }      // 设定偏移 | parameter Offset
+        public IVeloxCommand SetSizeCommand { get; }        // 设定尺寸 | parameter Size
+        public IVeloxCommand SetChannelCommand { get; }     // 设定通道 | parameter SlotChannel
 
         public IVeloxCommand ApplyConnectionCommand { get; }   // 作为连接构建发起方 | parameter Null
         public IVeloxCommand ReceiveConnectionCommand { get; } // 作为连接构建接收方 | parameter Null
@@ -59,6 +60,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public void SetSize(Size size);
         public void SaveOffset();
         public void SaveSize();
+        public void SetChannel(SlotChannel channel);
         public void UpdateAnchor();
 
         public void ApplyConnection();
