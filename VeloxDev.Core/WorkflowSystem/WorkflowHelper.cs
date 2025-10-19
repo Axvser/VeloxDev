@@ -564,15 +564,14 @@ namespace VeloxDev.Core.WorkflowSystem
 
                     if (!canBeSender)
                     {
-                        // 不允许作为发送端，立即重置并返回
                         ResetVirtualLink();
                         _sender = null;
                         _receiver = null;
                         return;
                     }
 
-                    // 2. 清理现有连接（在设置虚拟连接之前）
-                    CleanupExistingConnections(slot);
+                    // 2. 立即强制清理现有连接（关键修复）
+                    ForceCleanupExistingConnections(slot);
 
                     // 3. 设置虚拟连接
                     _self.VirtualLink.Sender.Anchor = slot.Anchor;
@@ -597,7 +596,6 @@ namespace VeloxDev.Core.WorkflowSystem
 
                     if (!canBeReceiver)
                     {
-                        // 不允许连接，重置但不清理发送端状态
                         ResetVirtualLink();
                         _receiver = null;
                         return;
@@ -621,126 +619,142 @@ namespace VeloxDev.Core.WorkflowSystem
                         return;
                     }
 
-                    // 4. 清理接收端现有连接（如果需要）
-                    CleanupExistingConnections(slot);
-
-                    // 5. 创建新连接
+                    // 4. 创建新连接
                     CreateNewConnection(_sender, slot);
 
-                    // 6. 重置状态
+                    // 5. 重置状态
                     ResetVirtualLink();
                     _sender = null;
                     _receiver = null;
                 }
 
-                private void CleanupExistingConnections(IWorkflowSlotViewModel slot)
+                /// <summary>
+                /// 强制清理现有连接（立即执行，不通过撤销/重做栈）
+                /// </summary>
+                private void ForceCleanupExistingConnections(IWorkflowSlotViewModel slot)
                 {
-                    // 收集现有连接
-                    List<IWorkflowLinkViewModel> links_AsSender = [];
-                    List<IWorkflowLinkViewModel> links_AsReceiver = [];
+                    // 收集需要清理的连接
+                    var connectionsToRemove = new List<(IWorkflowSlotViewModel, IWorkflowSlotViewModel, IWorkflowLinkViewModel)>();
 
-                    foreach (var target in slot.Targets)
+                    // 查找所有以当前slot为发送端的连接
+                    if (_self.LinksMap.TryGetValue(slot, out var targetLinks))
                     {
-                        if (target?.Parent?.Parent != slot.Parent?.Parent) SynchronizationError();
-                        if (_self.LinksMap.TryGetValue(slot, out var pair) &&
-                            pair.TryGetValue(target, out var link))
-                            links_AsSender.Add(link);
+                        foreach (var kvp in targetLinks)
+                        {
+                            connectionsToRemove.Add((slot, kvp.Key, kvp.Value));
+                        }
                     }
 
-                    foreach (var source in slot.Sources)
+                    // 根据通道限制决定是否清理
+                    bool shouldCleanup = false;
+
+                    switch (slot.Channel)
                     {
-                        if (source?.Parent?.Parent != slot.Parent?.Parent) SynchronizationError();
-                        if (_self.LinksMap.TryGetValue(source, out var pair) &&
-                            pair.TryGetValue(slot, out var link))
-                            links_AsReceiver.Add(link);
-                    }
-
-                    // 根据通道限制清理连接
-                    switch (slot.Channel.HasFlag(SlotChannel.None),
-                            slot.Channel.HasFlag(SlotChannel.OneTarget),
-                            slot.Channel.HasFlag(SlotChannel.OneSource),
-                            slot.Channel.HasFlag(SlotChannel.MultipleTargets),
-                            slot.Channel.HasFlag(SlotChannel.MultipleSources))
-                    {
-                        case (true, false, false, false, false): // None - 不允许任何连接
-                            foreach (var link in links_AsSender) link.GetHelper().Delete();
-                            foreach (var link in links_AsReceiver) link.GetHelper().Delete();
+                        case SlotChannel.OneTarget:
+                        case SlotChannel.OneBoth:
+                            // OneTarget和OneBoth在建立新连接前必须清理旧连接
+                            shouldCleanup = connectionsToRemove.Count > 0;
                             break;
 
-                        case (false, true, false, false, false): // OneTarget - 只能有一个目标
-                                                                 // 强制清理所有目标连接
-                            foreach (var link in links_AsSender)
-                            {
-                                link.GetHelper().Delete();
-                            }
+                        case SlotChannel.MultipleTargets:
+                        case SlotChannel.MultipleBoth:
+                            // Multiple类型允许保留现有连接
+                            shouldCleanup = false;
                             break;
 
-                        case (false, false, true, false, false): // OneSource - 只能有一个源
-                                                                 // 强制清理所有源连接
-                            foreach (var link in links_AsReceiver)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            break;
-
-                        case (false, true, true, false, false): // OneBoth - 只能有一个连接
-                            foreach (var link in links_AsSender) link.GetHelper().Delete();
-                            foreach (var link in links_AsReceiver) link.GetHelper().Delete();
-                            break;
-
-                        case (false, false, false, true, false): // MultipleTargets - 允许多个目标
-                                                                 // 不清理目标连接
-                            break;
-
-                        case (false, false, false, false, true): // MultipleSources - 允许多个源
-                                                                 // 不清理源连接
-                            break;
-
-                        case (false, true, false, true, false): // OneTarget | MultipleTargets
-                                                                // 优先执行OneTarget限制
-                            foreach (var link in links_AsSender)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            break;
-
-                        case (false, false, true, false, true): // OneSource | MultipleSources
-                                                                // 优先执行OneSource限制
-                            foreach (var link in links_AsReceiver)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            break;
-
-                        case (false, false, false, true, true): // MultipleBoth
-                                                                // 不清理现有连接
+                        default:
+                            shouldCleanup = false;
                             break;
                     }
 
-                    // 更新状态
-                    slot.State = SlotState.StandBy;
-                    slot.GetHelper().UpdateState();
+                    // 执行清理
+                    if (shouldCleanup && connectionsToRemove.Count > 0)
+                    {
+                        // 批量提交到撤销/重做栈
+                        var redoActions = new List<Action>();
+                        var undoActions = new List<Action>();
+
+                        foreach (var (sender, receiver, link) in connectionsToRemove)
+                        {
+                            redoActions.Add(() =>
+                            {
+                                // 从数据结构中移除
+                                _self.Links.Remove(link);
+                                if (_self.LinksMap.ContainsKey(sender))
+                                {
+                                    _self.LinksMap[sender].Remove(receiver);
+                                    if (_self.LinksMap[sender].Count == 0)
+                                        _self.LinksMap.Remove(sender);
+                                }
+
+                                // 更新连接关系
+                                sender.Targets.Remove(receiver);
+                                receiver.Sources.Remove(sender);
+
+                                // 更新状态
+                                if (sender.Targets.Count == 0)
+                                    sender.State &= ~SlotState.Sender;
+                                if (receiver.Sources.Count == 0)
+                                    receiver.State &= ~SlotState.Receiver;
+
+                                link.IsVisible = false;
+                            });
+
+                            undoActions.Add(() =>
+                            {
+                                // 恢复连接
+                                if (!_self.LinksMap.ContainsKey(sender))
+                                    _self.LinksMap[sender] = new Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>();
+
+                                _self.LinksMap[sender][receiver] = link;
+                                _self.Links.Add(link);
+
+                                // 恢复连接关系
+                                sender.Targets.Add(receiver);
+                                receiver.Sources.Add(sender);
+
+                                // 恢复状态
+                                sender.State |= SlotState.Sender;
+                                receiver.State |= SlotState.Receiver;
+
+                                link.IsVisible = true;
+                            });
+                        }
+
+                        // 提交批量操作
+                        Submit(new WorkflowActionPair(
+                            () => { foreach (var action in redoActions) action(); },
+                            () => { foreach (var action in undoActions) action(); }
+                        ));
+
+                        // 立即更新状态显示
+                        foreach (var (sender, receiver, _) in connectionsToRemove)
+                        {
+                            sender.GetHelper().UpdateState();
+                            receiver.GetHelper().UpdateState();
+                        }
+                    }
                 }
 
                 private bool IsConnectionAllowed(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
                 {
                     // 检查发送端限制
-                    bool senderAllowsNewConnection = sender.Channel switch
-                    {
-                        var c when c.HasFlag(SlotChannel.None) => false,
-                        var c when c.HasFlag(SlotChannel.OneTarget) => sender.Targets.Count == 0,
-                        var c when c.HasFlag(SlotChannel.OneBoth) => sender.Targets.Count == 0 && sender.Sources.Count == 0,
-                        _ => true
-                    };
+                    bool senderAllowsNewConnection = true;
+                    if (sender.Channel.HasFlag(SlotChannel.OneTarget) && sender.Targets.Count > 0)
+                        senderAllowsNewConnection = false;
+                    if (sender.Channel.HasFlag(SlotChannel.OneBoth) && (sender.Targets.Count > 0 || sender.Sources.Count > 0))
+                        senderAllowsNewConnection = false;
+                    if (sender.Channel.HasFlag(SlotChannel.None))
+                        senderAllowsNewConnection = false;
 
-                    // 检查接收端限制
-                    bool receiverAllowsNewConnection = receiver.Channel switch
-                    {
-                        var c when c.HasFlag(SlotChannel.None) => false,
-                        var c when c.HasFlag(SlotChannel.OneSource) => receiver.Sources.Count == 0,
-                        var c when c.HasFlag(SlotChannel.OneBoth) => receiver.Sources.Count == 0 && receiver.Targets.Count == 0,
-                        _ => true
-                    };
+                    // 检查接收端限制  
+                    bool receiverAllowsNewConnection = true;
+                    if (receiver.Channel.HasFlag(SlotChannel.OneSource) && receiver.Sources.Count > 0)
+                        receiverAllowsNewConnection = false;
+                    if (receiver.Channel.HasFlag(SlotChannel.OneBoth) && (receiver.Sources.Count > 0 || receiver.Targets.Count > 0))
+                        receiverAllowsNewConnection = false;
+                    if (receiver.Channel.HasFlag(SlotChannel.None))
+                        receiverAllowsNewConnection = false;
 
                     return senderAllowsNewConnection && receiverAllowsNewConnection;
                 }
@@ -779,7 +793,8 @@ namespace VeloxDev.Core.WorkflowSystem
 
                     // 提交到撤销/重做栈
                     Submit(new WorkflowActionPair(
-                        () => {
+                        () =>
+                        {
                             _self.Links.Add(newLink);
                             _self.LinksMap[sender][receiver] = newLink;
                             sender.Targets.Add(receiver);
@@ -792,7 +807,8 @@ namespace VeloxDev.Core.WorkflowSystem
                             sender.GetHelper().UpdateState();
                             receiver.GetHelper().UpdateState();
                         },
-                        () => {
+                        () =>
+                        {
                             _self.Links.Remove(newLink);
                             _self.LinksMap[sender].Remove(receiver);
                             if (_self.LinksMap[sender].Count == 0) _self.LinksMap.Remove(sender);
