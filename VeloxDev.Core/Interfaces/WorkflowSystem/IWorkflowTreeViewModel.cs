@@ -10,7 +10,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IWorkflowLinkViewModel VirtualLink { get; set; }
         public ObservableCollection<IWorkflowNodeViewModel> Nodes { get; set; }
         public ObservableCollection<IWorkflowLinkViewModel> Links { get; set; }
-        public ConcurrentDictionary<IWorkflowSlotViewModel, ConcurrentDictionary<IWorkflowSlotViewModel, HashSet<IWorkflowLinkViewModel>>> LinksMap { get; set; }
+        public ConcurrentDictionary<IWorkflowSlotViewModel, ConcurrentDictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>> LinksMap { get; set; }
 
         public IVeloxCommand CreateNodeCommand { get; }        // 创建节点           | parameter IWorkflowNodeViewModel
         public IVeloxCommand SetPointerCommand { get; }        // 触点跟踪           | parameter Anchor
