@@ -14,19 +14,33 @@ public partial class BezierCurveView : UserControl
         Panel.SetZIndex(this, -100);
     }
 
-    public static readonly DependencyProperty StartAnchorProperty =
+    public static readonly DependencyProperty StartLeftProperty =
         DependencyProperty.Register(
-            nameof(StartAnchor),
-            typeof(Anchor),
+            nameof(StartLeft),
+            typeof(double),
             typeof(BezierCurveView),
-            new PropertyMetadata(new Anchor(), OnStartAnchorChanged));
+            new PropertyMetadata(0d, OnStartLeftChanged));
 
-    public static readonly DependencyProperty EndAnchorProperty =
+    public static readonly DependencyProperty StartTopProperty =
         DependencyProperty.Register(
-            nameof(EndAnchor),
-            typeof(Anchor),
+            nameof(StartTop),
+            typeof(double),
             typeof(BezierCurveView),
-            new PropertyMetadata(new Anchor(), OnEndAnchorChanged));
+            new PropertyMetadata(0d, OnStartTopChanged));
+
+    public static readonly DependencyProperty EndLeftProperty =
+        DependencyProperty.Register(
+            nameof(EndLeft),
+            typeof(double),
+            typeof(BezierCurveView),
+            new PropertyMetadata(0d, OnEndLeftChanged));
+
+    public static readonly DependencyProperty EndTopProperty =
+        DependencyProperty.Register(
+            nameof(EndTop),
+            typeof(double),
+            typeof(BezierCurveView),
+            new PropertyMetadata(0d, OnEndTopChanged));
 
     public static readonly DependencyProperty CanRenderProperty =
         DependencyProperty.Register(
@@ -35,16 +49,28 @@ public partial class BezierCurveView : UserControl
             typeof(BezierCurveView),
             new PropertyMetadata(true, OnCanRenderChanged));
 
-    public Anchor StartAnchor
+    public double StartLeft
     {
-        get => (Anchor)GetValue(StartAnchorProperty);
-        set => SetValue(StartAnchorProperty, value);
+        get => (double)GetValue(StartLeftProperty);
+        set => SetValue(StartLeftProperty, value);
     }
 
-    public Anchor EndAnchor
+    public double StartTop
     {
-        get => (Anchor)GetValue(EndAnchorProperty);
-        set => SetValue(EndAnchorProperty, value);
+        get => (double)GetValue(StartTopProperty);
+        set => SetValue(StartTopProperty, value);
+    }
+
+    public double EndLeft
+    {
+        get => (double)GetValue(EndLeftProperty);
+        set => SetValue(EndLeftProperty, value);
+    }
+
+    public double EndTop
+    {
+        get => (double)GetValue(EndTopProperty);
+        set => SetValue(EndTopProperty, value);
     }
 
     public bool CanRender
@@ -53,16 +79,28 @@ public partial class BezierCurveView : UserControl
         set => SetValue(CanRenderProperty, value);
     }
 
-    private static void OnStartAnchorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private static void OnStartLeftChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var control = (BezierCurveView)d;
-        control.OnStartAnchorChanged((Anchor)e.OldValue, (Anchor)e.NewValue);
+        control.OnStartLeftChanged((double)e.OldValue, (double)e.NewValue);
     }
 
-    private static void OnEndAnchorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private static void OnStartTopChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var control = (BezierCurveView)d;
-        control.OnEndAnchorChanged((Anchor)e.OldValue, (Anchor)e.NewValue);
+        control.OnStartTopChanged((double)e.OldValue, (double)e.NewValue);
+    }
+
+    private static void OnEndLeftChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var control = (BezierCurveView)d;
+        control.OnEndLeftChanged((double)e.OldValue, (double)e.NewValue);
+    }
+
+    private static void OnEndTopChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var control = (BezierCurveView)d;
+        control.OnEndTopChanged((double)e.OldValue, (double)e.NewValue);
     }
 
     private static void OnCanRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -71,12 +109,22 @@ public partial class BezierCurveView : UserControl
         control.OnCanRenderChanged((bool)e.OldValue, (bool)e.NewValue);
     }
 
-    private void OnStartAnchorChanged(Anchor oldValue, Anchor newValue)
+    private void OnStartLeftChanged(double oldValue, double newValue)
     {
         InvalidateVisual();
     }
 
-    private void OnEndAnchorChanged(Anchor oldValue, Anchor newValue)
+    private void OnStartTopChanged(double oldValue, double newValue)
+    {
+        InvalidateVisual();
+    }
+
+    private void OnEndLeftChanged(double oldValue, double newValue)
+    {
+        InvalidateVisual();
+    }
+
+    private void OnEndTopChanged(double oldValue, double newValue)
     {
         InvalidateVisual();
     }
@@ -94,21 +142,21 @@ public partial class BezierCurveView : UserControl
             return;
 
         // 计算差距
-        var diffx = EndAnchor.Left - StartAnchor.Left;
-        var diffy = EndAnchor.Top - StartAnchor.Top;
+        var diffx = EndLeft - StartLeft;
+        var diffy = EndTop - StartTop;
 
         // 基于点位差距计算控制点
         var cp1 = new Point(
-            StartAnchor.Left + diffx * 0.618,
-            StartAnchor.Top + diffy * 0.1);
+            StartLeft + diffx * 0.618,
+            StartTop + diffy * 0.1);
         var cp2 = new Point(
-            EndAnchor.Left - diffx * 0.618,
-            EndAnchor.Top - diffy * 0.1);
+            EndLeft - diffx * 0.618,
+            EndTop - diffy * 0.1);
 
         // 创建贝塞尔曲线几何图形
         var pathFigure = new PathFigure
         {
-            StartPoint = new Point(StartAnchor.Left, StartAnchor.Top),
+            StartPoint = new Point(StartLeft, StartTop),
             IsClosed = false
         };
 
@@ -116,7 +164,7 @@ public partial class BezierCurveView : UserControl
         {
             Point1 = cp1,
             Point2 = cp2,
-            Point3 = new Point(EndAnchor.Left, EndAnchor.Top)
+            Point3 = new Point(EndLeft, EndTop)
         };
 
         pathFigure.Segments.Add(bezierSegment);

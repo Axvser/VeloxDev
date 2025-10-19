@@ -4,24 +4,26 @@ using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.Core.Interfaces.WorkflowSystem
 {
-    [Flags]
+    [Flags] // 语义优先级 > Multiple > One > None
     public enum SlotChannel : int
     {
-        Default = 0,          // 仅允许一个源或者一个目标
-        OneTarget = 1,        // 仅允许一个目标
-        OneSource = 2,        // 仅允许一个源
-        MultipleTargets = 4,  // 允许多个目标
-        MultipleSources = 8   // 允许多个源
+        None = 1,             // 无可用通道
+        OneTarget = 2,        // 仅允许一个目标
+        OneSource = 4,        // 仅允许一个源
+        OneBoth = OneTarget | OneSource,
+        MultipleTargets = 8,  // 允许多个目标
+        MultipleSources = 16, // 允许多个源
+        MultipleBoth = MultipleTargets | MultipleSources
     }
 
-    [Flags]
+    [Flags] // 混合状态模型
     public enum SlotState : int
     {
-        StandBy = 0,             // 空闲状态,未连接
-        PreviewSender = 1,       // 预览发送端状态,正在连接过程中,作为发送端
-        PreviewProcessor = 2,    // 预览处理端状态,正在连接过程中,作为处理端
-        Sender = 4,              // 已连接状态,作为发送端
-        Processor = 8            // 已连接状态,作为处理端
+        StandBy = 1,             // 空闲状态,未连接
+        PreviewSender = 2,       // 预览发送端状态,正在连接过程中,作为发送端
+        PreviewProcessor = 4,    // 预览处理端状态,正在连接过程中,作为处理端
+        Sender = 8,              // 已连接状态,作为发送端
+        Processor = 16           // 已连接状态,作为处理端
     }
 
     public interface IWorkflowSlotViewModel : IWorkflowViewModel
@@ -34,7 +36,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public Anchor Anchor { get; set; }
         public Offset Offset { get; set; }
         public Size Size { get; set; }
-        
+
         public IVeloxCommand SaveOffsetCommand { get; }     // 保存偏移 | parameter Null
         public IVeloxCommand SaveSizeCommand { get; }         // 保存尺寸 | parameter Null
         public IVeloxCommand SetOffsetCommand { get; }  // 设定偏移 | parameter Offset

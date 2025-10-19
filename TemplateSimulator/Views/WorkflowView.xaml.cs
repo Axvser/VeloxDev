@@ -17,15 +17,27 @@ public partial class WorkflowView : UserControl
         // 先模拟一些数据
         var slot1 = new SlotViewModel()
         {
-            Offset = new Offset(170, 120),
+            Offset = new Offset(170, 60),
             Size = new Size(20, 20),
-            Channel = SlotChannel.MultipleTargets | SlotChannel.MultipleSources,
+            Channel = SlotChannel.Default,
         };
         var slot2 = new SlotViewModel()
         {
+            Offset = new Offset(170, 120),
+            Size = new Size(20, 20),
+            Channel = SlotChannel.Default,
+        };
+        var slot3 = new SlotViewModel()
+        {
+            Offset = new Offset(10, 100),
+            Size = new Size(20, 20),
+            Channel = SlotChannel.Default,
+        };
+        var slot4 = new SlotViewModel()
+        {
             Offset = new Offset(10, 200),
             Size = new Size(20, 20),
-            Channel = SlotChannel.MultipleTargets | SlotChannel.MultipleSources,
+            Channel = SlotChannel.Default,
         };
         var node1 = new NodeViewModel()
         {
@@ -42,7 +54,9 @@ public partial class WorkflowView : UserControl
         _workflowViewModel.GetHelper().CreateNode(node1);
         _workflowViewModel.GetHelper().CreateNode(node2);
         node1.GetHelper().CreateSlot(slot1);
-        node2.GetHelper().CreateSlot(slot2);
+        node1.GetHelper().CreateSlot(slot2);
+        node2.GetHelper().CreateSlot(slot3);
+        node2.GetHelper().CreateSlot(slot4);
 
         // 使用数据上下文
         DataContext = _workflowViewModel;

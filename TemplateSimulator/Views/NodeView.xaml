@@ -19,7 +19,8 @@
             <Border Background="#aa1e1e1e"
                     MouseDown="OnMouseDown"
                     MouseUp="OnMouseUp"
-                    MouseMove="OnMouseMove">
+                    MouseMove="OnMouseMove"
+                    MouseLeave="OnMouseLeave">
                 <TextBlock Text="{Binding Name}"
                            Foreground="White"
                            TextAlignment="Center"

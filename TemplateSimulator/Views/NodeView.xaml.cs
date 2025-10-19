@@ -96,4 +96,9 @@ public partial class NodeView : UserControl
         _lastPosition = currentPosition;
         e.Handled = true;
     }
+
+    private void OnMouseLeave(object sender, MouseEventArgs e)
+    {
+        _isDragging = false;
+    }
 }

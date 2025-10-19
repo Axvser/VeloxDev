@@ -156,7 +156,7 @@ namespace VeloxDev.Core.WorkflowSystem
                         () => { _self.Size = oldSize; }
                     ));
                 }
-                public void UpdateAnchor()
+                public virtual void UpdateAnchor()
                 {
                     if (_self.Parent is null) return;
                     _self.Anchor.Left = _self.Parent.Anchor.Left + _self.Offset.Left + _self.Size.Width / 2;
@@ -702,8 +702,8 @@ namespace VeloxDev.Core.WorkflowSystem
                     =>
                     new LinkViewModelBase()
                     {
-                        Sender = new SlotViewModelBase(),
-                        Receiver = new SlotViewModelBase()
+                        Sender = new SlotViewModelBase() { Anchor = sender.Anchor },
+                        Receiver = new SlotViewModelBase() { Anchor = receiver.Anchor },
                     };
                 public virtual void CreateNode(IWorkflowNodeViewModel node)
                 {
@@ -733,20 +733,113 @@ namespace VeloxDev.Core.WorkflowSystem
                 #region Connection Manager
                 private IWorkflowSlotViewModel? _sender = null;
                 private IWorkflowSlotViewModel? _receiver = null;
+
                 public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
                     if (_self == null) return;
-                    _self.VirtualLink.Sender.Anchor = slot.Anchor;
-                    _self.VirtualLink.Receiver.Anchor = slot.Anchor;
-                    _self.VirtualLink.IsVisible = true;
+                    var e_def = slot.Channel.HasFlag(SlotChannel.None);
+                    var e_ot = slot.Channel.HasFlag(SlotChannel.OneTarget);
+                    var e_os = slot.Channel.HasFlag(SlotChannel.OneSource);
+                    var e_mt = slot.Channel.HasFlag(SlotChannel.MultipleTargets);
+                    var e_ms = slot.Channel.HasFlag(SlotChannel.MultipleSources);
+                    switch (e_def, e_ot, e_os, e_mt, e_ms)
+                    {   // 必须按照下述要求执行，先行检查已有连接中导致无法作为sender的link
+                        // 清理掉冲突的旧的link才继续后面的连接逻辑
+                        // 注意，receiver触发时，也需要做这样的检查
+                        case (true, false, false, false, false):
+                            // 关闭的连接
+                            // 清理它的已有连接，然后跳过连接逻辑
+                            break;
+                        case (_, true, false, false, false):
+                            // 只可作为Sender
+                            // 只允许一条连接
+                            break;
+                        case (_, false, true, false, false):
+                            // 只可作为Receicer
+                            // 只允许一条连接
+                            break;
+                        case (_, true, true, false, false):
+                            // 既可以作为Sender也可以作为Receiver
+                            // 作为Sender只允许建立一个连接
+                            // 作为Receiver只允许建立一个连接
+                            // 也就是最多持有一正一反的两条连接
+                            break;
+                        case (_, _, _, true, false):
+                            // 既可以作为Sender也可以作为Receiver
+                            // 作为Sender允许建立多个连接
+                            // 作为Receiver只允许建立一个连接
+                            break;
+                        case (_, _, _, false, true):
+                            // 既可以作为Sender也可以作为Receiver
+                            // 作为Sender只允许建立一个连接
+                            // 作为Receiver允许建立多个连接
+                            break;
+                        case (_, _, _, true, true):
+                            // 既可以作为Sender也可以作为Receiver
+                            // 作为Sender允许建立多个连接
+                            // 作为Receiver允许建立多个连接
+                            break;
+                        default:
+                            // 跳过本次连接
+                            break;
+                    }
                 }
+
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
-                    if (_self == null || _sender == null) return;
-                    ResetVirtualLink();
+                    if (_self == null) return;
+                    var e_def = slot.Channel.HasFlag(SlotChannel.None);
+                    var e_ot = slot.Channel.HasFlag(SlotChannel.OneTarget);
+                    var e_os = slot.Channel.HasFlag(SlotChannel.OneSource);
+                    var e_mt = slot.Channel.HasFlag(SlotChannel.MultipleTargets);
+                    var e_ms = slot.Channel.HasFlag(SlotChannel.MultipleSources);
+                    switch (e_def, e_ot, e_os, e_mt, e_ms)
+                    {   // 必须按照下述要求执行，先行检查已有连接中导致无法作为sender的link
+                        // 清理掉冲突的旧的link才继续后面的连接逻辑
+                        // 注意，receiver触发时，也需要做这样的检查
+                        case (true, false, false, false, false):
+                            // 关闭的连接
+                            // 清理它的已有连接，然后跳过连接逻辑
+                            break;
+                        case (_, true, false, false, false):
+                            // 只可作为Sender
+                            // 只允许一条连接
+                            break;
+                        case (_, false, true, false, false):
+                            // 只可作为Receicer
+                            // 只允许一条连接
+                            break;
+                        case (_, true, true, false, false):
+                            // 既可以作为Sender也可以作为Receiver
+                            // 作为Sender只允许建立一个连接
+                            // 作为Receiver只允许建立一个连接
+                            // 也就是最多持有一正一反的两条连接
+                            break;
+                        case (_, _, _, true, false):
+                            // 既可以作为Sender也可以作为Receiver
+                            // 作为Sender允许建立多个连接
+                            // 作为Receiver只允许建立一个连接
+                            break;
+                        case (_, _, _, false, true):
+                            // 既可以作为Sender也可以作为Receiver
+                            // 作为Sender只允许建立一个连接
+                            // 作为Receiver允许建立多个连接
+                            break;
+                        case (_, _, _, true, true):
+                            // 既可以作为Sender也可以作为Receiver
+                            // 作为Sender允许建立多个连接
+                            // 作为Receiver允许建立多个连接
+                            break;
+                        default:
+                            // 跳过本次连接
+                            break;
+                    }
                 }
+
                 public virtual void ResetVirtualLink()
                 {
+                    if (_self == null) return;
+
                     _self.VirtualLink.Sender.Anchor = new Anchor();
                     _self.VirtualLink.Receiver.Anchor = new Anchor();
                     _self.VirtualLink.IsVisible = false;
