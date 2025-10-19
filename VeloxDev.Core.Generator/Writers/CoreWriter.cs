@@ -16,7 +16,6 @@ namespace VeloxDev.Core.Generator.Writers
         public bool IsMono { get; set; } = false;
         public int MonoSpan { get; set; } = 17;
         public int WorkflowType { get; set; } = 0;
-        List<Tuple<string, bool, int, string>> CommandConfig { get; set; } = [];
         List<Analizer.MVVMPropertyFactory> MVVMProperties { get; set; } = [];
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
@@ -25,7 +24,6 @@ namespace VeloxDev.Core.Generator.Writers
             ReadAopConfig(classDeclaration);
             ReadMonoConfig(namedTypeSymbol);
             ReadMVVMConfig(namedTypeSymbol);
-            ReadCommandConfig(namedTypeSymbol);
         }
 
         private void ReadMVVMConfig(INamedTypeSymbol symbol)
@@ -74,79 +72,9 @@ namespace VeloxDev.Core.Generator.Writers
             }
         }
 
-        private void ReadCommandConfig(INamedTypeSymbol symbol)
-        {
-            const string attributeFullName = $"{NAMESPACE_VELOX_MVVM}.VeloxCommandAttribute";
-            var list = new List<Tuple<string, bool, int, string>>();
-
-            foreach (var methodSymbol in symbol.GetMembers().OfType<IMethodSymbol>())
-            {
-                // 1. 检查是否标记了 VeloxCommandAttribute
-                var attribute = methodSymbol.GetAttributes().FirstOrDefault(attr =>
-                    attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == attributeFullName
-                );
-                if (attribute == null) continue;
-
-                // 2. 生成方法签名（包含参数类型）
-                var signature =
-                    $"{methodSymbol.Name}({string.Join(",", methodSymbol.Parameters.Select(p => p.Type?.ToString()))})";
-
-                // 4. 解析命令配置
-                string commandName = "Auto"; // 默认值
-                bool canValidate = false;
-                int semaphore = 1;
-
-                // 5. 处理命名参数（优先）
-                foreach (var namedArg in attribute.NamedArguments)
-                {
-                    switch (namedArg.Key)
-                    {
-                        case "name":
-                            commandName = (string)(namedArg.Value.Value ?? "Auto");
-                            break;
-                        case "canValidate":
-                            canValidate = (bool)(namedArg.Value.Value ?? false);
-                            break;
-                        case "semaphore":
-                            semaphore = (int)(namedArg.Value.Value ?? false);
-                            break;
-                    }
-                }
-
-                // 6. 处理位置参数（兼容旧写法）
-                if (attribute.ConstructorArguments.Length >= 1)
-                    commandName = (string)(attribute.ConstructorArguments[0].Value ?? "Auto");
-                if (attribute.ConstructorArguments.Length >= 2)
-                    canValidate = (bool)(attribute.ConstructorArguments[1].Value ?? false);
-                if (attribute.ConstructorArguments.Length >= 3)
-                    semaphore = (int)(attribute.ConstructorArguments[2].Value ?? false);
-                if (semaphore <= 0)
-                    semaphore = 1;
-
-                // 7. 处理"Auto"命名规则
-                if (commandName == "Auto")
-                {
-                    string methodName = methodSymbol.Name;
-                    commandName = methodName.EndsWith("Async")
-                        ? methodName.Substring(0, methodName.Length - 5) // 移除最后5个字符("Async")
-                        : methodName;
-                }
-
-                // 8. 添加到配置列表
-                list.Add(Tuple.Create(
-                    commandName,
-                    canValidate,
-                    semaphore,
-                    methodSymbol.Name
-                ));
-            }
-
-            CommandConfig = list;
-        }
-
         public override bool CanWrite()
         {
-            return IsAop || IsMono || CommandConfig.Count > 0 || IsMVVM || WorkflowType != 0;
+            return IsAop || IsMono || IsMVVM || WorkflowType != 0;
         }
 
         public override string GetFileName()
@@ -163,8 +91,6 @@ namespace VeloxDev.Core.Generator.Writers
         public override string Write()
         {
             StringBuilder builder = new();
-
-            builder.AppendLine(GenerateHead());
             builder.AppendLine(GeneratePartial(GenerateBody()));
 
             return builder.ToString();
@@ -234,7 +160,7 @@ namespace VeloxDev.Core.Generator.Writers
             return sourceBuilder.ToString();
         }
 
-        private string GenerateBody()
+        public override string GenerateBody()
         {
             if (Syntax == null || Symbol == null)
             {
@@ -362,11 +288,6 @@ namespace VeloxDev.Core.Generator.Writers
                 builder.AppendLine(GenerateProperty());
             }
 
-            if (CommandConfig.Count > 0)
-            {
-                builder.AppendLine(GenerateCommand());
-            }
-
             return builder.ToString();
         }
 
@@ -376,91 +297,6 @@ namespace VeloxDev.Core.Generator.Writers
             foreach (var factory in MVVMProperties)
             {
                 builder.AppendLine(factory.Generate());
-            }
-
-            return builder.ToString();
-        }
-
-        private string GenerateCommand()
-        {
-            var builder = new StringBuilder();
-
-            foreach (var config in CommandConfig)
-            {
-                if (config.Item3 > 1)
-                {
-                    if (config.Item2)
-                    {
-                        builder.AppendLine($$"""
-                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
-                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
-                                                {
-                                                    get
-                                                    {
-                                                        _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
-                                                            executeAsync: {{config.Item4}},
-                                                            canExecute: CanExecute{{config.Item1}}Command,
-                                                            semaphore: {{config.Item3}});
-                                                        return _buffer_{{config.Item1}}Command;
-                                                    }
-                                                }
-                                                private partial bool CanExecute{{config.Item1}}Command(object? parameter);
-                                             """);
-                    }
-                    else
-                    {
-                        builder.AppendLine($$"""
-                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
-                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
-                                                {
-                                                    get
-                                                    {
-                                                        _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
-                                                            executeAsync: {{config.Item4}},
-                                                            canExecute: _ => true,
-                                                            semaphore: {{config.Item3}});
-                                                        return _buffer_{{config.Item1}}Command;
-                                                    }
-                                                }
-                                             """);
-                    }
-                }
-                else
-                {
-                    if (config.Item2)
-                    {
-                        builder.AppendLine($$"""
-                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
-                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
-                                                {
-                                                    get
-                                                    {
-                                                       _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                                                           executeAsync: {{config.Item4}},
-                                                           canExecute: CanExecute{{config.Item1}}Command);
-                                                       return _buffer_{{config.Item1}}Command;
-                                                    }
-                                                }
-                                                private partial bool CanExecute{{config.Item1}}Command(object? parameter);
-                                             """);
-                    }
-                    else
-                    {
-                        builder.AppendLine($$"""
-                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
-                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
-                                                {
-                                                   get
-                                                   {
-                                                      _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                                                          executeAsync: {{config.Item4}},
-                                                          canExecute: _ => true);
-                                                      return _buffer_{{config.Item1}}Command;
-                                                   }
-                                                }
-                                             """);
-                    }
-                }
             }
 
             return builder.ToString();

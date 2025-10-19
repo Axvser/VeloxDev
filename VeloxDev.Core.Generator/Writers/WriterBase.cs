@@ -25,11 +25,7 @@ namespace VeloxDev.Core.Generator.Writers
             Symbol = namedTypeSymbol;
         }
 
-        public abstract bool CanWrite();
-        public abstract string GetFileName();
-        public abstract string Write();
-
-        public virtual string GenerateHead()
+        public virtual string Write()
         {
             if (Syntax == null || Symbol == null) return string.Empty;
 
@@ -49,6 +45,8 @@ namespace VeloxDev.Core.Generator.Writers
             return sourceBuilder.ToString();
         }
 
+        public abstract bool CanWrite();
+        public abstract string GetFileName();   
         public abstract string[] GenerateBaseTypes();
         public abstract string[] GenerateBaseInterfaces();
         public abstract string GenerateBody();
