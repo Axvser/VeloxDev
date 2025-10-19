@@ -735,119 +735,262 @@ namespace VeloxDev.Core.WorkflowSystem
                 #endregion
 
                 #region Connection Manager
-                private IWorkflowSlotViewModel? _sender = null;
-                private IWorkflowSlotViewModel? _receiver = null;
+                private IWorkflowSlotViewModel? _pendingSender = null;
 
                 public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
                     if (_self == null) return;
-                    var e_def = slot.Channel.HasFlag(SlotChannel.None);
-                    var e_ot = slot.Channel.HasFlag(SlotChannel.OneTarget);
-                    var e_os = slot.Channel.HasFlag(SlotChannel.OneSource);
-                    var e_mt = slot.Channel.HasFlag(SlotChannel.MultipleTargets);
-                    var e_ms = slot.Channel.HasFlag(SlotChannel.MultipleSources);
-                    switch (e_def, e_ot, e_os, e_mt, e_ms)
-                    {   // 必须按照下述要求执行，先行检查已有连接中导致无法作为sender的link
-                        // 清理掉冲突的旧的link才继续后面的连接逻辑
-                        // 注意，receiver触发时，也需要做这样的检查
-                        case (true, false, false, false, false):
-                            // 关闭的连接
-                            // 清理它的已有连接，然后跳过连接逻辑
-                            break;
-                        case (_, true, false, false, false):
-                            // 只可作为Sender
-                            // 只允许一条连接
-                            break;
-                        case (_, false, true, false, false):
-                            // 只可作为Receicer
-                            // 只允许一条连接
-                            break;
-                        case (_, true, true, false, false):
-                            // 既可以作为Sender也可以作为Receiver
-                            // 作为Sender只允许建立一个连接
-                            // 作为Receiver只允许建立一个连接
-                            // 也就是最多持有一正一反的两条连接
-                            break;
-                        case (_, _, _, true, false):
-                            // 既可以作为Sender也可以作为Receiver
-                            // 作为Sender允许建立多个连接
-                            // 作为Receiver只允许建立一个连接
-                            break;
-                        case (_, _, _, false, true):
-                            // 既可以作为Sender也可以作为Receiver
-                            // 作为Sender只允许建立一个连接
-                            // 作为Receiver允许建立多个连接
-                            break;
-                        case (_, _, _, true, true):
-                            // 既可以作为Sender也可以作为Receiver
-                            // 作为Sender允许建立多个连接
-                            // 作为Receiver允许建立多个连接
-                            break;
-                        default:
-                            // 跳过本次连接
-                            break;
+
+                    // 检查是否可以作为发送方
+                    if (!CanBeSender(slot))
+                    {
+                        ResetVirtualLink();
+                        return;
                     }
+
+                    // 在连接开始前，先清理发送方的冲突连接
+                    CleanupSenderConflicts(slot);
+
+                    // 开始连接流程
+                    StartConnection(slot);
                 }
 
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
-                    if (_self == null) return;
-                    var e_def = slot.Channel.HasFlag(SlotChannel.None);
-                    var e_ot = slot.Channel.HasFlag(SlotChannel.OneTarget);
-                    var e_os = slot.Channel.HasFlag(SlotChannel.OneSource);
-                    var e_mt = slot.Channel.HasFlag(SlotChannel.MultipleTargets);
-                    var e_ms = slot.Channel.HasFlag(SlotChannel.MultipleSources);
-                    switch (e_def, e_ot, e_os, e_mt, e_ms)
-                    {   // 必须按照下述要求执行，先行检查已有连接中导致无法作为sender的link
-                        // 清理掉冲突的旧的link才继续后面的连接逻辑
-                        // 注意，receiver触发时，也需要做这样的检查
-                        case (true, false, false, false, false):
-                            // 关闭的连接
-                            // 清理它的已有连接，然后跳过连接逻辑
-                            break;
-                        case (_, true, false, false, false):
-                            // 只可作为Sender
-                            // 只允许一条连接
-                            break;
-                        case (_, false, true, false, false):
-                            // 只可作为Receicer
-                            // 只允许一条连接
-                            break;
-                        case (_, true, true, false, false):
-                            // 既可以作为Sender也可以作为Receiver
-                            // 作为Sender只允许建立一个连接
-                            // 作为Receiver只允许建立一个连接
-                            // 也就是最多持有一正一反的两条连接
-                            break;
-                        case (_, _, _, true, false):
-                            // 既可以作为Sender也可以作为Receiver
-                            // 作为Sender允许建立多个连接
-                            // 作为Receiver只允许建立一个连接
-                            break;
-                        case (_, _, _, false, true):
-                            // 既可以作为Sender也可以作为Receiver
-                            // 作为Sender只允许建立一个连接
-                            // 作为Receiver允许建立多个连接
-                            break;
-                        case (_, _, _, true, true):
-                            // 既可以作为Sender也可以作为Receiver
-                            // 作为Sender允许建立多个连接
-                            // 作为Receiver允许建立多个连接
-                            break;
-                        default:
-                            // 跳过本次连接
-                            break;
+                    if (_self == null || _pendingSender == null) return;
+
+                    // 检查是否可以连接到这个接收方
+                    if (!CanBeReceiver(slot, _pendingSender))
+                    {
+                        ResetVirtualLink();
+                        return;
                     }
+
+                    // 在真实连接创建前，先清理接收方的冲突连接
+                    CleanupReceiverConflicts(slot);
+
+                    // 完成连接
+                    CompleteConnection(slot);
                 }
 
                 public virtual void ResetVirtualLink()
                 {
+                    EndConnection();
+                }
+
+                #region Helper Methods
+                private void StartConnection(IWorkflowSlotViewModel sender)
+                {
+                    _pendingSender = sender;
+
+                    // 设置虚拟连接
+                    _self.VirtualLink.Sender.Anchor = new Anchor(sender.Anchor.Left, sender.Anchor.Top, sender.Anchor.Layer);
+                    _self.VirtualLink.Receiver.Anchor = new Anchor(sender.Anchor.Left, sender.Anchor.Top, sender.Anchor.Layer);
+                    _self.VirtualLink.IsVisible = true;
+
+                    // 更新发送方状态
+                    sender.State |= SlotState.PreviewSender;
+                    sender.State &= ~SlotState.StandBy;
+                }
+
+                private void CompleteConnection(IWorkflowSlotViewModel receiver)
+                {
+                    if (_pendingSender == null || receiver == null) return;
+
+                    // 创建实际连接
+                    var link = CreateLink(_pendingSender, receiver);
+                    link.IsVisible = true;
+
+                    // 更新连接关系
+                    if (!_pendingSender.Targets.Contains(receiver))
+                        _pendingSender.Targets.Add(receiver);
+
+                    if (!receiver.Sources.Contains(_pendingSender))
+                        receiver.Sources.Add(_pendingSender);
+
+                    // 添加到集合
+                    _self.Links.Add(link);
+                    AddLinkToMap(link);
+
+                    // 更新状态
+                    _pendingSender.State |= SlotState.Sender;
+                    _pendingSender.State &= ~SlotState.PreviewSender;
+
+                    receiver.State |= SlotState.Processor;
+                    receiver.State &= ~SlotState.PreviewProcessor;
+
+                    // 提交到历史记录
+                    Submit(new WorkflowActionPair(
+                        () => {
+                            _self.Links.Add(link);
+                            AddLinkToMap(link);
+                            _pendingSender.Targets.Add(receiver);
+                            receiver.Sources.Add(_pendingSender);
+                            _pendingSender.State |= SlotState.Sender;
+                            receiver.State |= SlotState.Processor;
+                            link.IsVisible = true;
+                        },
+                        () => {
+                            _self.Links.Remove(link);
+                            RemoveLinkFromMap(link);
+                            _pendingSender.Targets.Remove(receiver);
+                            receiver.Sources.Remove(_pendingSender);
+                            UpdateSlotStateAfterDisconnection(_pendingSender);
+                            UpdateSlotStateAfterDisconnection(receiver);
+                            link.IsVisible = false;
+                        }
+                    ));
+
+                    EndConnection();
+                }
+
+                private void EndConnection()
+                {
                     if (_self == null) return;
 
-                    _self.VirtualLink.Sender.Anchor = new Anchor();
-                    _self.VirtualLink.Receiver.Anchor = new Anchor();
+                    // 重置虚拟连接
+                    _self.VirtualLink.Sender.Anchor = new Anchor(0, 0, 0);
+                    _self.VirtualLink.Receiver.Anchor = new Anchor(0, 0, 0);
                     _self.VirtualLink.IsVisible = false;
+
+                    // 清理发送方预览状态
+                    if (_pendingSender != null)
+                    {
+                        _pendingSender.State &= ~SlotState.PreviewSender;
+                        UpdateSlotStateAfterDisconnection(_pendingSender);
+                        _pendingSender = null;
+                    }
                 }
+
+                private bool CanBeSender(IWorkflowSlotViewModel slot)
+                {
+                    if (slot.Channel.HasFlag(SlotChannel.None)) return false;
+                    if (slot.Parent == null) return false;
+
+                    // 检查通道权限
+                    bool canSend = slot.Channel.HasFlag(SlotChannel.OneTarget) ||
+                                   slot.Channel.HasFlag(SlotChannel.MultipleTargets);
+
+                    return canSend;
+                }
+
+                private bool CanBeReceiver(IWorkflowSlotViewModel slot, IWorkflowSlotViewModel sender)
+                {
+                    if (slot.Channel.HasFlag(SlotChannel.None)) return false;
+                    if (slot.Parent == null) return false;
+                    if (slot == sender) return false; // 不能连接到自己
+                    if (slot.Parent == sender.Parent) return false; // 不能连接到同节点
+
+                    // 检查通道权限
+                    bool canReceive = slot.Channel.HasFlag(SlotChannel.OneSource) ||
+                                      slot.Channel.HasFlag(SlotChannel.MultipleSources);
+
+                    return canReceive;
+                }
+
+                private void CleanupSenderConflicts(IWorkflowSlotViewModel sender)
+                {
+                    // 如果发送方是OneTarget（没有MultipleTargets），清理所有出站连接
+                    if (sender.Channel.HasFlag(SlotChannel.OneTarget) &&
+                        !sender.Channel.HasFlag(SlotChannel.MultipleTargets))
+                    {
+                        var outgoingConnections = GetOutgoingConnections(sender);
+                        foreach (var link in outgoingConnections.ToList())
+                        {
+                            DeleteLinkWithUndo(link);
+                        }
+                    }
+
+                    // 如果发送方是OneSource（没有MultipleSources），清理所有入站连接
+                    if (sender.Channel.HasFlag(SlotChannel.OneSource) &&
+                        !sender.Channel.HasFlag(SlotChannel.MultipleSources))
+                    {
+                        var incomingConnections = GetIncomingConnections(sender);
+                        foreach (var link in incomingConnections.ToList())
+                        {
+                            DeleteLinkWithUndo(link);
+                        }
+                    }
+                }
+
+                private void CleanupReceiverConflicts(IWorkflowSlotViewModel receiver)
+                {
+                    // 如果接收方是OneSource（没有MultipleSources），清理所有入站连接
+                    if (receiver.Channel.HasFlag(SlotChannel.OneSource) &&
+                        !receiver.Channel.HasFlag(SlotChannel.MultipleSources))
+                    {
+                        var incomingConnections = GetIncomingConnections(receiver);
+                        foreach (var link in incomingConnections.ToList())
+                        {
+                            DeleteLinkWithUndo(link);
+                        }
+                    }
+
+                    // 如果接收方是OneTarget（没有MultipleTargets），清理所有出站连接
+                    if (receiver.Channel.HasFlag(SlotChannel.OneTarget) &&
+                        !receiver.Channel.HasFlag(SlotChannel.MultipleTargets))
+                    {
+                        var outgoingConnections = GetOutgoingConnections(receiver);
+                        foreach (var link in outgoingConnections.ToList())
+                        {
+                            DeleteLinkWithUndo(link);
+                        }
+                    }
+                }
+
+                private void UpdateSlotStateAfterDisconnection(IWorkflowSlotViewModel slot)
+                {
+                    if (slot.Targets.Count == 0)
+                    {
+                        slot.State &= ~SlotState.Sender;
+                    }
+                    if (slot.Sources.Count == 0)
+                    {
+                        slot.State &= ~SlotState.Processor;
+                    }
+                    if (slot.Targets.Count == 0 && slot.Sources.Count == 0)
+                    {
+                        slot.State = SlotState.StandBy;
+                    }
+                }
+
+                private void DeleteLinkWithUndo(IWorkflowLinkViewModel link)
+                {
+                    if (link.Sender == null || link.Receiver == null) return;
+                    link.GetHelper().Delete();
+                }
+
+                private List<IWorkflowLinkViewModel> GetOutgoingConnections(IWorkflowSlotViewModel slot)
+                {
+                    return _self.Links.Where(l => l.Sender == slot).ToList();
+                }
+
+                private List<IWorkflowLinkViewModel> GetIncomingConnections(IWorkflowSlotViewModel slot)
+                {
+                    return _self.Links.Where(l => l.Receiver == slot).ToList();
+                }
+
+                private void AddLinkToMap(IWorkflowLinkViewModel link)
+                {
+                    if (!_self.LinksMap.ContainsKey(link.Sender))
+                    {
+                        _self.LinksMap[link.Sender] = new ConcurrentDictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>();
+                    }
+                    _self.LinksMap[link.Sender][link.Receiver] = link;
+                }
+
+                private void RemoveLinkFromMap(IWorkflowLinkViewModel link)
+                {
+                    if (_self.LinksMap.ContainsKey(link.Sender))
+                    {
+                        _self.LinksMap[link.Sender].TryRemove(link.Receiver, out _);
+                        if (_self.LinksMap[link.Sender].IsEmpty)
+                        {
+                            _self.LinksMap.TryRemove(link.Sender, out _);
+                        }
+                    }
+                }
+                #endregion
                 #endregion
 
                 #region Redo & Undo
