@@ -162,6 +162,10 @@ namespace VeloxDev.Core.WorkflowSystem
                     _self.Anchor.Left = _self.Parent.Anchor.Left + _self.Offset.Left + _self.Size.Width / 2;
                     _self.Anchor.Top = _self.Parent.Anchor.Top + _self.Offset.Top + _self.Size.Height / 2;
                 }
+                public virtual void SetChannel(SlotChannel channel)
+                {
+                    if (_self is null) return;
+                }
                 #endregion
 
                 public virtual void Delete()
