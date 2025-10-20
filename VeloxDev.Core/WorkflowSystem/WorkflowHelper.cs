@@ -785,60 +785,51 @@ namespace VeloxDev.Core.WorkflowSystem
 
                     if (connectionExists) return;
 
-                    // 创建新连接
+                    // 创建新连接（但不立即添加到数据结构中）
                     var newLink = CreateLink(sender, receiver);
                     newLink.IsVisible = true;
 
-                    // 更新数据结构
-                    if (!_self.LinksMap.ContainsKey(sender))
-                        _self.LinksMap[sender] = new Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>();
-
-                    _self.LinksMap[sender][receiver] = newLink;
-                    _self.Links.Add(newLink);
-
-                    // 更新连接关系
-                    if (!sender.Targets.Contains(receiver))
-                        sender.Targets.Add(receiver);
-                    if (!receiver.Sources.Contains(sender))
-                        receiver.Sources.Add(sender);
-
-                    // 更新状态
-                    sender.State |= SlotState.Sender;
-                    sender.State &= ~SlotState.PreviewSender;
-                    receiver.State |= SlotState.Receiver;
-
-                    // 提交到撤销/重做栈
+                    // 所有数据修改都必须在 Submit 的 Action 中执行
                     Submit(new WorkflowActionPair(
                         () =>
                         {
-                            _self.Links.Add(newLink);
-                            _self.LinksMap[sender][receiver] = newLink;
-                            sender.Targets.Add(receiver);
-                            receiver.Sources.Add(sender);
-                            sender.State |= SlotState.Sender;
-                            receiver.State |= SlotState.Receiver;
-                            newLink.IsVisible = true;
+                            // 重做：执行连接创建
+                            if (!_self.LinksMap.ContainsKey(sender))
+                                _self.LinksMap[sender] = new Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>();
 
-                            // 更新状态显示
+                            _self.LinksMap[sender][receiver] = newLink;
+                            _self.Links.Add(newLink);
+
+                            if (!sender.Targets.Contains(receiver))
+                                sender.Targets.Add(receiver);
+                            if (!receiver.Sources.Contains(sender))
+                                receiver.Sources.Add(sender);
+
+                            // 状态更新
                             sender.GetHelper().UpdateState();
                             receiver.GetHelper().UpdateState();
+
+                            newLink.IsVisible = true;
                         },
                         () =>
                         {
+                            // 撤销：回滚连接创建
                             _self.Links.Remove(newLink);
-                            _self.LinksMap[sender].Remove(receiver);
-                            if (_self.LinksMap[sender].Count == 0) _self.LinksMap.Remove(sender);
+                            if (_self.LinksMap.ContainsKey(sender))
+                            {
+                                _self.LinksMap[sender].Remove(receiver);
+                                if (_self.LinksMap[sender].Count == 0)
+                                    _self.LinksMap.Remove(sender);
+                            }
+
                             sender.Targets.Remove(receiver);
                             receiver.Sources.Remove(sender);
 
-                            // 更新状态
-                            if (sender.Targets.Count == 0) sender.State &= ~SlotState.Sender;
-                            if (receiver.Sources.Count == 0) receiver.State &= ~SlotState.Receiver;
-                            newLink.IsVisible = false;
-
-                            // 更新状态显示
+                            // 状态更新
                             sender.GetHelper().UpdateState();
                             receiver.GetHelper().UpdateState();
+
+                            newLink.IsVisible = false;
                         }
                     ));
                 }
