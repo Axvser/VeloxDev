@@ -185,7 +185,7 @@ public void Execute() { ... }
 
 ### 🎨 ThemeManager
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Theme)
 
 统一的主题控制模块
 
@@ -205,7 +205,7 @@ public void Execute() { ... }
 
 ### ⚙️ MonoBehaviour
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Mono)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/MonoBehaviour)
 
 类似游戏引擎的帧循环任务：( 注意只是API层面，它们本质是多个独立的 Task )
 
@@ -238,7 +238,7 @@ public void Execute() { ... }
 
 ### 📦 AOT Reflection
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/AOTReflection)
 
 #### 💡 设计目标
 

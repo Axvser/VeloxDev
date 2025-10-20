@@ -11,55 +11,41 @@
 
 ### 🪶 MVVM 示例
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/MVVM/Demo)
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/MVVM/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/MVVM)
 
 ---
 
 ### ⛓️ Workflow 示例
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Workflow/Demo)
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Workflow/Demo)
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WinUI-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WinUI/Workflow/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Workflow)
 
 ---
 
 ### 🎞️ 动画过渡示例
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Transition/Demo)  
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Transition/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Transition)
 
 ---
 
 ### 🎨 主题管理示例
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Theme/Demo)  
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Theme/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Theme)
 
 ---
 
 ### 🌀 AOP 编程示例
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/AOP/Demo)  
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/AOP/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/AOP)
 
 ---
 
 ### ⚙️ MonoBehaviour 示例
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Mono/Demo)  
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Mono/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/MonoBehaviour)
 
 ---
 
 ### 📦 AOT 反射支持示例
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/AOT/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/AOTReflection)
 
