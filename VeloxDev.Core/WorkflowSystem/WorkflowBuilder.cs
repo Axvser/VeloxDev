@@ -24,9 +24,13 @@ namespace VeloxDev.Core.WorkflowSystem
             /// [ Generator ] Template Code For Workflow Node Component
             /// </summary>
             /// <typeparam name="T"> The Type Of Helper </typeparam>
+            /// <param name="workSemaphore"> The concurrent capacity of Work Task </param>
             [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-            public sealed class NodeAttribute<T> : Attribute
-                where T : IWorkflowNodeViewModelHelper, new();
+            public sealed class NodeAttribute<T>(int workSemaphore = 1) : Attribute
+                where T : IWorkflowNodeViewModelHelper, new()
+            {
+                public int WorkSemaphore { get; } = workSemaphore;
+            }
 
             /// <summary>
             /// [ Generator ] Template Code For Workflow Slot Component
