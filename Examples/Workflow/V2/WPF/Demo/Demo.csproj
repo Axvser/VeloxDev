@@ -9,6 +9,6 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\..\..\..\..\VeloxDev.WPF\VeloxDev.WPF.csproj" />
+		<PackageReference Include="VeloxDev.WPF" Version="2.3.3" />
 	</ItemGroup>
 </Project>

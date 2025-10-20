@@ -24,10 +24,7 @@
 			<PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
 		</PackageReference>
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <ProjectReference Include="..\..\..\..\..\VeloxDev.Avalonia\VeloxDev.Avalonia.csproj" />
+		<PackageReference Include="VeloxDev.Avalonia" Version="2.3.3" />
 	</ItemGroup>
 
 </Project>
