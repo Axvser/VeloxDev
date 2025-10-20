@@ -9,6 +9,9 @@
              MouseUp="OnPointerReleased"
              MouseMove="OnPointerMoved">
     <Canvas>
+        <Button Content="Undo" Width="100" Height="100" Click="Button_Click"/>
+        <Button Content="Redo" Width="100" Height="100" Click="Button_Click_1" Canvas.Top="200"/>
+
         <!-- ObservableCollection<IWorkflowNode> Nodes | 所有节点的视图模型存储于此 -->
         <ItemsControl ItemsSource="{Binding Nodes}" Canvas.ZIndex="0">
             <!-- 容器模板，推荐显示设定尺寸 -->
@@ -32,7 +35,9 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <local:NodeView Width="{Binding Size.Width}"
-                                    Height="{Binding Size.Height}"/>
+                                    Height="{Binding Size.Height}"
+                                    IsEnabled="{Binding IsEnabled}"
+                                    IsWorking="{Binding Path=IsExecuting}"/>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
@@ -48,18 +53,22 @@
             <!-- 省略 -->
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <local:BezierCurveView StartAnchor="{Binding Sender.Anchor}"
-                                           EndAnchor="{Binding Sender.Anchor}"
-                                           CanRender="{Binding IsEnabled}" />
+                    <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
+                                           StartTop="{Binding Sender.Anchor.Top}"
+                                           EndLeft="{Binding Receiver.Anchor.Left}"
+                                           EndTop="{Binding Receiver.Anchor.Top}"
+                                           CanRender="{Binding IsVisible}" />
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
         <!-- IWorkflowLink VirtualLink | 预览曲线的视图模型 -->
         <local:BezierCurveView DataContext="{Binding VirtualLink}"
-                               StartAnchor="{Binding Sender.Anchor}"
-                               EndAnchor="{Binding Sender.Anchor}"
-                               CanRender="{Binding IsEnabled}" />
+                               StartLeft="{Binding Sender.Anchor.Left}"
+                               StartTop="{Binding Sender.Anchor.Top}"
+                               EndLeft="{Binding Receiver.Anchor.Left}"
+                               EndTop="{Binding Receiver.Anchor.Top}"
+                               CanRender="{Binding IsVisible}" />
 
     </Canvas>
 </UserControl>
