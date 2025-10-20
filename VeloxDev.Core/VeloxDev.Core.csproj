@@ -28,7 +28,6 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" PrivateAssets="all" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="2.7.6-preview" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -42,6 +41,12 @@
 	    <PackagePath>\</PackagePath>
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </EmbeddedResource>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj"
+						OutputItemType="Analyzer"
+                        ReferenceOutputAssembly="false"/>
 	</ItemGroup>
 
 </Project>

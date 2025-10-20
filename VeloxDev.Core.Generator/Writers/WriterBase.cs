@@ -1,6 +1,8 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using VeloxDev.Core.Generator.Base;
 
@@ -18,11 +20,21 @@ namespace VeloxDev.Core.Generator.Writers
 
         public ClassDeclarationSyntax? Syntax { get; protected set; }
         public INamedTypeSymbol? Symbol { get; protected set; }
+        public List<ClassDeclarationSyntax>? OuterClasses { get; protected set; }
 
         public virtual void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             Syntax = classDeclaration;
             Symbol = namedTypeSymbol;
+
+            // Collect outer classes if this is a nested class
+            OuterClasses = new List<ClassDeclarationSyntax>();
+            var parent = classDeclaration.Parent;
+            while (parent is ClassDeclarationSyntax outerClass)
+            {
+                OuterClasses.Insert(0, outerClass);
+                parent = parent.Parent;
+            }
         }
 
         public virtual string Write()
@@ -39,14 +51,83 @@ namespace VeloxDev.Core.Generator.Writers
             sourceBuilder.AppendLine("#pragma warning disable");
             sourceBuilder.AppendLine("#nullable enable");
             sourceBuilder.AppendLine();
-            sourceBuilder.AppendLine($"namespace {Symbol.ContainingNamespace};");
-            sourceBuilder.AppendLine();
-            sourceBuilder.AppendLine($"{Syntax.Modifiers} class {Syntax.Identifier.Text} {symbol} {string.Join(",", [.. baseTypes, .. baseInterfaces])}");
+
+            // Add namespace if not nested or if the outermost class is not in a namespace
+            if (OuterClasses == null || OuterClasses.Count == 0)
+            {
+                sourceBuilder.AppendLine($"namespace {Symbol.ContainingNamespace};");
+                sourceBuilder.AppendLine();
+            }
+
+            // Write outer classes if this is a nested class
+            if (OuterClasses != null && OuterClasses.Count > 0)
+            {
+                // Start with the outermost class
+                var outermostClass = OuterClasses[0];
+                sourceBuilder.AppendLine($"namespace {Symbol.ContainingNamespace};");
+                sourceBuilder.AppendLine();
+
+                // Format modifiers with proper partial placement
+                var modifiers = FormatModifiers(outermostClass.Modifiers.ToString());
+                sourceBuilder.AppendLine($"{modifiers}class {outermostClass.Identifier.Text}");
+                sourceBuilder.AppendLine("{");
+
+                // Write inner classes
+                for (int i = 1; i < OuterClasses.Count; i++)
+                {
+                    var outerClass = OuterClasses[i];
+                    modifiers = FormatModifiers(outerClass.Modifiers.ToString());
+                    sourceBuilder.AppendLine($"{modifiers}class {outerClass.Identifier.Text}");
+                    sourceBuilder.AppendLine("{");
+                }
+            }
+
+            // Write the current class
+            var currentModifiers = FormatModifiers(Syntax.Modifiers.ToString());
+            sourceBuilder.AppendLine($"{currentModifiers}class {Syntax.Identifier.Text} {symbol} {string.Join(",", [.. baseTypes, .. baseInterfaces])}");
             sourceBuilder.AppendLine("{");
             sourceBuilder.AppendLine(GenerateBody());
             sourceBuilder.AppendLine("}");
 
+            // Close all outer classes if this is a nested class
+            if (OuterClasses != null && OuterClasses.Count > 0)
+            {
+                for (int i = 0; i < OuterClasses.Count; i++)
+                {
+                    sourceBuilder.AppendLine("}");
+                }
+            }
+
             return sourceBuilder.ToString();
+        }
+
+        private string FormatModifiers(string modifiers)
+        {
+            // Split modifiers and process them
+            var modifierList = modifiers.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Distinct()
+                .ToList();
+
+            // Remove any existing partial modifier
+            bool hasPartial = modifierList.Remove("partial");
+
+            // Order remaining modifiers (access modifiers first)
+            var orderedModifiers = modifierList
+                .OrderBy(m => m == "public" ? 0 :
+                            m == "internal" ? 1 :
+                            m == "protected" ? 2 :
+                            m == "private" ? 3 : 4)
+                .ToList();
+
+            // Add partial back at the end if it was present
+            if (hasPartial)
+            {
+                orderedModifiers.Add("partial");
+            }
+
+            // Combine modifiers with proper spacing
+            return orderedModifiers.Count > 0 ? string.Join(" ", orderedModifiers) + " " : "";
         }
 
         public abstract bool CanWrite();

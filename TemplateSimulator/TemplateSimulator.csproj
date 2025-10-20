@@ -9,6 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj" 
+					  OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"/>
     <ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
   </ItemGroup>
 
