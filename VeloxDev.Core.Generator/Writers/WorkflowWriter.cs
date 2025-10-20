@@ -9,78 +9,83 @@ namespace VeloxDev.Core.Generator.Writers
 {
     public class WorkflowWriter : WriterBase
     {
-        private const string ObservableCollectionFullName = "global::System.Collections.ObjectModel.ObservableCollection";
-        private const string DictionaryFullName = "global::System.Collections.Generic.Dictionary";
-        private const string HashSetFullName = "global::System.Collections.Generic.HashSet";
-        private const string CancellationTokenFullName = "global::System.Threading.CancellationToken";
-        private const string TaskFullName = "global::System.Threading.Tasks.Task";
-        private const string FuncTaskFullName = "global::System.Func<global::System.Threading.Tasks.Task>";
-        private const string ObjectFullName = "global::System.Object";
-        private const string ExceptionFullName = "global::System.Exception";
-        private const string DebugFullName = "global::System.Diagnostics.Debug";
-        private const string InterlockedFullName = "global::System.Threading.Interlocked";
-        private const string ActionFullName = "global::System.Action";
-        private const string ActionObjectFullName = "global::System.Action<global::System.Object?>";
+        public const string ObservableCollectionFullName = "global::System.Collections.ObjectModel.ObservableCollection";
+        public const string DictionaryFullName = "global::System.Collections.Generic.Dictionary";
+        public const string HashSetFullName = "global::System.Collections.Generic.HashSet";
+        public const string ObjectFullName = "global::System.Object";
+        public const string TaskFullName = "global::System.Threading.Tasks.Task";
+        public const string CancellationTokenFullName = "global::System.Threading.CancellationToken";
 
-        private int _workflowType = 0;
-        private WorkflowAttributeModel? _detectedModel;
-
-        public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
+        public override bool CanWrite()
         {
-            base.Initialize(classDeclaration, namedTypeSymbol);
-            DetectWorkflowAttribute(namedTypeSymbol);
+            if (Symbol == null) return false;
+
+            var attributes = Symbol.GetAttributes();
+            return attributes.Any(attr => IsWorkflowViewModelAttribute(attr));
         }
 
-        private void DetectWorkflowAttribute(INamedTypeSymbol symbol)
+        public override string GetFileName()
         {
-            var attributes = symbol.GetAttributes();
-
-            foreach (var attribute in attributes)
-            {
-                var attributeClass = attribute.AttributeClass;
-                if (attributeClass == null) continue;
-
-                // 修正特性识别逻辑
-                var model = CreateAttributeModel(attribute, symbol);
-                if (model != null)
-                {
-                    _detectedModel = model;
-                    _workflowType = model.WorkflowType;
-                    break;
-                }
-            }
+            return Symbol?.Name + ".g.cs";
         }
 
-        #region 参数解析
-        private WorkflowAttributeModel? CreateAttributeModel(AttributeData attribute, INamedTypeSymbol targetClass)
+        public override string[] GenerateBaseTypes()
+        {
+            return new string[] { };
+        }
+
+        public override string[] GenerateBaseInterfaces()
+        {
+            if (Symbol == null) return Array.Empty<string>();
+
+            var attributes = Symbol.GetAttributes();
+            var workflowAttribute = attributes.FirstOrDefault(attr => IsWorkflowViewModelAttribute(attr));
+
+            if (workflowAttribute == null) return Array.Empty<string>();
+
+            var model = CreateWorkflowAttributeModel(workflowAttribute, Symbol);
+            if (model == null) return Array.Empty<string>();
+
+            return new string[] { GetWorkflowInterfaceName(model.WorkflowType) };
+        }
+
+        private bool IsWorkflowViewModelAttribute(AttributeData attribute)
+        {
+            var attributeClass = attribute.AttributeClass;
+            if (attributeClass == null) return false;
+
+            var fullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return fullName.Contains("WorkflowBuilder.ViewModel.TreeAttribute") ||
+                   fullName.Contains("WorkflowBuilder.ViewModel.NodeAttribute") ||
+                   fullName.Contains("WorkflowBuilder.ViewModel.SlotAttribute") ||
+                   fullName.Contains("WorkflowBuilder.ViewModel.LinkAttribute");
+        }
+
+        private WorkflowAttributeModel? CreateWorkflowAttributeModel(AttributeData attribute, INamedTypeSymbol targetClass)
         {
             var attributeClass = attribute.AttributeClass;
             if (attributeClass == null) return null;
 
-            // 修正特性识别逻辑
-            var containingType = attributeClass.ContainingType;
-            if (containingType?.Name != "ViewModel" ||
-                containingType.ContainingType?.Name != "WorkflowBuilder" ||
-                containingType.ContainingNamespace?.ToDisplayString() != "VeloxDev.Core.WorkflowSystem")
+            var fullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+            if (fullName.Contains("WorkflowBuilder.ViewModel.TreeAttribute"))
             {
-                return null;
+                return CreateTreeModel(attribute, targetClass);
+            }
+            else if (fullName.Contains("WorkflowBuilder.ViewModel.NodeAttribute"))
+            {
+                return CreateNodeModel(attribute, targetClass);
+            }
+            else if (fullName.Contains("WorkflowBuilder.ViewModel.SlotAttribute"))
+            {
+                return CreateSlotModel(attribute, targetClass);
+            }
+            else if (fullName.Contains("WorkflowBuilder.ViewModel.LinkAttribute"))
+            {
+                return CreateLinkModel(attribute, targetClass);
             }
 
-            // 处理泛型特性名称（如 TreeAttribute`1 -> TreeAttribute）
-            var attributeName = attributeClass.Name;
-            if (attributeName.Contains('`'))
-            {
-                attributeName = attributeName.Substring(0, attributeName.IndexOf('`'));
-            }
-
-            return attributeName switch
-            {
-                "TreeAttribute" => CreateTreeModel(attribute, targetClass),
-                "NodeAttribute" => CreateNodeModel(attribute, targetClass),
-                "SlotAttribute" => CreateSlotModel(attribute, targetClass),
-                "LinkAttribute" => CreateLinkModel(attribute, targetClass),
-                _ => null
-            };
+            return null;
         }
 
         private TreeAttributeModel CreateTreeModel(AttributeData attribute, INamedTypeSymbol targetClass)
@@ -99,16 +104,15 @@ namespace VeloxDev.Core.Generator.Writers
             }
             else
             {
-                // 如果没有泛型参数，使用默认的Helper类型
                 model.HelperType = GetDefaultHelperType("Tree");
             }
 
-            // 改进的参数解析：支持命名参数和位置参数
-            model.VirtualLinkType = GetConstructorArgumentAsType(attribute, "virtualLinkType", 0)
-                ?? GetConcreteDefaultVirtualLinkType();
+            // 改进的参数解析：正确处理默认值
+            var virtualLinkType = GetConstructorArgumentAsType(attribute, "virtualLinkType", 0);
+            model.VirtualLinkType = virtualLinkType ?? GetConcreteDefaultVirtualLinkType();
 
-            model.VirtualSlotType = GetConstructorArgumentAsType(attribute, "virtualSlotType", 1)
-                ?? GetConcreteDefaultVirtualSlotType();
+            var virtualSlotType = GetConstructorArgumentAsType(attribute, "virtualSlotType", 1);
+            model.VirtualSlotType = virtualSlotType ?? GetConcreteDefaultVirtualSlotType();
 
             return model;
         }
@@ -131,7 +135,7 @@ namespace VeloxDev.Core.Generator.Writers
                 model.HelperType = GetDefaultHelperType("Node");
             }
 
-            // 改进的参数解析
+            // 改进的参数解析：提供默认值
             model.WorkSemaphore = GetConstructorArgumentAsInt(attribute, "workSemaphore", 0) ?? 1;
 
             return model;
@@ -177,8 +181,8 @@ namespace VeloxDev.Core.Generator.Writers
             }
 
             // 改进的参数解析
-            model.SlotType = GetConstructorArgumentAsType(attribute, "slotType", 0)
-                ?? GetConcreteDefaultSlotType();
+            var slotType = GetConstructorArgumentAsType(attribute, "slotType", 0);
+            model.SlotType = slotType ?? GetConcreteDefaultSlotType();
 
             return model;
         }
@@ -196,7 +200,7 @@ namespace VeloxDev.Core.Generator.Writers
                 }
             }
 
-            // 按位置查找构造函数参数（确保位置不超出范围）
+            // 按位置查找构造函数参数
             if (position < attribute.ConstructorArguments.Length)
             {
                 var arg = attribute.ConstructorArguments[position];
@@ -206,7 +210,7 @@ namespace VeloxDev.Core.Generator.Writers
                 }
             }
 
-            return null; // 返回null表示使用默认值
+            return null;
         }
 
         private int? GetConstructorArgumentAsInt(AttributeData attribute, string parameterName, int position)
@@ -232,118 +236,91 @@ namespace VeloxDev.Core.Generator.Writers
                 }
             }
 
-            return null; // 返回null表示使用默认值
+            return null;
+        }
+
+        private ITypeSymbol GetDefaultHelperType(string workflowType)
+        {
+            var defaultHelperName = $"WorkflowHelper.ViewModel.{workflowType}";
+            return GetTypeSymbolFromReferencedAssemblies(defaultHelperName) ??
+                   GetTypeSymbolFromReferencedAssemblies($"VeloxDev.Core.WorkflowSystem.{defaultHelperName}");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualLinkType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.LinkViewModelBase");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.LinkViewModelBase")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.Templates.LinkViewModelBase");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualSlotType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.SlotViewModelBase");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.SlotViewModelBase")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.Templates.SlotViewModelBase");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultSlotType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.SlotViewModelBase");
-        }
-
-        private ITypeSymbol? GetDefaultHelperType(string workflowType)
-        {
-            var typeName = $"VeloxDev.Core.WorkflowSystem.WorkflowHelper.ViewModel.{workflowType}";
-            return GetTypeSymbolFromReferencedAssemblies(typeName);
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.SlotViewModelBase")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.Templates.SlotViewModelBase");
         }
 
         private INamedTypeSymbol? GetTypeSymbolFromReferencedAssemblies(string fullyQualifiedName)
         {
             if (Symbol == null) return null;
 
-            // 首先尝试当前程序集
+            // 首先在当前程序集中查找
             var typeSymbol = Symbol.ContainingAssembly?.GetTypeByMetadataName(fullyQualifiedName);
             if (typeSymbol != null) return typeSymbol;
 
-            // 然后尝试所有引用程序集
+            // 然后在所有引用程序集中查找
             foreach (var reference in Symbol.ContainingAssembly.Modules.SelectMany(m => m.ReferencedAssemblySymbols))
             {
                 typeSymbol = reference.GetTypeByMetadataName(fullyQualifiedName);
                 if (typeSymbol != null) return typeSymbol;
             }
 
-            // 如果找不到，返回null（让调用方处理）
             return null;
         }
-        #endregion
 
-        public override bool CanWrite()
+        private string GetWorkflowInterfaceName(int workflowType)
         {
-            if (_workflowType == 0) return false;
-
-            // 验证检测到的模型是否有效
-            return _detectedModel switch
+            return workflowType switch
             {
-                TreeAttributeModel treeModel =>
-                    treeModel.HelperType != null &&
-                    treeModel.VirtualLinkType != null &&
-                    treeModel.VirtualSlotType != null,
-
-                NodeAttributeModel nodeModel =>
-                    nodeModel.HelperType != null,
-
-                SlotAttributeModel slotModel =>
-                    slotModel.HelperType != null,
-
-                LinkAttributeModel linkModel =>
-                    linkModel.HelperType != null &&
-                    linkModel.SlotType != null,
-
-                _ => false
+                1 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowTreeViewModel",
+                2 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowNodeViewModel",
+                3 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowSlotViewModel",
+                4 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowLinkViewModel",
+                _ => throw new ArgumentException($"Unknown workflow type: {workflowType}")
             };
         }
-
-        public override string GetFileName()
-        {
-            if (Syntax == null || Symbol == null)
-            {
-                return string.Empty;
-            }
-
-            return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Workflow.g.cs";
-        }
-
-        public override string[] GenerateBaseInterfaces()
-            => _workflowType switch
-            {
-                1 => [$"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowTreeViewModel"],
-                2 => [$"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowNodeViewModel"],
-                3 => [$"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowSlotViewModel"],
-                4 => [$"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowLinkViewModel"],
-                _ => []
-            };
-
-        public override string[] GenerateBaseTypes() => [];
 
         public override string GenerateBody()
         {
-            if (_detectedModel == null)
-                return string.Empty;
+            if (Symbol == null) return string.Empty;
+
+            var attributes = Symbol.GetAttributes();
+            var workflowAttribute = attributes.FirstOrDefault(attr => IsWorkflowViewModelAttribute(attr));
+
+            if (workflowAttribute == null) return string.Empty;
+
+            var model = CreateWorkflowAttributeModel(workflowAttribute, Symbol);
+            if (model == null) return string.Empty;
 
             var sb = new StringBuilder();
 
-            switch (_detectedModel)
+            switch (model.WorkflowType)
             {
-                case TreeAttributeModel treeModel:
-                    GenerateTreeBody(sb, treeModel);
+                case 1: // Tree
+                    GenerateTreeBody(sb, (TreeAttributeModel)model);
                     break;
-                case NodeAttributeModel nodeModel:
-                    GenerateNodeBody(sb, nodeModel);
+                case 2: // Node
+                    GenerateNodeBody(sb, (NodeAttributeModel)model);
                     break;
-                case SlotAttributeModel slotModel:
-                    GenerateSlotBody(sb, slotModel);
+                case 3: // Slot
+                    GenerateSlotBody(sb, (SlotAttributeModel)model);
                     break;
-                case LinkAttributeModel linkModel:
-                    GenerateLinkBody(sb, linkModel);
+                case 4: // Link
+                    GenerateLinkBody(sb, (LinkAttributeModel)model);
                     break;
             }
 
