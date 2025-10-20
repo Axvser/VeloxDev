@@ -276,16 +276,6 @@ namespace VeloxDev.Core.Generator.Writers
                      Helper = helper;
                  }
 
-                public event global::System.ComponentModel.PropertyChangingEventHandler? PropertyChanging;
-                public event global::System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-                public void OnPropertyChanging(string propertyName)
-                {
-                    PropertyChanging?.Invoke(this, new global::System.ComponentModel.PropertyChangingEventArgs(propertyName));
-                }
-                public void OnPropertyChanged(string propertyName)
-                {
-                    PropertyChanged?.Invoke(this, new global::System.ComponentModel.PropertyChangedEventArgs(propertyName));
-                }
                 public global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowLinkViewModel VirtualLink
                 {
                     get => virtualLink;
@@ -523,16 +513,6 @@ namespace VeloxDev.Core.Generator.Writers
                     Helper = helper;
                 }
 
-                public event global::System.ComponentModel.PropertyChangingEventHandler? PropertyChanging;
-                public event global::System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-                public void OnPropertyChanging(string propertyName)
-                {
-                    PropertyChanging?.Invoke(this, new global::System.ComponentModel.PropertyChangingEventArgs(propertyName));
-                }
-                public void OnPropertyChanged(string propertyName)
-                {
-                    PropertyChanged?.Invoke(this, new global::System.ComponentModel.PropertyChangedEventArgs(propertyName));
-                }
                 public global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowTreeViewModel Parent
                 {
                     get => parent;
@@ -805,16 +785,6 @@ namespace VeloxDev.Core.Generator.Writers
                     Helper = helper;
                 }
 
-                public event global::System.ComponentModel.PropertyChangingEventHandler? PropertyChanging;
-                public event global::System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-                public void OnPropertyChanging(string propertyName)
-                {
-                    PropertyChanging?.Invoke(this, new global::System.ComponentModel.PropertyChangingEventArgs(propertyName));
-                }
-                public void OnPropertyChanged(string propertyName)
-                {
-                    PropertyChanged?.Invoke(this, new global::System.ComponentModel.PropertyChangedEventArgs(propertyName));
-                }
                 public global::System.Collections.Generic.HashSet<global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlotViewModel> Targets
                 {
                     get => targets;
@@ -1073,16 +1043,6 @@ namespace VeloxDev.Core.Generator.Writers
                     Helper = helper;
                 }
 
-                public event global::System.ComponentModel.PropertyChangingEventHandler? PropertyChanging;
-                public event global::System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-                public void OnPropertyChanging(string propertyName)
-                {
-                    PropertyChanging?.Invoke(this, new global::System.ComponentModel.PropertyChangingEventArgs(propertyName));
-                }
-                public void OnPropertyChanged(string propertyName)
-                {
-                    PropertyChanged?.Invoke(this, new global::System.ComponentModel.PropertyChangedEventArgs(propertyName));
-                }
                 public global::VeloxDev.Core.Interfaces.WorkflowSystem.IWorkflowSlotViewModel Sender
                 {
                     get => sender;
