@@ -1,0 +1,71 @@
+<UserControl x:Class="Demo.Views.WorkflowView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:Demo.Views"
+             mc:Ignorable="d"
+             d:DesignHeight="300" d:DesignWidth="300"
+             MouseUp="OnPointerReleased"
+             MouseMove="OnPointerMoved">
+    <Canvas>
+        <!-- ObservableCollection<IWorkflowNode> Nodes | 所有节点的视图模型存储于此 -->
+        <ItemsControl ItemsSource="{Binding Nodes}" Canvas.ZIndex="0">
+            <!-- 容器模板，推荐显示设定尺寸 -->
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Canvas />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <!-- 若属性作用域超出元素自身，例如此处作用域是Canvas，推荐使用 ItemContainerStyle 实现绑定 -->
+            <ItemsControl.ItemContainerStyle>
+                <Style TargetType="ContentPresenter">
+                    <Setter Property="Canvas.Left"
+                            Value="{Binding Anchor.Left}" />
+                    <Setter Property="Canvas.Top"
+                            Value="{Binding Anchor.Top}" />
+                    <Setter Property="Canvas.ZIndex"
+                            Value="{Binding Anchor.Layer}" />
+                </Style>
+            </ItemsControl.ItemContainerStyle>
+            <!-- 数据模板，在此处决定如何呈现每个节点视图，提示，可以使用模板选择多元化节点外观 -->
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <local:NodeView Width="{Binding Size.Width}"
+                                    Height="{Binding Size.Height}"
+                                    IsEnabled="{Binding IsEnabled}"
+                                    IsWorking="{Binding Path=IsExecuting}"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- ObservableCollection<IWorkflowLink> Links | 所有已经建立的连接视图模型存储于此 -->
+        <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="-1">
+            <!-- 省略 -->
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Canvas />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <!-- 省略 -->
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
+                                           StartTop="{Binding Sender.Anchor.Top}"
+                                           EndLeft="{Binding Receiver.Anchor.Left}"
+                                           EndTop="{Binding Receiver.Anchor.Top}"
+                                           CanRender="{Binding IsVisible}" />
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- IWorkflowLink VirtualLink | 预览曲线的视图模型 -->
+        <local:BezierCurveView DataContext="{Binding VirtualLink}"
+                               StartLeft="{Binding Sender.Anchor.Left}"
+                               StartTop="{Binding Sender.Anchor.Top}"
+                               EndLeft="{Binding Receiver.Anchor.Left}"
+                               EndTop="{Binding Receiver.Anchor.Top}"
+                               CanRender="{Binding IsVisible}" />
+
+    </Canvas>
+</UserControl>

@@ -8,13 +8,13 @@
 		<LangVersion>latest</LangVersion>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core.Generator</Title>
-		<Version>2.8.0-preview</Version>
+		<Version>3.0.0</Version>
 		<Authors>Axvser</Authors>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<!-- 不要把 Roslyn 的 DLL 放进 lib -->
 		<IncludeBuildOutput>false</IncludeBuildOutput>
 	</PropertyGroup>
-	
+
 	<!-- 保持编译信息干净 -->
 	<PropertyGroup Condition="'$(Configuration)'=='Release'">
 		<DebugType>none</DebugType>

@@ -70,9 +70,7 @@ VeloxDev.Core 专为 **多UI框架API一致性** 而设计
 
 ### 🪶 MVVM Toolkit
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/MVVM/Demo)
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/MVVM/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/MVVM)
 
 轻量 MVVM 工具，支持：
 
@@ -117,11 +115,7 @@ VeloxDev.Core 专为 **多UI框架API一致性** 而设计
 
 ### ⛓️ Workflow
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Workflow/Demo)
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Workflow/Demo)
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WinUI-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WinUI/Workflow/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Workflow)
 
 #### Workflow 生成支持
 
@@ -137,9 +131,7 @@ VeloxDev.Core 专为 **多UI框架API一致性** 而设计
 
 ### 🎞️ 插值动画
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Transition/Demo)  
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Transition/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Transition)
 
 简洁的插值系统 ( 需要UI框架适配层 )
 
@@ -178,9 +170,7 @@ VeloxDev.Core 专为 **多UI框架API一致性** 而设计
 
 ### 🌀 AOP 编程
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/AOP/Demo)  
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/AOP/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/AOP)
 
 以特性方式声明切面编程：
 
@@ -195,9 +185,7 @@ public void Execute() { ... }
 
 ### 🎨 ThemeManager
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Theme/Demo)  
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Theme/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Demo)
 
 统一的主题控制模块
 
@@ -217,9 +205,7 @@ public void Execute() { ... }
 
 ### ⚙️ MonoBehaviour
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/Mono/Demo)  
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/Mono/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Mono)
 
 类似游戏引擎的帧循环任务：( 注意只是API层面，它们本质是多个独立的 Task )
 
@@ -252,9 +238,7 @@ public void Execute() { ... }
 
 ### 📦 AOT Reflection
 
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_Avalonia-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Avalonia/AOT/Demo)  
-
-[![GitHub](https://img.shields.io/badge/GitHub-Demo_WPF-cyan?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/WPF/AOT/Demo)
+[![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Demo)
 
 #### 💡 设计目标
 
