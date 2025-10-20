@@ -8,7 +8,7 @@
 		<LangVersion>latest</LangVersion>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core.Generator</Title>
-		<Version>2.7.3-preview</Version>
+		<Version>2.7.6-preview</Version>
 		<Authors>Axvser</Authors>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<!-- 不要把 Roslyn 的 DLL 放进 lib -->

@@ -11,11 +11,13 @@ namespace VeloxDev.Core.Generator.Writers
     public class MVVMWriter : WriterBase
     {
         private List<MVVMPropertyFactory> MVVMProperties { get; set; } = [];
+        private bool IsWorkflowComponent { get; set; } = false;
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
             ReadMVVMConfig(namedTypeSymbol);
+            IsWorkflowComponent = HasWorkflowAttribute(namedTypeSymbol);
         }
 
         private void ReadMVVMConfig(INamedTypeSymbol symbol)
@@ -68,7 +70,7 @@ namespace VeloxDev.Core.Generator.Writers
             return false;
         }
 
-        public override bool CanWrite() => MVVMProperties.Count > 0 || HasWorkflowAttribute(Symbol);
+        public override bool CanWrite() => MVVMProperties.Count > 0 || IsWorkflowComponent;
 
         public override string GetFileName()
         {
@@ -89,7 +91,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         public override string GenerateBody()
         {
-            if (Syntax == null || Symbol == null || MVVMProperties.Count == 0)
+            if (Syntax == null || Symbol == null)
             {
                 return string.Empty;
             }

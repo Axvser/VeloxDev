@@ -10,7 +10,7 @@ using VeloxDev.Core.Generator.Writers;
 namespace VeloxDev.Core.Generator
 {
     [Generator(LanguageNames.CSharp)]
-    public class AopGenerator : IIncrementalGenerator
+    public class AopProxy : IIncrementalGenerator
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {

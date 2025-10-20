@@ -1098,7 +1098,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel sender = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel receiver = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
-        private {{ObjectFullName}} isVisible = false;
+        private bool isVisible = false;
 
         protected virtual {{TaskFullName}} Delete({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
         {
@@ -1150,7 +1150,7 @@ namespace VeloxDev.Core.Generator.Writers
         }
         partial void OnReceiverChanging({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel newValue);
         partial void OnReceiverChanged({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel newValue);
-        public {{ObjectFullName}} IsVisible
+        public bool IsVisible
         {
             get => isVisible;
             set

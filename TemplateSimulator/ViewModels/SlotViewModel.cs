@@ -1,8 +1,9 @@
-using VeloxDev.Core.WorkflowSystem.Templates;
+using VeloxDev.Core.WorkflowSystem;
 
 namespace TemplateSimulator.ViewModels;
 
-public partial class SlotViewModel : SlotViewModelBase
+[WorkflowBuilder.ViewModel.Slot<WorkflowHelper.ViewModel.Slot>]
+public partial class SlotViewModel
 {
 
 }

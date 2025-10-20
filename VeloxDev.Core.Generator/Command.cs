@@ -10,7 +10,7 @@ using VeloxDev.Core.Generator.Writers;
 namespace VeloxDev.Core.Generator
 {
     [Generator(LanguageNames.CSharp)]
-    public class MVVMGenerator : IIncrementalGenerator
+    public class Command : IIncrementalGenerator
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -22,7 +22,7 @@ namespace VeloxDev.Core.Generator
             var values = GetFilteredContext(input);
             foreach (var kvp in values)
             {
-                var writer = new MVVMWriter();
+                var writer = new CommandWriter();
                 writer.Initialize(kvp.Value, kvp.Key);
                 if (writer.CanWrite())
                 {

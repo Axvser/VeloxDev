@@ -1,8 +1,9 @@
-using VeloxDev.Core.WorkflowSystem.Templates;
+using VeloxDev.Core.WorkflowSystem;
 
 namespace TemplateSimulator.ViewModels;
 
-public partial class TreeViewModel : TreeViewModelBase
+[WorkflowBuilder.ViewModel.Tree<WorkflowHelper.ViewModel.Tree>(typeof(LinkViewModel),typeof(SlotViewModel))]
+public partial class TreeViewModel
 {
 
 }

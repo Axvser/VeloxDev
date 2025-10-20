@@ -1,8 +1,9 @@
-using VeloxDev.Core.WorkflowSystem.Templates;
+using VeloxDev.Core.WorkflowSystem;
 
 namespace TemplateSimulator.ViewModels;
 
-public partial class NodeViewModel : NodeViewModelBase
+[WorkflowBuilder.ViewModel.Node<WorkflowHelper.ViewModel.Node>(1)]
+public partial class NodeViewModel
 {
 
 }
