@@ -30,6 +30,7 @@ namespace VeloxDev.Core.Generator.Writers
             base.Initialize(classDeclaration, namedTypeSymbol);
             DetectWorkflowAttribute(namedTypeSymbol);
         }
+
         private void DetectWorkflowAttribute(INamedTypeSymbol symbol)
         {
             var attributes = symbol.GetAttributes();
@@ -81,6 +82,7 @@ namespace VeloxDev.Core.Generator.Writers
                 _ => null
             };
         }
+
         private TreeAttributeModel CreateTreeModel(AttributeData attribute, INamedTypeSymbol targetClass)
         {
             var model = new TreeAttributeModel
@@ -101,15 +103,16 @@ namespace VeloxDev.Core.Generator.Writers
                 model.HelperType = GetDefaultHelperType("Tree");
             }
 
-            // 直接获取构造函数参数，如果为default则使用具体的默认类型
-            model.VirtualLinkType = GetConstructorArgumentAsType(attribute, 0)
+            // 改进的参数解析：支持命名参数和位置参数
+            model.VirtualLinkType = GetConstructorArgumentAsType(attribute, "virtualLinkType", 0)
                 ?? GetConcreteDefaultVirtualLinkType();
 
-            model.VirtualSlotType = GetConstructorArgumentAsType(attribute, 1)
+            model.VirtualSlotType = GetConstructorArgumentAsType(attribute, "virtualSlotType", 1)
                 ?? GetConcreteDefaultVirtualSlotType();
 
             return model;
         }
+
         private NodeAttributeModel CreateNodeModel(AttributeData attribute, INamedTypeSymbol targetClass)
         {
             var model = new NodeAttributeModel
@@ -128,11 +131,12 @@ namespace VeloxDev.Core.Generator.Writers
                 model.HelperType = GetDefaultHelperType("Node");
             }
 
-            // 直接获取参数值，如果为default则使用默认值
-            model.WorkSemaphore = GetConstructorArgumentAsInt(attribute, 0) ?? 1;
+            // 改进的参数解析
+            model.WorkSemaphore = GetConstructorArgumentAsInt(attribute, "workSemaphore", 0) ?? 1;
 
             return model;
         }
+
         private SlotAttributeModel CreateSlotModel(AttributeData attribute, INamedTypeSymbol targetClass)
         {
             var model = new SlotAttributeModel
@@ -153,6 +157,7 @@ namespace VeloxDev.Core.Generator.Writers
 
             return model;
         }
+
         private LinkAttributeModel CreateLinkModel(AttributeData attribute, INamedTypeSymbol targetClass)
         {
             var model = new LinkAttributeModel
@@ -171,53 +176,86 @@ namespace VeloxDev.Core.Generator.Writers
                 model.HelperType = GetDefaultHelperType("Link");
             }
 
-            // 直接获取参数值，如果为default则使用具体的默认类型
-            model.SlotType = GetConstructorArgumentAsType(attribute, 0)
+            // 改进的参数解析
+            model.SlotType = GetConstructorArgumentAsType(attribute, "slotType", 0)
                 ?? GetConcreteDefaultSlotType();
 
             return model;
         }
-        private INamedTypeSymbol? GetConstructorArgumentAsType(AttributeData attribute, int index)
+
+        private INamedTypeSymbol? GetConstructorArgumentAsType(AttributeData attribute, string parameterName, int position)
         {
-            if (attribute.ConstructorArguments.Length > index)
+            // 优先按名称查找命名参数
+            foreach (var namedArg in attribute.NamedArguments)
             {
-                var arg = attribute.ConstructorArguments[index];
+                if (namedArg.Key == parameterName &&
+                    namedArg.Value.Kind == TypedConstantKind.Type &&
+                    namedArg.Value.Value is INamedTypeSymbol typeSymbol)
+                {
+                    return typeSymbol;
+                }
+            }
+
+            // 按位置查找构造函数参数（确保位置不超出范围）
+            if (position < attribute.ConstructorArguments.Length)
+            {
+                var arg = attribute.ConstructorArguments[position];
                 if (arg.Kind == TypedConstantKind.Type && arg.Value is INamedTypeSymbol typeSymbol)
                 {
                     return typeSymbol;
                 }
             }
+
             return null; // 返回null表示使用默认值
         }
-        private int? GetConstructorArgumentAsInt(AttributeData attribute, int index)
+
+        private int? GetConstructorArgumentAsInt(AttributeData attribute, string parameterName, int position)
         {
-            if (attribute.ConstructorArguments.Length > index)
+            // 优先按名称查找命名参数
+            foreach (var namedArg in attribute.NamedArguments)
             {
-                var arg = attribute.ConstructorArguments[index];
+                if (namedArg.Key == parameterName &&
+                    namedArg.Value.Kind == TypedConstantKind.Primitive &&
+                    namedArg.Value.Value is int intValue)
+                {
+                    return intValue;
+                }
+            }
+
+            // 按位置查找构造函数参数
+            if (position < attribute.ConstructorArguments.Length)
+            {
+                var arg = attribute.ConstructorArguments[position];
                 if (arg.Kind == TypedConstantKind.Primitive && arg.Value is int intValue)
                 {
                     return intValue;
                 }
             }
+
             return null; // 返回null表示使用默认值
         }
+
         private INamedTypeSymbol? GetConcreteDefaultVirtualLinkType()
         {
             return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.LinkViewModelBase");
         }
+
         private INamedTypeSymbol? GetConcreteDefaultVirtualSlotType()
         {
             return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.SlotViewModelBase");
         }
+
         private INamedTypeSymbol? GetConcreteDefaultSlotType()
         {
             return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.SlotViewModelBase");
         }
+
         private ITypeSymbol? GetDefaultHelperType(string workflowType)
         {
             var typeName = $"VeloxDev.Core.WorkflowSystem.WorkflowHelper.ViewModel.{workflowType}";
             return GetTypeSymbolFromReferencedAssemblies(typeName);
         }
+
         private INamedTypeSymbol? GetTypeSymbolFromReferencedAssemblies(string fullyQualifiedName)
         {
             if (Symbol == null) return null;
@@ -238,7 +276,32 @@ namespace VeloxDev.Core.Generator.Writers
         }
         #endregion
 
-        public override bool CanWrite() => _workflowType != 0;
+        public override bool CanWrite()
+        {
+            if (_workflowType == 0) return false;
+
+            // 验证检测到的模型是否有效
+            return _detectedModel switch
+            {
+                TreeAttributeModel treeModel =>
+                    treeModel.HelperType != null &&
+                    treeModel.VirtualLinkType != null &&
+                    treeModel.VirtualSlotType != null,
+
+                NodeAttributeModel nodeModel =>
+                    nodeModel.HelperType != null,
+
+                SlotAttributeModel slotModel =>
+                    slotModel.HelperType != null,
+
+                LinkAttributeModel linkModel =>
+                    linkModel.HelperType != null &&
+                    linkModel.SlotType != null,
+
+                _ => false
+            };
+        }
+
         public override string GetFileName()
         {
             if (Syntax == null || Symbol == null)
@@ -248,6 +311,7 @@ namespace VeloxDev.Core.Generator.Writers
 
             return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Workflow.g.cs";
         }
+
         public override string[] GenerateBaseInterfaces()
             => _workflowType switch
             {
@@ -257,7 +321,9 @@ namespace VeloxDev.Core.Generator.Writers
                 4 => [$"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowLinkViewModel"],
                 _ => []
             };
+
         public override string[] GenerateBaseTypes() => [];
+
         public override string GenerateBody()
         {
             if (_detectedModel == null)
