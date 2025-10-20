@@ -35,8 +35,41 @@ namespace VeloxDev.Core.Generator.Writers
                     })
             ];
         }
+        private bool HasWorkflowAttribute(INamedTypeSymbol symbol)
+        {
+            const string workflowNamespace = "VeloxDev.Core.WorkflowSystem";
 
-        public override bool CanWrite() => MVVMProperties.Count > 0;
+            var attributes = symbol.GetAttributes();
+            foreach (var attribute in attributes)
+            {
+                var attributeClass = attribute.AttributeClass;
+                if (attributeClass == null) continue;
+
+                // 检查是否属于Workflow特性
+                if (attributeClass.ContainingNamespace?.ToDisplayString() == workflowNamespace &&
+                    attributeClass.ContainingType?.Name == "ViewModel" &&
+                    attributeClass.ContainingType?.ContainingType?.Name == "WorkflowBuilder")
+                {
+                    return true;
+                }
+
+                // 检查特性名称（简化版）
+                var attributeName = attributeClass.Name;
+                if (attributeName.Contains('`'))
+                {
+                    attributeName = attributeName.Substring(0, attributeName.IndexOf('`'));
+                }
+
+                if (attributeName is "TreeAttribute" or "NodeAttribute" or "SlotAttribute" or "LinkAttribute")
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public override bool CanWrite() => MVVMProperties.Count > 0 || HasWorkflowAttribute(Symbol);
 
         public override string GetFileName()
         {
