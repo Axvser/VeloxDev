@@ -80,4 +80,16 @@ public partial class WorkflowView : UserControl
         if (DataContext is not IWorkflowTreeViewModel tree) return;
         tree.GetHelper().ResetVirtualLink();
     }
+
+    private void Button_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if (DataContext is not IWorkflowTreeViewModel tree) return;
+        tree.UndoCommand.Execute(null);
+    }
+
+    private void Button_Click_1(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if (DataContext is not IWorkflowTreeViewModel tree) return;
+        tree.RedoCommand.Execute(null);
+    }
 }

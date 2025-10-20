@@ -9,6 +9,9 @@
              MouseUp="OnPointerReleased"
              MouseMove="OnPointerMoved">
     <Canvas>
+        <Button Click="Button_Click" Content="撤销" Width="100" Height="100"/>
+        <Button Click="Button_Click_1" Content="重做" Width="100" Height="100" Canvas.Top="200"/>
+
         <!-- ObservableCollection<IWorkflowNode> Nodes | 所有节点的视图模型存储于此 -->
         <ItemsControl ItemsSource="{Binding Nodes}" Canvas.ZIndex="0">
             <!-- 容器模板，推荐显示设定尺寸 -->

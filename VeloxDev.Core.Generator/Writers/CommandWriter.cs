@@ -69,10 +69,7 @@ namespace VeloxDev.Core.Generator.Writers
                 // 7. 处理"Auto"命名规则
                 if (commandName == "Auto")
                 {
-                    string methodName = methodSymbol.Name;
-                    commandName = methodName.EndsWith("Async")
-                        ? methodName.Substring(0, methodName.Length - 5) // 移除最后5个字符("Async")
-                        : methodName;
+                    commandName = methodSymbol.Name;
                 }
 
                 // 8. 添加到配置列表
