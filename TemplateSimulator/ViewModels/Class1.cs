@@ -12,6 +12,7 @@ namespace TemplateSimulator.ViewModels
         internal partial class Class2
         {
             [VeloxProperty] private string name = string.Empty;
+            [VeloxProperty] private object? param = null;
         }
     }
 }

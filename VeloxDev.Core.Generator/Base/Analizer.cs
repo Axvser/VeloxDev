@@ -29,15 +29,45 @@ namespace VeloxDev.Core.Generator.Base
             internal MVVMFieldAnalizer(IFieldSymbol fieldSymbol)
             {
                 Symbol = fieldSymbol;
-                TypeName = fieldSymbol.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                TypeName = GetFullyQualifiedTypeName(fieldSymbol.Type);
                 FieldName = fieldSymbol.Name;
                 PropertyName = GetPropertyNameFromFieldName(fieldSymbol.Name);
+                IsNullable = IsNullableType(fieldSymbol.Type);
             }
 
             public IFieldSymbol Symbol { get; private set; }
             public string TypeName { get; private set; } = string.Empty;
             public string FieldName { get; private set; } = string.Empty;
             public string PropertyName { get; private set; } = string.Empty;
+            public bool IsNullable { get; private set; }
+
+            private static string GetFullyQualifiedTypeName(ITypeSymbol typeSymbol)
+            {
+                var displayFormat = new SymbolDisplayFormat(
+                    typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+                    genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+                    miscellaneousOptions: SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+                return typeSymbol.ToDisplayString(displayFormat);
+            }
+
+            private static bool IsNullableType(ITypeSymbol typeSymbol)
+            {
+                // 检查是否为可空值类型 (Nullable<T>)
+                if (typeSymbol is INamedTypeSymbol namedType &&
+                    namedType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+                {
+                    return true;
+                }
+
+                // 检查是否为可空引用类型 (在Nullable上下文中的引用类型)
+                if (typeSymbol.NullableAnnotation == NullableAnnotation.Annotated)
+                {
+                    return true;
+                }
+
+                return typeSymbol.NullableAnnotation == NullableAnnotation.Annotated;
+            }
 
             private static string GetPropertyNameFromFieldName(string fieldName)
             {
@@ -51,6 +81,7 @@ namespace VeloxDev.Core.Generator.Base
                 }
             }
         }
+
         public class MVVMPropertyFactory
         {
             const string RETRACT = "   ";
@@ -61,6 +92,7 @@ namespace VeloxDev.Core.Generator.Base
                 FullTypeName = fieldRoslyn.TypeName;
                 SourceName = fieldRoslyn.FieldName;
                 PropertyName = fieldRoslyn.PropertyName;
+                IsNullable = fieldRoslyn.IsNullable;
                 IsView = isView;
             }
 
@@ -70,6 +102,7 @@ namespace VeloxDev.Core.Generator.Base
                 FullTypeName = fullTypeName;
                 SourceName = sourceName;
                 PropertyName = propertyName;
+                IsNullable = fullTypeName.EndsWith("?");
                 IsView = isView;
             }
 
@@ -77,6 +110,7 @@ namespace VeloxDev.Core.Generator.Base
             public string FullTypeName { get; private set; }
             public string SourceName { get; private set; }
             public string PropertyName { get; private set; }
+            public bool IsNullable { get; private set; }
 
             public List<string> SetteringBody { get; set; } = [];
             public List<string> SetteredBody { get; set; } = [];
@@ -112,29 +146,37 @@ namespace VeloxDev.Core.Generator.Base
                     }
                 }
 
+                // 使用EqualityComparer<T>.Default来处理可空类型的比较
+                var baseTypeName = IsNullable ? FullTypeName.TrimEnd('?') : FullTypeName;
+                var equalityComparison = IsNullable ?
+                    $"global::System.Collections.Generic.EqualityComparer<{baseTypeName}>.Default.Equals({SourceName}, value)" :
+                    $"global::System.Object.Equals({SourceName}, value)";
+
                 return $$"""
-                {{RETRACT}}{{Modifies}} {{FullTypeName}} {{PropertyName}}
-                {{RETRACT}}{
-                {{RETRACT}}    get => {{SourceName}};
-                {{RETRACT}}    set
-                {{RETRACT}}    {
-                {{RETRACT}}       if(object.Equals({{SourceName}},value)) return;
-                {{RETRACT}}       var old = {{SourceName}};
-                {{setteringBody}}
-                {{RETRACT}}       On{{PropertyName}}Changing(old,value);
-                {{RETRACT}}       {{SourceName}} = value;
-                {{RETRACT}}       On{{PropertyName}}Changed(old,value);
-                {{setteredBody}}
-                {{RETRACT}}    }
-                {{RETRACT}}}
-                {{RETRACT}}partial void On{{PropertyName}}Changing({{FullTypeName}} oldValue,{{FullTypeName}} newValue);
-                {{RETRACT}}partial void On{{PropertyName}}Changed({{FullTypeName}} oldValue,{{FullTypeName}} newValue);
-                """;
+        {{RETRACT}}{{Modifies}} {{FullTypeName}} {{PropertyName}}
+        {{RETRACT}}{
+        {{RETRACT}}    get => {{SourceName}};
+        {{RETRACT}}    set
+        {{RETRACT}}    {
+        {{RETRACT}}       if({{equalityComparison}}) return;
+        {{RETRACT}}       var old = {{SourceName}};
+        {{setteringBody}}
+        {{RETRACT}}       On{{PropertyName}}Changing(old, value);
+        {{RETRACT}}       {{SourceName}} = value;
+        {{RETRACT}}       On{{PropertyName}}Changed(old, value);
+        {{setteredBody}}
+        {{RETRACT}}    }
+        {{RETRACT}}}
+        {{RETRACT}}partial void On{{PropertyName}}Changing({{FullTypeName}} oldValue, {{FullTypeName}} newValue);
+        {{RETRACT}}partial void On{{PropertyName}}Changed({{FullTypeName}} oldValue, {{FullTypeName}} newValue);
+        """;
             }
+
             public string Generate()
             {
                 return IsView ? GenerateProxy() : GenerateViewModel();
             }
+
             public string GenerateProxy()
             {
                 var attributeBody = new StringBuilder();
@@ -152,13 +194,13 @@ namespace VeloxDev.Core.Generator.Base
 
                 return $$"""
 
-                {{attributeBody}}
-                {{RETRACT}}{{Modifies}} {{FullTypeName}} {{PropertyName}}
-                {{RETRACT}}{
-                {{RETRACT}}    get => {{SourceName}};
-                {{RETRACT}}    set => {{SourceName}} = value;
-                {{RETRACT}}}
-                """;
+        {{attributeBody}}
+        {{RETRACT}}{{Modifies}} {{FullTypeName}} {{PropertyName}}
+        {{RETRACT}}{
+        {{RETRACT}}    get => {{SourceName}};
+        {{RETRACT}}    set => {{SourceName}} = value;
+        {{RETRACT}}}
+        """;
             }
         }
 

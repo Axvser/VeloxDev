@@ -37,6 +37,7 @@ namespace VeloxDev.Core.Generator.Writers
                     })
             ];
         }
+
         private bool HasWorkflowAttribute(INamedTypeSymbol symbol)
         {
             var attributes = symbol.GetAttributes();
@@ -87,6 +88,7 @@ namespace VeloxDev.Core.Generator.Writers
             $"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanging",
             $"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanged"
         ];
+
         public override string[] GenerateBaseTypes() => [];
 
         public override string GenerateBody()
