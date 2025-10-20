@@ -37,23 +37,22 @@ namespace VeloxDev.Core.Generator.Writers
         }
         private bool HasWorkflowAttribute(INamedTypeSymbol symbol)
         {
-            const string workflowNamespace = "VeloxDev.Core.WorkflowSystem";
-
             var attributes = symbol.GetAttributes();
             foreach (var attribute in attributes)
             {
                 var attributeClass = attribute.AttributeClass;
                 if (attributeClass == null) continue;
 
-                // 检查是否属于Workflow特性
-                if (attributeClass.ContainingNamespace?.ToDisplayString() == workflowNamespace &&
-                    attributeClass.ContainingType?.Name == "ViewModel" &&
-                    attributeClass.ContainingType?.ContainingType?.Name == "WorkflowBuilder")
+                var attributeFullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+                // 直接检查特性全名是否包含Workflow相关命名空间
+                if (attributeFullName.Contains("WorkflowBuilder.ViewModel") ||
+                    attributeFullName.Contains("VeloxDev.Core.WorkflowSystem"))
                 {
                     return true;
                 }
 
-                // 检查特性名称（简化版）
+                // 或者检查特性名称
                 var attributeName = attributeClass.Name;
                 if (attributeName.Contains('`'))
                 {

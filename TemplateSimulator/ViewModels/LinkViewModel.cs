@@ -1,8 +1,9 @@
-using VeloxDev.Core.WorkflowSystem.Templates;
+using VeloxDev.Core.WorkflowSystem;
 
 namespace TemplateSimulator.ViewModels;
 
-public partial class LinkViewModel : LinkViewModelBase
+[WorkflowBuilder.ViewModel.Link<WorkflowHelper.ViewModel.Link>(typeof(SlotViewModel))]
+public partial class LinkViewModel
 {
 
 }
