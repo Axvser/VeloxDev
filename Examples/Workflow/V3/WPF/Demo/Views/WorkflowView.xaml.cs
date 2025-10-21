@@ -65,6 +65,9 @@ public partial class WorkflowView : UserControl
         node2.GetHelper().CreateSlot(slot3);
         node2.GetHelper().CreateSlot(slot4);
 
+        // 清理历史栈，避免非法的重做与撤销
+        _workflowViewModel.GetHelper().ClearHistory();
+
         // 使用数据上下文
         DataContext = _workflowViewModel;
     }
