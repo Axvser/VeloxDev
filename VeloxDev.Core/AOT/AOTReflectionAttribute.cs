@@ -6,10 +6,10 @@
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false, AllowMultiple = false)]
     public sealed class AOTReflectionAttribute(
         string Namespace = "Auto",
-        bool Constructors = false,
-        bool Methods = false,
-        bool Properties = false,
-        bool Fields = false) : Attribute
+        bool Constructors = true,
+        bool Methods = true,
+        bool Properties = true,
+        bool Fields = true) : Attribute
     {
         public string Namespace { get; } = Namespace;
         public bool IncludeConstructors { get; } = Constructors;
