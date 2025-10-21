@@ -1,7 +1,9 @@
-﻿using VeloxDev.Core.MVVM;
+﻿using VeloxDev.Core.AOT;
+using VeloxDev.Core.MVVM;
 
 namespace VeloxDev.Core.WorkflowSystem
 {
+    [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
     public sealed partial class Offset(double left = 0d, double top = 0d) : ICloneable
     {
         [VeloxProperty]

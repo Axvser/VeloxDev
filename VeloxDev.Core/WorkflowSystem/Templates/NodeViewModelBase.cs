@@ -1,9 +1,11 @@
 ﻿using System.Collections.ObjectModel;
+using VeloxDev.Core.AOT;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 
 namespace VeloxDev.Core.WorkflowSystem.Templates
 {
+    [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
     public partial class NodeViewModelBase : IWorkflowNodeViewModel
     {
         private IWorkflowNodeViewModelHelper Helper = new WorkflowHelper.ViewModel.Node();

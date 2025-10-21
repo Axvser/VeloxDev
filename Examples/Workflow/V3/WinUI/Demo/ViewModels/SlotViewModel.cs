@@ -1,7 +1,9 @@
+using VeloxDev.Core.AOT;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
+[AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 [WorkflowBuilder.ViewModel.Slot<WorkflowHelper.ViewModel.Slot>]
 public partial class SlotViewModel
 {

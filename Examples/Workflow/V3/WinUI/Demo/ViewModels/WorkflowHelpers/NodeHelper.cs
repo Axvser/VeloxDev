@@ -36,16 +36,15 @@ namespace Demo.ViewModels.WorkflowHelpers
             }
         }
 
-        public override Task<bool> ValidateBroadcastAsync(IWorkflowNodeViewModel sender, IWorkflowNodeViewModel receiver, object? parameter, CancellationToken ct)
+        public override Task<bool> ValidateBroadcastAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, object? parameter, CancellationToken ct)
         {
-            // sender    | 传播起始 Node
-            // receicer  | 传播终止 Node
+            // sender    | 传播起始 Slot
+            // receicer  | 传播终止 Slot
             // parameter | 任务参数
             // ct        | 取消令牌
-            if (sender.Parent != receiver.Parent && !ct.IsCancellationRequested)
+            if (!ct.IsCancellationRequested)
             {
                 // 安全地验证是否可以执行任务参数传递
-                // 框架已经自带了Parent验证，这里只是一个演示
                 return Task.FromResult(true);
             }
 

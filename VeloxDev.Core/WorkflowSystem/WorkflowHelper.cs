@@ -214,10 +214,12 @@ namespace VeloxDev.Core.WorkflowSystem
                 {
                     if (component is null || component.Parent?.Parent is null) return;
                     var layer = component.Anchor.Layer;
-                    component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
-                        () => { component.Anchor.Layer = layer; },
-                        () => { component.Anchor.Layer = layer; }
-                    ));
+                    var action = () =>
+                    {
+                        component.Anchor.Layer = layer;
+                        component.OnPropertyChanged(nameof(component.Anchor));
+                    };
+                    component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(action, action));
                 }
                 public virtual void UpdateAnchor()
                 {
@@ -396,16 +398,25 @@ namespace VeloxDev.Core.WorkflowSystem
                     if (component is null) return;
                     component.Anchor.Left = anchor.Left;
                     component.Anchor.Top = anchor.Top;
+                    component.Anchor.Layer = anchor.Layer;
+                    component.OnPropertyChanged(nameof(component.Anchor));
                     foreach (var slot in component.Slots)
                     {
                         slot.GetHelper().UpdateAnchor();
                     }
+                }
+                public virtual void SetLayer(int layer)
+                {
+                    if (component is null) return;
+                    component.Anchor.Layer = layer;
+                    component.OnPropertyChanged(nameof(component.Anchor));
                 }
                 public virtual void SetSize(Size size)
                 {
                     if (component is null) return;
                     component.Size.Width = size.Width;
                     component.Size.Height = size.Height;
+                    component.OnPropertyChanged(nameof(component.Size));
                 }
                 public virtual void SaveAnchor()
                 {
@@ -423,6 +434,17 @@ namespace VeloxDev.Core.WorkflowSystem
                             component.Anchor = oldAnchor;
                             SetAnchor(oldAnchor);
                         }));
+                }
+                public virtual void SaveLayer()
+                {
+                    if (component is null || component.Parent is null) return;
+                    var layer = component.Anchor.Layer;
+                    var action = () =>
+                    {
+                        component.Anchor.Layer = layer;
+                        component.OnPropertyChanged(nameof(component.Anchor));
+                    };
+                    component.Parent.GetHelper().Submit(new WorkflowActionPair(action, action));
                 }
                 public virtual void SaveSize()
                 {

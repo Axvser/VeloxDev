@@ -33,9 +33,11 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public void Initialize(IWorkflowNodeViewModel node);
 
         public void SaveAnchor();
+        public void SaveLayer();
         public void SaveSize();
         public void Move(Offset offset);
         public void SetAnchor(Anchor newValue);
+        public void SetLayer(int layer);
         public void SetSize(Size newValue);
         public void CreateSlot(IWorkflowSlotViewModel slot);
         public void Delete();

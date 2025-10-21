@@ -47,7 +47,7 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251003001" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\..\VeloxDev.WinUI\VeloxDev.WinUI.csproj" />
+    <ProjectReference Include="..\..\..\..\..\VeloxDev.Core\VeloxDev.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\LinkView.xaml">

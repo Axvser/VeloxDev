@@ -57,8 +57,10 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
         public void SetOffset(Offset offset);
         public void SetSize(Size size);
+        public void SetLayer(int layer);
         public void SaveOffset();
         public void SaveSize();
+        public void SaveLayer();
         public void SetChannel(SlotChannel channel);
         public void UpdateAnchor();
         public void UpdateState();

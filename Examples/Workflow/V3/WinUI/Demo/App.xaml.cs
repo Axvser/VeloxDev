@@ -12,6 +12,12 @@ namespace Demo
     {
         private Window? _window;
 
+        static App()
+        {
+            VeloxDev.Core.WorkflowSystem.AOTReflection.Init();
+            ViewModels.AOTReflection.Init();
+        }
+
         /// <summary>
         /// Initializes the singleton application object.  This is the first line of authored code
         /// executed, and as such is the logical equivalent of main() or WinMain().
