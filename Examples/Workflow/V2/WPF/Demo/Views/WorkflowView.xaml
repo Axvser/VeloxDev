@@ -49,7 +49,7 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <local:BezierCurveView StartAnchor="{Binding Sender.Anchor}"
-                                           EndAnchor="{Binding Sender.Anchor}"
+                                           EndAnchor="{Binding Processor.Anchor}"
                                            CanRender="{Binding IsEnabled}" />
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -58,7 +58,7 @@
         <!-- IWorkflowLink VirtualLink | 预览曲线的视图模型 -->
         <local:BezierCurveView DataContext="{Binding VirtualLink}"
                                StartAnchor="{Binding Sender.Anchor}"
-                               EndAnchor="{Binding Sender.Anchor}"
+                               EndAnchor="{Binding Processor.Anchor}"
                                CanRender="{Binding IsEnabled}" />
 
     </Canvas>
