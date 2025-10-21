@@ -6,6 +6,7 @@
     xmlns:local="using:Demo"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:views="using:Demo.Views"
     mc:Ignorable="d"
     Title="Demo">
 
@@ -13,7 +14,5 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid>
-
-    </Grid>
+    <views:TreeView/>
 </Window>

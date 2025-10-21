@@ -8,7 +8,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid>
-
-    </Grid>
+    <Border x:Name="Border" 
+            CornerRadius="3"
+            BorderThickness="0" 
+            Background="#aa00ffff"
+            PointerPressed="Border_PointerPressed"
+            PointerReleased="Border_PointerReleased"/>
 </UserControl>

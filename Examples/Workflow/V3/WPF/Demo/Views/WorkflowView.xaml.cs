@@ -14,7 +14,11 @@ public partial class WorkflowView : UserControl
     public WorkflowView()
     {
         InitializeComponent();
+        SimulateData();
+    }
 
+    private void SimulateData()
+    {
         // 先模拟一些数据
         var slot1 = new SlotViewModel()
         {
@@ -51,9 +55,11 @@ public partial class WorkflowView : UserControl
             Anchor = new Anchor(250, 250, 1)
         };
 
-        // 此处为 Nodes 集合增加了了两个 Node 上下文
+        // 给 Tree 挂载 Node
         _workflowViewModel.GetHelper().CreateNode(node1);
         _workflowViewModel.GetHelper().CreateNode(node2);
+
+        // 给 Node 挂载 Slot
         node1.GetHelper().CreateSlot(slot1);
         node1.GetHelper().CreateSlot(slot2);
         node2.GetHelper().CreateSlot(slot3);
@@ -61,10 +67,6 @@ public partial class WorkflowView : UserControl
 
         // 使用数据上下文
         DataContext = _workflowViewModel;
-
-        // 执行并在 3s 内用拖拽建立连接即可看到传播效果 （ 取决于 NodeViewMolde 中的 Work 实现 ）
-        // 你可同时启用多个 Work 并观察 NodeViewModel 使用不同信号量时的效果差异
-        node1.WorkCommand.Execute(null);
     }
 
     // 当鼠标移动时，更新 工作流Tree 中记录的鼠标位点
