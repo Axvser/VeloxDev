@@ -1,5 +1,4 @@
-﻿using System.Collections.ObjectModel;
-using VeloxDev.Core.Interfaces.MVVM;
+﻿using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.Core.Interfaces.WorkflowSystem

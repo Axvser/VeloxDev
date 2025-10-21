@@ -610,13 +610,13 @@ namespace VeloxDev.Core.Generator.Writers
             Helper.Delete();
             return {{TaskFullName}}.CompletedTask;
         }
-        protected virtual {{TaskFullName}} Work({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+        protected virtual async {{TaskFullName}} Work({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
         {
-            return {{TaskFullName}}.CompletedTask;
+            await Helper.WorkAsync(parameter,ct);
         }
-        protected virtual {{TaskFullName}} Broadcast({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+        protected virtual async {{TaskFullName}} Broadcast({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
         {
-            return {{TaskFullName}}.CompletedTask;
+            await Helper.BroadcastAsync(parameter,ct);
         }
         protected virtual async {{TaskFullName}} Close({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
         {

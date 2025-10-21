@@ -1,6 +1,4 @@
 ﻿using System.Collections.ObjectModel;
-using System.ComponentModel;
-using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 
@@ -64,14 +62,14 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task Work(object? parameter, CancellationToken ct)
+        protected virtual async Task Work(object? parameter, CancellationToken ct)
         {
-            return Task.CompletedTask;
+            await Helper.WorkAsync(parameter, ct);
         }
         [VeloxCommand]
-        protected virtual Task Broadcast(object? parameter, CancellationToken ct)
+        protected virtual async Task Broadcast(object? parameter, CancellationToken ct)
         {
-            return Task.CompletedTask;
+            await Helper.BroadcastAsync(parameter, ct);
         }
         [VeloxCommand]
         protected virtual async Task Close(object? parameter, CancellationToken ct)
