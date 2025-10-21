@@ -110,6 +110,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     if (component is null) return;
                     component.Size.Width = size.Width;
                     component.Size.Height = size.Height;
+                    component.OnPropertyChanged(nameof(component.Size));
                     UpdateAnchor();
                 }
                 public virtual void SetOffset(Offset offset)
@@ -117,62 +118,8 @@ namespace VeloxDev.Core.WorkflowSystem
                     if (component is null) return;
                     component.Offset.Left = offset.Left;
                     component.Offset.Top = offset.Top;
+                    component.OnPropertyChanged(nameof(component.Offset));
                     UpdateAnchor();
-                }
-                public virtual void SaveOffset()
-                {
-                    if (component is null || component.Parent?.Parent is null) return;
-                    var oldOffset = component.Offset;
-                    var newOffset = new Offset(component.Offset.Left, component.Offset.Top);
-                    component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
-                        () => { component.Offset = newOffset; },
-                        () => { component.Offset = oldOffset; }
-                    ));
-                }
-                public virtual void SaveSize()
-                {
-                    if (component is null || component.Parent?.Parent is null) return;
-                    var oldSize = component.Size;
-                    var newSize = new Size(component.Size.Width, component.Size.Height);
-                    component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
-                        () => { component.Size = newSize; },
-                        () => { component.Size = oldSize; }
-                    ));
-                }
-                public virtual void UpdateAnchor()
-                {
-                    if (component.Parent is null) return;
-                    component.Anchor.Left = component.Parent.Anchor.Left + component.Offset.Left + component.Size.Width / 2;
-                    component.Anchor.Top = component.Parent.Anchor.Top + component.Offset.Top + component.Size.Height / 2;
-                }
-                public virtual void UpdateState()
-                {
-                    if (component is null) return;
-                    var tree = component.Parent.Parent;
-                    if (tree is null) return;
-                    List<IWorkflowLinkViewModel> links_asSource = [];
-                    List<IWorkflowLinkViewModel> links_asTarget = [];
-                    foreach (var target in component.Targets)
-                    {
-                        if (target?.Parent.Parent != component.Parent?.Parent) SynchronizationError();
-                        if (tree.LinksMap.TryGetValue(component, out var pair) &&
-                           pair.TryGetValue(target, out var link))
-                            links_asSource.Add(link);
-                    }
-                    foreach (var source in component.Sources)
-                    {
-                        if (source?.Parent.Parent != component.Parent?.Parent) SynchronizationError();
-                        if (tree.LinksMap.TryGetValue(source, out var pair) &&
-                           pair.TryGetValue(component, out var link))
-                            links_asTarget.Add(link);
-                    }
-                    component.State = (links_asSource.Count > 0, links_asTarget.Count > 0) switch
-                    {
-                        (true, false) => SlotState.Sender,
-                        (false, true) => SlotState.Receiver,
-                        (true, true) => SlotState.Sender | SlotState.Receiver,
-                        (false, false) => SlotState.StandBy,
-                    };
                 }
                 public virtual void SetChannel(SlotChannel channel)
                 {
@@ -236,6 +183,77 @@ namespace VeloxDev.Core.WorkflowSystem
                             }
                             break;
                     }
+                }
+                public virtual void SetLayer(int layer)
+                {
+                    if (component is null) return;
+                    component.Anchor.Layer = layer;
+                    component.OnPropertyChanged(nameof(component.Anchor));
+                }
+                public virtual void SaveOffset()
+                {
+                    if (component is null || component.Parent?.Parent is null) return;
+                    var oldOffset = component.Offset;
+                    var newOffset = new Offset(component.Offset.Left, component.Offset.Top);
+                    component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
+                        () => { component.Offset = newOffset; },
+                        () => { component.Offset = oldOffset; }
+                    ));
+                }
+                public virtual void SaveSize()
+                {
+                    if (component is null || component.Parent?.Parent is null) return;
+                    var oldSize = component.Size;
+                    var newSize = new Size(component.Size.Width, component.Size.Height);
+                    component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
+                        () => { component.Size = newSize; },
+                        () => { component.Size = oldSize; }
+                    ));
+                }
+                public virtual void SaveLayer()
+                {
+                    if (component is null || component.Parent?.Parent is null) return;
+                    var layer = component.Anchor.Layer;
+                    component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
+                        () => { component.Anchor.Layer = layer; },
+                        () => { component.Anchor.Layer = layer; }
+                    ));
+                }
+                public virtual void UpdateAnchor()
+                {
+                    if (component.Parent is null) return;
+                    component.Anchor.Left = component.Parent.Anchor.Left + component.Offset.Left + component.Size.Width / 2;
+                    component.Anchor.Top = component.Parent.Anchor.Top + component.Offset.Top + component.Size.Height / 2;
+                    component.OnPropertyChanged(nameof(component.Anchor));
+                }
+                public virtual void UpdateState()
+                {
+                    if (component is null) return;
+                    var tree = component.Parent.Parent;
+                    if (tree is null) return;
+                    List<IWorkflowLinkViewModel> links_asSource = [];
+                    List<IWorkflowLinkViewModel> links_asTarget = [];
+                    foreach (var target in component.Targets)
+                    {
+                        if (target?.Parent.Parent != component.Parent?.Parent) SynchronizationError();
+                        if (tree.LinksMap.TryGetValue(component, out var pair) &&
+                           pair.TryGetValue(target, out var link))
+                            links_asSource.Add(link);
+                    }
+                    foreach (var source in component.Sources)
+                    {
+                        if (source?.Parent.Parent != component.Parent?.Parent) SynchronizationError();
+                        if (tree.LinksMap.TryGetValue(source, out var pair) &&
+                           pair.TryGetValue(component, out var link))
+                            links_asTarget.Add(link);
+                    }
+                    component.State = (links_asSource.Count > 0, links_asTarget.Count > 0) switch
+                    {
+                        (true, false) => SlotState.Sender,
+                        (false, true) => SlotState.Receiver,
+                        (true, true) => SlotState.Sender | SlotState.Receiver,
+                        (false, false) => SlotState.StandBy,
+                    };
                 }
                 #endregion
 
@@ -327,19 +345,41 @@ namespace VeloxDev.Core.WorkflowSystem
                 }
                 public virtual async Task BroadcastAsync(object? parameter, CancellationToken ct)
                 {
-                    if (component is null) return;
-                    var slotArray = component.Slots.SelectMany(slot => slot.Targets).ToArray();
-                    foreach (var slot in slotArray)
+                    if (component is null || component.Parent is null) return;
+
+                    var senders = component.Slots.ToArray();
+                    var validationTasks = new List<Task<(IWorkflowSlotViewModel Receiver, bool IsValid)>>();
+
+                    // 创建所有 ValidateBroadcastAsync 任务
+                    foreach (var sender in senders)
                     {
-                        if (slot.Parent is null) continue;
-                        if (slot.Parent.Parent != component.Parent) SynchronizationError();
-                        if (!await ValidateBroadcastAsync(component, slot.Parent, parameter, ct)) continue;
-                        component.WorkCommand.Execute(parameter);
+                        var receivers = sender.Targets.ToArray();
+                        foreach (var receiver in receivers)
+                        {
+                            if (receiver.Parent?.Parent != component.Parent) SynchronizationError();
+
+                            // 记录 receiver，以便后续执行 WorkCommand
+                            validationTasks.Add(
+                                ValidateBroadcastAsync(sender, receiver, parameter, ct)
+                                    .ContinueWith(t => (receiver, t.Result))
+                            );
+                        }
                     }
-                    return;
+
+                    // 等待所有验证任务完成
+                    var validationResults = await Task.WhenAll(validationTasks);
+
+                    // 对每个通过验证的 receiver 执行 WorkCommand
+                    foreach (var (receiver, isValid) in validationResults)
+                    {
+                        if (isValid)
+                        {
+                            receiver.Parent?.WorkCommand.Execute(parameter);
+                        }
+                    }
                 }
                 public virtual Task WorkAsync(object? parameter, CancellationToken ct) => Task.CompletedTask;
-                public virtual async Task<bool> ValidateBroadcastAsync(IWorkflowNodeViewModel sender, IWorkflowNodeViewModel receiver, object? parameter, CancellationToken ct) => await Task.FromResult(true);
+                public virtual Task<bool> ValidateBroadcastAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, object? parameter, CancellationToken ct) => Task.FromResult(true);
                 public virtual void Dispose() { }
                 public virtual void Move(Offset offset)
                 {
@@ -559,6 +599,8 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void SetPointer(Anchor anchor)
                 {
                     component.VirtualLink.Receiver.Anchor = anchor;
+                    component.VirtualLink.OnPropertyChanged(nameof(component.VirtualLink.Receiver));
+                    component.OnPropertyChanged(nameof(component.VirtualLink));
                 }
                 #endregion
 
