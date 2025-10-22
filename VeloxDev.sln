@@ -56,8 +56,14 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Workflow", "Workflow", "{9E1081DD-F1EE-41AB-912B-088DA658739C}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "V2", "V2", "{D1E2FD5B-8282-4555-BC11-703D5C6BF15D}"
+	ProjectSection(SolutionItems) = preProject
+		Examples\Workflow\V2\README.md = Examples\Workflow\V2\README.md
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "V3", "V3", "{FB156758-A322-485E-A6D0-D7C925432DE9}"
+	ProjectSection(SolutionItems) = preProject
+		Examples\Workflow\V3\README.md = Examples\Workflow\V3\README.md
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WPF", "WPF", "{F40C38C9-2550-4105-8502-D17D27C5DE57}"
 EndProject
