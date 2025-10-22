@@ -11,7 +11,7 @@
     <Border x:Name="Border" 
             CornerRadius="3"
             BorderThickness="0" 
-            Background="#aa00ffff"
+            Background="#aaffffff"
             PointerPressed="Border_PointerPressed"
             PointerReleased="Border_PointerReleased"/>
 </UserControl>

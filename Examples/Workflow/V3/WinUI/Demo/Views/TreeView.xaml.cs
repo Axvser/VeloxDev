@@ -63,7 +63,7 @@ namespace Demo.Views
             node1.GetHelper().CreateSlot(slot2);
             node2.GetHelper().CreateSlot(slot3);
             node2.GetHelper().CreateSlot(slot4);
-            
+
             // 可以清空历史，阻止以外的撤销或重做
             ViewModel.GetHelper().ClearHistory();
 

@@ -2,7 +2,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
-using Windows.UI.Notifications;
 
 namespace Demo.Views
 {

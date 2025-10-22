@@ -5,7 +5,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Demo.Views"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+    xmlns:viewmodels="using:Demo.ViewModels" 
+    d:DataContext="{d:DesignInstance Type=viewmodels:TreeViewModel}"
     mc:Ignorable="d"
     PointerMoved="canvas_PointerMoved"
     PointerReleased="canvas_PointerReleased"
@@ -46,6 +48,7 @@
                                     StartTop="{Binding Sender.Anchor.Top}"
                                     EndLeft="{Binding Receiver.Anchor.Left}"
                                     EndTop="{Binding Receiver.Anchor.Top}"
+                                    Canvas.ZIndex="3"
                                     CanRender="{Binding IsVisible}" />
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -57,7 +60,9 @@
                         StartTop="{Binding Sender.Anchor.Top}"
                         EndLeft="{Binding Receiver.Anchor.Left}"
                         EndTop="{Binding Receiver.Anchor.Top}"
-                        CanRender="{Binding IsVisible}" />
+                        CanRender="{Binding IsVisible}"
+                        Canvas.ZIndex="3"
+                        IsVirtual="True"/>
 
     </Canvas>
 </UserControl>
