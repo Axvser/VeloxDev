@@ -1,4 +1,5 @@
 using Demo.ViewModels.WorkflowHelpers;
+using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.ViewModels;
@@ -11,4 +12,6 @@ public partial class NodeViewModel
     public NodeViewModel() => InitializeWorkflow();
 
     // …… 自由扩展您的节点视图模型
+
+    [VeloxProperty] private int taskCount = 0;
 }
