@@ -21,10 +21,10 @@ namespace Demo.ViewModels.WorkflowHelpers
             _viewModel = node as NodeViewModel;
         }
 
-        public override async Task CloseAsync()
+        public override async void Closed()
         {
-            // [ Standard ] 框架安全地关闭工作流
-            await base.CloseAsync();
+            // [ Standard ] 工作流关闭回调
+            base.Closed();
 
             // [ User ] 清除任务计数器
             if (_viewModel is null) return;

@@ -19,9 +19,37 @@ namespace VeloxDev.Core.WorkflowSystem
             public class Link : IWorkflowLinkViewModelHelper
             {
                 private IWorkflowLinkViewModel? component;
+                private List<IVeloxCommand> commands = [];
 
-                public virtual void Initialize(IWorkflowLinkViewModel link) => component = link;
-                public virtual Task CloseAsync() => Task.CompletedTask;
+                public virtual void Initialize(IWorkflowLinkViewModel link)
+                {
+                    component = link;
+                    commands = [link.DeleteCommand];
+                }
+                public virtual void Closing()
+                {
+                    if (component is null) return;
+                    foreach (var command in commands)
+                    {
+                        command.Lock();
+                    }
+                }
+                public virtual async Task CloseAsync()
+                {
+                    if (component is null) return;
+                    foreach (var command in commands)
+                    {
+                        command.InterruptAsync();
+                    }
+                }
+                public virtual void Closed()
+                {
+                    if (component is null) return;
+                    foreach (var command in commands)
+                    {
+                        command.UnLock();
+                    }
+                }
                 public virtual void Dispose() { }
 
                 public virtual void Delete()
@@ -88,10 +116,47 @@ namespace VeloxDev.Core.WorkflowSystem
             public class Slot : IWorkflowSlotViewModelHelper
             {
                 private IWorkflowSlotViewModel? component;
+                private List<IVeloxCommand> commands = [];
 
                 #region Simple Components
-                public virtual void Initialize(IWorkflowSlotViewModel slot) => component = slot;
-                public virtual Task CloseAsync() => Task.CompletedTask;
+                public virtual void Initialize(IWorkflowSlotViewModel slot)
+                {
+                    component = slot;
+                    commands =
+                        [
+                            slot.SaveOffsetCommand,
+                            slot.SaveSizeCommand,
+                            slot.SetOffsetCommand,
+                            slot.SetSizeCommand,
+                            slot.ApplyConnectionCommand,
+                            slot.ReceiveConnectionCommand,
+                            slot.DeleteCommand
+                        ];
+                }
+                public virtual void Closing()
+                {
+                    if (component is null) return;
+                    foreach (var command in commands)
+                    {
+                        command.Lock();
+                    }
+                }
+                public virtual async Task CloseAsync()
+                {
+                    if (component is null) return;
+                    foreach (var command in commands)
+                    {
+                        await command.InterruptAsync();
+                    }
+                }
+                public virtual void Closed()
+                {
+                    if (component is null) return;
+                    foreach (var command in commands)
+                    {
+                        command.UnLock();
+                    }
+                }
                 public virtual void Dispose() { }
                 public virtual void ApplyConnection()
                 {
@@ -309,27 +374,34 @@ namespace VeloxDev.Core.WorkflowSystem
             public class Node : IWorkflowNodeViewModelHelper
             {
                 private IWorkflowNodeViewModel? component;
+                private List<IVeloxCommand> commands = [];
 
                 #region Simple Components
-                public virtual void Initialize(IWorkflowNodeViewModel node) => component = node;
+                public virtual void Initialize(IWorkflowNodeViewModel node)
+                {
+                    component = node;
+                    commands =
+                        [
+                            node.SaveAnchorCommand,
+                            node.SaveSizeCommand,
+                            node.SetAnchorCommand,
+                            node.SetSizeCommand,
+                            node.CreateSlotCommand,
+                            node.DeleteCommand,
+                            node.WorkCommand,
+                            node.BroadcastCommand
+                        ];
+                }
+                public virtual void Closing()
+                {
+                    if (component is null) return;
+                    foreach (var command in commands)
+                    {
+                        command.Lock();
+                    }
+                }
                 public virtual async Task CloseAsync()
                 {
-                    if (component == null) return;
-
-                    // 锁定所有命令
-                    var commands = new[]
-                    {
-                         component.SaveAnchorCommand, component.SaveSizeCommand, component.SetAnchorCommand,
-                         component.SetSizeCommand, component.CreateSlotCommand, component.DeleteCommand,
-                         component.WorkCommand, component.BroadcastCommand
-                    };
-
-                    foreach (var cmd in commands)
-                    {
-                        cmd.Lock();
-                    }
-
-                    // 中断可能正在执行的工作
                     try
                     {
                         foreach (var cmd in commands)
@@ -337,12 +409,14 @@ namespace VeloxDev.Core.WorkflowSystem
                             await cmd.InterruptAsync();
                         }
                     }
-                    finally
+                    catch { }
+                }
+                public virtual void Closed()
+                {
+                    if (component is null) return;
+                    foreach (var command in commands)
                     {
-                        foreach (var cmd in commands)
-                        {
-                            cmd.UnLock();
-                        }
+                        command.UnLock();
                     }
                 }
                 public virtual async Task BroadcastAsync(object? parameter, CancellationToken ct)
@@ -522,73 +596,74 @@ namespace VeloxDev.Core.WorkflowSystem
             public class Tree : IWorkflowTreeViewModelHelper
             {
                 private IWorkflowTreeViewModel? component = null;
+                private List<IVeloxCommand> commands = [];
 
                 #region Simple Components
-                public virtual void Initialize(IWorkflowTreeViewModel tree) => component = tree;
+                public virtual void Initialize(IWorkflowTreeViewModel tree)
+                {
+                    component = tree;
+                    commands =
+                        [
+                            tree.CreateNodeCommand,
+                            tree.SetPointerCommand,
+                            tree.ResetVirtualLinkCommand,
+                            tree.ApplyConnectionCommand,
+                            tree.ReceiveConnectionCommand,
+                            tree.SubmitCommand,
+                            tree.RedoCommand,
+                            tree.UndoCommand
+                        ];
+                }
+                public virtual void Closing()
+                {
+                    if (component is null) return;
+                    foreach (var command in commands)
+                    {
+                        command.Lock();
+                    }
+                }
                 public virtual async Task CloseAsync()
                 {
                     if (component is null) return;
 
-                    // 收集所有需要操作的命令
-                    var commandsToLock = new List<IVeloxCommand>();
-
-                    if (component.Links != null)
+                    // 收集所有 Helper
+                    var helpers = new List<IWorkflowHelper>();
+                    foreach (var linkGroup in component.Links)
                     {
-                        foreach (var linkGroup in component.Links)
+                        helpers.Add(linkGroup.GetHelper());
+                    }
+                    foreach (var node in component.Nodes)
+                    {
+                        helpers.Add(node.GetHelper());
+                        foreach (var slot in node.Slots)
                         {
-                            commandsToLock.Add(linkGroup.DeleteCommand);
+                            helpers.Add(slot.GetHelper());
                         }
                     }
 
-                    if (component.Nodes != null)
+                    Closing();
+                    foreach (var helper in helpers)
                     {
-                        foreach (var node in component.Nodes)
-                        {
-                            var nodeCommands = new[]
-                            {
-                                 node.SaveAnchorCommand, node.SaveSizeCommand, node.SetAnchorCommand,
-                                 node.SetSizeCommand, node.CreateSlotCommand, node.DeleteCommand,
-                                 node.WorkCommand, node.BroadcastCommand
-                            };
-                            commandsToLock.AddRange(nodeCommands);
-
-                            if (node.Slots != null)
-                            {
-                                foreach (var slot in node.Slots)
-                                {
-                                    var slotCommands = new[]
-                                    {
-                                         slot.SaveOffsetCommand, slot.SaveSizeCommand, slot.SetOffsetCommand,
-                                         slot.SetSizeCommand, slot.ApplyConnectionCommand, slot.ReceiveConnectionCommand,
-                                         slot.DeleteCommand
-                                    };
-                                    commandsToLock.AddRange(slotCommands);
-                                }
-                            }
-                        }
+                        helper.Closing();
                     }
 
-                    // 锁定所有命令
-                    foreach (var cmd in commandsToLock)
+                    foreach (var helper in helpers)
                     {
-                        cmd.Lock();
+                        await helper.CloseAsync();
                     }
 
-                    try
+                    foreach (var helper in helpers)
                     {
-                        // 中断所有可能正在执行的操作
-                        foreach (var cmd in commandsToLock)
-                        {
-                            await cmd.InterruptAsync();
-                        }
+                        helper.Closed();
                     }
-                    finally
+                    Closed();
+                }
+                public virtual void Closed()
+                {
+                    if (component is null) return;
+                    foreach (var command in commands)
                     {
-                        // 解锁所有命令
-                        foreach (var cmd in commandsToLock)
-                        {
-                            cmd.UnLock();
-                        }
+                        command.UnLock();
                     }
                 }
                 public virtual void Dispose() { }

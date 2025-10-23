@@ -2,6 +2,8 @@
 {
     public interface IWorkflowHelper : IDisposable
     {
-        public Task CloseAsync(); // 安全地关闭连接两端工作
+        public void Closing();    // 关闭前
+        public Task CloseAsync(); // 安全地关闭
+        public void Closed();     // 关闭后
     }
 }
