@@ -43,7 +43,7 @@
         </ItemsControl>
 
         <!-- ObservableCollection<IWorkflowLink> Links | 所有已经建立的连接视图模型存储于此 -->
-        <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="-1">
+        <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="1">
             <!-- 省略 -->
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -68,7 +68,8 @@
                                StartTop="{Binding Sender.Anchor.Top}"
                                EndLeft="{Binding Receiver.Anchor.Left}"
                                EndTop="{Binding Receiver.Anchor.Top}"
-                               CanRender="{Binding IsVisible}" />
+                               CanRender="{Binding IsVisible}"
+                               IsVirtual="True"/>
 
     </Canvas>
 </UserControl>

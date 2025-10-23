@@ -24,7 +24,7 @@ public partial class WorkflowView : UserControl
         {
             Offset = new Offset(170, 60),
             Size = new Size(20, 20),
-            Channel = SlotChannel.OneTarget,
+            Channel = SlotChannel.OneBoth,
         };
         var slot2 = new SlotViewModel()
         {
@@ -36,7 +36,7 @@ public partial class WorkflowView : UserControl
         {
             Offset = new Offset(10, 100),
             Size = new Size(20, 20),
-            Channel = SlotChannel.OneSource,
+            Channel = SlotChannel.OneBoth,
         };
         var slot4 = new SlotViewModel()
         {

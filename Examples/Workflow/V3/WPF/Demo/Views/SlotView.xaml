@@ -6,7 +6,7 @@
              xmlns:local="clr-namespace:Demo.Views"
              mc:Ignorable="d"
              d:DesignHeight="300" d:DesignWidth="300"
-             Background="Violet"
+             Background="Gray"
              MouseUp="OnPointerReleased"
              MouseDown="OnPointerPressed">
 </UserControl>

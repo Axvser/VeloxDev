@@ -61,22 +61,15 @@ public partial class NodeView : UserControl
     // 鼠标按下时，获取鼠标相对于容器左上角的坐标，并记录为拖拽中
     private void OnMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.LeftButton == MouseButtonState.Pressed && _parentCanvas != null)
-        {
-            _isDragging = true;
-            _lastPosition = e.GetPosition(_parentCanvas);
-            e.Handled = true;
-        }
+        _isDragging = true;
+        _lastPosition = e.GetPosition(_parentCanvas);
+        e.Handled = true;
     }
 
     // 鼠标离开时，并记录为非拖拽中
     private void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton == MouseButton.Left)
-        {
-            _isDragging = false;
-            e.Handled = true;
-        }
+        _isDragging = false;
     }
 
     // 鼠标移动发生在拖拽模式时，请更新节点视图模型的 Anchor
@@ -95,5 +88,10 @@ public partial class NodeView : UserControl
 
         _lastPosition = currentPosition;
         e.Handled = true;
+    }
+
+    private void OnMouseLeave(object sender, MouseEventArgs e)
+    {
+        _isDragging = false;
     }
 }

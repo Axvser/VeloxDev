@@ -6,27 +6,28 @@
              xmlns:local="clr-namespace:Demo.Views"
              xmlns:vm="clr-namespace:Demo.ViewModels"
              mc:Ignorable="d"
-             d:DesignHeight="300" d:DesignWidth="300"
-             Background="#aaffffff">
+             d:DesignHeight="300" d:DesignWidth="300">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="12*" />
             <RowDefinition Height="90*" />
         </Grid.RowDefinitions>
 
+        <Border Grid.Row="1" 
+                Padding="1"
+                Background="#33ffffff" 
+                BorderBrush="White"
+                BorderThickness="1,0,1,1" 
+                CornerRadius="0,0,4,4" />
+
         <!-- 标题栏 -->
-        <Grid Grid.Row="0">
-            <Border Background="#aa1e1e1e"
-                    MouseDown="OnMouseDown"
-                    MouseUp="OnMouseUp"
-                    MouseMove="OnMouseMove">
-                <TextBlock Text="{Binding Name}"
-                           Foreground="White"
-                           TextAlignment="Center"
-                           VerticalAlignment="Center"
-                           HorizontalAlignment="Center" />
-            </Border>
-        </Grid>
+        <Border Grid.Row="0"
+                Background="#aaffffff"
+                MouseDown="OnMouseDown"
+                MouseUp="OnMouseUp"
+                MouseMove="OnMouseMove"
+                MouseLeave="OnMouseLeave">
+        </Border>
 
         <!-- 插槽区域 -->
         <Grid Grid.Row="0" Grid.RowSpan="2">
