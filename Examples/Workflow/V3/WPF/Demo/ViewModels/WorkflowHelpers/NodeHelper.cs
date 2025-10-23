@@ -56,7 +56,7 @@ namespace Demo.ViewModels.WorkflowHelpers
 
             try
             {
-                // [ User Component Helper ] 随机模拟验证耗时 ( 当然，实际开发建议此处耗时越短越好 )
+                // [ User ] 随机模拟验证耗时 ( 当然，实际开发建议此处耗时越短越好 )
                 await Task.Delay(rnd.Next(100, 2000), ct);
             }
             catch (TaskCanceledException ex)
