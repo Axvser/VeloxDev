@@ -8,12 +8,30 @@
              d:DesignHeight="300" d:DesignWidth="300"
              MouseUp="OnPointerReleased"
              MouseMove="OnPointerMoved">
+    <UserControl.Resources>
+        <DataTemplate x:Key="NodeTemplate">
+            <local:NodeView Width="{Binding Size.Width}"
+                    Height="{Binding Size.Height}"
+                    IsEnabled="{Binding IsEnabled}"
+                    IsWorking="{Binding Path=IsExecuting}"/>
+        </DataTemplate>
+        <DataTemplate x:Key="ControllerTemplate">
+            <local:ControllerView Width="{Binding Size.Width}"
+                    Height="{Binding Size.Height}"
+                    IsEnabled="{Binding IsEnabled}"/>
+        </DataTemplate>
+        <local:CustomTemplateSelector x:Key="NodeSelector"
+                                      Controller="{StaticResource ControllerTemplate}"
+                                      Simulator="{StaticResource NodeTemplate}"/>
+    </UserControl.Resources>
     <Canvas>
         <Button Content="Undo" Width="100" Height="100" Click="Button_Click"/>
         <Button Content="Redo" Width="100" Height="100" Click="Button_Click_1" Canvas.Top="200"/>
 
         <!-- ObservableCollection<IWorkflowNode> Nodes | 所有节点的视图模型存储于此 -->
-        <ItemsControl ItemsSource="{Binding Nodes}" Canvas.ZIndex="0">
+        <ItemsControl ItemsSource="{Binding Nodes}"
+                      Canvas.ZIndex="0"
+                      ItemTemplateSelector="{StaticResource NodeSelector}">
             <!-- 容器模板，推荐显示设定尺寸 -->
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -31,15 +49,8 @@
                             Value="{Binding Anchor.Layer}" />
                 </Style>
             </ItemsControl.ItemContainerStyle>
-            <!-- 数据模板，在此处决定如何呈现每个节点视图，提示，可以使用模板选择多元化节点外观 -->
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <local:NodeView Width="{Binding Size.Width}"
-                                    Height="{Binding Size.Height}"
-                                    IsEnabled="{Binding IsEnabled}"
-                                    IsWorking="{Binding Path=IsExecuting}"/>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
+            <!-- 数据模板，在此处决定如何呈现每个节点视图，此处使用模板选择以多元化节点外观 -->
+            
         </ItemsControl>
 
         <!-- ObservableCollection<IWorkflowLink> Links | 所有已经建立的连接视图模型存储于此 -->
