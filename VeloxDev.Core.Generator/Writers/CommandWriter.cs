@@ -63,8 +63,6 @@ namespace VeloxDev.Core.Generator.Writers
                     canValidate = (bool)(attribute.ConstructorArguments[1].Value ?? false);
                 if (attribute.ConstructorArguments.Length >= 3)
                     semaphore = (int)(attribute.ConstructorArguments[2].Value ?? false);
-                if (semaphore <= 0)
-                    semaphore = 1;
 
                 // 7. 处理"Auto"命名规则
                 if (commandName == "Auto")
@@ -112,17 +110,15 @@ namespace VeloxDev.Core.Generator.Writers
 
             foreach (var config in CommandConfig)
             {
-                if (config.Item3 > 1)
+                if (config.Item2)
                 {
-                    if (config.Item2)
-                    {
-                        builder.AppendLine($$"""
+                    builder.AppendLine($$"""
                                                 private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
                                                 public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
                                                 {
                                                     get
                                                     {
-                                                        _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
+                                                        _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
                                                             executeAsync: {{config.Item4}},
                                                             canExecute: CanExecute{{config.Item1}}Command,
                                                             semaphore: {{config.Item3}});
@@ -131,16 +127,16 @@ namespace VeloxDev.Core.Generator.Writers
                                                 }
                                                 private partial bool CanExecute{{config.Item1}}Command(object? parameter);
                                              """);
-                    }
-                    else
-                    {
-                        builder.AppendLine($$"""
+                }
+                else
+                {
+                    builder.AppendLine($$"""
                                                 private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
                                                 public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
                                                 {
                                                     get
                                                     {
-                                                        _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
+                                                        _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
                                                             executeAsync: {{config.Item4}},
                                                             canExecute: _ => true,
                                                             semaphore: {{config.Item3}});
@@ -148,43 +144,6 @@ namespace VeloxDev.Core.Generator.Writers
                                                     }
                                                 }
                                              """);
-                    }
-                }
-                else
-                {
-                    if (config.Item2)
-                    {
-                        builder.AppendLine($$"""
-                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
-                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
-                                                {
-                                                    get
-                                                    {
-                                                       _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                                                           executeAsync: {{config.Item4}},
-                                                           canExecute: CanExecute{{config.Item1}}Command);
-                                                       return _buffer_{{config.Item1}}Command;
-                                                    }
-                                                }
-                                                private partial bool CanExecute{{config.Item1}}Command(object? parameter);
-                                             """);
-                    }
-                    else
-                    {
-                        builder.AppendLine($$"""
-                                                private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_{{config.Item1}}Command = null;
-                                                public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand {{config.Item1}}Command
-                                                {
-                                                   get
-                                                   {
-                                                      _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                                                          executeAsync: {{config.Item4}},
-                                                          canExecute: _ => true);
-                                                      return _buffer_{{config.Item1}}Command;
-                                                   }
-                                                }
-                                             """);
-                    }
                 }
             }
 

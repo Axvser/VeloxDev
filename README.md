@@ -18,6 +18,8 @@
   * [⚙️ MonoBehaviour](#-monobehaviour)
   * [📦 AOT Reflection](#-aot-reflection)
 
+* [🔄 更新](#-更新)
+
 ---
 
 ## ⬇️ 获取
@@ -269,3 +271,31 @@ public static void Init()
     _ = typeof(global::Player).GetProperties(...);
 }
 ```
+
+### 🔄 更新
+
+<details>
+<summary>Version 3.0.0</summary>
+
+##### Roslyn 改进
+
+- 修复不支持嵌套类定义的问题
+- 修复NotifyProperty不支持可空类型的问题
+
+##### Workflow 重构
+
+- 改用 [ ViewModel ← Helper ] + View 结构，ViewModel 更轻量、更易于扩展与定制
+- 新增对 Redo 操作的支持
+- 移除 SlotCapacity 机制，转用 SlotChannel ，可定义更复杂的连接
+- 优化 SlotState 机制，使其作为 [ Flags ] ，可表达更复杂的状态
+
+</details>
+
+<details>
+<summary>Version 3.0.6</summary>
+
+##### Command 改进
+
+- 新增扩展方法 ChangeSemaphoreAsync ，支持动态地、安全地修改 
+
+</details>

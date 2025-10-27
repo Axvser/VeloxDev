@@ -564,275 +564,254 @@ namespace VeloxDev.Core.Generator.Writers
         private void GenerateNodeBody(StringBuilder sb, NodeAttributeModel model)
         {
             sb.AppendLine($$"""
-        public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+                    public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
 
-        private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel? parent = null;
-        private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
-        private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
-        private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> slots = [];
+                    private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel? parent = null;
+                    private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
+                    private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
+                    private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> slots = [];
 
-        protected virtual {{TaskFullName}} Move({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Offset offset) return {{TaskFullName}}.CompletedTask;
-            Helper.Move(offset);
-            return {{TaskFullName}}.CompletedTask;
-        }
-        protected virtual {{TaskFullName}} SaveAnchor({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            Helper.SaveAnchor();
-            return {{TaskFullName}}.CompletedTask;
-        }
-        protected virtual {{TaskFullName}} SaveSize({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            Helper.SaveSize();
-            return {{TaskFullName}}.CompletedTask;
-        }
-        protected virtual {{TaskFullName}} SetAnchor({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor) return {{TaskFullName}}.CompletedTask;
-            Helper.SetAnchor(anchor);
-            return {{TaskFullName}}.CompletedTask;
-        }
-        protected virtual {{TaskFullName}} SetSize({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Size scale) return {{TaskFullName}}.CompletedTask;
-            Helper.SetSize(scale);
-            return {{TaskFullName}}.CompletedTask;
-        }
-        protected virtual {{TaskFullName}} CreateSlot({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot) return {{TaskFullName}}.CompletedTask;
-            Helper.CreateSlot(slot);
-            return {{TaskFullName}}.CompletedTask;
-        }
-        protected virtual {{TaskFullName}} Delete({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            Helper.Delete();
-            return {{TaskFullName}}.CompletedTask;
-        }
-        protected virtual async {{TaskFullName}} Work({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            await Helper.WorkAsync(parameter,ct);
-        }
-        protected virtual async {{TaskFullName}} Broadcast({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            await Helper.BroadcastAsync(parameter,ct);
-        }
-        protected virtual async {{TaskFullName}} Close({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            await Helper.CloseAsync();
-        }
+                    protected virtual {{TaskFullName}} Move({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Offset offset) return {{TaskFullName}}.CompletedTask;
+                        Helper.Move(offset);
+                        return {{TaskFullName}}.CompletedTask;
+                    }
+                    protected virtual {{TaskFullName}} SaveAnchor({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        Helper.SaveAnchor();
+                        return {{TaskFullName}}.CompletedTask;
+                    }
+                    protected virtual {{TaskFullName}} SaveSize({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        Helper.SaveSize();
+                        return {{TaskFullName}}.CompletedTask;
+                    }
+                    protected virtual {{TaskFullName}} SetAnchor({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor) return {{TaskFullName}}.CompletedTask;
+                        Helper.SetAnchor(anchor);
+                        return {{TaskFullName}}.CompletedTask;
+                    }
+                    protected virtual {{TaskFullName}} SetSize({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Size scale) return {{TaskFullName}}.CompletedTask;
+                        Helper.SetSize(scale);
+                        return {{TaskFullName}}.CompletedTask;
+                    }
+                    protected virtual {{TaskFullName}} CreateSlot({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot) return {{TaskFullName}}.CompletedTask;
+                        Helper.CreateSlot(slot);
+                        return {{TaskFullName}}.CompletedTask;
+                    }
+                    protected virtual {{TaskFullName}} Delete({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        Helper.Delete();
+                        return {{TaskFullName}}.CompletedTask;
+                    }
+                    protected virtual async {{TaskFullName}} Work({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        await Helper.WorkAsync(parameter,ct);
+                    }
+                    protected virtual async {{TaskFullName}} Broadcast({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        await Helper.BroadcastAsync(parameter,ct);
+                    }
+                    protected virtual async {{TaskFullName}} Close({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        await Helper.CloseAsync();
+                    }
 
-        public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper GetHelper() => Helper;
-        public virtual void InitializeWorkflow() => Helper.Initialize(this);
-        public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper helper)
-        {
-            helper.Initialize(this);
-            Helper = helper;
-        }
+                    public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper GetHelper() => Helper;
+                    public virtual void InitializeWorkflow() => Helper.Initialize(this);
+                    public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper helper)
+                    {
+                        helper.Initialize(this);
+                        Helper = helper;
+                    }
 
-        public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel Parent
-        {
-            get => parent;
-            set
-            {
-               if({{ObjectFullName}}.Equals(parent,value)) return;
-               var old = parent;
-               OnPropertyChanging(nameof(Parent));
-               OnParentChanging(old,value);
-               parent = value;
-               OnParentChanged(old,value);
-               OnPropertyChanged(nameof(Parent));
-            }
-        }
-        partial void OnParentChanging({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel newValue);
-        partial void OnParentChanged({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel newValue);
-        public {{NAMESPACE_VELOX_WORKFLOW}}.Anchor Anchor
-        {
-            get => anchor;
-            set
-            {
-               if({{ObjectFullName}}.Equals(anchor,value)) return;
-               var old = anchor;
-               OnPropertyChanging(nameof(Anchor));
-               OnAnchorChanging(old,value);
-               anchor = value;
-               OnAnchorChanged(old,value);
-               OnPropertyChanged(nameof(Anchor));
-            }
-        }
-        partial void OnAnchorChanging({{NAMESPACE_VELOX_WORKFLOW}}.Anchor oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Anchor newValue);
-        partial void OnAnchorChanged({{NAMESPACE_VELOX_WORKFLOW}}.Anchor oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Anchor newValue);
-        public {{NAMESPACE_VELOX_WORKFLOW}}.Size Size
-        {
-            get => size;
-            set
-            {
-               if({{ObjectFullName}}.Equals(size,value)) return;
-               var old = size;
-               OnPropertyChanging(nameof(Size));
-               OnSizeChanging(old,value);
-               size = value;
-               OnSizeChanged(old,value);
-               OnPropertyChanged(nameof(Size));
-            }
-        }
-        partial void OnSizeChanging({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
-        partial void OnSizeChanged({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
-        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> Slots
-        {
-            get => slots;
-            set
-            {
-               if({{ObjectFullName}}.Equals(slots,value)) return;
-               var old = slots;
-               OnPropertyChanging(nameof(Slots));
-               OnSlotsChanging(old,value);
-               slots = value;
-               OnSlotsChanged(old,value);
-               OnPropertyChanged(nameof(Slots));
-            }
-        }
-        partial void OnSlotsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-        partial void OnSlotsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
+                    public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel Parent
+                    {
+                        get => parent;
+                        set
+                        {
+                           if({{ObjectFullName}}.Equals(parent,value)) return;
+                           var old = parent;
+                           OnPropertyChanging(nameof(Parent));
+                           OnParentChanging(old,value);
+                           parent = value;
+                           OnParentChanged(old,value);
+                           OnPropertyChanged(nameof(Parent));
+                        }
+                    }
+                    partial void OnParentChanging({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel newValue);
+                    partial void OnParentChanged({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel newValue);
+                    public {{NAMESPACE_VELOX_WORKFLOW}}.Anchor Anchor
+                    {
+                        get => anchor;
+                        set
+                        {
+                           if({{ObjectFullName}}.Equals(anchor,value)) return;
+                           var old = anchor;
+                           OnPropertyChanging(nameof(Anchor));
+                           OnAnchorChanging(old,value);
+                           anchor = value;
+                           OnAnchorChanged(old,value);
+                           OnPropertyChanged(nameof(Anchor));
+                        }
+                    }
+                    partial void OnAnchorChanging({{NAMESPACE_VELOX_WORKFLOW}}.Anchor oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Anchor newValue);
+                    partial void OnAnchorChanged({{NAMESPACE_VELOX_WORKFLOW}}.Anchor oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Anchor newValue);
+                    public {{NAMESPACE_VELOX_WORKFLOW}}.Size Size
+                    {
+                        get => size;
+                        set
+                        {
+                           if({{ObjectFullName}}.Equals(size,value)) return;
+                           var old = size;
+                           OnPropertyChanging(nameof(Size));
+                           OnSizeChanging(old,value);
+                           size = value;
+                           OnSizeChanged(old,value);
+                           OnPropertyChanged(nameof(Size));
+                        }
+                    }
+                    partial void OnSizeChanging({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
+                    partial void OnSizeChanged({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
+                    public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> Slots
+                    {
+                        get => slots;
+                        set
+                        {
+                           if({{ObjectFullName}}.Equals(slots,value)) return;
+                           var old = slots;
+                           OnPropertyChanging(nameof(Slots));
+                           OnSlotsChanging(old,value);
+                           slots = value;
+                           OnSlotsChanged(old,value);
+                           OnPropertyChanged(nameof(Slots));
+                        }
+                    }
+                    partial void OnSlotsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
+                    partial void OnSlotsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
 
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_MoveCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand MoveCommand
-        {
-           get
-           {
-              _buffer_MoveCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Move,
-                  canExecute: _ => true);
-              return _buffer_MoveCommand;
-           }
-        }
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SaveAnchorCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SaveAnchorCommand
-        {
-           get
-           {
-              _buffer_SaveAnchorCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SaveAnchor,
-                  canExecute: _ => true);
-              return _buffer_SaveAnchorCommand;
-           }
-        }
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SaveSizeCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SaveSizeCommand
-        {
-           get
-           {
-              _buffer_SaveSizeCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SaveSize,
-                  canExecute: _ => true);
-              return _buffer_SaveSizeCommand;
-           }
-        }
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SetAnchorCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SetAnchorCommand
-        {
-           get
-           {
-              _buffer_SetAnchorCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SetAnchor,
-                  canExecute: _ => true);
-              return _buffer_SetAnchorCommand;
-           }
-        }
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SetSizeCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SetSizeCommand
-        {
-           get
-           {
-              _buffer_SetSizeCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SetSize,
-                  canExecute: _ => true);
-              return _buffer_SetSizeCommand;
-           }
-        }
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_CreateSlotCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand CreateSlotCommand
-        {
-           get
-           {
-              _buffer_CreateSlotCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: CreateSlot,
-                  canExecute: _ => true);
-              return _buffer_CreateSlotCommand;
-           }
-        }
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_DeleteCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand DeleteCommand
-        {
-           get
-           {
-              _buffer_DeleteCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Delete,
-                  canExecute: _ => true);
-              return _buffer_DeleteCommand;
-           }
-        }
-    """);
-
-            if (model.WorkSemaphore > 1)
-            {
-                sb.AppendLine($$"""
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_WorkCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand WorkCommand
-        {
-           get
-           {
-              _buffer_WorkCommand ??= new {{NAMESPACE_VELOX_MVVM}}.ConcurrentVeloxCommand(
-                  executeAsync: Work,
-                  canExecute: _ => true,
-                  semaphore: {{model.WorkSemaphore}});
-              return _buffer_WorkCommand;
-           }
-        }
-    """);
-            }
-            else
-            {
-                sb.AppendLine($$"""
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_WorkCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand WorkCommand
-        {
-           get
-           {
-              _buffer_WorkCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Work,
-                  canExecute: _ => true);
-              return _buffer_WorkCommand;
-           }
-        }
-    """);
-            }
-
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_MoveCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand MoveCommand
+                    {
+                       get
+                       {
+                          _buffer_MoveCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              executeAsync: Move,
+                              canExecute: _ => true);
+                          return _buffer_MoveCommand;
+                       }
+                    }
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SaveAnchorCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SaveAnchorCommand
+                    {
+                       get
+                       {
+                          _buffer_SaveAnchorCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              executeAsync: SaveAnchor,
+                              canExecute: _ => true);
+                          return _buffer_SaveAnchorCommand;
+                       }
+                    }
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SaveSizeCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SaveSizeCommand
+                    {
+                       get
+                       {
+                          _buffer_SaveSizeCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              executeAsync: SaveSize,
+                              canExecute: _ => true);
+                          return _buffer_SaveSizeCommand;
+                       }
+                    }
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SetAnchorCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SetAnchorCommand
+                    {
+                       get
+                       {
+                          _buffer_SetAnchorCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              executeAsync: SetAnchor,
+                              canExecute: _ => true);
+                          return _buffer_SetAnchorCommand;
+                       }
+                    }
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SetSizeCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SetSizeCommand
+                    {
+                       get
+                       {
+                          _buffer_SetSizeCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              executeAsync: SetSize,
+                              canExecute: _ => true);
+                          return _buffer_SetSizeCommand;
+                       }
+                    }
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_CreateSlotCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand CreateSlotCommand
+                    {
+                       get
+                       {
+                          _buffer_CreateSlotCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              executeAsync: CreateSlot,
+                              canExecute: _ => true);
+                          return _buffer_CreateSlotCommand;
+                       }
+                    }
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_DeleteCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand DeleteCommand
+                    {
+                       get
+                       {
+                          _buffer_DeleteCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              executeAsync: Delete,
+                              canExecute: _ => true);
+                          return _buffer_DeleteCommand;
+                       }
+                    }
+                """);
             sb.AppendLine($$"""
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_BroadcastCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand BroadcastCommand
-        {
-           get
-           {
-              _buffer_BroadcastCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Broadcast,
-                  canExecute: _ => true);
-              return _buffer_BroadcastCommand;
-           }
-        }
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_CloseCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand CloseCommand
-        {
-           get
-           {
-              _buffer_CloseCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Close,
-                  canExecute: _ => true);
-              return _buffer_CloseCommand;
-           }
-        }
-    """);
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_WorkCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand WorkCommand
+                    {
+                       get
+                       {
+                          _buffer_WorkCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              executeAsync: Work,
+                              canExecute: _ => true,
+                              semaphore: {{model.WorkSemaphore}});
+                          return _buffer_WorkCommand;
+                       }
+                    }
+                """);
+            sb.AppendLine($$"""
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_BroadcastCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand BroadcastCommand
+                    {
+                       get
+                       {
+                          _buffer_BroadcastCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              executeAsync: Broadcast,
+                              canExecute: _ => true);
+                          return _buffer_BroadcastCommand;
+                       }
+                    }
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_CloseCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand CloseCommand
+                    {
+                       get
+                       {
+                          _buffer_CloseCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              executeAsync: Close,
+                              canExecute: _ => true);
+                          return _buffer_CloseCommand;
+                       }
+                    }
+                """);
         }
         private void GenerateSlotBody(StringBuilder sb, SlotAttributeModel model)
         {

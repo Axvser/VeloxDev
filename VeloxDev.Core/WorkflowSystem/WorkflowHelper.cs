@@ -39,7 +39,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     if (component is null) return;
                     foreach (var command in commands)
                     {
-                        command.InterruptAsync();
+                        command.ClearAsync();
                     }
                 }
                 public virtual void Closed()
@@ -146,7 +146,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     if (component is null) return;
                     foreach (var command in commands)
                     {
-                        await command.InterruptAsync();
+                        await command.ClearAsync();
                     }
                 }
                 public virtual void Closed()
@@ -406,7 +406,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     {
                         foreach (var cmd in commands)
                         {
-                            await cmd.InterruptAsync();
+                            await cmd.ClearAsync();
                         }
                     }
                     catch { }
