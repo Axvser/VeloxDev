@@ -8,27 +8,42 @@ namespace VeloxDev.Core.Interfaces.MVVM
     public interface IVeloxCommand : ICommand
     {
         /// <summary>
-        /// Invoked while execution started
+        /// Invoked when command execution starts
         /// </summary>
         public event EventHandler<object?>? ExecutionStarted;
 
         /// <summary>
-        /// Invoked while execution completed
+        /// Invoked when command execution completes successfully
         /// </summary>
         public event EventHandler<object?>? ExecutionCompleted;
 
         /// <summary>
-        /// Invoked while execution failed
+        /// Invoked when command execution fails with an exception
         /// </summary>
         public event EventHandler<(object? Parameter, Exception Exception)>? ExecutionFailed;
 
         /// <summary>
-        /// Locks the command to prevent new task executions
+        /// Invoked when a task is added to the pending queue
+        /// </summary>
+        public event EventHandler<object?>? TaskEnqueued;
+
+        /// <summary>
+        /// Invoked when a task is removed from the pending queue for execution
+        /// </summary>
+        public event EventHandler<object?>? TaskDequeued;
+
+        /// <summary>
+        /// Invoked when a CancellationTokenSource is created for a new execution item
+        /// </summary>
+        public event EventHandler<CancellationTokenSource>? TokenSourceCreated;
+
+        /// <summary>
+        /// Locks the command to prevent new task executions (asynchronous fire-and-forget)
         /// </summary>
         public void Lock();
 
         /// <summary>
-        /// Unlocks the command to allow new task executions
+        /// Unlocks the command to allow new task executions (asynchronous fire-and-forget)
         /// </summary>
         public void UnLock();
 
@@ -38,24 +53,24 @@ namespace VeloxDev.Core.Interfaces.MVVM
         public void Notify();
 
         /// <summary>
-        /// Clears the currently executing task
+        /// Cancels all executing tasks and clears the entire pending queue (asynchronous fire-and-forget)
         /// </summary>
         public void Clear();
 
         /// <summary>
-        /// Interrupts all tasks including queued operations
+        /// Cancels all currently executing tasks while preserving the pending queue (asynchronous fire-and-forget)
         /// </summary>
         public void Interrupt();
 
         /// <summary>
-        /// Continues tasks in queue
+        /// Attempts to start execution of pending tasks if conditions permit (asynchronous fire-and-forget)
         /// </summary>
         public void Continue();
 
         /// <summary>
-        /// Modifies the command's semaphore count for concurrent task control
+        /// Modifies the command's semaphore count for concurrent task control (asynchronous fire-and-forget)
         /// </summary>
-        /// <param name="semaphore">New semaphore value</param>
+        /// <param name="semaphore">New semaphore value (minimum 1)</param>
         public void ChangeSemaphore(int semaphore);
 
         /// <summary>
@@ -65,24 +80,34 @@ namespace VeloxDev.Core.Interfaces.MVVM
         public Task ExecuteAsync(object? parameter);
 
         /// <summary>
-        /// Clears the current execution state asynchronously
+        /// Locks the command asynchronously to prevent new task executions
+        /// </summary>
+        Task LockAsync();
+
+        /// <summary>
+        /// Unlocks the command asynchronously to allow new task executions
+        /// </summary>
+        Task UnLockAsync();
+
+        /// <summary>
+        /// Cancels all executing tasks and clears the entire pending queue asynchronously
         /// </summary>
         public Task ClearAsync();
 
         /// <summary>
-        /// Interrupts all command operations asynchronously
+        /// Cancels all currently executing tasks while preserving the pending queue asynchronously
         /// </summary>
         public Task InterruptAsync();
 
         /// <summary>
-        /// Continues tasks in queue asynchronously
+        /// Attempts to start execution of pending tasks if conditions permit asynchronously
         /// </summary>
         public Task ContinueAsync();
 
         /// <summary>
-        /// Modifies the command's semaphore count asynchronously
+        /// Modifies the command's semaphore count for concurrent task control asynchronously
         /// </summary>
-        /// <param name="semaphore">New semaphore value</param>
+        /// <param name="semaphore">New semaphore value (minimum 1)</param>
         public Task ChangeSemaphoreAsync(int semaphore);
     }
 }

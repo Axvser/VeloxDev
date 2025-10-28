@@ -16,12 +16,17 @@ namespace VeloxDev.Core.MVVM
         private int _maxConcurrency = Math.Max(1, semaphore);
         private bool _isForceLocked = false;
 
+        public event EventHandler<CancellationTokenSource>? TokenSourceCreated;
+
         public event EventHandler? CanExecuteChanged;
         public event EventHandler<object?>? ExecutionStarted;
         public event EventHandler<object?>? ExecutionCompleted;
         public event EventHandler<(object? Parameter, Exception Exception)>? ExecutionFailed;
 
-        private sealed class ExecutionItem(object? p)
+        public event EventHandler<object?>? TaskEnqueued;
+        public event EventHandler<object?>? TaskDequeued;
+
+        public sealed class ExecutionItem(object? p)
         {
             public object? Parameter { get; } = p;
             public CancellationTokenSource Cts { get; } = new CancellationTokenSource();
@@ -40,11 +45,12 @@ namespace VeloxDev.Core.MVVM
 
         public async Task ExecuteAsync(object? parameter)
         {
-            var item = new ExecutionItem(parameter);
-
             await _stateLock.WaitAsync().ConfigureAwait(false);
             try
             {
+                var item = new ExecutionItem(parameter);
+                TokenSourceCreated?.Invoke(this, item.Cts);
+
                 // If externally force locked, reject new tasks.
                 if (_isForceLocked)
                     return;
@@ -57,6 +63,7 @@ namespace VeloxDev.Core.MVVM
                 }
 
                 _pendingQueue.Enqueue(item);
+                TaskEnqueued?.Invoke(this, item);
             }
             finally
             {
@@ -134,7 +141,11 @@ namespace VeloxDev.Core.MVVM
                 _active.Clear();
 
                 while (_pendingQueue.Count > 0)
-                    toCancel.Add(_pendingQueue.Dequeue());
+                {
+                    var item = _pendingQueue.Dequeue();
+                    TaskDequeued?.Invoke(this, item);
+                    toCancel.Add(item);
+                }
             }
             finally
             {
@@ -188,13 +199,9 @@ namespace VeloxDev.Core.MVVM
                 await _executeAsync(item.Parameter, item.Cts.Token).ConfigureAwait(false);
                 ExecutionCompleted?.Invoke(this, item.Parameter);
             }
-            catch (OperationCanceledException)
-            {
-                // 预期的取消，不上报为失败
-            }
             catch (Exception ex)
             {
-                // 汇报失败事件，但不 rethrow（防止未观察的异常破坏线程）
+                // 汇报失败，但不 rethrow（防止未观察的异常破坏线程）
                 ExecutionFailed?.Invoke(this, (item.Parameter, ex));
             }
             finally
@@ -204,23 +211,17 @@ namespace VeloxDev.Core.MVVM
         }
         private async Task OnExecutionCompletedAsync(ExecutionItem completed)
         {
-            bool needWake = false;
-
             await _stateLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                // 从 active 中移除完成项
                 _active.Remove(completed);
-                // 仅在未被外部锁定时尝试唤醒
-                needWake = !_isForceLocked && _pendingQueue.Count > 0 && _active.Count < _maxConcurrency;
             }
             finally
             {
                 _stateLock.Release();
             }
 
-            if (needWake)
-                await TryStartPendingAsync().ConfigureAwait(false);
+            await TryStartPendingAsync().ConfigureAwait(false);
         }
         private async Task TryStartPendingAsync()
         {
@@ -232,6 +233,7 @@ namespace VeloxDev.Core.MVVM
                        !_isForceLocked)
                 {
                     var next = _pendingQueue.Dequeue();
+                    TaskDequeued?.Invoke(this, next);
                     _active.Add(next);
                     _ = ExecuteCoreAsync(next);
                 }

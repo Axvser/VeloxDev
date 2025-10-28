@@ -27,6 +27,15 @@
                 MouseUp="OnMouseUp"
                 MouseMove="OnMouseMove"
                 MouseLeave="OnMouseLeave">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock  Text="执行数 [ " VerticalAlignment="Center"/>
+                <TextBlock  Text="{Binding RunCount}" VerticalAlignment="Center"/>
+                <TextBlock  Text=" ] " VerticalAlignment="Center"/>
+                <TextBlock  Text="缓冲数 [ " VerticalAlignment="Center"/>
+                <TextBlock  Text="{Binding WaitCount}" VerticalAlignment="Center"/>
+                <TextBlock  Text=" ] " VerticalAlignment="Center"/>
+            </StackPanel>
+            
         </Border>
 
         <!-- 插槽区域 -->

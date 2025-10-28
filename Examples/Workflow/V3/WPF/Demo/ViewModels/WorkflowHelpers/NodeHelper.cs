@@ -14,29 +14,30 @@ namespace Demo.ViewModels.WorkflowHelpers
             // [ Standard ] 框架初始化 Helper 持有的视图模型
             base.Initialize(node);
 
-            // [ User ] 用户自定义 Helper 具体类型
+            // [ User ] 跟踪任务计数
             _viewModel = node as NodeViewModel;
+            _viewModel!.WorkCommand.ExecutionStarted += (s, e) => _viewModel.RunCount++;
+            _viewModel!.WorkCommand.ExecutionCompleted += (s, e) => _viewModel.RunCount--;
+            _viewModel!.WorkCommand.TaskEnqueued += (s, e) => _viewModel.WaitCount++;
+            _viewModel!.WorkCommand.TaskDequeued += (s, e) => _viewModel.WaitCount--;
         }
 
-        public override async void Closed()
+        public override void Closed()
         {
             // [ Standard ] 工作流关闭回调
             base.Closed();
 
             // [ User ] 清除任务计数器
             if (_viewModel is null) return;
-            _viewModel.TaskCount = 0;
         }
 
         public override async Task WorkAsync(object? parameter, CancellationToken ct)
         {
             try
             {
-                // [ User ] 跟踪任务计数并模拟随机任务耗时
+                // [ User ] 模拟随机任务耗时
                 if (_viewModel is null) return;
-                _viewModel.TaskCount++;
                 await Task.Delay(rnd.Next(1000, 7000), ct);
-                _viewModel.TaskCount--;
 
                 // [ Standard ] 框架广播任务参数给子节点
                 await BroadcastAsync(parameter, ct);

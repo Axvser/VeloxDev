@@ -292,10 +292,35 @@ public static void Init()
 </details>
 
 <details>
-<summary>Version 3.0.6</summary>
+<summary>Version 3.1.0</summary>
 
-##### Command 改进
+## VeloxCommand 改进
 
-- 新增扩展方法 ChangeSemaphoreAsync ，支持动态地、安全地修改 
+- 合并 ConcurrentVeloxCommand 与 VeloxCommand，统一为 VeloxCommand
+- 更清晰的API语义
+- 更成熟的并发与排队机制
+- 更丰富的回调支持
+
+## Event
+
+| 名称 | 类型 | 说明 |
+|---------|------|------|
+| `ExecutionStarted` | `EventHandler<object?>` | 执行开始时触发 |
+| `ExecutionCompleted` | `EventHandler<object?>` | 执行完成时触发 |
+| `ExecutionFailed` | `EventHandler<(object? Parameter, Exception Exception)>` | 执行失败时触发 |
+| `TaskEnqueued` | `EventHandler<object?>` | 任务入队时触发 |
+| `TaskDequeued` | `EventHandler<object?>` | 任务出队时触发 |
+
+## Method
+
+| 方法名称 | 参数 | 返回值 | 说明 |
+|---------|------|--------|------|
+| `Lock()` | 无 | `void / Task` | 锁定命令，阻止新任务进入 |
+| `UnLock()` | 无 | `void / Task` | 解锁命令，允许新任务进入 |
+| `Notify()` | 无 | `void / Task` | 通知命令重新评估其执行状态 |
+| `Clear()` | 无 | `void / Task` | 清除当前执行中的任务+等待队列中的任务 |
+| `Interrupt()` | 无 | `void / Task` | 中断当前执行中的任务 |
+| `Continue()` | 无 | `void / Task` | 继续执行等待队列中的任务 |
+| `ChangeSemaphore(int semaphore)` | `semaphore`: 新的信号量值 | `void / Task` | 修改命令的信号量计数以控制并发任务 |
 
 </details>

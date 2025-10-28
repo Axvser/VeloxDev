@@ -13,5 +13,7 @@ public partial class NodeViewModel
 
     // …… 自由扩展您的节点视图模型
 
-    [VeloxProperty] private int taskCount = 0;
+    [VeloxProperty] private int runCount = 0;
+
+    [VeloxProperty] private int waitCount = 0;
 }

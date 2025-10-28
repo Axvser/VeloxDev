@@ -54,10 +54,18 @@ public partial class WorkflowView : UserControl
             Size = new Size(300, 300),
             Anchor = new Anchor(250, 250, 1)
         };
-        var node3 = new ControllerViewModel() // 控制器节点，仅用于启动、终结
+
+        // 控制器节点，仅用于启动、终结
+        var node3 = new ControllerViewModel() 
         {
             Size = new Size(400, 200),
             Anchor = new Anchor(400, 400, 1)
+        };
+        var slot5 = new SlotViewModel()
+        {
+            Offset = new Offset(335, 55),
+            Size = new Size(30, 30),
+            Channel = SlotChannel.MultipleTargets,
         };
 
         // 给 Tree 挂载 Node
@@ -70,6 +78,7 @@ public partial class WorkflowView : UserControl
         node1.GetHelper().CreateSlot(slot2);
         node2.GetHelper().CreateSlot(slot3);
         node2.GetHelper().CreateSlot(slot4);
+        node3.GetHelper().CreateSlot(slot5);
 
         // 清理历史栈，避免非法的重做与撤销
         _workflowViewModel.GetHelper().ClearHistory();

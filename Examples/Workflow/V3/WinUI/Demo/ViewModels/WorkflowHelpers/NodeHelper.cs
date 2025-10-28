@@ -21,7 +21,7 @@ namespace Demo.ViewModels.WorkflowHelpers
             _viewModel = node as NodeViewModel;
         }
 
-        public override async void Closed()
+        public override void Closed()
         {
             // [ Standard ] 工作流关闭回调
             base.Closed();

@@ -4,8 +4,10 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:Demo.Views"
-             mc:Ignorable="d" 
-             d:DesignHeight="400" d:DesignWidth="800">
+             xmlns:vm="clr-namespace:Demo.ViewModels"
+             mc:Ignorable="d"
+             d:DesignHeight="400" d:DesignWidth="800"
+             d:DataContext="{d:DesignInstance Type=vm:ControllerViewModel}">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -14,17 +16,17 @@
             <RowDefinition Height="2*"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="5*"/>
+            <ColumnDefinition Width="8*"/>
             <ColumnDefinition Width="2*"/>
         </Grid.ColumnDefinitions>
         <Border Grid.RowSpan="5"
-                Grid.ColumnSpan="3"
+                Grid.ColumnSpan="2"
                 BorderThickness="1" 
                 CornerRadius="5"
                 BorderBrush="White" 
                 Background="#33ffffff" />
         <Border Grid.Row="0"
-                Grid.ColumnSpan="3"
+                Grid.ColumnSpan="2"
                 BorderThickness="1" 
                 CornerRadius="5,5,0,0"
                 Background="#aaffffff"
@@ -32,7 +34,7 @@
                 MouseUp="OnMouseUp"
                 MouseMove="OnMouseMove"
                 MouseLeave="OnMouseLeave">
-            <TextBlock Text="系统启停器" 
+            <TextBlock Text="系统开关" 
                        VerticalAlignment="Center" 
                        HorizontalAlignment="Center"
                        />
@@ -42,12 +44,38 @@
                 Grid.Column="0"
                 Margin="20"
                 Content="开始"
-                VerticalContentAlignment="Center"/>
+                VerticalContentAlignment="Center"
+                Command="{Binding BroadcastCommand}"/>
 
-        <Button Grid.Row="2"
+        <Button Grid.Row="3"
                 Grid.Column="0"
                 Margin="20"
                 Content="结束"
-                VerticalContentAlignment="Center"/>
+                VerticalContentAlignment="Center"
+                Command="{Binding Parent.CloseCommand}"/>
+
+        <ItemsControl ItemsSource="{Binding Slots}"
+                      Grid.RowSpan="2" 
+                      Grid.ColumnSpan="2">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Canvas />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemContainerStyle>
+                <Style TargetType="ContentPresenter">
+                    <Setter Property="Canvas.Left"
+                            Value="{Binding Offset.Left}" />
+                    <Setter Property="Canvas.Top"
+                            Value="{Binding Offset.Top}" />
+                </Style>
+            </ItemsControl.ItemContainerStyle>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <local:SlotView Width="{Binding Size.Width}"
+                                    Height="{Binding Size.Height}"/>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
     </Grid>
 </UserControl>
