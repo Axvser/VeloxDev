@@ -301,26 +301,25 @@ public static void Init()
 - 更成熟的并发与排队机制
 - 更丰富的回调支持
 
-## Event
+| 方法名                                                  | 作用                           | 典型场景          |
+| :--------------------------------------------------- | :--------------------------- | :------------ |
+| `Lock()` / `LockAsync()`                             | 锁定命令，禁止新任务入队或执行。             | 批量更新、暂停任务调度。  |
+| `UnLock()` / `UnLockAsync()`                         | 解锁命令，允许队列中的任务继续调度。           | 解锁后恢复执行。      |
+| `Interrupt()` / `InterruptAsync()`                   | 中断当前正在执行的任务（触发取消），保留队列。      | 用户强制终止执行。     |
+| `Clear()` / `ClearAsync()`                           | 清除所有任务（包括正在执行和等待中）。          | 完整清空命令状态。     |
+| `Continue()` / `ContinueAsync()`                     | 手动触发调度器检查并继续执行待处理任务。         | 可在外部信号后恢复执行。  |
+| `ChangeSemaphore(int)` / `ChangeSemaphoreAsync(int)` | 动态调整最大并发执行数。                 | 控制资源占用与吞吐量。   |
+| `Notify()`                                           | 主动触发 `CanExecuteChanged` 事件。 | 手动刷新 UI 可用状态。 |
 
-| 名称 | 类型 | 说明 |
-|---------|------|------|
-| `ExecutionStarted` | `EventHandler<object?>` | 执行开始时触发 |
-| `ExecutionCompleted` | `EventHandler<object?>` | 执行完成时触发 |
-| `ExecutionFailed` | `EventHandler<(object? Parameter, Exception Exception)>` | 执行失败时触发 |
-| `TaskEnqueued` | `EventHandler<object?>` | 任务入队时触发 |
-| `TaskDequeued` | `EventHandler<object?>` | 任务出队时触发 |
-
-## Method
-
-| 方法名称 | 参数 | 返回值 | 说明 |
-|---------|------|--------|------|
-| `Lock()` | 无 | `void / Task` | 锁定命令，阻止新任务进入 |
-| `UnLock()` | 无 | `void / Task` | 解锁命令，允许新任务进入 |
-| `Notify()` | 无 | `void / Task` | 通知命令重新评估其执行状态 |
-| `Clear()` | 无 | `void / Task` | 清除当前执行中的任务+等待队列中的任务 |
-| `Interrupt()` | 无 | `void / Task` | 中断当前执行中的任务 |
-| `Continue()` | 无 | `void / Task` | 继续执行等待队列中的任务 |
-| `ChangeSemaphore(int semaphore)` | `semaphore`: 新的信号量值 | `void / Task` | 修改命令的信号量计数以控制并发任务 |
+| 事件名             | 时机                       | 用途                        | 对应状态      |
+| :-------------- | :----------------------- | :------------------------ | :-------- |
+| `TaskCreated`   | 每次执行请求被提交时               | 任务对象已创建，但尚未调度。            | Created   |
+| `TaskEnqueued`  | 当当前并发已满时入队               | 表示任务等待被执行。                | Waiting   |
+| `TaskDequeued`  | 任务被取出准备执行时               | 即将从等待队列转入执行。              | Preparing |
+| `TaskStarted`   | 实际执行逻辑开始时                | 调用 `_executeAsync()` 前触发。 | Running   |
+| `TaskCompleted` | 执行成功（无异常、无取消）            | 正常结束。                     | Done      |
+| `TaskCanceled`  | 因 `CancellationToken` 取消 | 被显式中断或取消。                 | Canceled  |
+| `TaskFailed`    | 因异常导致失败                  | 异常在执行逻辑中被捕获。              | Failed    |
+| `TaskExited`    | 生命周期结束                   | 总是最后触发，无论成功/失败/取消。        | Finalized |
 
 </details>
