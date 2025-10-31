@@ -2,6 +2,19 @@
 
 namespace VeloxDev.Core.MVVM
 {
+    public enum VeloxCommandEventType : int
+    {
+        None = 0,
+        Created,   // 任务已创建
+        Enqueued,  // 入队等待
+        Dequeued,  // 出队准备执行
+        Started,   // 实际开始执行
+        Completed, // 执行成功
+        Failed,    // 执行失败
+        Canceled,  // 被取消
+        Exited     // 生命周期结束
+    }
+
     public sealed class VeloxCommand(Func<object?, CancellationToken, Task> executeAsync,
                         Predicate<object?>? canExecute = null,
                         int semaphore = 1) : IVeloxCommand
@@ -10,32 +23,30 @@ namespace VeloxDev.Core.MVVM
         private readonly Predicate<object?>? _canExecute = canExecute;
 
         private readonly SemaphoreSlim _stateLock = new(1, 1);
-        private readonly Queue<ExecutionItem> _pendingQueue = new();
-        private readonly List<ExecutionItem> _active = [];
+        private readonly Queue<VeloxCommandEventArgs> _pendingQueue = new();
+        private readonly List<VeloxCommandEventArgs> _active = [];
 
         private int _maxConcurrency = Math.Max(1, semaphore);
         private bool _isForceLocked = false;
 
-        public event EventHandler<CancellationTokenSource>? TokenSourceCreated;
-
         public event EventHandler? CanExecuteChanged;
-        public event EventHandler<object?>? ExecutionStarted;
-        public event EventHandler<object?>? ExecutionCompleted;
-        public event EventHandler<(object? Parameter, Exception Exception)>? ExecutionFailed;
 
-        public event EventHandler<object?>? TaskEnqueued;
-        public event EventHandler<object?>? TaskDequeued;
-
-        public sealed class ExecutionItem(object? p)
-        {
-            public object? Parameter { get; } = p;
-            public CancellationTokenSource Cts { get; } = new CancellationTokenSource();
-        }
+        public event VeloxCommandEventHandler? TaskCreated;
+        public event VeloxCommandEventHandler? TaskEnqueued;
+        public event VeloxCommandEventHandler? TaskDequeued;
+        public event VeloxCommandEventHandler? TaskStarted;
+        public event VeloxCommandEventHandler? TaskCompleted;
+        public event VeloxCommandEventHandler? TaskFailed;
+        public event VeloxCommandEventHandler? TaskCanceled;
+        public event VeloxCommandEventHandler? TaskExited;
 
         public bool CanExecute(object? parameter)
             => (_canExecute?.Invoke(parameter) ?? true) && !_isForceLocked;
+
         public void Execute(object? parameter) => _ = ExecuteAsync(parameter);
+
         public void Notify() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+
         public void Lock() => _ = LockAsync();
         public void UnLock() => _ = UnLockAsync();
         public void Interrupt() => _ = InterruptAsync();
@@ -45,31 +56,78 @@ namespace VeloxDev.Core.MVVM
 
         public async Task ExecuteAsync(object? parameter)
         {
+            var item = new VeloxCommandEventArgs(parameter, VeloxCommandEventType.Created);
+            TaskCreated?.Invoke(item);
+
             await _stateLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var item = new ExecutionItem(parameter);
-                TokenSourceCreated?.Invoke(this, item.Cts);
-
-                // If externally force locked, reject new tasks.
                 if (_isForceLocked)
+                {
+                    item.Cts.Cancel();
+                    TaskCanceled?.Invoke(item.With(VeloxCommandEventType.Canceled));
                     return;
+                }
 
                 if (_active.Count < _maxConcurrency)
                 {
                     _active.Add(item);
                     _ = ExecuteCoreAsync(item);
-                    return;
                 }
+                else
+                {
+                    _pendingQueue.Enqueue(item);
+                    TaskEnqueued?.Invoke(item.With(VeloxCommandEventType.Enqueued));
+                }
+            }
+            finally
+            {
+                _stateLock.Release();
+                Notify();
+            }
+        }
 
-                _pendingQueue.Enqueue(item);
-                TaskEnqueued?.Invoke(this, item);
+        private async Task ExecuteCoreAsync(VeloxCommandEventArgs item)
+        {
+            TaskStarted?.Invoke(item.With(VeloxCommandEventType.Started));
+
+            try
+            {
+                await _executeAsync(item.Parameter, item.Cts.Token).ConfigureAwait(false);
+                TaskCompleted?.Invoke(item.With(VeloxCommandEventType.Completed));
+            }
+            catch (OperationCanceledException)
+            {
+                TaskCanceled?.Invoke(item.With(VeloxCommandEventType.Canceled));
+            }
+            catch (Exception ex)
+            {
+                TaskFailed?.Invoke(item.With(VeloxCommandEventType.Failed, ex));
+            }
+            finally
+            {
+                await OnExecutionCompletedAsync(item).ConfigureAwait(false);
+            }
+        }
+
+        private async Task OnExecutionCompletedAsync(VeloxCommandEventArgs completed)
+        {
+            await _stateLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                _active.Remove(completed);
             }
             finally
             {
                 _stateLock.Release();
             }
+
+            TaskExited?.Invoke(completed.With(VeloxCommandEventType.Exited));
+            Notify();
+
+            await TryStartPendingAsync().ConfigureAwait(false);
         }
+
         public async Task LockAsync()
         {
             await _stateLock.WaitAsync().ConfigureAwait(false);
@@ -82,9 +140,9 @@ namespace VeloxDev.Core.MVVM
                 _stateLock.Release();
             }
 
-            // Notify outside lock to avoid UI handler reentrancy holding our lock.
             Notify();
         }
+
         public async Task UnLockAsync()
         {
             await _stateLock.WaitAsync().ConfigureAwait(false);
@@ -100,18 +158,17 @@ namespace VeloxDev.Core.MVVM
             Notify();
             await TryStartPendingAsync().ConfigureAwait(false);
         }
+
         public async Task InterruptAsync()
         {
-            List<ExecutionItem> toCancel = [];
+            List<VeloxCommandEventArgs> activeToCancel = [];
 
-            // step 1: lock to prevent new tasks entering
             await LockAsync().ConfigureAwait(false);
 
-            // step 2: snapshot current active and remove them from active (atomic)
             await _stateLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                toCancel.AddRange(_active);
+                activeToCancel.AddRange(_active);
                 _active.Clear();
             }
             finally
@@ -119,32 +176,33 @@ namespace VeloxDev.Core.MVVM
                 _stateLock.Release();
             }
 
-            // step 3: cancel tokens outside lock
-            foreach (var it in toCancel)
+            foreach (var it in activeToCancel)
+            {
                 it.Cts.Cancel();
+                TaskCanceled?.Invoke(it.With(VeloxCommandEventType.Canceled));
+            }
 
-            // step 4: unlock (allow new tasks and potentially re-schedule pending)
             await UnLockAsync().ConfigureAwait(false);
         }
+
         public async Task ClearAsync()
         {
-            List<ExecutionItem> toCancel = [];
+            List<VeloxCommandEventArgs> activeToCancel = [];
+            List<VeloxCommandEventArgs> pendingToCancel = [];
 
-            // step 1: lock
             await LockAsync().ConfigureAwait(false);
 
-            // step 2: snapshot active and pending, then clear them (atomic)
             await _stateLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                toCancel.AddRange(_active);
+                activeToCancel.AddRange(_active);
                 _active.Clear();
 
                 while (_pendingQueue.Count > 0)
                 {
                     var item = _pendingQueue.Dequeue();
-                    TaskDequeued?.Invoke(this, item);
-                    toCancel.Add(item);
+                    TaskDequeued?.Invoke(item.With(VeloxCommandEventType.Dequeued));
+                    pendingToCancel.Add(item);
                 }
             }
             finally
@@ -152,13 +210,15 @@ namespace VeloxDev.Core.MVVM
                 _stateLock.Release();
             }
 
-            // step 3: cancel outside lock
-            foreach (var it in toCancel)
+            foreach (var it in pendingToCancel.Concat(activeToCancel))
+            {
                 it.Cts.Cancel();
+                TaskCanceled?.Invoke(it.With(VeloxCommandEventType.Canceled));
+            }
 
-            // step 4: unlock
             await UnLockAsync().ConfigureAwait(false);
         }
+
         public async Task ContinueAsync()
         {
             await _stateLock.WaitAsync().ConfigureAwait(false);
@@ -174,9 +234,11 @@ namespace VeloxDev.Core.MVVM
 
             await TryStartPendingAsync().ConfigureAwait(false);
         }
+
         public async Task ChangeSemaphoreAsync(int semaphore)
         {
-            if (semaphore < 1) return;
+            if (semaphore < 1)
+                return;
 
             await _stateLock.WaitAsync().ConfigureAwait(false);
             try
@@ -191,40 +253,10 @@ namespace VeloxDev.Core.MVVM
             await TryStartPendingAsync().ConfigureAwait(false);
         }
 
-        private async Task ExecuteCoreAsync(ExecutionItem item)
-        {
-            try
-            {
-                ExecutionStarted?.Invoke(this, item.Parameter);
-                await _executeAsync(item.Parameter, item.Cts.Token).ConfigureAwait(false);
-                ExecutionCompleted?.Invoke(this, item.Parameter);
-            }
-            catch (Exception ex)
-            {
-                // 汇报失败，但不 rethrow（防止未观察的异常破坏线程）
-                ExecutionFailed?.Invoke(this, (item.Parameter, ex));
-            }
-            finally
-            {
-                await OnExecutionCompletedAsync(item).ConfigureAwait(false);
-            }
-        }
-        private async Task OnExecutionCompletedAsync(ExecutionItem completed)
-        {
-            await _stateLock.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                _active.Remove(completed);
-            }
-            finally
-            {
-                _stateLock.Release();
-            }
-
-            await TryStartPendingAsync().ConfigureAwait(false);
-        }
         private async Task TryStartPendingAsync()
         {
+            List<VeloxCommandEventArgs> toStart = [];
+
             await _stateLock.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -233,15 +265,35 @@ namespace VeloxDev.Core.MVVM
                        !_isForceLocked)
                 {
                     var next = _pendingQueue.Dequeue();
-                    TaskDequeued?.Invoke(this, next);
                     _active.Add(next);
-                    _ = ExecuteCoreAsync(next);
+                    toStart.Add(next);
                 }
             }
             finally
             {
                 _stateLock.Release();
             }
+
+            foreach (var next in toStart)
+            {
+                TaskDequeued?.Invoke(next.With(VeloxCommandEventType.Dequeued));
+                _ = ExecuteCoreAsync(next);
+            }
+
+            Notify();
         }
+    }
+
+    public delegate void VeloxCommandEventHandler(VeloxCommandEventArgs e);
+
+    public sealed class VeloxCommandEventArgs(object? parameter, VeloxCommandEventType type, Exception? ex = null)
+    {
+        public object? Parameter { get; } = parameter;
+        public CancellationTokenSource Cts { get; } = new CancellationTokenSource();
+        public Exception? Exception { get; } = ex;
+        public VeloxCommandEventType EventType { get; } = type;
+
+        public VeloxCommandEventArgs With(VeloxCommandEventType newType, Exception? ex = null)
+            => new(Parameter, newType, ex ?? Exception) { };
     }
 }

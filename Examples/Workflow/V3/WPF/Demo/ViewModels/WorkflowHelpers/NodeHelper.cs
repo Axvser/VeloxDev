@@ -16,10 +16,10 @@ namespace Demo.ViewModels.WorkflowHelpers
 
             // [ User ] 跟踪任务计数
             _viewModel = node as NodeViewModel;
-            _viewModel!.WorkCommand.ExecutionStarted += (s, e) => _viewModel.RunCount++;
-            _viewModel!.WorkCommand.ExecutionCompleted += (s, e) => _viewModel.RunCount--;
-            _viewModel!.WorkCommand.TaskEnqueued += (s, e) => _viewModel.WaitCount++;
-            _viewModel!.WorkCommand.TaskDequeued += (s, e) => _viewModel.WaitCount--;
+            _viewModel!.WorkCommand.TaskStarted += (e) => _viewModel.RunCount++;
+            _viewModel!.WorkCommand.TaskExited += (e) => _viewModel.RunCount--;
+            _viewModel!.WorkCommand.TaskEnqueued += (e) => _viewModel.WaitCount++;
+            _viewModel!.WorkCommand.TaskDequeued += (e) => _viewModel.WaitCount--;
         }
 
         public override void Closed()
