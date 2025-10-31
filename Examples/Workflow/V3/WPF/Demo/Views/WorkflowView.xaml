@@ -12,8 +12,7 @@
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView Width="{Binding Size.Width}"
                     Height="{Binding Size.Height}"
-                    IsEnabled="{Binding IsEnabled}"
-                    IsWorking="{Binding Path=IsExecuting}"/>
+                    IsEnabled="{Binding IsEnabled}"/>
         </DataTemplate>
         <DataTemplate x:Key="ControllerTemplate">
             <local:ControllerView Width="{Binding Size.Width}"

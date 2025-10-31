@@ -32,6 +32,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver);
 
         public void SetPointer(Anchor anchor);
+        public bool ValidateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver);
         public void ApplyConnection(IWorkflowSlotViewModel slot);
         public void ReceiveConnection(IWorkflowSlotViewModel slot);
         public void ResetVirtualLink();

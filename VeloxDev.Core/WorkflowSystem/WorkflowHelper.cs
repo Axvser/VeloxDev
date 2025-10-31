@@ -705,6 +705,7 @@ namespace VeloxDev.Core.WorkflowSystem
                 private IWorkflowSlotViewModel? _sender = null;
                 private IWorkflowSlotViewModel? _receiver = null;
 
+                public virtual bool ValidateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver) => true;
                 public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
                     if (component == null) return;
@@ -740,7 +741,7 @@ namespace VeloxDev.Core.WorkflowSystem
                 {
                     if (component == null || _sender == null) return;
 
-                    // 1. 检查接收端能力
+                    // 检查接收端能力
                     bool canBeReceiver = slot.Channel.HasFlag(SlotChannel.OneSource) ||
                                         slot.Channel.HasFlag(SlotChannel.MultipleSources) ||
                                         slot.Channel.HasFlag(SlotChannel.OneBoth) ||
@@ -753,7 +754,16 @@ namespace VeloxDev.Core.WorkflowSystem
                         return;
                     }
 
-                    // 2. 检查同节点内连接
+                    // 检查用户自定义验证逻辑
+                    if(!ValidateConnection(_sender, slot))
+                    {
+                        ResetVirtualLink();
+                        _sender = null;
+                        _receiver = null;
+                        return;
+                    }
+
+                    // 检查同节点内连接
                     if (_sender.Parent == slot.Parent)
                     {
                         ResetVirtualLink();
@@ -762,13 +772,13 @@ namespace VeloxDev.Core.WorkflowSystem
                         return;
                     }
 
-                    // 3. 根据接收端通道类型智能清理连接
+                    // 根据接收端通道类型智能清理连接
                     SmartCleanupReceiverConnections(slot);
 
-                    // 4. 创建新连接
+                    // 创建新连接
                     CreateNewConnection(_sender, slot);
 
-                    // 5. 重置状态
+                    // 重置状态
                     ResetVirtualLink();
                     _sender = null;
                     _receiver = null;

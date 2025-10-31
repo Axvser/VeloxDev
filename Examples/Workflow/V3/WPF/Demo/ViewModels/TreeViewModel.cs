@@ -1,8 +1,9 @@
+using Demo.ViewModels.WorkflowHelpers;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[WorkflowBuilder.ViewModel.Tree<WorkflowHelper.ViewModel.Tree>]
+[WorkflowBuilder.ViewModel.Tree<TreeHelper>]
 public partial class TreeViewModel
 {
     public TreeViewModel() => InitializeWorkflow();

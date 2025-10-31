@@ -1,6 +1,6 @@
+using Demo.ViewModels;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Demo.ViewModels;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 using Size = VeloxDev.Core.WorkflowSystem.Size;
@@ -56,7 +56,7 @@ public partial class WorkflowView : UserControl
         };
 
         // 控制器节点，仅用于启动、终结
-        var node3 = new ControllerViewModel() 
+        var node3 = new ControllerViewModel()
         {
             Size = new Size(400, 200),
             Anchor = new Anchor(400, 400, 1)

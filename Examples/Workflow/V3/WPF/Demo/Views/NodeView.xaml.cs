@@ -1,10 +1,8 @@
+using Demo.ViewModels;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using Demo.ViewModels;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.Views;
@@ -18,27 +16,6 @@ public partial class NodeView : UserControl
     public NodeView()
     {
         InitializeComponent();
-    }
-
-    public static readonly DependencyProperty IsWorkingProperty = DependencyProperty.Register(
-        nameof(IsWorking), typeof(bool), typeof(NodeView), new PropertyMetadata(false, (dp, e) =>
-        {
-            if (dp is NodeView nodeView && nodeView.DataContext is IWorkflowNodeViewModel nodeContext)
-            {
-                if ((bool)e.NewValue)
-                {
-                    nodeView.Background = Brushes.Red;
-                }
-                else
-                {
-                    nodeView.Background = Brushes.Lime;
-                }
-            }
-        }));
-    public bool IsWorking
-    {
-        get => (bool)GetValue(IsWorkingProperty);
-        set => SetValue(IsWorkingProperty, value);
     }
 
     protected override void OnVisualParentChanged(DependencyObject oldParent)

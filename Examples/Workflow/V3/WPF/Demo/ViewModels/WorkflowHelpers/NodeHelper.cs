@@ -22,15 +22,6 @@ namespace Demo.ViewModels.WorkflowHelpers
             _viewModel!.WorkCommand.TaskDequeued += (e) => _viewModel.WaitCount--;
         }
 
-        public override void Closed()
-        {
-            // [ Standard ] 工作流关闭回调
-            base.Closed();
-
-            // [ User ] 清除任务计数器
-            if (_viewModel is null) return;
-        }
-
         public override async Task WorkAsync(object? parameter, CancellationToken ct)
         {
             try

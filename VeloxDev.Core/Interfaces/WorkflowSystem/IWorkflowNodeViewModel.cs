@@ -29,6 +29,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
     {
         public Task WorkAsync(object? parameter, CancellationToken ct);
         public Task BroadcastAsync(object? parameter, CancellationToken ct);
+        public Task<bool> ValidateBroadcastAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, object? parameter, CancellationToken ct);
 
         public void Initialize(IWorkflowNodeViewModel node);
 

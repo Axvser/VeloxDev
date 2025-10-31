@@ -13,7 +13,7 @@ namespace VeloxDev.Core.Interfaces.MVVM
         public event VeloxCommandEventHandler? TaskExited;
         public event VeloxCommandEventHandler? TaskEnqueued;
         public event VeloxCommandEventHandler? TaskDequeued;
-        
+
         public void Lock();
         public void UnLock();
         public void Notify();
