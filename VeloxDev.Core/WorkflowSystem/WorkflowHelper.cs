@@ -13,6 +13,16 @@ namespace VeloxDev.Core.WorkflowSystem
         {
             private static void SynchronizationError() => throw new InvalidOperationException("Synchronization Error : You are attempting to operate the workflow component across domains, but an unexpected incident occurred somewhere, causing the workflow trees to which the two components belong to be inconsistent");
 
+            public static bool TryFindLink(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, out IWorkflowLinkViewModel? link)
+            {
+                if (tree.LinksMap.TryGetValue(sender, out var dic) && dic.TryGetValue(receiver, out link))
+                {
+                    return true;
+                }
+                link = null;
+                return false;
+            }
+
             /// <summary>
             /// [ Component Helper ] Provide standard supports for Link Component
             /// </summary>
@@ -57,56 +67,88 @@ namespace VeloxDev.Core.WorkflowSystem
                     if (component is null) return;
                     var sender = component.Sender;
                     var receiver = component.Receiver;
-                    if (sender.Parent?.Parent is null ||
-                         receiver.Parent?.Parent is null ||
-                         sender.Parent.Parent != receiver.Parent.Parent)
+
+                    if (sender.Parent?.Parent is null || receiver.Parent?.Parent is null ||
+                        sender.Parent.Parent != receiver.Parent.Parent)
                     {
                         SynchronizationError();
                     }
+
                     var tree = sender.Parent.Parent;
-                    if (tree.LinksMap.TryGetValue(sender, out var linkPai))
+
+                    // 检查连接是否存在
+                    bool connectionExists = tree.LinksMap.TryGetValue(sender, out var linkPair) &&
+                                           linkPair.TryGetValue(receiver, out var existingLink) &&
+                                           existingLink == component;
+
+                    if (!connectionExists)
                     {
-                        if (linkPai.TryGetValue(receiver, out var link))
-                        {
-                            if (link == component)
-                            {   // 唯一正确的分支,可以推送重做和撤销 
-                                tree.GetHelper().Submit(new WorkflowActionPair(
-                                    () =>
-                                    {
-                                        linkPai.Remove(receiver);
-                                        tree.Links.Remove(link);
-                                        sender.Targets.Remove(receiver);
-                                        receiver.Sources.Remove(sender);
-                                    },
-                                    () =>
-                                    {
-                                        linkPai.Add(receiver, link);
-                                        tree.Links.Add(link);
-                                        sender.Targets.Add(receiver);
-                                        receiver.Sources.Add(sender);
-                                    }));
-                            }
-                            else
-                            {
-                                linkPai.Remove(receiver);
-                                tree.Links.Remove(link);
-                                sender.Targets.Remove(receiver);
-                                receiver.Sources.Remove(sender);
-                            }
-                        }
-                        else
-                        {
-                            sender.Targets.Remove(receiver);
-                            receiver.Sources.Remove(sender);
-                        }
-                    }
-                    else
-                    {
+                        // 如果连接不存在，只清理基础关系
                         sender.Targets.Remove(receiver);
                         receiver.Sources.Remove(sender);
+                        return;
                     }
-                    sender.GetHelper().UpdateState();
-                    receiver.GetHelper().UpdateState();
+
+                    // 使用撤销/重做栈记录操作
+                    tree.GetHelper().Submit(new WorkflowActionPair(
+                        // Redo: 执行删除
+                        () =>
+                        {
+                            // 从LinksMap中移除
+                            linkPair.Remove(receiver);
+                            if (linkPair.Count == 0)
+                            {
+                                tree.LinksMap.Remove(sender);
+                            }
+
+                            // 从Links集合中移除
+                            tree.Links.Remove(component);
+
+                            // 更新Slot的关系
+                            sender.Targets.Remove(receiver);
+                            receiver.Sources.Remove(sender);
+
+                            // 隐藏连接
+                            component.IsVisible = false;
+
+                            // 更新状态
+                            sender.GetHelper().UpdateState();
+                            receiver.GetHelper().UpdateState();
+                        },
+                        // Undo: 撤销删除
+                        () =>
+                        {
+                            // 恢复LinksMap
+                            if (!tree.LinksMap.ContainsKey(sender))
+                            {
+                                tree.LinksMap[sender] = new Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>();
+                            }
+                            tree.LinksMap[sender][receiver] = component;
+
+                            // 恢复Links集合
+                            if (!tree.Links.Contains(component))
+                            {
+                                tree.Links.Add(component);
+                            }
+
+                            // 恢复Slot的关系
+                            if (!sender.Targets.Contains(receiver))
+                            {
+                                sender.Targets.Add(receiver);
+                            }
+                            if (!receiver.Sources.Contains(sender))
+                            {
+                                receiver.Sources.Add(sender);
+                            }
+
+                            // 显示连接
+                            component.IsVisible = true;
+
+                            // 更新状态
+                            sender.GetHelper().UpdateState();
+                            receiver.GetHelper().UpdateState();
+                        }
+                    ));
                 }
             }
 
@@ -329,42 +371,76 @@ namespace VeloxDev.Core.WorkflowSystem
                     if (component is null || component.Parent is null) return;
                     var tree = component.Parent.Parent;
                     if (tree is null) return;
-                    List<IWorkflowLinkViewModel> links_asSource = [];
-                    List<IWorkflowLinkViewModel> links_asTarget = [];
-                    foreach (var target in component.Targets)
+
+                    // 收集所有相关连接
+                    var connectionsToRemove = new List<IWorkflowLinkViewModel>();
+
+                    // 查找所有相关的连接
+                    foreach (var target in component.Targets.ToArray()) // 使用ToArray避免修改时迭代
                     {
-                        if (target?.Parent.Parent != component.Parent?.Parent) SynchronizationError();
-                        if (tree.LinksMap.TryGetValue(component, out var pair) &&
-                           pair.TryGetValue(target, out var link))
-                            links_asSource.Add(link);
+                        if (target?.Parent?.Parent != tree)
+                        {
+                            SynchronizationError();
+                            continue;
+                        }
+
+                        if (tree.LinksMap.TryGetValue(component, out var targetLinks) &&
+                            targetLinks.TryGetValue(target, out var link))
+                        {
+                            connectionsToRemove.Add(link);
+                        }
                     }
-                    foreach (var source in component.Sources)
+
+                    foreach (var source in component.Sources.ToArray())
                     {
-                        if (source?.Parent.Parent != component.Parent?.Parent) SynchronizationError();
-                        if (tree.LinksMap.TryGetValue(source, out var pair) &&
-                           pair.TryGetValue(component, out var link))
-                            links_asTarget.Add(link);
+                        if (source?.Parent?.Parent != tree)
+                        {
+                            SynchronizationError();
+                            continue;
+                        }
+
+                        if (tree.LinksMap.TryGetValue(source, out var sourceLinks) &&
+                            sourceLinks.TryGetValue(component, out var link))
+                        {
+                            connectionsToRemove.Add(link);
+                        }
                     }
-                    foreach (var link in links_asSource)
-                    {
-                        link.GetHelper().Delete();
-                    }
-                    foreach (var link in links_asTarget)
-                    {
-                        link.GetHelper().Delete();
-                    }
+
                     var oldParent = component.Parent;
+
+                    // 使用撤销/重做栈记录操作
                     tree.GetHelper().Submit(new WorkflowActionPair(
-                    () =>
-                    {
-                        oldParent.Slots.Remove(component);
-                        component.Parent = null;
-                    },
-                    () =>
-                    {
-                        oldParent.Slots.Add(component);
-                        component.Parent = oldParent;
-                    }));
+                        // Redo: 执行删除
+                        () =>
+                        {
+                            // 先删除所有相关连接
+                            foreach (var link in connectionsToRemove)
+                            {
+                                link.GetHelper().Delete(); // 递归调用，会进入撤销栈
+                            }
+
+                            // 从父节点移除
+                            oldParent.Slots.Remove(component);
+                            component.Parent = null;
+
+                            // 清理集合
+                            component.Targets.Clear();
+                            component.Sources.Clear();
+                        },
+                        // Undo: 撤销删除
+                        () =>
+                        {
+                            // 恢复父节点关系
+                            component.Parent = oldParent;
+                            if (!oldParent.Slots.Contains(component))
+                            {
+                                oldParent.Slots.Add(component);
+                            }
+
+                            // 注意：连接的恢复由各自的Delete方法的撤销操作处理
+                            // 这里不需要手动恢复连接，因为连接删除已经在撤销栈中
+                        }
+                    ));
                 }
             }
 
@@ -568,24 +644,151 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void Delete()
                 {
                     if (component is null) return;
-                    List<IWorkflowSlotViewModel> slots = [.. component.Slots];
+                    var tree = component.Parent;
+                    if (tree is null) return;
+
+                    // 收集所有相关数据
+                    var slots = component.Slots.ToArray();
+                    var connectionsToRemove = new List<IWorkflowLinkViewModel>();
+                    var oldParent = component.Parent;
+
+                    // 预收集所有连接，避免在循环中修改集合
                     foreach (var slot in slots)
                     {
-                        if (component.Parent != slot.Parent?.Parent) SynchronizationError();
-                        slot.GetHelper().Delete();
+                        if (slot.Parent?.Parent != tree)
+                        {
+                            SynchronizationError();
+                            continue;
+                        }
+
+                        // 收集所有出站连接（作为发送端）
+                        foreach (var target in slot.Targets.ToArray())
+                        {
+                            if (TryFindLink(tree, slot, target, out var link))
+                            {
+                                connectionsToRemove.Add(link);
+                            }
+                        }
+
+                        // 收集所有入站连接（作为接收端）
+                        foreach (var source in slot.Sources.ToArray())
+                        {
+                            if (TryFindLink(tree, source, slot, out var link))
+                            {
+                                connectionsToRemove.Add(link);
+                            }
+                        }
                     }
-                    var oldParent = component.Parent;
-                    component.Parent?.GetHelper()?.Submit(new WorkflowActionPair(
+
+                    // 使用撤销/重做栈记录操作
+                    tree.GetHelper().Submit(new WorkflowActionPair(
+                        // Redo: 执行删除
                         () =>
                         {
-                            oldParent?.Nodes?.Remove(component);
+                            // 先删除所有连接（批量操作，提高效率）
+                            foreach (var link in connectionsToRemove.Distinct()) // 去重
+                            {
+                                // 直接删除连接，不通过Helper以提升性能
+                                var linkSender = link.Sender;
+                                var linkReceiver = link.Receiver;
+
+                                if (tree.LinksMap.TryGetValue(linkSender, out var receiverDict))
+                                {
+                                    receiverDict.Remove(linkReceiver);
+                                    if (receiverDict.Count == 0)
+                                    {
+                                        tree.LinksMap.Remove(linkSender);
+                                    }
+                                }
+
+                                tree.Links.Remove(link);
+                                linkSender.Targets.Remove(linkReceiver);
+                                linkReceiver.Sources.Remove(linkSender);
+                                link.IsVisible = false;
+                            }
+
+                            // 删除所有Slot
+                            foreach (var slot in slots)
+                            {
+                                slot.Targets.Clear();
+                                slot.Sources.Clear();
+                                slot.Parent = null;
+                            }
+                            component.Slots.Clear();
+
+                            // 从树中移除节点
+                            tree.Nodes.Remove(component);
                             component.Parent = null;
                         },
+                        // Undo: 撤销删除
                         () =>
                         {
-                            oldParent?.Nodes?.Add(component);
+                            // 恢复节点关系
                             component.Parent = oldParent;
-                        }));
+                            if (!tree.Nodes.Contains(component))
+                            {
+                                tree.Nodes.Add(component);
+                            }
+
+                            // 恢复所有Slot
+                            foreach (var slot in slots)
+                            {
+                                slot.Parent = component;
+                                if (!component.Slots.Contains(slot))
+                                {
+                                    component.Slots.Add(slot);
+                                }
+                            }
+
+                            // 恢复所有连接
+                            foreach (var link in connectionsToRemove.Distinct())
+                            {
+                                var linkSender = link.Sender;
+                                var linkReceiver = link.Receiver;
+
+                                // 恢复LinksMap
+                                if (!tree.LinksMap.ContainsKey(linkSender))
+                                {
+                                    tree.LinksMap[linkSender] = new Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>();
+                                }
+                                tree.LinksMap[linkSender][linkReceiver] = link;
+
+                                // 恢复Links集合
+                                if (!tree.Links.Contains(link))
+                                {
+                                    tree.Links.Add(link);
+                                }
+
+                                // 恢复Slot关系
+                                if (!linkSender.Targets.Contains(linkReceiver))
+                                {
+                                    linkSender.Targets.Add(linkReceiver);
+                                }
+                                if (!linkReceiver.Sources.Contains(linkSender))
+                                {
+                                    linkReceiver.Sources.Add(linkSender);
+                                }
+
+                                link.IsVisible = true;
+                            }
+
+                            // 更新所有相关Slot的状态
+                            foreach (var slot in slots)
+                            {
+                                slot.GetHelper().UpdateState();
+
+                                // 更新连接的另一端
+                                foreach (var target in slot.Targets)
+                                {
+                                    target.GetHelper().UpdateState();
+                                }
+                                foreach (var source in slot.Sources)
+                                {
+                                    source.GetHelper().UpdateState();
+                                }
+                            }
+                        }
+                    ));
                 }
                 #endregion
             }
@@ -755,7 +958,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     }
 
                     // 检查用户自定义验证逻辑
-                    if(!ValidateConnection(_sender, slot))
+                    if (!ValidateConnection(_sender, slot))
                     {
                         ResetVirtualLink();
                         _sender = null;

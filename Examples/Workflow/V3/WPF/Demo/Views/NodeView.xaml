@@ -35,8 +35,8 @@
                 <TextBlock  Text="{Binding WaitCount}" VerticalAlignment="Center"/>
                 <TextBlock  Text=" ] " VerticalAlignment="Center"/>
             </StackPanel>
-            
         </Border>
+        <Button Grid.Row="0" Width="50" Content="删除" Command="{Binding DeleteCommand}" HorizontalAlignment="Right"/>
 
         <!-- 插槽区域 -->
         <Grid Grid.Row="0" Grid.RowSpan="2">
