@@ -286,25 +286,11 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void UpdateState()
                 {
                     if (component is null) return;
-                    var tree = component.Parent?.Parent;
-                    if (tree is null) return;
-                    List<IWorkflowLinkViewModel> links_asSource = [];
-                    List<IWorkflowLinkViewModel> links_asTarget = [];
-                    foreach (var target in component.Targets)
-                    {
-                        if (target?.Parent.Parent != component.Parent?.Parent) SynchronizationError();
-                        if (tree.LinksMap.TryGetValue(component, out var pair) &&
-                           pair.TryGetValue(target, out var link))
-                            links_asSource.Add(link);
-                    }
-                    foreach (var source in component.Sources)
-                    {
-                        if (source?.Parent.Parent != component.Parent?.Parent) SynchronizationError();
-                        if (tree.LinksMap.TryGetValue(source, out var pair) &&
-                           pair.TryGetValue(component, out var link))
-                            links_asTarget.Add(link);
-                    }
-                    component.State = (links_asSource.Count > 0, links_asTarget.Count > 0) switch
+
+                    bool hasOutgoingConnections = component.Targets.Count > 0;
+                    bool hasIncomingConnections = component.Sources.Count > 0;
+
+                    component.State = (hasOutgoingConnections, hasIncomingConnections) switch
                     {
                         (true, false) => SlotState.Sender,
                         (false, true) => SlotState.Receiver,
