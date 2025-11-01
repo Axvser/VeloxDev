@@ -909,6 +909,7 @@ namespace VeloxDev.Core.WorkflowSystem
                 private IWorkflowSlotViewModel? _receiver = null;
 
                 public virtual bool ValidateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver) => true;
+
                 public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
                     if (component == null) return;
@@ -940,6 +941,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     slot.State = SlotState.PreviewSender;
                     slot.GetHelper().UpdateState();
                 }
+
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
                     if (component == null || _sender == null) return;
@@ -975,6 +977,9 @@ namespace VeloxDev.Core.WorkflowSystem
                         return;
                     }
 
+                    // 启用硬性规定：检查并清理同向连接冲突
+                    CleanupSameDirectionConnections(_sender, slot);
+
                     // 根据接收端通道类型智能清理连接
                     SmartCleanupReceiverConnections(slot);
 
@@ -985,6 +990,46 @@ namespace VeloxDev.Core.WorkflowSystem
                     ResetVirtualLink();
                     _sender = null;
                     _receiver = null;
+                }
+
+                /// <summary>
+                /// 硬性规定：清理两个Node之间的同向连接冲突
+                /// 无论Slot通道配置如何，两个Node间只允许存在一个同向连接
+                /// </summary>
+                private void CleanupSameDirectionConnections(IWorkflowSlotViewModel newSender, IWorkflowSlotViewModel newReceiver)
+                {
+                    if (component == null || newSender.Parent == null || newReceiver.Parent == null) return;
+
+                    var senderNode = newSender.Parent;
+                    var receiverNode = newReceiver.Parent;
+
+                    // 收集需要清理的同向连接
+                    var sameDirectionConnections = new List<(IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver, IWorkflowLinkViewModel Link)>();
+
+                    // 查找所有从senderNode到receiverNode的连接
+                    foreach (var potentialSender in senderNode.Slots)
+                    {
+                        if (component.LinksMap.TryGetValue(potentialSender, out var targetLinks))
+                        {
+                            foreach (var potentialReceiver in receiverNode.Slots)
+                            {
+                                if (targetLinks.TryGetValue(potentialReceiver, out var existingLink))
+                                {
+                                    // 排除当前正在创建的新连接
+                                    if (!(potentialSender == newSender && potentialReceiver == newReceiver))
+                                    {
+                                        sameDirectionConnections.Add((potentialSender, potentialReceiver, existingLink));
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 执行清理（保留最新的连接）
+                    if (sameDirectionConnections.Count > 0)
+                    {
+                        RemoveConnections(sameDirectionConnections);
+                    }
                 }
 
                 /// <summary>
@@ -1027,6 +1072,7 @@ namespace VeloxDev.Core.WorkflowSystem
                         RemoveConnections(connectionsToRemove);
                     }
                 }
+
                 /// <summary>
                 /// 智能清理接收端连接（对于OneBoth需要清理所有连接）
                 /// </summary>
@@ -1067,6 +1113,7 @@ namespace VeloxDev.Core.WorkflowSystem
                         RemoveConnections(connectionsToRemove);
                     }
                 }
+
                 /// <summary>
                 /// 根据通道类型判断是否需要清理现有连接
                 /// </summary>
@@ -1098,6 +1145,7 @@ namespace VeloxDev.Core.WorkflowSystem
                         return false;
                     }
                 }
+
                 /// <summary>
                 /// 移除指定的连接集合
                 /// </summary>
@@ -1205,6 +1253,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     // 提交到撤销/重做栈
                     Submit(actionPair);
                 }
+
                 /// <summary>
                 /// 在两个Slot间建立新的连接
                 /// </summary>
@@ -1212,7 +1261,7 @@ namespace VeloxDev.Core.WorkflowSystem
                 {
                     if (sender == null || receiver == null) return;
 
-                    // 检查是否已存在连接
+                    // 检查是否已存在连接（经过清理后应该不存在）
                     bool connectionExists = component.LinksMap.TryGetValue(sender, out var existingLinks) &&
                                            existingLinks.ContainsKey(receiver);
 
