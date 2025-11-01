@@ -294,7 +294,7 @@ public static void Init()
 <details>
 <summary>Version 3.1.0</summary>
 
-## VeloxCommand 改进
+## Ⅰ VeloxCommand 改进
 
 - 合并 ConcurrentVeloxCommand 与 VeloxCommand，统一为 VeloxCommand
 - 更清晰的API语义
@@ -321,5 +321,24 @@ public static void Init()
 | `TaskCanceled`  | 因 `CancellationToken` 取消 | 被显式中断或取消。                 | Canceled  |
 | `TaskFailed`    | 因异常导致失败                  | 异常在执行逻辑中被捕获。              | Failed    |
 | `TaskExited`    | 生命周期结束                   | 总是最后触发，无论成功/失败/取消。        | Finalized |
+
+## Ⅱ Workflow 改进
+
+- Slot的状态更新不再依赖Tree的存在
+- 修复Node删除功能中存在的异常
+- 修复两个Node间出现多个同向连接的问题
+- 修复潜在的空值引用风险
+
+</details>
+
+<details>
+<summary>Version 3.1.1</summary>
+
+## Workflow 改进
+
+- Slot的状态更新不再依赖Tree的存在
+- 修复Node删除功能
+- 修复两个Node间出现多个同向连接的问题
+- 修复潜在的空值引用风险
 
 </details>

@@ -7,7 +7,7 @@
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Avalonia</Title>
-		<Version>3.1.0</Version>
+		<Version>3.1.1</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + Avalonia</Description>
 		<AvaloniaVersion>11.1.0</AvaloniaVersion>
@@ -28,7 +28,7 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="VeloxDev.Core" Version="3.1.0" />
+		<PackageReference Include="VeloxDev.Core" Version="3.1.1" />
 	</ItemGroup>
 
 </Project>
