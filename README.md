@@ -342,3 +342,12 @@ public static void Init()
 - 修复潜在的空值引用风险
 
 </details>
+
+<details>
+<summary>Version 3.1.2</summary>
+
+## Workflow 改进
+
+- 对已删除Node执行Undo操作的过程中，可能出现一些意外的Link回退，现已修复
+
+</details>
