@@ -1,6 +1,6 @@
 ﻿# 🚀 VeloxDev
 
-> 一个高度模块化的工具集，融合 **MVVM、AOP、Workflow、动画系统** 与 **AOT 支持**，旨在多个.NET的UI框架中采用一致API完成常见编程任务
+> 在多个.NET的UI框架中采用一致API完成常见编程任务
 
 ---
 
