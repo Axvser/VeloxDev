@@ -24,9 +24,10 @@
                                       Simulator="{StaticResource NodeTemplate}"/>
     </UserControl.Resources>
     <Canvas>
-        <Button Content="Undo" Width="100" Height="100" Click="Button_Click"/>
-        <Button Content="Redo" Width="100" Height="100" Click="Button_Click_1" Canvas.Top="200"/>
-
+        <Button Content="Undo" Width="100" Height="100" Command="{Binding UndoCommand}"/>
+        <Button Content="Redo" Width="100" Height="100" Command="{Binding RedoCommand}" Canvas.Top="200"/>
+        <Button Content="Save" Width="100" Height="100" Command="{Binding SaveCommand}" Canvas.Top="400"/>
+        
         <!-- ObservableCollection<IWorkflowNode> Nodes | 所有节点的视图模型存储于此 -->
         <ItemsControl ItemsSource="{Binding Nodes}"
                       Canvas.ZIndex="0"
@@ -63,8 +64,10 @@
             <!-- 省略 -->
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <local:BezierCurveView StartAnchor="{Binding Sender.Anchor}"
-                                           EndAnchor="{Binding Receiver.Anchor}"
+                    <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
+                                           StartTop="{Binding Sender.Anchor.Top}"
+                                           EndLeft="{Binding Receiver.Anchor.Left}"
+                                           EndTop="{Binding Receiver.Anchor.Top}"
                                            CanRender="{Binding IsVisible}" />
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -72,8 +75,10 @@
 
         <!-- IWorkflowLink VirtualLink | 预览曲线的视图模型 -->
         <local:BezierCurveView DataContext="{Binding VirtualLink}"
-                               StartAnchor="{Binding Sender.Anchor}"
-                               EndAnchor="{Binding Receiver.Anchor}"
+                               StartLeft="{Binding Sender.Anchor.Left}"
+                               StartTop="{Binding Sender.Anchor.Top}"
+                               EndLeft="{Binding Receiver.Anchor.Left}"
+                               EndTop="{Binding Receiver.Anchor.Top}"
                                CanRender="{Binding IsVisible}"
                                IsVirtual="True"/>
 

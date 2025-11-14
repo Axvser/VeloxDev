@@ -461,6 +461,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     if (component is null) return;
                     component.Anchor.Left += offset.Left;
                     component.Anchor.Top += offset.Top;
+                    component.OnPropertyChanged(nameof(component.Anchor));
                     foreach (var slot in component.Slots)
                     {
                         slot.GetHelper().UpdateAnchor();
