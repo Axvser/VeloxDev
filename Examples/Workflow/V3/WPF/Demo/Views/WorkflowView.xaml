@@ -63,10 +63,8 @@
             <!-- 省略 -->
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
-                                           StartTop="{Binding Sender.Anchor.Top}"
-                                           EndLeft="{Binding Receiver.Anchor.Left}"
-                                           EndTop="{Binding Receiver.Anchor.Top}"
+                    <local:BezierCurveView StartAnchor="{Binding Sender.Anchor}"
+                                           EndAnchor="{Binding Receiver.Anchor}"
                                            CanRender="{Binding IsVisible}" />
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -74,10 +72,8 @@
 
         <!-- IWorkflowLink VirtualLink | 预览曲线的视图模型 -->
         <local:BezierCurveView DataContext="{Binding VirtualLink}"
-                               StartLeft="{Binding Sender.Anchor.Left}"
-                               StartTop="{Binding Sender.Anchor.Top}"
-                               EndLeft="{Binding Receiver.Anchor.Left}"
-                               EndTop="{Binding Receiver.Anchor.Top}"
+                               StartAnchor="{Binding Sender.Anchor}"
+                               EndAnchor="{Binding Receiver.Anchor}"
                                CanRender="{Binding IsVisible}"
                                IsVirtual="True"/>
 
