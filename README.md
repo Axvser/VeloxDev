@@ -351,3 +351,16 @@ public static void Init()
 - 对已删除Node执行Undo操作的过程中，可能出现一些意外的Link回退，现已修复
 
 </details>
+
+<details>
+<summary>Version 3.1.4</summary>
+
+## 修复
+
+- Workflow的NodeHelper在一些情况下没有触发Anchor的PropertyChanged事件，现已修复
+
+## 增量
+
+- WPF的节点编辑器示例现已加入完整的序列化/反序列化示例 ( Newtonsoft.Json )
+
+</details>
