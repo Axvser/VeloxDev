@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using System.IO;
 using System.Windows.Controls;
 using System.Windows.Input;
+using VeloxDev.Core.Extension;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 using Size = VeloxDev.Core.WorkflowSystem.Size;
@@ -23,10 +24,10 @@ public partial class WorkflowView : UserControl
 
     private async Task ParseData()
     {
-        var json = await File.ReadAllTextAsync(@"E:\\Workflow.json");
-        var result = JsonConvert.DeserializeObject<TreeViewModel>(json,TreeHelper.js_settings);
-        if (result is null) return;
-        _workflowViewModel = result;
+        var stream = File.OpenRead(@"E:\\Workflow.json");
+        var (Success, Result) = await WorkflowEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
+        if (!Success || Result is null) return;
+        _workflowViewModel = Result;
         DataContext = _workflowViewModel;
     }
 

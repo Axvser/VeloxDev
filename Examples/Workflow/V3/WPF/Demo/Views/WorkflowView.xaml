@@ -30,7 +30,7 @@
         
         <!-- ObservableCollection<IWorkflowNode> Nodes | 所有节点的视图模型存储于此 -->
         <ItemsControl ItemsSource="{Binding Nodes}"
-                      Canvas.ZIndex="0"
+                      Canvas.ZIndex="1"
                       ItemTemplateSelector="{StaticResource NodeSelector}">
             <!-- 容器模板，推荐显示设定尺寸 -->
             <ItemsControl.ItemsPanel>
@@ -54,7 +54,8 @@
         </ItemsControl>
 
         <!-- ObservableCollection<IWorkflowLink> Links | 所有已经建立的连接视图模型存储于此 -->
-        <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="1">
+        <ItemsControl ItemsSource="{Binding Links}" 
+                      Canvas.ZIndex="-1">
             <!-- 省略 -->
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>

@@ -1,14 +1,11 @@
-using Demo.ViewModels.WorkflowHelpers;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 using System.IO;
-using System.Text.Json.Serialization;
+using VeloxDev.Core.Extension;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[WorkflowBuilder.ViewModel.Tree<TreeHelper>]
+[WorkflowBuilder.ViewModel.Tree<WorkflowHelper.ViewModel.Tree>]
 public partial class TreeViewModel
 {
     public TreeViewModel() => InitializeWorkflow();
@@ -18,7 +15,7 @@ public partial class TreeViewModel
     [VeloxCommand]
     private async Task Save(object? parameter, CancellationToken ct)
     {
-        var json = JsonConvert.SerializeObject(this, TreeHelper.js_settings);
+        var json = this.Serialize();
         await File.WriteAllTextAsync(@"E:\\Workflow.json", json, ct);
     }
 }

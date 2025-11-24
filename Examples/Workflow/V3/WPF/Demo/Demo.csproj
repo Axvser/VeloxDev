@@ -9,10 +9,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <PackageReference Include="Microsoft.CodeAnalysis" Version="5.0.0" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 	</ItemGroup>
 
 	<ItemGroup>
+	  <ProjectReference Include="..\..\..\..\..\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
 	  <ProjectReference Include="..\..\..\..\..\VeloxDev.Core\VeloxDev.Core.csproj" />
 	</ItemGroup>
 </Project>
