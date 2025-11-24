@@ -15,6 +15,7 @@ public partial class TreeViewModel
     [VeloxCommand]
     private async Task Save(object? parameter, CancellationToken ct)
     {
+        await Helper.CloseAsync();
         var json = this.Serialize();
         await File.WriteAllTextAsync(@"E:\\Workflow.json", json, ct);
     }

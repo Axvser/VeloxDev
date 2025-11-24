@@ -69,7 +69,11 @@
                                            StartTop="{Binding Sender.Anchor.Top}"
                                            EndLeft="{Binding Receiver.Anchor.Left}"
                                            EndTop="{Binding Receiver.Anchor.Top}"
-                                           CanRender="{Binding IsVisible}" />
+                                           CanRender="{Binding IsVisible}"
+                                           IsFlowEnabled="True"
+                                           FlowColor="#FF00FFFF"
+                                           FlowSpeed="3.0"
+                                           FlowDashArray="10,5"/>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
