@@ -1,6 +1,4 @@
 using Demo.ViewModels;
-using Demo.ViewModels.WorkflowHelpers;
-using Newtonsoft.Json;
 using System.IO;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -9,7 +7,7 @@ using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 using Size = VeloxDev.Core.WorkflowSystem.Size;
 
-namespace Demo.Views;
+namespace Demo.Views.Workflow;
 
 public partial class WorkflowView : UserControl
 {

@@ -2,7 +2,7 @@
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 
-namespace Demo.ViewModels.WorkflowHelpers
+namespace Demo.ViewModels.Workflow.Helper
 {
     public partial class NodeHelper : WorkflowHelper.ViewModel.Node
     {

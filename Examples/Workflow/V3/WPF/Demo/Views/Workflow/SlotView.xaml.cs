@@ -2,7 +2,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 
-namespace Demo.Views;
+namespace Demo.Views.Workflow;
 
 public partial class SlotView : UserControl
 {

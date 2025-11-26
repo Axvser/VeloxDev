@@ -2,7 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 
-namespace Demo.Views
+namespace Demo.Views.Workflow
 {
     public class CustomTemplateSelector : DataTemplateSelector
     {

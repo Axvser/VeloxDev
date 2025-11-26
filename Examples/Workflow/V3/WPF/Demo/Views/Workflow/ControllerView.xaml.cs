@@ -5,7 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using VeloxDev.Core.WorkflowSystem;
 
-namespace Demo.Views
+namespace Demo.Views.Workflow
 {
     public partial class ControllerView : UserControl
     {

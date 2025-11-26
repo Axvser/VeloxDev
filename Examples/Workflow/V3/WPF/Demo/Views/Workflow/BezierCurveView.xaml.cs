@@ -1,11 +1,8 @@
-using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Windows.Shapes;
 
-namespace Demo.Views;
+namespace Demo.Views.Workflow;
 
 public partial class BezierCurveView : UserControl
 {
@@ -132,7 +129,7 @@ public partial class BezierCurveView : UserControl
             nameof(FlowDashArray),
             typeof(DoubleCollection),
             typeof(BezierCurveView),
-            new PropertyMetadata(new DoubleCollection(new double[] { 8, 4 }), OnRenderPropertyChanged));
+            new PropertyMetadata(new DoubleCollection([8, 4]), OnRenderPropertyChanged));
 
     public bool IsFlowEnabled
     {
@@ -201,7 +198,7 @@ public partial class BezierCurveView : UserControl
         CompositionTarget.Rendering -= OnRendering;
     }
 
-    private void OnRendering(object sender, EventArgs e)
+    private void OnRendering(object? sender, EventArgs e)
     {
         if (!IsFlowEnabled)
         {
@@ -291,8 +288,10 @@ public partial class BezierCurveView : UserControl
 
         // 中层：主流光
         var mainBrush = new SolidColorBrush(FlowColor);
-        var mainPen = new Pen(mainBrush, 3);
-        mainPen.DashStyle = new DashStyle(FlowDashArray, _dashOffset);
+        var mainPen = new Pen(mainBrush, 3)
+        {
+            DashStyle = new DashStyle(FlowDashArray, _dashOffset)
+        };
         context.DrawGeometry(null, mainPen, pathGeometry);
 
         // 上层：高光效果（稍微超前）
@@ -316,14 +315,14 @@ public partial class BezierCurveView : UserControl
             return;
 
         var pathFigure = pathGeometry.Figures[0];
-        if (pathFigure.Segments.Count == 0 || !(pathFigure.Segments[0] is BezierSegment bezierSegment))
+        if (pathFigure.Segments.Count == 0 || pathFigure.Segments[0] is not BezierSegment bezierSegment)
             return;
 
         // 在曲线的终点绘制箭头（表示从起点流向终点）
         Point arrowTip = bezierSegment.Point3;
 
         // 计算曲线在终点的切线方向
-        Vector tangentDirection = new Vector(
+        Vector tangentDirection = new(
             bezierSegment.Point3.X - bezierSegment.Point2.X,
             bezierSegment.Point3.Y - bezierSegment.Point2.Y);
 
@@ -340,19 +339,19 @@ public partial class BezierCurveView : UserControl
         double arrowLength = 10;
         double arrowWidth = 6;
 
-        Point arrowBase = new Point(
+        Point arrowBase = new(
             arrowTip.X - tangentDirection.X * arrowLength,
             arrowTip.Y - tangentDirection.Y * arrowLength);
 
-        Vector perpendicular = new Vector(-tangentDirection.Y, tangentDirection.X);
-        Point arrowWing1 = new Point(
+        Vector perpendicular = new(-tangentDirection.Y, tangentDirection.X);
+        Point arrowWing1 = new(
             arrowBase.X + perpendicular.X * arrowWidth / 2,
             arrowBase.Y + perpendicular.Y * arrowWidth / 2);
-        Point arrowWing2 = new Point(
+        Point arrowWing2 = new(
             arrowBase.X - perpendicular.X * arrowWidth / 2,
             arrowBase.Y - perpendicular.Y * arrowWidth / 2);
 
-        StreamGeometry arrowGeometry = new StreamGeometry();
+        StreamGeometry arrowGeometry = new();
         using (var geometryContext = arrowGeometry.Open())
         {
             geometryContext.BeginFigure(arrowTip, true, true);
@@ -372,8 +371,10 @@ public partial class BezierCurveView : UserControl
     private void DrawVirtualLine(DrawingContext context, PathGeometry pathGeometry)
     {
         var brush = new SolidColorBrush(FlowColor);
-        var pen = new Pen(brush, 2);
-        pen.DashStyle = DashStyles.Dash;
+        var pen = new Pen(brush, 2)
+        {
+            DashStyle = DashStyles.Dash
+        };
         context.DrawGeometry(null, pen, pathGeometry);
     }
 
@@ -428,12 +429,12 @@ public partial class BezierCurveView : UserControl
             return;
 
         var pathFigure = pathGeometry.Figures[0];
-        if (pathFigure.Segments.Count == 0 || !(pathFigure.Segments[0] is BezierSegment bezierSegment))
+        if (pathFigure.Segments.Count == 0 || pathFigure.Segments[0] is not BezierSegment bezierSegment)
             return;
 
         Point arrowTip = bezierSegment.Point3;
 
-        Vector tangentDirection = new Vector(
+        Vector tangentDirection = new(
             bezierSegment.Point3.X - bezierSegment.Point2.X,
             bezierSegment.Point3.Y - bezierSegment.Point2.Y);
 
@@ -449,13 +450,13 @@ public partial class BezierCurveView : UserControl
         double arrowLength = 12 + pen.Thickness * 2;
         double arrowWidth = 8 + pen.Thickness * 1.5;
 
-        Vector perpendicular = new Vector(-tangentDirection.Y, tangentDirection.X);
+        Vector perpendicular = new(-tangentDirection.Y, tangentDirection.X);
 
         Point arrowHeadBase = arrowTip - tangentDirection * arrowLength;
         Point arrowWing1 = arrowHeadBase + perpendicular * arrowWidth / 2;
         Point arrowWing2 = arrowHeadBase - perpendicular * arrowWidth / 2;
 
-        StreamGeometry arrowGeometry = new StreamGeometry();
+        StreamGeometry arrowGeometry = new();
         using (var geometryContext = arrowGeometry.Open())
         {
             geometryContext.BeginFigure(arrowTip, true, true);
