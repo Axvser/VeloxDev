@@ -14,6 +14,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <None Remove="Views\ControllerView.xaml" />
     <None Remove="Views\LinkView.xaml" />
     <None Remove="Views\NodeView.xaml" />
     <None Remove="Views\SlotView.xaml" />
@@ -47,7 +48,13 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251003001" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
     <ProjectReference Include="..\..\..\..\..\VeloxDev.Core\VeloxDev.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\ControllerView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
   <ItemGroup>
     <Page Update="Views\LinkView.xaml">

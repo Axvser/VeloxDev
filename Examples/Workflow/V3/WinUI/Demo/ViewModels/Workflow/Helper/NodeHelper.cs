@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 
-namespace Demo.ViewModels.WorkflowHelpers
+namespace Demo.ViewModels.Workflow.Helper
 {
     public partial class NodeHelper : WorkflowHelper.ViewModel.Node
     {
@@ -17,29 +17,21 @@ namespace Demo.ViewModels.WorkflowHelpers
             // [ Standard ] 框架初始化 Helper 持有的视图模型
             base.Initialize(node);
 
-            // [ User ] 用户自定义 Helper 具体类型
+            // [ User ] 跟踪任务计数
             _viewModel = node as NodeViewModel;
-        }
-
-        public override void Closed()
-        {
-            // [ Standard ] 工作流关闭回调
-            base.Closed();
-
-            // [ User ] 清除任务计数器
-            if (_viewModel is null) return;
-            _viewModel.TaskCount = 0;
+            _viewModel!.WorkCommand.TaskStarted += (e) => _viewModel.RunCount++;
+            _viewModel!.WorkCommand.TaskExited += (e) => _viewModel.RunCount--;
+            _viewModel!.WorkCommand.TaskEnqueued += (e) => _viewModel.WaitCount++;
+            _viewModel!.WorkCommand.TaskDequeued += (e) => _viewModel.WaitCount--;
         }
 
         public override async Task WorkAsync(object? parameter, CancellationToken ct)
         {
             try
             {
-                // [ User ] 跟踪任务计数并模拟随机任务耗时
+                // [ User ] 模拟随机任务耗时
                 if (_viewModel is null) return;
-                _viewModel.TaskCount++;
                 await Task.Delay(rnd.Next(1000, 7000), ct);
-                _viewModel.TaskCount--;
 
                 // [ Standard ] 框架广播任务参数给子节点
                 await BroadcastAsync(parameter, ct);

@@ -9,15 +9,23 @@
     mc:Ignorable="d" >
 
     <Grid>
-        <Border Background="#aaffffff" VerticalAlignment="Top" Height="30"
-                BorderBrush="White"
-                BorderThickness="1,1,1,0"
+        <Border Background="#2d2d2d" VerticalAlignment="Top" Height="30"
+                CornerRadius="5,5,0,0"
+                BorderBrush="Gray"
+                BorderThickness="0,0,0,0.5"
                 ManipulationDelta="Border_ManipulationDelta"
                 ManipulationMode="All"
-                Canvas.ZIndex="1"/>
-        <Border Background="#19ffffff"
-                BorderBrush="White"
-                BorderThickness="1,0,1,1" 
+                Canvas.ZIndex="1">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock  Text="执行数 [ " Foreground="White" VerticalAlignment="Center"/>
+                <TextBlock  Text="{Binding RunCount}" Foreground="White" VerticalAlignment="Center"/>
+                <TextBlock  Text=" ] " Foreground="White" VerticalAlignment="Center"/>
+                <TextBlock  Text="缓冲数 [ " Foreground="White" VerticalAlignment="Center"/>
+                <TextBlock  Text="{Binding WaitCount}" Foreground="White" VerticalAlignment="Center"/>
+                <TextBlock  Text=" ] " Foreground="White" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+        <Border Background="#2d2d2d"
                 CornerRadius="0,0,5,5"/>
         <local:CanvasItemsControl ItemsSource="{Binding Slots}">
             <local:CanvasItemsControl.ItemsPanel>

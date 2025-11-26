@@ -1,9 +1,7 @@
-using VeloxDev.Core.AOT;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 [WorkflowBuilder.ViewModel.Link<WorkflowHelper.ViewModel.Link>]
 public partial class LinkViewModel
 {

@@ -9,22 +9,47 @@
     xmlns:viewmodels="using:Demo.ViewModels"
     d:DataContext="{d:DesignInstance Type=viewmodels:TreeViewModel}"
     mc:Ignorable="d"
-    PointerMoved="canvas_PointerMoved"
-    PointerReleased="canvas_PointerReleased"
+    PointerMoved="Canvas_PointerMoved"
+    PointerReleased="Canvas_PointerReleased"
     ManipulationMode="All">
 
+    <UserControl.Resources>
+        <DataTemplate x:Key="NodeTemplate">
+            <local:NodeView Width="{Binding Size.Width}"
+                            Height="{Binding Size.Height}"
+                            Canvas.Left="{Binding Anchor.Left}"
+                            Canvas.Top="{Binding Anchor.Top}"
+                            Canvas.ZIndex="{Binding Anchor.Layer}"/>
+        </DataTemplate>
+        <DataTemplate x:Key="ControllerTemplate">
+            <local:ControllerView Width="{Binding Size.Width}"
+                                  Height="{Binding Size.Height}"
+                                  Canvas.Left="{Binding Anchor.Left}"
+                                  Canvas.Top="{Binding Anchor.Top}"
+                                  Canvas.ZIndex="{Binding Anchor.Layer}"/>
+        </DataTemplate>
+        <local:CustomTemplateSelector x:Key="NodeSelector"
+                                      ControllerTemplate="{StaticResource ControllerTemplate}"
+                                      NodeTemplate="{StaticResource NodeTemplate}"/>
+    </UserControl.Resources>
+
     <Canvas x:Name="canvas" Background="#1e1e1e">
-        <Button Content="Undo" Width="100" Height="100" Click="Button_Click"/>
-        <Button Content="Redo" Width="100" Height="100" Click="Button_Click_1" Canvas.Top="200"/>
+        <Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}"/>
+        <Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" Canvas.Top="100"/>
+        <Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" Canvas.Top="200"/>
+        <Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" Canvas.Top="300"/>
+        <Button Content="Simulate" Width="100" Height="50" Click="SimulateData" Canvas.Top="400"/>
 
         <!-- ObservableCollection<IWorkflowNode> Nodes | 所有节点的视图模型存储于此 -->
-        <local:CanvasItemsControl ItemsSource="{Binding Nodes}" Canvas.ZIndex="0">
+        <local:CanvasItemsControl ItemsSource="{Binding Nodes}"
+                                  Canvas.ZIndex="1" 
+                                  ItemTemplateSelector="{StaticResource NodeSelector}">
             <local:CanvasItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                     <Canvas />
                 </ItemsPanelTemplate>
             </local:CanvasItemsControl.ItemsPanel>
-            <local:CanvasItemsControl.ItemTemplate>
+            <!--<local:CanvasItemsControl.ItemTemplate>
                 <DataTemplate>
                     <local:NodeView Width="{Binding Size.Width}"
                                     Height="{Binding Size.Height}"
@@ -32,11 +57,11 @@
                                     Canvas.Top="{Binding Anchor.Top}"
                                     Canvas.ZIndex="{Binding Anchor.Layer}"/>
                 </DataTemplate>
-            </local:CanvasItemsControl.ItemTemplate>
+            </local:CanvasItemsControl.ItemTemplate>-->
         </local:CanvasItemsControl>
 
         <!-- ObservableCollection<IWorkflowLink> Links | 所有已经建立的连接视图模型存储于此 -->
-        <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="1">
+        <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="-1">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                     <Canvas />
@@ -55,6 +80,7 @@
 
         <!-- IWorkflowLink VirtualLink | 预览曲线的视图模型 -->
         <local:LinkView DataContext="{Binding VirtualLink}"
+                        Canvas.ZIndex="-1"
                         StartLeft="{Binding Sender.Anchor.Left}"
                         StartTop="{Binding Sender.Anchor.Top}"
                         EndLeft="{Binding Receiver.Anchor.Left}"
