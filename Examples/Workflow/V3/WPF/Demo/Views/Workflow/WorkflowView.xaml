@@ -24,9 +24,11 @@
                                       Simulator="{StaticResource NodeTemplate}"/>
     </UserControl.Resources>
     <Canvas>
-        <Button Content="Undo" Width="100" Height="100" Command="{Binding UndoCommand}"/>
-        <Button Content="Redo" Width="100" Height="100" Command="{Binding RedoCommand}" Canvas.Top="200"/>
-        <Button Content="Save" Width="100" Height="100" Command="{Binding SaveCommand}" Canvas.Top="400"/>
+        <Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}"/>
+        <Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" Canvas.Top="100"/>
+        <Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" Canvas.Top="200"/>
+        <Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" Canvas.Top="300"/>
+        <Button Content="Simulate" Width="100" Height="50" Click="SimulateData" Canvas.Top="400"/>
         
         <!-- ObservableCollection<IWorkflowNode> Nodes | 所有节点的视图模型存储于此 -->
         <ItemsControl ItemsSource="{Binding Nodes}"

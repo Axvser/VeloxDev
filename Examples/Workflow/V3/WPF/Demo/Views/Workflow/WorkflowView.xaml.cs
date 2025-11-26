@@ -1,11 +1,11 @@
 using Demo.ViewModels;
+using Microsoft.Win32;
 using System.IO;
 using System.Windows.Controls;
 using System.Windows.Input;
 using VeloxDev.Core.Extension;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
-using Size = VeloxDev.Core.WorkflowSystem.Size;
 
 namespace Demo.Views.Workflow;
 
@@ -16,22 +16,79 @@ public partial class WorkflowView : UserControl
     public WorkflowView()
     {
         InitializeComponent();
-        //SimulateData();
-        Loaded += async (s, e) => await ParseData();
     }
 
-    private async Task ParseData()
+    // 从指定的json文件加载工作流
+    private async void SelectWorkflow(object sender, System.Windows.RoutedEventArgs e)
     {
-        var stream = File.OpenRead(@"E:\\Workflow.json");
-        var (Success, Result) = await WorkflowEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
-        if (!Success || Result is null) return;
-        _workflowViewModel = Result;
-        DataContext = _workflowViewModel;
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择工作流文件",
+            Filter = "JSON 文件 (*.json)|*.json|所有文件 (*.*)|*.*",
+            DefaultExt = ".json",
+            CheckFileExists = true,
+            CheckPathExists = true
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                using var stream = File.OpenRead(dialog.FileName);
+                var (Success, Result) = await WorkflowEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
+
+                if (!Success || Result is null)
+                {
+                    System.Windows.MessageBox.Show("文件格式不正确或解析失败。", "加载失败",
+                        System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                    return;
+                }
+
+                _workflowViewModel = Result;
+                DataContext = _workflowViewModel;
+
+                System.Windows.MessageBox.Show($"工作流已从 {dialog.FileName} 加载成功。", "加载成功",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"加载文件失败：{ex.Message}", "错误",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
+        }
     }
 
-    private void SimulateData()
+    // 保存工作流到指定的json文件
+    private void SaveWorkflow(object sender, System.Windows.RoutedEventArgs e)
     {
-        // 先模拟一些数据
+        if (DataContext is not TreeViewModel tree) return;
+
+        var dialog = new OpenFolderDialog();
+
+        if (dialog.ShowDialog() == true)
+        {
+            tree.SaveCommand.Execute(Path.Combine(dialog.FolderName, "Workflow.json"));
+        }
+    }
+
+    // 更新当前鼠标所处位置
+    private void OnPointerMoved(object sender, MouseEventArgs e)
+    {
+        if (DataContext is not IWorkflowTreeViewModel tree) return;
+        var point = e.GetPosition(this);
+        tree.SetPointerCommand.Execute(new Anchor(point.X, point.Y, 0));
+    }
+
+    // 重置连接器
+    private void OnPointerReleased(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is not IWorkflowTreeViewModel tree) return;
+        tree.GetHelper().ResetVirtualLink();
+    }
+
+    // 模拟工作流数据
+    private void SimulateData(object sender, System.Windows.RoutedEventArgs e)
+    {
         var slot1 = new SlotViewModel()
         {
             Offset = new Offset(170, 60),
@@ -97,20 +154,5 @@ public partial class WorkflowView : UserControl
 
         // 使用数据上下文
         DataContext = _workflowViewModel;
-    }
-
-    // 当鼠标移动时，更新 工作流Tree 中记录的鼠标位点
-    private void OnPointerMoved(object sender, MouseEventArgs e)
-    {
-        if (DataContext is not IWorkflowTreeViewModel tree) return;
-        var point = e.GetPosition(this);
-        tree.SetPointerCommand.Execute(new Anchor(point.X, point.Y, 0));
-    }
-
-    // 当鼠标离开时，清除 工作流Tree 中记录的起始 输入/输出口
-    private void OnPointerReleased(object sender, MouseButtonEventArgs e)
-    {
-        if (DataContext is not IWorkflowTreeViewModel tree) return;
-        tree.GetHelper().ResetVirtualLink();
     }
 }

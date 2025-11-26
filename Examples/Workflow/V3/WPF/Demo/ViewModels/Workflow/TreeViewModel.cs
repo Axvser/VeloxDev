@@ -15,8 +15,7 @@ public partial class TreeViewModel
     [VeloxCommand]
     private async Task Save(object? parameter, CancellationToken ct)
     {
-        if (parameter is not string path) return;
-        if (string.IsNullOrEmpty(path)) path = @"E:\Workflow.json";
+        if (parameter is not string path || !File.Exists(path)) return;
         await Helper.CloseAsync();
         var json = this.Serialize();
         await File.WriteAllTextAsync(path, json, ct);
