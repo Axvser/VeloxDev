@@ -3,7 +3,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using System;
+using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using VeloxDev.Core.Extension;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
@@ -14,6 +16,37 @@ namespace Demo.Views
     public sealed partial class TreeView : UserControl
     {
         private TreeViewModel ViewModel = new();
+
+        // Win32 API 声明
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetActiveWindow();
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetDesktopWindow();
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetParent(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll")]
+        private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        private const uint GA_ROOT = 0;
+        private const uint GA_ROOTOWNER = 1;
+        private const uint GA_PARENT = 2;
 
         public TreeView()
         {
@@ -26,15 +59,15 @@ namespace Demo.Views
 
             var folderPicker = new Windows.Storage.Pickers.FolderPicker();
 
-            // 设置文件类型过滤器（WinUI 3需要）
+            // 使用 Win32 API 获取窗口句柄
+            var hwnd = GetActiveWindowHandle();
+            if (hwnd != IntPtr.Zero)
+            {
+                WinRT.Interop.InitializeWithWindow.Initialize(folderPicker, hwnd);
+            }
+
             folderPicker.FileTypeFilter.Add("*");
-
-            // 设置选择器启动位置
             folderPicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
-
-            // 对于WinUI 3，需要获取窗口句柄
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            WinRT.Interop.InitializeWithWindow.Initialize(folderPicker, hwnd);
 
             var folder = await folderPicker.PickSingleFolderAsync();
 
@@ -42,8 +75,6 @@ namespace Demo.Views
             {
                 string filePath = Path.Combine(folder.Path, "Workflow.json");
                 tree.SaveCommand.Execute(filePath);
-
-                // 显示成功消息（WinUI 3方式）
                 await ShowMessageAsync("保存成功", $"工作流已保存到：{filePath}");
             }
         }
@@ -52,17 +83,17 @@ namespace Demo.Views
         {
             var filePicker = new Windows.Storage.Pickers.FileOpenPicker();
 
-            // 设置文件类型过滤器
+            // 使用 Win32 API 获取窗口句柄
+            var hwnd = GetActiveWindowHandle();
+            if (hwnd != IntPtr.Zero)
+            {
+                WinRT.Interop.InitializeWithWindow.Initialize(filePicker, hwnd);
+            }
+
             filePicker.FileTypeFilter.Add(".json");
             filePicker.FileTypeFilter.Add("*");
-
-            // 设置选择器属性
             filePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
             filePicker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
-
-            // 获取窗口句柄并初始化（WinUI 3必需）
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            WinRT.Interop.InitializeWithWindow.Initialize(filePicker, hwnd);
 
             var file = await filePicker.PickSingleFileAsync();
 
@@ -88,6 +119,107 @@ namespace Demo.Views
                 {
                     await ShowMessageAsync("错误", $"加载文件失败：{ex.Message}", "确定");
                 }
+            }
+        }
+
+        // 使用 Win32 API 获取活动窗口句柄
+        private IntPtr GetActiveWindowHandle()
+        {
+            try
+            {
+                // 方法1：获取当前活动窗口
+                IntPtr hwnd = GetActiveWindow();
+                if (hwnd != IntPtr.Zero)
+                {
+                    Debug.WriteLine($"获取到活动窗口句柄: {hwnd}");
+                    return hwnd;
+                }
+
+                // 方法2：获取前台窗口
+                hwnd = GetForegroundWindow();
+                if (hwnd != IntPtr.Zero)
+                {
+                    Debug.WriteLine($"获取到前台窗口句柄: {hwnd}");
+                    return hwnd;
+                }
+
+                // 方法3：通过枚举窗口查找 WinUI 窗口
+                hwnd = FindWinUIWindow();
+                if (hwnd != IntPtr.Zero)
+                {
+                    Debug.WriteLine($"通过枚举找到 WinUI 窗口句柄: {hwnd}");
+                    return hwnd;
+                }
+
+                Debug.WriteLine("无法获取窗口句柄");
+                return IntPtr.Zero;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"获取窗口句柄时出错: {ex.Message}");
+                return IntPtr.Zero;
+            }
+        }
+
+        // 枚举窗口查找 WinUI 窗口
+        private IntPtr FindWinUIWindow()
+        {
+            IntPtr foundHandle = IntPtr.Zero;
+
+            EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
+            {
+                // 检查窗口是否可见
+                if (IsWindowVisible(hWnd))
+                {
+                    // 获取窗口标题
+                    var title = new System.Text.StringBuilder(256);
+                    GetWindowText(hWnd, title, title.Capacity);
+
+                    // 获取窗口类名
+                    var className = new System.Text.StringBuilder(256);
+                    GetClassName(hWnd, className, className.Capacity);
+
+                    // 查找包含应用程序名称的窗口（根据你的应用名调整）
+                    if (!string.IsNullOrEmpty(title.ToString()) &&
+                        title.ToString().Contains("Demo") || // 你的应用名称
+                        className.ToString().Contains("ApplicationFrameWindow") ||
+                        className.ToString().Contains("Windows.UI.Core.CoreWindow"))
+                    {
+                        foundHandle = hWnd;
+                        return false; // 停止枚举
+                    }
+                }
+                return true; // 继续枚举
+            }, IntPtr.Zero);
+
+            return foundHandle;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern int GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        // 更简单的方法：直接使用桌面窗口作为后备
+        private IntPtr GetSimpleWindowHandle()
+        {
+            try
+            {
+                // 首先尝试活动窗口
+                IntPtr hwnd = GetActiveWindow();
+                if (hwnd != IntPtr.Zero) return hwnd;
+
+                // 然后尝试前台窗口
+                hwnd = GetForegroundWindow();
+                if (hwnd != IntPtr.Zero) return hwnd;
+
+                // 最后使用桌面窗口（总是存在）
+                return GetDesktopWindow();
+            }
+            catch
+            {
+                return GetDesktopWindow();
             }
         }
 
@@ -181,16 +313,16 @@ namespace Demo.Views
                 {
                     Spacing = 8,
                     Children =
-            {
-                new TextBlock
-                {
-                    Text = message,
-                    TextWrapping = TextWrapping.WrapWholeWords
-                }
-            }
+                    {
+                        new TextBlock
+                        {
+                            Text = message,
+                            TextWrapping = TextWrapping.WrapWholeWords
+                        }
+                    }
                 },
                 PrimaryButtonText = primaryButtonText,
-                XamlRoot = this.XamlRoot // 必需设置XamlRoot
+                XamlRoot = this.XamlRoot
             };
 
             await dialog.ShowAsync();
