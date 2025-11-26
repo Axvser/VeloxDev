@@ -41,14 +41,14 @@ public partial class MainWindowViewModel
     private void FreeCommand()
     {
         MinusCommand.Lock();      // 进入锁定状态，阻止新的命令触发但不会中断当前执行中的命令
-        
+
         MinusCommand.Clear();     // 清理当前命令和正在排队的所有命令
         MinusCommand.Interrupt(); // 中断当前命令，保留排队中的任务
         MinusCommand.Continue();  // 尝试继续执行排队中的任务
 
         MinusCommand.UnLock();    // 解除锁定
     }
-    
+
     /* 异步中断 */
     private async Task FreeCommandAsync()
     {

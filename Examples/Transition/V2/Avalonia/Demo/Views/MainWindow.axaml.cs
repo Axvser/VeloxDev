@@ -1,8 +1,8 @@
-using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Media;
+using System;
 using VeloxDev.Avalonia.PlatformAdapters;
 using VeloxDev.Core.TransitionSystem;
 

@@ -2,7 +2,6 @@
 using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem.Templates;
-using static VeloxDev.Core.TransitionSystem.Eases;
 
 #pragma warning disable
 

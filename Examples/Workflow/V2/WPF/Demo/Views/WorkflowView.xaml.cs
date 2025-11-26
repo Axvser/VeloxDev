@@ -1,6 +1,6 @@
+using Demo.ViewModels;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Demo.ViewModels;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 using Size = VeloxDev.Core.WorkflowSystem.Size;
@@ -46,7 +46,7 @@ public partial class WorkflowView : UserControl
         _workflowViewModel.Nodes.Add(node2);
         // 使用数据上下文
         DataContext = _workflowViewModel;
-        
+
         // 执行并在 3s 内用拖拽建立连接即可看到传播效果 （ 取决于 NodeViewMolde 中的 Work 实现 ）
         // 你可同时启用多个 Work 并观察 NodeViewModel 使用不同信号量时的效果差异
         node1.WorkCommand.Execute(null);

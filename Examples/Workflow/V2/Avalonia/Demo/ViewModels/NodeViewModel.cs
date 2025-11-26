@@ -36,7 +36,7 @@ public partial class NodeViewModel
             // 任务取消时不在 Work 做任何处理
         }
     }
-    
+
     partial void OnWorkCanceled(object? parameter)
     {
         Name = "任务被取消";

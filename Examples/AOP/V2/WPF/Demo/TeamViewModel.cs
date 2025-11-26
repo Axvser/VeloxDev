@@ -13,8 +13,8 @@ public partial class TeamViewModel
         _members.CollectionChanged += OnMemberRemoved;
     }
 
-    [VeloxProperty] [AspectOriented] private string _name = string.Empty;
-    [VeloxProperty] [AspectOriented] private ObservableCollection<MemberViewModel> _members = [];
+    [VeloxProperty][AspectOriented] private string _name = string.Empty;
+    [VeloxProperty][AspectOriented] private ObservableCollection<MemberViewModel> _members = [];
 
     [AspectOriented]
     public void Reset()
@@ -31,7 +31,7 @@ public partial class TeamViewModel
         newValue.CollectionChanged += OnMemberAdded;
         newValue.CollectionChanged += OnMemberRemoved;
     }
-    
+
     private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
     {
         Proxy.AOP_OnMemberAdded(sender, e);
@@ -41,7 +41,7 @@ public partial class TeamViewModel
     {
         if (e.Action != NotifyCollectionChangedAction.Add) return;
     }
-    
+
     private void OnMemberRemoved(object? sender, NotifyCollectionChangedEventArgs e)
     {
         Proxy.AOP_OnMemberRemoved(sender, e);

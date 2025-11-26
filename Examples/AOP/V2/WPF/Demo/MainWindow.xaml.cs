@@ -86,7 +86,7 @@ namespace Demo
                 (p, r) =>
                 {
                     if (p?[1] is not NotifyCollectionChangedEventArgs e || e.NewItems is null) return null;
-                    foreach(MemberViewModel member in e.NewItems)
+                    foreach (MemberViewModel member in e.NewItems)
                     {
                         MessageBox.Show($"a member named [{member.Name}] has been added");
                     }

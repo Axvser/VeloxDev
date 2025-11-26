@@ -14,7 +14,7 @@ public partial class MainWindow : Window
         Animation0.Execute(Rec0);
         Animation1.Execute(Rec1);
         Animation2.Execute(Rec2);
-        
+
         // TransitionCore.Exit(Rec0); 安全地退出插值动画
     }
 }

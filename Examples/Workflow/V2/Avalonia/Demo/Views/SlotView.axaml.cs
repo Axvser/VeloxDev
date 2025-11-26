@@ -10,12 +10,12 @@ namespace Demo.Views;
 public partial class SlotView : UserControl
 {
     private Canvas? _parentCanvas;
-    
+
     public SlotView()
     {
         InitializeComponent();
     }
-    
+
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
@@ -25,14 +25,14 @@ public partial class SlotView : UserControl
     // 当触点按下，将 输入/输入口 设定为 输出口
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (DataContext is not IWorkflowSlot context  || context.Parent?.Parent is not { } tree) return;
+        if (DataContext is not IWorkflowSlot context || context.Parent?.Parent is not { } tree) return;
 
         // Avalonia 必须这么做，否则 Released 无法作用在其它 SlotView
         if (e.Pointer.Captured != null)
         {
             e.Pointer.Capture(null);
         }
-        
+
         // 无鼠标设备需要在此处更新一次当前位置，否则连接线可能有一帧异常数据
         var point = e.GetPosition(_parentCanvas);
         tree.SetPointerCommand.Execute(new Anchor(point.X, point.Y, 0));
