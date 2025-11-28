@@ -1,6 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
-using VeloxDev.Core.Interfaces.MonoBehavior;
+using VeloxDev.Core.Interfaces.MonoBehaviour;
 
 namespace VeloxDev.Core.TimeLine
 {
@@ -8,9 +8,9 @@ namespace VeloxDev.Core.TimeLine
     {
         #region 内部类
 
-        private class BehaviorWrapper(IMonoBehavior behavior, int executionOrder)
+        private class BehaviorWrapper(IMonoBehaviour​ behavior, int executionOrder)
         {
-            public IMonoBehavior Behavior { get; } = behavior;
+            public IMonoBehaviour​ Behavior { get; } = behavior;
             public int ExecutionOrder { get; } = executionOrder;
         }
 
@@ -26,8 +26,8 @@ namespace VeloxDev.Core.TimeLine
         #region 私有字段
 
         private static readonly ConcurrentDictionary<int, BehaviorWrapper> _behaviors = new();
-        private static readonly ConcurrentQueue<IMonoBehavior> _addQueue = new();
-        private static readonly ConcurrentQueue<IMonoBehavior> _removeQueue = new();
+        private static readonly ConcurrentQueue<IMonoBehaviour​> _addQueue = new();
+        private static readonly ConcurrentQueue<IMonoBehaviour​> _removeQueue = new();
         private static readonly ConcurrentQueue<ConfigChangeRequest> _configQueue = new();
 
         // 性能参数
@@ -132,7 +132,7 @@ namespace VeloxDev.Core.TimeLine
             Debug.WriteLine("MonoBehaviourManager stopped.");
         }
 
-        public static void RegisterBehavior(IMonoBehavior behavior)
+        public static void RegisterBehaviour(IMonoBehaviour​ behavior)
         {
             if (behavior == null)
             {
@@ -143,7 +143,7 @@ namespace VeloxDev.Core.TimeLine
             _addQueue.Enqueue(behavior);
         }
 
-        public static void UnregisterBehavior(IMonoBehavior behavior)
+        public static void UnregisterBehaviour(IMonoBehaviour​ behavior)
         {
             if (behavior == null)
             {
@@ -303,7 +303,7 @@ namespace VeloxDev.Core.TimeLine
             }
         }
 
-        private static int GetBehaviorHash(IMonoBehavior behavior)
+        private static int GetBehaviorHash(IMonoBehaviour​ behavior)
         {
             return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(behavior);
         }
@@ -347,7 +347,7 @@ namespace VeloxDev.Core.TimeLine
             }
         }
 
-        private static void SafeExecute(Action action, string methodName, IMonoBehavior behavior)
+        private static void SafeExecute(Action action, string methodName, IMonoBehaviour​ behavior)
         {
             try
             {

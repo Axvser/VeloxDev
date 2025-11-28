@@ -142,6 +142,9 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VeloxDev.Core.Extension", "VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj", "{8730D3FC-A7C3-4C1B-953E-445A52BB15C2}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "V3", "V3", "{BEC91136-F07C-46EE-8780-3B59EAC5921F}"
+	ProjectSection(SolutionItems) = preProject
+		Examples\MonoBehaviour\V3\README.md = Examples\MonoBehaviour\V3\README.md
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demo", "Examples\MonoBehaviour\V3\WPF\Demo\Demo.csproj", "{3E7BCF0D-BE85-4104-B8DA-956007D78E60}"
 EndProject

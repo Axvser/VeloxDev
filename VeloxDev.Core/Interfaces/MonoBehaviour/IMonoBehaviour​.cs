@@ -1,10 +1,10 @@
 ﻿using VeloxDev.Core.TimeLine;
 
-namespace VeloxDev.Core.Interfaces.MonoBehavior;
+namespace VeloxDev.Core.Interfaces.MonoBehaviour;
 
-public interface IMonoBehavior
+public interface IMonoBehaviour​
 {
-    void InitializeMonoBehavior();
+    void InitializeMonoBehaviour​();
     void InvokeAwake();
     void InvokeStart();
     void InvokeUpdate(FrameEventArgs e);

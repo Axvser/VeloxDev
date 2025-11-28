@@ -14,8 +14,11 @@ namespace Demo
             {
                 KeyDown += User_KeyDown;
                 KeyUp += User_KeyUp;
-                MonoBehaviourManager.Start();
-                InitializeMonoBehavior();
+
+                InitializeMonoBehaviour();  // 每个实例都需要执行一次
+                // CloseMonoBehavior();
+                MonoBehaviourManager.Start();  // 全局一次即可
+                // MonoBehaviourManager.Stop();
             };
         }
 
@@ -24,6 +27,7 @@ namespace Demo
             // 更新性能参数显示
             UpdatePerformanceDisplay(e);
 
+            // 检测 Ctrl + H 组合键
             if (_pressedKeys.Contains(Key.H) && _pressedKeys.Contains(Key.LeftCtrl))
             {
                 MessageBox.Show($"[ Ctrl + H ] has been invoked");

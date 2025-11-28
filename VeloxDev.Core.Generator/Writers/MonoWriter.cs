@@ -40,7 +40,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         public override string[] GenerateBaseInterfaces()
         {
-            return IsMono ? ["global::VeloxDev.Core.Interfaces.MonoBehavior.IMonoBehavior"] : [];
+            return IsMono ? ["global::VeloxDev.Core.Interfaces.MonoBehaviour.IMonoBehaviour"] : [];
         }
 
         public override string GenerateBody()
@@ -51,14 +51,14 @@ namespace VeloxDev.Core.Generator.Writers
             }
 
             return $$"""
-                public void InitializeMonoBehavior()
+                public void InitializeMonoBehaviour()
                 {
-                    {{NAMESPACE_VELOX_TIMELINE}}.MonoBehaviourManager.RegisterBehavior(this);
+                    {{NAMESPACE_VELOX_TIMELINE}}.MonoBehaviourManager.RegisterBehaviour(this);
                 }
 
-                public void CloseMonoBehavior()
+                public void CloseMonoBehaviour()
                 {
-                    {{NAMESPACE_VELOX_TIMELINE}}.MonoBehaviourManager.UnregisterBehavior(this);
+                    {{NAMESPACE_VELOX_TIMELINE}}.MonoBehaviourManager.UnregisterBehaviour(this);
                 }
 
                 public void InvokeAwake()
