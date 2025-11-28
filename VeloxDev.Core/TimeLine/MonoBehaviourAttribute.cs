@@ -1,11 +1,11 @@
 ﻿namespace VeloxDev.Core.TimeLine
 {
     /// <summary>
-    /// Maintain frames that are executed in a loop
+    /// Enables the instance to run MonoBehaviour-like lifecycle methods in the TimeLine system.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-    public class MonoBehaviourAttribute(int fps = 60) : Attribute
+    public sealed class MonoBehaviourAttribute : Attribute
     {
-        private readonly TimeSpan _delay = TimeSpan.FromMilliseconds(1000d / fps > 0 ? fps : 1);
+
     }
 }

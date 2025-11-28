@@ -2,5 +2,5 @@
 
 public sealed class TransitionEventArgs : TimeLineEventArgs
 {
-    
+
 }

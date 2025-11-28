@@ -72,9 +72,9 @@ namespace VeloxDev.Core.TransitionSystem
                        TUIThreadInspectorCore,
                        TTransitionInterpreterCore,
                        TPriorityCore>()
-                       {
-                           TargetRef = new WeakReference<object>(source)
-                       };
+                {
+                    TargetRef = new WeakReference<object>(source)
+                };
             }
         }
     }
@@ -143,9 +143,9 @@ namespace VeloxDev.Core.TransitionSystem
                 return new TransitionSchedulerCore<
                        TUIThreadInspectorCore,
                        TTransitionInterpreterCore>()
-                       {
-                           TargetRef = new WeakReference<object>(source)
-                       };
+                {
+                    TargetRef = new WeakReference<object>(source)
+                };
             }
         }
     }
