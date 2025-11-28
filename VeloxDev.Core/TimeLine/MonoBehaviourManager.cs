@@ -1,451 +1,314 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using VeloxDev.Core.Interfaces.MonoBehavior;
 
 namespace VeloxDev.Core.TimeLine
 {
-    /// <summary>
-    /// 管理所有MonoBehaviour实例的生命周期，提供高性能、线程安全的帧更新调度
-    /// </summary>
     public static class MonoBehaviourManager
     {
-        #region 内部类和结构
+        #region 内部类
 
-        private class BehaviorWrapper(IMonoBehavior behavior, int executionOrder)
+        private class BehaviorWrapper
         {
-            public WeakReference<IMonoBehavior> WeakBehavior { get; } = new WeakReference<IMonoBehavior>(behavior);
-            public int ExecutionOrder { get; } = executionOrder;
-            public long LastExecutionTicks { get; set; }
-            public long AverageExecutionTime { get; set; }
+            public IMonoBehavior Behavior { get; }
+            public int ExecutionOrder { get; }
+
+            public BehaviorWrapper(IMonoBehavior behavior, int executionOrder)
+            {
+                // 直接赋值，避免任何属性访问
+                Behavior = behavior;
+                ExecutionOrder = executionOrder;
+            }
         }
-
-        private struct ExecutionContext
-        {
-            public FrameEventArgs FrameArgs;
-            public CancellationToken CancellationToken;
-            public long FrameStartTicks;
-            public long TimeSliceTicks;
-        }
-
-        #endregion
-
-        #region 常量和配置
-
-        private const int DEFAULT_TARGET_FPS = 60;
-        private const int MAX_FRAME_TIME_MS = 16; // 60FPS对应的帧时间
-        private const int MIN_FRAME_TIME_MS = 2;  // 500FPS对应的帧时间
-        private const int TIME_SLICE_US = 1000;   // 每帧每个行为最大执行时间1ms
-
-        // 自适应帧率控制参数
-        private const double ADAPTIVE_SMOOTHING = 0.9;
-        private const int ADAPTIVE_THRESHOLD_MS = 12;
 
         #endregion
 
         #region 私有字段
 
         private static readonly ConcurrentDictionary<int, BehaviorWrapper> _behaviors = new();
-        private static readonly ReaderWriterLockSlim _behaviorLock = new();
         private static readonly ConcurrentQueue<IMonoBehavior> _addQueue = new();
-        private static readonly ConcurrentQueue<WeakReference<IMonoBehavior>> _removeQueue = new();
+        private static readonly ConcurrentQueue<IMonoBehavior> _removeQueue = new();
 
         private static volatile bool _isRunning = false;
-        private static volatile bool _isInitialized = false;
-        private static int _targetFPS = DEFAULT_TARGET_FPS;
-        private static long _totalTime = 0;
+        private static int _targetFPS = 60;
+        private static long _totalTimeMs = 0;
+        private static long _lastFrameTime = 0;
+        private static int _currentFPS = 0;
+        private static int _fpsCounter = 0;
+        private static long _fpsLastUpdateTime = 0;
+        private static long _totalFrames = 0;
         private static int _instanceCounter = 0;
 
-        // 性能监控
-        private static long _lastFrameTicks = 0;
-        private static double _averageFrameTime = MAX_FRAME_TIME_MS;
-        private static int _currentFPS = 0;
-        private static long _fpsCounterTime = 0;
-        private static int _fpsCounter = 0;
-
-        // 取消令牌源
-        private static CancellationTokenSource _cancellationTokenSource = new();
+        private static CancellationTokenSource _cancellationTokenSource;
 
         #endregion
 
         #region 公共属性
 
-        /// <summary>
-        /// 获取或设置目标帧率
-        /// </summary>
         public static int TargetFPS
         {
             get => _targetFPS;
-            set => _targetFPS = Math.Max(1, Math.Min(1000, value));
+            set => _targetFPS = value < 1 ? 1 : (value > 1000 ? 1000 : value);
         }
 
-        /// <summary>
-        /// 获取当前帧率
-        /// </summary>
         public static int CurrentFPS => _currentFPS;
-
-        /// <summary>
-        /// 获取总运行时间（毫秒）
-        /// </summary>
-        public static long TotalTime => _totalTime;
-
-        /// <summary>
-        /// 管理器是否正在运行
-        /// </summary>
+        public static long TotalTimeMs => _totalTimeMs;
+        public static long TotalFrames => _totalFrames;
         public static bool IsRunning => _isRunning;
+        public static int ActiveBehaviorCount => _behaviors.Count;
 
         #endregion
 
-        #region 公共方法
+        #region 核心生命周期管理
 
-        /// <summary>
-        /// 初始化管理器
-        /// </summary>
-        public static void Initialize()
-        {
-            if (_isInitialized) return;
-
-            _cancellationTokenSource = new CancellationTokenSource();
-            _lastFrameTicks = DateTime.UtcNow.Ticks;
-            _isInitialized = true;
-
-            Console.WriteLine("MonoBehaviourManager initialized.");
-        }
-
-        /// <summary>
-        /// 启动帧更新循环
-        /// </summary>
         public static void Start()
         {
-            if (!_isInitialized) Initialize();
             if (_isRunning) return;
 
             _isRunning = true;
-            _ = Task.Run(async () => await RunMainLoopAsync());
+            _cancellationTokenSource = new CancellationTokenSource();
+            _lastFrameTime = GetCurrentTimestamp();
+            _fpsLastUpdateTime = _lastFrameTime;
 
-            Console.WriteLine("MonoBehaviourManager started.");
+            // 启动主循环
+            ThreadPool.QueueUserWorkItem(_ => RunMainLoop());
+
+            Debug.WriteLine("MonoBehaviourManager started.");
         }
 
-        /// <summary>
-        /// 停止帧更新循环
-        /// </summary>
         public static void Stop()
         {
             if (!_isRunning) return;
 
             _isRunning = false;
             _cancellationTokenSource?.Cancel();
-
-            Console.WriteLine("MonoBehaviourManager stopped.");
+            Debug.WriteLine("MonoBehaviourManager stopped.");
         }
 
-        /// <summary>
-        /// 注册MonoBehaviour实例
-        /// </summary>
         public static void RegisterBehavior(IMonoBehavior behavior)
         {
-            if (behavior == null) throw new ArgumentNullException(nameof(behavior));
+            if (behavior == null)
+            {
+                Debug.WriteLine("Warning: Attempted to register null behavior");
+                return;
+            }
 
             _addQueue.Enqueue(behavior);
-
-            // 如果管理器正在运行，立即初始化新行为
-            if (_isRunning)
-            {
-                ProcessPendingOperations();
-            }
+            Debug.WriteLine($"Behavior queued: {behavior.GetType().Name}");
         }
 
-        /// <summary>
-        /// 注销MonoBehaviour实例
-        /// </summary>
         public static void UnregisterBehavior(IMonoBehavior behavior)
         {
-            if (behavior == null) return;
+            if (behavior == null)
+            {
+                Debug.WriteLine("Warning: Attempted to unregister null behavior");
+                return;
+            }
 
-            var weakRef = new WeakReference<IMonoBehavior>(behavior);
-            _removeQueue.Enqueue(weakRef);
+            _removeQueue.Enqueue(behavior);
+            Debug.WriteLine($"Behavior unregister queued: {behavior.GetType().Name}");
         }
 
-        /// <summary>
-        /// 获取当前注册的行为数量
-        /// </summary>
-        public static int GetBehaviorCount()
+        #endregion
+
+        #region 主循环核心逻辑
+
+        private static void RunMainLoop()
         {
-            _behaviorLock.EnterReadLock();
-            try
+            Debug.WriteLine("Main loop started");
+
+            while (_isRunning)
             {
-                return _behaviors.Count;
+                try
+                {
+                    var frameStartTime = GetCurrentTimestamp();
+
+                    // 处理挂起的操作
+                    ProcessPendingOperations();
+
+                    // 计算时间增量
+                    var deltaTime = CalculateDeltaTime(frameStartTime);
+                    if (deltaTime <= 0)
+                    {
+                        Thread.Sleep(1);
+                        continue;
+                    }
+
+                    // 创建帧事件参数 - 使用最简单的构造方式
+                    var frameArgs = CreateFrameEventArgs(deltaTime);
+
+                    // 执行行为更新
+                    ExecuteBehaviors(frameArgs);
+
+                    // 更新性能统计
+                    UpdatePerformanceStats(frameStartTime, deltaTime);
+
+                    // 帧率控制
+                    FrameRateControl(frameStartTime);
+
+                    _totalFrames++;
+
+                    // 调试输出
+                    if (_totalFrames % 60 == 0)
+                    {
+                        Debug.WriteLine($"Frame {_totalFrames}: {_currentFPS}FPS, Behaviors: {_behaviors.Count}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error in main loop: {ex.Message}");
+                    Thread.Sleep(10);
+                }
             }
-            finally
+
+            Debug.WriteLine("Main loop stopped");
+        }
+
+        private static FrameEventArgs CreateFrameEventArgs(int deltaTime)
+        {
+            // 使用最简单的结构体初始化方式
+            var frameArgs = new FrameEventArgs();
+
+            // 直接赋值，避免任何可能的属性递归
+            frameArgs.DeltaTime = deltaTime;
+            frameArgs.TotalTime = (int)_totalTimeMs;
+            frameArgs.CurrentFPS = _currentFPS;
+            frameArgs.TargetFPS = _targetFPS;
+            frameArgs.Handled = false;
+
+            return frameArgs;
+        }
+
+        private static void ExecuteBehaviors(FrameEventArgs frameArgs)
+        {
+            if (_behaviors.IsEmpty) return;
+
+            // 使用ToArray避免在枚举时修改集合
+            var wrappers = _behaviors.Values.ToArray();
+
+            foreach (var wrapper in wrappers)
             {
-                _behaviorLock.ExitReadLock();
+                if (wrapper == null) continue;
+
+                var behavior = wrapper.Behavior;
+                if (behavior == null) continue;
+
+                try
+                {
+                    behavior.InvokeUpdate(frameArgs);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error in Update for {behavior.GetType().Name}: {ex.Message}");
+                }
+
+                if (frameArgs.Handled) break;
             }
         }
 
         #endregion
 
-        #region 主循环和核心逻辑
-
-        private static async Task RunMainLoopAsync()
-        {
-            var token = _cancellationTokenSource.Token;
-
-            while (_isRunning && !token.IsCancellationRequested)
-            {
-                var frameStartTicks = DateTime.UtcNow.Ticks;
-                var deltaTime = CalculateDeltaTime(frameStartTicks);
-
-                // 处理挂起的操作
-                ProcessPendingOperations();
-
-                // 清理无效引用
-                CleanupInvalidReferences();
-
-                // 创建帧事件参数
-                var frameArgs = new FrameEventArgs
-                {
-                    DeltaTime = deltaTime,
-                    TotalTime = (int)_totalTime,
-                    CurrentFPS = _currentFPS,
-                    TargetFPS = _targetFPS
-                };
-
-                // 执行帧更新
-                await ExecuteFrameUpdates(frameArgs, frameStartTicks, token);
-
-                // 更新性能统计
-                UpdatePerformanceStats(frameStartTicks);
-
-                // 自适应帧率控制
-                await AdaptiveFrameRateControl();
-            }
-        }
-
-        private static int CalculateDeltaTime(long currentTicks)
-        {
-            if (_lastFrameTicks == 0) return 0;
-
-            var deltaTicks = currentTicks - _lastFrameTicks;
-            return (int)(deltaTicks / TimeSpan.TicksPerMillisecond);
-        }
+        #region 辅助方法
 
         private static void ProcessPendingOperations()
         {
-            // 处理新增行为
+            ProcessAddedBehaviors();
+            ProcessRemovedBehaviors();
+        }
+
+        private static void ProcessAddedBehaviors()
+        {
             while (_addQueue.TryDequeue(out var behavior))
             {
-                var wrapper = new BehaviorWrapper(behavior, Interlocked.Increment(ref _instanceCounter));
-
-                _behaviorLock.EnterWriteLock();
-                try
-                {
-                    _behaviors[behavior.GetHashCode()] = wrapper;
-                }
-                finally
-                {
-                    _behaviorLock.ExitWriteLock();
-                }
-
-                // 初始化新行为
-                SafeExecute(() => behavior.InitializeMonoBehavior(), "InitializeMonoBehavior");
-                if (_isRunning)
-                {
-                    SafeExecute(() => behavior.InvokeAwake(), "InvokeAwake");
-                    SafeExecute(() => behavior.InvokeStart(), "InvokeStart");
-                }
-            }
-
-            // 处理移除行为
-            while (_removeQueue.TryDequeue(out var weakRef))
-            {
-                if (weakRef.TryGetTarget(out var behavior))
-                {
-                    _behaviorLock.EnterWriteLock();
-                    try
-                    {
-                        _behaviors.TryRemove(behavior.GetHashCode(), out _);
-                    }
-                    finally
-                    {
-                        _behaviorLock.ExitWriteLock();
-                    }
-                }
-            }
-        }
-
-        private static void CleanupInvalidReferences()
-        {
-            var invalidKeys = new List<int>();
-
-            _behaviorLock.EnterReadLock();
-            try
-            {
-                foreach (var kvp in _behaviors)
-                {
-                    if (!kvp.Value.WeakBehavior.TryGetTarget(out _))
-                    {
-                        invalidKeys.Add(kvp.Key);
-                    }
-                }
-            }
-            finally
-            {
-                _behaviorLock.ExitReadLock();
-            }
-
-            if (invalidKeys.Count > 0)
-            {
-                _behaviorLock.EnterWriteLock();
-                try
-                {
-                    foreach (var key in invalidKeys)
-                    {
-                        _behaviors.TryRemove(key, out _);
-                    }
-                }
-                finally
-                {
-                    _behaviorLock.ExitWriteLock();
-                }
-            }
-        }
-
-        private static async Task ExecuteFrameUpdates(FrameEventArgs frameArgs, long frameStartTicks, CancellationToken token)
-        {
-            var context = new ExecutionContext
-            {
-                FrameArgs = frameArgs,
-                CancellationToken = token,
-                FrameStartTicks = frameStartTicks,
-                TimeSliceTicks = TimeSpan.TicksPerMillisecond / 1000 * TIME_SLICE_US // 转换为ticks
-            };
-
-            // 按执行顺序排序执行
-            var behaviors = GetSortedBehaviors();
-
-            await ExecuteLifecyclePhase(behaviors, context, "InvokeUpdate", (behavior, ctx) =>
-                behavior.InvokeUpdate(ctx.FrameArgs));
-
-            await ExecuteLifecyclePhase(behaviors, context, "InvokeLateUpdate", (behavior, ctx) =>
-                behavior.InvokeLateUpdate(ctx.FrameArgs));
-
-            await ExecuteLifecyclePhase(behaviors, context, "InvokeFixedUpdate", (behavior, ctx) =>
-                behavior.InvokeFixedUpdate(ctx.FrameArgs));
-        }
-
-        private static List<BehaviorWrapper> GetSortedBehaviors()
-        {
-            _behaviorLock.EnterReadLock();
-            try
-            {
-                return [.. _behaviors.Values
-                    .Where(wrapper => wrapper.WeakBehavior.TryGetTarget(out _))
-                    .OrderBy(wrapper => wrapper.ExecutionOrder)];
-            }
-            finally
-            {
-                _behaviorLock.ExitReadLock();
-            }
-        }
-
-        private static async Task ExecuteLifecyclePhase(
-            List<BehaviorWrapper> behaviors,
-            ExecutionContext context,
-            string phaseName,
-            Action<IMonoBehavior, ExecutionContext> action)
-        {
-            foreach (var wrapper in behaviors)
-            {
-                if (context.CancellationToken.IsCancellationRequested) break;
-                if (!wrapper.WeakBehavior.TryGetTarget(out var behavior)) continue;
-
-                var executionStart = DateTime.UtcNow.Ticks;
+                if (behavior == null) continue;
 
                 try
                 {
-                    // 时间片控制：如果执行时间超过限制，切换到异步执行
-                    if (executionStart - context.FrameStartTicks > context.TimeSliceTicks * 10) // 超过10倍时间片
-                    {
-                        await Task.Run(() => action(behavior, context));
-                    }
-                    else
-                    {
-                        action(behavior, context);
-                    }
+                    // 使用最简单的构造函数
+                    int executionOrder = Interlocked.Increment(ref _instanceCounter);
+                    var wrapper = new BehaviorWrapper(behavior, executionOrder);
+
+                    _behaviors[GetBehaviorHash(behavior)] = wrapper;
+
+                    // 初始化行为
+                    SafeExecute(behavior.InvokeAwake, "Awake", behavior);
+                    SafeExecute(behavior.InvokeStart, "Start", behavior);
+
+                    Debug.WriteLine($"Behavior registered successfully: {behavior.GetType().Name}, Order: {executionOrder}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error in {phaseName} for behavior {behavior.GetType().Name}: {ex.Message}");
-                }
-
-                // 更新执行时间统计
-                var executionTime = DateTime.UtcNow.Ticks - executionStart;
-                UpdateExecutionTimeStats(wrapper, executionTime);
-
-                // 检查是否应该提前结束本帧（性能保护）
-                if (DateTime.UtcNow.Ticks - context.FrameStartTicks > TimeSpan.TicksPerMillisecond * ADAPTIVE_THRESHOLD_MS)
-                {
-                    break; // 跳过剩余行为，保护帧率
+                    Debug.WriteLine($"Error registering behavior {behavior.GetType().Name}: {ex.Message}");
                 }
             }
         }
 
-        private static void UpdateExecutionTimeStats(BehaviorWrapper wrapper, long executionTime)
+        private static void ProcessRemovedBehaviors()
         {
-            if (wrapper.AverageExecutionTime == 0)
+            while (_removeQueue.TryDequeue(out var behavior))
             {
-                wrapper.AverageExecutionTime = executionTime;
+                if (behavior == null) continue;
+
+                _behaviors.TryRemove(GetBehaviorHash(behavior), out _);
+                Debug.WriteLine($"Behavior unregistered: {behavior.GetType().Name}");
             }
-            else
-            {
-                wrapper.AverageExecutionTime = (long)(wrapper.AverageExecutionTime * ADAPTIVE_SMOOTHING +
-                    executionTime * (1 - ADAPTIVE_SMOOTHING));
-            }
-            wrapper.LastExecutionTicks = DateTime.UtcNow.Ticks;
         }
 
-        private static void UpdatePerformanceStats(long frameStartTicks)
+        private static int GetBehaviorHash(IMonoBehavior behavior)
         {
-            var frameTime = (DateTime.UtcNow.Ticks - frameStartTicks) / TimeSpan.TicksPerMillisecond;
-            _averageFrameTime = _averageFrameTime * ADAPTIVE_SMOOTHING + frameTime * (1 - ADAPTIVE_SMOOTHING);
+            // 使用RuntimeHelpers.GetHashCode避免可能的GetHashCode重写问题
+            return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(behavior);
+        }
 
-            // 更新FPS计数
+        private static long GetCurrentTimestamp()
+        {
+            return Stopwatch.GetTimestamp() / (Stopwatch.Frequency / 1000); // 转换为毫秒
+        }
+
+        private static int CalculateDeltaTime(long currentTime)
+        {
+            if (_lastFrameTime <= 0) return 1;
+
+            var delta = (int)(currentTime - _lastFrameTime);
+            return delta < 1 ? 1 : delta;
+        }
+
+        private static void UpdatePerformanceStats(long frameStartTime, int deltaTime)
+        {
+            _totalTimeMs += deltaTime;
+            _lastFrameTime = frameStartTime;
+
             _fpsCounter++;
-            var currentTime = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
-            if (currentTime - _fpsCounterTime >= 1000) // 每秒钟更新一次FPS
+            var currentTime = GetCurrentTimestamp();
+            if (currentTime - _fpsLastUpdateTime >= 1000)
             {
                 _currentFPS = _fpsCounter;
                 _fpsCounter = 0;
-                _fpsCounterTime = currentTime;
+                _fpsLastUpdateTime = currentTime;
             }
-
-            _totalTime += (int)frameTime;
-            _lastFrameTicks = frameStartTicks;
         }
 
-        private static async Task AdaptiveFrameRateControl()
+        private static void FrameRateControl(long frameStartTime)
         {
             var targetFrameTime = 1000.0 / _targetFPS;
-            var actualFrameTime = _averageFrameTime;
+            var elapsed = GetCurrentTimestamp() - frameStartTime;
 
-            if (actualFrameTime < targetFrameTime)
+            if (elapsed < targetFrameTime)
             {
-                // 执行过快，需要等待
-                var sleepTime = (int)(targetFrameTime - actualFrameTime);
-                sleepTime = Math.Max(MIN_FRAME_TIME_MS, Math.Min(sleepTime, MAX_FRAME_TIME_MS));
-
-                await Task.Delay(sleepTime);
+                var sleepTime = (int)(targetFrameTime - elapsed);
+                if (sleepTime > 0) Thread.Sleep(sleepTime);
             }
-            // 如果执行过慢，下一帧会自动加快，不需要特殊处理
         }
 
-        private static void SafeExecute(Action action, string operationName)
+        private static void SafeExecute(Action action, string methodName, IMonoBehavior behavior)
         {
             try
             {
-                action();
+                action?.Invoke();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in {operationName}: {ex.Message}");
+                Debug.WriteLine($"Error in {methodName} for {behavior?.GetType().Name}: {ex.Message}");
             }
         }
 
