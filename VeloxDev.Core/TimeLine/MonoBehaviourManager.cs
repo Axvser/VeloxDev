@@ -8,17 +8,10 @@ namespace VeloxDev.Core.TimeLine
     {
         #region 内部类
 
-        private class BehaviorWrapper
+        private class BehaviorWrapper(IMonoBehavior behavior, int executionOrder)
         {
-            public IMonoBehavior Behavior { get; }
-            public int ExecutionOrder { get; }
-
-            public BehaviorWrapper(IMonoBehavior behavior, int executionOrder)
-            {
-                // 直接赋值，避免任何属性访问
-                Behavior = behavior;
-                ExecutionOrder = executionOrder;
-            }
+            public IMonoBehavior Behavior { get; } = behavior;
+            public int ExecutionOrder { get; } = executionOrder;
         }
 
         #endregion
@@ -39,7 +32,7 @@ namespace VeloxDev.Core.TimeLine
         private static long _totalFrames = 0;
         private static int _instanceCounter = 0;
 
-        private static CancellationTokenSource _cancellationTokenSource;
+        private static CancellationTokenSource _cancellationTokenSource = new();
 
         #endregion
 
@@ -70,9 +63,7 @@ namespace VeloxDev.Core.TimeLine
             _lastFrameTime = GetCurrentTimestamp();
             _fpsLastUpdateTime = _lastFrameTime;
 
-            // 启动主循环
             ThreadPool.QueueUserWorkItem(_ => RunMainLoop());
-
             Debug.WriteLine("MonoBehaviourManager started.");
         }
 
@@ -94,7 +85,6 @@ namespace VeloxDev.Core.TimeLine
             }
 
             _addQueue.Enqueue(behavior);
-            Debug.WriteLine($"Behavior queued: {behavior.GetType().Name}");
         }
 
         public static void UnregisterBehavior(IMonoBehavior behavior)
@@ -106,7 +96,6 @@ namespace VeloxDev.Core.TimeLine
             }
 
             _removeQueue.Enqueue(behavior);
-            Debug.WriteLine($"Behavior unregister queued: {behavior.GetType().Name}");
         }
 
         #endregion
@@ -134,10 +123,10 @@ namespace VeloxDev.Core.TimeLine
                         continue;
                     }
 
-                    // 创建帧事件参数 - 使用最简单的构造方式
+                    // 创建帧事件参数
                     var frameArgs = CreateFrameEventArgs(deltaTime);
 
-                    // 执行行为更新
+                    // 执行行为更新（Handled属性控制执行）
                     ExecuteBehaviors(frameArgs);
 
                     // 更新性能统计
@@ -147,12 +136,6 @@ namespace VeloxDev.Core.TimeLine
                     FrameRateControl(frameStartTime);
 
                     _totalFrames++;
-
-                    // 调试输出
-                    if (_totalFrames % 60 == 0)
-                    {
-                        Debug.WriteLine($"Frame {_totalFrames}: {_currentFPS}FPS, Behaviors: {_behaviors.Count}");
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -166,43 +149,40 @@ namespace VeloxDev.Core.TimeLine
 
         private static FrameEventArgs CreateFrameEventArgs(int deltaTime)
         {
-            // 使用最简单的结构体初始化方式
-            var frameArgs = new FrameEventArgs();
-
-            // 直接赋值，避免任何可能的属性递归
-            frameArgs.DeltaTime = deltaTime;
-            frameArgs.TotalTime = (int)_totalTimeMs;
-            frameArgs.CurrentFPS = _currentFPS;
-            frameArgs.TargetFPS = _targetFPS;
-            frameArgs.Handled = false;
-
-            return frameArgs;
+            return new FrameEventArgs
+            {
+                DeltaTime = deltaTime,
+                TotalTime = (int)_totalTimeMs,
+                CurrentFPS = _currentFPS,
+                TargetFPS = _targetFPS,
+                Handled = false
+            };
         }
 
         private static void ExecuteBehaviors(FrameEventArgs frameArgs)
         {
-            if (_behaviors.IsEmpty) return;
+            if (_behaviors.IsEmpty || frameArgs.Handled) return;
 
-            // 使用ToArray避免在枚举时修改集合
-            var wrappers = _behaviors.Values.ToArray();
+            // 按执行顺序排序
+            var wrappers = _behaviors.Values
+                .OrderBy(w => w.ExecutionOrder)
+                .ToArray();
 
             foreach (var wrapper in wrappers)
             {
-                if (wrapper == null) continue;
+                if (wrapper?.Behavior == null) continue;
 
-                var behavior = wrapper.Behavior;
-                if (behavior == null) continue;
+                // 检查Handled状态，如果被设置为true则中断执行
+                if (frameArgs.Handled) break;
 
                 try
                 {
-                    behavior.InvokeUpdate(frameArgs);
+                    wrapper.Behavior.InvokeUpdate(frameArgs);
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Error in Update for {behavior.GetType().Name}: {ex.Message}");
+                    Debug.WriteLine($"Error in Update for {wrapper.Behavior.GetType().Name}: {ex.Message}");
                 }
-
-                if (frameArgs.Handled) break;
             }
         }
 
@@ -224,17 +204,14 @@ namespace VeloxDev.Core.TimeLine
 
                 try
                 {
-                    // 使用最简单的构造函数
                     int executionOrder = Interlocked.Increment(ref _instanceCounter);
                     var wrapper = new BehaviorWrapper(behavior, executionOrder);
 
                     _behaviors[GetBehaviorHash(behavior)] = wrapper;
 
-                    // 初始化行为
+                    // 初始化行为（不受Handled影响）
                     SafeExecute(behavior.InvokeAwake, "Awake", behavior);
                     SafeExecute(behavior.InvokeStart, "Start", behavior);
-
-                    Debug.WriteLine($"Behavior registered successfully: {behavior.GetType().Name}, Order: {executionOrder}");
                 }
                 catch (Exception ex)
                 {
@@ -250,25 +227,22 @@ namespace VeloxDev.Core.TimeLine
                 if (behavior == null) continue;
 
                 _behaviors.TryRemove(GetBehaviorHash(behavior), out _);
-                Debug.WriteLine($"Behavior unregistered: {behavior.GetType().Name}");
             }
         }
 
         private static int GetBehaviorHash(IMonoBehavior behavior)
         {
-            // 使用RuntimeHelpers.GetHashCode避免可能的GetHashCode重写问题
             return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(behavior);
         }
 
         private static long GetCurrentTimestamp()
         {
-            return Stopwatch.GetTimestamp() / (Stopwatch.Frequency / 1000); // 转换为毫秒
+            return Stopwatch.GetTimestamp() * 1000 / Stopwatch.Frequency;
         }
 
         private static int CalculateDeltaTime(long currentTime)
         {
             if (_lastFrameTime <= 0) return 1;
-
             var delta = (int)(currentTime - _lastFrameTime);
             return delta < 1 ? 1 : delta;
         }

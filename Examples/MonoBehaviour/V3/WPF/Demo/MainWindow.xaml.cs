@@ -23,12 +23,32 @@ namespace Demo
 
         partial void Update(FrameEventArgs e)
         {
+            // 更新性能参数显示
+            UpdatePerformanceDisplay(e);
+
             if (_pressedKeys.Contains(Key.H) && _pressedKeys.Contains(Key.LeftCtrl))
             {
                 MessageBox.Show($"[ Ctrl + H ] has been invoked");
                 _pressedKeys.Remove(Key.H);
                 _pressedKeys.Remove(Key.LeftCtrl);
+
+                // 设置Handled为true来演示功能
+                e.Handled = true;
             }
+        }
+
+        private void UpdatePerformanceDisplay(FrameEventArgs e)
+        {
+            // 使用Dispatcher确保UI线程安全更新
+            Dispatcher.Invoke(() =>
+            {
+                txtDeltaTime.Text = $"DeltaTime: {e.DeltaTime}ms";
+                txtTotalTime.Text = $"TotalTime: {e.TotalTime}ms";
+                txtCurrentFPS.Text = $"Current FPS: {e.CurrentFPS}";
+                txtTargetFPS.Text = $"Target FPS: {e.TargetFPS}";
+                txtTotalFrames.Text = $"Total Frames: {MonoBehaviourManager.TotalFrames}";
+                txtHandled.Text = $"Handled: {e.Handled}";
+            });
         }
 
         private void User_KeyDown(object? sender, KeyEventArgs e)
