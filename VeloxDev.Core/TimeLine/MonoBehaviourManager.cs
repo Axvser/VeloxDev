@@ -14,6 +14,13 @@ namespace VeloxDev.Core.TimeLine
             public int ExecutionOrder { get; } = executionOrder;
         }
 
+        private class ConfigChangeRequest
+        {
+            public int? TargetFPS { get; set; }
+            public Action<FrameEventArgs>? PreUpdateCallback { get; set; }
+            public Action<FrameEventArgs>? PostUpdateCallback { get; set; }
+        }
+
         #endregion
 
         #region 私有字段
@@ -21,7 +28,9 @@ namespace VeloxDev.Core.TimeLine
         private static readonly ConcurrentDictionary<int, BehaviorWrapper> _behaviors = new();
         private static readonly ConcurrentQueue<IMonoBehavior> _addQueue = new();
         private static readonly ConcurrentQueue<IMonoBehavior> _removeQueue = new();
+        private static readonly ConcurrentQueue<ConfigChangeRequest> _configQueue = new();
 
+        // 性能参数
         private static volatile bool _isRunning = false;
         private static int _targetFPS = 60;
         private static long _totalTimeMs = 0;
@@ -31,6 +40,11 @@ namespace VeloxDev.Core.TimeLine
         private static long _fpsLastUpdateTime = 0;
         private static long _totalFrames = 0;
         private static int _instanceCounter = 0;
+
+        // 缓存和配置
+        private static readonly FrameEventArgs _cachedFrameArgs = new();
+        private static Action<FrameEventArgs>? _preUpdateCallback;
+        private static Action<FrameEventArgs>? _postUpdateCallback;
 
         private static CancellationTokenSource _cancellationTokenSource = new();
 
@@ -49,6 +63,48 @@ namespace VeloxDev.Core.TimeLine
         public static long TotalFrames => _totalFrames;
         public static bool IsRunning => _isRunning;
         public static int ActiveBehaviorCount => _behaviors.Count;
+
+        #endregion
+
+        #region 配置修改API
+
+        public static void SetTargetFPS(int fps)
+        {
+            if (fps < 1 || fps > 1000) return;
+            _configQueue.Enqueue(new ConfigChangeRequest { TargetFPS = fps });
+        }
+
+        public static void SetPreUpdateCallback(Action<FrameEventArgs> callback)
+        {
+            _configQueue.Enqueue(new ConfigChangeRequest { PreUpdateCallback = callback });
+        }
+
+        public static void SetPostUpdateCallback(Action<FrameEventArgs> callback)
+        {
+            _configQueue.Enqueue(new ConfigChangeRequest { PostUpdateCallback = callback });
+        }
+
+        public static void ClearCallbacks()
+        {
+            _configQueue.Enqueue(new ConfigChangeRequest
+            {
+                PreUpdateCallback = null,
+                PostUpdateCallback = null
+            });
+        }
+
+        public static void Pause()
+        {
+            _configQueue.Enqueue(new ConfigChangeRequest
+            {
+                PreUpdateCallback = args => args.Handled = true
+            });
+        }
+
+        public static void Resume()
+        {
+            _configQueue.Enqueue(new ConfigChangeRequest { PreUpdateCallback = null });
+        }
 
         #endregion
 
@@ -112,10 +168,8 @@ namespace VeloxDev.Core.TimeLine
                 {
                     var frameStartTime = GetCurrentTimestamp();
 
-                    // 处理挂起的操作
                     ProcessPendingOperations();
 
-                    // 计算时间增量
                     var deltaTime = CalculateDeltaTime(frameStartTime);
                     if (deltaTime <= 0)
                     {
@@ -123,16 +177,18 @@ namespace VeloxDev.Core.TimeLine
                         continue;
                     }
 
-                    // 创建帧事件参数
                     var frameArgs = CreateFrameEventArgs(deltaTime);
 
-                    // 执行行为更新（Handled属性控制执行）
-                    ExecuteBehaviors(frameArgs);
+                    _preUpdateCallback?.Invoke(frameArgs);
 
-                    // 更新性能统计
+                    if (!frameArgs.Handled)
+                    {
+                        ExecuteBehaviors(frameArgs);
+                    }
+
+                    _postUpdateCallback?.Invoke(frameArgs);
+
                     UpdatePerformanceStats(frameStartTime, deltaTime);
-
-                    // 帧率控制
                     FrameRateControl(frameStartTime);
 
                     _totalFrames++;
@@ -149,21 +205,20 @@ namespace VeloxDev.Core.TimeLine
 
         private static FrameEventArgs CreateFrameEventArgs(int deltaTime)
         {
-            return new FrameEventArgs
-            {
-                DeltaTime = deltaTime,
-                TotalTime = (int)_totalTimeMs,
-                CurrentFPS = _currentFPS,
-                TargetFPS = _targetFPS,
-                Handled = false
-            };
+            // 直接复用缓存对象并赋值
+            _cachedFrameArgs.DeltaTime = deltaTime;
+            _cachedFrameArgs.TotalTime = (int)_totalTimeMs;
+            _cachedFrameArgs.CurrentFPS = _currentFPS;
+            _cachedFrameArgs.TargetFPS = _targetFPS;
+            _cachedFrameArgs.Handled = false;
+
+            return _cachedFrameArgs;
         }
 
         private static void ExecuteBehaviors(FrameEventArgs frameArgs)
         {
             if (_behaviors.IsEmpty || frameArgs.Handled) return;
 
-            // 按执行顺序排序
             var wrappers = _behaviors.Values
                 .OrderBy(w => w.ExecutionOrder)
                 .ToArray();
@@ -171,8 +226,6 @@ namespace VeloxDev.Core.TimeLine
             foreach (var wrapper in wrappers)
             {
                 if (wrapper?.Behavior == null) continue;
-
-                // 检查Handled状态，如果被设置为true则中断执行
                 if (frameArgs.Handled) break;
 
                 try
@@ -192,8 +245,30 @@ namespace VeloxDev.Core.TimeLine
 
         private static void ProcessPendingOperations()
         {
+            ProcessConfigChanges();
             ProcessAddedBehaviors();
             ProcessRemovedBehaviors();
+        }
+
+        private static void ProcessConfigChanges()
+        {
+            while (_configQueue.TryDequeue(out var config))
+            {
+                if (config.TargetFPS.HasValue)
+                {
+                    _targetFPS = config.TargetFPS.Value;
+                }
+
+                if (config.PreUpdateCallback != null || config.PreUpdateCallback == null)
+                {
+                    _preUpdateCallback = config.PreUpdateCallback;
+                }
+
+                if (config.PostUpdateCallback != null || config.PostUpdateCallback == null)
+                {
+                    _postUpdateCallback = config.PostUpdateCallback;
+                }
+            }
         }
 
         private static void ProcessAddedBehaviors()
@@ -209,7 +284,6 @@ namespace VeloxDev.Core.TimeLine
 
                     _behaviors[GetBehaviorHash(behavior)] = wrapper;
 
-                    // 初始化行为（不受Handled影响）
                     SafeExecute(behavior.InvokeAwake, "Awake", behavior);
                     SafeExecute(behavior.InvokeStart, "Start", behavior);
                 }
@@ -225,7 +299,6 @@ namespace VeloxDev.Core.TimeLine
             while (_removeQueue.TryDequeue(out var behavior))
             {
                 if (behavior == null) continue;
-
                 _behaviors.TryRemove(GetBehaviorHash(behavior), out _);
             }
         }

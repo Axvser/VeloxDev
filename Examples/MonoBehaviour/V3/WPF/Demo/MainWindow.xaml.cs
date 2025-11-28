@@ -19,8 +19,6 @@ namespace Demo
             };
         }
 
-        private readonly HashSet<Key> _pressedKeys = [];
-
         partial void Update(FrameEventArgs e)
         {
             // 更新性能参数显示
@@ -31,10 +29,10 @@ namespace Demo
                 MessageBox.Show($"[ Ctrl + H ] has been invoked");
                 _pressedKeys.Remove(Key.H);
                 _pressedKeys.Remove(Key.LeftCtrl);
-
-                // 设置Handled为true来演示功能
-                e.Handled = true;
             }
+
+            // 假设每帧有随机负载，这会影响性能参数的统计结果
+            Thread.Sleep(random.Next(0,30));
         }
 
         private void UpdatePerformanceDisplay(FrameEventArgs e)
@@ -50,6 +48,9 @@ namespace Demo
                 txtHandled.Text = $"Handled: {e.Handled}";
             });
         }
+
+        private readonly HashSet<Key> _pressedKeys = [];
+        private readonly Random random = new();
 
         private void User_KeyDown(object? sender, KeyEventArgs e)
         {

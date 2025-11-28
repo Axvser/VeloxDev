@@ -28,7 +28,6 @@ namespace Demo
                 _pressedKeys.Remove(Key.H);
                 _pressedKeys.Remove(Key.LeftCtrl);
             }
-            Thread.Sleep(50);
         }
 
         private void User_KeyDown(object? sender, KeyEventArgs e)
