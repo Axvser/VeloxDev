@@ -1,4 +1,6 @@
-﻿namespace VeloxDev.Core.Interfaces.TransitionSystem
+﻿using VeloxDev.Core.TimeLine;
+
+namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
     public interface ITransitionInterpreter<TPriorityCore> : ITransitionInterpreterCore
     {
@@ -22,7 +24,7 @@
 
     public interface ITransitionInterpreterCore : IDisposable
     {
-        public FrameEventArgs Args { get; set; }
+        public TransitionEventArgs Args { get; set; }
         public void Exit();
     }
 }

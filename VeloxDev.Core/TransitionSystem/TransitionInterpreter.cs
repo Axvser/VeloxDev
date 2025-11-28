@@ -1,4 +1,5 @@
 ﻿using VeloxDev.Core.Interfaces.TransitionSystem;
+using VeloxDev.Core.TimeLine;
 
 namespace VeloxDev.Core.TransitionSystem
 {
@@ -172,7 +173,7 @@ namespace VeloxDev.Core.TransitionSystem
     public abstract class TransitionInterpreterCore : ITransitionInterpreterCore, IDisposable
     {
         protected CancellationTokenSource? cts = null;
-        public virtual FrameEventArgs Args { get; set; } = new();
+        public virtual TransitionEventArgs Args { get; set; } = new();
 
         public virtual void Exit()
         {

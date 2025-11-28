@@ -1,8 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
-using System.Text;
-using VeloxDev.Core.Generator.Base;
 
 namespace VeloxDev.Core.Generator.Writers
 {
@@ -22,7 +20,7 @@ namespace VeloxDev.Core.Generator.Writers
             var attributeData = symbol.GetAttributes()
                 .FirstOrDefault(ad =>
                     ad.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
-                    NAMESPACE_VELOX_MONO + ".MonoBehaviourAttribute" &&
+                    NAMESPACE_VELOX_TIMELINE + ".MonoBehaviourAttribute" &&
                     ad.ApplicationSyntaxReference?.GetSyntax() is AttributeSyntax attrSyntax &&
                     attrSyntax.Parent?.Parent is ClassDeclarationSyntax
                 );

@@ -1,8 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
-using System.Text;
-using VeloxDev.Core.Generator.Base;
 
 namespace VeloxDev.Core.Generator.Writers
 {

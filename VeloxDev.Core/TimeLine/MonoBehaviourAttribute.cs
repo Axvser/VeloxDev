@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.Mono
+﻿namespace VeloxDev.Core.TimeLine
 {
     /// <summary>
     /// Maintain frames that are executed in a loop

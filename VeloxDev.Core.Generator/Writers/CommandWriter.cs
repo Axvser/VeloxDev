@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using VeloxDev.Core.Generator.Base;
 
 namespace VeloxDev.Core.Generator.Writers
 {

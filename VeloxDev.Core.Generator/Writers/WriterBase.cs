@@ -10,7 +10,7 @@ namespace VeloxDev.Core.Generator.Writers
 {
     public abstract class WriterBase : ICodeWriter
     {
-        public const string NAMESPACE_VELOX_MONO = "global::VeloxDev.Core.Mono";
+        public const string NAMESPACE_VELOX_TIMELINE = "global::VeloxDev.Core.TimeLine";
         public const string NAMESPACE_VELOX_IMVVM = "global::VeloxDev.Core.Interfaces.MVVM";
         public const string NAMESPACE_VELOX_MVVM = "global::VeloxDev.Core.MVVM";
         public const string NAMESPACE_VELOX_AOP = "global::VeloxDev.Core.AopInterfaces";

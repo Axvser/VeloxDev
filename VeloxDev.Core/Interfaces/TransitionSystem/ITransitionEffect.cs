@@ -1,10 +1,7 @@
-﻿namespace VeloxDev.Core.Interfaces.TransitionSystem
-{
-    public class FrameEventArgs : EventArgs
-    {
-        public bool Handled { get; set; } = false;
-    }
+﻿using VeloxDev.Core.TimeLine;
 
+namespace VeloxDev.Core.Interfaces.TransitionSystem
+{
     public interface ITransitionEffect<TPriorityCore> : ITransitionEffectCore
     {
         public TPriorityCore Priority { get; set; }
@@ -20,21 +17,21 @@
         public int LoopTime { get; set; }
         public IEaseCalculator Ease { get; set; }
 
-        public event EventHandler<FrameEventArgs> Awaked;
-        public event EventHandler<FrameEventArgs> Start;
-        public event EventHandler<FrameEventArgs> Update;
-        public event EventHandler<FrameEventArgs> LateUpdate;
-        public event EventHandler<FrameEventArgs> Canceled;
-        public event EventHandler<FrameEventArgs> Completed;
-        public event EventHandler<FrameEventArgs> Finally;
+        public event EventHandler<TransitionEventArgs> Awaked;
+        public event EventHandler<TransitionEventArgs> Start;
+        public event EventHandler<TransitionEventArgs> Update;
+        public event EventHandler<TransitionEventArgs> LateUpdate;
+        public event EventHandler<TransitionEventArgs> Canceled;
+        public event EventHandler<TransitionEventArgs> Completed;
+        public event EventHandler<TransitionEventArgs> Finally;
 
-        public void InvokeAwake(object sender, FrameEventArgs e);
-        public void InvokeStart(object sender, FrameEventArgs e);
-        public void InvokeUpdate(object sender, FrameEventArgs e);
-        public void InvokeLateUpdate(object sender, FrameEventArgs e);
-        public void InvokeCompleted(object sender, FrameEventArgs e);
-        public void InvokeCancled(object sender, FrameEventArgs e);
-        public void InvokeFinally(object sender, FrameEventArgs e);
+        public void InvokeAwake(object sender, TransitionEventArgs e);
+        public void InvokeStart(object sender, TransitionEventArgs e);
+        public void InvokeUpdate(object sender, TransitionEventArgs e);
+        public void InvokeLateUpdate(object sender, TransitionEventArgs e);
+        public void InvokeCompleted(object sender, TransitionEventArgs e);
+        public void InvokeCancled(object sender, TransitionEventArgs e);
+        public void InvokeFinally(object sender, TransitionEventArgs e);
 
         public ITransitionEffectCore Clone();
     }
