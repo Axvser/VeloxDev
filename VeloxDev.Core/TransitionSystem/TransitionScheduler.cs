@@ -44,27 +44,37 @@ namespace VeloxDev.Core.TransitionSystem
 
         public static ITransitionScheduler<TPriorityCore> FindOrCreate<T>(T source, bool CanSTAThread = true) where T : class
         {
-            if (TryGetScheduler(source, out var item))
+            if (CanSTAThread)
             {
-                return item as TransitionSchedulerCore<
-                    TUIThreadInspectorCore,
-                    TTransitionInterpreterCore,
-                    TPriorityCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
+                if (TryGetScheduler(source, out var item))
+                {
+                    return item as TransitionSchedulerCore<
+                        TUIThreadInspectorCore,
+                        TTransitionInterpreterCore,
+                        TPriorityCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
+                }
+                else
+                {
+                    var scheduler = new TransitionSchedulerCore<
+                        TUIThreadInspectorCore,
+                        TTransitionInterpreterCore,
+                        TPriorityCore>()
+                    {
+                        TargetRef = new WeakReference<object>(source)
+                    };
+                    Schedulers.Add(source, scheduler);
+                    return scheduler;
+                }
             }
             else
             {
-                var scheduler = new TransitionSchedulerCore<
-                    TUIThreadInspectorCore,
-                    TTransitionInterpreterCore,
-                    TPriorityCore>()
-                {
-                    TargetRef = new WeakReference<object>(source)
-                };
-                if (CanSTAThread)
-                {
-                    Schedulers.Add(source, scheduler);
-                }
-                return scheduler;
+                return new TransitionSchedulerCore<
+                       TUIThreadInspectorCore,
+                       TTransitionInterpreterCore,
+                       TPriorityCore>()
+                       {
+                           TargetRef = new WeakReference<object>(source)
+                       };
             }
         }
     }
@@ -108,25 +118,34 @@ namespace VeloxDev.Core.TransitionSystem
 
         public static ITransitionScheduler FindOrCreate<T>(T source, bool CanSTAThread = true) where T : class
         {
-            if (TryGetScheduler(source, out var item))
+            if (CanSTAThread)
             {
-                return item as TransitionSchedulerCore<
-                    TUIThreadInspectorCore,
-                    TTransitionInterpreterCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
+                if (TryGetScheduler(source, out var item))
+                {
+                    return item as TransitionSchedulerCore<
+                        TUIThreadInspectorCore,
+                        TTransitionInterpreterCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
+                }
+                else
+                {
+                    var scheduler = new TransitionSchedulerCore<
+                        TUIThreadInspectorCore,
+                        TTransitionInterpreterCore>()
+                    {
+                        TargetRef = new WeakReference<object>(source)
+                    };
+                    Schedulers.Add(source, scheduler);
+                    return scheduler;
+                }
             }
             else
             {
-                var scheduler = new TransitionSchedulerCore<
-                    TUIThreadInspectorCore,
-                    TTransitionInterpreterCore>()
-                {
-                    TargetRef = new WeakReference<object>(source)
-                };
-                if (CanSTAThread)
-                {
-                    Schedulers.Add(source, scheduler);
-                }
-                return scheduler;
+                return new TransitionSchedulerCore<
+                       TUIThreadInspectorCore,
+                       TTransitionInterpreterCore>()
+                       {
+                           TargetRef = new WeakReference<object>(source)
+                       };
             }
         }
     }
