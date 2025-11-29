@@ -23,7 +23,7 @@ namespace VeloxDev.Core.DynamicTheme
     {
         private static InterpolatorCore? _interpolator;
 
-        private static readonly Dictionary<Type, Dictionary<string, Dictionary<PropertyInfo, Dictionary<Type, object?>>>> _def_cache = new();
+        private static readonly Dictionary<Type, Dictionary<string, Dictionary<PropertyInfo, Dictionary<Type, object?>>>> _def_cache = [];
         private static readonly ConditionalWeakTable<IThemeObject, Dictionary<string, Dictionary<PropertyInfo, Dictionary<Type, object?>>>> _act_cache = new();
         private static readonly List<WeakReference<IThemeObject>> activeThemes = [];
 
