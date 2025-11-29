@@ -21,7 +21,7 @@ namespace Demo
                 // MonoBehaviourManager.Stop();
             };
         }
-
+        
         partial void Update(FrameEventArgs e)
         {
             // 更新性能参数显示
@@ -35,7 +35,8 @@ namespace Demo
                 _pressedKeys.Remove(Key.LeftCtrl);
             }
 
-            // 假设每帧有随机负载，这会影响性能参数的统计结果
+            // Update执行频率受负载影响
+            // FixedUpdate执行频率不受负载影响
             Thread.Sleep(random.Next(0,30));
         }
 

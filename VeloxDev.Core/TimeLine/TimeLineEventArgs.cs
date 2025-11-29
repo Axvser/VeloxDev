@@ -5,5 +5,5 @@ public abstract class TimeLineEventArgs
     /// <summary>
     /// False : default | True : kill the time line
     /// </summary>
-    public bool Handled { get; set; } = false;
+    public virtual bool Handled { get; set; } = false;
 }

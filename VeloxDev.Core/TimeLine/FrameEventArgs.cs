@@ -1,6 +1,6 @@
 ﻿namespace VeloxDev.Core.TimeLine;
 
-public sealed class FrameEventArgs : TimeLineEventArgs
+public class FrameEventArgs : TimeLineEventArgs
 {
     /// <summary>
     /// the delta time from last frame in milliseconds
