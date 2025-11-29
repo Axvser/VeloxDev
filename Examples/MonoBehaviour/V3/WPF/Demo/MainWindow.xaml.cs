@@ -133,8 +133,6 @@ namespace Demo
                 _pressedKeys.Remove(Key.H);
                 _pressedKeys.Remove(Key.LeftCtrl);
             }
-
-            Thread.Sleep(_random.Next(0, 30));
         }
 
         partial void FixedUpdate(FrameEventArgs e)
