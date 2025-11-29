@@ -24,38 +24,43 @@
 
 ## ⬇️ 获取
 
-> 大部分功能由 VeloxDev.Core 直接支持 
+> ① 若您喜欢拆箱即用的体验，从下述包列表选装即可
 
-|  框架  | 项目 | NuGet |  是否必须  |
-|--------|------|-------|------------|
-| .NET | VeloxDev.Core | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/)| ✔ |
-| WPF | VeloxDev.WPF | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/) | ❌ |
-| Avalonia | VeloxDev.Avalonia | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Avalonia?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Avalonia/) | ❌ |
-| WinUI | VeloxDev.WinUI | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinUI/) | ❌ |
-| MAUI | VeloxDev.MAUI | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) | ❌ |
+|  框架  | 项目 | NuGet | 依赖第三方库 | 备注 |
+|--------|------|-------|--------------|------|
+| WPF | VeloxDev.WPF | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/) | ❌ | 适配包 |
+| Avalonia | VeloxDev.Avalonia | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Avalonia?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Avalonia/) | ❌ | 适配包 |
+| WinUI | VeloxDev.WinUI | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinUI/) | ❌ | 适配包 |
+| MAUI | VeloxDev.MAUI | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) | ❌ | 适配包 |
+| .NET | VeloxDev.Core.Extension | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Extension?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core.Extension/) | ✔ | 功能扩展包 |
 
-> 小部分功能需要UI框架适配层支持
+> ② 若您或者您的项目满足下述条件，推荐直接安装核心库 
+>
+> 1. 您更喜欢了解抽象层的结构设计与实现，并亲自实现适配层
+>
+> 2. 您对于 Source Generator 如何辅助实现核心功能这一课题感兴趣
+>
+> 3. 您的项目并不依赖任何UI框架，但希望使用 VeloxDev.Core 提供的通用功能
+>
+> 4. 您的项目依赖于UI框架，但您不打算使用 `动画` 、`主题渐变切换` 和 `Views交互代码生成` 这些必须有适配层支持的功能
 
-|  组件 | 描述 |
-|-------|------|
-| 插值动画 | 兼容指定平台指定类型的插值计算，为 Fluent API 构建动画提供支持 |
-| 主题渐变切换 | 如果仅仅是跳转主题，直接用核心层即可，但是，加载带渐变效果的主题则必须有插值动画支持 |
-| View代码生成 | 例如，处理 Workflow 的 View 时，一些交互可以由源代码生成器自动完成，作为一种扩展功能，它随版本更新会逐步支持 |
-
+|  框架  | 项目 | NuGet |  依赖第三方库  | 备注 |
+|--------|------|-------|----------------|------|
+| .NET | VeloxDev.Core | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/)| ❌ | 核心库 |
 
 ---
 
 ## ✨ 概览
 
-VeloxDev.Core 专为 **多UI框架API一致性** 而设计
-
-* 🪶 MVVM 生成支持
-* 🔁 灵活的拖拽式 **Workflow 构建系统**
-* 🎞️ 统一的 **插值动画 API**
-* 🌀 可插拔的 **AOP 调用拦截机制**
-* 🎨 主题系统统一化管理与动态切换
-* ⚙️ MonoBehaviour 为实例提供一个基于帧的循环刷新机制
-* 📦 生成使AOT支持特定类反射的初始化代码
+| 功能特性 | 描述 | 是否需要适配层 | 说明 |
+|---------|------|---------------|-----------|
+| 🪶 MVVM  | 自动生成NotifyProperty与Command | ❌ | |
+| 🔁 Workflow  | 可视化拖拽式工作流设计器 | ❌ | |
+| 🎞️ Transition | 跨平台的动画抽象层，支持缓动函数 | ✔ | 需要为不同平台实现具体的插值器、主线程检测器、调度器等 |
+| 🌀 AOP | 面向切面编程的拦截框架 | ❌ | 需要目标框架 ≥ .NET5 |
+| 🎨 Theme | 动态主题切换和样式管理 | ✔ | 需要适配不同平台的样式/资源系统 |
+| ⚙️ MonoBehaviour | 按帧同步的循环刷新机制 | ❌ | |
+| 📦 AOT - Reflect | 在AOT编译项目中生成反射调用代码 | ❌ | |
 
 ---
 
@@ -76,7 +81,7 @@ VeloxDev.Core 专为 **多UI框架API一致性** 而设计
 
 轻量 MVVM 工具，支持：
 
-* 可观测属性（`[VeloxProperty]`）
+* 通知属性（`[VeloxProperty]`）
 * 命令（`[VeloxCommand]`）
 
 ```csharp
@@ -135,7 +140,7 @@ VeloxDev.Core 专为 **多UI框架API一致性** 而设计
 
 [![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/Transition)
 
-简洁的插值系统 ( 需要UI框架适配层 )
+您可在多个UI框架中体验到下述动画能力
 
 * 缓动支持（线性、缓入缓出、弹性、反弹等）
 * 循环支持
@@ -209,31 +214,46 @@ public void Execute() { ... }
 
 [![GitHub](https://img.shields.io/badge/GitHub-Demo-blue?logo=github)](https://github.com/Axvser/VeloxDev/tree/master/Examples/MonoBehaviour)
 
-类似游戏引擎的帧循环任务：( 注意只是API层面，它们本质是多个独立的 Task )
+类似游戏引擎的帧循环任务
 
 ```csharp
-    [MonoBehaviour] // 默认 MonoBehaviour(60) 也就是 60 FPS
-    public partial class MainWindow : Window
+[MonoBehaviour]
+public partial class MainWindow : Window
+{
+    public MainWindow()
     {
-        // 默认关闭,可以设置CanMonoBehaviour为true或false来开启或关闭 MonoBehaviour 功能
+        InitializeComponent();
+        Loaded += (s, e) =>
+        {
+            InitializeMonoBehaviour();  // 每个实例都需要执行
+            MonoBehaviourManager.Start();  // 全局执行一次
+        };
+    }
+
+    partial void Update(FrameEventArgs e)
+    {
+        // 每帧更新逻辑
+        UpdatePerformanceDisplay(e);
         
-        partial void Start()
+        // 业务逻辑处理
+        if (e.DeltaTime > 100)
         {
-
-        }
-        partial void Update()
-        {
-
-        }
-        partial void LateUpdate()
-        {
-
-        }
-        partial void ExitMonoBehaviour()
-        {
-            
+            Debug.WriteLine("帧率过低警告");
         }
     }
+
+    partial void Awake()
+    {
+        // 组件初始化逻辑
+        Debug.WriteLine("组件已唤醒");
+    }
+
+    partial void Start()
+    {
+        // 启动逻辑
+        Debug.WriteLine("组件已启动");
+    }
+}
 ```
 
 ---
@@ -362,5 +382,30 @@ public static void Init()
 ## 增量
 
 - WPF的节点编辑器示例现已加入完整的序列化/反序列化示例 ( Newtonsoft.Json )
+
+</details>
+
+<details>
+<summary>Version 3.2.0</summary>
+
+## 重构 MonoBehaviour
+
+> 具体事项
+> 
+> 1. 独占一条后台线程，项目将具备更流畅的画面 （ 注意UI操作需调度 ）
+> 
+> 2. 新增FrameEventArgs作为帧事件的参数，可以获取DeltaTime与FPS等信息，支持Handled中断帧事件继续传递
+> 
+> 3. 所有对象在时间线上按帧同步，统一调配
+>
+> 文档和示例可在[这里](https://github.com/Axvser/VeloxDev/tree/master/Examples/MonoBehaviour/V3)找到
+
+## 优化 WorkflowHelper
+
+> 具体事项
+> 
+> 1. 为默认Helper增加回调 （ 非 Helper 接口定义 ）
+>
+> 文档和示例可在[这里](https://github.com/Axvser/VeloxDev/tree/master/Examples/Workflow/V3)找到
 
 </details>
