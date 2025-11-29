@@ -6,22 +6,115 @@
         xmlns:local="clr-namespace:Demo"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
-    <Grid>
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-            <TextBlock Text="Keep the window focused | The hotkey [ Ctrl + H ] can be checked every frame" 
-                       FontWeight="Bold" TextAlignment="Center"/>
+    <Window.Resources>
+        <Style TargetType="GroupBox">
+            <Setter Property="BorderBrush" Value="#BDC3C7"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="5"/>
+            <Setter Property="Margin" Value="0,0,0,15"/>
+        </Style>
 
-            <Border Background="#F0F0F0" Padding="10" CornerRadius="5">
-                <StackPanel>
-                    <TextBlock Text="Performance Parameters" FontWeight="Bold" Margin="0,0,0,5"/>
-                    <TextBlock x:Name="txtDeltaTime" Text="DeltaTime: 0ms"/>
-                    <TextBlock x:Name="txtTotalTime" Text="TotalTime: 0ms"/>
-                    <TextBlock x:Name="txtCurrentFPS" Text="Current FPS: 0"/>
-                    <TextBlock x:Name="txtTargetFPS" Text="Target FPS: 0"/>
-                    <TextBlock x:Name="txtTotalFrames" Text="Total Frames: 0"/>
-                    <TextBlock x:Name="txtHandled" Text="Handled: False"/>
-                </StackPanel>
-            </Border>
-        </StackPanel>
+        <Style TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,3"/>
+            <Setter Property="Foreground" Value="#2C3E50"/>
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="#F8F9FA">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20">
+            <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center">
+
+                <!-- Title Section -->
+                <Border Background="#2C3E50" CornerRadius="10" Padding="20" Margin="0,0,0,20">
+                    <StackPanel>
+                        <TextBlock Text="Multi-Component Timeline Sync Test System" 
+                              FontSize="24" FontWeight="Bold" Foreground="White" 
+                              TextAlignment="Center" Margin="0,0,0,5"/>
+                        <TextBlock Text="Cross-thread Timeline Synchronization Engine based on MonoBehaviour Pattern" 
+                              FontSize="14" Foreground="#ECF0F1" TextAlignment="Center" Margin="0,0,0,10"/>
+                        <TextBlock Text="Shortcut: [Ctrl + H] View Detailed Statistics" 
+                              FontSize="12" Foreground="#3498DB" TextAlignment="Center" FontWeight="Bold"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Global Statistics -->
+                <GroupBox Header="📊 Global Timeline Statistics" Background="#E8F6F3">
+                    <StackPanel Margin="10">
+                        <TextBlock x:Name="txtActiveComponents" Text="Active Components: 0" FontWeight="Bold"/>
+                        <TextBlock x:Name="txtTotalUpdates" Text="Total Updates: 0"/>
+                        <TextBlock x:Name="txtThreadStatus" Text="Update Thread: Running | Physics Thread: Running"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Real-time Performance Parameters -->
+                <GroupBox Header="⚡ Real-time Performance" Background="#F4ECF7">
+                    <StackPanel Margin="10">
+                        <TextBlock x:Name="txtDeltaTime" Text="Delta Time: 0 ms"/>
+                        <TextBlock x:Name="txtTotalTime" Text="Total Time: 0 s"/>
+                        <TextBlock x:Name="txtCurrentFPS" Text="Current FPS: 0"/>
+                        <TextBlock x:Name="txtTargetFPS" Text="Target FPS: 0"/>
+                        <TextBlock x:Name="txtTotalFrames" Text="Total Frames: 0"/>
+                        <TextBlock x:Name="txtHandled" Text="Handled: No"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Component Running Statistics -->
+                <GroupBox Header="🔧 Component Statistics" Background="#EBF5FB">
+                    <StackPanel Margin="10">
+                        <TextBlock x:Name="txtWindowStats" Text="Window Component: Not loaded" FontWeight="Bold"/>
+                        <TextBlock x:Name="txtPhysicsStats" Text="Physics Component: Not loaded" Foreground="#27AE60"/>
+                        <TextBlock x:Name="txtInputStats" Text="Input Component: Not loaded" Foreground="#2980B9"/>
+                        <TextBlock x:Name="txtRenderStats" Text="Render Component: Not loaded" Foreground="#E74C3C"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Test Control Panel -->
+                <GroupBox Header="🎮 Test Control Panel" Background="#FDEDEC">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="10">
+                        <Button x:Name="btnAddComponent" Content="➕ Add Component" Click="BtnAddComponent_Click" Background="#2ECC71"/>
+                        <Button x:Name="btnStart" Content="▶️ Start" Click="BtnStart_Click" Background="Blue"/>
+                        <Button x:Name="btnResetStats" Content="🔄 Reset Stats" Click="BtnResetStats_Click" Background="#3498DB"/>
+                        <Button x:Name="btnPause" Content="⏸️ Pause" Click="BtnPause_Click" Background="#E67E22"/>
+                        <Button x:Name="btnResume" Content="▶️ Resume" Click="BtnResume_Click" Background="#9B59B6"/>
+                        <Button x:Name="btnStop" Content="🛑 Stop" Click="BtnStop_Click" Background="#E74C3C"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- System Status Indicator -->
+                <Border Background="#34495E" CornerRadius="5" Margin="0,10" Padding="10">
+                    <TextBlock x:Name="txtSystemStatus" Text="🟢 System Running Normally" 
+                          Foreground="White" FontWeight="Bold" TextAlignment="Center" FontSize="14"/>
+                </Border>
+
+                <!-- System Description -->
+                <GroupBox Header="📋 System Architecture" Background="#FEF9E7">
+                    <StackPanel Margin="10">
+                        <TextBlock TextWrapping="Wrap" TextAlignment="Left" LineHeight="20">
+                        <Run FontWeight="Bold">System Features:</Run>
+                        <LineBreak/>• Multi-threaded Architecture: Physics calculation and rendering separated
+                        <LineBreak/>• Timeline Synchronization: All components coordinated on the same timeline
+                        <LineBreak/>• Fixed Time Step: Physics calculations unaffected by frame rate fluctuations
+                        <LineBreak/>• Real-time Performance Monitoring: Comprehensive system status monitoring
+                        <LineBreak/>• Dynamic Component Management: Support runtime add/remove components
+                        <LineBreak/>
+                        <Run FontWeight="Bold">Test Description:</Run>
+                        <LineBreak/>• Physics Component: Simulates gravity acceleration calculations
+                        <LineBreak/>• Input Component: Real-time keyboard input detection
+                        <LineBreak/>• Render Component: Simulates high-load rendering tasks
+                        <LineBreak/>• Window Component: Main interface and performance display
+                        </TextBlock>
+                    </StackPanel>
+                </GroupBox>
+
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </Window>

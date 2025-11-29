@@ -19,6 +19,8 @@ namespace VeloxDev.Core.TimeLine
         {
             public int? TargetFPS { get; set; }
             public int? FixedUpdateInterval { get; set; }
+            public float? TimeScale { get; set; }
+            public bool? PauseState { get; set; }
             public Action<FrameEventArgs>? PreUpdateCallback { get; set; }
             public Action<FrameEventArgs>? PostUpdateCallback { get; set; }
         }
@@ -38,6 +40,8 @@ namespace VeloxDev.Core.TimeLine
 
         // 性能参数
         private static volatile bool _isRunning = false;
+        private static volatile bool _isPaused = false;
+        private static float _timeScale = 1.0f;
         private static int _targetFPS = 60;
         private static int _fixedUpdateInterval = 16; // 默认60Hz
         private static long _totalTimeMs = 0;
@@ -56,29 +60,35 @@ namespace VeloxDev.Core.TimeLine
         // 缓存
         private static readonly ThreadSafeFrameEventArgs _cachedFrameArgs = new();
 
+        // 事件
+        public static event EventHandler? OnSystemStarted;
+        public static event EventHandler? OnSystemPaused;
+        public static event EventHandler? OnSystemResumed;
+        public static event EventHandler? OnSystemStopped;
+
         #endregion
 
-        #region 公共属性
+        #region 公共静态属性
 
-        public static int TargetFPS
-        {
-            get => _targetFPS;
-            set => _targetFPS = value < 1 ? 1 : (value > 1000 ? 1000 : value);
-        }
-
-        public static int FixedUpdateInterval
-        {
-            get => _fixedUpdateInterval;
-            set => _fixedUpdateInterval = value < 1 ? 1 : (value > 1000 ? 1000 : value);
-        }
-
+        public static bool IsRunning => _isRunning;
+        public static bool IsPaused => _isPaused;
         public static int CurrentFPS => _currentFPS;
+        public static int TargetFPS => _targetFPS;
         public static long TotalTimeMs => _totalTimeMs;
         public static long TotalFrames => _totalFrames;
-        public static bool IsRunning => _isRunning;
         public static int ActiveBehaviorCount => _behaviors.Count;
+        public static float TimeScale => _timeScale;
 
-        // 线程状态监控
+        public static string SystemStatus
+        {
+            get
+            {
+                if (!_isRunning) return "Stopped";
+                if (_isPaused) return "Paused";
+                return "Running";
+            }
+        }
+
         public static bool IsUpdateThreadAlive => _updateTask?.Status == TaskStatus.Running;
         public static bool IsFixedUpdateThreadAlive => _fixedUpdateTask?.Status == TaskStatus.Running;
 
@@ -96,6 +106,12 @@ namespace VeloxDev.Core.TimeLine
         {
             if (intervalMs < 1 || intervalMs > 1000) return;
             _configQueue.Enqueue(new ConfigChangeRequest { FixedUpdateInterval = intervalMs });
+        }
+
+        public static void SetTimeScale(float timeScale)
+        {
+            if (timeScale < 0) timeScale = 0;
+            _configQueue.Enqueue(new ConfigChangeRequest { TimeScale = timeScale });
         }
 
         public static void SetPreUpdateCallback(Action<FrameEventArgs> callback)
@@ -122,6 +138,7 @@ namespace VeloxDev.Core.TimeLine
             if (_isRunning) return;
 
             _isRunning = true;
+            _isPaused = false;
             _mainCancellationTokenSource = new CancellationTokenSource();
             _lastFrameTime = GetCurrentTimestamp();
             _fpsLastUpdateTime = _lastFrameTime;
@@ -134,6 +151,7 @@ namespace VeloxDev.Core.TimeLine
             _updateTask = Task.Run(() => UpdateLoop(_mainCancellationTokenSource.Token),
                 _mainCancellationTokenSource.Token);
 
+            OnSystemStarted?.Invoke(null, EventArgs.Empty);
             Debug.WriteLine("MonoBehaviourManager started with multi-threading.");
         }
 
@@ -142,6 +160,7 @@ namespace VeloxDev.Core.TimeLine
             if (!_isRunning) return;
 
             _isRunning = false;
+            _isPaused = false;
             _mainCancellationTokenSource.Cancel();
 
             try
@@ -155,7 +174,40 @@ namespace VeloxDev.Core.TimeLine
             }
 
             _fixedUpdateEvents.Dispose();
+            OnSystemStopped?.Invoke(null, EventArgs.Empty);
             Debug.WriteLine("MonoBehaviourManager stopped.");
+        }
+
+        public static void Pause()
+        {
+            if (!_isRunning || _isPaused) return;
+
+            _isPaused = true;
+            OnSystemPaused?.Invoke(null, EventArgs.Empty);
+            Debug.WriteLine("MonoBehaviourManager paused.");
+        }
+
+        public static void Resume()
+        {
+            if (!_isRunning || !_isPaused) return;
+
+            _isPaused = false;
+            OnSystemResumed?.Invoke(null, EventArgs.Empty);
+            Debug.WriteLine("MonoBehaviourManager resumed.");
+        }
+
+        public static void TogglePause()
+        {
+            if (_isPaused)
+                Resume();
+            else
+                Pause();
+        }
+
+        public static void Restart()
+        {
+            Stop();
+            Start();
         }
 
         public static void RegisterBehaviour(IMonoBehaviour behavior)
@@ -199,6 +251,12 @@ namespace VeloxDev.Core.TimeLine
             {
                 while (_isRunning && !token.IsCancellationRequested)
                 {
+                    if (_isPaused)
+                    {
+                        await Task.Delay(10, token);
+                        continue;
+                    }
+
                     var currentTime = GetCurrentTimestamp();
                     var elapsed = currentTime - lastFixedUpdateTime;
 
@@ -237,7 +295,7 @@ namespace VeloxDev.Core.TimeLine
         {
             return new FrameEventArgs
             {
-                DeltaTime = deltaTime,
+                DeltaTime = (int)(deltaTime * _timeScale),
                 TotalTime = (int)_totalTimeMs,
                 CurrentFPS = _currentFPS,
                 TargetFPS = _targetFPS,
@@ -257,6 +315,12 @@ namespace VeloxDev.Core.TimeLine
             {
                 while (_isRunning && !token.IsCancellationRequested)
                 {
+                    if (_isPaused)
+                    {
+                        await Task.Delay(10, token);
+                        continue;
+                    }
+
                     var frameStartTime = GetCurrentTimestamp();
 
                     // 处理主线程任务（行为注册/注销等）
@@ -302,15 +366,13 @@ namespace VeloxDev.Core.TimeLine
         {
             while (_fixedUpdateEvents.TryTake(out var fixedEvent))
             {
-                // 这里可以处理从物理线程发送过来的事件
-                // 例如：碰撞事件、物理状态同步等
                 Debug.WriteLine($"FixedUpdate event received: DeltaTime={fixedEvent.DeltaTime}");
             }
         }
 
         private static FrameEventArgs CreateFrameEventArgs(int deltaTime)
         {
-            _cachedFrameArgs.DeltaTime = deltaTime;
+            _cachedFrameArgs.DeltaTime = (int)(deltaTime * _timeScale);
             _cachedFrameArgs.TotalTime = (int)_totalTimeMs;
             _cachedFrameArgs.CurrentFPS = _currentFPS;
             _cachedFrameArgs.TargetFPS = _targetFPS;
@@ -321,7 +383,7 @@ namespace VeloxDev.Core.TimeLine
 
         #endregion
 
-        #region 行为执行方法（线程安全版本）
+        #region 行为执行方法
 
         private static async Task ExecuteBehaviorsUpdate(FrameEventArgs frameArgs, CancellationToken token)
         {
@@ -373,7 +435,6 @@ namespace VeloxDev.Core.TimeLine
 
                 try
                 {
-                    // 使用 Task.Run 避免阻塞当前线程
                     await Task.Run(() => action(wrapper), token);
                 }
                 catch (Exception ex)
@@ -413,6 +474,8 @@ namespace VeloxDev.Core.TimeLine
             {
                 if (config.TargetFPS.HasValue) _targetFPS = config.TargetFPS.Value;
                 if (config.FixedUpdateInterval.HasValue) _fixedUpdateInterval = config.FixedUpdateInterval.Value;
+                if (config.TimeScale.HasValue) _timeScale = config.TimeScale.Value;
+                if (config.PauseState.HasValue) _isPaused = config.PauseState.Value;
             }
         }
 
