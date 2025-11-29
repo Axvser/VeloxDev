@@ -61,6 +61,13 @@ namespace VeloxDev.Core.TimeLine
         private static Task? _updateTask;
         private static Task? _fixedUpdateTask;
 
+        // 新增：线程活动状态跟踪
+        private static volatile bool _isUpdateThreadActive = false;
+        private static volatile bool _isFixedUpdateThreadActive = false;
+        private static long _updateThreadLastActivity = 0;
+        private static long _fixedUpdateThreadLastActivity = 0;
+        private static readonly object _threadStatusLock = new();
+
         // 对象池 - 避免频繁创建
         private static readonly ObjectPool<FrameEventArgs> _frameEventArgsPool = new(() => new FrameEventArgs(), 100);
         private static readonly ObjectPool<ConfigChangeRequest> _configRequestPool = new(() => new ConfigChangeRequest(), 50);
@@ -103,7 +110,7 @@ namespace VeloxDev.Core.TimeLine
 
         #endregion
 
-        #region 公共静态属性
+        #region 公共静态属性 - 优化线程状态检测
 
         public static bool IsRunning => _isRunning;
         public static bool IsPaused => _isPaused;
@@ -124,8 +131,32 @@ namespace VeloxDev.Core.TimeLine
             }
         }
 
-        public static bool IsUpdateThreadAlive => _updateTask?.Status == TaskStatus.Running;
-        public static bool IsFixedUpdateThreadAlive => _fixedUpdateTask?.Status == TaskStatus.Running;
+        // 优化线程状态检测
+        public static bool IsUpdateThreadAlive
+        {
+            get
+            {
+                if (!_isRunning) return false;
+                if (!_isUpdateThreadActive) return false;
+
+                // 检查线程是否在最近2秒内有活动
+                var timeSinceLastActivity = GetCurrentTimestamp() - _updateThreadLastActivity;
+                return timeSinceLastActivity < 2000; // 2秒超时
+            }
+        }
+
+        public static bool IsFixedUpdateThreadAlive
+        {
+            get
+            {
+                if (!_isRunning) return false;
+                if (!_isFixedUpdateThreadActive) return false;
+
+                // 检查线程是否在最近2秒内有活动
+                var timeSinceLastActivity = GetCurrentTimestamp() - _fixedUpdateThreadLastActivity;
+                return timeSinceLastActivity < 2000; // 2秒超时
+            }
+        }
 
         #endregion
 
@@ -178,31 +209,45 @@ namespace VeloxDev.Core.TimeLine
         {
             if (_isRunning) return;
 
-            _isRunning = true;
-            _isPaused = false;
-            _mainCancellationTokenSource = new CancellationTokenSource();
-            _lastFrameTime = GetCurrentTimestamp();
-            _fpsLastUpdateTime = _lastFrameTime;
+            lock (_threadStatusLock)
+            {
+                _isRunning = true;
+                _isPaused = false;
+                _isUpdateThreadActive = false;
+                _isFixedUpdateThreadActive = false;
+                _updateThreadLastActivity = 0;
+                _fixedUpdateThreadLastActivity = 0;
 
-            // 预缓存包装器数组
-            UpdateCachedWrappers();
+                _mainCancellationTokenSource = new CancellationTokenSource();
+                _lastFrameTime = GetCurrentTimestamp();
+                _fpsLastUpdateTime = _lastFrameTime;
 
-            _fixedUpdateTask = Task.Run(() => FixedUpdateLoop(_mainCancellationTokenSource.Token),
-                _mainCancellationTokenSource.Token);
+                // 预缓存包装器数组
+                UpdateCachedWrappers();
 
-            _updateTask = Task.Run(() => UpdateLoop(_mainCancellationTokenSource.Token),
-                _mainCancellationTokenSource.Token);
+                _fixedUpdateTask = Task.Run(() => FixedUpdateLoop(_mainCancellationTokenSource.Token),
+                    _mainCancellationTokenSource.Token);
 
-            OnSystemStarted?.Invoke(null, EventArgs.Empty);
-            Debug.WriteLine("MonoBehaviourManager started.");
+                _updateTask = Task.Run(() => UpdateLoop(_mainCancellationTokenSource.Token),
+                    _mainCancellationTokenSource.Token);
+
+                OnSystemStarted?.Invoke(null, EventArgs.Empty);
+                Debug.WriteLine("MonoBehaviourManager started.");
+            }
         }
 
         public static async void Stop()
         {
             if (!_isRunning) return;
 
-            _isRunning = false;
-            _isPaused = false;
+            lock (_threadStatusLock)
+            {
+                _isRunning = false;
+                _isPaused = false;
+                _isUpdateThreadActive = false;
+                _isFixedUpdateThreadActive = false;
+            }
+
             _mainCancellationTokenSource.Cancel();
 
             try
@@ -221,13 +266,13 @@ namespace VeloxDev.Core.TimeLine
             {
                 _updateTask = null;
                 _fixedUpdateTask = null;
+
+                // 重置统计信息
+                ResetStatistics();
+
+                // 清空队列但不释放集合
+                ClearQueues();
             }
-
-            // 重置统计信息
-            ResetStatistics();
-
-            // 清空队列但不释放集合
-            ClearQueues();
 
             OnSystemStopped?.Invoke(null, EventArgs.Empty);
             Debug.WriteLine("MonoBehaviourManager stopped.");
@@ -300,16 +345,28 @@ namespace VeloxDev.Core.TimeLine
 
         #endregion
 
-        #region FixedUpdate 线程 - 使用对象池
+        #region FixedUpdate 线程 - 添加活动跟踪
 
         private static async Task FixedUpdateLoop(CancellationToken token)
         {
+            lock (_threadStatusLock)
+            {
+                _isFixedUpdateThreadActive = true;
+                _fixedUpdateThreadLastActivity = GetCurrentTimestamp();
+            }
+
             long lastFixedUpdateTime = GetCurrentTimestamp();
 
             try
             {
                 while (_isRunning && !token.IsCancellationRequested)
                 {
+                    // 更新活动时间戳
+                    lock (_threadStatusLock)
+                    {
+                        _fixedUpdateThreadLastActivity = GetCurrentTimestamp();
+                    }
+
                     if (_isPaused)
                     {
                         await Task.Delay(10, token);
@@ -340,6 +397,13 @@ namespace VeloxDev.Core.TimeLine
             {
                 // 预期中的取消
             }
+            finally
+            {
+                lock (_threadStatusLock)
+                {
+                    _isFixedUpdateThreadActive = false;
+                }
+            }
         }
 
         private static FrameEventArgs CreateFixedFrameEventArgs(int deltaTime)
@@ -355,14 +419,26 @@ namespace VeloxDev.Core.TimeLine
 
         #endregion
 
-        #region Update 线程 - 优化缓存
+        #region Update 线程 - 添加活动跟踪
 
         private static async Task UpdateLoop(CancellationToken token)
         {
+            lock (_threadStatusLock)
+            {
+                _isUpdateThreadActive = true;
+                _updateThreadLastActivity = GetCurrentTimestamp();
+            }
+
             try
             {
                 while (_isRunning && !token.IsCancellationRequested)
                 {
+                    // 更新活动时间戳
+                    lock (_threadStatusLock)
+                    {
+                        _updateThreadLastActivity = GetCurrentTimestamp();
+                    }
+
                     if (_isPaused)
                     {
                         await Task.Delay(10, token);
@@ -396,6 +472,13 @@ namespace VeloxDev.Core.TimeLine
             catch (OperationCanceledException)
             {
                 // 预期中的取消
+            }
+            finally
+            {
+                lock (_threadStatusLock)
+                {
+                    _isUpdateThreadActive = false;
+                }
             }
         }
 
