@@ -8,7 +8,6 @@ using System.Collections.Generic;
 using System.Linq;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 using Windows.Foundation;
-using Windows.Foundation.Collections;
 using Windows.UI;
 
 namespace VeloxDev.WinUI.PlatformAdapters
@@ -388,7 +387,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
             private static List<(Transform? s, Transform? e)> MatchPairs(List<Transform> s, List<Transform> e)
             {
                 var types = s.Select(t => t.GetType()).Union(e.Select(t => t.GetType())).Distinct();
-                return types.Select(t => (s.LastOrDefault(x => x.GetType() == t), e.LastOrDefault(x => x.GetType() == t))).ToList();
+                return [.. types.Select(t => (s.LastOrDefault(x => x.GetType() == t), e.LastOrDefault(x => x.GetType() == t)))];
             }
 
             private static Transform CombineTransforms(List<(Transform? s, Transform? e)> pairs, double t)

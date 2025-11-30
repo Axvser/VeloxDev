@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
+using Microsoft.UI.Dispatching;
 
 namespace Demo.ViewModels.Workflow.Helper
 {
@@ -11,6 +12,7 @@ namespace Demo.ViewModels.Workflow.Helper
     {
         private NodeViewModel? _viewModel;
         private readonly Random rnd = new(); // 随机时间模拟
+        private DispatcherQueue? _dispatcherQueue;
 
         public override void Initialize(IWorkflowNodeViewModel node)
         {
@@ -19,8 +21,20 @@ namespace Demo.ViewModels.Workflow.Helper
 
             // [ User ] 跟踪任务计数
             _viewModel = node as NodeViewModel;
-            _viewModel!.WorkCommand.TaskStarted += (e) => _viewModel.RunCount++;
-            _viewModel!.WorkCommand.TaskExited += (e) => _viewModel.RunCount--;
+            _viewModel!.WorkCommand.TaskStarted += (e) => 
+            { 
+                _dispatcherQueue ??= DispatcherQueue.GetForCurrentThread(); 
+                _viewModel.RunCount++;
+                Debug.WriteLine("Plus Invoked");
+            };
+            _viewModel!.WorkCommand.TaskExited += (e) =>
+            {
+                _dispatcherQueue?.TryEnqueue(() =>
+                {
+                    _viewModel.RunCount--;
+                    Debug.WriteLine("Minus Invoked");
+                });
+            };
             _viewModel!.WorkCommand.TaskEnqueued += (e) => _viewModel.WaitCount++;
             _viewModel!.WorkCommand.TaskDequeued += (e) => _viewModel.WaitCount--;
         }

@@ -18,10 +18,10 @@
                 Canvas.ZIndex="1">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                 <TextBlock  Text="执行数 [ " Foreground="White" VerticalAlignment="Center"/>
-                <TextBlock  Text="{Binding RunCount}" Foreground="White" VerticalAlignment="Center"/>
+                <TextBlock  Text="{Binding RunCount,Mode=TwoWay}" Foreground="White" VerticalAlignment="Center"/>
                 <TextBlock  Text=" ] " Foreground="White" VerticalAlignment="Center"/>
                 <TextBlock  Text="缓冲数 [ " Foreground="White" VerticalAlignment="Center"/>
-                <TextBlock  Text="{Binding WaitCount}" Foreground="White" VerticalAlignment="Center"/>
+                <TextBlock  Text="{Binding WaitCount,Mode=TwoWay}" Foreground="White" VerticalAlignment="Center"/>
                 <TextBlock  Text=" ] " Foreground="White" VerticalAlignment="Center"/>
             </StackPanel>
         </Border>

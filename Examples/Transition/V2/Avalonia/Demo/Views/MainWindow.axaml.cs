@@ -13,9 +13,20 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
         Animation0.Execute(Rec0);
         Animation1.Execute(Rec1);
         Animation2.Execute(Rec2);
+
+        // 可以直接在其它线程中启动动画，框架会自动切换到 UI 线程执行插值操作
+
+        //_ = Task.Run(() =>
+        //{
+        //    Animation0.Execute(Rec0);
+        //    Animation1.Execute(Rec1);
+        //    Animation2.Execute(Rec2);
+        //});
+
 
         // TransitionCore.Exit(Rec0); 安全地退出插值动画
     }

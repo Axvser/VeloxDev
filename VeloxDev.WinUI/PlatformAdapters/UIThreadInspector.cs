@@ -11,22 +11,9 @@ namespace VeloxDev.WinUI.PlatformAdapters
 {
     public class UIThreadInspector : UIThreadInspectorCore<DispatcherQueuePriority>
     {
-        private DispatcherQueue? _dispatcher;
+        public static DispatcherQueue? DispatcherQueue { get; set; }
 
-        private DispatcherQueue Dispatcher
-        {
-            get
-            {
-                if (_dispatcher == null)
-                    _dispatcher = DispatcherQueue.GetForCurrentThread();
-
-                return _dispatcher
-                    ?? throw new InvalidOperationException("Cannot find a valid DispatcherQueue for UI thread.");
-            }
-        }
-
-        public override bool IsUIThread() =>
-            DispatcherQueue.GetForCurrentThread()?.HasThreadAccess == true;
+        public override bool IsUIThread() => DispatcherQueue?.HasThreadAccess ?? false;
 
         public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
         {
@@ -34,7 +21,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 return propertyInfo?.GetValue(target);
 
             var tcs = new TaskCompletionSource<object?>();
-            Dispatcher.TryEnqueue(() =>
+            DispatcherQueue?.TryEnqueue(() =>
             {
                 try
                 {
@@ -55,7 +42,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 return interpolate();
 
             var tcs = new TaskCompletionSource<List<object?>>();
-            Dispatcher.TryEnqueue(() =>
+            DispatcherQueue?.TryEnqueue(() =>
             {
                 try
                 {
@@ -77,7 +64,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 return;
             }
 
-            Dispatcher.TryEnqueue(priority, () =>
+            DispatcherQueue?.TryEnqueue(priority, () =>
             {
                 action();
             });
