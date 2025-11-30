@@ -17,11 +17,11 @@ namespace VeloxDev.Core.TransitionSystem
         where TUIThreadInspectorCore : IUIThreadInspector, new()
         where TTransitionInterpreterCore : class, ITransitionInterpreter, new()
     {
-        internal TStateCore state = new();
-        internal StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore>? root;
-        internal StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore>? next = null;
-        internal TEffectCore effect = new();
-        internal TInterpolatorCore interpolator = new();
+        public TStateCore state = new();
+        public StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore>? root;
+        public StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore>? next = null;
+        public TEffectCore effect = new();
+        public TInterpolatorCore interpolator = new();
 
         internal override void AsRoot()
         {
@@ -175,11 +175,11 @@ namespace VeloxDev.Core.TransitionSystem
         where TUIThreadInspectorCore : IUIThreadInspector<TPriorityCore>, new()
         where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
     {
-        internal TStateCore state = new();
-        internal StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? root;
-        internal StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? next = null;
-        internal TEffectCore effect = new();
-        internal TInterpolatorCore interpolator = new();
+        public TStateCore state = new();
+        public StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? root;
+        public StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? next = null;
+        public TEffectCore effect = new();
+        public TInterpolatorCore interpolator = new();
 
         internal override void AsRoot()
         {
