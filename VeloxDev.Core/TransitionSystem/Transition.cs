@@ -48,16 +48,16 @@ namespace VeloxDev.Core.TransitionSystem
             return snapshot;
         }
 
-        public static T Execute<T>(this T snapshot, object target, bool CanSTAThread = true)
+        public static T Execute<T>(this T snapshot, object target, bool CanMutualTask = true)
             where T : StateSnapshotCore
         {
-            snapshot.CoreExecute(target, CanSTAThread);
+            snapshot.CoreExecute(target, CanMutualTask);
             return snapshot;
         }
-        public static T Execute<T>(this T snapshot, bool CanSTAThread = true)
+        public static T Execute<T>(this T snapshot, bool CanMutualTask = true)
             where T : StateSnapshotCore
         {
-            snapshot.CoreExecute(CanSTAThread);
+            snapshot.CoreExecute(CanMutualTask);
             return snapshot;
         }
     }
@@ -87,28 +87,28 @@ namespace VeloxDev.Core.TransitionSystem
             return value;
         }
 
-        public static void Execute<T>(T target, StateSnapshotCore value, bool CanSTAThread = true)
+        public static void Execute<T>(T target, StateSnapshotCore value, bool CanMutualTask = true)
             where T : class, TTarget
         {
-            value.CoreExecute(target, CanSTAThread);
+            value.CoreExecute(target, CanMutualTask);
         }
-        public static void Execute(StateSnapshotCore values, bool CanSTAThread = true)
+        public static void Execute(StateSnapshotCore values, bool CanMutualTask = true)
         {
-            values.CoreExecute(CanSTAThread);
+            values.CoreExecute(CanMutualTask);
         }
-        public static void Execute<T>(T target, IEnumerable<StateSnapshotCore> values, bool CanSTAThread = false)
+        public static void Execute<T>(T target, IEnumerable<StateSnapshotCore> values, bool CanMutualTask = false)
             where T : class, TTarget
         {
             foreach (var snapshot in values)
             {
-                snapshot.CoreExecute(target, CanSTAThread);
+                snapshot.CoreExecute(target, CanMutualTask);
             }
         }
-        public static void Execute(IEnumerable<StateSnapshotCore> values, bool CanSTAThread = false)
+        public static void Execute(IEnumerable<StateSnapshotCore> values, bool CanMutualTask = false)
         {
             foreach (var snapshot in values)
             {
-                snapshot.CoreExecute(CanSTAThread);
+                snapshot.CoreExecute(CanMutualTask);
             }
         }
     }

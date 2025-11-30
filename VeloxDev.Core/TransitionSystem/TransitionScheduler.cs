@@ -42,9 +42,9 @@ namespace VeloxDev.Core.TransitionSystem
             oldCts?.Cancel();
         }
 
-        public static ITransitionScheduler<TPriorityCore> FindOrCreate<T>(T source, bool CanSTAThread = true) where T : class
+        public static ITransitionScheduler<TPriorityCore> FindOrCreate<T>(T source, bool CanMutualTask = true) where T : class
         {
-            if (CanSTAThread)
+            if (CanMutualTask)
             {
                 if (TryGetScheduler(source, out var item))
                 {
@@ -116,9 +116,9 @@ namespace VeloxDev.Core.TransitionSystem
             oldCts?.Cancel();
         }
 
-        public static ITransitionScheduler FindOrCreate<T>(T source, bool CanSTAThread = true) where T : class
+        public static ITransitionScheduler FindOrCreate<T>(T source, bool CanMutualTask = true) where T : class
         {
-            if (CanSTAThread)
+            if (CanMutualTask)
             {
                 if (TryGetScheduler(source, out var item))
                 {
