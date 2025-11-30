@@ -12,7 +12,7 @@ namespace VeloxDev.MAUI.PlatformAdapters
             }
             else
             {
-                Dispatcher.GetForCurrentThread()?.DispatchAsync(() => Update(target, frameIndex));
+                Application.Current?.Dispatcher?.DispatchAsync(() => Update(target, frameIndex));
             }
         }
     }

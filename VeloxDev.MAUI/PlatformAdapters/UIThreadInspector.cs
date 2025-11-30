@@ -7,35 +7,48 @@ namespace VeloxDev.MAUI.PlatformAdapters
     {
         public bool IsUIThread()
         {
-            return Dispatcher.GetForCurrentThread()?.IsDispatchRequired == false;
+            return Application.Current?.Dispatcher?.IsDispatchRequired == false;
         }
 
         public object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
         {
             if (isUIThread)
+                return propertyInfo?.GetValue(target);
+
+            var tcs = new TaskCompletionSource<object?>();
+            Application.Current?.Dispatcher?.Dispatch(() =>
             {
-                return propertyInfo.GetValue(target);
-            }
-            else
-            {
-                object? result = null;
-                _ = Dispatcher.GetForCurrentThread()?.Dispatch(() => result = propertyInfo.GetValue(target));
-                return result;
-            }
+                try
+                {
+                    var value = propertyInfo.GetValue(target);
+                    tcs.SetResult(value);
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            });
+            return tcs.Task.GetAwaiter().GetResult();
         }
 
         public List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
         {
             if (isUIThread)
+                return interpolate();
+
+            var tcs = new TaskCompletionSource<List<object?>>();
+            Application.Current?.Dispatcher?.Dispatch(() =>
             {
-                return interpolate.Invoke();
-            }
-            else
-            {
-                List<object?> result = [];
-                _ = Dispatcher.GetForCurrentThread()?.Dispatch(() => result = interpolate.Invoke());
-                return result;
-            }
+                try
+                {
+                    tcs.SetResult(interpolate());
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            });
+            return tcs.Task.GetAwaiter().GetResult() ?? [];
         }
 
         public void ProtectedInvoke(bool isUIThread, Action action)
@@ -46,7 +59,7 @@ namespace VeloxDev.MAUI.PlatformAdapters
             }
             else
             {
-                _ = Dispatcher.GetForCurrentThread()?.Dispatch(action);
+                Application.Current?.Dispatcher?.Dispatch(action);
             }
         }
     }
