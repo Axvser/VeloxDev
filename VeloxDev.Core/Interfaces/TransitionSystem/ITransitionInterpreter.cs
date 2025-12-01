@@ -25,6 +25,12 @@ namespace VeloxDev.Core.Interfaces.TransitionSystem
     public interface ITransitionInterpreterCore : IDisposable
     {
         public TransitionEventArgs Args { get; set; }
+        public Task Execute(
+            object target,
+            IFrameSequenceCore frameSequence,
+            ITransitionEffectCore effect,
+            bool isUIAccess,
+            CancellationTokenSource cts);
         public void Exit();
     }
 }

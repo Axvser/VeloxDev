@@ -10,6 +10,23 @@ namespace VeloxDev.Core.TransitionSystem
         where TTransitionEffectCore : ITransitionEffect<TPriorityCore>
         where TOutputCore : IFrameSequence<TPriorityCore>
     {
+        public override async Task Execute(
+            object target,
+            IFrameSequenceCore frameSequence,
+            ITransitionEffectCore effect,
+            bool isUIAccess,
+            CancellationTokenSource cts)
+        {
+            if (frameSequence is not IFrameSequence<TPriorityCore> cvt_frameSequence) return;
+            if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) return;
+            await Execute(
+                target,
+                cvt_frameSequence,
+                cvt_effect,
+                isUIAccess,
+                cts);
+        }
+
         public virtual async Task Execute(
             object target,
             IFrameSequence<TPriorityCore> frameSequence,
@@ -94,6 +111,22 @@ namespace VeloxDev.Core.TransitionSystem
         where TTransitionEffectCore : ITransitionEffectCore
         where TOutputCore : IFrameSequence
     {
+        public override async Task Execute(
+            object target, 
+            IFrameSequenceCore frameSequence, 
+            ITransitionEffectCore effect, 
+            bool isUIAccess, 
+            CancellationTokenSource cts)
+        {
+            if (frameSequence is not IFrameSequence cvt_frameSequence) return;
+            await Execute(
+                target,
+                cvt_frameSequence,
+                effect,
+                isUIAccess,
+                cts);
+        }
+
         public virtual async Task Execute(
             object target,
             IFrameSequence frameSequence,
@@ -174,6 +207,8 @@ namespace VeloxDev.Core.TransitionSystem
     {
         protected CancellationTokenSource? cts = null;
         public virtual TransitionEventArgs Args { get; set; } = new();
+
+        public abstract Task Execute(object target, IFrameSequenceCore frameSequence, ITransitionEffectCore effect, bool isUIAccess, CancellationTokenSource cts);
 
         public virtual void Exit()
         {
