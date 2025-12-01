@@ -26,7 +26,7 @@ namespace Demo
             Animation1.Execute(Rec1);
             Animation2.Execute(Rec2);
 
-            // 可以直接在其它线程中启动动画，框架会自动切换到 UI 线程执行插值操作
+            // 可以直接在其它线程中启动动画，框架会自动切换到 UI 线程
 
             //_ = Task.Run(() =>
             //{
@@ -56,7 +56,7 @@ namespace Demo
                 .Property(r => r.RenderTransform, [new TranslateTransform() { X = 800, Y = 0 }])
                 .Effect(new TransitionEffect()
                 {
-                    Duration = TimeSpan.FromSeconds(2),
+                    Duration = TimeSpan.FromSeconds(1),
                     IsAutoReverse = true,
                     LoopTime = 2,
                 });
@@ -64,7 +64,7 @@ namespace Demo
         // 延迟动画
         private readonly Transition<Rectangle>.StateSnapshot Animation1 =
             Transition<Rectangle>.Create()
-                .Await(TimeSpan.FromSeconds(5))
+                .Await(TimeSpan.FromSeconds(3))
                 .Property(r => r.RenderTransform, [new RotateTransform() { Angle = 180 }])
                 .Effect(new TransitionEffect()
                 {

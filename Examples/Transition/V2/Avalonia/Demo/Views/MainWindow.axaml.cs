@@ -42,7 +42,7 @@ public partial class MainWindow
     // 简单动画：移动 + 背景线性渐变
     private static readonly Transition<Rectangle>.StateSnapshot Animation0 =
         Transition<Rectangle>.Create()
-            .Property(r => r.RenderTransform, [new TranslateTransform(800, 0)])
+            .Property(r => r.RenderTransform, [new TranslateTransform(400, 0)])
             .Property(r => r.Fill,
                 new LinearGradientBrush
                 {
