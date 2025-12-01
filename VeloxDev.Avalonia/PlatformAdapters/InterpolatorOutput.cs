@@ -3,17 +3,17 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Avalonia.PlatformAdapters
 {
-    public class InterpolatorOutput : InterpolatorOutputCore<DispatcherPriority>
+    public class InterpolatorOutput : InterpolatorOutput<DispatcherPriority>
     {
         public override void Update(object target, int frameIndex, bool isUIAccess, DispatcherPriority priority)
         {
             if (isUIAccess)
             {
-                Update(target, frameIndex);
+                SetValues(target, frameIndex);
             }
             else
             {
-                Dispatcher.UIThread?.InvokeAsync(() => Update(target, frameIndex), priority);
+                Dispatcher.UIThread?.InvokeAsync(() => SetValues(target, frameIndex), priority);
             }
         }
     }

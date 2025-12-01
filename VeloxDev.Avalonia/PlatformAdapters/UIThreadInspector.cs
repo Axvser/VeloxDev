@@ -2,15 +2,15 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using VeloxDev.Core.Interfaces.TransitionSystem;
+using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Avalonia.PlatformAdapters
 {
-    public class UIThreadInspector() : IUIThreadInspector<DispatcherPriority>
+    public class UIThreadInspector() : UIThreadInspectorCore<DispatcherPriority>
     {
-        public bool IsUIThread() => Dispatcher.UIThread?.CheckAccess() ?? default;
+        public override bool IsUIThread() => Dispatcher.UIThread?.CheckAccess() ?? default;
 
-        public object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
+        public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
         {
             if (isUIThread)
             {
@@ -22,7 +22,7 @@ namespace VeloxDev.Avalonia.PlatformAdapters
             }
         }
 
-        public List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
+        public override List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
         {
             if (isUIThread)
             {
@@ -34,7 +34,7 @@ namespace VeloxDev.Avalonia.PlatformAdapters
             }
         }
 
-        public void ProtectedInvoke(bool isUIThread, Action action, DispatcherPriority priority)
+        public override void ProtectedInvoke(bool isUIThread, Action action, DispatcherPriority priority)
         {
             if (isUIThread)
             {
