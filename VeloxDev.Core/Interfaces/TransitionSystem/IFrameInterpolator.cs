@@ -22,6 +22,11 @@
 
     public interface IFrameInterpolatorCore
     {
-
+        public IFrameSequenceCore Interpolate(
+            object target,
+            IFrameState state,
+            ITransitionEffectCore effect,
+            bool isUIAccess,
+            IUIThreadInspectorCore inspector);
     }
 }

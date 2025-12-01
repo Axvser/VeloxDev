@@ -15,7 +15,7 @@ namespace VeloxDev.Core.Interfaces.TransitionSystem
     public interface IFrameSequenceCore
     {
         public int Count { get; }
-        public void Update(object target, int frameIndex);
+        public void Update(object target, int frameIndex, bool isUIAccess, object? priority = default);
         public void AddPropertyInterpolations(PropertyInfo propertyInfo, List<object?> objects);
         public void SetCount(int count);
     }

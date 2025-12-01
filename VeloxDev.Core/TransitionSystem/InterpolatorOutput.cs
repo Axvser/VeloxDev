@@ -7,12 +7,10 @@ namespace VeloxDev.Core.TransitionSystem
     {
         public virtual Dictionary<PropertyInfo, List<object?>> Frames { get; protected set; } = [];
         public virtual int Count { get; protected set; } = 0;
-        public virtual void Update(object target, int frameIndex)
+        public void Update(object target, int frameIndex, bool isUIAccess, object? priority = default)
         {
-            foreach (var kvp in Frames)
-            {
-                kvp.Key.SetValue(target, kvp.Value[frameIndex]);
-            }
+            if (priority is not TPriorityCore cvt_priority) throw new InvalidDataException($"The value of \"priority\" is not [ {typeof(TPriorityCore).FullName} ] !");
+            Update(target, frameIndex, isUIAccess, cvt_priority);
         }
         public abstract void Update(object target, int frameIndex, bool isUIAccess, TPriorityCore priority);
         public virtual void AddPropertyInterpolations(PropertyInfo propertyInfo, List<object?> objects)
@@ -36,12 +34,9 @@ namespace VeloxDev.Core.TransitionSystem
     {
         public virtual Dictionary<PropertyInfo, List<object?>> Frames { get; protected set; } = [];
         public virtual int Count { get; protected set; } = 0;
-        public virtual void Update(object target, int frameIndex)
+        public void Update(object target, int frameIndex, bool isUIAccess, object? priority = default)
         {
-            foreach (var kvp in Frames)
-            {
-                kvp.Key.SetValue(target, kvp.Value[frameIndex]);
-            }
+            Update(target, frameIndex, isUIAccess);
         }
         public abstract void Update(object target, int frameIndex, bool isUIAccess);
         public virtual void AddPropertyInterpolations(PropertyInfo propertyInfo, List<object?> objects)

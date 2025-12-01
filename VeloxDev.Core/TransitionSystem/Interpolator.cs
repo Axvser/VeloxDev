@@ -8,6 +8,19 @@ namespace VeloxDev.Core.TransitionSystem
         TPriorityCore> : InterpolatorCore, IFrameInterpolator<TPriorityCore>
         where TOutputCore : IFrameSequence<TPriorityCore>, new()
     {
+        public override IFrameSequenceCore Interpolate(
+            object target,
+            IFrameState state,
+            ITransitionEffectCore effect,
+            bool isUIAccess,
+            IUIThreadInspectorCore inspector)
+        {
+            if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to ITransitionEffect<TPriorityCore> !");
+            if (inspector is not IUIThreadInspector<TPriorityCore> cvt_inspector) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to IUIThreadInspector<TPriorityCore> !");
+            
+            return Interpolate(target, state, cvt_effect, isUIAccess, cvt_inspector);
+        }
+
         public virtual IFrameSequence<TPriorityCore> Interpolate(
             object target,
             IFrameState state,
@@ -63,6 +76,18 @@ namespace VeloxDev.Core.TransitionSystem
     public abstract class InterpolatorCore<TOutputCore> : InterpolatorCore, IFrameInterpolator
         where TOutputCore : IFrameSequence, new()
     {
+        public override IFrameSequenceCore Interpolate(
+            object target,
+            IFrameState state,
+            ITransitionEffectCore effect,
+            bool isUIAccess,
+            IUIThreadInspectorCore inspector)
+        {
+            if (inspector is not IUIThreadInspector cvt_inspector) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to IUIThreadInspector !");
+            
+            return Interpolate(target, state, effect, isUIAccess, cvt_inspector);
+        }
+
         public virtual IFrameSequence Interpolate(
             object target,
             IFrameState state,
@@ -166,5 +191,7 @@ namespace VeloxDev.Core.TransitionSystem
         {
             return NativeInterpolators.TryRemove(type, out interpolator);
         }
+
+        public abstract IFrameSequenceCore Interpolate(object target, IFrameState state, ITransitionEffectCore effect, bool isUIAccess, IUIThreadInspectorCore inspector);
     }
 }
