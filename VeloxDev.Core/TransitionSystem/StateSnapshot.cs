@@ -59,29 +59,26 @@ namespace VeloxDev.Core.TransitionSystem
         internal override async void CoreExecute(bool CanMutualTask = true)
         {
             root ??= this;
-            await root.StartAsync(CanMutualTask);
+
+            if (!(targetref?.TryGetTarget(out var target) ?? false)) return;
+            var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore>.FindOrCreate(target, CanMutualTask);
+            if (CanMutualTask) scheduler.Exit();
+
+            await root.StartAsync(target, scheduler, CanMutualTask);
         }
         internal override async void CoreExecute(object target, bool CanMutualTask = true)
         {
-            if (target is not T tTarget)
-            {
-                throw new ArgumentException($"The target must be of type {typeof(T).Name}.", nameof(target));
-            }
             root ??= this;
-            await root.StartAsync(tTarget, CanMutualTask);
-        }
-        internal async Task StartAsync(bool CanMutualTask = true)
-        {
-            if (targetref?.TryGetTarget(out var target) ?? false)
-            {
-                await StartAsync(target, CanMutualTask);
-            }
-        }
-        internal async Task StartAsync(T target, bool CanMutualTask = true)
-        {
-            await Task.Delay(delay);
+
+            if (target is not T cvt_target) throw new InvalidDataException($"The target is not a {typeof(T).Name}");
             var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore>.FindOrCreate(target, CanMutualTask);
             if (CanMutualTask) scheduler.Exit();
+
+            await root.StartAsync(cvt_target, scheduler, CanMutualTask);
+        }
+        internal async Task StartAsync(T target, ITransitionScheduler scheduler, bool CanMutualTask = true)
+        {
+            await Task.Delay(delay);
             var copyEffect = effect.Clone();
             if (!CanMutualTask)
             {
@@ -93,7 +90,7 @@ namespace VeloxDev.Core.TransitionSystem
             }
             await scheduler.Execute(interpolator, state, copyEffect);
             if (next is null) return;
-            await next.StartAsync(target, CanMutualTask);
+            next.CoreExecute(target, CanMutualTask);
         }
 
         internal override T1 CoreThen<T1>()
@@ -217,29 +214,26 @@ namespace VeloxDev.Core.TransitionSystem
         internal override async void CoreExecute(bool CanMutualTask = true)
         {
             root ??= this;
-            await root.StartAsync(CanMutualTask);
+
+            if (!(targetref?.TryGetTarget(out var target) ?? false)) return;
+            var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>.FindOrCreate(target, CanMutualTask);
+            if (CanMutualTask) scheduler.Exit();
+
+            await root.StartAsync(target, scheduler, CanMutualTask);
         }
         internal override async void CoreExecute(object target, bool CanMutualTask = true)
         {
-            if (target is not T tTarget)
-            {
-                throw new ArgumentException($"The target must be of type {typeof(T).Name}.", nameof(target));
-            }
             root ??= this;
-            await root.StartAsync(tTarget, CanMutualTask);
-        }
-        internal async Task StartAsync(bool CanMutualTask = true)
-        {
-            if (targetref?.TryGetTarget(out var target) ?? false)
-            {
-                await StartAsync(target, CanMutualTask);
-            }
-        }
-        internal async Task StartAsync(T target, bool CanMutualTask = true)
-        {
-            await Task.Delay(delay);
+
+            if (target is not T cvt_target) throw new InvalidDataException($"The target is not a {typeof(T).Name}");
             var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>.FindOrCreate(target, CanMutualTask);
             if (CanMutualTask) scheduler.Exit();
+
+            await root.StartAsync(cvt_target, scheduler, CanMutualTask);
+        }
+        internal async Task StartAsync(T target, ITransitionScheduler<TPriorityCore> scheduler, bool CanMutualTask = true)
+        {
+            await Task.Delay(delay);
             var copyEffect = effect.Clone();
             if (!CanMutualTask)
             {
@@ -251,7 +245,7 @@ namespace VeloxDev.Core.TransitionSystem
             }
             await scheduler.Execute(interpolator, state, copyEffect);
             if (next is null) return;
-            await next.StartAsync(target, CanMutualTask);
+            next.CoreExecute(target,CanMutualTask);
         }
         internal override T1 CoreThen<T1>()
         {
