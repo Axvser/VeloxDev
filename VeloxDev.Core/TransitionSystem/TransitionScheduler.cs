@@ -13,6 +13,13 @@ namespace VeloxDev.Core.TransitionSystem
         protected TTransitionInterpreterCore? interpreter = null;
         protected TUIThreadInspectorCore uIThreadInspector = new();
 
+        public override async Task Execute(IFrameInterpolatorCore interpolator, IFrameState state, ITransitionEffectCore effect)
+        {
+            if (interpolator is not IFrameInterpolator<TPriorityCore> cvt_interpolator) return;
+            if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) return;
+            await Execute(cvt_interpolator, state, cvt_effect);
+        }
+
         public virtual async Task Execute(IFrameInterpolator<TPriorityCore> interpolator, IFrameState state, ITransitionEffect<TPriorityCore> effect)
         {
             if (targetref is null || !targetref.TryGetTarget(out var target))
@@ -87,6 +94,12 @@ namespace VeloxDev.Core.TransitionSystem
     {
         protected TTransitionInterpreterCore? interpreter = null;
         protected TUIThreadInspectorCore uIThreadInspector = new();
+
+        public override async Task Execute(IFrameInterpolatorCore interpolator, IFrameState state, ITransitionEffectCore effect)
+        {
+            if (interpolator is not IFrameInterpolator cvt_interpolator) return;
+            await Execute(cvt_interpolator, state, effect);
+        }
 
         public virtual async Task Execute(IFrameInterpolator interpolator, IFrameState state, ITransitionEffectCore effect)
         {
@@ -173,6 +186,7 @@ namespace VeloxDev.Core.TransitionSystem
             protected set => targetref = value;
         }
 
+        public abstract Task Execute(IFrameInterpolatorCore interpolator, IFrameState state, ITransitionEffectCore effect);
         public abstract void Exit();
     }
 }

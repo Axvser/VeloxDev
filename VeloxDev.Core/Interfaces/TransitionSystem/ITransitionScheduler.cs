@@ -18,6 +18,10 @@
 
     public interface ITransitionSchedulerCore
     {
+        public Task Execute(
+            IFrameInterpolatorCore interpolator,
+            IFrameState state,
+            ITransitionEffectCore effect);
         public void Exit();
     }
 }

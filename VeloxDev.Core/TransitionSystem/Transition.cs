@@ -117,14 +117,14 @@ namespace VeloxDev.Core.TransitionSystem
     {
         public static ConditionalWeakTable<object, List<ITransitionSchedulerCore>> NoSTASchedulers { get; internal set; } = new();
 
-        public static void Exit<T>(T target, bool IncludeUnSTA = false)
+        public static void Exit<T>(T target, bool IncludeUnMutual = false)
             where T : class
         {
             if (TransitionSchedulerCore.TryGetScheduler(target, out var scheduler))
             {
                 scheduler?.Exit();
             }
-            if (IncludeUnSTA)
+            if (IncludeUnMutual)
             {
                 if (NoSTASchedulers.TryGetValue(target, out var noSTASchedulers))
                 {
@@ -135,7 +135,7 @@ namespace VeloxDev.Core.TransitionSystem
                 }
             }
         }
-        public static void Exit<T>(IEnumerable<T> targets, bool IncludeUnSTA = false)
+        public static void Exit<T>(IEnumerable<T> targets, bool IncludeUnMutual = false)
             where T : class
         {
             foreach (var target in targets)
@@ -144,7 +144,7 @@ namespace VeloxDev.Core.TransitionSystem
                 {
                     scheduler?.Exit();
                 }
-                if (IncludeUnSTA && NoSTASchedulers.TryGetValue(target, out var noSTASchedulers))
+                if (IncludeUnMutual && NoSTASchedulers.TryGetValue(target, out var noSTASchedulers))
                 {
                     foreach (var noSTAScheduler in noSTASchedulers)
                     {
@@ -154,7 +154,7 @@ namespace VeloxDev.Core.TransitionSystem
             }
         }
 
-        internal static void AddNoSTA(object target, IEnumerable<ITransitionSchedulerCore> schedulerCores)
+        internal static void AddNoMutual(object target, IEnumerable<ITransitionSchedulerCore> schedulerCores)
         {
             if (NoSTASchedulers.TryGetValue(target, out var noSTASchedulers))
             {
@@ -168,7 +168,7 @@ namespace VeloxDev.Core.TransitionSystem
                 NoSTASchedulers.Add(target, [.. schedulerCores]);
             }
         }
-        internal static void RemoveNoSTA(object target, IEnumerable<ITransitionSchedulerCore> schedulerCores)
+        internal static void RemoveNoMutual(object target, IEnumerable<ITransitionSchedulerCore> schedulerCores)
         {
             if (NoSTASchedulers.TryGetValue(target, out var noSTASchedulers))
             {

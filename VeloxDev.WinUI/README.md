@@ -5,3 +5,5 @@
 > 2. 增加 WinUI 的动画 demo
 >
 > 3. 同步到最新的 MonoBehaviour 机制
+>
+> 4. 修复 Workflow 示例中由于 UIThread 导致的问题

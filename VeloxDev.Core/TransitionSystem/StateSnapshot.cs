@@ -85,10 +85,10 @@ namespace VeloxDev.Core.TransitionSystem
             var copyEffect = effect.Clone();
             if (!CanMutualTask)
             {
-                TransitionCore.AddNoSTA(target, [scheduler]);
+                TransitionCore.AddNoMutual(target, [scheduler]);
                 copyEffect.Finally += (s, e) =>
                 {
-                    TransitionCore.RemoveNoSTA(target, [scheduler]);
+                    TransitionCore.RemoveNoMutual(target, [scheduler]);
                 };
             }
             await scheduler.Execute(interpolator, state, copyEffect);
@@ -243,10 +243,10 @@ namespace VeloxDev.Core.TransitionSystem
             var copyEffect = effect.Clone();
             if (!CanMutualTask)
             {
-                TransitionCore.AddNoSTA(target, [scheduler]);
+                TransitionCore.AddNoMutual(target, [scheduler]);
                 copyEffect.Finally += (s, e) =>
                 {
-                    TransitionCore.RemoveNoSTA(target, [scheduler]);
+                    TransitionCore.RemoveNoMutual(target, [scheduler]);
                 };
             }
             await scheduler.Execute(interpolator, state, copyEffect);

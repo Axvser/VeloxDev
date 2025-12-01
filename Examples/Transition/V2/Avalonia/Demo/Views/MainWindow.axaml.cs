@@ -14,9 +14,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        Animation0.Execute(Rec0);
+        // CanMutualTask 参数表示本次执行的动画是否启用互斥检测，
+        // 如果启用互斥检测，则在同一时间只能有一个动画在
+
+        Animation0.Execute(Rec0, CanMutualTask: false);
         Animation1.Execute(Rec1);
         Animation2.Execute(Rec2);
+
+        Transition<Rectangle>.Execute(Animation0, CanMutualTask: false);
 
         // 可以直接在其它线程中启动动画，框架会自动切换到 UI 线程执行插值操作
 
@@ -27,8 +32,10 @@ public partial class MainWindow : Window
         //    Animation2.Execute(Rec2);
         //});
 
+        // 终结互斥模式下执行中的动画
 
-        // TransitionCore.Exit(Rec0); 安全地退出插值动画
+        // TransitionCore.Exit(Rec0);
+        // Transition<Rectangle>.Exit(Rec0);
     }
 }
 
