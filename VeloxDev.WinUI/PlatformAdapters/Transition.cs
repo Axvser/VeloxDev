@@ -9,6 +9,11 @@ using Windows.Foundation;
 
 namespace VeloxDev.WinUI.PlatformAdapters
 {
+    public class Transition : TransitionCore
+    {
+
+    }
+
     public class Transition<T> : TransitionCore<T, Transition<T>.StateSnapshot>
         where T : class
     {

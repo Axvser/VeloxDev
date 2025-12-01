@@ -13,21 +13,29 @@ namespace VeloxDev.Core.TransitionSystem
         protected TTransitionInterpreterCore? interpreter = null;
         protected TUIThreadInspectorCore uIThreadInspector = new();
 
-        public override async Task Execute(IFrameInterpolatorCore interpolator, IFrameState state, ITransitionEffectCore effect)
+        public override async Task Execute(
+            IFrameInterpolatorCore interpolator, 
+            IFrameState state, 
+            ITransitionEffectCore effect, 
+            CancellationTokenSource? externCts = default)
         {
             if (interpolator is not IFrameInterpolator<TPriorityCore> cvt_interpolator) return;
             if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) return;
-            await Execute(cvt_interpolator, state, cvt_effect);
+            await Execute(cvt_interpolator, state, cvt_effect, externCts);
         }
 
-        public virtual async Task Execute(IFrameInterpolator<TPriorityCore> interpolator, IFrameState state, ITransitionEffect<TPriorityCore> effect)
+        public virtual async Task Execute(
+            IFrameInterpolator<TPriorityCore> interpolator, 
+            IFrameState state, 
+            ITransitionEffect<TPriorityCore> effect, 
+            CancellationTokenSource? externCts = default)
         {
             if (targetref is null || !targetref.TryGetTarget(out var target))
             {
                 targetref = null;
                 return;
             }
-            var newCts = new CancellationTokenSource();
+            var newCts = externCts ?? new CancellationTokenSource();
             TTransitionInterpreterCore newInterpreter = new();
             cts = newCts;
             interpreter = newInterpreter;
@@ -95,20 +103,28 @@ namespace VeloxDev.Core.TransitionSystem
         protected TTransitionInterpreterCore? interpreter = null;
         protected TUIThreadInspectorCore uIThreadInspector = new();
 
-        public override async Task Execute(IFrameInterpolatorCore interpolator, IFrameState state, ITransitionEffectCore effect)
+        public override async Task Execute(
+            IFrameInterpolatorCore interpolator,
+            IFrameState state,
+            ITransitionEffectCore effect,
+            CancellationTokenSource? externCts = default)
         {
             if (interpolator is not IFrameInterpolator cvt_interpolator) return;
-            await Execute(cvt_interpolator, state, effect);
+            await Execute(cvt_interpolator, state, effect, externCts);
         }
 
-        public virtual async Task Execute(IFrameInterpolator interpolator, IFrameState state, ITransitionEffectCore effect)
+        public virtual async Task Execute(
+            IFrameInterpolator interpolator,
+            IFrameState state,
+            ITransitionEffectCore effect,
+            CancellationTokenSource? externCts = default)
         {
             if (targetref is null || !targetref.TryGetTarget(out var target))
             {
                 targetref = null;
                 return;
             }
-            var newCts = new CancellationTokenSource();
+            var newCts = externCts ?? new CancellationTokenSource();
             TTransitionInterpreterCore newInterpreter = new();
             cts = newCts;
             interpreter = newInterpreter;
@@ -186,7 +202,11 @@ namespace VeloxDev.Core.TransitionSystem
             protected set => targetref = value;
         }
 
-        public abstract Task Execute(IFrameInterpolatorCore interpolator, IFrameState state, ITransitionEffectCore effect);
+        public abstract Task Execute(
+            IFrameInterpolatorCore interpolator,
+            IFrameState state,
+            ITransitionEffectCore effect,
+            CancellationTokenSource? externCts = default);
         public abstract void Exit();
     }
 }

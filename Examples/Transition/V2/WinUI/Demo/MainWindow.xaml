@@ -23,7 +23,9 @@
             <RowDefinition Height="100"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
         </Grid.RowDefinitions>
-        <Button Width="150" Height="50" Content="Load Animation" Click="Button_Click"/>
+        <Button Width="150" Height="50" Content="Load Animation" VerticalAlignment="Top" Click="Button_Click"/>
+        <Button Width="150" Height="50" Content="Stop Animation" VerticalAlignment="Bottom" Click="Button_Click_1"/>
+
         <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
         <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="100" HorizontalAlignment="Center"></Rectangle>
         <Rectangle Grid.Row="5" x:Name="Rec2" Width="100">

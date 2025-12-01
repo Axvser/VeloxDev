@@ -27,70 +27,51 @@ namespace VeloxDev.Core.TransitionSystem
         {
             root = this;
         }
-        internal override void SetTarget(T target)
-        {
-            root ??= this;
-            root.targetref = new WeakReference<T>(target);
-        }
 
         internal override IFrameState CoreRecordState()
         {
             return state.Clone();
         }
-        internal override IFrameState Merge(StateSnapshotCore<T> snapshot)
-        {
-            var result = state.Clone();
 
-            if (snapshot is StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore> coreSnapshot)
-            {
-                foreach (var value in coreSnapshot.state.Values)
-                {
-                    result.SetValue(value.Key, value.Value);
-                }
-                foreach (var interpolator in coreSnapshot.state.Interpolators)
-                {
-                    result.SetInterpolator(interpolator.Key, interpolator.Value);
-                }
-            }
-
-            return result;
-        }
-
-        internal override async void CoreExecute(bool CanMutualTask = true)
-        {
-            root ??= this;
-
-            if (!(targetref?.TryGetTarget(out var target) ?? false)) return;
-            var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore>.FindOrCreate(target, CanMutualTask);
-            if (CanMutualTask) scheduler.Exit();
-
-            await root.StartAsync(target, scheduler, CanMutualTask);
-        }
         internal override async void CoreExecute(object target, bool CanMutualTask = true)
         {
+            await slim.WaitAsync().ConfigureAwait(false);
+
             root ??= this;
+            if (root.spreador is not null) await root.spreador.CloseAsync();
 
             if (target is not T cvt_target) throw new InvalidDataException($"The target is not a {typeof(T).Name}");
             var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore>.FindOrCreate(target, CanMutualTask);
             if (CanMutualTask) scheduler.Exit();
 
-            await root.StartAsync(cvt_target, scheduler, CanMutualTask);
+            var spreador = new StateSnapshotChainSpreador<T>(root, cvt_target, scheduler, CanMutualTask);
+            root.spreador = spreador;
+
+            await root.StartAsync(spreador);
+
+            slim.Release();
         }
-        internal async Task StartAsync(T target, ITransitionScheduler scheduler, bool CanMutualTask = true)
+        internal async Task StartAsync(StateSnapshotChainSpreador<T> spreador)
         {
-            await Task.Delay(delay);
-            var copyEffect = effect.Clone();
-            if (!CanMutualTask)
+            var nowCts = spreador.cts;
+            if (nowCts is null) return;
+            try
             {
-                TransitionCore.AddNoMutual(target, [scheduler]);
+                await Task.Delay(delay, nowCts.Token);
+            }
+            catch { }
+            var copyEffect = effect.Clone();
+            if (!spreador.CanMutualTask)
+            {
+                TransitionCore.AddNoMutual(spreador.Target, [spreador.Scheduler]);
                 copyEffect.Finally += (s, e) =>
                 {
-                    TransitionCore.RemoveNoMutual(target, [scheduler]);
+                    TransitionCore.RemoveNoMutual(spreador.Target, [spreador.Scheduler]);
                 };
             }
-            await scheduler.Execute(interpolator, state, copyEffect);
-            if (next is null) return;
-            next.CoreExecute(target, CanMutualTask);
+            await spreador.Scheduler.Execute(interpolator, state, copyEffect, nowCts);
+            if (next is null || nowCts.IsCancellationRequested) return;
+            await next.StartAsync(spreador);
         }
 
         internal override T1 CoreThen<T1>()
@@ -101,7 +82,6 @@ namespace VeloxDev.Core.TransitionSystem
                 throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
             }
             converted.root = root;
-            converted.targetref = targetref;
             next = converted;
             return newNode;
         }
@@ -114,7 +94,6 @@ namespace VeloxDev.Core.TransitionSystem
             }
             converted.root = root;
             converted.delay = timeSpan;
-            converted.targetref = targetref;
             next = converted;
             return newNode;
         }
@@ -182,70 +161,59 @@ namespace VeloxDev.Core.TransitionSystem
         {
             root = this;
         }
-        internal override void SetTarget(T target)
-        {
-            root ??= this;
-            root.targetref = new WeakReference<T>(target);
-        }
 
         internal override IFrameState CoreRecordState()
         {
             return state.Clone();
         }
-        internal override IFrameState Merge(StateSnapshotCore<T> snapshot)
-        {
-            var result = state.Clone();
 
-            if (snapshot is StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore> coreSnapshot)
-            {
-                foreach (var value in coreSnapshot.state.Values)
-                {
-                    result.SetValue(value.Key, value.Value);
-                }
-                foreach (var interpolator in coreSnapshot.state.Interpolators)
-                {
-                    result.SetInterpolator(interpolator.Key, interpolator.Value);
-                }
-            }
-
-            return result;
-        }
-
-        internal override async void CoreExecute(bool CanMutualTask = true)
-        {
-            root ??= this;
-
-            if (!(targetref?.TryGetTarget(out var target) ?? false)) return;
-            var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>.FindOrCreate(target, CanMutualTask);
-            if (CanMutualTask) scheduler.Exit();
-
-            await root.StartAsync(target, scheduler, CanMutualTask);
-        }
         internal override async void CoreExecute(object target, bool CanMutualTask = true)
         {
+            await slim.WaitAsync().ConfigureAwait(false);
+
             root ??= this;
+            if(root.spreador is not null) await root.spreador.CloseAsync();
 
             if (target is not T cvt_target) throw new InvalidDataException($"The target is not a {typeof(T).Name}");
             var scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>.FindOrCreate(target, CanMutualTask);
             if (CanMutualTask) scheduler.Exit();
 
-            await root.StartAsync(cvt_target, scheduler, CanMutualTask);
+            var spreador = new StateSnapshotChainSpreador<T, TPriorityCore>(root, cvt_target, scheduler, CanMutualTask);
+            root.spreador = spreador;
+
+            await root.StartAsync(spreador);
+
+            slim.Release();
         }
-        internal async Task StartAsync(T target, ITransitionScheduler<TPriorityCore> scheduler, bool CanMutualTask = true)
+        internal async Task StartAsync(StateSnapshotChainSpreador<T, TPriorityCore> spreador)
         {
-            await Task.Delay(delay);
-            var copyEffect = effect.Clone();
-            if (!CanMutualTask)
+            var nowCts = spreador.cts;
+            if (nowCts is null || nowCts.IsCancellationRequested) return;  // 提前检查取消
+
+            try
             {
-                TransitionCore.AddNoMutual(target, [scheduler]);
+                await Task.Delay(delay, nowCts.Token);  // 支持取消的Delay
+            }
+            catch (OperationCanceledException)
+            {
+                return;  // 被取消时直接返回
+            }
+
+            var copyEffect = effect.Clone();
+            if (!spreador.CanMutualTask)
+            {
+                TransitionCore.AddNoMutual(spreador.Target, [spreador.Scheduler]);
                 copyEffect.Finally += (s, e) =>
                 {
-                    TransitionCore.RemoveNoMutual(target, [scheduler]);
+                    TransitionCore.RemoveNoMutual(spreador.Target, [spreador.Scheduler]);
                 };
             }
-            await scheduler.Execute(interpolator, state, copyEffect);
-            if (next is null) return;
-            next.CoreExecute(target,CanMutualTask);
+
+            await spreador.Scheduler.Execute(interpolator, state, copyEffect, nowCts);
+
+            // 关键修复：检查取消状态后再决定是否执行下一个
+            if (next is null || nowCts.IsCancellationRequested) return;
+            await next.StartAsync(spreador);
         }
         internal override T1 CoreThen<T1>()
         {
@@ -255,7 +223,6 @@ namespace VeloxDev.Core.TransitionSystem
                 throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
             }
             converted.root = root;
-            converted.targetref = root?.targetref;
             next = converted;
             return newNode;
         }
@@ -268,7 +235,6 @@ namespace VeloxDev.Core.TransitionSystem
             }
             converted.root = root;
             converted.delay = timeSpan;
-            converted.targetref = root?.targetref;
             next = converted;
             return newNode;
         }
@@ -314,13 +280,8 @@ namespace VeloxDev.Core.TransitionSystem
     public abstract class StateSnapshotCore<T> : StateSnapshotCore
         where T : class
     {
-        internal WeakReference<T>? targetref = null;
         internal TimeSpan delay = TimeSpan.Zero;
-        internal abstract IFrameState Merge(StateSnapshotCore<T> snapshot);
-        internal virtual void SetTarget(T target)
-        {
-            targetref = new WeakReference<T>(target);
-        }
+
         internal override T1 CoreAwait<T1>(TimeSpan timeSpan)
         {
             if (this is not T1 snapshot)
@@ -334,6 +295,9 @@ namespace VeloxDev.Core.TransitionSystem
 
     public abstract class StateSnapshotCore
     {
+        internal SemaphoreSlim slim = new(1, 1);
+        internal StateSnapshotChainSpreadorCore? spreador = null;
+
         internal abstract void AsRoot();
         internal abstract T CoreProperty<T, TInterpolable>(Expression<Func<T, TInterpolable>> propertyLambda, TInterpolable newValue)
             where T : class
@@ -347,7 +311,6 @@ namespace VeloxDev.Core.TransitionSystem
             where T : StateSnapshotCore, new();
         internal abstract T CoreAwaitThen<T>(TimeSpan timeSpan)
             where T : StateSnapshotCore, new();
-        internal abstract void CoreExecute(bool CanMutualTask = true);
         internal abstract void CoreExecute(object target, bool CanMutualTask = true);
     }
 }

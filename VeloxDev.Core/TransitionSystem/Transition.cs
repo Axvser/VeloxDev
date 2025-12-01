@@ -48,17 +48,15 @@ namespace VeloxDev.Core.TransitionSystem
             return snapshot;
         }
 
-        public static T Execute<T>(this T snapshot, object target, bool CanMutualTask = true)
+        public static void Execute<T>(this T snapshot, object target, bool CanMutualTask = true)
             where T : StateSnapshotCore
         {
             snapshot.CoreExecute(target, CanMutualTask);
-            return snapshot;
         }
-        public static T Execute<T>(this T snapshot, bool CanMutualTask = true)
+        public static void Execute<T>(this T snapshot, bool CanMutualTask = true)
             where T : StateSnapshotCore
         {
             snapshot.CoreExecute(CanMutualTask);
-            return snapshot;
         }
     }
 
@@ -72,17 +70,6 @@ namespace VeloxDev.Core.TransitionSystem
             if (value is StateSnapshotCore<TTarget> snapshot)
             {
                 snapshot.AsRoot();
-            }
-            return value;
-        }
-        public static TStateSnapshotCore Create<T>(T target)
-            where T : class, TTarget
-        {
-            var value = new TStateSnapshotCore();
-            if (value is StateSnapshotCore<TTarget> snapshot)
-            {
-                snapshot.AsRoot();
-                snapshot.SetTarget(target);
             }
             return value;
         }

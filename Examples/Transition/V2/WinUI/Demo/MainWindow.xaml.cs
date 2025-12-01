@@ -22,23 +22,25 @@ namespace Demo
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            //Animation0.Execute(Rec0);
-            //Animation1.Execute(Rec1);
-            //Animation2.Execute(Rec2);
+            Animation0.Execute(Rec0);
+            Animation1.Execute(Rec1);
+            Animation2.Execute(Rec2);
 
             // 可以直接在其它线程中启动动画，框架会自动切换到 UI 线程执行插值操作
 
-            _ = Task.Run(() =>
-            {
-                Animation0.Execute(Rec0);
-                Animation1.Execute(Rec1);
-                Animation2.Execute(Rec2);
-            });
+            //_ = Task.Run(() =>
+            //{
+            //    Animation0.Execute(Rec0);
+            //    Animation1.Execute(Rec1);
+            //    Animation2.Execute(Rec2);
+            //});
+        }
 
-            // 安全地退出插值动画
-
-            // TransitionCore.Exit(Rec0);
-            // Transition<Rectangle>.Exit(Rec0);
+        private void Button_Click_1(object sender, RoutedEventArgs e)
+        {
+            Transition.Exit(Rec0);
+            Transition.Exit(Rec1);
+            Transition.Exit(Rec2);
         }
     }
 

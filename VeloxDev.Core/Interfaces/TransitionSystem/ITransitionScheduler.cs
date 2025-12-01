@@ -5,7 +5,8 @@
         public Task Execute(
             IFrameInterpolator<TPriorityCore> interpolator,
             IFrameState state,
-            ITransitionEffect<TPriorityCore> effect);
+            ITransitionEffect<TPriorityCore> effect,
+            CancellationTokenSource? externCts = default);
     }
 
     public interface ITransitionScheduler : ITransitionSchedulerCore
@@ -13,7 +14,8 @@
         public Task Execute(
             IFrameInterpolator interpolator,
             IFrameState state,
-            ITransitionEffectCore effect);
+            ITransitionEffectCore effect,
+            CancellationTokenSource? externCts = default);
     }
 
     public interface ITransitionSchedulerCore
@@ -21,7 +23,8 @@
         public Task Execute(
             IFrameInterpolatorCore interpolator,
             IFrameState state,
-            ITransitionEffectCore effect);
+            ITransitionEffectCore effect,
+            CancellationTokenSource? externCts = default);
         public void Exit();
     }
 }
