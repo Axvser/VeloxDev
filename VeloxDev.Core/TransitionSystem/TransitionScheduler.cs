@@ -194,8 +194,8 @@ namespace VeloxDev.Core.TransitionSystem
             return Schedulers.Remove(source);
         }
 
-        protected CancellationTokenSource? cts = null;
-        protected WeakReference<object>? targetref = null;
+        internal CancellationTokenSource? cts = null;
+        internal WeakReference<object>? targetref = null;
         public virtual WeakReference<object>? TargetRef
         {
             get => targetref;

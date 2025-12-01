@@ -102,8 +102,8 @@ namespace VeloxDev.Core.TransitionSystem
 
     public abstract class TransitionCore
     {
-        public static ConditionalWeakTable<object, List<ITransitionSchedulerCore>> NoSTASchedulers { get; internal set; } = new();
-
+        public static ConditionalWeakTable<object, List<ITransitionSchedulerCore>> NoSerialSchedulers { get; internal set; } = new();
+        
         public static void Exit<T>(T target, bool IncludeUnMutual = false)
             where T : class
         {
@@ -113,25 +113,7 @@ namespace VeloxDev.Core.TransitionSystem
             }
             if (IncludeUnMutual)
             {
-                if (NoSTASchedulers.TryGetValue(target, out var noSTASchedulers))
-                {
-                    foreach (var noSTAScheduler in noSTASchedulers)
-                    {
-                        noSTAScheduler.Exit();
-                    }
-                }
-            }
-        }
-        public static void Exit<T>(IEnumerable<T> targets, bool IncludeUnMutual = false)
-            where T : class
-        {
-            foreach (var target in targets)
-            {
-                if (TransitionSchedulerCore.TryGetScheduler(target, out var scheduler))
-                {
-                    scheduler?.Exit();
-                }
-                if (IncludeUnMutual && NoSTASchedulers.TryGetValue(target, out var noSTASchedulers))
+                if (NoSerialSchedulers.TryGetValue(target, out var noSTASchedulers))
                 {
                     foreach (var noSTAScheduler in noSTASchedulers)
                     {
@@ -143,7 +125,7 @@ namespace VeloxDev.Core.TransitionSystem
 
         internal static void AddNoMutual(object target, IEnumerable<ITransitionSchedulerCore> schedulerCores)
         {
-            if (NoSTASchedulers.TryGetValue(target, out var noSTASchedulers))
+            if (NoSerialSchedulers.TryGetValue(target, out var noSTASchedulers))
             {
                 foreach (var scheduler in schedulerCores)
                 {
@@ -152,12 +134,12 @@ namespace VeloxDev.Core.TransitionSystem
             }
             else
             {
-                NoSTASchedulers.Add(target, [.. schedulerCores]);
+                NoSerialSchedulers.Add(target, [.. schedulerCores]);
             }
         }
         internal static void RemoveNoMutual(object target, IEnumerable<ITransitionSchedulerCore> schedulerCores)
         {
-            if (NoSTASchedulers.TryGetValue(target, out var noSTASchedulers))
+            if (NoSerialSchedulers.TryGetValue(target, out var noSTASchedulers))
             {
                 foreach (var scheduler in schedulerCores)
                 {
@@ -165,7 +147,7 @@ namespace VeloxDev.Core.TransitionSystem
                 }
                 if (noSTASchedulers.Count == 0)
                 {
-                    NoSTASchedulers.Remove(target);
+                    NoSerialSchedulers.Remove(target);
                 }
             }
         }
