@@ -20,6 +20,13 @@
             <RowDefinition Height="100"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
         </Grid.RowDefinitions>
+
+        <HorizontalStackLayout Grid.Row="0">
+            <Button WidthRequest="150" HeightRequest="50" Text="Load Animations" Clicked="LoadAnimations"/>
+            <Button x:Name="btnReset" WidthRequest="150" HeightRequest="50" Text="Reset Rec0"/>
+            <Button WidthRequest="150" HeightRequest="50" Text="Exit Animations" Clicked="ExitAnimations"/>
+        </HorizontalStackLayout>
+
         <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" WidthRequest="100" HeightRequest="100"/>
         <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" WidthRequest="100" HeightRequest="100"/>
         <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" WidthRequest="100" HeightRequest="100"/>

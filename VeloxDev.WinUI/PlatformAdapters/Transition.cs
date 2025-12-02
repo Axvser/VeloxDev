@@ -23,7 +23,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 // 拍摄指定属性
                 foreach (var expression in expressions)
                 {
-                    if (TryGetPropertyFromExpression(expression, out var property) && property.CanRead && property.CanWrite)
+                    if (TryGetPropertyFromExpression(expression, out var property) && property!.CanRead && property.CanWrite)
                     {
                         var currentValue = property.GetValue(target);
                         snapshot.state.SetValue(property, currentValue);
@@ -59,7 +59,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 {
                     if (TryGetPropertyFromExpression(expression, out var property))
                     {
-                        excludedProperties.Add(property);
+                        excludedProperties.Add(property!);
                     }
                 }
             }
@@ -77,7 +77,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
             return snapshot;
         }
 
-        private static bool TryGetPropertyFromExpression<T>(Expression<Func<T, object>> expression, out PropertyInfo property)
+        private static bool TryGetPropertyFromExpression<T>(Expression<Func<T, object>> expression, out PropertyInfo? property)
             where T : class
         {
             property = null;

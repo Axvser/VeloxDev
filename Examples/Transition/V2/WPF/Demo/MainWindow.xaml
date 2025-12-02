@@ -23,6 +23,13 @@
             <RowDefinition Height="100"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
         </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <Button Width="150" Height="50" Content="Load Animations" Click="LoadAnimations"/>
+            <Button x:Name="btnReset" Width="150" Height="50" Content="Reset Rec0"/>
+            <Button Width="150" Height="50" Content="Exit Animations" Click="ExitAnimations"/>
+        </StackPanel>
+
         <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
         <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="100" HorizontalAlignment="Center"></Rectangle>
         <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" Width="100"></Rectangle>

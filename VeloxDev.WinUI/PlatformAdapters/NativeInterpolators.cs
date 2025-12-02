@@ -465,9 +465,9 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 );
             }
         }
-        
+
         //===================== PlaneProjection =====================
-        
+
         public class ProjectionInterpolator : IValueInterpolator
         {
             public List<object?> Interpolate(object? start, object? end, int steps)
