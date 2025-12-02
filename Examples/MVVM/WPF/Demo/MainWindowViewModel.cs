@@ -44,8 +44,8 @@ public partial class MainWindowViewModel
     {
         MinusCommand.Lock();   // 进入锁定状态，阻止新的命令触发但不会中断当前执行中的命令
 
-        MinusCommand.Cancel();    // 中断当前命令
-        MinusCommand.Interrupt(); // 中断当前命令和正在排队的所有命令
+        MinusCommand.Interrupt();    // 中断当前命令
+        MinusCommand.Clear();        // 中断当前命令和正在排队的所有命令
 
         MinusCommand.UnLock(); // 解除锁定
     }
@@ -55,8 +55,8 @@ public partial class MainWindowViewModel
     {
         MinusCommand.Lock();   // 进入锁定状态，阻止新的命令触发但不会中断当前执行中的命令
 
-        await MinusCommand.CancelAsync();    // 中断当前命令
-        await MinusCommand.InterruptAsync(); // 中断当前命令和正在排队的所有命令
+        await MinusCommand.InterruptAsync();    // 中断当前命令
+        await MinusCommand.ClearAsync(); // 中断当前命令和正在排队的所有命令
 
         MinusCommand.UnLock(); // 解除锁定
     }

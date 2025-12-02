@@ -47,9 +47,11 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251003001" />
   </ItemGroup>
+	
+	
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
-    <ProjectReference Include="..\..\..\..\VeloxDev.Core\VeloxDev.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\VeloxDev.WinUI\VeloxDev.WinUI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

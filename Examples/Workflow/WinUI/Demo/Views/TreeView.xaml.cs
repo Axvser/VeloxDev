@@ -7,9 +7,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using VeloxDev.Core.Extension;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.Core.Extension;
 
 namespace Demo.Views
 {
@@ -102,7 +102,7 @@ namespace Demo.Views
                 try
                 {
                     using var stream = await file.OpenStreamForReadAsync();
-                    var (Success, Result) = await WorkflowEx.TryDeMutualizeFromStreamAsync<TreeViewModel>(stream);
+                    var (Success, Result) = await WorkflowEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
 
                     if (!Success || Result is null)
                     {
