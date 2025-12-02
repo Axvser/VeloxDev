@@ -13,7 +13,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
 {
     public static class TransitionEx
     {
-        public static Transition<T>.StateSnapshot Snapshot<T>(this T target, params Expression<Func<T, object>>[] expressions)
+        public static Transition<T>.StateSnapshot Snapshot<T>(this T target, params Expression<Func<T, object?>>[] expressions)
             where T : class
         {
             var snapshot = new Transition<T>.StateSnapshot();
@@ -34,7 +34,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
             {
                 // 拍摄所有实例属性
                 var instanceProperties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                                                .Where(p => p.CanRead && p.CanWrite);
+                                                .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0);
 
                 foreach (var property in instanceProperties)
                 {
@@ -46,7 +46,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
             return snapshot;
         }
 
-        public static Transition<T>.StateSnapshot SnapshotExcept<T>(this T target, params Expression<Func<T, object>>[] excludedExpressions)
+        public static Transition<T>.StateSnapshot SnapshotExcept<T>(this T target, params Expression<Func<T, object?>>[] excludedExpressions)
             where T : class
         {
             var snapshot = new Transition<T>.StateSnapshot();
@@ -66,7 +66,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
 
             // 拍摄除排除属性外的所有属性
             var allProperties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                                        .Where(p => p.CanRead && p.CanWrite && !excludedProperties.Contains(p));
+                                        .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0 && !excludedProperties.Contains(p));
 
             foreach (var property in allProperties)
             {
@@ -77,7 +77,7 @@ namespace VeloxDev.WinUI.PlatformAdapters
             return snapshot;
         }
 
-        private static bool TryGetPropertyFromExpression<T>(Expression<Func<T, object>> expression, out PropertyInfo? property)
+        private static bool TryGetPropertyFromExpression<T>(Expression<Func<T, object?>> expression, out PropertyInfo? property)
             where T : class
         {
             property = null;
@@ -92,7 +92,9 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 property = unaryMemberExpr.Member as PropertyInfo;
             }
 
-            return property != null;
+            return property != null &&
+                Interpolator.TryGetInterpolator(property.PropertyType, out _) &&
+                property.GetIndexParameters().Length == 0;
         }
     }
 
