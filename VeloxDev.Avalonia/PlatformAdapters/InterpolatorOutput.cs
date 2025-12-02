@@ -3,7 +3,7 @@ using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Avalonia.PlatformAdapters
 {
-    public class InterpolatorOutput : InterpolatorOutput<DispatcherPriority>
+    public class InterpolatorOutput : InterpolatorOutputCore<DispatcherPriority>
     {
         public override void Update(object target, int frameIndex, bool isUIAccess, DispatcherPriority priority)
         {

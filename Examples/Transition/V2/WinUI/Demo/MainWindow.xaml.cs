@@ -1,4 +1,5 @@
 ﻿using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
@@ -6,6 +7,7 @@ using System;
 using System.Threading.Tasks;
 using VeloxDev.Core.TransitionSystem;
 using VeloxDev.WinUI.PlatformAdapters;
+using WinRT.Interop;
 
 namespace Demo
 {
@@ -15,9 +17,17 @@ namespace Demo
         {
             InitializeComponent();
 
-            // VeloxDev库执行动画时依赖一个 UIThread 检查器来确保插值操作在 UI 线程中执行
-            // 这里将 WinUI 的 DispatcherQueue 适配器注册到 UIThreadInspector 中
-            UIThreadInspector.DispatcherQueue = DispatcherQueue;
+            var snapshot0 = Rec0.Snapshot();     // 记录所有可读写实例属性
+
+            var snapshot1 = Rec0.Snapshot(       // 仅记录指定的实例属性
+                x => x.Width, 
+                x => x.Height);
+
+            var snapshot2 = Rec0.SnapshotExcept( // 记录除Visibility外所有可读写的实例属性
+                x => x.Visibility);
+
+            // VeloxDev库在WinUI执行动画时，必须手动获取主窗口
+            UIThreadInspector.SetWindow(this);
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)

@@ -14,6 +14,7 @@ namespace VeloxDev.Core.Interfaces.TransitionSystem
 
     public interface IUIThreadInspectorCore
     {
+        public bool IsAppAlive();
         public bool IsUIThread();
         public abstract void ProtectedInvoke(bool isUIThread, Action action, object? priority = default);
         public object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo);

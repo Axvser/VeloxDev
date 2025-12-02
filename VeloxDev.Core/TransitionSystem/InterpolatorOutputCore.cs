@@ -3,8 +3,11 @@ using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
-    public abstract class InterpolatorOutput<TPriorityCore> : InterpolatorOutputCore, IFrameSequence<TPriorityCore>
+    public abstract class InterpolatorOutputCore<TUIThreadInspectorCore, TPriorityCore> : InterpolatorOutputBase, IFrameSequence<TPriorityCore>
+        where TUIThreadInspectorCore : IUIThreadInspectorCore, new()
     {
+        private readonly TUIThreadInspectorCore inspector = new();
+        public override bool CanSetValue() => inspector.IsAppAlive();
         public override void Update(object target, int frameIndex, bool isUIAccess, object? priority = default)
         {
             if (priority is not TPriorityCore cvt_priority) throw new InvalidDataException($"The value of \"priority\" is not [ {typeof(TPriorityCore).FullName} ] !");
@@ -13,8 +16,11 @@ namespace VeloxDev.Core.TransitionSystem
         public abstract void Update(object target, int frameIndex, bool isUIAccess, TPriorityCore priority);
     }
 
-    public abstract class InterpolatorOutput : InterpolatorOutputCore, IFrameSequence
+    public abstract class InterpolatorOutputCore<TUIThreadInspectorCore> : InterpolatorOutputBase, IFrameSequence
+        where TUIThreadInspectorCore : IUIThreadInspectorCore, new()
     {
+        private readonly TUIThreadInspectorCore inspector = new();
+        public override bool CanSetValue() => inspector.IsAppAlive();
         public override void Update(object target, int frameIndex, bool isUIAccess, object? priority = default)
         {
             Update(target, frameIndex, isUIAccess);
@@ -22,8 +28,9 @@ namespace VeloxDev.Core.TransitionSystem
         public abstract void Update(object target, int frameIndex, bool isUIAccess);
     }
 
-    public abstract class InterpolatorOutputCore : IFrameSequenceCore
+    public abstract class InterpolatorOutputBase : IFrameSequenceCore
     {
+        public abstract bool CanSetValue();
         public virtual Dictionary<PropertyInfo, List<object?>> Frames { get; protected set; } = [];
         public virtual int Count { get; protected set; } = 0;
         public abstract void Update(object target, int frameIndex, bool isUIAccess, object? priority = default);
@@ -46,7 +53,10 @@ namespace VeloxDev.Core.TransitionSystem
         {
             foreach (var kvp in Frames)
             {
-                kvp.Key.SetValue(target, kvp.Value[frameIndex]);
+                if (CanSetValue())
+                {
+                    kvp.Key.SetValue(target, kvp.Value[frameIndex]);
+                }
             }
         }
     }
