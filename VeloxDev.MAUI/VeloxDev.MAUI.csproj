@@ -18,7 +18,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.MAUI</Title>
-		<Version>3.2.2</Version>
+		<Version>3.3.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + MAUI</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
@@ -42,10 +42,7 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-	</ItemGroup>
-
-	<ItemGroup>
-	  <ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<PackageReference Include="VeloxDev.Core" Version="3.3.0" />
 	</ItemGroup>
 
 </Project>
