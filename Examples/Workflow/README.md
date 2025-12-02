@@ -58,8 +58,8 @@ slot.ApplyConnectionCommand.Execute(null);   // 开始
 slot.ReceiveConnectionCommand.Execute(null); // 结束
 
 // 保存/加载（使用独立序列化扩展）
-string json = tree.Mutualize();                          // 序列化
-bool ok = json.TryDeMutualize(out MyTree? tree);         // 反序列化
+string json = tree.Serialize();                          // 序列化
+bool ok = json.TryDeSerialize(out MyTree? tree);         // 反序列化
 ```
 
 ---
@@ -79,9 +79,9 @@ bool ok = json.TryDeMutualize(out MyTree? tree);         // 反序列化
 ### 序列化扩展（来自 `WorkflowEx`）
 | 方法 | 说明 |
 |------|------|
-| `T.Mutualize()` | 同步序列化为 JSON |
-| `json.TryDeMutualize<T>(out T?)` | 安全反序列化 |
-| `stream.TryDeMutualizeFromStreamAsync<T>()` | 异步从流加载 |
+| `T.Serialize()` | 同步序列化为 JSON |
+| `json.TryDeSerialize<T>(out T?)` | 安全反序列化 |
+| `stream.TryDeSerializeFromStreamAsync<T>()` | 异步从流加载 |
 
 ### 关键数据模型
 | 类型 | 字段 |
@@ -93,4 +93,4 @@ bool ok = json.TryDeMutualize(out MyTree? tree);         // 反序列化
 ---
 
 > 💡 **一句话使用**：  
-> **标记 `[Tree/Node/Slot/Link]` → 实现 `Helper` → 用 `MoveCommand`/`ApplyConnectionCommand` 驱动交互 → 通过 `Mutualize()`/`TryDeMutualize()` 保存加载。**
+> **标记 `[Tree/Node/Slot/Link]` → 实现 `Helper` → 用 `MoveCommand`/`ApplyConnectionCommand` 驱动交互 → 通过 `Serialize()`/`TryDeSerialize()` 保存加载。**

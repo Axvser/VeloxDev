@@ -109,10 +109,10 @@
         {
             // 下述三个方法均有 Async 版本
             DeleteCommand.Execute(null); // 执行
-            DeleteCommand.Cancel();      // 取消当前执行中的 Task
-            DeleteCommand.Interrupt();   // 取消包含排队 Task 在内的所有 Task
+            DeleteCommand.Interrupt();   // 取消当前执行中的 Task
+            DeleteCommand.Clear();       // 取消包含排队 Task 在内的所有 Task
             
-            DeleteCommand.Lock();        // 锁定命令以阻止所有任务继续
+            DeleteCommand.Lock();        // 锁定命令 - 阻止新的任务开始
             DeleteCommand.UnLock();      // 解锁命令
         }
     }
