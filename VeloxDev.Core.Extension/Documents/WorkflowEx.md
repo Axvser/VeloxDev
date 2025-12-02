@@ -35,27 +35,27 @@ public class MyWorkflow : IWorkflowTreeViewModel
 var workflow = new MyWorkflow { Name = "示例工作流" };
 
 // 同步序列化
-string json = workflow.Serialize();
+string json = workflow.Mutualize();
 
 // 同步反序列化
-bool success = json.TryDeserialize(out var result);
+bool success = json.TryDeMutualize(out var result);
 ```
 
 ### 异步处理
 
 ```csharp
 // 异步序列化
-string json = await workflow.SerializeAsync();
+string json = await workflow.MutualizeAsync();
 
 // 异步反序列化（元组方式）
-var (success, result) = await json.TryDeserializeAsync<MyWorkflow>();
+var (success, result) = await json.TryDeMutualizeAsync<MyWorkflow>();
 
 // 异步反序列化（异常方式）
 try
 {
-    var result = await json.DeserializeAsync<MyWorkflow>();
+    var result = await json.DeMutualizeAsync<MyWorkflow>();
 }
-catch (JsonSerializationException ex)
+catch (JsonMutualizationException ex)
 {
     Console.WriteLine($"反序列化失败: {ex.Message}");
 }
@@ -66,12 +66,12 @@ catch (JsonSerializationException ex)
 ```csharp
 // 序列化到文件流
 using var fileStream = File.Create("workflow.json");
-await workflow.SerializeToStreamAsync(fileStream);
+await workflow.MutualizeToStreamAsync(fileStream);
 
 // 从文件流反序列化
 using var readStream = File.OpenRead("workflow.json");
-var result = await readStream.DeserializeFromStreamAsync<MyWorkflow>();
+var result = await readStream.DeMutualizeFromStreamAsync<MyWorkflow>();
 
 // 流式处理大文件
-var (success, workflow) = await readStream.TryDeserializeFromStreamAsync<MyWorkflow>();
+var (success, workflow) = await readStream.TryDeMutualizeFromStreamAsync<MyWorkflow>();
 ```

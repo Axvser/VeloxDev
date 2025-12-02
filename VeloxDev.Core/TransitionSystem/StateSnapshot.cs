@@ -44,16 +44,8 @@ namespace VeloxDev.Core.TransitionSystem
             if (CanMutualTask) scheduler.Exit();
 
             CancellationTokenSource cts = new();
+
             if (scheduler is TransitionSchedulerCore coreScheduler) coreScheduler.cts = cts;
-            root.latestCts = cts;
-
-            await root.slim.WaitAsync().ConfigureAwait(false);
-
-            if (root.latestCts != cts)
-            {
-                cts.Cancel();
-                return;
-            }
 
             Queue<IFrameInterpolatorCore> interpolators = [];
             Queue<TimeSpan> spans = [];
@@ -80,20 +72,18 @@ namespace VeloxDev.Core.TransitionSystem
                 Count++;
                 currentNode = currentNode.next;
             }
-            while (currentNode is not null && root.latestCts == cts);
+            while (currentNode is not null);
 
-            while (!cts.IsCancellationRequested && root.latestCts == cts && Count > 0)
+            while (!cts.IsCancellationRequested && Count > 0)
             {
                 try
                 {
-                    await Task.Delay(spans.Dequeue(), cts.Token).ConfigureAwait(false);
+                    await Task.Delay(spans.Dequeue(), cts.Token);
                 }
-                catch (OperationCanceledException) { root.slim.Release(); return; }
+                catch (OperationCanceledException) { return; }
                 await scheduler.Execute(interpolators.Dequeue(), states.Dequeue(), effects.Dequeue(), cts);
                 Count--;
             }
-
-            root.slim.Release();
         }
 
         internal override T1 CoreThen<T1>()
@@ -200,12 +190,8 @@ namespace VeloxDev.Core.TransitionSystem
             if (CanMutualTask) scheduler.Exit();
 
             CancellationTokenSource cts = new();
+
             if (scheduler is TransitionSchedulerCore coreScheduler) coreScheduler.cts = cts;
-            root.latestCts = cts;
-
-            await root.slim.WaitAsync().ConfigureAwait(false);
-
-            if (root.latestCts != cts) return;
 
             Queue<IFrameInterpolatorCore> interpolators = [];
             Queue<TimeSpan> spans = [];
@@ -232,20 +218,18 @@ namespace VeloxDev.Core.TransitionSystem
                 Count++;
                 currentNode = currentNode.next;
             }
-            while (currentNode is not null && root.latestCts == cts);
+            while (currentNode is not null);
 
-            while (!cts.IsCancellationRequested && root.latestCts == cts && Count > 0)
+            while (!cts.IsCancellationRequested && Count > 0)
             {
                 try
                 {
                     await Task.Delay(spans.Dequeue(), cts.Token);
                 }
-                catch (OperationCanceledException) { root.slim.Release(); return; }
+                catch (OperationCanceledException) { return; }
                 await scheduler.Execute(interpolators.Dequeue(), states.Dequeue(), effects.Dequeue(), cts);
                 Count--;
             }
-
-            root.slim.Release();
         }
 
         internal override T1 CoreThen<T1>()
@@ -314,8 +298,6 @@ namespace VeloxDev.Core.TransitionSystem
         where T : class
     {
         internal TimeSpan delay = TimeSpan.Zero;
-        internal CancellationTokenSource? latestCts = null;
-        internal SemaphoreSlim slim = new(1, 1);
 
         internal override T1 CoreAwait<T1>(TimeSpan timeSpan)
         {

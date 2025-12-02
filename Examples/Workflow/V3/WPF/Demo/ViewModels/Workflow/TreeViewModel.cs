@@ -17,7 +17,7 @@ public partial class TreeViewModel
     {
         if (parameter is not string path || !File.Exists(path)) return;
         await Helper.CloseAsync();
-        var json = this.Serialize();
+        var json = this.Mutualize();
         await File.WriteAllTextAsync(path, json, ct);
     }
 }

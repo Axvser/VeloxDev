@@ -35,7 +35,7 @@ public partial class WorkflowView : UserControl
             try
             {
                 using var stream = File.OpenRead(dialog.FileName);
-                var (Success, Result) = await WorkflowEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
+                var (Success, Result) = await WorkflowEx.TryDeMutualizeFromStreamAsync<TreeViewModel>(stream);
 
                 if (!Success || Result is null)
                 {

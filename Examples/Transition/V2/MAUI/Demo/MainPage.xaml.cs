@@ -10,18 +10,18 @@ namespace Demo
         {
             InitializeComponent();
 
-            //Animation0.Execute(Rec0);
-            //Animation1.Execute(Rec1);
-            //Animation2.Execute(Rec2);
+            Animation0.Execute(Rec0);
+            Animation1.Execute(Rec1);
+            Animation2.Execute(Rec2);
 
             // 可以直接在其它线程中启动动画，框架会自动切换到 UI 线程执行插值操作
 
-            _ = Task.Run(() =>
-            {
-                Animation0.Execute(Rec0);
-                Animation1.Execute(Rec1);
-                Animation2.Execute(Rec2);
-            });
+            //_ = Task.Run(() =>
+            //{
+            //    Animation0.Execute(Rec0);
+            //    Animation1.Execute(Rec1);
+            //    Animation2.Execute(Rec2);
+            //});
 
 
             // TransitionCore.Exit(Rec0); 安全地退出插值动画
@@ -45,8 +45,8 @@ namespace Demo
         // 延迟动画 - 3D旋转
         private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
             Transition<Rectangle>.Create()
-                .Await(TimeSpan.FromSeconds(5))
-                .Property(r => r.Rotation, 180)     // MAUI 旋转
+                .Await(TimeSpan.FromSeconds(2))
+                .Property(r => r.RotationX, 180)     // MAUI 旋转
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(2),

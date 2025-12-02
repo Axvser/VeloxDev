@@ -61,7 +61,7 @@ namespace VeloxDev.Core.TransitionSystem
         {
             if (CanMutualTask)
             {
-                if (TryGetScheduler(source, out var item))
+                if (TryGetMutualScheduler(source, out var item))
                 {
                     return item as TransitionSchedulerCore<
                         TUIThreadInspectorCore,
@@ -77,7 +77,7 @@ namespace VeloxDev.Core.TransitionSystem
                     {
                         TargetRef = new WeakReference<object>(source)
                     };
-                    Schedulers.Add(source, scheduler);
+                    MutualSchedulers.Add(source, scheduler);
                     return scheduler;
                 }
             }
@@ -149,7 +149,7 @@ namespace VeloxDev.Core.TransitionSystem
         {
             if (CanMutualTask)
             {
-                if (TryGetScheduler(source, out var item))
+                if (TryGetMutualScheduler(source, out var item))
                 {
                     return item as TransitionSchedulerCore<
                         TUIThreadInspectorCore,
@@ -163,7 +163,7 @@ namespace VeloxDev.Core.TransitionSystem
                     {
                         TargetRef = new WeakReference<object>(source)
                     };
-                    Schedulers.Add(source, scheduler);
+                    MutualSchedulers.Add(source, scheduler);
                     return scheduler;
                 }
             }
@@ -181,17 +181,41 @@ namespace VeloxDev.Core.TransitionSystem
 
     public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     {
-        public static ConditionalWeakTable<object, ITransitionSchedulerCore> Schedulers { get; protected set; } = new();
+        public static ConditionalWeakTable<object, ITransitionSchedulerCore> MutualSchedulers { get; protected set; } = new();
+        public static ConditionalWeakTable<object, List<ITransitionSchedulerCore>> NoMutualSchedulers { get; internal set; } = new();
 
-        public static bool TryGetScheduler(object source, out ITransitionSchedulerCore? scheduler)
+        public static bool TryGetMutualScheduler(object source, out ITransitionSchedulerCore? scheduler)
         {
-            if (Schedulers.TryGetValue(source, out scheduler)) return true;
+            if (MutualSchedulers.TryGetValue(source, out scheduler)) return true;
             scheduler = null;
             return false;
         }
-        public static bool RemoveScheduler(object source)
+        public static bool RemoveMutualScheduler(object source)
         {
-            return Schedulers.Remove(source);
+            if (MutualSchedulers.TryGetValue(source, out var scheduler)) scheduler.Exit();
+            return MutualSchedulers.Remove(source);
+        }
+
+        public static bool TryGetNoMutualScheduler(object source, out ITransitionSchedulerCore[] schedulers)
+        {
+            if (NoMutualSchedulers.TryGetValue(source, out var values))
+            {
+                schedulers = [.. values];
+                return true;
+            }
+            schedulers = [];
+            return false;
+        }
+        public static bool RemoveNoMutualScheduler(object source)
+        {
+            if (NoMutualSchedulers.TryGetValue(source, out var values))
+            {
+                foreach(var value in values)
+                {
+                    value.Exit();
+                }
+            }
+            return NoMutualSchedulers.Remove(source);
         }
 
         internal CancellationTokenSource? cts = null;

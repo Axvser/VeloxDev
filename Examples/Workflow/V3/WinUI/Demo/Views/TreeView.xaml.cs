@@ -102,7 +102,7 @@ namespace Demo.Views
                 try
                 {
                     using var stream = await file.OpenStreamForReadAsync();
-                    var (Success, Result) = await WorkflowEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
+                    var (Success, Result) = await WorkflowEx.TryDeMutualizeFromStreamAsync<TreeViewModel>(stream);
 
                     if (!Success || Result is null)
                     {

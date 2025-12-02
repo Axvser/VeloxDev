@@ -5,6 +5,8 @@ namespace VeloxDev.MAUI.PlatformAdapters
 {
     public class UIThreadInspector() : IUIThreadInspector
     {
+        public bool IsAppAlive() => true;
+
         public bool IsUIThread()
         {
             return Application.Current?.Dispatcher?.IsDispatchRequired == false;
@@ -61,6 +63,11 @@ namespace VeloxDev.MAUI.PlatformAdapters
             {
                 Application.Current?.Dispatcher?.Dispatch(action);
             }
+        }
+
+        public void ProtectedInvoke(bool isUIThread, Action action, object? priority = null)
+        {
+            throw new NotImplementedException();
         }
     }
 }
