@@ -35,8 +35,8 @@ namespace Demo
                 snapshot0.Effect(TransitionEffects.Empty).Execute(Rec0);
             };
         }
-
-        private void Button_Click(object sender, RoutedEventArgs e)
+        
+        private void LoadAnimations(object sender, RoutedEventArgs e)
         {
             // 直接从 snapshot 对象启动过渡动画
             // 默认对象只允许同时执行一个动画，即 CanMutualTask: true，新来的会打断正在执行的
@@ -54,8 +54,8 @@ namespace Demo
                 Animation2.Execute(Rec2);
             });
         }
-
-        private void Button_Click_1(object sender, RoutedEventArgs e)
+        
+        private void ExitAnimations(object sender, RoutedEventArgs e)
         {
             // 终结对象持有的动画
             // IncludeMutual   表示是否终结设定了 CanMutualTask: true 的动画

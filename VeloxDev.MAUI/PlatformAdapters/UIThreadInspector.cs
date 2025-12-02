@@ -5,12 +5,9 @@ namespace VeloxDev.MAUI.PlatformAdapters
 {
     public class UIThreadInspector() : UIThreadInspectorCore
     {
-        public override bool IsAppAlive() => true;
+        public override bool IsAppAlive() => Application.Current?.Windows?.Count > 0;
 
-        public override bool IsUIThread()
-        {
-            return Application.Current?.Dispatcher?.IsDispatchRequired == false;
-        }
+        public override bool IsUIThread() => Application.Current?.Dispatcher?.IsDispatchRequired == false;
 
         public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
         {

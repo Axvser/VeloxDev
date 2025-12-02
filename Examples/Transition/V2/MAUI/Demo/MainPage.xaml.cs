@@ -16,15 +16,12 @@ namespace Demo
 
             // 可以直接在其它线程中启动动画，框架会自动切换到 UI 线程执行插值操作
 
-            Loaded += (s, e) =>
+            _ = Task.Run(() =>
             {
-                _ = Task.Run(() =>
-                {
-                    Animation0.Execute(Rec0);
-                    Animation1.Execute(Rec1);
-                    Animation2.Execute(Rec2);
-                });
-            };
+                Animation0.Execute(Rec0);
+                Animation1.Execute(Rec1);
+                Animation2.Execute(Rec2);
+            });
 
             // TransitionCore.Exit(Rec0); 安全地退出插值动画
         }

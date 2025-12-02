@@ -20,7 +20,7 @@ namespace VeloxDev.Core.TransitionSystem
                 SetValues(target, frameIndex);
                 return;
             }
-            inspector.ProtectedInvoke(inspector.IsUIThread(), () => { SetValues(target, frameIndex); },priority);
+            inspector.ProtectedInvoke(inspector.IsUIThread(), () => { SetValues(target, frameIndex); }, priority);
         }
     }
 
@@ -69,10 +69,8 @@ namespace VeloxDev.Core.TransitionSystem
         {
             foreach (var kvp in Frames)
             {
-                if (CanSetValue())
-                {
-                    kvp.Key.SetValue(target, kvp.Value[frameIndex]);
-                }
+                if (!CanSetValue()) return;
+                kvp.Key.SetValue(target, kvp.Value[frameIndex]);
             }
         }
     }
