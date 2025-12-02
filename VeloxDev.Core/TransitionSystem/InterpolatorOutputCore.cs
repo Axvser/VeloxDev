@@ -13,7 +13,15 @@ namespace VeloxDev.Core.TransitionSystem
             if (priority is not TPriorityCore cvt_priority) throw new InvalidDataException($"The value of \"priority\" is not [ {typeof(TPriorityCore).FullName} ] !");
             Update(target, frameIndex, isUIAccess, cvt_priority);
         }
-        public abstract void Update(object target, int frameIndex, bool isUIAccess, TPriorityCore priority);
+        public virtual void Update(object target, int frameIndex, bool isUIAccess, TPriorityCore priority)
+        {
+            if (isUIAccess)
+            {
+                SetValues(target, frameIndex);
+                return;
+            }
+            inspector.ProtectedInvoke(inspector.IsUIThread(), () => { SetValues(target, frameIndex); },priority);
+        }
     }
 
     public abstract class InterpolatorOutputCore<TUIThreadInspectorCore> : InterpolatorOutputBase, IFrameSequence
@@ -25,7 +33,15 @@ namespace VeloxDev.Core.TransitionSystem
         {
             Update(target, frameIndex, isUIAccess);
         }
-        public abstract void Update(object target, int frameIndex, bool isUIAccess);
+        public virtual void Update(object target, int frameIndex, bool isUIAccess)
+        {
+            if (isUIAccess)
+            {
+                SetValues(target, frameIndex);
+                return;
+            }
+            inspector.ProtectedInvoke(inspector.IsUIThread(), () => { SetValues(target, frameIndex); });
+        }
     }
 
     public abstract class InterpolatorOutputBase : IFrameSequenceCore

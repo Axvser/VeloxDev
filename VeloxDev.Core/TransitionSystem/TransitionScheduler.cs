@@ -11,7 +11,7 @@ namespace VeloxDev.Core.TransitionSystem
         where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
     {
         protected TTransitionInterpreterCore? interpreter = null;
-        protected TUIThreadInspectorCore uIThreadInspector = new();
+        protected static readonly TUIThreadInspectorCore uIThreadInspector = new();
 
         public override async Task Execute(
             IFrameInterpolatorCore interpolator, 
@@ -101,7 +101,7 @@ namespace VeloxDev.Core.TransitionSystem
         where TTransitionInterpreterCore : class, ITransitionInterpreter, new()
     {
         protected TTransitionInterpreterCore? interpreter = null;
-        protected TUIThreadInspectorCore uIThreadInspector = new();
+        protected static readonly TUIThreadInspectorCore uIThreadInspector = new();
 
         public override async Task Execute(
             IFrameInterpolatorCore interpolator,
