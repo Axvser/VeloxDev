@@ -1,14 +1,17 @@
 ﻿using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
-using VeloxDev.Core.Interfaces.TransitionSystem;
+using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.WPF.PlatformAdapters
 {
-    public class UIThreadInspector() : IUIThreadInspector<DispatcherPriority>
+    public class UIThreadInspector() : UIThreadInspectorCore<DispatcherPriority>
     {
-        public bool IsUIThread() => Application.Current?.Dispatcher?.CheckAccess() ?? default;
-        public object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
+        public override bool IsAppAlive() => true;
+
+        public override bool IsUIThread() => Application.Current?.Dispatcher?.CheckAccess() ?? default;
+
+        public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
         {
             if (isUIThread)
             {
@@ -19,7 +22,8 @@ namespace VeloxDev.WPF.PlatformAdapters
                 return Application.Current?.Dispatcher?.Invoke(() => propertyInfo.GetValue(target));
             }
         }
-        public List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
+
+        public override List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
         {
             if (isUIThread)
             {
@@ -30,7 +34,8 @@ namespace VeloxDev.WPF.PlatformAdapters
                 return Application.Current?.Dispatcher?.Invoke(interpolate) ?? [];
             }
         }
-        public void ProtectedInvoke(bool isUIThread, Action action, DispatcherPriority priority)
+
+        public override void ProtectedInvoke(bool isUIThread, Action action, DispatcherPriority priority)
         {
             if (isUIThread)
             {

@@ -28,7 +28,10 @@
 		</PackageReference>
 		<PackageReference Include="System.ValueTuple" Version="4.6.1" PrivateAssets="all" />
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" PrivateAssets="all" />
-		<PackageReference Include="VeloxDev.Core" Version="3.2.2" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

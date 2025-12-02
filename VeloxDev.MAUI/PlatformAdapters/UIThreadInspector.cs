@@ -1,18 +1,18 @@
 ﻿using System.Reflection;
-using VeloxDev.Core.Interfaces.TransitionSystem;
+using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.MAUI.PlatformAdapters
 {
-    public class UIThreadInspector() : IUIThreadInspector
+    public class UIThreadInspector() : UIThreadInspectorCore
     {
-        public bool IsAppAlive() => true;
+        public override bool IsAppAlive() => true;
 
-        public bool IsUIThread()
+        public override bool IsUIThread()
         {
             return Application.Current?.Dispatcher?.IsDispatchRequired == false;
         }
 
-        public object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
+        public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
         {
             if (isUIThread)
                 return propertyInfo?.GetValue(target);
@@ -33,7 +33,7 @@ namespace VeloxDev.MAUI.PlatformAdapters
             return tcs.Task.GetAwaiter().GetResult();
         }
 
-        public List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
+        public override List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
         {
             if (isUIThread)
                 return interpolate();
@@ -53,7 +53,7 @@ namespace VeloxDev.MAUI.PlatformAdapters
             return tcs.Task.GetAwaiter().GetResult() ?? [];
         }
 
-        public void ProtectedInvoke(bool isUIThread, Action action)
+        public override void ProtectedInvoke(bool isUIThread, Action action)
         {
             if (isUIThread)
             {
@@ -63,11 +63,6 @@ namespace VeloxDev.MAUI.PlatformAdapters
             {
                 Application.Current?.Dispatcher?.Dispatch(action);
             }
-        }
-
-        public void ProtectedInvoke(bool isUIThread, Action action, object? priority = null)
-        {
-            throw new NotImplementedException();
         }
     }
 }

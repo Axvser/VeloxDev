@@ -8,6 +8,8 @@ namespace VeloxDev.Avalonia.PlatformAdapters
 {
     public class UIThreadInspector() : UIThreadInspectorCore<DispatcherPriority>
     {
+        public override bool IsAppAlive() => true;
+
         public override bool IsUIThread() => Dispatcher.UIThread?.CheckAccess() ?? default;
 
         public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
