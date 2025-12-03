@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="450"
+			 x:Class="Demo.NodeView"
+			 xmlns:local="using:Demo"
+			 xmlns:vm="using:Demo.ViewModels"
+			 x:DataType="vm:NodeViewModel">
+	<Grid RowDefinitions="12*,90*">
+
+		<Border Grid.Row="1"
+		        Padding="1"
+		        Background="#2d2d2d"
+		        CornerRadius="0,0,4,4" />
+		
+		<!-- 标题栏 -->
+		<Border Grid.Row="0"
+				Background="#2d2d2d"
+				CornerRadius="4,4,0,0"
+				BorderThickness="0,0,0,0.5"
+				BorderBrush="Gray"
+				PointerPressed="OnPointerPressed"
+				PointerReleased="OnPointerReleased"
+				PointerMoved="OnPointerMoved"
+				PointerCaptureLost="OnPointerCaptureLost">
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+				<TextBlock Text="ִ执行数 [ " Foreground="White" VerticalAlignment="Center"/>
+				<TextBlock Text="{Binding RunCount}" Foreground="White" VerticalAlignment="Center"/>
+				<TextBlock Text=" ] " Foreground="White" VerticalAlignment="Center"/>
+				<TextBlock Text="缓冲数 [ " Foreground="White" VerticalAlignment="Center"/>
+				<TextBlock Text="{Binding WaitCount}" Foreground="White" VerticalAlignment="Center"/>
+				<TextBlock Text=" ] " Foreground="White" VerticalAlignment="Center"/>
+			</StackPanel>
+		</Border>
+
+		<!-- 插槽区域 -->
+		<Grid Grid.Row="0" Grid.RowSpan="2">
+			<ItemsControl ItemsSource="{Binding Slots}">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<Canvas Width="{Binding $parent[Grid].Bounds.Width}"
+								Height="{Binding $parent[Grid].Bounds.Height}"
+								x:Name="LayoutRoot"/>
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+
+				<ItemsControl.ItemContainerTheme>
+					<ControlTheme TargetType="ContentPresenter" x:DataType="vm:SlotViewModel">
+						<Setter Property="Canvas.Left" Value="{Binding Offset.Left}" />
+						<Setter Property="Canvas.Top" Value="{Binding Offset.Top}" />
+					</ControlTheme>
+				</ItemsControl.ItemContainerTheme>
+
+				<ItemsControl.ItemTemplate>
+					<DataTemplate DataType="vm:SlotViewModel">
+						<local:SlotView Width="{Binding Size.Width}"
+										Height="{Binding Size.Height}" />
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+		</Grid>
+	</Grid>
+</UserControl>

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Demo.Views.Workflow.WorkflowView"
+             xmlns:local="clr-namespace:Demo.Views.Workflow" 
+             xmlns:vm="clr-namespace:Demo.ViewModels"
+             xmlns:workflow="clr-namespace:VeloxDev.Core.Interfaces.WorkflowSystem;assembly=VeloxDev.Core"
+             x:DataType="vm:TreeViewModel">
+
+    <ContentView.Resources>
+        <DataTemplate x:Key="NodeTemplate" x:DataType="vm:NodeViewModel">
+            <local:NodeView WidthRequest="{Binding Size.Width}"
+                           HeightRequest="{Binding Size.Height}"
+                           TranslationX="{Binding Anchor.Left}"
+                           TranslationY="{Binding Anchor.Top}"/>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ControllerTemplate" x:DataType="vm:ControllerViewModel">
+            <local:ControllerView WidthRequest="{Binding Size.Width}"
+                                HeightRequest="{Binding Size.Height}"
+                                TranslationX="{Binding Anchor.Left}"
+                                TranslationY="{Binding Anchor.Top}"/>
+        </DataTemplate>
+
+        <local:CustomTemplateSelector x:Key="NodeSelector"
+                                     Controller="{StaticResource ControllerTemplate}"
+                                     Simulator="{StaticResource NodeTemplate}"/>
+    </ContentView.Resources>
+
+    <AbsoluteLayout>
+        <!-- 按钮区域 -->
+        <Button Text="Undo" WidthRequest="100" HeightRequest="50" 
+                Command="{Binding UndoCommand}"
+                AbsoluteLayout.LayoutBounds="0,0,100,50"/>
+
+        <Button Text="Redo" WidthRequest="100" HeightRequest="50" 
+                Command="{Binding RedoCommand}"
+                AbsoluteLayout.LayoutBounds="0,100,100,50"/>
+
+        <Button Text="Save" WidthRequest="100" HeightRequest="50" 
+                Clicked="SaveWorkflow"
+                AbsoluteLayout.LayoutBounds="0,200,100,50"/>
+
+        <Button Text="Select" WidthRequest="100" HeightRequest="50" 
+                Clicked="SelectWorkflow"
+                AbsoluteLayout.LayoutBounds="0,300,100,50"/>
+
+        <Button Text="Simulate" WidthRequest="100" HeightRequest="50" 
+                Clicked="SimulateData"
+                AbsoluteLayout.LayoutBounds="0,400,100,50"/>
+
+        <!-- 节点层 - 使用 CollectionView -->
+        <CollectionView x:Name="NodesCollection"
+                       ItemsSource="{Binding Nodes}"
+                       AbsoluteLayout.LayoutBounds="0,0,1,1"
+                       AbsoluteLayout.LayoutFlags="All">
+            <!-- 使用绝对定位布局 -->
+            <CollectionView.ItemsLayout>
+                <LinearItemsLayout Orientation="Vertical" />
+            </CollectionView.ItemsLayout>
+        </CollectionView>
+
+        <!-- 连接线层 - 使用 CollectionView -->
+        <CollectionView x:Name="LinksCollection"
+                       ItemsSource="{Binding Links}"
+                       AbsoluteLayout.LayoutBounds="0,0,1,1"
+                       AbsoluteLayout.LayoutFlags="All">
+            <CollectionView.ItemsLayout>
+                <LinearItemsLayout Orientation="Vertical" />
+            </CollectionView.ItemsLayout>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="workflow:IWorkflowLinkViewModel">
+                    <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
+                                         StartTop="{Binding Sender.Anchor.Top}"
+                                         EndLeft="{Binding Receiver.Anchor.Left}"
+                                         EndTop="{Binding Receiver.Anchor.Top}"
+                                         CanRender="{Binding IsVisible}"/>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <!-- 虚拟连接线 -->
+        <local:BezierCurveView x:DataType="workflow:IWorkflowLinkViewModel"
+            BindingContext="{Binding VirtualLink}"
+                             StartLeft="{Binding Sender.Anchor.Left}"
+                             StartTop="{Binding Sender.Anchor.Top}"
+                             EndLeft="{Binding Receiver.Anchor.Left}"
+                             EndTop="{Binding Receiver.Anchor.Top}"
+                             CanRender="{Binding IsVisible}"
+                             IsVirtual="True"
+                             AbsoluteLayout.LayoutBounds="0,0,1,1"
+                             AbsoluteLayout.LayoutFlags="All"/>
+    </AbsoluteLayout>
+</ContentView>

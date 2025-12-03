@@ -1,0 +1,91 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+			 x:Class="Demo.WorkflowView"
+			 xmlns:local="using:Demo"
+			 xmlns:vm="using:Demo.ViewModels"
+			 xmlns:workflow="using:VeloxDev.Core.Interfaces.WorkflowSystem"
+			 x:DataType="vm:TreeViewModel"
+			 PointerReleased="OnPointerReleased"
+			 PointerMoved="OnPointerMoved">
+
+	<!-- 模板选择 -->
+	<UserControl.DataTemplates>
+		<DataTemplate DataType="vm:NodeViewModel">
+			<local:NodeView Width="{Binding Size.Width}"
+							Height="{Binding Size.Height}"/>
+		</DataTemplate>
+
+		<DataTemplate DataType="vm:ControllerViewModel">
+			<local:ControllerView Width="{Binding Size.Width}"
+								  Height="{Binding Size.Height}"/>
+		</DataTemplate>
+	</UserControl.DataTemplates>
+
+	<Canvas>
+		<!-- 控制按钮 -->
+		<Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}" />
+		<Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" Canvas.Top="100" />
+		<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" Canvas.Top="200" />
+		<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" Canvas.Top="300" />
+		<Button Content="Simulate" Width="100" Height="50" Click="SimulateData" Canvas.Top="400" />
+
+		<!-- 节点集合 -->
+		<ItemsControl ItemsSource="{Binding Nodes}"
+					  ZIndex="1">
+			<ItemsControl.ItemsPanel>
+				<ItemsPanelTemplate>
+					<Canvas Width="{Binding $parent[Canvas].Bounds.Width}"
+							Height="{Binding $parent[Canvas].Bounds.Height}"/>
+				</ItemsPanelTemplate>
+			</ItemsControl.ItemsPanel>
+
+			<ItemsControl.ItemContainerTheme>
+				<ControlTheme TargetType="ContentPresenter" x:DataType="workflow:IWorkflowNodeViewModel">
+					<Setter Property="Canvas.Left" Value="{Binding Anchor.Left}" />
+					<Setter Property="Canvas.Top" Value="{Binding Anchor.Top}" />
+				</ControlTheme>
+			</ItemsControl.ItemContainerTheme>
+
+		</ItemsControl>
+
+		<!-- 连接线集合 -->
+		<ItemsControl ItemsSource="{Binding Links}"
+					  ZIndex="-1">
+			<ItemsControl.ItemsPanel>
+				<ItemsPanelTemplate>
+					<Canvas Width="{Binding $parent[Canvas].Bounds.Width}"
+							Height="{Binding $parent[Canvas].Bounds.Height}"/>
+				</ItemsPanelTemplate>
+			</ItemsControl.ItemsPanel>
+			<ItemsControl.ItemTemplate>
+				<DataTemplate DataType="workflow:IWorkflowLinkViewModel">
+					<local:BezierCurveView
+					StartLeft="{Binding Sender.Anchor.Left}"
+					StartTop="{Binding Sender.Anchor.Top}"
+					EndLeft="{Binding Receiver.Anchor.Left}"
+					EndTop="{Binding Receiver.Anchor.Top}"
+					CanRender="{Binding IsVisible}"
+					Width="{Binding $parent[Canvas].Bounds.Width}"
+					Height="{Binding $parent[Canvas].Bounds.Height}"
+					IsVirtual="False" />
+				</DataTemplate>
+			</ItemsControl.ItemTemplate>
+		</ItemsControl>
+
+		<!-- 虚拟预览线 -->
+		<local:BezierCurveView x:DataType="workflow:IWorkflowLinkViewModel"
+							   DataContext="{Binding VirtualLink}"
+							   StartLeft="{Binding Sender.Anchor.Left}"
+							   StartTop="{Binding Sender.Anchor.Top}"
+							   EndLeft="{Binding Receiver.Anchor.Left}"
+							   EndTop="{Binding Receiver.Anchor.Top}"
+							   CanRender="{Binding IsVisible}"
+							   Width="{Binding $parent[Canvas].Bounds.Width}"
+							   Height="{Binding $parent[Canvas].Bounds.Height}"
+							   IsVirtual="True"
+							   ZIndex="0" />
+	</Canvas>
+</UserControl>
