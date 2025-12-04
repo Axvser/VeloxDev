@@ -1,5 +1,4 @@
-﻿using System.Transactions;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using VeloxDev.Core.TransitionSystem;
