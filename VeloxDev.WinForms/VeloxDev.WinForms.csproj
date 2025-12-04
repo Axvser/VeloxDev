@@ -1,11 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>netframework4.6.1;net5.0-windows</TargetFrameworks>
+		<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<UseWindowsForms>true</UseWindowsForms>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<LangVersion>latest</LangVersion>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<Title>VeloxDev.WinForms</Title>
+		<Version>1.0.0</Version>
+		<Authors>Axvser</Authors>
+		<Description>VeloxDev.Core + WinForms</Description>
 	</PropertyGroup>
 
 	<ItemGroup>
