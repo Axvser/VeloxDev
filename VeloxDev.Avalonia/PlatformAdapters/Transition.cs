@@ -105,7 +105,6 @@ namespace VeloxDev.Avalonia.PlatformAdapters
     }
 
     public class Transition<T> : TransitionCore<T, Transition<T>.StateSnapshot>
-        where T : class
     {
         public class StateSnapshot : StateSnapshotCore<
             T,
@@ -206,11 +205,6 @@ namespace VeloxDev.Avalonia.PlatformAdapters
                 return this;
             }
             public StateSnapshot Property(Expression<Func<T, float>> propertyLambda, float newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-            public StateSnapshot Property(Expression<Func<T, long>> propertyLambda, long newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;

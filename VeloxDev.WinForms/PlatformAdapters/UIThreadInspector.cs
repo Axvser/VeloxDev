@@ -8,7 +8,7 @@ namespace VeloxDev.WinForms.PlatformAdapters
         private static SynchronizationContext? _uiSyncContext;
         private static int _uiThreadId = -1;
         private static bool _isAppRunning = false;
-        
+
         public static void CaptureUIThread()
         {
             if (_uiThreadId != -1)

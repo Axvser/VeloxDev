@@ -1,4 +1,5 @@
 ﻿using System.Linq.Expressions;
+using System.Numerics;
 using System.Reflection;
 using VeloxDev.Core.TransitionSystem;
 
@@ -97,7 +98,6 @@ namespace VeloxDev.WinForms.PlatformAdapters
     }
 
     public class Transition<T> : TransitionCore<T, Transition<T>.StateSnapshot>
-        where T : class
     {
         public class StateSnapshot : StateSnapshotCore<
             T,
@@ -107,64 +107,13 @@ namespace VeloxDev.WinForms.PlatformAdapters
             UIThreadInspector,
             TransitionInterpreter>
         {
-            public StateSnapshot Property(Expression<Func<T, double>> propertyLambda, double newValue)
+            public StateSnapshot Effect(Action<TransitionEffect> effectSetter)
             {
-                state.SetValue(propertyLambda, newValue);
-                return this;
+                return CoreEffect<StateSnapshot, TransitionEffect>(effectSetter);
             }
-
-            public StateSnapshot Property(Expression<Func<T, int>> propertyLambda, int newValue)
+            public StateSnapshot Effect(TransitionEffect effect)
             {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-
-            public StateSnapshot Property(Expression<Func<T, float>> propertyLambda, float newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-
-            public StateSnapshot Property(Expression<Func<T, Color>> propertyLambda, Color newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-
-            public StateSnapshot Property(Expression<Func<T, Point>> propertyLambda, Point newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-
-            public StateSnapshot Property(Expression<Func<T, PointF>> propertyLambda, PointF newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-
-            public StateSnapshot Property(Expression<Func<T, Size>> propertyLambda, Size newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-
-            public StateSnapshot Property(Expression<Func<T, SizeF>> propertyLambda, SizeF newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-
-            public StateSnapshot Property(Expression<Func<T, Rectangle>> propertyLambda, Rectangle newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-
-            public StateSnapshot Property(Expression<Func<T, RectangleF>> propertyLambda, RectangleF newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
+                return CoreEffect<StateSnapshot, TransitionEffect>(effect);
             }
 
             public StateSnapshot Property(Expression<Func<T, Padding>> propertyLambda, Padding newValue)
@@ -173,11 +122,79 @@ namespace VeloxDev.WinForms.PlatformAdapters
                 return this;
             }
 
-            public StateSnapshot Property(Expression<Func<T, Font>> propertyLambda, Font newValue)
+            public StateSnapshot Property(Expression<Func<T, double>> propertyLambda, double newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
+            public StateSnapshot Property(Expression<Func<T, float>> propertyLambda, float newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, decimal>> propertyLambda, decimal newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, Point>> propertyLambda, Point newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, PointF>> propertyLambda, PointF newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, Size>> propertyLambda, Size newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, SizeF>> propertyLambda, SizeF newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, Color>> propertyLambda, Color newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, Rectangle>> propertyLambda, Rectangle newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, RectangleF>> propertyLambda, RectangleF newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+
+#if NETCOREAPP || NETFRAMEWORK || NET
+            public StateSnapshot Property(Expression<Func<T, Vector2>> propertyLambda, Vector2 newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, Vector3>> propertyLambda, Vector3 newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, Vector4>> propertyLambda, Vector4 newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+            public StateSnapshot Property(Expression<Func<T, Quaternion>> propertyLambda, Quaternion newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
+#endif
         }
     }
 }

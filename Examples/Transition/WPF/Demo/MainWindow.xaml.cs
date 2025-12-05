@@ -78,6 +78,7 @@ public partial class MainWindow
     // 简单动画
     private static readonly Transition<Rectangle>.StateSnapshot Animation0 =
         Transition<Rectangle>.Create()
+            .Property(r => r.Opacity, 0)
             .Property(r => r.RenderTransform, [new TranslateTransform(800, 0)])
             .Effect(new TransitionEffect()
             {

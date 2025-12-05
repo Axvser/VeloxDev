@@ -199,11 +199,6 @@ namespace VeloxDev.WPF.PlatformAdapters
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, long>> propertyLambda, long newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
             public StateSnapshot Property(Expression<Func<T, decimal>> propertyLambda, decimal newValue)
             {
                 state.SetValue(propertyLambda, newValue);
