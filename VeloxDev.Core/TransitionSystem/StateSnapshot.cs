@@ -118,7 +118,7 @@ namespace VeloxDev.Core.TransitionSystem
             state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
             return result;
         }
-        internal override T1 CoreEffect<T1, T2>(T2 effect)
+        protected override T1 CoreEffect<T1, T2>(T2 effect)
         {
             if (this is not T1 result)
             {
@@ -131,7 +131,7 @@ namespace VeloxDev.Core.TransitionSystem
             this.effect = convertedEffect;
             return result;
         }
-        internal override T1 CoreEffect<T1, T2>(Action<T2> effectSetter)
+        protected override T1 CoreEffect<T1, T2>(Action<T2> effectSetter)
         {
             if (this is not T1 result)
             {
@@ -264,7 +264,7 @@ namespace VeloxDev.Core.TransitionSystem
             state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
             return result;
         }
-        internal override T1 CoreEffect<T1, T2>(T2 effect)
+        protected override T1 CoreEffect<T1, T2>(T2 effect)
         {
             if (this is not T1 result)
             {
@@ -277,7 +277,7 @@ namespace VeloxDev.Core.TransitionSystem
             this.effect = convertedEffect;
             return result;
         }
-        internal override T1 CoreEffect<T1, T2>(Action<T2> effectSetter)
+        protected override T1 CoreEffect<T1, T2>(Action<T2> effectSetter)
         {
             if (this is not T1 result)
             {
@@ -316,8 +316,8 @@ namespace VeloxDev.Core.TransitionSystem
         internal abstract T CoreProperty<T, TInterpolable>(Expression<Func<T, TInterpolable>> propertyLambda, TInterpolable newValue)
             where T : class
             where TInterpolable : IInterpolable;
-        internal abstract T1 CoreEffect<T1, T2>(T2 effect) where T2 : ITransitionEffectCore;
-        internal abstract T1 CoreEffect<T1, T2>(Action<T2> effectSetter) where T2 : ITransitionEffectCore, new();
+        protected abstract T1 CoreEffect<T1, T2>(T2 effect) where T2 : ITransitionEffectCore;
+        protected abstract T1 CoreEffect<T1, T2>(Action<T2> effectSetter) where T2 : ITransitionEffectCore, new();
         internal abstract IFrameState CoreRecordState();
         internal abstract T CoreAwait<T>(TimeSpan timeSpan)
             where T : StateSnapshotCore, new();

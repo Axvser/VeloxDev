@@ -166,10 +166,10 @@ public partial class MainWindow
                         new GradientStop(Colors.Lime, 1)
                     }
                 })
-            .Effect(new TransitionEffect()
+            .Effect((x) =>
             {
-                Duration = TimeSpan.FromSeconds(4),
-                FPS = 144,
-                Ease = Eases.Sine.In,
+                x.Duration = TimeSpan.FromSeconds(4);
+                x.FPS = 144;
+                x.Ease = Eases.Sine.In;
             });
 }

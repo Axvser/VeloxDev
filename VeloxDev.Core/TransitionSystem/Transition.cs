@@ -23,30 +23,6 @@ namespace VeloxDev.Core.TransitionSystem
             return snapshot.CoreAwaitThen<T>(timeSpan);
         }
 
-        public static T Effect<T, T1>(this T snapshot, T1 effect)
-            where T : StateSnapshotCore, new()
-            where T1 : ITransitionEffectCore
-        {
-            snapshot.CoreEffect<T, T1>(effect);
-            return snapshot;
-        }
-        public static T Effect<T, T1>(this T snapshot, Action<T1> effectSetter)
-            where T : StateSnapshotCore, new()
-            where T1 : ITransitionEffectCore, new()
-        {
-            snapshot.CoreEffect<T, T1>(effectSetter);
-            return snapshot;
-        }
-
-        public static T Property<T, T1, T2>(this T snapshot, Expression<Func<T1, T2>> expression, T2 value)
-            where T : StateSnapshotCore
-            where T1 : class
-            where T2 : IInterpolable
-        {
-            snapshot.CoreProperty<T1, T2>(expression, value);
-            return snapshot;
-        }
-
         public static void Execute<T>(this T snapshot, object target, bool CanMutualTask = true)
             where T : StateSnapshotCore
         {

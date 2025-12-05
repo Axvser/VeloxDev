@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Avalonia.PlatformAdapters
@@ -114,6 +115,20 @@ namespace VeloxDev.Avalonia.PlatformAdapters
             TransitionInterpreter,
             DispatcherPriority>
         {
+            public StateSnapshot Effect(Action<TransitionEffect> effectSetter)
+            {
+                return CoreEffect<StateSnapshot, TransitionEffect>(effectSetter);
+            }
+            public StateSnapshot Effect(TransitionEffect effect)
+            {
+                return CoreEffect<StateSnapshot, TransitionEffect>(effect);
+            }
+
+            public StateSnapshot Property(Expression<Func<T, IInterpolable?>> propertyLambda, IInterpolable value)
+            {
+                state.SetValue(propertyLambda, value);
+                return this;
+            }
             public StateSnapshot Property(Expression<Func<T, double>> propertyLambda, double newValue)
             {
                 state.SetValue(propertyLambda, newValue);
