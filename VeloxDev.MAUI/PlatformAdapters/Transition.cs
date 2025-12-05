@@ -1,6 +1,7 @@
 ﻿using Microsoft.Maui.Controls.Shapes;
 using System.Linq.Expressions;
 using System.Reflection;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.MAUI.PlatformAdapters
@@ -114,6 +115,11 @@ namespace VeloxDev.MAUI.PlatformAdapters
             public StateSnapshot Effect(TransitionEffect effect)
             {
                 return CoreEffect<StateSnapshot, TransitionEffect>(effect);
+            }
+            public StateSnapshot Property(Expression<Func<T, IInterpolable?>> propertyLambda, IInterpolable? newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
             }
 
             public StateSnapshot Property(Expression<Func<T, Brush?>> propertyLambda, Brush? newValue)

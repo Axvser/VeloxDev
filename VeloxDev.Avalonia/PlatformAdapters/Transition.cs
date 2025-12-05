@@ -3,11 +3,10 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Numerics;
 using System.Reflection;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Avalonia.PlatformAdapters
@@ -123,6 +122,11 @@ namespace VeloxDev.Avalonia.PlatformAdapters
             {
                 return CoreEffect<StateSnapshot, TransitionEffect>(effect);
             }
+            public StateSnapshot Property(Expression<Func<T, IInterpolable?>> propertyLambda, IInterpolable? newValue)
+            {
+                state.SetValue(propertyLambda, newValue);
+                return this;
+            }
 
             public StateSnapshot Property(Expression<Func<T, ITransform?>> propertyLambda, ICollection<Transform> newValue)
             {
@@ -148,7 +152,7 @@ namespace VeloxDev.Avalonia.PlatformAdapters
                 state.SetValue(propertyLambda, value);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, global::Avalonia.Point?>> propertyLambda, global::Avalonia.Point? newValue)
+            public StateSnapshot Property(Expression<Func<T, Point?>> propertyLambda, Point? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
@@ -158,7 +162,7 @@ namespace VeloxDev.Avalonia.PlatformAdapters
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, global::Avalonia.Size?>> propertyLambda, global::Avalonia.Size? newValue)
+            public StateSnapshot Property(Expression<Func<T, Size?>> propertyLambda, Size? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
@@ -188,7 +192,7 @@ namespace VeloxDev.Avalonia.PlatformAdapters
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, global::Avalonia.Media.Color?>> propertyLambda, global::Avalonia.Media.Color? newValue)
+            public StateSnapshot Property(Expression<Func<T, Color?>> propertyLambda, Color? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
@@ -199,74 +203,74 @@ namespace VeloxDev.Avalonia.PlatformAdapters
                 return this;
             }
 
-            public StateSnapshot Property(Expression<Func<T, double>> propertyLambda, double newValue)
+            public StateSnapshot Property(Expression<Func<T, double?>> propertyLambda, double? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, float>> propertyLambda, float newValue)
+            public StateSnapshot Property(Expression<Func<T, float?>> propertyLambda, float? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, decimal>> propertyLambda, decimal newValue)
+            public StateSnapshot Property(Expression<Func<T, decimal?>> propertyLambda, decimal? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Drawing.Point>> propertyLambda, System.Drawing.Point newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.Point?>> propertyLambda, System.Drawing.Point? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, PointF>> propertyLambda, PointF newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.PointF?>> propertyLambda, System.Drawing.PointF? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Drawing.Size>> propertyLambda, System.Drawing.Size newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.Size?>> propertyLambda, System.Drawing.Size? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, SizeF>> propertyLambda, SizeF newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.SizeF?>> propertyLambda, System.Drawing.SizeF? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Drawing.Color>> propertyLambda, System.Drawing.Color newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.Color?>> propertyLambda, System.Drawing.Color? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Rectangle>> propertyLambda, Rectangle newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.Rectangle?>> propertyLambda, System.Drawing.Rectangle? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, RectangleF>> propertyLambda, RectangleF newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.RectangleF?>> propertyLambda, System.Drawing.RectangleF? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
 
 #if NETCOREAPP || NETFRAMEWORK || NET
-            public StateSnapshot Property(Expression<Func<T, Vector2>> propertyLambda, Vector2 newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Numerics.Vector2?>> propertyLambda, System.Numerics.Vector2? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Vector3>> propertyLambda, Vector3 newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Numerics.Vector3?>> propertyLambda, System.Numerics.Vector3? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Vector4>> propertyLambda, Vector4 newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Numerics.Vector4?>> propertyLambda, System.Numerics.Vector4? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Numerics.Quaternion>> propertyLambda, System.Numerics.Quaternion newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Numerics.Quaternion?>> propertyLambda, System.Numerics.Quaternion? newValue)
             {
                 state.SetValue(propertyLambda, newValue);
                 return this;
