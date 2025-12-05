@@ -7,7 +7,6 @@
 ## 📚 目录
 
 * [✨ 概览](#-概览)
-* [🧩 模块结构](#-模块结构)
 
   * [🏗️ VeloxDev.Core](#veloxdevcore)
   * [🪶 MVVM Toolkit](#mvvm-toolkit)
@@ -17,8 +16,6 @@
   * [🎨 ThemeManager](#-thememanager)
   * [⚙️ MonoBehaviour](#-monobehaviour)
   * [📦 AOT Reflection](#-aot-reflection)
-
-* [🔄 更新](#-更新)
 
 ---
 
@@ -35,15 +32,11 @@
 | WinForms | VeloxDev.WinForms | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinForms?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinForms/) | ❌ | 适配包 |
 | .NET | VeloxDev.Core.Extension | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Extension?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core.Extension/) | ✔ | 功能扩展包 |
 
-> ② 若您或者您的项目满足下述条件，推荐直接安装核心库 
+> ② 若您或者您的项目满足下述条件，可仅安装核心库
 >
 > 1. 您更喜欢了解抽象层的结构设计与实现，并亲自实现适配层
 >
-> 2. 您对于 Source Generator 如何辅助实现核心功能这一课题感兴趣
->
-> 3. 您的项目并不依赖任何UI框架，但希望使用 VeloxDev.Core 提供的通用功能
->
-> 4. 您的项目依赖于UI框架，但您不打算使用 `动画` 、`主题渐变切换` 和 `Views交互代码生成` 这些必须有适配层支持的功能
+> 2. 您不打算使用 `动画` 、`主题渐变切换` 和 `Views交互代码生成` 这些必须有适配层支持的功能
 
 |  框架  | 项目 | NuGet |  依赖第三方库  | 备注 |
 |--------|------|-------|----------------|------|
@@ -52,6 +45,8 @@
 ---
 
 ## ✨ 概览
+
+> Examples 目录下编写了对应的 demo
 
 | 功能特性 | 描述 | 是否需要适配层 | 说明 |
 |---------|------|---------------|-----------|
@@ -62,17 +57,6 @@
 | 🎨 Theme | 动态主题切换和样式管理 | ✔ | 需要适配不同平台的样式/资源系统 |
 | ⚙️ MonoBehaviour | 按帧同步的循环刷新机制 | ❌ | |
 | 📦 AOT - Reflect | 在AOT编译项目中生成反射调用代码 | ❌ | |
-
----
-
-## 🧩 模块结构
-
-### 🏗️ VeloxDev.Core
-
-核心抽象层，可快速衍生出适配不同 UI 框架的子工具集，例如 VeloxDev.WPF / VeloxDev.Avalonia
-- 一些核心功能已经有抽象实现，每次升级 VeloxDev.Core，其子工具集都可直接受益
-- 广泛地运用 Source Generator 优化编码体验
-- 抽象层保证了API在不同UI框架间的一致性
 
 ---
 
@@ -292,22 +276,3 @@ public static void Init()
     _ = typeof(global::Player).GetProperties(...);
 }
 ```
-
-### 🔄 更新
-
-<details>
-<summary>Version 3.3.0</summary>
-
-## Transition 架构优化
-
-> 具体事项
-> 
-> 1. UIThreadInspector 在运行过程中占用更少内存，提供更安全的属性更新机制 （ 特别是对于 WinUI ）
-> 
-> 2. StateSnapshot 链式动画执行过程重构，提供更符合直觉的行为
-> 
-> 3. 适配层现已不再需要实现 InterpolatorOutputCore 的 Update 函数
->
-> 4. TransitionCore 提供更好的 Exit 机制，并且允许获取动画的 Scheduler
-
-</details>
