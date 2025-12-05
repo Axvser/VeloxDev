@@ -78,6 +78,10 @@ namespace Demo
             Transition<Rectangle>.Create()
                 .Property(r => r.TranslationX, 800)  // MAUI 的平移X
                 .Property(r => r.TranslationY, 0)   // MAUI 的平移Y
+                .Property(r => r.Background, new LinearGradientBrush()
+                {
+                    GradientStops = [new GradientStop(Colors.Red, 0), new GradientStop(Colors.Lime, 1)]
+                })
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(2),

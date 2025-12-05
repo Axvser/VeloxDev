@@ -4,14 +4,14 @@
 		<NoWarn>1573</NoWarn>
 		<NoWarn>1591</NoWarn>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
-		<TargetFrameworks>netframework4.6.2;net5.0-windows</TargetFrameworks>
+		<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<LangVersion>latest</LangVersion>
 		<UseWPF>true</UseWPF>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WPF</Title>
-		<Version>3.3.1</Version>
+		<Version>3.3.4</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WPF</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
@@ -28,10 +28,7 @@
 		</PackageReference>
 		<PackageReference Include="System.ValueTuple" Version="4.6.1" PrivateAssets="all" />
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" PrivateAssets="all" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<PackageReference Include="VeloxDev.Core" Version="3.3.4" />
 	</ItemGroup>
 
 	<ItemGroup>
