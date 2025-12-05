@@ -35,7 +35,6 @@ namespace VeloxDev.Core.TransitionSystem
     }
 
     public class TransitionCore<TTarget, TStateSnapshotCore> : TransitionCore
-        where TTarget : class
         where TStateSnapshotCore : new()
     {
         public static TStateSnapshotCore Create()

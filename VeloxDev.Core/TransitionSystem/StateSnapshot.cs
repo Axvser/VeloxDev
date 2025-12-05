@@ -1,4 +1,6 @@
-﻿using System.Linq.Expressions;
+﻿using System.Drawing;
+using System.Linq.Expressions;
+using System.Numerics;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
@@ -10,7 +12,6 @@ namespace VeloxDev.Core.TransitionSystem
         TInterpolatorCore,
         TUIThreadInspectorCore,
         TTransitionInterpreterCore> : StateSnapshotCore<T>
-        where T : class
         where TStateCore : IFrameState, new()
         where TEffectCore : ITransitionEffectCore, new()
         where TInterpolatorCore : IFrameInterpolator, new()
@@ -156,7 +157,6 @@ namespace VeloxDev.Core.TransitionSystem
         TUIThreadInspectorCore,
         TTransitionInterpreterCore,
         TPriorityCore> : StateSnapshotCore<T>
-        where T : class
         where TStateCore : IFrameState, new()
         where TEffectCore : ITransitionEffect<TPriorityCore>, new()
         where TInterpolatorCore : IFrameInterpolator<TPriorityCore>, new()
@@ -295,7 +295,6 @@ namespace VeloxDev.Core.TransitionSystem
     }
 
     public abstract class StateSnapshotCore<T> : StateSnapshotCore
-        where T : class
     {
         internal TimeSpan delay = TimeSpan.Zero;
 

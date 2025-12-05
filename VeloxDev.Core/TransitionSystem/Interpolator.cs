@@ -149,6 +149,7 @@ namespace VeloxDev.Core.TransitionSystem
         {
             RegisterInterpolator(typeof(double), new DoubleInterpolator());
             RegisterInterpolator(typeof(float), new FloatInterpolator());
+            RegisterInterpolator(typeof(long), new LongInterpolator());
             RegisterInterpolator(typeof(decimal), new DecimalInterpolator());
             RegisterInterpolator(typeof(Point), new PointInterpolator());
             RegisterInterpolator(typeof(PointF), new PointFInterpolator());
@@ -157,7 +158,7 @@ namespace VeloxDev.Core.TransitionSystem
             RegisterInterpolator(typeof(Color), new ColorInterpolator());
             RegisterInterpolator(typeof(Rectangle), new RectangleInterpolator());
             RegisterInterpolator(typeof(RectangleF), new RectangleFInterpolator());
-#if NETCOREAPP || NETFRAMEWORK
+#if NETCOREAPP || NETFRAMEWORK || NET
             RegisterInterpolator(typeof(Vector2), new Vector2Interpolator());
             RegisterInterpolator(typeof(Vector3), new Vector3Interpolator());
             RegisterInterpolator(typeof(Vector4), new Vector4Interpolator());
