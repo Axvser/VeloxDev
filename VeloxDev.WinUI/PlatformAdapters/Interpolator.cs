@@ -2,7 +2,9 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using VeloxDev.Core.TransitionSystem;
+using VeloxDev.WinUI.PlatformAdapters.Interpolators;
 using Windows.Foundation;
+using Windows.UI;
 
 namespace VeloxDev.WinUI.PlatformAdapters
 {
@@ -10,13 +12,16 @@ namespace VeloxDev.WinUI.PlatformAdapters
     {
         static Interpolator()
         {
-            RegisterInterpolator(typeof(double), new NativeInterpolators.DoubleInterpolator());
-            RegisterInterpolator(typeof(Brush), new NativeInterpolators.BrushInterpolator());
-            RegisterInterpolator(typeof(Thickness), new NativeInterpolators.ThicknessInterpolator());
-            RegisterInterpolator(typeof(Point), new NativeInterpolators.PointInterpolator());
-            RegisterInterpolator(typeof(CornerRadius), new NativeInterpolators.CornerRadiusInterpolator());
-            RegisterInterpolator(typeof(Transform), new NativeInterpolators.TransformInterpolator());
-            RegisterInterpolator(typeof(Projection), new NativeInterpolators.ProjectionInterpolator());
+            RegisterInterpolator(typeof(Brush), new BrushInterpolator());
+            RegisterInterpolator(typeof(Thickness), new ThicknessInterpolator());
+            RegisterInterpolator(typeof(Point), new PointInterpolator());
+            RegisterInterpolator(typeof(CornerRadius), new CornerRadiusInterpolator());
+            RegisterInterpolator(typeof(Transform), new TransformInterpolator());
+            RegisterInterpolator(typeof(Projection), new ProjectionInterpolator());
+            RegisterInterpolator(typeof(Size), new SizeInterpolator());
+            RegisterInterpolator(typeof(Rect), new RectInterpolator());
+            RegisterInterpolator(typeof(GridLength), new GridLengthInterpolator());
+            RegisterInterpolator(typeof(Color), new ColorInterpolator());
         }
     }
 }

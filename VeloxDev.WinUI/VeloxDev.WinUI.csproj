@@ -22,7 +22,9 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.0.0" />
-		<PackageReference Include="VeloxDev.Core" Version="3.3.0" />
+	</ItemGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
