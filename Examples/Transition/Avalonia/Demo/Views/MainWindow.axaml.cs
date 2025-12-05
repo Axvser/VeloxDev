@@ -148,11 +148,11 @@ public partial class MainWindow
                 })
             .Effect(new TransitionEffect()
             {
-                Duration = TimeSpan.FromSeconds(4),
+                Duration = TimeSpan.FromSeconds(3),
                 IsAutoReverse = true,
                 FPS = 144,
                 Ease = Eases.Circ.InOut,
-                LoopTime = 4,
+                LoopTime = 2,
             })
             .AwaitThen(TimeSpan.FromSeconds(5))
             .Property(r => r.Fill,
@@ -163,13 +163,13 @@ public partial class MainWindow
                     GradientStops =
                     {
                         new GradientStop(Colors.Yellow, 0),
-                        new GradientStop(Colors.Orange, 1)
+                        new GradientStop(Colors.Lime, 1)
                     }
                 })
             .Effect(new TransitionEffect()
             {
                 Duration = TimeSpan.FromSeconds(4),
                 FPS = 144,
-                Ease = Eases.Sine.In
+                Ease = Eases.Sine.In,
             });
 }

@@ -83,7 +83,6 @@ namespace VeloxDev.Core.TransitionSystem
             finally
             {
                 effect.InvokeFinally(target, Args);
-                Exit();
             }
         }
 
@@ -181,7 +180,6 @@ namespace VeloxDev.Core.TransitionSystem
             finally
             {
                 effect.InvokeFinally(target, Args);
-                Exit();
             }
         }
 
@@ -212,16 +210,16 @@ namespace VeloxDev.Core.TransitionSystem
 
         public virtual void Exit()
         {
-            var oldCts = Interlocked.Exchange(ref cts, null);
-            if (oldCts != null && !oldCts.IsCancellationRequested)
-            {
-                oldCts.Cancel();
-            }
             Dispose();
         }
 
         public virtual void Dispose()
         {
+            var oldCts = Interlocked.Exchange(ref cts, null);
+            if (oldCts != null && !oldCts.IsCancellationRequested)
+            {
+                oldCts.Cancel();
+            }
             GC.SuppressFinalize(this);
         }
     }
