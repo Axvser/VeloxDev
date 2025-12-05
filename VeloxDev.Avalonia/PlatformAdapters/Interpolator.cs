@@ -1,6 +1,7 @@
 ﻿using Avalonia;
 using Avalonia.Media;
 using Avalonia.Threading;
+using System;
 using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Avalonia.PlatformAdapters
@@ -9,7 +10,6 @@ namespace VeloxDev.Avalonia.PlatformAdapters
     {
         static Interpolator()
         {
-            RegisterInterpolator(typeof(double), new NativeInterpolators.DoubleInterpolator());
             RegisterInterpolator(typeof(IBrush), new NativeInterpolators.BrushInterpolator());
             RegisterInterpolator(typeof(Thickness), new NativeInterpolators.ThicknessInterpolator());
             RegisterInterpolator(typeof(Point), new NativeInterpolators.PointInterpolator());

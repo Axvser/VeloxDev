@@ -14,9 +14,9 @@ namespace VeloxDev.Core.TransitionSystem
         protected static readonly TUIThreadInspectorCore uIThreadInspector = new();
 
         public override async Task Execute(
-            IFrameInterpolatorCore interpolator, 
-            IFrameState state, 
-            ITransitionEffectCore effect, 
+            IFrameInterpolatorCore interpolator,
+            IFrameState state,
+            ITransitionEffectCore effect,
             CancellationTokenSource? externCts = default)
         {
             if (interpolator is not IFrameInterpolator<TPriorityCore> cvt_interpolator) return;
@@ -25,9 +25,9 @@ namespace VeloxDev.Core.TransitionSystem
         }
 
         public virtual async Task Execute(
-            IFrameInterpolator<TPriorityCore> interpolator, 
-            IFrameState state, 
-            ITransitionEffect<TPriorityCore> effect, 
+            IFrameInterpolator<TPriorityCore> interpolator,
+            IFrameState state,
+            ITransitionEffect<TPriorityCore> effect,
             CancellationTokenSource? externCts = default)
         {
             if (targetref is null || !targetref.TryGetTarget(out var target))
@@ -210,7 +210,7 @@ namespace VeloxDev.Core.TransitionSystem
         {
             if (NoMutualSchedulers.TryGetValue(source, out var values))
             {
-                foreach(var value in values)
+                foreach (var value in values)
                 {
                     value.Exit();
                 }

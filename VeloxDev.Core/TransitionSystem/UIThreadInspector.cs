@@ -23,7 +23,7 @@ namespace VeloxDev.Core.TransitionSystem
             ProtectedInvoke(isUIThread, action);
         }
     }
-    
+
     public abstract class UIThreadInspectorBase : IUIThreadInspectorCore
     {
         public abstract bool IsAppAlive();

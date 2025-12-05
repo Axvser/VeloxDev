@@ -10,33 +10,6 @@ namespace VeloxDev.Avalonia.PlatformAdapters
 {
     internal static class NativeInterpolators
     {
-        public class DoubleInterpolator : IValueInterpolator
-        {
-            public List<object?> Interpolate(object? start, object? end, int steps)
-            {
-                var d1 = (double)(start ?? 0);
-                var d2 = (double)(end ?? d1);
-                if (steps == 1)
-                {
-                    return [d2];
-                }
-
-                List<object?> result = new(steps);
-
-                var delta = d2 - d1;
-
-                for (var i = 0; i < steps; i++)
-                {
-                    var t = (double)(i + 1) / steps;
-                    result.Add(d1 + t * delta);
-                }
-                result[0] = start;
-                result[steps - 1] = end;
-
-                return result;
-            }
-        }
-
         public class ThicknessInterpolator : IValueInterpolator
         {
             public List<object?> Interpolate(object? start, object? end, int steps)

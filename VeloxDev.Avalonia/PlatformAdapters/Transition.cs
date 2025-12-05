@@ -124,19 +124,9 @@ namespace VeloxDev.Avalonia.PlatformAdapters
                 return CoreEffect<StateSnapshot, TransitionEffect>(effect);
             }
 
-            public StateSnapshot Property(Expression<Func<T, IInterpolable?>> propertyLambda, IInterpolable value)
+            public StateSnapshot Property(Expression<Func<T, object?>> propertyLambda, object value)
             {
                 state.SetValue(propertyLambda, value);
-                return this;
-            }
-            public StateSnapshot Property(Expression<Func<T, double>> propertyLambda, double newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-            public StateSnapshot Property(Expression<Func<T, IBrush?>> propertyLambda, IBrush newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
                 return this;
             }
             public StateSnapshot Property(Expression<Func<T, ITransform?>> propertyLambda, ICollection<Transform> newValue)
@@ -146,21 +136,6 @@ namespace VeloxDev.Avalonia.PlatformAdapters
                     Children = [.. newValue]
                 };
                 state.SetValue(propertyLambda, transformGroup);
-                return this;
-            }
-            public StateSnapshot Property(Expression<Func<T, Point>> propertyLambda, Point newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-            public StateSnapshot Property(Expression<Func<T, CornerRadius>> propertyLambda, CornerRadius newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
-                return this;
-            }
-            public StateSnapshot Property(Expression<Func<T, Thickness>> propertyLambda, Thickness newValue)
-            {
-                state.SetValue(propertyLambda, newValue);
                 return this;
             }
         }

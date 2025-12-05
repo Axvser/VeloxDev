@@ -1,5 +1,4 @@
-﻿using System.Linq.Expressions;
-using VeloxDev.Core.Interfaces.TransitionSystem;
+﻿using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
@@ -89,7 +88,7 @@ namespace VeloxDev.Core.TransitionSystem
             {
                 schedulers.AddRange(nomutualSchedulers);
             }
-            foreach(var scheduler in  schedulers)
+            foreach (var scheduler in schedulers)
             {
                 scheduler.Exit();
             }

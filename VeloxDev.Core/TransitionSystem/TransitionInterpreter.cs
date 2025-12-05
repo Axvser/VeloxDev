@@ -111,10 +111,10 @@ namespace VeloxDev.Core.TransitionSystem
         where TOutputCore : IFrameSequence
     {
         public override async Task Execute(
-            object target, 
-            IFrameSequenceCore frameSequence, 
-            ITransitionEffectCore effect, 
-            bool isUIAccess, 
+            object target,
+            IFrameSequenceCore frameSequence,
+            ITransitionEffectCore effect,
+            bool isUIAccess,
             CancellationTokenSource cts)
         {
             if (frameSequence is not IFrameSequence cvt_frameSequence) return;

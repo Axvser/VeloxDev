@@ -1,5 +1,8 @@
 ﻿using System.Collections.Concurrent;
+using System.Drawing;
+using System.Numerics;
 using VeloxDev.Core.Interfaces.TransitionSystem;
+using VeloxDev.Core.TransitionSystem.NativeInterpolators;
 
 namespace VeloxDev.Core.TransitionSystem
 {
@@ -17,7 +20,7 @@ namespace VeloxDev.Core.TransitionSystem
         {
             if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to ITransitionEffect<TPriorityCore> !");
             if (inspector is not IUIThreadInspector<TPriorityCore> cvt_inspector) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to IUIThreadInspector<TPriorityCore> !");
-            
+
             return Interpolate(target, state, cvt_effect, isUIAccess, cvt_inspector);
         }
 
@@ -84,7 +87,7 @@ namespace VeloxDev.Core.TransitionSystem
             IUIThreadInspectorCore inspector)
         {
             if (inspector is not IUIThreadInspector cvt_inspector) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to IUIThreadInspector !");
-            
+
             return Interpolate(target, state, effect, isUIAccess, cvt_inspector);
         }
 
@@ -142,7 +145,28 @@ namespace VeloxDev.Core.TransitionSystem
 
     public abstract class InterpolatorCore : IFrameInterpolatorCore
     {
+        static InterpolatorCore()
+        {
+            RegisterInterpolator(typeof(double), new DoubleInterpolator());
+            RegisterInterpolator(typeof(float), new FloatInterpolator());
+            RegisterInterpolator(typeof(decimal), new DecimalInterpolator());
+            RegisterInterpolator(typeof(Point), new PointInterpolator());
+            RegisterInterpolator(typeof(PointF), new PointFInterpolator());
+            RegisterInterpolator(typeof(Size), new SizeInterpolator());
+            RegisterInterpolator(typeof(SizeF), new SizeFInterpolator());
+            RegisterInterpolator(typeof(Color), new ColorInterpolator());
+            RegisterInterpolator(typeof(Rectangle), new RectangleInterpolator());
+            RegisterInterpolator(typeof(RectangleF), new RectangleFInterpolator());
+#if NETCOREAPP || NETFRAMEWORK
+            RegisterInterpolator(typeof(Vector2), new Vector2Interpolator());
+            RegisterInterpolator(typeof(Vector3), new Vector3Interpolator());
+            RegisterInterpolator(typeof(Vector4), new Vector4Interpolator());
+            RegisterInterpolator(typeof(Quaternion), new QuaternionInterpolator());
+#endif
+        }
+
         public static ConcurrentDictionary<Type, IValueInterpolator> NativeInterpolators { get; protected set; } = [];
+
         public static bool TryGetInterpolator(Type type, out IValueInterpolator? interpolator)
         {
             if (NativeInterpolators.TryGetValue(type, out interpolator))
@@ -164,30 +188,6 @@ namespace VeloxDev.Core.TransitionSystem
             }
         }
         public static bool UnregisterInterpolator(Type type, out IValueInterpolator? interpolator)
-        {
-            return NativeInterpolators.TryRemove(type, out interpolator);
-        }
-        public bool TryGetValue(Type type, out IValueInterpolator? interpolator)
-        {
-            if (NativeInterpolators.TryGetValue(type, out interpolator))
-            {
-                return true;
-            }
-            interpolator = null;
-            return false;
-        }
-        public bool Register(Type type, IValueInterpolator interpolator)
-        {
-            if (NativeInterpolators.TryGetValue(type, out var oldValue))
-            {
-                return NativeInterpolators.TryUpdate(type, interpolator, oldValue);
-            }
-            else
-            {
-                return NativeInterpolators.TryAdd(type, interpolator);
-            }
-        }
-        public bool Unregister(Type type, out IValueInterpolator? interpolator)
         {
             return NativeInterpolators.TryRemove(type, out interpolator);
         }

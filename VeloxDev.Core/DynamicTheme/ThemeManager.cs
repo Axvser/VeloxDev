@@ -302,7 +302,7 @@ namespace VeloxDev.Core.DynamicTheme
 
                         try
                         {
-                            if (_interpolator?.TryGetValue(propertyInfo.PropertyType, out var interpolator) ?? false)
+                            if (InterpolatorCore.TryGetInterpolator(propertyInfo.PropertyType, out var interpolator))
                             {
                                 var interpolated = interpolator!.Interpolate(currentValue, targetValue, steps);
                                 for (int i = 0; i < steps && i < interpolated.Count; i++)
