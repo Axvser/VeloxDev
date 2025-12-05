@@ -3,7 +3,7 @@ using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem.NativeInterpolators
 {
-#if NETCOREAPP || NETFRAMEWORK
+#if NETCOREAPP || NETFRAMEWORK || NET
     public class QuaternionInterpolator : IValueInterpolator
     {
         public List<object?> Interpolate(object? start, object? end, int steps)
