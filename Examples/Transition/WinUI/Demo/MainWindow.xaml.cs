@@ -35,7 +35,7 @@ namespace Demo
                 snapshot0.Effect(TransitionEffects.Empty).Execute(Rec0);
             };
         }
-        
+
         private void LoadAnimations(object sender, RoutedEventArgs e)
         {
             // 直接从 snapshot 对象启动过渡动画
@@ -54,7 +54,7 @@ namespace Demo
                 Animation2.Execute(Rec2);
             });
         }
-        
+
         private void ExitAnimations(object sender, RoutedEventArgs e)
         {
             // 终结对象持有的动画
@@ -103,6 +103,14 @@ namespace Demo
             Transition<Rectangle>.Create()
                 .Await(TimeSpan.FromSeconds(3))
                 .Property(r => r.RenderTransform, [new RotateTransform() { Angle = 180 }])
+                .Property(r => r.Fill, new LinearGradientBrush()
+                {
+                    GradientStops =
+                    [
+                        new GradientStop(){Color = Colors.Cyan,Offset=0},
+                        new GradientStop(){Color= Colors.Red,Offset=0},
+                    ]
+                })
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(2),
