@@ -63,7 +63,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\..\..\..\VeloxDev.MAUI\VeloxDev.MAUI.csproj" />
+	  <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.MAUI\VeloxDev.MAUI.csproj" />
 	</ItemGroup>
 
 </Project>

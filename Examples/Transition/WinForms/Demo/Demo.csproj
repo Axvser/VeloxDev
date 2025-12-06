@@ -48,13 +48,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\VeloxDev.Core\VeloxDev.Core.csproj">
-      <Project>{d161b5d6-2b2e-fc9e-6815-b592f8f403f2}</Project>
-      <Name>VeloxDev.Core</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\..\VeloxDev.WinForms\VeloxDev.WinForms.csproj" />
-  </ItemGroup>
-  <ItemGroup>
     <Compile Include="Form1.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -85,6 +78,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj">
+      <Project>{34195111-c8ca-0f5f-cc75-b76ed3b7fe9f}</Project>
+      <Name>VeloxDev.WinForms</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
