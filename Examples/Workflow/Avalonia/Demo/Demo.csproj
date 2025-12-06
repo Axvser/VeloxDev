@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.Avalonia\VeloxDev.Avalonia.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
   </ItemGroup>
 
   <ItemGroup>
