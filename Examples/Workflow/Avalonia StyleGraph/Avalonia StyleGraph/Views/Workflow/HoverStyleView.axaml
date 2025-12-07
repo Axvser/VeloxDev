@@ -1,0 +1,107 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+			 x:Class="Avalonia_StyleGraph.HoverStyleView"
+			 xmlns:local="using:Avalonia_StyleGraph"
+			 xmlns:vm="using:Avalonia_StyleGraph.ViewModels.Workflow"
+			 xmlns:workflow="using:VeloxDev.Core.Interfaces.WorkflowSystem"
+			 x:DataType="vm:HoverStyleViewModel">
+
+	<Grid RowDefinitions="12*,90*">
+
+		<Border Grid.Row="1"
+				Padding="1"
+				Background="#2d2d2d"
+				CornerRadius="0,0,4,4" />
+
+		<!-- 标题栏 -->
+		<Border Grid.Row="0"
+				Background="#2d2d2d"
+				CornerRadius="4,4,0,0"
+				BorderThickness="0,0,0,0.5"
+				BorderBrush="Gray"
+				PointerPressed="OnPointerPressed"
+				PointerReleased="OnPointerReleased"
+				PointerMoved="OnPointerMoved"
+				PointerCaptureLost="OnPointerCaptureLost">
+			<TextBlock Text="ִStyle Editor" Foreground="White" VerticalAlignment="Center"/>
+		</Border>
+
+		<!-- 插槽区域 -->
+		<Grid Grid.RowSpan="2">
+			<ItemsControl ItemsSource="{Binding Slots}">
+				<ItemsControl.ItemsPanel>
+					<ItemsPanelTemplate>
+						<Canvas Width="{Binding $parent[Grid].Bounds.Width}"
+								Height="{Binding $parent[Grid].Bounds.Height}"
+								x:Name="LayoutRoot"/>
+					</ItemsPanelTemplate>
+				</ItemsControl.ItemsPanel>
+
+				<ItemsControl.ItemContainerTheme>
+					<ControlTheme TargetType="ContentPresenter" x:DataType="vm:SlotViewModel">
+						<Setter Property="Canvas.Left" Value="{Binding Offset.Left}" />
+						<Setter Property="Canvas.Top" Value="{Binding Offset.Top}" />
+					</ControlTheme>
+				</ItemsControl.ItemContainerTheme>
+
+				<ItemsControl.ItemTemplate>
+					<DataTemplate DataType="vm:SlotViewModel">
+						<local:SlotView Width="{Binding Size.Width}"
+										Height="{Binding Size.Height}" />
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+		</Grid>
+
+		<!-- 值编辑区域 -->
+		<Grid RowDefinitions="Auto,Auto,Auto,Auto"
+			  ColumnDefinitions="Auto,1*,Auto"
+			  Margin="10,0,60,0"
+			  VerticalAlignment="Center"
+			  Grid.Row="1">
+
+			<!-- Alpha -->
+			<TextBlock Grid.Row="0" Grid.Column="0" Text="Alpha:" Foreground="White" VerticalAlignment="Center"/>
+			<Slider Grid.Row="0" Grid.Column="1"
+					Minimum="0" Maximum="255"
+					Value="{Binding Alpha, Mode=TwoWay}" />
+			<TextBlock Grid.Row="0" Grid.Column="2"
+					   Text="{Binding Alpha}"
+					   Foreground="White"
+					   VerticalAlignment="Center"/>
+
+			<!-- Red -->
+			<TextBlock Grid.Row="1" Grid.Column="0" Text="Red:" Foreground="White" VerticalAlignment="Center"/>
+			<Slider Grid.Row="1" Grid.Column="1"
+					Minimum="0" Maximum="255"
+					Value="{Binding Red, Mode=TwoWay}" />
+			<TextBlock Grid.Row="1" Grid.Column="2"
+					   Text="{Binding Red}"
+					   Foreground="White"
+					   VerticalAlignment="Center"/>
+
+			<!-- Green -->
+			<TextBlock Grid.Row="2" Grid.Column="0" Text="Green:" Foreground="White" VerticalAlignment="Center"/>
+			<Slider Grid.Row="2" Grid.Column="1"
+					Minimum="0" Maximum="255"
+					Value="{Binding Green, Mode=TwoWay}" />
+			<TextBlock Grid.Row="2" Grid.Column="2"
+					   Text="{Binding Green}"
+					   Foreground="White"
+					   VerticalAlignment="Center"/>
+
+			<!-- Blue -->
+			<TextBlock Grid.Row="3" Grid.Column="0" Text="Blue:" Foreground="White" VerticalAlignment="Center"/>
+			<Slider Grid.Row="3" Grid.Column="1"
+					Minimum="0" Maximum="255"
+					Value="{Binding Blue, Mode=TwoWay}" />
+			<TextBlock Grid.Row="3" Grid.Column="2"
+					   Text="{Binding Blue}"
+					   Foreground="White"
+					   VerticalAlignment="Center"/>
+		</Grid>
+	</Grid>
+</UserControl>

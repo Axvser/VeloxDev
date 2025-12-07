@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Packages.props" />
+  </Folder>
+  <Project Path="Avalonia StyleGraph.Android/Avalonia StyleGraph.Android.csproj" />
+  <Project Path="Avalonia StyleGraph.Browser/Avalonia StyleGraph.Browser.csproj" />
+  <Project Path="Avalonia StyleGraph.Desktop/Avalonia StyleGraph.Desktop.csproj" />
+  <Project Path="Avalonia StyleGraph.iOS/Avalonia StyleGraph.iOS.csproj" />
+  <Project Path="Avalonia StyleGraph/Avalonia StyleGraph.csproj" />
+</Solution>
