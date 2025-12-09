@@ -1,7 +1,6 @@
 ﻿using System.Windows;
-using System.Windows.Input;
 using System.Windows.Controls;
-using System.Threading;
+using System.Windows.Input;
 using VeloxDev.Core.TimeLine;
 
 namespace Demo
@@ -108,9 +107,9 @@ namespace Demo
                 MonoBehaviourManager.Start();
             };
 
-            Closed += (s, e) =>
+            Closing += async (s, e) =>
             {
-                MonoBehaviourManager.Stop();
+                await MonoBehaviourManager.StopAsync();
             };
         }
 
@@ -228,9 +227,9 @@ namespace Demo
             MonoBehaviourManager.Resume();
         }
 
-        private void BtnStop_Click(object sender, RoutedEventArgs e)
+        private async void BtnStop_Click(object sender, RoutedEventArgs e)
         {
-            MonoBehaviourManager.Stop();
+            await MonoBehaviourManager.StopAsync();
         }
     }
 }
