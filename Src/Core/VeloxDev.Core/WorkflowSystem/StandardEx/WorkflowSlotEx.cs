@@ -1,0 +1,188 @@
+﻿using System.ComponentModel;
+using VeloxDev.Core.Interfaces.MVVM;
+using VeloxDev.Core.Interfaces.WorkflowSystem;
+
+namespace VeloxDev.Core.WorkflowSystem.StandardEx;
+
+public static class WorkflowSlotEx
+{
+    public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands
+        (this IWorkflowSlotViewModel component)
+        =>
+        [
+            component.SaveOffsetCommand,
+            component.SaveSizeCommand,
+            component.SetOffsetCommand,
+            component.SetSizeCommand,
+            component.ApplyConnectionCommand,
+            component.ReceiveConnectionCommand,
+            component.DeleteCommand
+        ];
+
+    public static void StandardSetSize(this IWorkflowSlotViewModel component, Size size)
+    {
+        component.Size.Width = size.Width;
+        component.Size.Height = size.Height;
+        component.OnPropertyChanged(nameof(component.Size));
+        component.GetHelper().UpdateAnchor();
+    }
+    public static void StandardSetOffset(this IWorkflowSlotViewModel component, Offset offset)
+    {
+        component.Offset.Left = offset.Left;
+        component.Offset.Top = offset.Top;
+        component.OnPropertyChanged(nameof(component.Offset));
+        component.GetHelper().UpdateAnchor();
+    }
+    public static void StandardSetChannel(this IWorkflowSlotViewModel component, SlotChannel channel)
+    {
+        if (component.Parent?.Parent is null) return;
+        var tree = component.Parent.Parent;
+        List<IWorkflowLinkViewModel> links_asSource = [];
+        List<IWorkflowLinkViewModel> links_asTarget = [];
+        foreach (var target in component.Targets)
+        {
+            if (tree.LinksMap.TryGetValue(component, out var pair) &&
+               pair.TryGetValue(target, out var link))
+                links_asSource.Add(link);
+        }
+        foreach (var source in component.Sources)
+        {
+            if (tree.LinksMap.TryGetValue(source, out var pair) &&
+               pair.TryGetValue(component, out var link))
+                links_asTarget.Add(link);
+        }
+        switch (component.Channel.HasFlag(SlotChannel.None),
+                component.Channel.HasFlag(SlotChannel.OneTarget),
+                component.Channel.HasFlag(SlotChannel.OneSource),
+                component.Channel.HasFlag(SlotChannel.MultipleTargets),
+                component.Channel.HasFlag(SlotChannel.MultipleSources))
+        {
+            case (true, false, false, false, false):
+                foreach (var link in links_asSource)
+                {
+                    link.GetHelper().Delete();
+                }
+                foreach (var link in links_asTarget)
+                {
+                    link.GetHelper().Delete();
+                }
+                break;
+            case (_, true, false, false, false):
+                foreach (var link in links_asTarget)
+                {
+                    link.GetHelper().Delete();
+                }
+                break;
+            case (_, false, true, false, false):
+                foreach (var link in links_asSource)
+                {
+                    link.GetHelper().Delete();
+                }
+                break;
+            case (_, true, _, false, true):
+                foreach (var link in links_asTarget)
+                {
+                    link.GetHelper().Delete();
+                }
+                break;
+            case (_, _, true, true, false):
+                foreach (var link in links_asSource)
+                {
+                    link.GetHelper().Delete();
+                }
+                break;
+        }
+        component.Channel = channel;
+    }
+    public static void StandardSetLayer(this IWorkflowSlotViewModel component, int layer)
+    {
+        component.Anchor.Layer = layer;
+        component.OnPropertyChanged(nameof(component.Anchor));
+    }
+
+    public static void StandardUpdateAnchor(this IWorkflowSlotViewModel component)
+    {
+        if (component.Parent is null) return;
+        component.Anchor.Left = component.Parent.Anchor.Left + component.Offset.Left + component.Size.Width / 2;
+        component.Anchor.Top = component.Parent.Anchor.Top + component.Offset.Top + component.Size.Height / 2;
+        component.OnPropertyChanged(nameof(component.Anchor));
+    }
+    public static void StandardUpdateState(this IWorkflowSlotViewModel component)
+    {
+        bool hasOutgoingConnections = component.Targets.Count > 0;
+        bool hasIncomingConnections = component.Sources.Count > 0;
+
+        component.State = (hasOutgoingConnections, hasIncomingConnections) switch
+        {
+            (true, false) => SlotState.Sender,
+            (false, true) => SlotState.Receiver,
+            (true, true) => SlotState.Sender | SlotState.Receiver,
+            (false, false) => SlotState.StandBy,
+        };
+    }
+
+    public static void StandardApplyConnection(this IWorkflowSlotViewModel component)
+    {
+        var tree = component.Parent?.Parent;
+        tree?.GetHelper()?.ApplyConnection(component);
+    }
+    public static void StandardReceiveConnection(this IWorkflowSlotViewModel component)
+    {
+        var tree = component.Parent?.Parent;
+        tree?.GetHelper().ReceiveConnection(component);
+    }
+
+    public static void StandardDelete(this IWorkflowSlotViewModel component)
+    {
+        if (component.Parent is null) return;
+
+        HashSet<IWorkflowLinkViewModel> links = [];
+
+        foreach (var target in component.Targets)
+        {
+            var tree = target.Parent?.Parent;
+
+            if ((tree?.LinksMap.TryGetValue(component, out var dic) ?? false) &&
+                dic.TryGetValue(target, out var link))
+            {
+                links.Add(link);
+            }
+        }
+
+        foreach (var source in component.Sources)
+        {
+            var tree = source.Parent?.Parent;
+
+            if ((tree?.LinksMap.TryGetValue(source, out var dic) ?? false) &&
+                dic.TryGetValue(component, out var link))
+            {
+                links.Add(link);
+            }
+        }
+
+        foreach (var link in links)
+        {
+            link.GetHelper().Delete();
+        }
+
+        if (component.Parent.Parent is null)
+        {
+            component.Parent.Slots.Remove(component);
+        }
+        else
+        {
+            var oldParent = component.Parent;
+            component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
+                () =>
+                {
+                    component.Parent.Slots.Remove(component);
+                    component.Parent = null;
+                },
+                () =>
+                {
+                    oldParent.Slots.Add(component);
+                    component.Parent = oldParent;
+                }));
+        }
+    }
+}

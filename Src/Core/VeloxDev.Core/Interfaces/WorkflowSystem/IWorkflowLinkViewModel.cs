@@ -1,4 +1,5 @@
 ﻿using VeloxDev.Core.Interfaces.MVVM;
+using VeloxDev.Core.WeakTypes;
 
 namespace VeloxDev.Core.Interfaces.WorkflowSystem
 {
@@ -16,7 +17,8 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
     public interface IWorkflowLinkViewModelHelper : IWorkflowHelper
     {
-        public void Initialize(IWorkflowLinkViewModel link);
+        public void Install(IWorkflowLinkViewModel link);
+        public void Uninstall(IWorkflowLinkViewModel link);
         public void Delete();
     }
 }

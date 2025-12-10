@@ -25,18 +25,6 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task SaveAnchor(object? parameter, CancellationToken ct)
-        {
-            Helper.SaveAnchor();
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        protected virtual Task SaveSize(object? parameter, CancellationToken ct)
-        {
-            Helper.SaveSize();
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
         protected virtual Task SetAnchor(object? parameter, CancellationToken ct)
         {
             if (parameter is not Anchor anchor) return Task.CompletedTask;
@@ -80,10 +68,11 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         }
 
         public virtual IWorkflowNodeViewModelHelper GetHelper() => Helper;
-        public virtual void InitializeWorkflow() => Helper.Initialize(this);
+        public virtual void InitializeWorkflow() => Helper.Install(this);
         public virtual void SetHelper(IWorkflowNodeViewModelHelper helper)
         {
-            helper.Initialize(this);
+            Helper.Uninstall(this);
+            helper.Install(this);
             Helper = helper;
         }
     }

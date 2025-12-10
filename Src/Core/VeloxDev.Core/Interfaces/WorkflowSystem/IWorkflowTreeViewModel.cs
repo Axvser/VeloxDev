@@ -27,7 +27,9 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
     public interface IWorkflowTreeViewModelHelper : IWorkflowHelper
     {
-        public void Initialize(IWorkflowTreeViewModel tree);
+        public void Install(IWorkflowTreeViewModel tree);
+        public void Uninstall(IWorkflowTreeViewModel tree);
+
         public void CreateNode(IWorkflowNodeViewModel node);
         public IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver);
 

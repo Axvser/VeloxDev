@@ -77,10 +77,11 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         }
 
         public virtual IWorkflowTreeViewModelHelper GetHelper() => Helper;
-        public virtual void InitializeWorkflow() => Helper.Initialize(this);
+        public virtual void InitializeWorkflow() => Helper.Install(this);
         public virtual void SetHelper(IWorkflowTreeViewModelHelper helper)
         {
-            helper.Initialize(this);
+            Helper.Uninstall(this);
+            helper.Install(this);
             Helper = helper;
         }
     }

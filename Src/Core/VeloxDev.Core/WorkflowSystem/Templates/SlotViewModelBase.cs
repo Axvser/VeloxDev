@@ -21,18 +21,6 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         [VeloxProperty] private Size size = new();
 
         [VeloxCommand]
-        protected virtual Task SaveOffset(object? parameter, CancellationToken ct)
-        {
-            Helper.SaveOffset();
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
-        protected virtual Task SaveSize(object? parameter, CancellationToken ct)
-        {
-            Helper.SaveSize();
-            return Task.CompletedTask;
-        }
-        [VeloxCommand]
         protected virtual Task SetOffset(object? parameter, CancellationToken ct)
         {
             if (parameter is not Offset offset) return Task.CompletedTask;
@@ -78,10 +66,11 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         }
 
         public virtual IWorkflowSlotViewModelHelper GetHelper() => Helper;
-        public virtual void InitializeWorkflow() => Helper.Initialize(this);
+        public virtual void InitializeWorkflow() => Helper.Install(this);
         public virtual void SetHelper(IWorkflowSlotViewModelHelper helper)
         {
-            helper.Initialize(this);
+            Helper.Uninstall(this);
+            helper.Install(this);
             Helper = helper;
         }
     }

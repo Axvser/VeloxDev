@@ -1,9 +1,9 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
+using VeloxDev.Core.WorkflowSystem.StandardEx;
 using VeloxDev.Core.WorkflowSystem.Templates;
-
-#pragma warning disable
 
 namespace VeloxDev.Core.WorkflowSystem
 {
@@ -11,93 +11,26 @@ namespace VeloxDev.Core.WorkflowSystem
     {
         public static class ViewModel
         {
-            private static void SynchronizationError() => throw new InvalidOperationException("Synchronization Error : You are attempting to operate the workflow component across domains, but an unexpected incident occurred somewhere, causing the workflow trees to which the two components belong to be inconsistent");
-
             /// <summary>
             /// [ Component Helper ] Provide standard supports for Link Component
             /// </summary>
             public class Link : IWorkflowLinkViewModelHelper
             {
                 private IWorkflowLinkViewModel? component;
-                private List<IVeloxCommand> commands = [];
+                private IReadOnlyCollection<IVeloxCommand> commands = [];
 
-                public virtual void Initialize(IWorkflowLinkViewModel link)
+                public virtual void Install(IWorkflowLinkViewModel link)
                 {
                     component = link;
-                    commands = [link.DeleteCommand];
+                    commands = link.GetStandardCommands();
                 }
-                public virtual void Closing()
-                {
-                    if (component is null) return;
-                    foreach (var command in commands)
-                    {
-                        command.Lock();
-                    }
-                }
-                public virtual async Task CloseAsync()
-                {
-                    if (component is null) return;
-                    foreach (var command in commands)
-                    {
-                        command.ClearAsync();
-                    }
-                }
-                public virtual void Closed()
-                {
-                    if (component is null) return;
-                    foreach (var command in commands)
-                    {
-                        command.UnLock();
-                    }
-                }
-                public virtual void Dispose() { }
+                public virtual void Uninstall(IWorkflowLinkViewModel link) { }
+                public virtual void Closing() => commands.StandardClosing();
+                public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
+                public virtual void Closed() => commands.StandardClosed();
+                public virtual void Dispose() { GC.SuppressFinalize(this); }
 
-                public virtual void Delete()
-                {
-                    if (component is null) return;
-
-                    if (component.Sender.Parent?.Parent is null ||
-                       component.Receiver.Parent?.Parent is null ||
-                       component.Sender.Parent?.Parent != component.Receiver.Parent?.Parent)
-                    {
-                        SynchronizationError();
-                    }
-
-                    var tree = component.Sender.Parent.Parent;
-
-                    if (tree.LinksMap.TryGetValue(component.Sender, out var dic) &&
-                        dic.TryGetValue(component.Receiver, out var link))
-                    {
-                        if (link == component)
-                        {
-                            tree.GetHelper().Submit(new WorkflowActionPair(
-                                () =>
-                                {
-                                    component.Sender.Targets.Remove(component.Receiver);
-                                    component.Receiver.Sources.Remove(component.Sender);
-                                    tree.LinksMap[component.Sender].Remove(component.Receiver);
-                                    tree.Links.Remove(component);
-                                    component.IsVisible = false;
-                                    component.Sender.GetHelper().UpdateState();
-                                    component.Receiver.GetHelper().UpdateState();
-                                },
-                                () =>
-                                {
-                                    component.Sender.Targets.Add(component.Receiver);
-                                    component.Receiver.Sources.Add(component.Sender);
-                                    tree.LinksMap[component.Sender].Add(component.Receiver, component);
-                                    tree.Links.Add(component);
-                                    component.IsVisible = true;
-                                    component.Sender.GetHelper().UpdateState();
-                                    component.Receiver.GetHelper().UpdateState();
-                                }));
-                        }
-                        else
-                        {
-                            SynchronizationError();
-                        }
-                    }
-                }
+                public virtual void Delete() => component?.StandardDelete();
             }
 
             /// <summary>
@@ -106,265 +39,34 @@ namespace VeloxDev.Core.WorkflowSystem
             public class Slot : IWorkflowSlotViewModelHelper
             {
                 private IWorkflowSlotViewModel? component;
-                private List<IVeloxCommand> commands = [];
+                private IReadOnlyCollection<IVeloxCommand> commands = [];
 
-                public virtual void Initialize(IWorkflowSlotViewModel slot)
+                public virtual void Install(IWorkflowSlotViewModel slot)
                 {
                     component = slot;
-                    commands =
-                        [
-                            slot.SaveOffsetCommand,
-                            slot.SaveSizeCommand,
-                            slot.SetOffsetCommand,
-                            slot.SetSizeCommand,
-                            slot.ApplyConnectionCommand,
-                            slot.ReceiveConnectionCommand,
-                            slot.DeleteCommand
-                        ];
+                    commands = slot.GetStandardCommands();
                 }
-                public virtual void Closing()
+                public void Uninstall(IWorkflowSlotViewModel slot)
                 {
-                    if (component is null) return;
-                    foreach (var command in commands)
-                    {
-                        command.Lock();
-                    }
-                }
-                public virtual async Task CloseAsync()
-                {
-                    if (component is null) return;
-                    foreach (var command in commands)
-                    {
-                        await command.ClearAsync();
-                    }
-                }
-                public virtual void Closed()
-                {
-                    if (component is null) return;
-                    foreach (var command in commands)
-                    {
-                        command.UnLock();
-                    }
-                }
-                public virtual void Dispose() { }
-                public virtual void ApplyConnection()
-                {
-                    if (component is null) return;
-                    var tree = component.Parent?.Parent;
-                    tree?.GetHelper()?.ApplyConnection(component);
-                }
-                public virtual void ReceiveConnection()
-                {
-                    if (component is null) return;
-                    var tree = component.Parent?.Parent;
-                    tree?.GetHelper().ReceiveConnection(component);
-                }
-                public virtual void SetSize(Size size)
-                {
-                    if (component is null) return;
-                    component.Size.Width = size.Width;
-                    component.Size.Height = size.Height;
-                    component.OnPropertyChanged(nameof(component.Size));
-                    UpdateAnchor();
-                }
-                public virtual void SetOffset(Offset offset)
-                {
-                    if (component is null) return;
-                    component.Offset.Left = offset.Left;
-                    component.Offset.Top = offset.Top;
-                    component.OnPropertyChanged(nameof(component.Offset));
-                    UpdateAnchor();
-                }
-                public virtual void SetChannel(SlotChannel channel)
-                {
-                    if (component is null) return;
-                    var tree = component.Parent.Parent;
-                    if (tree is null) return;
-                    List<IWorkflowLinkViewModel> links_asSource = [];
-                    List<IWorkflowLinkViewModel> links_asTarget = [];
-                    foreach (var target in component.Targets)
-                    {
-                        if (target?.Parent.Parent != component.Parent?.Parent) SynchronizationError();
-                        if (tree.LinksMap.TryGetValue(component, out var pair) &&
-                           pair.TryGetValue(target, out var link))
-                            links_asSource.Add(link);
-                    }
-                    foreach (var source in component.Sources)
-                    {
-                        if (source?.Parent.Parent != component.Parent?.Parent) SynchronizationError();
-                        if (tree.LinksMap.TryGetValue(source, out var pair) &&
-                           pair.TryGetValue(component, out var link))
-                            links_asTarget.Add(link);
-                    }
-                    switch (component.Channel.HasFlag(SlotChannel.None),
-                            component.Channel.HasFlag(SlotChannel.OneTarget),
-                            component.Channel.HasFlag(SlotChannel.OneSource),
-                            component.Channel.HasFlag(SlotChannel.MultipleTargets),
-                            component.Channel.HasFlag(SlotChannel.MultipleSources))
-                    {
-                        case (true, false, false, false, false):
-                            foreach (var link in links_asSource)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            foreach (var link in links_asTarget)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            break;
-                        case (_, true, false, false, false):
-                            foreach (var link in links_asTarget)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            break;
-                        case (_, false, true, false, false):
-                            foreach (var link in links_asSource)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            break;
-                        case (_, true, _, false, true):
-                            foreach (var link in links_asTarget)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            break;
-                        case (_, _, true, true, false):
-                            foreach (var link in links_asSource)
-                            {
-                                link.GetHelper().Delete();
-                            }
-                            break;
-                    }
-                }
-                public virtual void SetLayer(int layer)
-                {
-                    if (component is null) return;
-                    component.Anchor.Layer = layer;
-                    component.OnPropertyChanged(nameof(component.Anchor));
-                }
-                public virtual void SaveOffset()
-                {
-                    if (component is null || component.Parent?.Parent is null) return;
-                    var oldOffset = component.Offset;
-                    var newOffset = new Offset(component.Offset.Left, component.Offset.Top);
-                    component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
-                        () => { component.Offset = newOffset; },
-                        () => { component.Offset = oldOffset; }
-                    ));
-                }
-                public virtual void SaveSize()
-                {
-                    if (component is null || component.Parent?.Parent is null) return;
-                    var oldSize = component.Size;
-                    var newSize = new Size(component.Size.Width, component.Size.Height);
-                    component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
-                        () => { component.Size = newSize; },
-                        () => { component.Size = oldSize; }
-                    ));
-                }
-                public virtual void SaveLayer()
-                {
-                    if (component is null || component.Parent?.Parent is null) return;
-                    var layer = component.Anchor.Layer;
-                    var action = () =>
-                    {
-                        component.Anchor.Layer = layer;
-                        component.OnPropertyChanged(nameof(component.Anchor));
-                    };
-                    component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(action, action));
-                }
-                public virtual void UpdateAnchor()
-                {
-                    if (component.Parent is null) return;
-                    component.Anchor.Left = component.Parent.Anchor.Left + component.Offset.Left + component.Size.Width / 2;
-                    component.Anchor.Top = component.Parent.Anchor.Top + component.Offset.Top + component.Size.Height / 2;
-                    component.OnPropertyChanged(nameof(component.Anchor));
-                }
-                public virtual void UpdateState()
-                {
-                    if (component is null) return;
 
-                    bool hasOutgoingConnections = component.Targets.Count > 0;
-                    bool hasIncomingConnections = component.Sources.Count > 0;
-
-                    component.State = (hasOutgoingConnections, hasIncomingConnections) switch
-                    {
-                        (true, false) => SlotState.Sender,
-                        (false, true) => SlotState.Receiver,
-                        (true, true) => SlotState.Sender | SlotState.Receiver,
-                        (false, false) => SlotState.StandBy,
-                    };
                 }
+                public virtual void Closing() => commands.StandardClosing();
+                public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
+                public virtual void Closed() => commands.StandardClosed();
+                public virtual void Dispose() { GC.SuppressFinalize(this); }
 
-                public virtual void Delete()
-                {
-                    if (component is null || component.Parent is null) return;
+                public virtual void SetSize(Size size) => component?.StandardSetSize(size);
+                public virtual void SetOffset(Offset offset) => component?.StandardSetOffset(offset);
+                public virtual void SetChannel(SlotChannel channel) => component?.StandardSetChannel(channel);
+                public virtual void SetLayer(int layer) => component?.StandardSetLayer(layer);
 
-                    HashSet<IWorkflowLinkViewModel> links = [];
+                public virtual void UpdateAnchor() => component?.StandardUpdateAnchor();
+                public virtual void UpdateState() => component?.StandardUpdateState();
 
-                    foreach (var target in component.Targets)
-                    {
-                        if (target.Parent?.Parent is null ||
-                            component.Parent?.Parent is null ||
-                            target.Parent.Parent != component.Parent.Parent)
-                        {
-                            SynchronizationError();
-                        }
+                public virtual void ApplyConnection() => component?.StandardApplyConnection();
+                public virtual void ReceiveConnection() => component?.StandardReceiveConnection();
 
-                        var tree = target.Parent.Parent;
-
-                        if (tree.LinksMap.TryGetValue(component, out var dic) &&
-                            dic.TryGetValue(target, out var link))
-                        {
-                            links.Add(link);
-                        }
-                    }
-
-                    foreach (var source in component.Sources)
-                    {
-                        if (source.Parent?.Parent is null ||
-                            component.Parent?.Parent is null ||
-                            source.Parent.Parent != component.Parent.Parent)
-                        {
-                            SynchronizationError();
-                        }
-
-                        var tree = source.Parent.Parent;
-
-                        if (tree.LinksMap.TryGetValue(source, out var dic) &&
-                            dic.TryGetValue(component, out var link))
-                        {
-                            links.Add(link);
-                        }
-                    }
-
-                    foreach (var link in links)
-                    {
-                        link.GetHelper().Delete();
-                    }
-
-                    if (component.Parent.Parent is null)
-                    {
-                        component.Parent.Slots.Remove(component);
-                    }
-                    else
-                    {
-                        var oldParent = component.Parent;
-                        component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
-                            () =>
-                            {
-                                component.Parent.Slots.Remove(component);
-                                component.Parent = null;
-                            },
-                            () =>
-                            {
-                                oldParent.Slots.Add(component);
-                                component.Parent = oldParent;
-                            }));
-                    }
-                }
+                public virtual void Delete() => component?.StandardDelete();
             }
 
             /// <summary>
@@ -373,389 +75,46 @@ namespace VeloxDev.Core.WorkflowSystem
             public class Node : IWorkflowNodeViewModelHelper
             {
                 private IWorkflowNodeViewModel? component;
-                private List<IVeloxCommand> commands = [];
+                private IReadOnlyCollection<IVeloxCommand> commands = [];
 
-                public virtual void Initialize(IWorkflowNodeViewModel node)
+                public virtual void Install(IWorkflowNodeViewModel node)
                 {
                     component = node;
-                    commands =
-                        [
-                            node.SaveAnchorCommand,
-                            node.SaveSizeCommand,
-                            node.SetAnchorCommand,
-                            node.SetSizeCommand,
-                            node.CreateSlotCommand,
-                            node.DeleteCommand,
-                            node.WorkCommand,
-                            node.BroadcastCommand
-                        ];
+                    commands = node.GetStandardCommands();
                 }
-                public virtual void Closing()
+                public void Uninstall(IWorkflowNodeViewModel node)
                 {
-                    if (component is null) return;
-                    foreach (var command in commands)
-                    {
-                        command.Lock();
-                    }
+
                 }
-                public virtual async Task CloseAsync()
+                public virtual void Closing() => commands.StandardClosing();
+                public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
+                public virtual void Closed() => commands.StandardClosed();
+                public virtual void Dispose() { GC.SuppressFinalize(this); }
+                public virtual void CreateSlot(IWorkflowSlotViewModel slot) => component?.StandardCreateSlot(slot);
+
+                public virtual async Task BroadcastAsync(
+                    object? parameter,
+                    CancellationToken ct)
                 {
-                    try
-                    {
-                        foreach (var cmd in commands)
-                        {
-                            await cmd.ClearAsync();
-                        }
-                    }
-                    catch { }
+                    if (component is not null) await component.StandardBroadcastAsync(parameter, ct);
                 }
-                public virtual void Closed()
-                {
-                    if (component is null) return;
-                    foreach (var command in commands)
-                    {
-                        command.UnLock();
-                    }
-                }
-                public virtual async Task BroadcastAsync(object? parameter, CancellationToken ct)
-                {
-                    if (component is null || component.Parent is null) return;
+                public virtual Task WorkAsync(
+                    object? parameter,
+                    CancellationToken ct)
+                    => Task.CompletedTask;
+                public virtual Task<bool> ValidateBroadcastAsync(
+                    IWorkflowSlotViewModel sender,
+                    IWorkflowSlotViewModel receiver,
+                    object? parameter,
+                    CancellationToken ct)
+                    => Task.FromResult(true);
 
-                    var senders = component.Slots.ToArray();
-                    var validationTasks = new List<Task<(IWorkflowSlotViewModel Receiver, bool IsValid)>>();
+                public virtual void SetAnchor(Anchor anchor) => component?.StandardSetAnchor(anchor);
+                public virtual void SetLayer(int layer) => component?.StandardSetLayer(layer);
+                public virtual void SetSize(Size size) => component?.StandardSetSize(size);
+                public virtual void Move(Offset offset) => component?.StandardMove(offset);
 
-                    // 创建所有 ValidateBroadcastAsync 任务
-                    foreach (var sender in senders)
-                    {
-                        var receivers = sender.Targets.ToArray();
-                        foreach (var receiver in receivers)
-                        {
-                            if (receiver.Parent?.Parent != component.Parent) SynchronizationError();
-
-                            // 记录 receiver，以便后续执行 WorkCommand
-                            validationTasks.Add(
-                                ValidateBroadcastAsync(sender, receiver, parameter, ct)
-                                    .ContinueWith(t => (receiver, t.Result))
-                            );
-                        }
-                    }
-
-                    // 等待所有验证任务完成
-                    var validationResults = await Task.WhenAll(validationTasks);
-
-                    // 对每个通过验证的 receiver 执行 WorkCommand
-                    foreach (var (receiver, isValid) in validationResults)
-                    {
-                        if (isValid)
-                        {
-                            receiver.Parent?.WorkCommand.Execute(parameter);
-                        }
-                    }
-                }
-                public virtual Task WorkAsync(object? parameter, CancellationToken ct) => Task.CompletedTask;
-                public virtual Task<bool> ValidateBroadcastAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, object? parameter, CancellationToken ct) => Task.FromResult(true);
-                public virtual void Dispose() { }
-                public virtual void Move(Offset offset)
-                {
-                    if (component is null) return;
-                    component.Anchor.Left += offset.Left;
-                    component.Anchor.Top += offset.Top;
-                    component.OnPropertyChanged(nameof(component.Anchor));
-                    foreach (var slot in component.Slots)
-                    {
-                        slot.GetHelper().UpdateAnchor();
-                    }
-                }
-                public virtual void SetAnchor(Anchor anchor)
-                {
-                    if (component is null) return;
-                    component.Anchor.Left = anchor.Left;
-                    component.Anchor.Top = anchor.Top;
-                    component.Anchor.Layer = anchor.Layer;
-                    component.OnPropertyChanged(nameof(component.Anchor));
-                    foreach (var slot in component.Slots)
-                    {
-                        slot.GetHelper().UpdateAnchor();
-                    }
-                }
-                public virtual void SetLayer(int layer)
-                {
-                    if (component is null) return;
-                    component.Anchor.Layer = layer;
-                    component.OnPropertyChanged(nameof(component.Anchor));
-                }
-                public virtual void SetSize(Size size)
-                {
-                    if (component is null) return;
-                    component.Size.Width = size.Width;
-                    component.Size.Height = size.Height;
-                    component.OnPropertyChanged(nameof(component.Size));
-                }
-                public virtual void SaveAnchor()
-                {
-                    if (component is null || component.Parent is null) return;
-                    var oldAnchor = component.Anchor;
-                    var newAnchor = new Anchor(component.Anchor.Left, component.Anchor.Top, component.Anchor.Layer);
-                    component.Parent.GetHelper().Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            component.Anchor = newAnchor;
-                            SetAnchor(newAnchor);
-                        },
-                        () =>
-                        {
-                            component.Anchor = oldAnchor;
-                            SetAnchor(oldAnchor);
-                        }));
-                }
-                public virtual void SaveLayer()
-                {
-                    if (component is null || component.Parent is null) return;
-                    var layer = component.Anchor.Layer;
-                    var action = () =>
-                    {
-                        component.Anchor.Layer = layer;
-                        component.OnPropertyChanged(nameof(component.Anchor));
-                    };
-                    component.Parent.GetHelper().Submit(new WorkflowActionPair(action, action));
-                }
-                public virtual void SaveSize()
-                {
-                    if (component is null || component.Parent is null) return;
-                    var oldSize = component.Size;
-                    var newSize = new Size(component.Size.Width, component.Size.Height);
-                    component.Parent.GetHelper().Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            component.Size = newSize;
-                        },
-                        () =>
-                        {
-                            component.Size = oldSize;
-                        }));
-                }
-                public virtual void CreateSlot(IWorkflowSlotViewModel slot)
-                {
-                    if (component is null) return;
-                    var oldParent = slot.Parent;
-                    var newParent = component;
-                    if (component.Parent is null)
-                    {
-                        slot.GetHelper().Delete();
-                        slot.Parent = newParent;
-                        slot.GetHelper().UpdateAnchor();
-                        return;
-                    }
-                    component.Parent.GetHelper().Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            slot.Parent = newParent;
-                            slot.GetHelper().UpdateAnchor();
-                            component.Slots.Add(slot);
-                        },
-                        () =>
-                        {
-                            slot.GetHelper().Delete();
-                            slot.Parent = oldParent;
-                            slot.GetHelper().UpdateAnchor();
-                            component.Slots.Remove(slot);
-                        }));
-                }
-
-                public virtual void Delete()
-                {
-                    if (component is null || component.Parent is null) return;
-
-                    var tree = component.Parent;
-                    var oldParent = component.Parent;
-
-                    // 方案2核心修改：只收集"有效"的连接（两端节点都存在的连接）
-                    var connectionsToRemove = new List<IWorkflowLinkViewModel>();
-                    var slotConnections = new Dictionary<IWorkflowSlotViewModel, (HashSet<IWorkflowSlotViewModel> Targets, HashSet<IWorkflowSlotViewModel> Sources)>();
-
-                    foreach (var slot in component.Slots)
-                    {
-                        var validTargets = new HashSet<IWorkflowSlotViewModel>();
-                        var validSources = new HashSet<IWorkflowSlotViewModel>();
-
-                        // 只收集目标节点存在且在同一Tree中的连接
-                        foreach (var target in slot.Targets)
-                        {
-                            if (target.Parent?.Parent == tree) // 关键检查：确保目标节点在同一个Tree中且存在
-                            {
-                                if (tree.LinksMap.TryGetValue(slot, out var dic) && dic.TryGetValue(target, out var link))
-                                {
-                                    connectionsToRemove.Add(link);
-                                    validTargets.Add(target);
-                                }
-                            }
-                        }
-
-                        // 只收集源节点存在且在同一Tree中的连接
-                        foreach (var source in slot.Sources)
-                        {
-                            if (source.Parent?.Parent == tree) // 关键检查：确保源节点在同一个Tree中且存在
-                            {
-                                if (tree.LinksMap.TryGetValue(source, out var dic) && dic.TryGetValue(slot, out var link))
-                                {
-                                    connectionsToRemove.Add(link);
-                                    validSources.Add(source);
-                                }
-                            }
-                        }
-
-                        slotConnections[slot] = (validTargets, validSources);
-                    }
-
-                    // 去重连接
-                    var distinctConnections = connectionsToRemove.Distinct().ToList();
-
-                    // 使用单个原子操作处理所有删除
-                    tree.GetHelper().Submit(new WorkflowActionPair(
-                        // Redo: 执行删除
-                        () =>
-                        {
-                            ExecuteNodeDeletion(tree, component, distinctConnections, slotConnections);
-                        },
-                        // Undo: 撤销删除
-                        () =>
-                        {
-                            RestoreNode(tree, component, oldParent, distinctConnections, slotConnections);
-                        }
-                    ));
-                }
-
-                // 执行Node删除的核心逻辑
-                private void ExecuteNodeDeletion(
-                    IWorkflowTreeViewModel tree,
-                    IWorkflowNodeViewModel node,
-                    List<IWorkflowLinkViewModel> connections,
-                    Dictionary<IWorkflowSlotViewModel, (HashSet<IWorkflowSlotViewModel> Targets, HashSet<IWorkflowSlotViewModel> Sources)> slotConnections)
-                {
-                    // 第一阶段：解除所有连接关系
-                    foreach (var link in connections)
-                    {
-                        var sender = link.Sender;
-                        var receiver = link.Receiver;
-
-                        if (tree.LinksMap.TryGetValue(sender, out var receiverDict))
-                        {
-                            receiverDict.Remove(receiver);
-                            if (receiverDict.Count == 0)
-                            {
-                                tree.LinksMap.Remove(sender);
-                            }
-                        }
-
-                        tree.Links.Remove(link);
-                        sender.Targets.Remove(receiver);
-                        receiver.Sources.Remove(sender);
-                        link.IsVisible = false;
-                    }
-
-                    // 第二阶段：解除Slot的父子关系
-                    foreach (var slot in node.Slots.ToArray())
-                    {
-                        slot.Parent = null;
-                    }
-
-                    // 第三阶段：删除Node自身
-                    tree.Nodes.Remove(node);
-                    node.Parent = null;
-
-                    // 第四阶段：批量更新所有受影响组件状态
-                    UpdateAllAffectedStates(connections, node.Slots);
-                }
-
-                // 恢复Node的核心逻辑
-                private void RestoreNode(
-                    IWorkflowTreeViewModel tree,
-                    IWorkflowNodeViewModel node,
-                    IWorkflowTreeViewModel oldParent,
-                    List<IWorkflowLinkViewModel> connections,
-                    Dictionary<IWorkflowSlotViewModel, (HashSet<IWorkflowSlotViewModel> Targets, HashSet<IWorkflowSlotViewModel> Sources)> slotConnections)
-                {
-                    // 第一阶段：恢复Node自身
-                    node.Parent = oldParent;
-                    if (!tree.Nodes.Contains(node))
-                    {
-                        tree.Nodes.Add(node);
-                    }
-
-                    // 第二阶段：恢复Slot的父子关系
-                    foreach (var slot in node.Slots)
-                    {
-                        slot.Parent = node;
-                        // 恢复Slot的连接关系（现在都是有效连接）
-                        if (slotConnections.TryGetValue(slot, out var connectionsInfo))
-                        {
-                            slot.Targets.UnionWith(connectionsInfo.Targets);
-                            slot.Sources.UnionWith(connectionsInfo.Sources);
-                        }
-                    }
-
-                    // 第三阶段：恢复所有连接（现在可以安全恢复，因为都是有效连接）
-                    foreach (var link in connections)
-                    {
-                        var sender = link.Sender;
-                        var receiver = link.Receiver;
-
-                        // 恢复映射关系
-                        if (!tree.LinksMap.ContainsKey(sender))
-                        {
-                            tree.LinksMap[sender] = new Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>();
-                        }
-                        tree.LinksMap[sender][receiver] = link;
-
-                        // 恢复集合
-                        if (!tree.Links.Contains(link))
-                        {
-                            tree.Links.Add(link);
-                        }
-
-                        // 恢复双向关系（避免重复添加）
-                        if (!sender.Targets.Contains(receiver))
-                        {
-                            sender.Targets.Add(receiver);
-                        }
-                        if (!receiver.Sources.Contains(sender))
-                        {
-                            receiver.Sources.Add(sender);
-                        }
-
-                        // 显示连接
-                        link.IsVisible = true;
-                    }
-
-                    // 第四阶段：批量更新所有受影响组件状态
-                    UpdateAllAffectedStates(connections, node.Slots);
-
-                    // 触发属性变更通知
-                    node.OnPropertyChanged(nameof(node.Slots));
-                    foreach (var slot in node.Slots)
-                    {
-                        slot.OnPropertyChanged(nameof(slot.Targets));
-                        slot.OnPropertyChanged(nameof(slot.Sources));
-                        slot.GetHelper().UpdateState();
-                    }
-                }
-
-                // 批量更新状态方法
-                private void UpdateAllAffectedStates(List<IWorkflowLinkViewModel> connections, IList<IWorkflowSlotViewModel> slots)
-                {
-                    var allAffectedSlots = new HashSet<IWorkflowSlotViewModel>(slots);
-
-                    foreach (var link in connections)
-                    {
-                        allAffectedSlots.Add(link.Sender);
-                        allAffectedSlots.Add(link.Receiver);
-                    }
-
-                    foreach (var slot in allAffectedSlots)
-                    {
-                        slot.GetHelper().UpdateState();
-                    }
-                }
+                public virtual void Delete() => component?.StandardDelete();
             }
 
             /// <summary>
@@ -764,114 +123,40 @@ namespace VeloxDev.Core.WorkflowSystem
             public class Tree : IWorkflowTreeViewModelHelper
             {
                 private IWorkflowTreeViewModel? component = null;
-                private List<IVeloxCommand> commands = [];
+                private IReadOnlyCollection<IVeloxCommand> commands = [];
 
-                public virtual void Initialize(IWorkflowTreeViewModel tree)
+                public virtual void Install(IWorkflowTreeViewModel tree)
                 {
                     component = tree;
-                    commands =
-                        [
-                            tree.CreateNodeCommand,
-                            tree.SetPointerCommand,
-                            tree.ResetVirtualLinkCommand,
-                            tree.ApplyConnectionCommand,
-                            tree.ReceiveConnectionCommand,
-                            tree.SubmitCommand,
-                            tree.RedoCommand,
-                            tree.UndoCommand
-                        ];
+                    commands = tree.GetStandardCommands();
                 }
-                public virtual void Closing()
+                public void Uninstall(IWorkflowTreeViewModel tree)
                 {
-                    if (component is null) return;
-                    foreach (var command in commands)
-                    {
-                        command.Lock();
-                    }
+                    
                 }
-                public virtual async Task CloseAsync()
-                {
-                    if (component is null) return;
-
-                    // 收集所有 Helper
-                    var helpers = new List<IWorkflowHelper>();
-                    foreach (var linkGroup in component.Links)
-                    {
-                        helpers.Add(linkGroup.GetHelper());
-                    }
-                    foreach (var node in component.Nodes)
-                    {
-                        helpers.Add(node.GetHelper());
-                        foreach (var slot in node.Slots)
-                        {
-                            helpers.Add(slot.GetHelper());
-                        }
-                    }
-
-                    Closing();
-                    foreach (var helper in helpers)
-                    {
-                        helper.Closing();
-                    }
-
-                    foreach (var helper in helpers)
-                    {
-                        await helper.CloseAsync();
-                    }
-
-                    foreach (var helper in helpers)
-                    {
-                        helper.Closed();
-                    }
-                    Closed();
-                }
-                public virtual void Closed()
-                {
-                    if (component is null) return;
-                    foreach (var command in commands)
-                    {
-                        command.UnLock();
-                    }
-                }
-                public virtual void Dispose() { }
-                public virtual IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+                public virtual void Closing() => commands.StandardClosing();
+                public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
+                public virtual void Closed() => commands.StandardClosed();
+                public virtual void Dispose() { GC.SuppressFinalize(this); }
+                public virtual IWorkflowLinkViewModel CreateLink(
+                    IWorkflowSlotViewModel sender,
+                    IWorkflowSlotViewModel receiver)
                     =>
                     new LinkViewModelBase()
                     {
                         Sender = new SlotViewModelBase() { Anchor = sender.Anchor },
                         Receiver = new SlotViewModelBase() { Anchor = receiver.Anchor },
                     };
-                public virtual void CreateNode(IWorkflowNodeViewModel node)
-                {
-                    if (component is null) return;
-                    var oldParent = node.Parent;
-                    var newParent = component;
-                    node.GetHelper().Delete();
-                    Submit(new WorkflowActionPair(
-                        () =>
-                        {
-                            node.Parent = newParent;
-                            component.Nodes.Add(node);
-                        },
-                        () =>
-                        {
-                            node.GetHelper().Delete();
-                            node.Parent = oldParent;
-                            component.Nodes.Remove(node);
-                        }));
-                }
-                public virtual void SetPointer(Anchor anchor)
-                {
-                    component.VirtualLink.Receiver.Anchor = anchor;
-                    component.VirtualLink.OnPropertyChanged(nameof(component.VirtualLink.Receiver));
-                    component.OnPropertyChanged(nameof(component.VirtualLink));
-                }
+                public virtual void CreateNode(IWorkflowNodeViewModel node) => component?.StandardCreateNode(node);
+                public virtual void SetPointer(Anchor anchor) => component?.StandardSetPointer(anchor);
 
                 #region Connection Manager
                 private IWorkflowSlotViewModel? _sender = null;
-                private IWorkflowSlotViewModel? _receiver = null;
 
-                public virtual bool ValidateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver) => true;
+                public virtual bool ValidateConnection(
+                    IWorkflowSlotViewModel sender,
+                    IWorkflowSlotViewModel receiver)
+                    => true;
 
                 public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
                 {
@@ -879,15 +164,14 @@ namespace VeloxDev.Core.WorkflowSystem
 
                     // 1. 检查发送端能力
                     bool canBeSender = slot.Channel.HasFlag(SlotChannel.OneTarget) ||
-                                      slot.Channel.HasFlag(SlotChannel.MultipleTargets) ||
-                                      slot.Channel.HasFlag(SlotChannel.OneBoth) ||
-                                      slot.Channel.HasFlag(SlotChannel.MultipleBoth);
+                                       slot.Channel.HasFlag(SlotChannel.MultipleTargets) ||
+                                       slot.Channel.HasFlag(SlotChannel.OneBoth) ||
+                                       slot.Channel.HasFlag(SlotChannel.MultipleBoth);
 
                     if (!canBeSender)
                     {
                         ResetVirtualLink();
                         _sender = null;
-                        _receiver = null;
                         return;
                     }
 
@@ -904,7 +188,6 @@ namespace VeloxDev.Core.WorkflowSystem
                     slot.State = SlotState.PreviewSender;
                     slot.GetHelper().UpdateState();
                 }
-
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                 {
                     if (component == null || _sender == null) return;
@@ -918,7 +201,6 @@ namespace VeloxDev.Core.WorkflowSystem
                     if (!canBeReceiver)
                     {
                         ResetVirtualLink();
-                        _receiver = null;
                         return;
                     }
 
@@ -927,7 +209,6 @@ namespace VeloxDev.Core.WorkflowSystem
                     {
                         ResetVirtualLink();
                         _sender = null;
-                        _receiver = null;
                         return;
                     }
 
@@ -936,7 +217,6 @@ namespace VeloxDev.Core.WorkflowSystem
                     {
                         ResetVirtualLink();
                         _sender = null;
-                        _receiver = null;
                         return;
                     }
 
@@ -952,11 +232,12 @@ namespace VeloxDev.Core.WorkflowSystem
                     // 重置状态
                     ResetVirtualLink();
                     _sender = null;
-                    _receiver = null;
                 }
 
                 // 清理两个Node之间的同向连接冲突
-                private void CleanupSameDirectionConnections(IWorkflowSlotViewModel newSender, IWorkflowSlotViewModel newReceiver)
+                private void CleanupSameDirectionConnections(
+                    IWorkflowSlotViewModel newSender,
+                    IWorkflowSlotViewModel newReceiver)
                 {
                     if (component == null || newSender.Parent == null || newReceiver.Parent == null) return;
 
@@ -1071,7 +352,10 @@ namespace VeloxDev.Core.WorkflowSystem
                 }
 
                 // 根据通道类型判断是否需要清理现有连接
-                private bool ShouldCleanupConnections(SlotChannel channel, bool isSender, int existingConnections)
+                private static bool ShouldCleanupConnections(
+                    SlotChannel channel,
+                    bool isSender,
+                    int existingConnections)
                 {
                     if (channel.HasFlag(SlotChannel.None))
                         return false;
@@ -1101,9 +385,12 @@ namespace VeloxDev.Core.WorkflowSystem
                 }
 
                 // 移除指定的连接集合
-                private void RemoveConnections(List<(IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver, IWorkflowLinkViewModel Link)> connectionsToRemove)
+                private void RemoveConnections(
+                    List<(IWorkflowSlotViewModel Sender,
+                        IWorkflowSlotViewModel Receiver,
+                        IWorkflowLinkViewModel Link)> connectionsToRemove)
                 {
-                    if (connectionsToRemove == null || connectionsToRemove.Count == 0)
+                    if (component is null || connectionsToRemove.Count == 0)
                         return;
 
                     var redoActions = new List<Action>();
@@ -1147,7 +434,7 @@ namespace VeloxDev.Core.WorkflowSystem
                             // 确保 LinksMap 中存在发送端的字典
                             if (!component.LinksMap.ContainsKey(sender))
                             {
-                                component.LinksMap[sender] = new Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>();
+                                component.LinksMap[sender] = [];
                             }
 
                             // 恢复连接映射
@@ -1178,10 +465,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     {
                         foreach (var slot in affectedSlots)
                         {
-                            if (slot != null)
-                            {
-                                slot.GetHelper().UpdateState();
-                            }
+                            slot?.GetHelper().UpdateState();
                         }
                     });
 
@@ -1189,10 +473,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     {
                         foreach (var slot in affectedSlots)
                         {
-                            if (slot != null)
-                            {
-                                slot.GetHelper().UpdateState();
-                            }
+                            slot?.GetHelper().UpdateState();
                         }
                     });
 
@@ -1207,9 +488,11 @@ namespace VeloxDev.Core.WorkflowSystem
                 }
 
                 // 在两个Slot间建立新的连接
-                private void CreateNewConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+                private void CreateNewConnection(
+                    IWorkflowSlotViewModel sender,
+                    IWorkflowSlotViewModel receiver)
                 {
-                    if (sender == null || receiver == null) return;
+                    if (component is null || sender is null || receiver is null) return;
 
                     // 检查是否已存在连接（经过清理后应该不存在）
                     bool connectionExists = component.LinksMap.TryGetValue(sender, out var existingLinks) &&
@@ -1225,7 +508,7 @@ namespace VeloxDev.Core.WorkflowSystem
                         () =>
                         {
                             if (!component.LinksMap.ContainsKey(sender))
-                                component.LinksMap[sender] = new Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>();
+                                component.LinksMap[sender] = [];
 
                             component.LinksMap[sender][receiver] = newLink;
                             component.Links.Add(newLink);
@@ -1275,7 +558,6 @@ namespace VeloxDev.Core.WorkflowSystem
                     }
 
                     _sender = null;
-                    _receiver = null;
                 }
                 #endregion
 
@@ -1296,7 +578,7 @@ namespace VeloxDev.Core.WorkflowSystem
                             }
                             catch (Exception ex)
                             {
-                                // 记录错误但继续执行
+                                Debug.WriteLine(ex);
                             }
                         }
                     }
@@ -1312,7 +594,7 @@ namespace VeloxDev.Core.WorkflowSystem
                         }
                         catch (Exception ex)
                         {
-
+                            Debug.WriteLine(ex);
                         }
                     }
                 }
@@ -1329,7 +611,7 @@ namespace VeloxDev.Core.WorkflowSystem
                             }
                             catch (Exception ex)
                             {
-                                // 记录错误但继续执行
+                                Debug.WriteLine(ex);
                             }
                         }
                     }

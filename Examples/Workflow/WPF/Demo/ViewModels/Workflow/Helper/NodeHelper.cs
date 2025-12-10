@@ -9,10 +9,10 @@ namespace Demo.ViewModels.Workflow.Helper
         private NodeViewModel? _viewModel;
         private readonly Random rnd = new(); // 随机时间模拟
 
-        public override void Initialize(IWorkflowNodeViewModel node)
+        public override void Install(IWorkflowNodeViewModel node)
         {
             // [ Standard ] 框架初始化 Helper 持有的视图模型
-            base.Initialize(node);
+            base.Install(node);
 
             // [ User ] 跟踪任务计数
             _viewModel = node as NodeViewModel;

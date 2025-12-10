@@ -389,6 +389,7 @@ namespace VeloxDev.Core.Generator.Writers
          public virtual void InitializeWorkflow() => Helper.Initialize(this);
          public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModelHelper helper)
          {
+             Helper.Uninstall(this);
              helper.Initialize(this);
              Helper = helper;
          }
@@ -575,16 +576,6 @@ namespace VeloxDev.Core.Generator.Writers
                         Helper.Move(offset);
                         return {{TaskFullName}}.CompletedTask;
                     }
-                    protected virtual {{TaskFullName}} SaveAnchor({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-                    {
-                        Helper.SaveAnchor();
-                        return {{TaskFullName}}.CompletedTask;
-                    }
-                    protected virtual {{TaskFullName}} SaveSize({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-                    {
-                        Helper.SaveSize();
-                        return {{TaskFullName}}.CompletedTask;
-                    }
                     protected virtual {{TaskFullName}} SetAnchor({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
                         if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor) return {{TaskFullName}}.CompletedTask;
@@ -625,6 +616,7 @@ namespace VeloxDev.Core.Generator.Writers
                     public virtual void InitializeWorkflow() => Helper.Initialize(this);
                     public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper helper)
                     {
+                        Helper.Uninstall(this);
                         helper.Initialize(this);
                         Helper = helper;
                     }
@@ -703,28 +695,6 @@ namespace VeloxDev.Core.Generator.Writers
                               executeAsync: Move,
                               canExecute: _ => true);
                           return _buffer_MoveCommand;
-                       }
-                    }
-                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SaveAnchorCommand = null;
-                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SaveAnchorCommand
-                    {
-                       get
-                       {
-                          _buffer_SaveAnchorCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              executeAsync: SaveAnchor,
-                              canExecute: _ => true);
-                          return _buffer_SaveAnchorCommand;
-                       }
-                    }
-                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SaveSizeCommand = null;
-                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SaveSizeCommand
-                    {
-                       get
-                       {
-                          _buffer_SaveSizeCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              executeAsync: SaveSize,
-                              canExecute: _ => true);
-                          return _buffer_SaveSizeCommand;
                        }
                     }
                     private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SetAnchorCommand = null;
@@ -825,16 +795,6 @@ namespace VeloxDev.Core.Generator.Writers
         private {{NAMESPACE_VELOX_WORKFLOW}}.Offset offset = new();
         private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
 
-        protected virtual {{TaskFullName}} SaveOffset({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            Helper.SaveOffset();
-            return {{TaskFullName}}.CompletedTask;
-        }
-        protected virtual {{TaskFullName}} SaveSize({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            Helper.SaveSize();
-            return {{TaskFullName}}.CompletedTask;
-        }
         protected virtual {{TaskFullName}} SetOffset({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
         {
             if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Offset offset) return {{TaskFullName}}.CompletedTask;
@@ -877,6 +837,7 @@ namespace VeloxDev.Core.Generator.Writers
         public virtual void InitializeWorkflow() => Helper.Initialize(this);
         public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModelHelper helper)
         {
+            Helper.Uninstall(this);
             helper.Initialize(this);
             Helper = helper;
         }
@@ -1010,28 +971,6 @@ namespace VeloxDev.Core.Generator.Writers
         partial void OnSizeChanging({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
         partial void OnSizeChanged({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
 
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SaveOffsetCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SaveOffsetCommand
-        {
-           get
-           {
-              _buffer_SaveOffsetCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SaveOffset,
-                  canExecute: _ => true);
-              return _buffer_SaveOffsetCommand;
-           }
-        }
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SaveSizeCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SaveSizeCommand
-        {
-           get
-           {
-              _buffer_SaveSizeCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SaveSize,
-                  canExecute: _ => true);
-              return _buffer_SaveSizeCommand;
-           }
-        }
         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SetOffsetCommand = null;
         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SetOffsetCommand
         {
@@ -1134,6 +1073,7 @@ namespace VeloxDev.Core.Generator.Writers
         public virtual void InitializeWorkflow() => Helper.Initialize(this);
         public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModelHelper helper)
         {
+            Helper.Uninstall(this);
             helper.Initialize(this);
             Helper = helper;
         }

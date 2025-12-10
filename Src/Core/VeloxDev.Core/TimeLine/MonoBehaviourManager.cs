@@ -240,8 +240,6 @@ namespace VeloxDev.Core.TimeLine
             OnSystemStopped?.Invoke(null, EventArgs.Empty);
         }
 
-        public static void Stop() => StopAsync().GetAwaiter().GetResult();
-
         public static void Pause()
         {
             if (!_isRunning || _isPaused) return;
@@ -260,16 +258,13 @@ namespace VeloxDev.Core.TimeLine
         {
             var stopwatch = Stopwatch.StartNew();
 
-            // 使用智能重启机制替代固定延迟
-            await SmartRestartAsync().ConfigureAwait(false);
+            await ExecuteRestartAsync().ConfigureAwait(false);
 
             if (stopwatch.ElapsedMilliseconds > 5)
             {
                 Debug.WriteLine($"Smart restart completed in {stopwatch.ElapsedMilliseconds}ms");
             }
         }
-
-        public static void Restart() => RestartAsync().GetAwaiter().GetResult();
 
         public static void RegisterBehaviour(IMonoBehaviour behavior) => ExecuteOnMainThread(() =>
         {
@@ -285,10 +280,10 @@ namespace VeloxDev.Core.TimeLine
 
         #region 重启机制
 
-        private static async Task SmartRestartAsync()
+        private static async Task ExecuteRestartAsync()
         {
             // 阶段1: 请求停止
-            Stop();
+            await StopAsync();
 
             // 阶段2: 等待系统完全停止
             var shutdownConfirmed = await WaitForConditionAsync(

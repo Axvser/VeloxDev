@@ -36,8 +36,6 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public Offset Offset { get; set; }
         public Size Size { get; set; }
 
-        public IVeloxCommand SaveOffsetCommand { get; }     // 保存偏移 | parameter Null
-        public IVeloxCommand SaveSizeCommand { get; }       // 保存尺寸 | parameter Null
         public IVeloxCommand SetOffsetCommand { get; }      // 设定偏移 | parameter Offset
         public IVeloxCommand SetSizeCommand { get; }        // 设定尺寸 | parameter Size
         public IVeloxCommand SetChannelCommand { get; }     // 设定通道 | parameter SlotChannel
@@ -53,15 +51,14 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
     public interface IWorkflowSlotViewModelHelper : IWorkflowHelper
     {
-        public void Initialize(IWorkflowSlotViewModel slot);
+        public void Install(IWorkflowSlotViewModel slot);
+        public void Uninstall(IWorkflowSlotViewModel slot);
 
         public void SetOffset(Offset offset);
         public void SetSize(Size size);
         public void SetLayer(int layer);
-        public void SaveOffset();
-        public void SaveSize();
-        public void SaveLayer();
         public void SetChannel(SlotChannel channel);
+
         public void UpdateAnchor();
         public void UpdateState();
 
