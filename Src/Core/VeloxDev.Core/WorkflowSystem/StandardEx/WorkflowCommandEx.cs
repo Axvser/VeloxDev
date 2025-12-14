@@ -6,7 +6,7 @@ public static class WorkflowCommandEx
 {
     public static void StandardClosing(this IReadOnlyCollection<IVeloxCommand> commands)
     {
-        foreach(var command in commands)
+        foreach (var command in commands)
         {
             command.Lock();
         }

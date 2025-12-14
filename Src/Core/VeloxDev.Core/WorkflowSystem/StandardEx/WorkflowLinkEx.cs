@@ -7,11 +7,11 @@ public static class WorkflowLinkEx
 {
     public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands
         (this IWorkflowLinkViewModel component)
-        => 
+        =>
         [
             component.DeleteCommand
         ];
-    
+
     public static void StandardDelete(this IWorkflowLinkViewModel component)
     {
         if (component.Sender?.Parent?.Parent is null) return;

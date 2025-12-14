@@ -1,5 +1,4 @@
-﻿using System.ComponentModel;
-using VeloxDev.Core.Interfaces.MVVM;
+﻿using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 
 namespace VeloxDev.Core.WorkflowSystem.StandardEx;
@@ -10,8 +9,6 @@ public static class WorkflowNodeEx
         (this IWorkflowNodeViewModel component)
         =>
         [
-            component.SaveAnchorCommand,
-            component.SaveSizeCommand,
             component.SetAnchorCommand,
             component.SetSizeCommand,
             component.CreateSlotCommand,
@@ -298,7 +295,7 @@ public static class WorkflowNodeEx
 
     // 批量更新状态方法
     private static void UpdateAllAffectedStates(
-        List<IWorkflowLinkViewModel> connections, 
+        List<IWorkflowLinkViewModel> connections,
         IList<IWorkflowSlotViewModel> slots)
     {
         var allAffectedSlots = new HashSet<IWorkflowSlotViewModel>(slots);

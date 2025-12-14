@@ -1,5 +1,4 @@
-﻿using System.ComponentModel;
-using VeloxDev.Core.Interfaces.MVVM;
+﻿using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 
 namespace VeloxDev.Core.WorkflowSystem.StandardEx;
@@ -10,8 +9,6 @@ public static class WorkflowSlotEx
         (this IWorkflowSlotViewModel component)
         =>
         [
-            component.SaveOffsetCommand,
-            component.SaveSizeCommand,
             component.SetOffsetCommand,
             component.SetSizeCommand,
             component.ApplyConnectionCommand,
@@ -185,4 +182,16 @@ public static class WorkflowSlotEx
                 }));
         }
     }
+
+    public static bool StandardCanBeSender(this IWorkflowSlotViewModel component)
+        => component.Channel.HasFlag(SlotChannel.OneTarget) ||
+           component.Channel.HasFlag(SlotChannel.MultipleTargets) ||
+           component.Channel.HasFlag(SlotChannel.OneBoth) ||
+           component.Channel.HasFlag(SlotChannel.MultipleBoth);
+
+    public static bool StandardCanBeReceiver(this IWorkflowSlotViewModel component)
+        => component.Channel.HasFlag(SlotChannel.OneSource) ||
+           component.Channel.HasFlag(SlotChannel.MultipleSources) ||
+           component.Channel.HasFlag(SlotChannel.OneBoth) ||
+           component.Channel.HasFlag(SlotChannel.MultipleBoth);
 }

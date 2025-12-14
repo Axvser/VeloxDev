@@ -1,5 +1,4 @@
 ﻿using VeloxDev.Core.Interfaces.MVVM;
-using VeloxDev.Core.WeakTypes;
 
 namespace VeloxDev.Core.Interfaces.WorkflowSystem
 {
