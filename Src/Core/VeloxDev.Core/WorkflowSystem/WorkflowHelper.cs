@@ -47,12 +47,17 @@ namespace VeloxDev.Core.WorkflowSystem
                 {
                     component = slot;
                     commands = slot.GetStandardCommands();
+                    slot.Targets.CollectionChanged += OnTargetsChanged;
+                    slot.Sources.CollectionChanged += OnSourcesChanged;
                 }
                 public virtual void Uninstall(IWorkflowSlotViewModel slot)
                 {
                     component = null;
                     commands = [];
+                    slot.Targets.CollectionChanged -= OnTargetsChanged;
+                    slot.Sources.CollectionChanged -= OnSourcesChanged;
                 }
+
                 public virtual void Closing() => commands.StandardClosing();
                 public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
                 public virtual void Closed() => commands.StandardClosed();
@@ -69,6 +74,66 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void ReceiveConnection() => component?.StandardReceiveConnection();
 
                 public virtual void Delete() => component?.StandardDelete();
+
+                #region Data CallBack
+                private void OnTargetsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+                {
+                    switch (e.Action)
+                    {
+                        case NotifyCollectionChangedAction.Add:
+                            if (e.NewItems is null) return;
+                            foreach (var item in e.NewItems)
+                            {
+                                if (item is IWorkflowSlotViewModel slot)
+                                {
+                                    OnTargetAdded(slot);
+                                }
+                            }
+                            break;
+                        case NotifyCollectionChangedAction.Remove:
+                            if (e.OldItems is null) return;
+                            foreach (var item in e.OldItems)
+                            {
+                                if (item is IWorkflowSlotViewModel slot)
+                                {
+                                    OnTargetRemoved(slot);
+                                }
+                            }
+                            break;
+                    }
+                }
+                protected virtual void OnTargetAdded(IWorkflowSlotViewModel slot) { }
+                protected virtual void OnTargetRemoved(IWorkflowSlotViewModel slot) { }
+
+                private void OnSourcesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+                {
+                    switch (e.Action)
+                    {
+                        case NotifyCollectionChangedAction.Add:
+                            if (e.NewItems is null) return;
+                            foreach (var item in e.NewItems)
+                            {
+                                if (item is IWorkflowSlotViewModel slot)
+                                {
+                                    OnSourceAdded(slot);
+                                }
+                            }
+                            break;
+                        case NotifyCollectionChangedAction.Remove:
+                            if (e.OldItems is null) return;
+                            foreach (var item in e.OldItems)
+                            {
+                                if (item is IWorkflowSlotViewModel slot)
+                                {
+                                    OnSourceRemoved(slot);
+                                }
+                            }
+                            break;
+                    }
+                }
+                protected virtual void OnSourceAdded(IWorkflowSlotViewModel slot) { }
+                protected virtual void OnSourceRemoved(IWorkflowSlotViewModel slot) { }
+                #endregion
             }
 
             /// <summary>
