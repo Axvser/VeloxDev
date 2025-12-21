@@ -148,11 +148,13 @@ namespace VeloxDev.Core.WorkflowSystem
                 {
                     component = node;
                     commands = node.GetStandardCommands();
+                    node.Slots.CollectionChanged += OnSlotsChanged;
                 }
                 public virtual void Uninstall(IWorkflowNodeViewModel node)
                 {
                     component = null;
                     commands = [];
+                    node.Slots.CollectionChanged -= OnSlotsChanged;
                 }
                 public virtual void Closing() => commands.StandardClosing();
                 public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
@@ -182,6 +184,35 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void Move(Offset offset) => component?.StandardMove(offset);
 
                 public virtual void Delete() => component?.StandardDelete();
+
+                private void OnSlotsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+                {
+                    switch (e.Action)
+                    {
+                        case NotifyCollectionChangedAction.Add:
+                            if (e.NewItems is null) return;
+                            foreach (var item in e.NewItems)
+                            {
+                                if (item is IWorkflowSlotViewModel slot)
+                                {
+                                    OnSlotAdded(slot);
+                                }
+                            }
+                            break;
+                        case NotifyCollectionChangedAction.Remove:
+                            if (e.OldItems is null) return;
+                            foreach (var item in e.OldItems)
+                            {
+                                if (item is IWorkflowSlotViewModel slot)
+                                {
+                                    OnSlotRemoved(slot);
+                                }
+                            }
+                            break;
+                    }
+                }
+                protected virtual void OnSlotAdded(IWorkflowSlotViewModel slot) { }
+                protected virtual void OnSlotRemoved(IWorkflowSlotViewModel slot) { }
             }
 
             /// <summary>
