@@ -9,7 +9,6 @@ namespace VeloxDev.Core.Generator.Writers
     {
         public const string ObservableCollectionFullName = "global::System.Collections.ObjectModel.ObservableCollection";
         public const string DictionaryFullName = "global::System.Collections.Generic.Dictionary";
-        public const string HashSetFullName = "global::System.Collections.Generic.HashSet";
         public const string ObjectFullName = "global::System.Object";
         public const string TaskFullName = "global::System.Threading.Tasks.Task";
         public const string CancellationTokenFullName = "global::System.Threading.CancellationToken";
@@ -386,11 +385,11 @@ namespace VeloxDev.Core.Generator.Writers
          }
 
          public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModelHelper GetHelper() => Helper;
-         public virtual void InitializeWorkflow() => Helper.Initialize(this);
+         public virtual void InitializeWorkflow() => Helper.Install(this);
          public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModelHelper helper)
          {
              Helper.Uninstall(this);
-             helper.Initialize(this);
+             helper.Install(this);
              Helper = helper;
          }
 
@@ -613,11 +612,11 @@ namespace VeloxDev.Core.Generator.Writers
                     }
 
                     public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper GetHelper() => Helper;
-                    public virtual void InitializeWorkflow() => Helper.Initialize(this);
+                    public virtual void InitializeWorkflow() => Helper.Install(this);
                     public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper helper)
                     {
                         Helper.Uninstall(this);
-                        helper.Initialize(this);
+                        helper.Install(this);
                         Helper = helper;
                     }
 
@@ -786,8 +785,8 @@ namespace VeloxDev.Core.Generator.Writers
             sb.AppendLine($$"""
         public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
 
-        private {{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> targets = [];
-        private {{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> sources = [];
+        private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> targets = [];
+        private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> sources = [];
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel? parent = null;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel channel = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel.OneBoth;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState state = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState.StandBy;
@@ -834,15 +833,15 @@ namespace VeloxDev.Core.Generator.Writers
         }
 
         public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModelHelper GetHelper() => Helper;
-        public virtual void InitializeWorkflow() => Helper.Initialize(this);
+        public virtual void InitializeWorkflow() => Helper.Install(this);
         public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModelHelper helper)
         {
             Helper.Uninstall(this);
-            helper.Initialize(this);
+            helper.Install(this);
             Helper = helper;
         }
 
-        public {{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> Targets
+        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> Targets
         {
             get => targets;
             set
@@ -856,9 +855,9 @@ namespace VeloxDev.Core.Generator.Writers
                OnPropertyChanged(nameof(Targets));
             }
         }
-        partial void OnTargetsChanging({{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-        partial void OnTargetsChanged({{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-        public {{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> Sources
+        partial void OnTargetsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
+        partial void OnTargetsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
+        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> Sources
         {
             get => sources;
             set
@@ -872,8 +871,8 @@ namespace VeloxDev.Core.Generator.Writers
                OnPropertyChanged(nameof(Sources));
             }
         }
-        partial void OnSourcesChanging({{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-        partial void OnSourcesChanged({{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{HashSetFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
+        partial void OnSourcesChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
+        partial void OnSourcesChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
         public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel Parent
         {
             get => parent;
@@ -1070,11 +1069,11 @@ namespace VeloxDev.Core.Generator.Writers
         }
 
         public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModelHelper GetHelper() => Helper;
-        public virtual void InitializeWorkflow() => Helper.Initialize(this);
+        public virtual void InitializeWorkflow() => Helper.Install(this);
         public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModelHelper helper)
         {
             Helper.Uninstall(this);
-            helper.Initialize(this);
+            helper.Install(this);
             Helper = helper;
         }
 

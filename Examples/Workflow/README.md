@@ -6,7 +6,7 @@
 
 ## ✍️ 1. 代码怎么写？
 
-### 步骤 1：定义组件 ViewModel（仅需标记特性）
+### 步骤 1：定义组件 ViewModel
 ```csharp
 // 根容器
 [WorkflowBuilder.ViewModel.Tree<TreeHelper>]
@@ -75,6 +75,7 @@ bool ok = json.TryDeSerialize(out MyTree? tree);         // 反序列化
 | `ApplyConnectionCommand` | `null` | 设为连接发起端 |
 | `ReceiveConnectionCommand` | `null` | 设为连接接收端 |
 | `UndoCommand` / `RedoCommand` | `null` | 撤销/重做 |
+| ... |||
 
 ### 序列化扩展（来自 `WorkflowEx`）
 | 方法 | 说明 |
@@ -82,6 +83,7 @@ bool ok = json.TryDeSerialize(out MyTree? tree);         // 反序列化
 | `T.Serialize()` | 同步序列化为 JSON |
 | `json.TryDeSerialize<T>(out T?)` | 安全反序列化 |
 | `stream.TryDeSerializeFromStreamAsync<T>()` | 异步从流加载 |
+| ... ||
 
 ### 关键数据模型
 | 类型 | 字段 |

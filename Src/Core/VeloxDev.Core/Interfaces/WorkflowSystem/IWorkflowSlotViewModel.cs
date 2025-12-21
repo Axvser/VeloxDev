@@ -1,4 +1,5 @@
-﻿using VeloxDev.Core.Interfaces.MVVM;
+﻿using System.Collections.ObjectModel;
+using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.Core.Interfaces.WorkflowSystem
@@ -27,8 +28,8 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
     public interface IWorkflowSlotViewModel : IWorkflowViewModel
     {
-        public HashSet<IWorkflowSlotViewModel> Targets { get; set; }
-        public HashSet<IWorkflowSlotViewModel> Sources { get; set; }
+        public ObservableCollection<IWorkflowSlotViewModel> Targets { get; set; }
+        public ObservableCollection<IWorkflowSlotViewModel> Sources { get; set; }
         public IWorkflowNodeViewModel? Parent { get; set; }
         public SlotChannel Channel { get; set; }
         public SlotState State { get; set; }

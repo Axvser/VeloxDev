@@ -239,11 +239,30 @@ public static class WorkflowNodeEx
         foreach (var slot in node.Slots)
         {
             slot.Parent = node;
-            // 恢复Slot的连接关系（现在都是有效连接）
+
             if (slotConnections.TryGetValue(slot, out var connectionsInfo))
             {
-                slot.Targets.UnionWith(connectionsInfo.Targets);
-                slot.Sources.UnionWith(connectionsInfo.Sources);
+                if (connectionsInfo.Targets != null)
+                {
+                    foreach (var target in connectionsInfo.Targets)
+                    {
+                        if (!slot.Targets.Contains(target))
+                        {
+                            slot.Targets.Add(target);
+                        }
+                    }
+                }
+
+                if (connectionsInfo.Sources != null)
+                {
+                    foreach (var source in connectionsInfo.Sources)
+                    {
+                        if (!slot.Sources.Contains(source))
+                        {
+                            slot.Sources.Add(source);
+                        }
+                    }
+                }
             }
         }
 

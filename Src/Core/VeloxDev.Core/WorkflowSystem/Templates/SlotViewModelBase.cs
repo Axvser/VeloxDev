@@ -1,4 +1,5 @@
-﻿using VeloxDev.Core.AOT;
+﻿using System.Collections.ObjectModel;
+using VeloxDev.Core.AOT;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 
@@ -11,8 +12,8 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
 
         public SlotViewModelBase() { InitializeWorkflow(); }
 
-        [VeloxProperty] private HashSet<IWorkflowSlotViewModel> targets = [];
-        [VeloxProperty] private HashSet<IWorkflowSlotViewModel> sources = [];
+        [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> targets = [];
+        [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> sources = [];
         [VeloxProperty] private IWorkflowNodeViewModel? parent = null;
         [VeloxProperty] private SlotChannel channel = SlotChannel.OneBoth;
         [VeloxProperty] private SlotState state = SlotState.StandBy;
