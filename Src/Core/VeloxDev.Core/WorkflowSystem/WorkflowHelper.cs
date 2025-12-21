@@ -1,4 +1,5 @@
-﻿using VeloxDev.Core.Interfaces.MVVM;
+﻿using System.Collections.Specialized;
+using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem.StandardEx;
 using VeloxDev.Core.WorkflowSystem.Templates;
@@ -22,11 +23,14 @@ namespace VeloxDev.Core.WorkflowSystem
                     component = link;
                     commands = link.GetStandardCommands();
                 }
-                public virtual void Uninstall(IWorkflowLinkViewModel link) { }
+                public virtual void Uninstall(IWorkflowLinkViewModel link) 
+                {
+                    component = null;
+                    commands = [];
+                }
                 public virtual void Closing() => commands.StandardClosing();
                 public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
                 public virtual void Closed() => commands.StandardClosed();
-                public virtual void Dispose() { GC.SuppressFinalize(this); }
 
                 public virtual void Delete() => component?.StandardDelete();
             }
@@ -44,14 +48,14 @@ namespace VeloxDev.Core.WorkflowSystem
                     component = slot;
                     commands = slot.GetStandardCommands();
                 }
-                public void Uninstall(IWorkflowSlotViewModel slot)
+                public virtual void Uninstall(IWorkflowSlotViewModel slot)
                 {
-
+                    component = null;
+                    commands = [];
                 }
                 public virtual void Closing() => commands.StandardClosing();
                 public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
                 public virtual void Closed() => commands.StandardClosed();
-                public virtual void Dispose() { GC.SuppressFinalize(this); }
 
                 public virtual void SetSize(Size size) => component?.StandardSetSize(size);
                 public virtual void SetOffset(Offset offset) => component?.StandardSetOffset(offset);
@@ -80,14 +84,14 @@ namespace VeloxDev.Core.WorkflowSystem
                     component = node;
                     commands = node.GetStandardCommands();
                 }
-                public void Uninstall(IWorkflowNodeViewModel node)
+                public virtual void Uninstall(IWorkflowNodeViewModel node)
                 {
-
+                    component = null;
+                    commands = [];
                 }
                 public virtual void Closing() => commands.StandardClosing();
                 public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
                 public virtual void Closed() => commands.StandardClosed();
-                public virtual void Dispose() { GC.SuppressFinalize(this); }
                 public virtual void CreateSlot(IWorkflowSlotViewModel slot) => component?.StandardCreateSlot(slot);
 
                 public virtual async Task BroadcastAsync(
@@ -127,14 +131,20 @@ namespace VeloxDev.Core.WorkflowSystem
                 {
                     component = tree;
                     commands = tree.GetStandardCommands();
+                    tree.Nodes.CollectionChanged += OnNodesChanged;
+                    tree.Links.CollectionChanged += OnLinksChanged;
                 }
-
-                public void Uninstall(IWorkflowTreeViewModel tree) { }
+                public virtual void Uninstall(IWorkflowTreeViewModel tree)
+                {
+                    component = null;
+                    commands = [];
+                    tree.Nodes.CollectionChanged -= OnNodesChanged;
+                    tree.Links.CollectionChanged -= OnLinksChanged;
+                }
 
                 public virtual void Closing() => commands.StandardClosing();
                 public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
                 public virtual void Closed() => commands.StandardClosed();
-                public virtual void Dispose() { GC.SuppressFinalize(this); }
 
                 public virtual IWorkflowLinkViewModel CreateLink(
                     IWorkflowSlotViewModel sender,
@@ -151,7 +161,67 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void SetPointer(Anchor anchor)
                     => component?.StandardSetPointer(anchor);
 
-                #region Connection Manager - 替换为调用Ex方法
+                #region Data CallBack
+                private void OnNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+                {
+                    switch (e.Action)
+                    {
+                        case NotifyCollectionChangedAction.Add:
+                            if (e.NewItems is null) return;
+                            foreach (var item in e.NewItems)
+                            {
+                                if (item is IWorkflowNodeViewModel node)
+                                {
+                                    OnNodeAdded(node);
+                                }
+                            }
+                            break;
+                        case NotifyCollectionChangedAction.Remove:
+                            if (e.OldItems is null) return;
+                            foreach (var item in e.OldItems)
+                            {
+                                if (item is IWorkflowNodeViewModel node)
+                                {
+                                    OnNodeRemoved(node);
+                                }
+                            }
+                            break;
+                    }
+                }
+                protected virtual void OnNodeAdded(IWorkflowNodeViewModel node) { }
+                protected virtual void OnNodeRemoved(IWorkflowNodeViewModel node) { }
+
+                private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+                {
+                    switch (e.Action)
+                    {
+                        case NotifyCollectionChangedAction.Add:
+                            if (e.NewItems is null) return;
+                            foreach (var item in e.NewItems)
+                            {
+                                if (item is IWorkflowLinkViewModel link)
+                                {
+                                    OnLinkAdded(link);
+                                }
+                            }
+                            break;
+                        case NotifyCollectionChangedAction.Remove:
+                            if (e.OldItems is null) return;
+                            foreach (var item in e.OldItems)
+                            {
+                                if (item is IWorkflowLinkViewModel link)
+                                {
+                                    OnLinkRemoved(link);
+                                }
+                            }
+                            break;
+                    }
+                }
+                protected virtual void OnLinkAdded(IWorkflowLinkViewModel link) { }
+                protected virtual void OnLinkRemoved(IWorkflowLinkViewModel link) { }
+                #endregion
+
+                #region Connection Manager
                 public virtual bool ValidateConnection(
                     IWorkflowSlotViewModel sender,
                     IWorkflowSlotViewModel receiver)
@@ -167,7 +237,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     => component?.StandardResetVirtualLink();
                 #endregion
 
-                #region Redo & Undo - 替换为调用Ex方法
+                #region Redo & Undo
                 public virtual void Redo()
                     => component?.StandardRedo();
 
