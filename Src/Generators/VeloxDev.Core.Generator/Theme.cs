@@ -157,11 +157,7 @@ namespace VeloxDev.Core.Generator
                 }
 
                 // 4. 获取属性的完整类型信息（支持泛型、数组等）
-                var propertyTypeName = propertySymbol.Type.ToDisplayString(
-                    new SymbolDisplayFormat(
-                        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-                        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
-                        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes));
+                var propertyTypeName = propertySymbol.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
                 // 5. 处理转换器实例缓存
                 if (!converterTypeToKey.TryGetValue(converterTypeName, out var converterKey))
