@@ -1,6 +1,8 @@
 ﻿using Microsoft.Maui.Controls.Shapes;
+using System.Diagnostics;
 using VeloxDev.Core.TransitionSystem;
 using VeloxDev.MAUI.PlatformAdapters;
+using VeloxDev.MAUI.PlatformAdapters.Interpolators;
 
 namespace Demo
 {
@@ -76,11 +78,13 @@ namespace Demo
         // 简单动画 - 平移
         private static readonly Transition<Rectangle>.StateSnapshot Animation0 =
             Transition<Rectangle>.Create()
-                .Property(r => r.TranslationX, 800)  // MAUI 的平移X
-                .Property(r => r.TranslationY, 0)   // MAUI 的平移Y
-                .Property(r => r.Background, new LinearGradientBrush()
+                .Property(r => r.Fill, new LinearGradientBrush()
                 {
-                    GradientStops = [new GradientStop(Colors.Red, 0), new GradientStop(Colors.Lime, 1)]
+                    GradientStops = 
+                    [ 
+                        new GradientStop(Colors.Cyan,0),
+                        new GradientStop(Colors.Yellow,1)
+                    ]
                 })
                 .Effect(new TransitionEffect()
                 {

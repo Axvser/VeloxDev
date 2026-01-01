@@ -2,6 +2,8 @@
 
 > 在多个.NET的UI框架中采用一致API完成常见编程任务
 
+[Wiki](https://axvser.github.io/VeloxDev.Wiki/)
+
 ---
 
 ## 📚 目录

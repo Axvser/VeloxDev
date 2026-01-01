@@ -6,22 +6,23 @@
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core.Extension</Title>
-		<Version>1.0.1</Version>
+		<Version>3.4.0</Version>
 		<Authors>Axvser</Authors>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageReadmeFile></PackageReadmeFile>
 		<Description>VeloxDev.Core tries not to rely on any third-party libraries, while Extension, as an optional extension package, contains a set of advanced functions implemented based on third-party libraries, which can further optimize the user experience</Description>
+		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-		<PackageReference Include="VeloxDev.Core" Version="3.3.0" />
+		<PackageReference Include="VeloxDev.Core" Version="3.4.0" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Update="README.md">
-	    <Pack>True</Pack>
-	    <PackagePath>\</PackagePath>
-	  </None>
+		<None Include="..\..\..\LICENSE.txt">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
 	</ItemGroup>
 
 </Project>

@@ -10,12 +10,14 @@ namespace VeloxDev.Core.Generator.Writers
     public class MVVMWriter : WriterBase
     {
         private List<MVVMPropertyFactory> MVVMProperties { get; set; } = [];
+        private List<MVVMPropertyFactory> AutoProperties { get; set; } = [];
         private bool IsWorkflowComponent { get; set; } = false;
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
             ReadMVVMConfig(namedTypeSymbol);
+            ReadAutoProperties(namedTypeSymbol);
             IsWorkflowComponent = HasWorkflowAttribute(namedTypeSymbol);
         }
 
@@ -37,6 +39,24 @@ namespace VeloxDev.Core.Generator.Writers
             ];
         }
 
+        private void ReadAutoProperties(INamedTypeSymbol symbol)
+        {
+            AutoProperties =
+            [
+                .. symbol.GetMembers()
+                    .OfType<IPropertySymbol>()
+                    .Where(property => property.GetAttributes().Any(attr =>
+                        attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                        NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
+                    .Select(property => new MVVMPropertyAnalizer(property))
+                    .Select(analizer => new MVVMPropertyFactory(analizer, "public", false)
+                    {
+                        SetteringBody = analizer.HasSetter ? [$"OnPropertyChanging(nameof({analizer.PropertyName}));"] : [],
+                        SetteredBody = analizer.HasSetter ? [$"OnPropertyChanged(nameof({analizer.PropertyName}));"] : [],
+                    })
+            ];
+        }
+
         private bool HasWorkflowAttribute(INamedTypeSymbol symbol)
         {
             var attributes = symbol.GetAttributes();
@@ -47,14 +67,12 @@ namespace VeloxDev.Core.Generator.Writers
 
                 var attributeFullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-                // 直接检查特性全名是否包含Workflow相关命名空间
                 if (attributeFullName.Contains("WorkflowBuilder.ViewModel") ||
                     attributeFullName.Contains("VeloxDev.Core.WorkflowSystem"))
                 {
                     return true;
                 }
 
-                // 或者检查特性名称
                 var attributeName = attributeClass.Name;
                 if (attributeName.Contains('`'))
                 {
@@ -70,7 +88,7 @@ namespace VeloxDev.Core.Generator.Writers
             return false;
         }
 
-        public override bool CanWrite() => MVVMProperties.Count > 0 || IsWorkflowComponent;
+        public override bool CanWrite() => MVVMProperties.Count > 0 || AutoProperties.Count > 0 || IsWorkflowComponent;
 
         public override string GetFileName()
         {
@@ -101,20 +119,30 @@ namespace VeloxDev.Core.Generator.Writers
 
             // 生成事件和方法
             builder.AppendLine($$"""
-                public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventHandler? PropertyChanging;
-                public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventHandler? PropertyChanged;
-                public void OnPropertyChanging(string propertyName)
-                {
-                    PropertyChanging?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventArgs(propertyName));
-                }
-                public void OnPropertyChanged(string propertyName)
-                {
-                    PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
-                }
-            """);
+                    public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventHandler? PropertyChanging;
+                    public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventHandler? PropertyChanged;
+                    public void OnPropertyChanging(string propertyName)
+                    {
+                        PropertyChanging?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventArgs(propertyName));
+                    }
+                    public void OnPropertyChanged(string propertyName)
+                    {
+                        PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
+                    }
+                """);
 
-            // 生成属性
-            foreach (var factory in MVVMProperties)
+            // 为自动属性生成字段
+            foreach (var factory in AutoProperties)
+            {
+                var fieldDeclaration = factory.GenerateFieldDeclaration();
+                if (!string.IsNullOrEmpty(fieldDeclaration))
+                {
+                    builder.AppendLine(fieldDeclaration);
+                }
+            }
+
+            // 生成属性（字段属性和自动属性）
+            foreach (var factory in MVVMProperties.Concat(AutoProperties))
             {
                 builder.AppendLine(factory.Generate());
             }

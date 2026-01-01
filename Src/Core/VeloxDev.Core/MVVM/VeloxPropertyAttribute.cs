@@ -1,9 +1,10 @@
 ﻿namespace VeloxDev.Core.MVVM
 {
     /// <summary>
-    /// Field ➤ Notify Property
+    /// <para> Field ➤ Notify Property </para>
+    /// <para> Partial Property ➤ Notify Property </para>
     /// </summary>
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
     public class VeloxPropertyAttribute : Attribute
     {
 

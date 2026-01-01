@@ -3,7 +3,8 @@
 		<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
 		<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
 		<RootNamespace>VeloxDev.WinUI</RootNamespace>
-		<RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+		<RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+		<RuntimeIdentifiers Condition="'$(RuntimeIdentifiers)' == ''">win-x64;win-arm64;win-x86</RuntimeIdentifiers>
 		<UseWinUI>true</UseWinUI>
 		<Nullable>enable</Nullable>
 		<WinUISDKReferences>false</WinUISDKReferences>
@@ -11,26 +12,14 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WinUI</Title>
-		<Version>3.3.6</Version>
+		<Version>3.4.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinUI</Description>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
-	<ItemGroup>
-	  <None Remove="README.md" />
-	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.0.0" />
-		<PackageReference Include="VeloxDev.Core" Version="3.3.6" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Resource Include="README.md">
-	    <Pack>True</Pack>
-	    <PackagePath>\</PackagePath>
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Resource>
+		<PackageReference Include="VeloxDev.Core" Version="3.4.0" />
 	</ItemGroup>
 
 </Project>

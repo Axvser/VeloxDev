@@ -25,10 +25,6 @@ namespace VeloxDev.MAUI.PlatformAdapters.Interpolators
                 result.Add(InterpolateAligned(alignedS, alignedE, t));
             }
 
-            // 确保首尾帧精确
-            result[0] = s;
-            result[steps - 1] = e;  // 修复这行：使用索引而不是赋值
-
             return result;
         }
 
@@ -36,38 +32,32 @@ namespace VeloxDev.MAUI.PlatformAdapters.Interpolators
 
         private static Brush Normalize(object? obj)
         {
-            if (obj is Brush b)
-                return b;
-
             if (obj is Color c)
                 return new SolidColorBrush(c);
+
+            if (obj is Brush b)
+                return b;
 
             return new SolidColorBrush(Colors.Transparent);
         }
 
-        /// <summary>
-        /// 对齐画刷类型以便插值
-        /// </summary>
         private static (Brush, Brush) AlignBrushTypes(Brush s, Brush e)
         {
             if (s.GetType() == e.GetType())
                 return (s, e);
 
-            // SolidColorBrush ↔ LinearGradientBrush 转换
             if (s is SolidColorBrush sb && e is LinearGradientBrush le)
                 return (ToLinearEquivalent(sb, le), e);
 
             if (e is SolidColorBrush eb && s is LinearGradientBrush ls)
                 return (s, ToLinearEquivalent(eb, ls));
 
-            // SolidColorBrush ↔ RadialGradientBrush 转换  
             if (s is SolidColorBrush sb2 && e is RadialGradientBrush re)
                 return (ToRadialEquivalent(sb2, re), e);
 
             if (e is SolidColorBrush eb2 && s is RadialGradientBrush rs)
                 return (s, ToRadialEquivalent(eb2, rs));
 
-            // 无法对齐的类型保持原样
             return (s, e);
         }
 
@@ -105,24 +95,43 @@ namespace VeloxDev.MAUI.PlatformAdapters.Interpolators
         {
             try
             {
-                return (s, e) switch
-                {
-                    (SolidColorBrush sb, SolidColorBrush eb) => InterpolateSolidColors(sb, eb, t),
-                    (LinearGradientBrush sl, LinearGradientBrush el) => InterpolateLinearGradient(sl, el, t),
-                    (RadialGradientBrush sr, RadialGradientBrush er) => InterpolateRadialGradient(sr, er, t),
-                    _ => CreateFallbackInterpolation(s, e, t),
-                };
+                if (t <= 0.0) return CloneBrush(s);
+                if (t >= 1.0) return CloneBrush(e);
+
+                // 修复：使用is模式匹配而不是switch表达式
+                if (s is SolidColorBrush startSolid && e is SolidColorBrush endSolid)
+                    return InterpolateSolidColors(startSolid, endSolid, t);
+
+                if (s is LinearGradientBrush startLinear && e is LinearGradientBrush endLinear)
+                    return InterpolateLinearGradient(startLinear, endLinear, t);
+
+                if (s is RadialGradientBrush startRadial && e is RadialGradientBrush endRadial)
+                    return InterpolateRadialGradient(startRadial, endRadial, t);
+
+                return CreateFallbackInterpolation(s, e, t);
             }
             catch
             {
-                // 出错时返回结束值
-                return e;
+                return t < 0.5 ? CloneBrush(s) : CloneBrush(e);
             }
         }
 
         private static SolidColorBrush InterpolateSolidColors(SolidColorBrush start, SolidColorBrush end, double t)
         {
-            return new SolidColorBrush(LerpColorPremultiplied(start.Color, end.Color, t));
+            var startColor = start.Color;
+            var endColor = end.Color;
+
+            double red = Lerp(startColor.Red, endColor.Red, t);
+            double green = Lerp(startColor.Green, endColor.Green, t);
+            double blue = Lerp(startColor.Blue, endColor.Blue, t);
+            double alpha = Lerp(startColor.Alpha, endColor.Alpha, t);
+
+            red = ClampToUnit(red);
+            green = ClampToUnit(green);
+            blue = ClampToUnit(blue);
+            alpha = ClampToUnit(alpha);
+
+            return new SolidColorBrush(Color.FromRgba(red, green, blue, alpha));
         }
 
         private static LinearGradientBrush InterpolateLinearGradient(LinearGradientBrush start, LinearGradientBrush end, double t)
@@ -133,14 +142,50 @@ namespace VeloxDev.MAUI.PlatformAdapters.Interpolators
                 EndPoint = LerpPoint(start.EndPoint, end.EndPoint, t)
             };
 
-            var count = Math.Min(start.GradientStops.Count, end.GradientStops.Count);
-            for (var i = 0; i < count; i++)
+            var maxStops = Math.Max(start.GradientStops.Count, end.GradientStops.Count);
+
+            for (var i = 0; i < maxStops; i++)
             {
-                result.GradientStops.Add(new GradientStop
+                var startStop = i < start.GradientStops.Count ? start.GradientStops[i] : null;
+                var endStop = i < end.GradientStops.Count ? end.GradientStops[i] : null;
+
+                if (startStop != null && endStop != null)
                 {
-                    Color = LerpColorPremultiplied(start.GradientStops[i].Color, end.GradientStops[i].Color, t),
-                    Offset = (float)Lerp(start.GradientStops[i].Offset, end.GradientStops[i].Offset, t)
-                });
+                    var startColor = startStop.Color;
+                    var endColor = endStop.Color;
+
+                    double red = Lerp(startColor.Red, endColor.Red, t);
+                    double green = Lerp(startColor.Green, endColor.Green, t);
+                    double blue = Lerp(startColor.Blue, endColor.Blue, t);
+                    double alpha = Lerp(startColor.Alpha, endColor.Alpha, t);
+
+                    red = ClampToUnit(red);
+                    green = ClampToUnit(green);
+                    blue = ClampToUnit(blue);
+                    alpha = ClampToUnit(alpha);
+
+                    result.GradientStops.Add(new GradientStop
+                    {
+                        Color = Color.FromRgba(red, green, blue, alpha),
+                        Offset = (float)Lerp(startStop.Offset, endStop.Offset, t)
+                    });
+                }
+                else if (startStop != null)
+                {
+                    result.GradientStops.Add(new GradientStop
+                    {
+                        Color = startStop.Color,
+                        Offset = startStop.Offset
+                    });
+                }
+                else if (endStop != null)
+                {
+                    result.GradientStops.Add(new GradientStop
+                    {
+                        Color = endStop.Color,
+                        Offset = endStop.Offset
+                    });
+                }
             }
             return result;
         }
@@ -153,14 +198,50 @@ namespace VeloxDev.MAUI.PlatformAdapters.Interpolators
                 Radius = (float)Lerp(start.Radius, end.Radius, t)
             };
 
-            var count = Math.Min(start.GradientStops.Count, end.GradientStops.Count);
-            for (var i = 0; i < count; i++)
+            var maxStops = Math.Max(start.GradientStops.Count, end.GradientStops.Count);
+
+            for (var i = 0; i < maxStops; i++)
             {
-                result.GradientStops.Add(new GradientStop
+                var startStop = i < start.GradientStops.Count ? start.GradientStops[i] : null;
+                var endStop = i < end.GradientStops.Count ? end.GradientStops[i] : null;
+
+                if (startStop != null && endStop != null)
                 {
-                    Color = LerpColorPremultiplied(start.GradientStops[i].Color, end.GradientStops[i].Color, t),
-                    Offset = (float)Lerp(start.GradientStops[i].Offset, end.GradientStops[i].Offset, t)
-                });
+                    var startColor = startStop.Color;
+                    var endColor = endStop.Color;
+
+                    double red = Lerp(startColor.Red, endColor.Red, t);
+                    double green = Lerp(startColor.Green, endColor.Green, t);
+                    double blue = Lerp(startColor.Blue, endColor.Blue, t);
+                    double alpha = Lerp(startColor.Alpha, endColor.Alpha, t);
+
+                    red = ClampToUnit(red);
+                    green = ClampToUnit(green);
+                    blue = ClampToUnit(blue);
+                    alpha = ClampToUnit(alpha);
+
+                    result.GradientStops.Add(new GradientStop
+                    {
+                        Color = Color.FromRgba(red, green, blue, alpha),
+                        Offset = (float)Lerp(startStop.Offset, endStop.Offset, t)
+                    });
+                }
+                else if (startStop != null)
+                {
+                    result.GradientStops.Add(new GradientStop
+                    {
+                        Color = startStop.Color,
+                        Offset = startStop.Offset
+                    });
+                }
+                else if (endStop != null)
+                {
+                    result.GradientStops.Add(new GradientStop
+                    {
+                        Color = endStop.Color,
+                        Offset = endStop.Offset
+                    });
+                }
             }
             return result;
         }
@@ -169,7 +250,18 @@ namespace VeloxDev.MAUI.PlatformAdapters.Interpolators
         {
             var c1 = ExtractRepresentativeColor(start);
             var c2 = ExtractRepresentativeColor(end);
-            return new SolidColorBrush(LerpColorPremultiplied(c1, c2, t));
+
+            double red = Lerp(c1.Red, c2.Red, t);
+            double green = Lerp(c1.Green, c2.Green, t);
+            double blue = Lerp(c1.Blue, c2.Blue, t);
+            double alpha = Lerp(c1.Alpha, c2.Alpha, t);
+
+            red = ClampToUnit(red);
+            green = ClampToUnit(green);
+            blue = ClampToUnit(blue);
+            alpha = ClampToUnit(alpha);
+
+            return new SolidColorBrush(Color.FromRgba(red, green, blue, alpha));
         }
 
         #endregion
@@ -183,54 +275,74 @@ namespace VeloxDev.MAUI.PlatformAdapters.Interpolators
             return new Point(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t));
         }
 
+        private static double ClampToUnit(double value)
+        {
+            if (value < 0.0) return 0.0;
+            if (value > 1.0) return 1.0;
+            return value;
+        }
+
         private static Color ExtractRepresentativeColor(Brush brush)
         {
             if (brush is SolidColorBrush sb)
                 return sb.Color;
 
             if (brush is GradientBrush gb && gb.GradientStops.Count > 0)
-                return gb.GradientStops[0].Color;  // 修复：使用索引而不是属性
+                return gb.GradientStops[0].Color;
 
             return Colors.Transparent;
         }
 
-        /// <summary>
-        /// 使用预乘Alpha的颜色插值（更准确的颜色混合）
-        /// </summary>
-        private static Color LerpColorPremultiplied(Color a, Color b, double t)
+        private static Brush CloneBrush(Brush original)
         {
-            var aA = a.Alpha / 255.0;
-            var bA = b.Alpha / 255.0;
+            if (original is SolidColorBrush sb)
+                return new SolidColorBrush(sb.Color);
 
-            // 预乘RGB分量
-            var ar = a.Red * aA;
-            var ag = a.Green * aA;
-            var ab = a.Blue * aA;
+            if (original is LinearGradientBrush lb)
+                return CloneLinearGradient(lb);
 
-            var br = b.Red * bA;
-            var bg = b.Green * bA;
-            var bb = b.Blue * bA;
+            if (original is RadialGradientBrush rb)
+                return CloneRadialGradient(rb);
 
-            // 插值预乘后的分量
-            var rr = ar * (1.0 - t) + br * t;
-            var gg = ag * (1.0 - t) + bg * t;
-            var bbResult = ab * (1.0 - t) + bb * t;
-            var aa = aA * (1.0 - t) + bA * t;
+            return new SolidColorBrush(Colors.Transparent);
+        }
 
-            // 反预乘
-            if (aa > 0)
+        private static LinearGradientBrush CloneLinearGradient(LinearGradientBrush original)
+        {
+            var brush = new LinearGradientBrush
             {
-                rr /= aa;
-                gg /= aa;
-                bbResult /= aa;
+                StartPoint = original.StartPoint,
+                EndPoint = original.EndPoint
+            };
+
+            foreach (var stop in original.GradientStops)
+            {
+                brush.GradientStops.Add(new GradientStop
+                {
+                    Color = stop.Color,
+                    Offset = stop.Offset
+                });
             }
+            return brush;
+        }
 
-            var alpha = (byte)Math.Clamp(aa * 255.0, 0, 255);
-            var red = (byte)Math.Clamp(rr * 255.0, 0, 255);
-            var green = (byte)Math.Clamp(gg * 255.0, 0, 255);
-            var blue = (byte)Math.Clamp(bbResult * 255.0, 0, 255);
+        private static RadialGradientBrush CloneRadialGradient(RadialGradientBrush original)
+        {
+            var brush = new RadialGradientBrush
+            {
+                Center = original.Center,
+                Radius = original.Radius
+            };
 
-            return Color.FromRgba(red, green, blue, alpha);
+            foreach (var stop in original.GradientStops)
+            {
+                brush.GradientStops.Add(new GradientStop
+                {
+                    Color = stop.Color,
+                    Offset = stop.Offset
+                });
+            }
+            return brush;
         }
 
         #endregion

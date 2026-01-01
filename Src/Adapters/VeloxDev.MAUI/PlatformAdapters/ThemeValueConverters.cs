@@ -242,7 +242,7 @@ namespace VeloxDev.MAUI.PlatformAdapters
             }
 
             // 2. 尝试获取当前页面（使用 MAUI 官方方法获取当前上下文）
-            return Shell.Current?.CurrentPage ?? Application.Current?.MainPage;
+            return Shell.Current?.CurrentPage ?? Application.Current?.Windows[0].Page;
         }
 
         // MAUI 官方推荐的元素级资源查找
