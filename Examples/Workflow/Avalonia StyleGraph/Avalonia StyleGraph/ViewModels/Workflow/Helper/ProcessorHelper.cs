@@ -54,9 +54,9 @@ namespace Avalonia_StyleGraph.ViewModels.Workflow.Helper
             }
         }
 
-        public override void Initialize(IWorkflowNodeViewModel node)
+        public override void Install(IWorkflowNodeViewModel node)
         {
-            base.Initialize(node);
+            base.Install(node);
             _viewModel = node as HoverProcessorViewModel;
         }
 

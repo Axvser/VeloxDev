@@ -11,9 +11,9 @@ namespace Avalonia_StyleGraph.ViewModels.Workflow.Helper
     {
         private HoverTriggerViewModel? _viewModel;
 
-        public override void Initialize(IWorkflowNodeViewModel node)
+        public override void Install(IWorkflowNodeViewModel node)
         {
-            base.Initialize(node);
+            base.Install(node);
             _viewModel = node as HoverTriggerViewModel;
         }
 

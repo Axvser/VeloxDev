@@ -23,20 +23,33 @@ namespace Demo.ViewModels.Workflow.Helper
             _viewModel = node as NodeViewModel;
             _viewModel!.WorkCommand.TaskStarted += (e) => 
             { 
-                _dispatcherQueue ??= DispatcherQueue.GetForCurrentThread(); 
-                _viewModel.RunCount++;
-                Debug.WriteLine("Plus Invoked");
+                _dispatcherQueue ??= DispatcherQueue.GetForCurrentThread();
+                _dispatcherQueue?.TryEnqueue(() =>
+                {
+                    _viewModel.RunCount++;
+                });
             };
             _viewModel!.WorkCommand.TaskExited += (e) =>
             {
                 _dispatcherQueue?.TryEnqueue(() =>
                 {
                     _viewModel.RunCount--;
-                    Debug.WriteLine("Minus Invoked");
                 });
             };
-            _viewModel!.WorkCommand.TaskEnqueued += (e) => _viewModel.WaitCount++;
-            _viewModel!.WorkCommand.TaskDequeued += (e) => _viewModel.WaitCount--;
+            _viewModel!.WorkCommand.TaskEnqueued += (e) =>
+            {
+                _dispatcherQueue?.TryEnqueue(() =>
+                {
+                    _viewModel.WaitCount++;
+                });
+            };
+            _viewModel!.WorkCommand.TaskDequeued += (e) =>
+            {
+                _dispatcherQueue?.TryEnqueue(() =>
+                {
+                    _viewModel.WaitCount--;
+                });
+            };
         }
 
         public override async Task WorkAsync(object? parameter, CancellationToken ct)

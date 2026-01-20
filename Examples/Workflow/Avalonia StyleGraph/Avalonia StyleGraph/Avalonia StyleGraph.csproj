@@ -20,8 +20,11 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" />
-    <PackageReference Include="VeloxDev.Avalonia" />
-    <PackageReference Include="VeloxDev.Core.Extension" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.Avalonia\VeloxDev.Avalonia.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
   </ItemGroup>
 	
 </Project>
