@@ -23,7 +23,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     component = link;
                     commands = link.GetStandardCommands();
                 }
-                public virtual void Uninstall(IWorkflowLinkViewModel link) 
+                public virtual void Uninstall(IWorkflowLinkViewModel link)
                 {
                     component = null;
                     commands = [];
@@ -239,7 +239,10 @@ namespace VeloxDev.Core.WorkflowSystem
                 }
 
                 public virtual void Closing() => commands.StandardClosing();
-                public virtual async Task CloseAsync() => await commands.StandardCloseAsync();
+                public virtual async Task CloseAsync()
+                {
+                    if (component is not null) await component.StandardCloseAsync();
+                }
                 public virtual void Closed() => commands.StandardClosed();
 
                 public virtual IWorkflowLinkViewModel CreateLink(

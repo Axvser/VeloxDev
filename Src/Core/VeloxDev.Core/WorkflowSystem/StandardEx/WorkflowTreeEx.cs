@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using VeloxDev.Core.Interfaces.MVVM;
@@ -40,6 +41,52 @@ public static class WorkflowTreeEx
         component.VirtualLink.Receiver.Anchor = anchor;
         component.VirtualLink.OnPropertyChanged(nameof(component.VirtualLink.Receiver));
         component.OnPropertyChanged(nameof(component.VirtualLink));
+    }
+
+    public static async Task StandardCloseAsync(this IWorkflowTreeViewModel component)
+    {
+        component.GetHelper().Closing();
+
+        foreach (var node in component.Nodes)
+        {
+            node.GetHelper().Closing();
+            foreach (var slot in node.Slots)
+            {
+                slot.GetHelper().Closing();
+            }
+        }
+        foreach (var link in component.Links)
+        {
+            link.GetHelper().Closing();
+        }
+
+        foreach (var node in component.Nodes)
+        {
+            await node.GetHelper().CloseAsync().ConfigureAwait(false);
+            foreach (var slot in node.Slots)
+            {
+                await slot.GetHelper().CloseAsync().ConfigureAwait(false);
+            }
+        }
+        foreach (var link in component.Links)
+        {
+            await link.GetHelper().CloseAsync().ConfigureAwait(false);
+        }
+
+        foreach (var node in component.Nodes)
+        {
+            node.GetHelper().Closed();
+            foreach (var slot in node.Slots)
+            {
+                slot.GetHelper().Closed();
+            }
+        }
+        foreach (var link in component.Links)
+        {
+            link.GetHelper().Closed();
+        }
+
+        component.GetHelper().Closed();
     }
 
     #region Connection Manager Extensions

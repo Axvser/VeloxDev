@@ -11,7 +11,7 @@
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core</Title>
-		<Version>3.4.0</Version>
+		<Version>3.4.1</Version>
 		<Authors>Axvser</Authors>
 		<Description>The Core of VeloxDev. Shared those components that can optimize the development experience of WPF/Avalonia/MAUI……</Description>
 		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
