@@ -87,8 +87,8 @@ public partial class WorkflowView : UserControl
     {
         var point = e.GetPosition(Root_Canvas);
         _workflowViewModel.SetPointerCommand.Execute(new Anchor(
-            (point.X - _workflowViewModel.NegativeOffset.Left)*_workflowViewModel.Scale,
-            (point.Y - _workflowViewModel.NegativeOffset.Top)*_workflowViewModel.Scale,
+            point.X - _workflowViewModel.NegativeOffset.Left,
+            point.Y - _workflowViewModel.NegativeOffset.Top,
             0));
     }
 
