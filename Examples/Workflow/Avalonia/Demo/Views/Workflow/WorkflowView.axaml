@@ -13,79 +13,106 @@
 
 	<!-- 模板选择 -->
 	<UserControl.DataTemplates>
+		<!-- 节点模板 -->
 		<DataTemplate DataType="vm:NodeViewModel">
 			<local:NodeView Width="{Binding Size.Width}"
-							Height="{Binding Size.Height}"/>
+							Height="{Binding Size.Height}"
+							RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
 		</DataTemplate>
 
 		<DataTemplate DataType="vm:ControllerViewModel">
 			<local:ControllerView Width="{Binding Size.Width}"
-								  Height="{Binding Size.Height}"/>
+								  Height="{Binding Size.Height}"
+								  RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+		</DataTemplate>
+
+		<!-- 连接线模板 -->
+		<DataTemplate DataType="workflow:IWorkflowLinkViewModel">
+			<local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
+								   StartTop="{Binding Sender.Anchor.Top}"
+								   EndLeft="{Binding Receiver.Anchor.Left}"
+								   EndTop="{Binding Receiver.Anchor.Top}"
+								   CanRender="{Binding IsVisible}"
+								   Width="{Binding $parent[Canvas].Bounds.Width}"
+								   Height="{Binding $parent[Canvas].Bounds.Height}"
+								   RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
 		</DataTemplate>
 	</UserControl.DataTemplates>
 
-	<Canvas>
-		<!-- 控制按钮 -->
-		<Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}" />
-		<Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" Canvas.Top="100" />
-		<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" Canvas.Top="200" />
-		<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" Canvas.Top="300" />
-		<Button Content="Simulate" Width="100" Height="50" Click="SimulateData" Canvas.Top="400" />
+	<Grid ColumnDefinitions="2*,8*">
+		<Grid Grid.Column="0">
+			<StackPanel Orientation="Vertical">
+				<TextBlock Text="{Binding ActualSize}" />
+				<Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}" />
+				<Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" />
+				<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
+				<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
+				<Button Content="Simulate" Width="100" Height="50" Click="SimulateData" />
+				<Button Content="左延申" Click="Button_Click"/>
+				<Button Content="上延申" Click="Button_Click1"/>
+				<Button Content="右延申" Click="Button_Click2"/>
+				<Button Content="下延申" Click="Button_Click3"/>
+				<Button Content="放大" Click="Button_Click4"/>
+				<Button Content="缩小" Click="Button_Click5"/>
+			</StackPanel>
+		</Grid>
 
-		<!-- 节点集合 -->
-		<ItemsControl ItemsSource="{Binding Nodes}"
-					  ZIndex="1">
-			<ItemsControl.ItemsPanel>
-				<ItemsPanelTemplate>
-					<Canvas Width="{Binding $parent[Canvas].Bounds.Width}"
-							Height="{Binding $parent[Canvas].Bounds.Height}"/>
-				</ItemsPanelTemplate>
-			</ItemsControl.ItemsPanel>
-
-			<ItemsControl.ItemContainerTheme>
-				<ControlTheme TargetType="ContentPresenter" x:DataType="workflow:IWorkflowNodeViewModel">
-					<Setter Property="Canvas.Left" Value="{Binding Anchor.Left}" />
-					<Setter Property="Canvas.Top" Value="{Binding Anchor.Top}" />
-				</ControlTheme>
-			</ItemsControl.ItemContainerTheme>
-
-		</ItemsControl>
-
-		<!-- 连接线集合 -->
-		<ItemsControl ItemsSource="{Binding Links}"
-					  ZIndex="-1">
-			<ItemsControl.ItemsPanel>
-				<ItemsPanelTemplate>
-					<Canvas Width="{Binding $parent[Canvas].Bounds.Width}"
-							Height="{Binding $parent[Canvas].Bounds.Height}"/>
-				</ItemsPanelTemplate>
-			</ItemsControl.ItemsPanel>
-			<ItemsControl.ItemTemplate>
-				<DataTemplate DataType="workflow:IWorkflowLinkViewModel">
-					<local:BezierCurveView
-					StartLeft="{Binding Sender.Anchor.Left}"
-					StartTop="{Binding Sender.Anchor.Top}"
-					EndLeft="{Binding Receiver.Anchor.Left}"
-					EndTop="{Binding Receiver.Anchor.Top}"
-					CanRender="{Binding IsVisible}"
-					Width="{Binding $parent[Canvas].Bounds.Width}"
-					Height="{Binding $parent[Canvas].Bounds.Height}"
-					IsVirtual="False" />
-				</DataTemplate>
-			</ItemsControl.ItemTemplate>
-		</ItemsControl>
-
-		<!-- 虚拟预览线 -->
-		<local:BezierCurveView x:DataType="workflow:IWorkflowLinkViewModel"
-							   DataContext="{Binding VirtualLink}"
-							   StartLeft="{Binding Sender.Anchor.Left}"
-							   StartTop="{Binding Sender.Anchor.Top}"
-							   EndLeft="{Binding Receiver.Anchor.Left}"
-							   EndTop="{Binding Receiver.Anchor.Top}"
-							   CanRender="{Binding IsVisible}"
-							   Width="{Binding $parent[Canvas].Bounds.Width}"
-							   Height="{Binding $parent[Canvas].Bounds.Height}"
-							   IsVirtual="True"
-							   ZIndex="0" />
-	</Canvas>
+		<Grid Grid.Column="1">
+			<Border BorderBrush="White" BorderThickness="1" CornerRadius="3">
+				<ScrollViewer HorizontalScrollBarVisibility="Auto"
+							  x:Name="Root_ScrollViewer">
+					<Canvas Width="{Binding ActualSize.Width}"
+							Height="{Binding ActualSize.Height}"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Top"
+							RenderTransform="{Binding $parent[local:WorkflowView].GlobalScale}"
+							x:Name="Root_Canvas">
+						<!-- 已挂载节点 -->
+						<ItemsControl ItemsSource="{Binding Nodes}"
+									  ZIndex="0">
+							<ItemsControl.ItemsPanel>
+								<ItemsPanelTemplate>
+									<Canvas Width="{Binding ActualSize.Width}"
+											Height="{Binding ActualSize.Height}"/>
+								</ItemsPanelTemplate>
+							</ItemsControl.ItemsPanel>
+							<ItemsControl.ItemContainerTheme>
+								<ControlTheme TargetType="ContentPresenter" x:DataType="workflow:IWorkflowNodeViewModel">
+									<Setter Property="Canvas.Left" Value="{Binding Anchor.Left}" />
+									<Setter Property="Canvas.Top" Value="{Binding Anchor.Top}" />
+									<Setter Property="Canvas.ZIndex" Value="{Binding Anchor.Layer}" />
+								</ControlTheme>
+							</ItemsControl.ItemContainerTheme>
+						</ItemsControl>
+						<!-- 已建立连接线 -->
+						<ItemsControl ItemsSource="{Binding Links}"
+									  ZIndex="-1">
+							<ItemsControl.ItemsPanel>
+								<ItemsPanelTemplate>
+									<Canvas Width="{Binding ActualSize.Width}"
+											Height="{Binding ActualSize.Height}"/>
+								</ItemsPanelTemplate>
+							</ItemsControl.ItemsPanel>
+						</ItemsControl>
+						<!-- 临时连接线 -->
+						<Canvas Width="{Binding ActualSize.Width}"
+								Height="{Binding ActualSize.Height}">
+							<local:BezierCurveView x:DataType="workflow:IWorkflowLinkViewModel"
+												   ZIndex="-2"
+												   DataContext="{Binding VirtualLink}"
+												   StartLeft="{Binding Sender.Anchor.Left}"
+												   StartTop="{Binding Sender.Anchor.Top}"
+												   EndLeft="{Binding Receiver.Anchor.Left}"
+												   EndTop="{Binding Receiver.Anchor.Top}"
+												   CanRender="{Binding IsVisible}"
+												   Width="{Binding $parent[Canvas].Bounds.Width}"
+												   Height="{Binding $parent[Canvas].Bounds.Height}"
+												   IsVirtual="True"
+												   RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+						</Canvas>
+					</Canvas>
+				</ScrollViewer>
+			</Border>
+		</Grid>
+	</Grid>
 </UserControl>

@@ -6,7 +6,7 @@ using System.Collections.Generic;
 
 namespace Demo;
 
-public partial class BezierCurveView : UserControl
+public partial class BezierCurveView : Control
 {
     public BezierCurveView()
     {

@@ -1,13 +1,16 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Demo.ViewModels;
+using System;
 using System.IO;
-using System.Linq;
 using VeloxDev.Core.Extension;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
+using Size = VeloxDev.Core.WorkflowSystem.Size;
 
 namespace Demo;
 
@@ -16,9 +19,28 @@ public partial class WorkflowView : UserControl
     private TreeViewModel _workflowViewModel = new();
     private WindowNotificationManager _manager;
 
+    public static readonly StyledProperty<Transform> CanvasTransformProperty =
+        AvaloniaProperty.Register<WorkflowView, Transform>(nameof(CanvasTransform));
+
+    public static readonly StyledProperty<Transform> GlobalScaleProperty =
+        AvaloniaProperty.Register<WorkflowView, Transform>(nameof(GlobalScale));
+
+    public Transform GlobalScale
+    {
+        get => this.GetValue(GlobalScaleProperty);
+        set => SetValue(GlobalScaleProperty, value);
+    }
+
+    public Transform CanvasTransform
+    {
+        get => this.GetValue(CanvasTransformProperty);
+        set => SetValue(CanvasTransformProperty, value);
+    }
+
     public WorkflowView()
     {
         InitializeComponent();
+        Root_Canvas.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
         _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3 };
     }
 
@@ -63,8 +85,11 @@ public partial class WorkflowView : UserControl
 
     private void OnPointerMoved(object? sender, Avalonia.Input.PointerEventArgs e)
     {
-        var point = e.GetPosition(this);
-        _workflowViewModel.SetPointerCommand.Execute(new Anchor(point.X, point.Y, 0));
+        var point = e.GetPosition(Root_Canvas);
+        _workflowViewModel.SetPointerCommand.Execute(new Anchor(
+            (point.X - _workflowViewModel.NegativeOffset.Left)*_workflowViewModel.Scale,
+            (point.Y - _workflowViewModel.NegativeOffset.Top)*_workflowViewModel.Scale,
+            0));
     }
 
     private void OnPointerReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
@@ -139,5 +164,154 @@ public partial class WorkflowView : UserControl
 
         // 使用数据上下文
         DataContext = _workflowViewModel;
+    }
+
+    private void Button_Click(object? sender, RoutedEventArgs e)
+    {
+        if (Root_ScrollViewer.Offset.X <= 0)
+        {
+            _workflowViewModel.NegativeOffset += new Offset(2, 0);
+            CanvasTransform = new TransformGroup()
+            {
+                Children = [
+                    new TranslateTransform(
+                        _workflowViewModel.NegativeOffset.Left,
+                        _workflowViewModel.NegativeOffset.Top
+                        )
+                    ]
+            };
+        }
+        else
+        {
+            Root_ScrollViewer.Offset = new Vector(
+                Math.Clamp(Root_ScrollViewer.Offset.X - 2, 0, double.MaxValue),
+                Root_ScrollViewer.Offset.Y
+                );
+        }
+    }
+    private void Button_Click1(object? sender, RoutedEventArgs e)
+    {
+        if (Root_ScrollViewer.Offset.Y <= 0)
+        {
+            _workflowViewModel.NegativeOffset += new Offset(0, 2);
+            CanvasTransform = new TransformGroup()
+            {
+                Children = [
+                    new TranslateTransform(
+                        _workflowViewModel.NegativeOffset.Left,
+                        _workflowViewModel.NegativeOffset.Top
+                        )
+                    ]
+            };
+        }
+        else
+        {
+            Root_ScrollViewer.Offset = new Vector(
+                Root_ScrollViewer.Offset.X,
+                Math.Clamp(Root_ScrollViewer.Offset.Y - 2, 0, double.MaxValue)
+                );
+        }
+
+    }
+    private void Button_Click2(object? sender, RoutedEventArgs e)
+    {
+        if (GetHorizontalScrollMaximum(Root_ScrollViewer) - Root_ScrollViewer.Offset.X <= 0)
+        {
+            _workflowViewModel.PositiveOffset += new Offset(2, 0);
+            CanvasTransform = new TransformGroup()
+            {
+                Children = [
+                    new TranslateTransform(
+                        _workflowViewModel.NegativeOffset.Left,
+                        _workflowViewModel.NegativeOffset.Top
+                        )
+                    ]
+            };
+            Root_ScrollViewer.Offset = new Vector(
+                Math.Clamp(Root_ScrollViewer.Offset.X + 2, 0, double.MaxValue),
+                Root_ScrollViewer.Offset.Y
+                );
+        }
+        else
+        {
+            Root_ScrollViewer.Offset = new Vector(
+                Math.Clamp(Root_ScrollViewer.Offset.X + 2, 0, double.MaxValue),
+                Root_ScrollViewer.Offset.Y
+                );
+        }
+    }
+    private void Button_Click3(object? sender, RoutedEventArgs e)
+    {
+        if (GetVerticalScrollMaximum(Root_ScrollViewer)-Root_ScrollViewer.Offset.Y <= 0)
+        {
+            _workflowViewModel.PositiveOffset += new Offset(0, 2);
+            CanvasTransform = new TransformGroup()
+            {
+                Children = [
+                    new TranslateTransform(
+                        _workflowViewModel.NegativeOffset.Left,
+                        _workflowViewModel.NegativeOffset.Top
+                        )
+                    ]
+            };
+            Root_ScrollViewer.Offset = new Vector(
+                Root_ScrollViewer.Offset.X,
+                Math.Clamp(Root_ScrollViewer.Offset.Y + 2, 0, double.MaxValue)
+                );
+        }
+        else
+        {
+            Root_ScrollViewer.Offset = new Vector(
+                Root_ScrollViewer.Offset.X,
+                Math.Clamp(Root_ScrollViewer.Offset.Y + 2, 0, double.MaxValue)
+                );
+        }
+    }
+
+    public static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)
+    {
+        if (scrollViewer == null) return 0;
+
+        var extent = scrollViewer.Extent;
+        var viewport = scrollViewer.Viewport;
+
+        // 最大滚动值 = 内容宽度 - 可视区域宽度
+        double maxScroll = Math.Max(0, extent.Width - viewport.Width);
+        return maxScroll;
+    }
+
+    public static double GetVerticalScrollMaximum(ScrollViewer scrollViewer)
+    {
+        if (scrollViewer == null) return 0;
+
+        var extent = scrollViewer.Extent;
+        var viewport = scrollViewer.Viewport;
+
+        // 最大滚动值 = 内容宽度 - 可视区域宽度
+        double maxScroll = Math.Max(0, extent.Height - viewport.Height);
+        return maxScroll;
+    }
+
+    private void Button_Click4(object? sender, RoutedEventArgs e)
+    {
+        _workflowViewModel.Scale += 0.1;
+        GlobalScale = new TransformGroup()
+        {
+            Children = [
+                new ScaleTransform(_workflowViewModel.Scale, _workflowViewModel.Scale)
+                ]
+        };
+    }
+
+    private void Button_Click5(object? sender, RoutedEventArgs e)
+    {
+        _workflowViewModel.Scale -= 0.1;
+
+        GlobalScale = new TransformGroup()
+        {
+            Children = [
+                new ScaleTransform(_workflowViewModel.Scale, _workflowViewModel.Scale)
+                ]
+        };
     }
 }
