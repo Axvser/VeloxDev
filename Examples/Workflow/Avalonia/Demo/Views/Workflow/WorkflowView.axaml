@@ -19,13 +19,11 @@
 							Height="{Binding Size.Height}"
 							RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
 		</DataTemplate>
-
 		<DataTemplate DataType="vm:ControllerViewModel">
 			<local:ControllerView Width="{Binding Size.Width}"
 								  Height="{Binding Size.Height}"
 								  RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
 		</DataTemplate>
-
 		<!-- 连接线模板 -->
 		<DataTemplate DataType="workflow:IWorkflowLinkViewModel">
 			<local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
@@ -39,30 +37,34 @@
 		</DataTemplate>
 	</UserControl.DataTemplates>
 
-	<Grid ColumnDefinitions="2*,8*">
+	<Grid ColumnDefinitions="2*,auto,8*">
 		<Grid Grid.Column="0">
-			<StackPanel Orientation="Vertical">
-				<TextBlock Text="{Binding ActualSize}" />
-				<Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}" />
-				<Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" />
-				<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
-				<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
-				<Button Content="Simulate" Width="100" Height="50" Click="SimulateData" />
-				<Button Content="左延申" Click="Button_Click"/>
-				<Button Content="上延申" Click="Button_Click1"/>
-				<Button Content="右延申" Click="Button_Click2"/>
-				<Button Content="下延申" Click="Button_Click3"/>
-				<Button Content="放大" Click="Button_Click4"/>
-				<Button Content="缩小" Click="Button_Click5"/>
-			</StackPanel>
+			<ScrollViewer>
+				<StackPanel Orientation="Vertical">
+					<TextBlock Text="{Binding Layout}" />
+					<Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}" />
+					<Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" />
+					<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
+					<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
+					<Button Content="Simulate" Width="100" Height="50" Click="SimulateData" />
+					<Button Content="左延申" Click="Button_Click"/>
+					<Button Content="上延申" Click="Button_Click1"/>
+					<Button Content="右延申" Click="Button_Click2"/>
+					<Button Content="下延申" Click="Button_Click3"/>
+					<Button Content="放大" Click="Button_Click4"/>
+					<Button Content="缩小" Click="Button_Click5"/>
+				</StackPanel>
+			</ScrollViewer>
 		</Grid>
 
-		<Grid Grid.Column="1">
+		<GridSplitter Grid.Column="1" Width="5" Background="Gray"/>
+
+		<Grid Grid.Column="2">
 			<Border BorderBrush="White" BorderThickness="1" CornerRadius="3">
 				<ScrollViewer HorizontalScrollBarVisibility="Auto"
 							  x:Name="Root_ScrollViewer">
-					<Canvas Width="{Binding ActualSize.Width}"
-							Height="{Binding ActualSize.Height}"
+					<Canvas Width="{Binding Layout.ActualSize.Width}"
+							Height="{Binding Layout.ActualSize.Height}"
 							HorizontalAlignment="Left"
 							VerticalAlignment="Top"
 							RenderTransform="{Binding $parent[local:WorkflowView].GlobalScale}"
@@ -72,8 +74,8 @@
 									  ZIndex="0">
 							<ItemsControl.ItemsPanel>
 								<ItemsPanelTemplate>
-									<Canvas Width="{Binding ActualSize.Width}"
-											Height="{Binding ActualSize.Height}"/>
+									<Canvas Width="{Binding Layout.ActualSize.Width}"
+											Height="{Binding Layout.ActualSize.Height}"/>
 								</ItemsPanelTemplate>
 							</ItemsControl.ItemsPanel>
 							<ItemsControl.ItemContainerTheme>
@@ -89,14 +91,14 @@
 									  ZIndex="-1">
 							<ItemsControl.ItemsPanel>
 								<ItemsPanelTemplate>
-									<Canvas Width="{Binding ActualSize.Width}"
-											Height="{Binding ActualSize.Height}"/>
+									<Canvas Width="{Binding Layout.ActualSize.Width}"
+											Height="{Binding Layout.ActualSize.Height}"/>
 								</ItemsPanelTemplate>
 							</ItemsControl.ItemsPanel>
 						</ItemsControl>
 						<!-- 临时连接线 -->
-						<Canvas Width="{Binding ActualSize.Width}"
-								Height="{Binding ActualSize.Height}">
+						<Canvas Width="{Binding Layout.ActualSize.Width}"
+								Height="{Binding Layout.ActualSize.Height}">
 							<local:BezierCurveView x:DataType="workflow:IWorkflowLinkViewModel"
 												   ZIndex="-2"
 												   DataContext="{Binding VirtualLink}"

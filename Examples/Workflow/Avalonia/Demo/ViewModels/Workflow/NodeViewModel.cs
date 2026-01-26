@@ -1,4 +1,4 @@
-using Demo.ViewModels.Workflow.Helper;
+﻿using Demo.ViewModels.Workflow.Helper;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
@@ -13,7 +13,9 @@ public partial class NodeViewModel
 
     // …… 自由扩展您的节点视图模型
 
-    [VeloxProperty] private int runCount = 0;
-
-    [VeloxProperty] private int waitCount = 0;
+    [VeloxProperty] private string host = string.Empty;
+    [VeloxProperty] private string port = string.Empty;
+    [VeloxProperty] private string userName = string.Empty;
+    [VeloxProperty] private string passWord = string.Empty;
+    [VeloxProperty] private string mFA = string.Empty;
 }

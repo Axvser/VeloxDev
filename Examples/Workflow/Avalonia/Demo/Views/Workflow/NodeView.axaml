@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -7,13 +7,13 @@
 			 xmlns:local="using:Demo"
 			 xmlns:vm="using:Demo.ViewModels"
 			 x:DataType="vm:NodeViewModel">
-	<Grid RowDefinitions="12*,90*">
+	<Grid RowDefinitions="10*,80*,25*">
 
 		<Border Grid.Row="1"
-		        Padding="1"
-		        Background="#2d2d2d"
-		        CornerRadius="0,0,4,4" />
-		
+				Padding="1"
+				Background="#2d2d2d"
+				CornerRadius="0,0,4,4" />
+
 		<!-- 标题栏 -->
 		<Border Grid.Row="0"
 				Background="#2d2d2d"
@@ -25,45 +25,136 @@
 				PointerMoved="OnPointerMoved"
 				PointerCaptureLost="OnPointerCaptureLost">
 			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-				<TextBlock Text="ִ执行数 [ " Foreground="White" VerticalAlignment="Center"/>
-				<TextBlock Text="{Binding RunCount}" Foreground="White" VerticalAlignment="Center"/>
-				<TextBlock Text=" ] " Foreground="White" VerticalAlignment="Center"/>
-				<TextBlock Text="缓冲数 [ " Foreground="White" VerticalAlignment="Center"/>
-				<TextBlock Text="{Binding WaitCount}" Foreground="White" VerticalAlignment="Center"/>
-				<TextBlock Text=" ] " Foreground="White" VerticalAlignment="Center"/>
-				<TextBlock Text=" [ " Foreground="White" VerticalAlignment="Center"/>
-				<TextBlock Text="{Binding Anchor.Left,StringFormat='{}{0:F0}'}" Foreground="White" VerticalAlignment="Center"/>
-				<TextBlock Text=" , " Foreground="White" VerticalAlignment="Center"/>
-				<TextBlock Text="{Binding Anchor.Top,StringFormat='{}{0:F0}'}" Foreground="White" VerticalAlignment="Center"/>
-				<TextBlock Text=" ]" Foreground="White" VerticalAlignment="Center"/>
+				<TextBlock Text=" SSH Connector " Foreground="White" VerticalAlignment="Center"/>
 			</StackPanel>
 		</Border>
 
-		<!-- 插槽区域 -->
-		<Grid Grid.Row="0" Grid.RowSpan="2">
-			<ItemsControl ItemsSource="{Binding Slots}">
-				<ItemsControl.ItemsPanel>
-					<ItemsPanelTemplate>
-						<Canvas Width="{Binding $parent[Grid].Bounds.Width}"
-								Height="{Binding $parent[Grid].Bounds.Height}"
-								x:Name="LayoutRoot"/>
-					</ItemsPanelTemplate>
-				</ItemsControl.ItemsPanel>
+		<!-- 工作区域 -->
+		<Grid Grid.Row="1" Grid.ColumnDefinitions="8*,2*,2*">
+			<!-- 输入区 -->
+			<Grid Grid.Column="1"></Grid>
+			<!-- 参数配置区 -->
+			<Grid Grid.Column="0">
+				<ScrollViewer VerticalScrollBarVisibility="Auto">
+					<StackPanel Margin="20" Spacing="10">
 
-				<ItemsControl.ItemContainerTheme>
-					<ControlTheme TargetType="ContentPresenter" x:DataType="vm:SlotViewModel">
-						<Setter Property="Canvas.Left" Value="{Binding Offset.Left}" />
-						<Setter Property="Canvas.Top" Value="{Binding Offset.Top}" />
-					</ControlTheme>
-				</ItemsControl.ItemContainerTheme>
+						<!-- 主机配置 -->
+						<Grid ColumnDefinitions="100,*" VerticalAlignment="Center">
+							<TextBlock Text="主机:"
+									   Foreground="White"
+									   VerticalAlignment="Center"/>
+							<TextBox Grid.Column="1"
+									 Text="{Binding Host, Mode=TwoWay}"
+									 Watermark="请输入主机地址"
+									 Background="#3d3d3d"
+									 Foreground="White"
+									 BorderBrush="Gray"
+									 BorderThickness="1"
+									 Padding="5"/>
+						</Grid>
 
-				<ItemsControl.ItemTemplate>
-					<DataTemplate DataType="vm:SlotViewModel">
-						<local:SlotView Width="{Binding Size.Width}"
-										Height="{Binding Size.Height}" />
-					</DataTemplate>
-				</ItemsControl.ItemTemplate>
-			</ItemsControl>
+						<!-- 端口配置 -->
+						<Grid ColumnDefinitions="100,*" VerticalAlignment="Center">
+							<TextBlock Text="端口:"
+									   Foreground="White"
+									   VerticalAlignment="Center"/>
+							<TextBox Grid.Column="1"
+									 Text="{Binding Port, Mode=TwoWay}"
+									 Watermark="请输入端口号"
+									 Background="#3d3d3d"
+									 Foreground="White"
+									 BorderBrush="Gray"
+									 BorderThickness="1"
+									 Padding="5"/>
+						</Grid>
+
+						<!-- 用户名配置 -->
+						<Grid ColumnDefinitions="100,*" VerticalAlignment="Center">
+							<TextBlock Text="用户名:"
+									   Foreground="White"
+									   VerticalAlignment="Center"/>
+							<TextBox Grid.Column="1"
+									 Text="{Binding UserName, Mode=TwoWay}"
+									 Watermark="请输入用户名"
+									 Background="#3d3d3d"
+									 Foreground="White"
+									 BorderBrush="Gray"
+									 BorderThickness="1"
+									 Padding="5"/>
+						</Grid>
+
+						<!-- 密码配置 -->
+						<Grid ColumnDefinitions="100,*" VerticalAlignment="Center">
+							<TextBlock Text="密码:"
+									   Foreground="White"
+									   VerticalAlignment="Center"/>
+							<Grid Grid.Column="1" ColumnDefinitions="*,Auto">
+								<TextBox Grid.Column="0"
+											 Text="{Binding PassWord, Mode=TwoWay}"
+											 Watermark="请输入密码"
+											 Background="#3d3d3d"
+											 Foreground="White"
+											 BorderBrush="Gray"
+											 BorderThickness="1"
+											 Padding="5"/>
+							</Grid>
+						</Grid>
+
+						<!-- 双因素认证 -->
+						<Grid ColumnDefinitions="100,*" VerticalAlignment="Center">
+							<TextBlock Text="MFA:"
+									   Foreground="White"
+									   VerticalAlignment="Center"/>
+							<Grid Grid.Column="1" ColumnDefinitions="*,Auto">
+								<TextBox Grid.Column="0"
+										 Text="{Binding MFA, Mode=TwoWay}"
+										 Watermark="请输入双因素认证码"
+										 Background="#3d3d3d"
+										 Foreground="White"
+										 BorderBrush="Gray"
+										 BorderThickness="1"
+										 Padding="5"/>
+							</Grid>
+						</Grid>
+					</StackPanel>
+				</ScrollViewer>
+			</Grid>
+			<!-- 输出区 -->
+			<Grid Grid.Column="2">
+				<ItemsControl ItemsSource="{Binding Slots}">
+					<ItemsControl.ItemsPanel>
+						<ItemsPanelTemplate>
+							<Canvas Width="{Binding $parent[Grid].Bounds.Width}"
+									Height="{Binding $parent[Grid].Bounds.Height}"
+									x:Name="LayoutRoot"/>
+						</ItemsPanelTemplate>
+					</ItemsControl.ItemsPanel>
+
+					<ItemsControl.ItemContainerTheme>
+						<ControlTheme TargetType="ContentPresenter" x:DataType="vm:SlotViewModel">
+							<Setter Property="Canvas.Left" Value="{Binding Offset.Left}" />
+							<Setter Property="Canvas.Top" Value="{Binding Offset.Top}" />
+						</ControlTheme>
+					</ItemsControl.ItemContainerTheme>
+
+					<ItemsControl.ItemTemplate>
+						<DataTemplate DataType="vm:SlotViewModel">
+							<local:SlotView Width="{Binding Size.Width}"
+											Height="{Binding Size.Height}" />
+						</DataTemplate>
+					</ItemsControl.ItemTemplate>
+				</ItemsControl>
+			</Grid>
 		</Grid>
+
+		<Border Grid.Row="3"
+				Padding="1"
+				Background="#2d2d2d"
+				CornerRadius="0,0,4,4">
+			<Grid ColumnDefinitions="*,*">
+				<Button Grid.Column="0" Content="Start" Command="{Binding WorkCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
+				<Button Grid.Column="1" Content="End" Command="{Binding CloseCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
+			</Grid>
+		</Border>
 	</Grid>
 </UserControl>
