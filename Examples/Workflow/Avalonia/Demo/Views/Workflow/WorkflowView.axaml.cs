@@ -6,7 +6,9 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Demo.ViewModels;
+using Demo.ViewModels.Workflow.Helper;
 using System;
+using System.Diagnostics;
 using System.IO;
 using VeloxDev.Core.Extension;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
@@ -190,58 +192,80 @@ public partial class WorkflowView : UserControl
 
     private void SimulateData(object? sender, RoutedEventArgs e)
     {
-        var slot1 = new SlotViewModel()
-        {
-            Offset = new Offset(170, 60),
-            Size = new Size(20, 20),
-            Channel = SlotChannel.OneBoth,
-        };
-        var slot2 = new SlotViewModel()
-        {
-            Offset = new Offset(170, 120),
-            Size = new Size(20, 20),
-            Channel = SlotChannel.MultipleTargets,
-        };
-        var slot3 = new SlotViewModel()
-        {
-            Offset = new Offset(10, 100),
-            Size = new Size(20, 20),
-            Channel = SlotChannel.OneBoth,
-        };
-        var slot4 = new SlotViewModel()
-        {
-            Offset = new Offset(10, 200),
-            Size = new Size(20, 20),
-            Channel = SlotChannel.MultipleSources,
-        };
-        var node1 = new NodeViewModel()
-        {
-            Size = new Size(440, 200),
-            Anchor = new Anchor(50, 50, 1)
-        };
-        var slot5 = new SlotViewModel()
-        {
-            Offset = new Offset(335, 55),
-            Size = new Size(30, 30),
-            Channel = SlotChannel.MultipleTargets,
-        };
+        var random = new Random();
+        var workflowHelper = _workflowViewModel.GetHelper();
 
-        // 给 Tree 挂载 Node
-        _workflowViewModel.GetHelper().CreateNode(node1);
+        // 定义一些可能的配置
+        var slotTypes = new[]
+        {
+        SlotChannel.OneBoth,
+        SlotChannel.MultipleTargets,
+        SlotChannel.MultipleSources
+    };
 
-        // 给 Node 挂载 Slot
-        node1.GetHelper().CreateSlot(slot1);
-        node1.GetHelper().CreateSlot(slot2);
+        var slotSizes = new[]
+        {
+        new Size(20, 20),
+        new Size(25, 25),
+        new Size(30, 30),
+        new Size(20, 25),
+        new Size(25, 20)
+    };
 
-        // 清理历史栈，避免非法的重做与撤销
+        // 生成1000个节点
+        for (int i = 0; i < 1000; i++)
+        {
+            // 随机生成节点
+            var node = new NodeViewModel()
+            {
+                Size = new Size(random.Next(100, 401), random.Next(80, 301)),
+                Anchor = new Anchor(
+                    random.Next(0, 1920),  // 假设画布宽度1920
+                    random.Next(0, 1080),  // 假设画布高度1080
+                    random.Next(0, 5)     // 层级
+                )
+            };
+
+            // 将节点添加到工作流
+            workflowHelper.CreateNode(node);
+
+            // 为每个节点随机生成1-4个插槽
+            int slotCount = random.Next(1, 5);
+            for (int j = 0; j < slotCount; j++)
+            {
+                var slot = new SlotViewModel()
+                {
+                    // 在节点内部随机位置
+                    Offset = new Offset(
+                        random.Next(0, (int)node.Size.Width - 30),  // 确保插槽不超出节点边界
+                        random.Next(0, (int)node.Size.Height - 30)
+                    ),
+                    Size = slotSizes[random.Next(0, slotSizes.Length)],
+                    Channel = slotTypes[random.Next(0, slotTypes.Length)]
+                };
+
+                node.GetHelper().CreateSlot(slot);
+            }
+
+            // 每生成100个节点清理一次历史，避免内存占用过高
+            if (i % 100 == 0)
+            {
+                _workflowViewModel.GetHelper().ClearHistory();
+            }
+        }
+
+        // 清理最终历史栈
         _workflowViewModel.GetHelper().ClearHistory();
 
         // 使用数据上下文
         DataContext = _workflowViewModel;
 
+        // 配置布局
         _workflowViewModel.Layout.OriginAlign = OriginAligns.TopLeft;
+
         // 刷新逻辑布局
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
+
         // 刷新UI布局
         ReLayout();
     }
@@ -284,7 +308,7 @@ public partial class WorkflowView : UserControl
     }
     private void Button_Click3(object? sender, RoutedEventArgs e)
     {
-        if (GetVerticalScrollMaximum(Root_ScrollViewer)-Root_ScrollViewer.Offset.Y <= 0)
+        if (GetVerticalScrollMaximum(Root_ScrollViewer) - Root_ScrollViewer.Offset.Y <= 0)
         {
             _workflowViewModel.Layout.PositiveOffset += new Offset(0, 2);
         }
@@ -335,6 +359,16 @@ public partial class WorkflowView : UserControl
         ReLayout();
     }
 
+    private void Button_Click6(object? sender, RoutedEventArgs e)
+    {
+        UpdateVisibleRegion();
+    }
+
+    private void Button_Click7(object? sender, RoutedEventArgs e)
+    {
+        GC.Collect();
+    }
+
     private void ReLayout()
     {
         CanvasTransform = new TransformGroup()
@@ -352,5 +386,37 @@ public partial class WorkflowView : UserControl
                 new ScaleTransform(_workflowViewModel.Layout.OriginScale.X, _workflowViewModel.Layout.OriginScale.Y)
                 ]
         };
+    }
+
+    private void UpdateVisibleRegion()
+    {
+        if (Root_ScrollViewer is not { } viewer || _workflowViewModel is not { } vm) return;
+
+        var scrollOffset = viewer.Offset;
+        var viewport = viewer.Viewport;
+        var layoutOffset = vm.Layout.ActualOffset;
+
+        double visibleLeft = scrollOffset.X - layoutOffset.Left;
+        double visibleTop = scrollOffset.Y - layoutOffset.Top;
+
+        if (vm.GetHelper() is TreeHelper helper)
+        {
+            var sw1 = Stopwatch.StartNew();
+            var list = helper._spatialHashMap.Query(visibleLeft, visibleTop, viewport.Width, viewport.Height);
+            sw1.Stop();
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                VMTime.Text = $"{sw1.ElapsedTicks * 1000000L / Stopwatch.Frequency} μs";
+            });
+
+            var sw2 = Stopwatch.StartNew();
+            _workflowViewModel.VisibleNodes = [.. list];
+            
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                sw2.Stop();
+                VTime.Text = $"{sw2.ElapsedTicks * 1000000L / Stopwatch.Frequency} μs";
+            });
+        }
     }
 }

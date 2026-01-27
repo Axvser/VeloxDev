@@ -53,6 +53,16 @@
 					<Button Content="下延申" Click="Button_Click3"/>
 					<Button Content="放大" Click="Button_Click4"/>
 					<Button Content="缩小" Click="Button_Click5"/>
+					<Button Content="GC" Click="Button_Click7"/>
+					<Button Content="虚拟化" Click="Button_Click6"/>
+					<TextBlock Text="节点总数：" />
+					<TextBlock Text="{Binding Nodes.Count}"/>
+					<TextBlock Text="数据层虚拟化耗时：" />
+					<TextBlock x:Name="VMTime"/>
+					<TextBlock Text="UI层同步耗时：" />
+					<TextBlock x:Name="VTime"/>
+					<TextBlock Text="可见节点数：" />
+					<TextBlock Text="{Binding VisibleNodes.Count}" />
 					<local:Rocker x:Name="PART_ROCKER" Width="100" Height="100" Foreground="Lime"/>
 				</StackPanel>
 			</ScrollViewer>
@@ -71,7 +81,7 @@
 							RenderTransform="{Binding $parent[local:WorkflowView].GlobalScale}"
 							x:Name="Root_Canvas">
 						<!-- 已挂载节点 -->
-						<ItemsControl ItemsSource="{Binding Nodes}"
+						<ItemsControl ItemsSource="{Binding VisibleNodes}"
 									  ZIndex="0">
 							<ItemsControl.ItemsPanel>
 								<ItemsPanelTemplate>
