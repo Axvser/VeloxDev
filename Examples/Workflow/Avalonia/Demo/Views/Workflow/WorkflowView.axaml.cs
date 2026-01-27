@@ -4,6 +4,7 @@ using Avalonia.Controls.Notifications;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Demo.ViewModels;
 using System;
 using System.IO;
@@ -18,6 +19,8 @@ public partial class WorkflowView : UserControl
 {
     private TreeViewModel _workflowViewModel = new();
     private WindowNotificationManager _manager;
+    private DispatcherTimer? _rockerPanTimer;
+    private const double PanSpeed = 8.0; // 像素/帧（可调）
 
     public static readonly StyledProperty<Transform> CanvasTransformProperty =
         AvaloniaProperty.Register<WorkflowView, Transform>(nameof(CanvasTransform));
@@ -42,6 +45,92 @@ public partial class WorkflowView : UserControl
         InitializeComponent();
         Root_Canvas.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
         _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3 };
+
+        // 绑定摇杆事件
+        PART_ROCKER.JoystickChanged += OnRockerChanged;
+
+        // 创建定时器（初始不启动）
+        _rockerPanTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) }; // ～60 FPS
+        _rockerPanTimer.Tick += OnRockerPanTick;
+    }
+
+    private void OnRockerChanged(object? sender, Vector e)
+    {
+        // 如果摇杆几乎居中，停止平移
+        if (Math.Abs(e.X) < 0.05 && Math.Abs(e.Y) < 0.05)
+        {
+            _rockerPanTimer?.Stop();
+            return;
+        }
+
+        // 启动定时器（如果未运行）
+        if (!_rockerPanTimer!.IsEnabled)
+        {
+            _rockerPanTimer.Start();
+        }
+    }
+
+    private void OnRockerPanTick(object? sender, EventArgs e)
+    {
+        if (Root_ScrollViewer == null || PART_ROCKER == null) return;
+
+        var x = PART_ROCKER.X;
+        var y = PART_ROCKER.Y;
+
+        // 微小死区
+        if (Math.Abs(x) < 0.05 && Math.Abs(y) < 0.05)
+        {
+            _rockerPanTimer?.Stop();
+            return;
+        }
+
+        // 计算位移（注意方向）
+        double deltaX = x * PanSpeed; // X>0 → 向右滚动（内容左移）→ Offset.X 增加
+        double deltaY = y * PanSpeed; // Y>0 → 向下滚动 → Offset.Y 增加
+
+        var currentOffset = Root_ScrollViewer.Offset;
+        var newOffsetX = currentOffset.X + deltaX;
+        var newOffsetY = currentOffset.Y + deltaY;
+
+        // 获取最大滚动范围
+        var maxH = GetHorizontalScrollMaximum(Root_ScrollViewer);
+        var maxV = GetVerticalScrollMaximum(Root_ScrollViewer);
+
+        // 边界检测 + 自动扩展布局（与按钮逻辑一致）
+        if (newOffsetX < 0)
+        {
+            _workflowViewModel.Layout.NegativeOffset += new Offset(-newOffsetX, 0);
+            newOffsetX = 0;
+            ReLayout(); // 必须刷新 transform
+        }
+        else if (newOffsetX > maxH)
+        {
+            _workflowViewModel.Layout.PositiveOffset += new Offset(newOffsetX - maxH, 0);
+            ReLayout();
+            // 重新计算 maxH，因为 layout 扩展了
+            maxH = GetHorizontalScrollMaximum(Root_ScrollViewer);
+            newOffsetX = Math.Min(newOffsetX, maxH);
+        }
+
+        if (newOffsetY < 0)
+        {
+            _workflowViewModel.Layout.NegativeOffset += new Offset(0, -newOffsetY);
+            newOffsetY = 0;
+            ReLayout();
+        }
+        else if (newOffsetY > maxV)
+        {
+            _workflowViewModel.Layout.PositiveOffset += new Offset(0, newOffsetY - maxV);
+            ReLayout();
+            maxV = GetVerticalScrollMaximum(Root_ScrollViewer);
+            newOffsetY = Math.Min(newOffsetY, maxV);
+        }
+
+        // 应用新偏移
+        Root_ScrollViewer.Offset = new Vector(
+            Math.Max(0, Math.Min(newOffsetX, maxH)),
+            Math.Max(0, Math.Min(newOffsetY, maxV))
+        );
     }
 
     private async void SaveWorkflow(object? sender, RoutedEventArgs e)

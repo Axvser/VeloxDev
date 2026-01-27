@@ -53,6 +53,7 @@
 					<Button Content="下延申" Click="Button_Click3"/>
 					<Button Content="放大" Click="Button_Click4"/>
 					<Button Content="缩小" Click="Button_Click5"/>
+					<local:Rocker x:Name="PART_ROCKER" Width="100" Height="100" Foreground="Lime"/>
 				</StackPanel>
 			</ScrollViewer>
 		</Grid>

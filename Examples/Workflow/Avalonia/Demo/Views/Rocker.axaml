@@ -1,0 +1,25 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="400"
+			 x:Class="Demo.Rocker"
+			 x:Name="Self">
+  <Grid x:Name="PART_BOARD" Background="Transparent">
+    <!-- 背景圆：占满整个 Grid -->
+    <Ellipse x:Name="PART_BG"
+             Stroke="{Binding ElementName=Self,Path=Foreground}"
+             StrokeThickness="2"
+             Fill="Transparent"/>
+
+    <!-- 前景摇杆点：初始居中，通过 Margin 精确定位 -->
+    <Ellipse x:Name="PART_FG"
+             Fill="{Binding ElementName=Self,Path=Foreground}"
+             HorizontalAlignment="Left"
+             VerticalAlignment="Top"
+             PointerPressed="OnPointerPressed"
+             PointerMoved="OnPointerMoved"
+             PointerReleased="OnPointerReleased"
+             PointerExited="OnPointerExited" />
+  </Grid>
+</UserControl>
