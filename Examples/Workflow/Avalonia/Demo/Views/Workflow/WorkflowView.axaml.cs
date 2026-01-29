@@ -8,7 +8,6 @@ using Avalonia.Threading;
 using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
 using System;
-using System.Diagnostics;
 using System.IO;
 using VeloxDev.Core.Extension;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
@@ -133,6 +132,8 @@ public partial class WorkflowView : UserControl
             Math.Max(0, Math.Min(newOffsetX, maxH)),
             Math.Max(0, Math.Min(newOffsetY, maxV))
         );
+
+        UpdateVisibleRegion();
     }
 
     private async void SaveWorkflow(object? sender, RoutedEventArgs e)
@@ -192,10 +193,14 @@ public partial class WorkflowView : UserControl
 
     private void SimulateData(object? sender, RoutedEventArgs e)
     {
-        var random = new Random();
+        const int totalNodes = 1_000_000;
+        const double gridSize = 150; // 格子大小（也是最小间距基础）
+        const double jitter = 30;    // 抖动幅度（±jitter）
+        double canvasSize = gridSize * Math.Sqrt(totalNodes); // ≈150,000
+
+        var random = new Random(12345); // 固定种子
         var workflowHelper = _workflowViewModel.GetHelper();
 
-        // 定义一些可能的配置
         var slotTypes = new[]
         {
         SlotChannel.OneBoth,
@@ -207,69 +212,74 @@ public partial class WorkflowView : UserControl
         {
         new Size(20, 20),
         new Size(25, 25),
-        new Size(30, 30),
-        new Size(20, 25),
-        new Size(25, 20)
+        new Size(30, 30)
     };
 
-        // 生成1000个节点
-        for (int i = 0; i < 1000; i++)
+        // 计算网格行列数
+        int gridCount = (int)Math.Ceiling(Math.Sqrt(totalNodes)); // 1000 for 1M
+        int generated = 0;
+
+        for (int i = 0; i < gridCount && generated < totalNodes; i++)
         {
-            // 随机生成节点
-            var node = new NodeViewModel()
+            for (int j = 0; j < gridCount && generated < totalNodes; j++)
             {
-                Size = new Size(random.Next(100, 401), random.Next(80, 301)),
-                Anchor = new Anchor(
-                    random.Next(0, 1920),  // 假设画布宽度1920
-                    random.Next(0, 1080),  // 假设画布高度1080
-                    random.Next(0, 5)     // 层级
-                )
-            };
+                // 格子左上角
+                double baseX = i * gridSize;
+                double baseY = j * gridSize;
 
-            // 将节点添加到工作流
-            workflowHelper.CreateNode(node);
+                // 在格子内随机抖动（避免完全对齐）
+                double x = baseX + jitter - random.NextDouble() * jitter * 2;
+                double y = baseY + jitter - random.NextDouble() * jitter * 2;
 
-            // 为每个节点随机生成1-4个插槽
-            int slotCount = random.Next(1, 5);
-            for (int j = 0; j < slotCount; j++)
-            {
-                var slot = new SlotViewModel()
+                // 边界保护
+                x = Math.Max(0, Math.Min(x, canvasSize - 1));
+                y = Math.Max(0, Math.Min(y, canvasSize - 1));
+
+                var node = new NodeViewModel()
                 {
-                    // 在节点内部随机位置
-                    Offset = new Offset(
-                        random.Next(0, (int)node.Size.Width - 30),  // 确保插槽不超出节点边界
-                        random.Next(0, (int)node.Size.Height - 30)
+                    Size = new Size(
+                        width: 80 + random.Next(0, 80),   // 80~160
+                        height: 60 + random.Next(0, 60)   // 60~120
                     ),
-                    Size = slotSizes[random.Next(0, slotSizes.Length)],
-                    Channel = slotTypes[random.Next(0, slotTypes.Length)]
+                    Anchor = new Anchor(x, y, 0) // 所有在同一层简化
                 };
 
-                node.GetHelper().CreateSlot(slot);
-            }
+                // 添加 1~3 个插槽
+                int slotCount = random.Next(1, 4);
+                for (int s = 0; s < slotCount; s++)
+                {
+                    node.GetHelper().CreateSlot(new SlotViewModel
+                    {
+                        Offset = new Offset(
+                            left: 5 + random.Next(0, (int)node.Size.Width - 40),
+                            top: 5 + random.Next(0, (int)node.Size.Height - 40)
+                        ),
+                        Size = slotSizes[random.Next(slotSizes.Length)],
+                        Channel = slotTypes[random.Next(slotTypes.Length)]
+                    });
+                }
 
-            // 每生成100个节点清理一次历史，避免内存占用过高
-            if (i % 100 == 0)
-            {
-                _workflowViewModel.GetHelper().ClearHistory();
+                workflowHelper.CreateNode(node);
+                generated++;
+
+                // 每 10,000 个清理一次历史（避免 Undo 栈爆炸）
+                if (generated % 10_000 == 0)
+                {
+                    _workflowViewModel.GetHelper().ClearHistory();
+                    GC.Collect(); // 可选：强制回收（仅调试用）
+                }
             }
         }
 
-        // 清理最终历史栈
         _workflowViewModel.GetHelper().ClearHistory();
-
-        // 使用数据上下文
+        _workflowViewModel.Layout.OriginSize = new Size(150000,150000);
         DataContext = _workflowViewModel;
-
-        // 配置布局
         _workflowViewModel.Layout.OriginAlign = OriginAligns.TopLeft;
-
-        // 刷新逻辑布局
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
-
-        // 刷新UI布局
         ReLayout();
-    }
 
+        _manager.Show(new Notification("OK", $"Generated {generated:N0} nodes in {canvasSize:N0}×{canvasSize:N0} space"));
+    }
     private void Button_Click(object? sender, RoutedEventArgs e)
     {
         if (Root_ScrollViewer.Offset.X <= 0)
@@ -401,22 +411,12 @@ public partial class WorkflowView : UserControl
 
         if (vm.GetHelper() is TreeHelper helper)
         {
-            var sw1 = Stopwatch.StartNew();
-            var list = helper._spatialHashMap.Query(visibleLeft, visibleTop, viewport.Width, viewport.Height);
-            sw1.Stop();
-            Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                VMTime.Text = $"{sw1.ElapsedTicks * 1000000L / Stopwatch.Frequency} μs";
-            });
-
-            var sw2 = Stopwatch.StartNew();
-            _workflowViewModel.VisibleNodes = [.. list];
-            
-            Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                sw2.Stop();
-                VTime.Text = $"{sw2.ElapsedTicks * 1000000L / Stopwatch.Frequency} μs";
-            });
+            helper.UpdateVisibleNodes(new Viewport(
+                visibleLeft,
+                visibleTop,
+                viewport.Width,
+                viewport.Height));
+            VC.Text = $"{Root_Canvas.Children.Count}";
         }
     }
 }

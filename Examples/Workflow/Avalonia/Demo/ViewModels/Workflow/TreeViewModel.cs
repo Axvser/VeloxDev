@@ -20,7 +20,7 @@ public partial class TreeViewModel
 
     [VeloxProperty] private Layout layout = new();
 
-    [VeloxProperty] private ObservableCollection<IWorkflowNodeViewModel> _visibleNodes = [];
+    [VeloxProperty] private ObservableCollection<IWorkflowViewModel> _visibleItems = [];
 
     [VeloxCommand]
     private async Task Save(object? parameter, CancellationToken ct)

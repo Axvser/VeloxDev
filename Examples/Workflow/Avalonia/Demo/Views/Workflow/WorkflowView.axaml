@@ -62,7 +62,9 @@
 					<TextBlock Text="UI层同步耗时：" />
 					<TextBlock x:Name="VTime"/>
 					<TextBlock Text="可见节点数：" />
-					<TextBlock Text="{Binding VisibleNodes.Count}" />
+					<TextBlock Text="{Binding VisibleItems.Count}" />
+					<TextBlock Text="虚拟画布子元素数量：" />
+					<TextBlock x:Name="VC"/>
 					<local:Rocker x:Name="PART_ROCKER" Width="100" Height="100" Foreground="Lime"/>
 				</StackPanel>
 			</ScrollViewer>
@@ -74,57 +76,36 @@
 			<Border BorderBrush="White" BorderThickness="1" CornerRadius="3">
 				<ScrollViewer HorizontalScrollBarVisibility="Auto"
 							  x:Name="Root_ScrollViewer">
-					<Canvas Width="{Binding Layout.ActualSize.Width}"
+					<Canvas x:Name="Root_Canvas"
+							Width="{Binding Layout.ActualSize.Width}"
 							Height="{Binding Layout.ActualSize.Height}"
 							HorizontalAlignment="Left"
 							VerticalAlignment="Top"
-							RenderTransform="{Binding $parent[local:WorkflowView].GlobalScale}"
-							x:Name="Root_Canvas">
-						<!-- 已挂载节点 -->
-						<ItemsControl ItemsSource="{Binding VisibleNodes}"
-									  ZIndex="0">
-							<ItemsControl.ItemsPanel>
-								<ItemsPanelTemplate>
-									<Canvas Width="{Binding Layout.ActualSize.Width}"
-											Height="{Binding Layout.ActualSize.Height}"/>
-								</ItemsPanelTemplate>
-							</ItemsControl.ItemsPanel>
-							<ItemsControl.ItemContainerTheme>
-								<ControlTheme TargetType="ContentPresenter" x:DataType="workflow:IWorkflowNodeViewModel">
-									<Setter Property="Canvas.Left" Value="{Binding Anchor.Left}" />
-									<Setter Property="Canvas.Top" Value="{Binding Anchor.Top}" />
-									<Setter Property="Canvas.ZIndex" Value="{Binding Anchor.Layer}" />
-								</ControlTheme>
-							</ItemsControl.ItemContainerTheme>
-						</ItemsControl>
-						<!-- 已建立连接线 -->
-						<ItemsControl ItemsSource="{Binding Links}"
-									  ZIndex="-1">
-							<ItemsControl.ItemsPanel>
-								<ItemsPanelTemplate>
-									<Canvas Width="{Binding Layout.ActualSize.Width}"
-											Height="{Binding Layout.ActualSize.Height}"/>
-								</ItemsPanelTemplate>
-							</ItemsControl.ItemsPanel>
-						</ItemsControl>
-						<!-- 临时连接线 -->
-						<Canvas Width="{Binding Layout.ActualSize.Width}"
-								Height="{Binding Layout.ActualSize.Height}">
-							<local:BezierCurveView x:DataType="workflow:IWorkflowLinkViewModel"
-												   ZIndex="-2"
-												   DataContext="{Binding VirtualLink}"
-												   StartLeft="{Binding Sender.Anchor.Left}"
-												   StartTop="{Binding Sender.Anchor.Top}"
-												   EndLeft="{Binding Receiver.Anchor.Left}"
-												   EndTop="{Binding Receiver.Anchor.Top}"
-												   CanRender="{Binding IsVisible}"
-												   Width="{Binding $parent[Canvas].Bounds.Width}"
-												   Height="{Binding $parent[Canvas].Bounds.Height}"
-												   IsVirtual="True"
-												   RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
-						</Canvas>
+							RenderTransform="{Binding $parent[local:WorkflowView].GlobalScale}">
+						<local:VirtualizingCanvas x:DataType="vm:TreeViewModel"
+												  DataContext="{Binding VisibleItems}"
+												  >
+							<local:VirtualizingCanvas.DataTemplates>
+								<DataTemplate DataType="vm:NodeViewModel">
+									<local:NodeView Width="{Binding Size.Width}"
+													Height="{Binding Size.Height}"
+													Canvas.Left="{Binding Anchor.Left}"
+													Canvas.Top="{Binding Anchor.Top}"
+													ZIndex="{Binding Anchor.Layer}"
+													RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+								</DataTemplate>
+								<DataTemplate DataType="vm:ControllerViewModel">
+									<local:ControllerView Width="{Binding Size.Width}"
+														  Height="{Binding Size.Height}"
+														  Canvas.Left="{Binding Anchor.Left}"
+														  Canvas.Top="{Binding Anchor.Top}"
+														  ZIndex="{Binding Anchor.Layer}"
+														  RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+								</DataTemplate>
+							</local:VirtualizingCanvas.DataTemplates>
+						</local:VirtualizingCanvas>
 					</Canvas>
-				</ScrollViewer>
+			</ScrollViewer>
 			</Border>
 		</Grid>
 	</Grid>

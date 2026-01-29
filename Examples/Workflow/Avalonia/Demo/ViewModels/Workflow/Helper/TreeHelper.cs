@@ -1,4 +1,6 @@
-﻿using VeloxDev.Core.Interfaces.WorkflowSystem;
+﻿using System.Collections.ObjectModel;
+using System.Linq;
+using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
 
 namespace Demo.ViewModels.Workflow.Helper;
@@ -13,7 +15,7 @@ public class TreeHelper : WorkflowHelper.ViewModel.Tree
         base.Install(tree);
         _viewModel = tree as TreeViewModel;
 
-        // 初始化时重建索引（如果已有节点）
+        // 初始化时重建空间索引
         if (_viewModel?.Nodes != null)
         {
             foreach (var node in _viewModel.Nodes)
@@ -39,15 +41,29 @@ public class TreeHelper : WorkflowHelper.ViewModel.Tree
     }
 
     // 新增：供外部（如 ScrollViewer）调用的视口更新入口
-    public void UpdateVisibleNodes(double viewportLeft, double viewportTop, double viewportWidth, double viewportHeight)
+    public void UpdateVisibleNodes(Viewport viewport)
     {
-        if (_viewModel == null) return;
+        if (_viewModel?.VisibleItems is not ObservableCollection<IWorkflowViewModel> visibleItems)
+            return;
 
-        var visible = _spatialHashMap.Query(viewportLeft, viewportTop, viewportWidth, viewportHeight);
-        _viewModel.VisibleNodes.Clear();
-        foreach (var node in visible)
+        var newVisibleSet = _spatialHashMap.Query(viewport).ToHashSet();
+        var oldVisibleList = visibleItems.ToList(); // 快照（保持顺序和引用）
+        var oldVisibleSet = oldVisibleList.ToHashSet();
+
+        // 计算差集
+        var toRemove = oldVisibleList.Where(item => !newVisibleSet.Contains(item)).ToList();
+        var toAdd = newVisibleSet.Where(item => !oldVisibleSet.Contains(item)).ToList();
+
+        // 先移除（从后往前，避免索引偏移问题）
+        foreach (var item in toRemove.AsEnumerable().Reverse())
         {
-            _viewModel.VisibleNodes.Add(node);
+            visibleItems.Remove(item);
+        }
+
+        // 再添加
+        foreach (var item in toAdd)
+        {
+            visibleItems.Add(item);
         }
     }
 }
