@@ -41,19 +41,11 @@
 		<Grid Grid.Column="0">
 			<ScrollViewer>
 				<StackPanel Orientation="Vertical">
-					<TextBlock Text="{Binding Layout}" />
 					<Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}" />
 					<Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" />
 					<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
 					<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
 					<Button Content="Simulate" Width="100" Height="50" Click="SimulateData" />
-					<Button Content="左延申" Click="Button_Click"/>
-					<Button Content="上延申" Click="Button_Click1"/>
-					<Button Content="右延申" Click="Button_Click2"/>
-					<Button Content="下延申" Click="Button_Click3"/>
-					<Button Content="放大" Click="Button_Click4"/>
-					<Button Content="缩小" Click="Button_Click5"/>
-					<Button Content="GC" Click="Button_Click7"/>
 					<Button Content="虚拟化" Click="Button_Click6"/>
 					<TextBlock Text="节点总数：" />
 					<TextBlock Text="{Binding Nodes.Count}"/>
@@ -63,8 +55,7 @@
 					<TextBlock x:Name="VTime"/>
 					<TextBlock Text="可见节点数：" />
 					<TextBlock Text="{Binding VisibleItems.Count}" />
-					<TextBlock Text="虚拟画布子元素数量：" />
-					<TextBlock x:Name="VC"/>
+					<TextBlock Text="{Binding Layout}" />
 					<local:Rocker x:Name="PART_ROCKER" Width="100" Height="100" Foreground="Lime"/>
 				</StackPanel>
 			</ScrollViewer>

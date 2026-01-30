@@ -1,6 +1,7 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
+using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -14,36 +15,34 @@ public class VirtualizingCanvas : Canvas
 {
     private readonly Dictionary<Type, Queue<Control>> _viewPool = [];
     private readonly List<ControlItem> _activeViews = [];
+    private readonly List<IWorkflowViewModel> _pendingViews = []; // 待创建的 ViewModel
     private ObservableCollection<IWorkflowViewModel>? _currentCollection;
-
-    // 不再有 ItemsSource 属性！直接使用 DataContext
+    private bool _isSchedulingRender = false;
 
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
 
-        // 1. 取消旧集合监听
         if (_currentCollection != null)
         {
             _currentCollection.CollectionChanged -= OnCollectionChanged;
             ClearAllViews();
         }
 
-        // 2. 尝试将新 DataContext 转为集合
         if (DataContext is ObservableCollection<IWorkflowViewModel> newCollection)
         {
             _currentCollection = newCollection;
             _currentCollection.CollectionChanged += OnCollectionChanged;
 
-            // 初始加载所有项
-            foreach (var item in _currentCollection)
-            {
-                AddOrReuseView(item);
-            }
+            // 初始项全部加入待处理队列
+            _pendingViews.Clear();
+            _pendingViews.AddRange(_currentCollection);
+            ScheduleNextBatchRender();
         }
         else
         {
             _currentCollection = null;
+            _pendingViews.Clear();
             if (DataContext != null)
             {
                 throw new InvalidOperationException(
@@ -58,17 +57,71 @@ public class VirtualizingCanvas : Canvas
         {
             case NotifyCollectionChangedAction.Add:
                 foreach (IWorkflowViewModel item in e.NewItems!)
-                    AddOrReuseView(item);
+                {
+                    _pendingViews.Add(item);
+                }
+                ScheduleNextBatchRender();
                 break;
 
             case NotifyCollectionChangedAction.Remove:
                 foreach (IWorkflowViewModel item in e.OldItems!)
+                {
                     HideViewFor(item);
+                }
                 break;
 
             case NotifyCollectionChangedAction.Reset:
                 ResetAllViews();
+                if (_currentCollection != null)
+                {
+                    _pendingViews.Clear();
+                    _pendingViews.AddRange(_currentCollection);
+                    ScheduleNextBatchRender();
+                }
                 break;
+        }
+    }
+
+    private void ScheduleNextBatchRender()
+    {
+        if (_isSchedulingRender || _pendingViews.Count == 0) return;
+
+        _isSchedulingRender = true;
+
+        // 使用 Post 在下一帧执行（比 Timer 更贴合渲染节奏）
+        Dispatcher.UIThread.Post(ProcessNextBatch, DispatcherPriority.Background);
+    }
+
+    private void ProcessNextBatch()
+    {
+        _isSchedulingRender = false;
+
+        // 每次只处理少量（例如 2~5 个），避免卡顿
+        const int batchSize = 3;
+        int processed = 0;
+
+        while (processed < batchSize && _pendingViews.Count > 0)
+        {
+            var viewModel = _pendingViews[0];
+            _pendingViews.RemoveAt(0);
+
+            try
+            {
+                AddOrReuseView(viewModel);
+            }
+            catch (Exception ex)
+            {
+                // 可选：记录日志
+                System.Diagnostics.Debug.WriteLine($"Failed to create view for {viewModel?.GetType()}: {ex}");
+            }
+
+            processed++;
+        }
+
+        // 如果还有剩余，继续调度
+        if (_pendingViews.Count > 0)
+        {
+            ScheduleNextBatchRender();
         }
     }
 
@@ -148,17 +201,12 @@ public class VirtualizingCanvas : Canvas
             }
         }
         _activeViews.Clear();
-
-        if (_currentCollection != null)
-        {
-            foreach (var vm in _currentCollection)
-                AddOrReuseView(vm);
-        }
     }
 
     private void ClearAllViews()
     {
         ResetAllViews();
+        _pendingViews.Clear();
     }
 
     private record ControlItem
