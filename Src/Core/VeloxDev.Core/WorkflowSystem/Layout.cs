@@ -17,33 +17,37 @@ public enum OriginAligns
 }
 
 [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
-public sealed partial class Layout : ICloneable
+public sealed partial class Layout : ICloneable, IEquatable<Layout>
 {
     /* Configure those properties to change the layout calculation
      *  usage
-     *  (1) OriginSize - The original size of the layout
+     *  (1) OriginSize - The original size of the canvas
      *  (2) OriginScale - The scale factor applied to the original size
      *  (3) PositiveOffset - Add Size At Right/Bottom Side
      *  (4) NegativeOffset - Add Size At Left/Top Side
      *  (5) OriginAlign - The alignment point of the layout
-     *  (6) OriginViewport - The Viewport value from UI ( such as scrollview )，Only as a logic value
      */
     [VeloxProperty] private Size originSize = new(1920, 1080);
     [VeloxProperty] private Scale originScale = new(1, 1);
     [VeloxProperty] private Offset positiveOffset = new(0, 0);
     [VeloxProperty] private Offset negativeOffset = new(0, 0);
     [VeloxProperty] private OriginAligns originAlign = OriginAligns.Center;
-    [VeloxProperty] private Viewport originViewport = new();
 
     /* Bind those properties directly to change the effect of UI
      *  usage
      *  (1) ActualSize - Canvas.Width/Height
      *  (2) ActualOffset - TranslateTransform.X/Y
-     *  (3) ActualViewport - Use this value to correctly virtualize Nodes
      */
     [VeloxProperty] private Size actualSize = new(1920, 1080);
     [VeloxProperty] private Offset actualOffset = new(0, 0);
-    [VeloxProperty] private Viewport actualViewport = new();
+
+    public bool Equals(Layout? other)
+        => other is not null &&
+           OriginSize == other.OriginSize &&
+           OriginScale == other.OriginScale &&
+           PositiveOffset == other.PositiveOffset &&
+           NegativeOffset == other.NegativeOffset &&
+           OriginAlign == other.OriginAlign;
 
     public object Clone() => new Layout()
     {
@@ -51,6 +55,7 @@ public sealed partial class Layout : ICloneable
         OriginScale = new Scale(this.OriginScale.X, this.OriginScale.Y),
         PositiveOffset = new Offset(this.PositiveOffset.Left, this.PositiveOffset.Top),
         NegativeOffset = new Offset(this.NegativeOffset.Left, this.NegativeOffset.Top),
+        OriginAlign = this.OriginAlign
     };
 
     public override bool Equals(object? obj)
@@ -60,14 +65,15 @@ public sealed partial class Layout : ICloneable
             return OriginSize == layout.OriginSize &&
                    OriginScale == layout.OriginScale &&
                    PositiveOffset == layout.PositiveOffset &&
-                   NegativeOffset == layout.NegativeOffset;
+                   NegativeOffset == layout.NegativeOffset &&
+                   OriginAlign == layout.OriginAlign;
         }
         return false;
     }
 
     public override int GetHashCode()
     {
-        return HashCode.Combine(OriginSize, OriginScale, PositiveOffset, NegativeOffset);
+        return HashCode.Combine(OriginSize, OriginScale, PositiveOffset, NegativeOffset, OriginAlign);
     }
 
     public override string ToString()
@@ -94,10 +100,9 @@ public sealed partial class Layout : ICloneable
     {
         var baseWidth = OriginSize.Width + PositiveOffset.Left + NegativeOffset.Left;
         var baseHeight = OriginSize.Height + PositiveOffset.Top + NegativeOffset.Top;
-        ActualSize = new Size(
-            baseWidth + (baseWidth - (baseWidth * OriginScale.X)), 
-            baseHeight + (baseHeight - (baseHeight * OriginScale.Y))
-            );
+        ActualSize.Width = baseWidth + (baseWidth - (baseWidth * OriginScale.X));
+        ActualSize.Height = baseHeight + (baseHeight - (baseHeight * OriginScale.Y));
+        OnPropertyChanged(nameof(ActualSize));
         ActualOffset = (OriginAlign) switch
         {
             OriginAligns.TopLeft => new Offset(NegativeOffset.Left, NegativeOffset.Top),

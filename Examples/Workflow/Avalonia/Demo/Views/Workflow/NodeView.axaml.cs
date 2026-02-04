@@ -10,6 +10,7 @@ public partial class NodeView : UserControl
 {
     private Point _lastPoint;
     private bool _isDragging;
+    private Canvas? _dragCanvas;
 
     public NodeView()
     {
@@ -18,22 +19,15 @@ public partial class NodeView : UserControl
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        var pointer = e.GetCurrentPoint(LayoutRoot);
+        // 查找祖先中的 Canvas
+        _dragCanvas = FindAncestorOfType<Canvas>();
 
-        // 只在左键按下时开始拖拽
-        if (pointer.Properties.IsLeftButtonPressed)
-        {
-            _lastPoint = e.GetPosition(LayoutRoot);
-            _isDragging = true;
+        if (_dragCanvas == null)
+            return;
 
-            // 关键：捕获指针事件
-            if (sender is Control control)
-            {
-                e.Pointer.Capture(control);
-            }
-
-            
-        }
+        _lastPoint = e.GetPosition(_dragCanvas);
+        _isDragging = true;
+        e.Pointer.Capture(sender as IInputElement);
     }
 
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -41,29 +35,38 @@ public partial class NodeView : UserControl
         if (_isDragging)
         {
             _isDragging = false;
-
-            // 释放指针捕获
             e.Pointer.Capture(null);
-            
+            _dragCanvas = null;
         }
     }
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (!_isDragging || DataContext is not IWorkflowNodeViewModel node)
+        if (!_isDragging || DataContext is not IWorkflowNodeViewModel node || _dragCanvas == null)
             return;
 
-        var current = e.GetPosition(LayoutRoot);
+        var current = e.GetPosition(_dragCanvas);
         var offset = new Offset(current.X - _lastPoint.X, current.Y - _lastPoint.Y);
-
         node.MoveCommand.Execute(offset);
-
         _lastPoint = current;
-        
     }
 
     private void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
         _isDragging = false;
+        _dragCanvas = null;
+    }
+
+    // 辅助方法：查找祖先
+    private T? FindAncestorOfType<T>() where T : class
+    {
+        var parent = Parent;
+        while (parent != null)
+        {
+            if (parent is T result)
+                return result;
+            parent = (parent as Visual)?.Parent;
+        }
+        return null;
     }
 }

@@ -11,17 +11,23 @@
 			 PointerReleased="OnPointerReleased"
 			 PointerMoved="OnPointerMoved">
 
-	<!-- 模板选择 -->
+	<!-- 模板 -->
 	<UserControl.DataTemplates>
 		<!-- 节点模板 -->
 		<DataTemplate DataType="vm:NodeViewModel">
 			<local:NodeView Width="{Binding Size.Width}"
 							Height="{Binding Size.Height}"
+							Canvas.Left="{Binding Anchor.Left}"
+							Canvas.Top="{Binding Anchor.Top}"
+							ZIndex="{Binding Anchor.Layer}"
 							RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
 		</DataTemplate>
 		<DataTemplate DataType="vm:ControllerViewModel">
 			<local:ControllerView Width="{Binding Size.Width}"
 								  Height="{Binding Size.Height}"
+								  Canvas.Left="{Binding Anchor.Left}"
+								  Canvas.Top="{Binding Anchor.Top}"
+								  ZIndex="{Binding Anchor.Layer}"
 								  RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
 		</DataTemplate>
 		<!-- 连接线模板 -->
@@ -33,11 +39,35 @@
 								   CanRender="{Binding IsVisible}"
 								   Width="{Binding $parent[Canvas].Bounds.Width}"
 								   Height="{Binding $parent[Canvas].Bounds.Height}"
-								   RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+								   RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"
+								   ZIndex="-1"/>
 		</DataTemplate>
 	</UserControl.DataTemplates>
 
 	<Grid ColumnDefinitions="2*,auto,8*">
+		<!-- 渲染节点编辑器 ( 虚拟化支持 ) -->
+		<Grid Grid.Column="2">
+			<Border BorderBrush="White" BorderThickness="1" CornerRadius="3">
+				<ScrollViewer HorizontalScrollBarVisibility="Auto"
+							  ScrollChanged="OnScrollChanged"
+							  x:Name="Root_ScrollViewer">
+					<Canvas x:DataType="vm:TreeViewModel"
+							x:Name="Root_Canvas"
+							Width="{Binding Layout.ActualSize.Width}"
+							Height="{Binding Layout.ActualSize.Height}"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Top"
+							RenderTransform="{Binding $parent[local:WorkflowView].GlobalScale}"
+							local:ViewPool.ItemsSource="{Binding VisibleItems}">
+						<Canvas.DataTemplates>
+							<!-- 依照优先级寻找数据模板 >> Self > Parent > App -->
+						</Canvas.DataTemplates>
+					</Canvas>
+				</ScrollViewer>
+			</Border>
+		</Grid>
+
+		<!-- 功能按键 ( 测试用 ) -->
 		<Grid Grid.Column="0">
 			<ScrollViewer>
 				<StackPanel Orientation="Vertical">
@@ -46,13 +76,8 @@
 					<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
 					<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
 					<Button Content="Simulate" Width="100" Height="50" Click="SimulateData" />
-					<Button Content="虚拟化" Click="Button_Click6"/>
 					<TextBlock Text="节点总数：" />
 					<TextBlock Text="{Binding Nodes.Count}"/>
-					<TextBlock Text="数据层虚拟化耗时：" />
-					<TextBlock x:Name="VMTime"/>
-					<TextBlock Text="UI层同步耗时：" />
-					<TextBlock x:Name="VTime"/>
 					<TextBlock Text="可见节点数：" />
 					<TextBlock Text="{Binding VisibleItems.Count}" />
 					<TextBlock Text="{Binding Layout}" />
@@ -62,42 +87,5 @@
 		</Grid>
 
 		<GridSplitter Grid.Column="1" Width="5" Background="Gray"/>
-
-		<Grid Grid.Column="2">
-			<Border BorderBrush="White" BorderThickness="1" CornerRadius="3">
-				<ScrollViewer HorizontalScrollBarVisibility="Auto"
-							  x:Name="Root_ScrollViewer">
-					<Canvas x:Name="Root_Canvas"
-							Width="{Binding Layout.ActualSize.Width}"
-							Height="{Binding Layout.ActualSize.Height}"
-							HorizontalAlignment="Left"
-							VerticalAlignment="Top"
-							RenderTransform="{Binding $parent[local:WorkflowView].GlobalScale}">
-						<local:VirtualizingCanvas x:DataType="vm:TreeViewModel"
-												  DataContext="{Binding VisibleItems}"
-												  >
-							<local:VirtualizingCanvas.DataTemplates>
-								<DataTemplate DataType="vm:NodeViewModel">
-									<local:NodeView Width="{Binding Size.Width}"
-													Height="{Binding Size.Height}"
-													Canvas.Left="{Binding Anchor.Left}"
-													Canvas.Top="{Binding Anchor.Top}"
-													ZIndex="{Binding Anchor.Layer}"
-													RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
-								</DataTemplate>
-								<DataTemplate DataType="vm:ControllerViewModel">
-									<local:ControllerView Width="{Binding Size.Width}"
-														  Height="{Binding Size.Height}"
-														  Canvas.Left="{Binding Anchor.Left}"
-														  Canvas.Top="{Binding Anchor.Top}"
-														  ZIndex="{Binding Anchor.Layer}"
-														  RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
-								</DataTemplate>
-							</local:VirtualizingCanvas.DataTemplates>
-						</local:VirtualizingCanvas>
-					</Canvas>
-			</ScrollViewer>
-			</Border>
-		</Grid>
 	</Grid>
 </UserControl>

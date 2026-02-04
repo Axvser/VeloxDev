@@ -14,10 +14,14 @@ namespace Demo.ViewModels.Workflow.Helper
 
         public override void Install(IWorkflowNodeViewModel node)
         {
-            // [ Standard ] 框架初始化
             base.Install(node);
-
             _viewModel = node as NodeViewModel;
+        }
+
+        public override void Uninstall(IWorkflowNodeViewModel node)
+        {
+            base.Uninstall(node);
+            _viewModel = null;
         }
 
         public override async Task WorkAsync(object? parameter, CancellationToken ct)

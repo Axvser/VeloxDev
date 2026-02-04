@@ -193,53 +193,9 @@ public partial class WorkflowView : UserControl
         _workflowViewModel.ResetVirtualLinkCommand.Execute(null);
     }
 
-    private void Button_Click(object? sender, RoutedEventArgs e)
+    private void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (Root_ScrollViewer.Offset.X <= 0)
-        {
-            _workflowViewModel.Layout.NegativeOffset += new Offset(2, 0);
-        }
-        Root_ScrollViewer.Offset = new Vector(
-            Math.Clamp(Root_ScrollViewer.Offset.X - 2, 0, double.MaxValue),
-            Root_ScrollViewer.Offset.Y
-            );
-        ReLayout();
-    }
-    private void Button_Click1(object? sender, RoutedEventArgs e)
-    {
-        if (Root_ScrollViewer.Offset.Y <= 0)
-        {
-            _workflowViewModel.Layout.NegativeOffset += new Offset(0, 2);
-        }
-        Root_ScrollViewer.Offset = new Vector(
-            Root_ScrollViewer.Offset.X,
-            Math.Clamp(Root_ScrollViewer.Offset.Y - 2, 0, double.MaxValue)
-            );
-        ReLayout();
-    }
-    private void Button_Click2(object? sender, RoutedEventArgs e)
-    {
-        if (GetHorizontalScrollMaximum(Root_ScrollViewer) - Root_ScrollViewer.Offset.X <= 0)
-        {
-            _workflowViewModel.Layout.PositiveOffset += new Offset(2, 0);
-        }
-        Root_ScrollViewer.Offset = new Vector(
-            Math.Clamp(Root_ScrollViewer.Offset.X + 2, 0, double.MaxValue),
-            Root_ScrollViewer.Offset.Y
-            );
-        ReLayout();
-    }
-    private void Button_Click3(object? sender, RoutedEventArgs e)
-    {
-        if (GetVerticalScrollMaximum(Root_ScrollViewer) - Root_ScrollViewer.Offset.Y <= 0)
-        {
-            _workflowViewModel.Layout.PositiveOffset += new Offset(0, 2);
-        }
-        Root_ScrollViewer.Offset = new Vector(
-            Root_ScrollViewer.Offset.X,
-            Math.Clamp(Root_ScrollViewer.Offset.Y + 2, 0, double.MaxValue)
-            );
-        ReLayout();
+        UpdateVisibleRegion();
     }
 
     public static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)
@@ -264,32 +220,6 @@ public partial class WorkflowView : UserControl
         // 最大滚动值 = 内容宽度 - 可视区域宽度
         double maxScroll = Math.Max(0, extent.Height - viewport.Height);
         return maxScroll;
-    }
-
-    private void Button_Click4(object? sender, RoutedEventArgs e)
-    {
-        _workflowViewModel.Layout.OriginScale.X += 0.1;
-        _workflowViewModel.Layout.OriginScale.Y += 0.1;
-        _workflowViewModel.Layout.UpdateCommand.Execute(null);
-        ReLayout();
-    }
-
-    private void Button_Click5(object? sender, RoutedEventArgs e)
-    {
-        _workflowViewModel.Layout.OriginScale.X -= 0.1;
-        _workflowViewModel.Layout.OriginScale.Y -= 0.1;
-        _workflowViewModel.Layout.UpdateCommand.Execute(null);
-        ReLayout();
-    }
-
-    private void Button_Click6(object? sender, RoutedEventArgs e)
-    {
-        UpdateVisibleRegion();
-    }
-
-    private void Button_Click7(object? sender, RoutedEventArgs e)
-    {
-        GC.Collect();
     }
 
     private void ReLayout()
@@ -324,7 +254,7 @@ public partial class WorkflowView : UserControl
 
         if (vm.GetHelper() is TreeHelper helper)
         {
-            helper.UpdateVisibleNodes(new Viewport(
+            helper.Virtualize(new Viewport(
                 visibleLeft,
                 visibleTop,
                 viewport.Width,
@@ -334,125 +264,104 @@ public partial class WorkflowView : UserControl
 
     private async void SimulateData(object? sender, RoutedEventArgs e)
     {
-        const int totalNodes = 1_000_000; // 总量
-        const int batchSize = 10_000; // 每批处理数量
-        const double gridSize = 150; // 标准网格大小
-        const double jitter = 30; 
-        double canvasSize = gridSize * Math.Sqrt(totalNodes); // ≈150,000
+        const int totalNodes = 1000; // 总节点数
+        const int batchSize = 100;   // 每批次处理节点数
+        const double gridSize = 200; // 标准网格大小
+        const double jitter = 30;
+        double canvasSize = gridSize * Math.Sqrt(totalNodes);
 
-        var random = new Random(12345); // 固定种子（注意：多线程下需谨慎，但此处单线程使用）
-        var slotTypes = new[]
-        {
-            SlotChannel.OneBoth,
-            SlotChannel.MultipleTargets,
-            SlotChannel.MultipleSources
-        };
-        var slotSizes = new[]
-        {
-            new Size(20, 20),
-            new Size(25, 25),
-            new Size(30, 30)
-        };
+        var random = new Random(12345);
+        var slotTypes = new[] { SlotChannel.OneBoth, SlotChannel.MultipleTargets, SlotChannel.MultipleSources };
+        var slotSizes = new[] { new Size(20, 20), new Size(25, 25), new Size(30, 30) };
 
         int gridCount = (int)Math.Ceiling(Math.Sqrt(totalNodes));
         int generated = 0;
         int i = 0, j = 0;
 
-        // 获取 ViewModel 和 Helper（必须在 UI 线程获取引用）
         var workflowViewModel = _workflowViewModel;
         var workflowHelper = workflowViewModel.GetHelper();
 
-        // 先设置画布大小等基础属性（UI 线程）
-        await Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            workflowViewModel.Layout.OriginSize = new Size(150000, 150000);
-            workflowViewModel.Layout.OriginAlign = OriginAligns.TopLeft;
-            DataContext = workflowViewModel;
-        });
+        // 初始化画布
+        workflowViewModel.Layout.OriginSize = new Size(canvasSize, canvasSize);
+        workflowViewModel.Layout.OriginAlign = OriginAligns.TopLeft;
+        DataContext = workflowViewModel;
 
-        // 后台生成节点
-        await Task.Run(async () =>
+        while (generated < totalNodes)
         {
-            while (generated < totalNodes)
+            var batchNodes = new List<NodeViewModel>();
+            var batchSlots = new Dictionary<NodeViewModel, List<SlotViewModel>>(); // 记录每个 node 对应的 slots
+
+            int batchGenerated = 0;
+            while (batchGenerated < batchSize && generated < totalNodes)
             {
-                var batchGenerated = 0;
-                var nodesInBatch = new List<NodeViewModel>();
+                if (j >= gridCount) { j = 0; i++; }
+                if (i >= gridCount) break;
 
-                // 构建一批节点（纯数据，不涉及 UI）
-                while (batchGenerated < batchSize && generated < totalNodes)
+                double baseX = i * gridSize;
+                double baseY = j * gridSize;
+                double x = Math.Max(0, Math.Min(baseX + jitter - random.NextDouble() * jitter * 2, canvasSize - 1));
+                double y = Math.Max(0, Math.Min(baseY + jitter - random.NextDouble() * jitter * 2, canvasSize - 1));
+
+                var node = new NodeViewModel
                 {
-                    if (j >= gridCount)
+                    Size = new Size(180 + random.Next(0, 280), 160 + random.Next(0, 260)),
+                    Anchor = new Anchor(x, y, 0)
+                };
+
+                // 先只创建 node，不加 slot
+                batchNodes.Add(node);
+                batchSlots[node] = [];
+
+                // 生成 slot 数据（但暂不挂载）
+                int slotCount = random.Next(1, 4);
+                for (int s = 0; s < slotCount; s++)
+                {
+                    var slot = new SlotViewModel
                     {
-                        j = 0;
-                        i++;
-                    }
-                    if (i >= gridCount) break;
-
-                    double baseX = i * gridSize;
-                    double baseY = j * gridSize;
-
-                    double x = baseX + jitter - random.NextDouble() * jitter * 2;
-                    double y = baseY + jitter - random.NextDouble() * jitter * 2;
-
-                    x = Math.Max(0, Math.Min(x, canvasSize - 1));
-                    y = Math.Max(0, Math.Min(y, canvasSize - 1));
-
-                    var node = new NodeViewModel()
-                    {
-                        Size = new Size(
-                            width: 80 + random.Next(0, 80),
-                            height: 60 + random.Next(0, 60)
+                        Offset = new Offset(
+                            5 + random.Next(0, (int)node.Size.Width - 40),
+                            5 + random.Next(0, (int)node.Size.Height - 40)
                         ),
-                        Anchor = new Anchor(x, y, 0)
+                        Size = slotSizes[random.Next(slotSizes.Length)],
+                        Channel = slotTypes[random.Next(slotTypes.Length)]
                     };
-
-                    int slotCount = random.Next(1, 4);
-                    for (int s = 0; s < slotCount; s++)
-                    {
-                        node.GetHelper().CreateSlot(new SlotViewModel
-                        {
-                            Offset = new Offset(
-                                left: 5 + random.Next(0, (int)node.Size.Width - 40),
-                                top: 5 + random.Next(0, (int)node.Size.Height - 40)
-                            ),
-                            Size = slotSizes[random.Next(slotSizes.Length)],
-                            Channel = slotTypes[random.Next(slotTypes.Length)]
-                        });
-                    }
-
-                    nodesInBatch.Add(node);
-                    generated++;
-                    batchGenerated++;
-                    j++;
+                    batchSlots[node].Add(slot);
                 }
 
-                // 将这批节点添加到 ViewModel（必须回到 UI 线程）
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    foreach (var node in nodesInBatch)
-                    {
-                        workflowHelper.CreateNode(node);
-                    }
-                    workflowHelper.ClearHistory(); // 清理历史
-                });
-
-                // 显示进度通知（每批一次）
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    _manager.Show(new Notification("Progress", $"Generated {generated:N0} / {totalNodes:N0} nodes"));
-                });
-
-                // 小延迟，让 UI 有机会响应（可选，但提升流畅度）
-                await Task.Delay(50); // 50ms 间隔
+                generated++;
+                batchGenerated++;
+                j++;
             }
 
-            // 最终更新布局
-            await Dispatcher.UIThread.InvokeAsync(() =>
+            // 🔑 关键步骤：先批量挂载所有 nodes 到 tree
+            foreach (var node in batchNodes)
             {
-                workflowViewModel.Layout.UpdateCommand.Execute(null);
-                ReLayout();
-                _manager.Show(new Notification("OK", $"Completed! Generated {generated:N0} nodes in {canvasSize:N0}×{canvasSize:N0} space"));
-            });
-        });
+                workflowHelper.CreateNode(node); // 此时 node 已属于 Tree，DataContext 和绑定生效
+            }
+
+            // 🔑 再批量为已挂载的 nodes 添加 slots
+            foreach (var kvp in batchSlots)
+            {
+                var node = kvp.Key;
+                var slots = kvp.Value;
+                var nodeHelper = node.GetHelper(); // 此时 helper 应已正确初始化（因 node 已挂载）
+
+                foreach (var slot in slots)
+                {
+                    nodeHelper.CreateSlot(slot); // 安全：node 已在树中
+                }
+            }
+
+            workflowHelper.ClearHistory();
+            _manager.Show(new Notification("Progress", $"Generated {generated:N0} / {totalNodes:N0} nodes"));
+
+            await Task.Yield(); // 让 UI 线程有机会刷新
+
+            if (this.Parent is null) break;
+        }
+
+        workflowViewModel.Layout.UpdateCommand.Execute(null);
+        ReLayout();
+        _manager.Show(new Notification("OK", $"Completed! Generated {generated:N0} nodes"));
     }
 }
