@@ -19,9 +19,28 @@
 					<local:SlotView Width="{Binding Size.Width}"
 									Height="{Binding Size.Height}"
 									Canvas.Left="{Binding Offset.Left}"
-									Canvas.Top="{Binding Offset.Top}"/>
+									Canvas.Top="{Binding Offset.Top}"
+									SlotState="{Binding State}"/>
 				</DataTemplate>
 			</Canvas.DataTemplates>
+			<!-- 不同状态下反馈不同的颜色 -->
+			<Canvas.Styles>
+				<Style Selector="local|SlotView">
+					<Setter Property="Foreground" Value="White"/>
+				</Style>
+				<!-- 发送端 -->
+				<Style Selector="local|SlotView[SlotState=8]">
+					<Setter Property="Foreground" Value="Tomato"/>
+				</Style>
+				<!-- 接收端 -->
+				<Style Selector="local|SlotView[SlotState=16]">
+					<Setter Property="Foreground" Value="Lime"/>
+				</Style>
+				<!-- 双向端 -->
+				<Style Selector="local|SlotView[SlotState=24]">
+					<Setter Property="Foreground" Value="Violet"/>
+				</Style>
+			</Canvas.Styles>
 		</Canvas>
 
 		<!-- 标题栏 -->

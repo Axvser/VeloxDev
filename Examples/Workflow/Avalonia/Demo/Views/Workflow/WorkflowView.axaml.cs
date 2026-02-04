@@ -190,6 +190,7 @@ public partial class WorkflowView : UserControl
 
     private void OnPointerReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
     {
+        _workflowViewModel.VirtualLink.Sender.State &= ~SlotState.PreviewSender;
         _workflowViewModel.ResetVirtualLinkCommand.Execute(null);
     }
 
@@ -271,7 +272,7 @@ public partial class WorkflowView : UserControl
         double canvasSize = gridSize * Math.Sqrt(totalNodes);
 
         var random = new Random(12345);
-        var slotTypes = new[] { SlotChannel.OneBoth, SlotChannel.MultipleTargets, SlotChannel.MultipleSources };
+        var slotTypes = new[] { SlotChannel.MultipleBoth };
         var slotSizes = new[] { new Size(20, 20), new Size(25, 25), new Size(30, 30) };
 
         int gridCount = (int)Math.Ceiling(Math.Sqrt(totalNodes));
