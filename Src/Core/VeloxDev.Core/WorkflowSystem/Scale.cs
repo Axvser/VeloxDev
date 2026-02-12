@@ -1,10 +1,17 @@
-﻿namespace VeloxDev.Core.WorkflowSystem;
+﻿using VeloxDev.Core.AOT;
+using VeloxDev.Core.MVVM;
 
-public readonly struct Scale(double x = 0d, double y = 0d) : IEquatable<Scale>
+namespace VeloxDev.Core.WorkflowSystem;
+
+[AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
+public partial class Scale(double x = 0d, double y = 0d) : ICloneable, IEquatable<Scale>
 {
-    public double X { get; } = x;
-    public double Y { get; } = y;
+    [VeloxProperty]
+    private double _x = x;
+    [VeloxProperty]
+    private double _y = y;
 
+    public object Clone() => new Scale(X, Y);
     public override bool Equals(object? obj)
     {
         if (obj is Scale size)
@@ -15,7 +22,7 @@ public readonly struct Scale(double x = 0d, double y = 0d) : IEquatable<Scale>
     }
     public override int GetHashCode() => HashCode.Combine(X, Y);
     public override string ToString() => $"Scale({X},{Y})";
-    public bool Equals(Scale other) => X == other.X && Y == other.Y;
+    public bool Equals(Scale? other) => other is not null && X == other.X && Y == other.Y;
 
     public static bool operator ==(Scale a, Scale b) => a.Equals(b);
     public static bool operator !=(Scale a, Scale b) => !a.Equals(b);

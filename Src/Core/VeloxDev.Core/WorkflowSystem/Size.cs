@@ -4,7 +4,7 @@ using VeloxDev.Core.MVVM;
 namespace VeloxDev.Core.WorkflowSystem;
 
 [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
-public sealed partial class Size(double width = double.NaN, double height = double.NaN) : ICloneable, IEquatable<Size>
+public sealed partial class Size(double width = 0d, double height = 0d) : ICloneable, IEquatable<Size>
 {
     [VeloxProperty]
     private double _width = width;
