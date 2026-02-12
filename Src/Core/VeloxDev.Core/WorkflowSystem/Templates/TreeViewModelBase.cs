@@ -38,10 +38,10 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task ApplyConnection(object? parameter, CancellationToken ct)
+        protected virtual Task SendConnection(object? parameter, CancellationToken ct)
         {
             if (parameter is not IWorkflowSlotViewModel slot) return Task.CompletedTask;
-            Helper.ApplyConnection(slot);
+            Helper.SendConnection(slot);
             return Task.CompletedTask;
         }
         [VeloxCommand]

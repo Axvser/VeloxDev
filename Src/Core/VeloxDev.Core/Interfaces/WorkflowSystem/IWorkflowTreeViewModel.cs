@@ -14,7 +14,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IVeloxCommand CreateNodeCommand { get; }        // 创建节点           | parameter IWorkflowNodeViewModel
         public IVeloxCommand SetPointerCommand { get; }        // 触点跟踪           | parameter Anchor
         public IVeloxCommand ResetVirtualLinkCommand { get; }  // 重置虚拟连接       | parameter Null
-        public IVeloxCommand ApplyConnectionCommand { get; }   // 处理连接构建发起方 | parameter Null
+        public IVeloxCommand SendConnectionCommand { get; }   // 处理连接构建发起方 | parameter Null
         public IVeloxCommand ReceiveConnectionCommand { get; } // 处理连接构建接收方 | parameter Null
 
         public IVeloxCommand SubmitCommand { get; }        // 提交 | parameter IWorkflowActionPair
@@ -35,7 +35,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
         public void SetPointer(Anchor anchor);
         public bool ValidateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver);
-        public void ApplyConnection(IWorkflowSlotViewModel slot);
+        public void SendConnection(IWorkflowSlotViewModel slot);
         public void ReceiveConnection(IWorkflowSlotViewModel slot);
         public void ResetVirtualLink();
 

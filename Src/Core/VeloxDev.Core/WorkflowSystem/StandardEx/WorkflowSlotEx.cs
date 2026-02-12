@@ -9,9 +9,8 @@ public static class WorkflowSlotEx
         (this IWorkflowSlotViewModel component)
         =>
         [
-            component.SetOffsetCommand,
             component.SetSizeCommand,
-            component.ApplyConnectionCommand,
+            component.SendConnectionCommand,
             component.ReceiveConnectionCommand,
             component.DeleteCommand
         ];
@@ -21,14 +20,14 @@ public static class WorkflowSlotEx
         component.Size.Width = size.Width;
         component.Size.Height = size.Height;
         component.OnPropertyChanged(nameof(component.Size));
-        component.GetHelper().UpdateAnchor();
+        component.GetHelper().UpdateLayout();
     }
     public static void StandardSetOffset(this IWorkflowSlotViewModel component, Offset offset)
     {
         component.Offset.Left = offset.Left;
         component.Offset.Top = offset.Top;
         component.OnPropertyChanged(nameof(component.Offset));
-        component.GetHelper().UpdateAnchor();
+        component.GetHelper().UpdateLayout();
     }
     public static void StandardSetChannel(this IWorkflowSlotViewModel component, SlotChannel channel)
     {
@@ -97,12 +96,31 @@ public static class WorkflowSlotEx
         component.OnPropertyChanged(nameof(component.Anchor));
     }
 
-    public static void StandardUpdateAnchor(this IWorkflowSlotViewModel component)
+    public static void StandardUpdateLayout(this IWorkflowSlotViewModel component)
     {
         if (component.Parent is null) return;
+        var baseLeft = component.VisualPoint.Unit is VisualUnit.Relative ? component.Parent.Size.Width * component.VisualPoint.Left : component.VisualPoint.Left;
+        var baseTop = component.VisualPoint.Unit is VisualUnit.Relative ? component.Parent.Size.Height * component.VisualPoint.Top : component.VisualPoint.Top;
+        var leftOffset = component.VisualPoint.Alignment switch
+        {
+            Alignments.TopLeft or Alignments.CenterLeft or Alignments.BottomLeft => 0d,
+            Alignments.TopCenter or Alignments.Center or Alignments.BottomCenter => component.Size.Width * 0.5d,
+            Alignments.TopRight or Alignments.CenterRight or Alignments.BottomRight => component.Size.Width,
+            _ => 0d
+        };
+        var topOffset = component.VisualPoint.Alignment switch
+        {
+            Alignments.TopLeft or Alignments.TopCenter or Alignments.TopRight => 0d,
+            Alignments.CenterLeft or Alignments.Center or Alignments.CenterRight => component.Size.Height * 0.5d,
+            Alignments.BottomLeft or Alignments.BottomCenter or Alignments.BottomRight => component.Size.Height,
+            _ => 0d
+        };
+        component.Offset.Left = baseLeft - leftOffset;
+        component.Offset.Top = baseTop - topOffset;
         component.Anchor.Left = component.Parent.Anchor.Left + component.Offset.Left + component.Size.Width / 2;
         component.Anchor.Top = component.Parent.Anchor.Top + component.Offset.Top + component.Size.Height / 2;
         component.OnPropertyChanged(nameof(component.Anchor));
+        component.OnPropertyChanged(nameof(component.Offset));
     }
     public static void StandardUpdateState(this IWorkflowSlotViewModel component)
     {
@@ -121,7 +139,7 @@ public static class WorkflowSlotEx
     public static void StandardApplyConnection(this IWorkflowSlotViewModel component)
     {
         var tree = component.Parent?.Parent;
-        tree?.GetHelper()?.ApplyConnection(component);
+        tree?.GetHelper()?.SendConnection(component);
     }
     public static void StandardReceiveConnection(this IWorkflowSlotViewModel component)
     {

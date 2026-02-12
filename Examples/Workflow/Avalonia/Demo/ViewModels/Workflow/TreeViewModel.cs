@@ -1,5 +1,4 @@
-﻿using Avalonia;
-using Demo.ViewModels.Workflow.Helper;
+﻿using Demo.ViewModels.Workflow.Helper;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading;
@@ -18,9 +17,23 @@ public partial class TreeViewModel
 
     // …… 自由扩展您的工作流树视图模型
 
-    [VeloxProperty] private Layout layout = new();
+    [VeloxProperty] private CanvasLayout layout = new();
 
     [VeloxProperty] private ObservableCollection<IWorkflowViewModel> _visibleItems = [];
+
+    [VeloxCommand]
+    private Task PlusScale(object? parameter, CancellationToken ct)
+    {
+        Layout.OriginScale += new Scale(x: 0.1, y: 0.1);
+        return Task.CompletedTask;
+    }
+
+    [VeloxCommand]
+    private Task MinusScale(object? parameter, CancellationToken ct)
+    {
+        Layout.OriginScale -= new Scale(x: 0.1, y: 0.1);
+        return Task.CompletedTask;
+    }
 
     [VeloxCommand]
     private async Task Save(object? parameter, CancellationToken ct)

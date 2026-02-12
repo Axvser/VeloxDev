@@ -76,11 +76,12 @@
 					<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
 					<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
 					<Button Content="Simulate" Width="100" Height="50" Click="SimulateData" />
+					<Button Content="放大" Width="100" Height="50" Click="PlusScale" />
+					<Button Content="缩小" Width="100" Height="50" Click="MinusScale" />
 					<TextBlock Text="节点总数：" />
 					<TextBlock Text="{Binding Nodes.Count}"/>
 					<TextBlock Text="可见节点数：" />
 					<TextBlock Text="{Binding VisibleItems.Count}" />
-					<TextBlock Text="{Binding Layout}" />
 					<local:Rocker x:Name="PART_ROCKER" Width="100" Height="100" Foreground="Lime"/>
 				</StackPanel>
 			</ScrollViewer>

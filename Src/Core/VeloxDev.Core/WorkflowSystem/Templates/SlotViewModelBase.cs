@@ -17,17 +17,11 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         [VeloxProperty] private IWorkflowNodeViewModel? parent = null;
         [VeloxProperty] private SlotChannel channel = SlotChannel.OneBoth;
         [VeloxProperty] private SlotState state = SlotState.StandBy;
+        [VeloxProperty] private VisualPoint visualPoint = new();
         [VeloxProperty] private Anchor anchor = new();
         [VeloxProperty] private Offset offset = new();
         [VeloxProperty] private Size size = new();
 
-        [VeloxCommand]
-        protected virtual Task SetOffset(object? parameter, CancellationToken ct)
-        {
-            if (parameter is not Offset offset) return Task.CompletedTask;
-            Helper.SetOffset(offset);
-            return Task.CompletedTask;
-        }
         [VeloxCommand]
         protected virtual Task SetSize(object? parameter, CancellationToken ct)
         {
@@ -43,9 +37,9 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
             return Task.CompletedTask;
         }
         [VeloxCommand]
-        protected virtual Task ApplyConnection(object? parameter, CancellationToken ct)
+        protected virtual Task SendConnection(object? parameter, CancellationToken ct)
         {
-            Helper.ApplyConnection();
+            Helper.SendConnection();
             return Task.CompletedTask;
         }
         [VeloxCommand]

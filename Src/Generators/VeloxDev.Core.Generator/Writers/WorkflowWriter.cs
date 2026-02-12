@@ -351,10 +351,10 @@ namespace VeloxDev.Core.Generator.Writers
              Helper.ResetVirtualLink();
              return {{TaskFullName}}.CompletedTask;
          }
-         protected virtual {{TaskFullName}} ApplyConnection({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+         protected virtual {{TaskFullName}} SendConnection({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
          {
              if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot) return {{TaskFullName}}.CompletedTask;
-             Helper.ApplyConnection(slot);
+             Helper.SendConnection(slot);
              return {{TaskFullName}}.CompletedTask;
          }
          protected virtual {{TaskFullName}} ReceiveConnection({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
@@ -491,15 +491,15 @@ namespace VeloxDev.Core.Generator.Writers
               return _buffer_ResetVirtualLinkCommand;
            }
         }
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_ApplyConnectionCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand ApplyConnectionCommand
+        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SendConnectionCommand = null;
+        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SendConnectionCommand
         {
            get
            {
-              _buffer_ApplyConnectionCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: ApplyConnection,
+              _buffer_SendConnectionCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                  executeAsync: SendConnection,
                   canExecute: _ => true);
-              return _buffer_ApplyConnectionCommand;
+              return _buffer_SendConnectionCommand;
            }
         }
         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_ReceiveConnectionCommand = null;
@@ -790,16 +790,11 @@ namespace VeloxDev.Core.Generator.Writers
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel? parent = null;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel channel = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel.OneBoth;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState state = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState.StandBy;
+        private {{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint visualPoint = new();
         private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
         private {{NAMESPACE_VELOX_WORKFLOW}}.Offset offset = new();
         private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
 
-        protected virtual {{TaskFullName}} SetOffset({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Offset offset) return {{TaskFullName}}.CompletedTask;
-            Helper.SetOffset(offset);
-            return {{TaskFullName}}.CompletedTask;
-        }
         protected virtual {{TaskFullName}} SetSize({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
         {
             if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Size scale) return {{TaskFullName}}.CompletedTask;
@@ -812,9 +807,9 @@ namespace VeloxDev.Core.Generator.Writers
             Helper.SetChannel(slotChannel);
             return {{TaskFullName}}.CompletedTask;
         }
-        protected virtual {{TaskFullName}} ApplyConnection({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+        protected virtual {{TaskFullName}} SendConnection({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
         {
-            Helper.ApplyConnection();
+            Helper.SendConnection();
             return {{TaskFullName}}.CompletedTask;
         }
         protected virtual {{TaskFullName}} ReceiveConnection({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
@@ -921,6 +916,22 @@ namespace VeloxDev.Core.Generator.Writers
         }
         partial void OnStateChanging({{NAMESPACE_VELOX_IWORKFLOW}}.SlotState oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.SlotState newValue);
         partial void OnStateChanged({{NAMESPACE_VELOX_IWORKFLOW}}.SlotState oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.SlotState newValue);
+        public {{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint VisualPoint
+        {
+            get => visualPoint;
+            set
+            {
+               if({{ObjectFullName}}.Equals(visualPoint,value)) return;
+               var old = visualPoint;
+               OnPropertyChanging(nameof(VisualPoint));
+               OnVisualPointChanging(old, value);
+               visualPoint = value;
+               OnVisualPointChanged(old, value);
+               OnPropertyChanged(nameof(VisualPoint));
+            }
+        }
+        partial void OnVisualPointChanging({{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint oldValue, {{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint newValue);
+        partial void OnVisualPointChanged({{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint oldValue, {{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint newValue);
         public {{NAMESPACE_VELOX_WORKFLOW}}.Anchor Anchor
         {
             get => anchor;
@@ -970,17 +981,6 @@ namespace VeloxDev.Core.Generator.Writers
         partial void OnSizeChanging({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
         partial void OnSizeChanged({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
 
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SetOffsetCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SetOffsetCommand
-        {
-           get
-           {
-              _buffer_SetOffsetCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SetOffset,
-                  canExecute: _ => true);
-              return _buffer_SetOffsetCommand;
-           }
-        }
         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SetSizeCommand = null;
         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SetSizeCommand
         {
@@ -1003,15 +1003,15 @@ namespace VeloxDev.Core.Generator.Writers
               return _buffer_SetChannelCommand;
            }
         }
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_ApplyConnectionCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand ApplyConnectionCommand
+        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SendConnectionCommand = null;
+        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SendConnectionCommand
         {
            get
            {
-              _buffer_ApplyConnectionCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: ApplyConnection,
+              _buffer_SendConnectionCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                  executeAsync: SendConnection,
                   canExecute: _ => true);
-              return _buffer_ApplyConnectionCommand;
+              return _buffer_SendConnectionCommand;
            }
         }
         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_ReceiveConnectionCommand = null;

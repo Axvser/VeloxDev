@@ -2,6 +2,7 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -9,6 +10,7 @@ using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Threading.Tasks;
 using VeloxDev.Core.Extension;
@@ -23,7 +25,7 @@ public partial class WorkflowView : UserControl
     private TreeViewModel _workflowViewModel = new();
     private WindowNotificationManager _manager;
     private DispatcherTimer? _rockerPanTimer;
-    private const double PanSpeed = 8.0; // 像素/帧（可调）
+    private const double PanSpeed = 8.0;
 
     public static readonly StyledProperty<Transform> CanvasTransformProperty =
         AvaloniaProperty.Register<WorkflowView, Transform>(nameof(CanvasTransform));
@@ -104,12 +106,12 @@ public partial class WorkflowView : UserControl
         {
             _workflowViewModel.Layout.NegativeOffset += new Offset(-newOffsetX, 0);
             newOffsetX = 0;
-            ReLayout(); // 必须刷新 transform
+            ReLayout(Root_Canvas, _workflowViewModel.Layout); // 必须刷新 transform
         }
         else if (newOffsetX > maxH)
         {
             _workflowViewModel.Layout.PositiveOffset += new Offset(newOffsetX - maxH, 0);
-            ReLayout();
+            ReLayout(Root_Canvas, _workflowViewModel.Layout);
             // 重新计算 maxH，因为 layout 扩展了
             maxH = GetHorizontalScrollMaximum(Root_ScrollViewer);
             newOffsetX = Math.Min(newOffsetX, maxH);
@@ -119,12 +121,12 @@ public partial class WorkflowView : UserControl
         {
             _workflowViewModel.Layout.NegativeOffset += new Offset(0, -newOffsetY);
             newOffsetY = 0;
-            ReLayout();
+            ReLayout(Root_Canvas, _workflowViewModel.Layout);
         }
         else if (newOffsetY > maxV)
         {
             _workflowViewModel.Layout.PositiveOffset += new Offset(0, newOffsetY - maxV);
-            ReLayout();
+            ReLayout(Root_Canvas, _workflowViewModel.Layout);
             maxV = GetVerticalScrollMaximum(Root_ScrollViewer);
             newOffsetY = Math.Min(newOffsetY, maxV);
         }
@@ -223,8 +225,56 @@ public partial class WorkflowView : UserControl
         return maxScroll;
     }
 
-    private void ReLayout()
+    private void ReLayout(Canvas canvas, CanvasLayout layout)
     {
+        switch (layout.OriginAlignment)
+        {
+            case Alignments.TopLeft:
+                canvas.VerticalAlignment = VerticalAlignment.Top;
+                canvas.HorizontalAlignment = HorizontalAlignment.Left;
+                canvas.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
+                break;
+            case Alignments.TopCenter:
+                canvas.VerticalAlignment = VerticalAlignment.Top;
+                canvas.HorizontalAlignment = HorizontalAlignment.Left;
+                canvas.RenderTransformOrigin = new RelativePoint(0.5, 0, RelativeUnit.Relative);
+                break;
+            case Alignments.TopRight:
+                canvas.VerticalAlignment = VerticalAlignment.Top;
+                canvas.HorizontalAlignment = HorizontalAlignment.Right;
+                canvas.RenderTransformOrigin = new RelativePoint(1, 0, RelativeUnit.Relative);
+                break;
+            case Alignments.CenterLeft:
+                canvas.VerticalAlignment = VerticalAlignment.Center;
+                canvas.HorizontalAlignment = HorizontalAlignment.Left;
+                canvas.RenderTransformOrigin = new RelativePoint(0, 0.5, RelativeUnit.Relative);
+                break;
+            case Alignments.Center:
+                canvas.VerticalAlignment = VerticalAlignment.Center;
+                canvas.HorizontalAlignment = HorizontalAlignment.Center;
+                canvas.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+                break;
+            case Alignments.CenterRight:
+                canvas.VerticalAlignment = VerticalAlignment.Center;
+                canvas.HorizontalAlignment = HorizontalAlignment.Right;
+                canvas.RenderTransformOrigin = new RelativePoint(1, 0.5, RelativeUnit.Relative);
+                break;
+            case Alignments.BottomLeft:
+                canvas.VerticalAlignment = VerticalAlignment.Bottom;
+                canvas.HorizontalAlignment = HorizontalAlignment.Left;
+                canvas.RenderTransformOrigin = new RelativePoint(0, 1, RelativeUnit.Relative);
+                break;
+            case Alignments.BottomCenter:
+                canvas.VerticalAlignment = VerticalAlignment.Bottom;
+                canvas.HorizontalAlignment = HorizontalAlignment.Center;
+                canvas.RenderTransformOrigin = new RelativePoint(0.5, 1, RelativeUnit.Relative);
+                break;
+            case Alignments.BottomRight:
+                canvas.VerticalAlignment = VerticalAlignment.Bottom;
+                canvas.HorizontalAlignment = HorizontalAlignment.Right;
+                canvas.RenderTransformOrigin = new RelativePoint(1, 1, RelativeUnit.Relative);
+                break;
+        }
         CanvasTransform = new TransformGroup()
         {
             Children = [
@@ -248,19 +298,40 @@ public partial class WorkflowView : UserControl
 
         var scrollOffset = viewer.Offset;
         var viewport = viewer.Viewport;
-        var layoutOffset = vm.Layout.ActualOffset;
+        var layout = vm.Layout;
 
-        double visibleLeft = scrollOffset.X - layoutOffset.Left;
-        double visibleTop = scrollOffset.Y - layoutOffset.Top;
+        // 获取画布的实际逻辑尺寸
+        double canvasLogicalWidth = layout.ActualSize.Width;
+        double canvasLogicalHeight = layout.ActualSize.Height;
+
+        // 转换到逻辑坐标空间
+        double visibleLeft = (scrollOffset.X - layout.ActualOffset.Left) / layout.OriginScale.X;
+        double visibleTop = (scrollOffset.Y - layout.ActualOffset.Top) / layout.OriginScale.Y;
+        double visibleWidth = viewport.Width / layout.OriginScale.X;
+        double visibleHeight = viewport.Height / layout.OriginScale.Y;
+
+        // 边界约束（确保不超出画布范围）
+        visibleLeft = Math.Max(0, Math.Min(visibleLeft, canvasLogicalWidth));
+        visibleTop = Math.Max(0, Math.Min(visibleTop, canvasLogicalHeight));
+        visibleWidth = Math.Min(visibleWidth, canvasLogicalWidth - visibleLeft);
+        visibleHeight = Math.Min(visibleHeight, canvasLogicalHeight - visibleTop);
 
         if (vm.GetHelper() is TreeHelper helper)
         {
-            helper.Virtualize(new Viewport(
-                visibleLeft,
-                visibleTop,
-                viewport.Width,
-                viewport.Height));
+            helper.Virtualize(new Viewport(visibleLeft, visibleTop, visibleWidth, visibleHeight));
         }
+    }
+
+    private async void PlusScale(object? sender, RoutedEventArgs e)
+    {
+        _workflowViewModel.PlusScaleCommand.Execute(null);
+        ReLayout(Root_Canvas, _workflowViewModel.Layout);
+    }
+
+    private async void MinusScale(object? sender, RoutedEventArgs e)
+    {
+        _workflowViewModel.MinusScaleCommand.Execute(null);
+        ReLayout(Root_Canvas, _workflowViewModel.Layout);
     }
 
     private async void SimulateData(object? sender, RoutedEventArgs e)
@@ -284,7 +355,7 @@ public partial class WorkflowView : UserControl
 
         // 初始化画布
         workflowViewModel.Layout.OriginSize = new Size(canvasSize, canvasSize);
-        workflowViewModel.Layout.OriginAlign = OriginAligns.TopLeft;
+        workflowViewModel.Layout.OriginAlignment = Alignments.TopLeft;
         DataContext = workflowViewModel;
 
         while (generated < totalNodes)
@@ -319,9 +390,9 @@ public partial class WorkflowView : UserControl
                 {
                     var slot = new SlotViewModel
                     {
-                        Offset = new Offset(
-                            5 + random.Next(0, (int)node.Size.Width - 40),
-                            5 + random.Next(0, (int)node.Size.Height - 40)
+                        VisualPoint = new(
+                            0.9,
+                            random.NextDouble()
                         ),
                         Size = slotSizes[random.Next(slotSizes.Length)],
                         Channel = slotTypes[random.Next(slotTypes.Length)]
@@ -362,7 +433,7 @@ public partial class WorkflowView : UserControl
         }
 
         workflowViewModel.Layout.UpdateCommand.Execute(null);
-        ReLayout();
+        ReLayout(Root_Canvas, _workflowViewModel.Layout);
         _manager.Show(new Notification("OK", $"Completed! Generated {generated:N0} nodes"));
     }
 }

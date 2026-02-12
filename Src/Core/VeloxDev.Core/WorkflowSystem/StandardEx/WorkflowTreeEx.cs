@@ -18,7 +18,7 @@ public static class WorkflowTreeEx
             component.CreateNodeCommand,
             component.SetPointerCommand,
             component.ResetVirtualLinkCommand,
-            component.ApplyConnectionCommand,
+            component.SendConnectionCommand,
             component.ReceiveConnectionCommand,
             component.SubmitCommand,
             component.RedoCommand,

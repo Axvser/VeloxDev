@@ -33,7 +33,7 @@ public partial class SlotView : UserControl
     {
         if (DataContext is not IWorkflowSlotViewModel slot) return;
 
-        slot.ApplyConnectionCommand.Execute(null);
+        slot.SendConnectionCommand.Execute(null);
         e.Pointer.Capture(null);
     }
 }

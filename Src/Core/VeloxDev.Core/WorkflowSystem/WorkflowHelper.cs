@@ -67,10 +67,10 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void SetChannel(SlotChannel channel) => component?.StandardSetChannel(channel);
                 public virtual void SetLayer(int layer) => component?.StandardSetLayer(layer);
 
-                public virtual void UpdateAnchor() => component?.StandardUpdateAnchor();
+                public virtual void UpdateLayout() => component?.StandardUpdateLayout();
                 public virtual void UpdateState() => component?.StandardUpdateState();
 
-                public virtual void ApplyConnection() => component?.StandardApplyConnection();
+                public virtual void SendConnection() => component?.StandardApplyConnection();
                 public virtual void ReceiveConnection() => component?.StandardReceiveConnection();
 
                 public virtual void Delete() => component?.StandardDelete();
@@ -326,7 +326,7 @@ namespace VeloxDev.Core.WorkflowSystem
                     IWorkflowSlotViewModel receiver)
                     => true;
 
-                public virtual void ApplyConnection(IWorkflowSlotViewModel slot)
+                public virtual void SendConnection(IWorkflowSlotViewModel slot)
                     => component?.StandardApplyConnection(slot);
 
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)

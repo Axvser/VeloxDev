@@ -33,15 +33,15 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IWorkflowNodeViewModel? Parent { get; set; }
         public SlotChannel Channel { get; set; }
         public SlotState State { get; set; }
+        public VisualPoint VisualPoint { get; set; }
         public Anchor Anchor { get; set; }
         public Offset Offset { get; set; }
         public Size Size { get; set; }
 
-        public IVeloxCommand SetOffsetCommand { get; }      // 设定偏移 | parameter Offset
         public IVeloxCommand SetSizeCommand { get; }        // 设定尺寸 | parameter Size
         public IVeloxCommand SetChannelCommand { get; }     // 设定通道 | parameter SlotChannel
 
-        public IVeloxCommand ApplyConnectionCommand { get; }   // 作为连接构建发起方 | parameter Null
+        public IVeloxCommand SendConnectionCommand { get; }   // 作为连接构建发起方 | parameter Null
         public IVeloxCommand ReceiveConnectionCommand { get; } // 作为连接构建接收方 | parameter Null
 
         public IVeloxCommand DeleteCommand { get; }     // 删除Slot | parameter Null
@@ -55,15 +55,14 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public void Install(IWorkflowSlotViewModel slot);
         public void Uninstall(IWorkflowSlotViewModel slot);
 
-        public void SetOffset(Offset offset);
         public void SetSize(Size size);
         public void SetLayer(int layer);
         public void SetChannel(SlotChannel channel);
 
-        public void UpdateAnchor();
+        public void UpdateLayout();
         public void UpdateState();
 
-        public void ApplyConnection();
+        public void SendConnection();
         public void ReceiveConnection();
 
         public void Delete();

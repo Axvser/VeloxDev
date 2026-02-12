@@ -26,21 +26,21 @@ public static class WorkflowNodeEx
         {
             slot.GetHelper().Delete();
             slot.Parent = newParent;
-            slot.GetHelper().UpdateAnchor();
+            slot.GetHelper().UpdateLayout();
             return;
         }
         component.Parent.GetHelper().Submit(new WorkflowActionPair(
             () =>
             {
                 slot.Parent = newParent;
-                slot.GetHelper().UpdateAnchor();
+                slot.GetHelper().UpdateLayout();
                 component.Slots.Add(slot);
             },
             () =>
             {
                 slot.GetHelper().Delete();
                 slot.Parent = oldParent;
-                slot.GetHelper().UpdateAnchor();
+                slot.GetHelper().UpdateLayout();
                 component.Slots.Remove(slot);
             }));
     }
@@ -54,7 +54,7 @@ public static class WorkflowNodeEx
         component.OnPropertyChanged(nameof(component.Anchor));
         foreach (var slot in component.Slots)
         {
-            slot.GetHelper().UpdateAnchor();
+            slot.GetHelper().UpdateLayout();
         }
     }
     public static void StandardSetLayer(this IWorkflowNodeViewModel component, int layer)
@@ -69,6 +69,10 @@ public static class WorkflowNodeEx
         component.Size.Width = size.Width;
         component.Size.Height = size.Height;
         component.OnPropertyChanged(nameof(component.Size));
+        foreach (var slot in component.Slots)
+        {
+            slot.GetHelper().UpdateLayout();
+        }
     }
     public static void StandardMove(this IWorkflowNodeViewModel component, Offset offset)
     {
@@ -78,7 +82,7 @@ public static class WorkflowNodeEx
         component.OnPropertyChanged(nameof(component.Anchor));
         foreach (var slot in component.Slots)
         {
-            slot.GetHelper().UpdateAnchor();
+            slot.GetHelper().UpdateLayout();
         }
     }
 
