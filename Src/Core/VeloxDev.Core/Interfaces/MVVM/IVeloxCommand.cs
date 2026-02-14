@@ -5,14 +5,14 @@ namespace VeloxDev.Core.Interfaces.MVVM
 {
     public interface IVeloxCommand : ICommand
     {
-        public event VeloxCommandEventHandler? TaskCreated;
-        public event VeloxCommandEventHandler? TaskStarted;
-        public event VeloxCommandEventHandler? TaskCompleted;
-        public event VeloxCommandEventHandler? TaskCanceled;
-        public event VeloxCommandEventHandler? TaskFailed;
-        public event VeloxCommandEventHandler? TaskExited;
-        public event VeloxCommandEventHandler? TaskEnqueued;
-        public event VeloxCommandEventHandler? TaskDequeued;
+        public event CommandEventHandler? Created;
+        public event CommandEventHandler? Started;
+        public event CommandEventHandler? Completed;
+        public event CommandEventHandler? Canceled;
+        public event CommandEventHandler? Failed;
+        public event CommandEventHandler? Exited;
+        public event CommandEventHandler? Enqueued;
+        public event CommandEventHandler? Dequeued;
 
         public void Lock();
         public void UnLock();
@@ -21,6 +21,7 @@ namespace VeloxDev.Core.Interfaces.MVVM
         public void Interrupt();
         public void Continue();
         public void ChangeSemaphore(int semaphore);
+
         public Task ExecuteAsync(object? parameter);
         Task LockAsync();
         Task UnLockAsync();

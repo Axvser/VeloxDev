@@ -464,7 +464,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_CreateNodeCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: CreateNode,
+                  command: CreateNode,
                   canExecute: _ => true);
               return _buffer_CreateNodeCommand;
            }
@@ -475,7 +475,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_SetPointerCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SetPointer,
+                  command: SetPointer,
                   canExecute: _ => true);
               return _buffer_SetPointerCommand;
            }
@@ -486,7 +486,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_ResetVirtualLinkCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: ResetVirtualLink,
+                  command: ResetVirtualLink,
                   canExecute: _ => true);
               return _buffer_ResetVirtualLinkCommand;
            }
@@ -497,7 +497,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_SendConnectionCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SendConnection,
+                  command: SendConnection,
                   canExecute: _ => true);
               return _buffer_SendConnectionCommand;
            }
@@ -508,7 +508,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_ReceiveConnectionCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: ReceiveConnection,
+                  command: ReceiveConnection,
                   canExecute: _ => true);
               return _buffer_ReceiveConnectionCommand;
            }
@@ -519,7 +519,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_SubmitCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Submit,
+                  command: Submit,
                   canExecute: _ => true);
               return _buffer_SubmitCommand;
            }
@@ -530,7 +530,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_RedoCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Redo,
+                  command: Redo,
                   canExecute: _ => true);
               return _buffer_RedoCommand;
            }
@@ -541,7 +541,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_UndoCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Undo,
+                  command: Undo,
                   canExecute: _ => true);
               return _buffer_UndoCommand;
            }
@@ -552,7 +552,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_CloseCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Close,
+                  command: Close,
                   canExecute: _ => true);
               return _buffer_CloseCommand;
            }
@@ -691,7 +691,7 @@ namespace VeloxDev.Core.Generator.Writers
                        get
                        {
                           _buffer_MoveCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              executeAsync: Move,
+                              command: Move,
                               canExecute: _ => true);
                           return _buffer_MoveCommand;
                        }
@@ -702,7 +702,7 @@ namespace VeloxDev.Core.Generator.Writers
                        get
                        {
                           _buffer_SetAnchorCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              executeAsync: SetAnchor,
+                              command: SetAnchor,
                               canExecute: _ => true);
                           return _buffer_SetAnchorCommand;
                        }
@@ -713,7 +713,7 @@ namespace VeloxDev.Core.Generator.Writers
                        get
                        {
                           _buffer_SetSizeCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              executeAsync: SetSize,
+                              command: SetSize,
                               canExecute: _ => true);
                           return _buffer_SetSizeCommand;
                        }
@@ -724,7 +724,7 @@ namespace VeloxDev.Core.Generator.Writers
                        get
                        {
                           _buffer_CreateSlotCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              executeAsync: CreateSlot,
+                              command: CreateSlot,
                               canExecute: _ => true);
                           return _buffer_CreateSlotCommand;
                        }
@@ -735,7 +735,7 @@ namespace VeloxDev.Core.Generator.Writers
                        get
                        {
                           _buffer_DeleteCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              executeAsync: Delete,
+                              command: Delete,
                               canExecute: _ => true);
                           return _buffer_DeleteCommand;
                        }
@@ -748,7 +748,7 @@ namespace VeloxDev.Core.Generator.Writers
                        get
                        {
                           _buffer_WorkCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              executeAsync: Work,
+                              command: Work,
                               canExecute: _ => true,
                               semaphore: {{model.WorkSemaphore}});
                           return _buffer_WorkCommand;
@@ -762,7 +762,7 @@ namespace VeloxDev.Core.Generator.Writers
                        get
                        {
                           _buffer_BroadcastCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              executeAsync: Broadcast,
+                              command: Broadcast,
                               canExecute: _ => true);
                           return _buffer_BroadcastCommand;
                        }
@@ -773,7 +773,7 @@ namespace VeloxDev.Core.Generator.Writers
                        get
                        {
                           _buffer_CloseCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              executeAsync: Close,
+                              command: Close,
                               canExecute: _ => true);
                           return _buffer_CloseCommand;
                        }
@@ -987,7 +987,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_SetSizeCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SetSize,
+                  command: SetSize,
                   canExecute: _ => true);
               return _buffer_SetSizeCommand;
            }
@@ -998,7 +998,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_SetChannelCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SetChannel,
+                  command: SetChannel,
                   canExecute: _ => true);
               return _buffer_SetChannelCommand;
            }
@@ -1009,7 +1009,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_SendConnectionCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: SendConnection,
+                  command: SendConnection,
                   canExecute: _ => true);
               return _buffer_SendConnectionCommand;
            }
@@ -1020,7 +1020,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_ReceiveConnectionCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: ReceiveConnection,
+                  command: ReceiveConnection,
                   canExecute: _ => true);
               return _buffer_ReceiveConnectionCommand;
            }
@@ -1031,7 +1031,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_DeleteCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Delete,
+                  command: Delete,
                   canExecute: _ => true);
               return _buffer_DeleteCommand;
            }
@@ -1042,7 +1042,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_CloseCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Close,
+                  command: Close,
                   canExecute: _ => true);
               return _buffer_CloseCommand;
            }
@@ -1132,7 +1132,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_DeleteCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Delete,
+                  command: Delete,
                   canExecute: _ => true);
               return _buffer_DeleteCommand;
            }
@@ -1143,7 +1143,7 @@ namespace VeloxDev.Core.Generator.Writers
            get
            {
               _buffer_CloseCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  executeAsync: Close,
+                  command: Close,
                   canExecute: _ => true);
               return _buffer_CloseCommand;
            }

@@ -9,7 +9,7 @@ namespace VeloxDev.Core.Generator.Writers
 {
     public class CommandWriter : WriterBase
     {
-        List<Tuple<string, bool, int, string>> CommandConfig { get; set; } = [];
+        List<Tuple<string, bool, int, string, int>> CommandConfig { get; set; } = [];
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
@@ -19,66 +19,90 @@ namespace VeloxDev.Core.Generator.Writers
         private void ReadCommandConfig(INamedTypeSymbol symbol)
         {
             const string attributeFullName = $"{NAMESPACE_VELOX_MVVM}.VeloxCommandAttribute";
-            var list = new List<Tuple<string, bool, int, string>>();
+            var list = new List<Tuple<string, bool, int, string, int>>();
 
             foreach (var methodSymbol in symbol.GetMembers().OfType<IMethodSymbol>())
             {
-                // 1. 检查是否标记了 VeloxCommandAttribute
-                var attribute = methodSymbol.GetAttributes().FirstOrDefault(attr =>
-                    attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == attributeFullName
-                );
+                // 仅检查是否标记了 VeloxCommandAttribute
+                var attribute = methodSymbol.GetAttributes()
+                    .FirstOrDefault(attr =>
+                        attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == attributeFullName);
+
                 if (attribute == null) continue;
 
-                // 2. 生成方法签名（包含参数类型）
-                var signature =
-                    $"{methodSymbol.Name}({string.Join(",", methodSymbol.Parameters.Select(p => p.Type?.ToString()))})";
-
-                // 4. 解析命令配置
-                string commandName = "Auto"; // 默认值
+                // 解析配置：先位置参数，后命名参数覆盖
+                string commandName = "Auto";
                 bool canValidate = false;
                 int semaphore = 1;
 
-                // 5. 处理命名参数（优先）
+                // 位置参数（按顺序）
+                if (attribute.ConstructorArguments.Length >= 1 && attribute.ConstructorArguments[0].Value is string nameArg)
+                    commandName = nameArg;
+                if (attribute.ConstructorArguments.Length >= 2 && attribute.ConstructorArguments[1].Value is bool canValArg)
+                    canValidate = canValArg;
+                if (attribute.ConstructorArguments.Length >= 3 && attribute.ConstructorArguments[2].Value is int semaArg)
+                    semaphore = semaArg;
+
+                // 命名参数（覆盖位置参数）
                 foreach (var namedArg in attribute.NamedArguments)
                 {
                     switch (namedArg.Key)
                     {
-                        case "name":
-                            commandName = (string)(namedArg.Value.Value ?? "Auto");
+                        case "name" when namedArg.Value.Value is string s:
+                            commandName = s;
                             break;
-                        case "canValidate":
-                            canValidate = (bool)(namedArg.Value.Value ?? false);
+                        case "canValidate" when namedArg.Value.Value is bool b:
+                            canValidate = b;
                             break;
-                        case "semaphore":
-                            semaphore = (int)(namedArg.Value.Value ?? false);
+                        case "semaphore" when namedArg.Value.Value is int i:
+                            semaphore = i;
                             break;
                     }
                 }
 
-                // 6. 处理位置参数（兼容旧写法）
-                if (attribute.ConstructorArguments.Length >= 1)
-                    commandName = (string)(attribute.ConstructorArguments[0].Value ?? "Auto");
-                if (attribute.ConstructorArguments.Length >= 2)
-                    canValidate = (bool)(attribute.ConstructorArguments[1].Value ?? false);
-                if (attribute.ConstructorArguments.Length >= 3)
-                    semaphore = (int)(attribute.ConstructorArguments[2].Value ?? false);
-
-                // 7. 处理"Auto"命名规则
+                // Auto 命名规则
                 if (commandName == "Auto")
                 {
                     commandName = methodSymbol.Name;
                 }
 
-                // 8. 添加到配置列表
-                list.Add(Tuple.Create(
-                    commandName,
-                    canValidate,
-                    semaphore,
-                    methodSymbol.Name
-                ));
+                // 构造方式分析
+                int constructorType = ParseConstructorType(methodSymbol);
+
+                // 记录上下文
+                list.Add(Tuple.Create(commandName, canValidate, Math.Max(1, semaphore), methodSymbol.Name, constructorType));
             }
 
             CommandConfig = list;
+        }
+        private int ParseConstructorType(IMethodSymbol methodSymbol)
+        {
+            var parameters = methodSymbol.Parameters;
+            var returnType = methodSymbol.ReturnType;
+
+            // 检查返回类型是否为 Task
+            var taskSymbol = methodSymbol.ContainingAssembly.GetTypeByMetadataName("System.Threading.Tasks.Task");
+            bool isTask = taskSymbol != null && SymbolEqualityComparer.Default.Equals(returnType, taskSymbol);
+
+            if (parameters.Length == 1)
+            {
+                var paramType = parameters[0].Type;
+
+                // 判断是否为 object（包括 object?）
+                if (paramType.SpecialType == SpecialType.System_Object)
+                {
+                    return 1;
+                }
+
+                // 判断是否为 CancellationToken
+                var cancellationTokenSymbol = methodSymbol.ContainingAssembly.GetTypeByMetadataName("System.Threading.CancellationToken");
+                if (cancellationTokenSymbol != null && SymbolEqualityComparer.Default.Equals(paramType, cancellationTokenSymbol))
+                {
+                    return 2;
+                }
+            }
+
+            return 0;
         }
 
         public override bool CanWrite() => CommandConfig.Count > 0;
@@ -109,6 +133,12 @@ namespace VeloxDev.Core.Generator.Writers
 
             foreach (var config in CommandConfig)
             {
+                string constructor = config.Item5 switch
+                {
+                    1 => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskOnlyWithParameter(",
+                    2 => $"{NAMESPACE_VELOX_MVVM}.VeloxCommand.CreateTaskOnlyWithCancellationToken(",
+                    _ => $"new {NAMESPACE_VELOX_MVVM}.VeloxCommand("
+                };
                 if (config.Item2)
                 {
                     builder.AppendLine($$"""
@@ -117,8 +147,8 @@ namespace VeloxDev.Core.Generator.Writers
                                                 {
                                                     get
                                                     {
-                                                        _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                                                            executeAsync: {{config.Item4}},
+                                                        _buffer_{{config.Item1}}Command ??= {{constructor}}
+                                                            command: {{config.Item4}},
                                                             canExecute: CanExecute{{config.Item1}}Command,
                                                             semaphore: {{config.Item3}});
                                                         return _buffer_{{config.Item1}}Command;
@@ -135,8 +165,8 @@ namespace VeloxDev.Core.Generator.Writers
                                                 {
                                                     get
                                                     {
-                                                        _buffer_{{config.Item1}}Command ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                                                            executeAsync: {{config.Item4}},
+                                                        _buffer_{{config.Item1}}Command ??= {{constructor}}
+                                                            command: {{config.Item4}},
                                                             canExecute: _ => true,
                                                             semaphore: {{config.Item3}});
                                                         return _buffer_{{config.Item1}}Command;
