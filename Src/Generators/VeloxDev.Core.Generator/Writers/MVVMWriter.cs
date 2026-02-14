@@ -119,13 +119,13 @@ namespace VeloxDev.Core.Generator.Writers
 
             // 生成事件和方法
             builder.AppendLine($$"""
-                    public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventHandler? PropertyChanging;
-                    public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventHandler? PropertyChanged;
-                    public void OnPropertyChanging(string propertyName)
+                    public new event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventHandler? PropertyChanging;
+                    public new event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventHandler? PropertyChanged;
+                    public new void OnPropertyChanging(string propertyName)
                     {
                         PropertyChanging?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventArgs(propertyName));
                     }
-                    public void OnPropertyChanged(string propertyName)
+                    public new void OnPropertyChanged(string propertyName)
                     {
                         PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
                     }
