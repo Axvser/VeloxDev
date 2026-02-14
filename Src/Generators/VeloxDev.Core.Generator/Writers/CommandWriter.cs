@@ -84,7 +84,7 @@ namespace VeloxDev.Core.Generator.Writers
             var taskSymbol = methodSymbol.ContainingAssembly.GetTypeByMetadataName("System.Threading.Tasks.Task");
             bool isTask = taskSymbol != null && SymbolEqualityComparer.Default.Equals(returnType, taskSymbol);
 
-            if (parameters.Length == 1)
+            if (isTask && parameters.Length == 1)
             {
                 var paramType = parameters[0].Type;
 
