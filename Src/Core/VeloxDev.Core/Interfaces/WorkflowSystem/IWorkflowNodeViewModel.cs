@@ -25,6 +25,9 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
     public interface IWorkflowNodeViewModelHelper : IWorkflowHelper
     {
+        public event EventHandler<IWorkflowSlotViewModel>? SlotAdded;
+        public event EventHandler<IWorkflowSlotViewModel>? SlotRemoved;
+
         public void Install(IWorkflowNodeViewModel node);
         public void Uninstall(IWorkflowNodeViewModel node);
         public void CreateSlot(IWorkflowSlotViewModel slot);

@@ -43,6 +43,11 @@ namespace VeloxDev.Core.WorkflowSystem
                 private IWorkflowSlotViewModel? component;
                 private IReadOnlyCollection<IVeloxCommand> commands = [];
 
+                public event EventHandler<IWorkflowSlotViewModel>? TargetAdded;
+                public event EventHandler<IWorkflowSlotViewModel>? TargetRemoved;
+                public event EventHandler<IWorkflowSlotViewModel>? SourceAdded;
+                public event EventHandler<IWorkflowSlotViewModel>? SourceRemoved;
+
                 public virtual void Install(IWorkflowSlotViewModel slot)
                 {
                     component = slot;
@@ -63,7 +68,6 @@ namespace VeloxDev.Core.WorkflowSystem
                 public virtual void Closed() => commands.StandardClosed();
 
                 public virtual void SetSize(Size size) => component?.StandardSetSize(size);
-                public virtual void SetOffset(Offset offset) => component?.StandardSetOffset(offset);
                 public virtual void SetChannel(SlotChannel channel) => component?.StandardSetChannel(channel);
                 public virtual void SetLayer(int layer) => component?.StandardSetLayer(layer);
 
@@ -102,8 +106,8 @@ namespace VeloxDev.Core.WorkflowSystem
                             break;
                     }
                 }
-                protected virtual void OnTargetAdded(IWorkflowSlotViewModel slot) { }
-                protected virtual void OnTargetRemoved(IWorkflowSlotViewModel slot) { }
+                protected virtual void OnTargetAdded(IWorkflowSlotViewModel slot) => TargetAdded?.Invoke(component, slot);
+                protected virtual void OnTargetRemoved(IWorkflowSlotViewModel slot) => TargetRemoved?.Invoke(component, slot);
 
                 private void OnSourcesChanged(object? sender, NotifyCollectionChangedEventArgs e)
                 {
@@ -131,8 +135,8 @@ namespace VeloxDev.Core.WorkflowSystem
                             break;
                     }
                 }
-                protected virtual void OnSourceAdded(IWorkflowSlotViewModel slot) { }
-                protected virtual void OnSourceRemoved(IWorkflowSlotViewModel slot) { }
+                protected virtual void OnSourceAdded(IWorkflowSlotViewModel slot) => SourceAdded?.Invoke(component, slot);
+                protected virtual void OnSourceRemoved(IWorkflowSlotViewModel slot) => SourceRemoved?.Invoke(component, slot);
                 #endregion
             }
 
@@ -143,6 +147,9 @@ namespace VeloxDev.Core.WorkflowSystem
             {
                 private IWorkflowNodeViewModel? component;
                 private IReadOnlyCollection<IVeloxCommand> commands = [];
+
+                public event EventHandler<IWorkflowSlotViewModel>? SlotAdded;
+                public event EventHandler<IWorkflowSlotViewModel>? SlotRemoved;
 
                 public virtual void Install(IWorkflowNodeViewModel node)
                 {
@@ -211,8 +218,8 @@ namespace VeloxDev.Core.WorkflowSystem
                             break;
                     }
                 }
-                protected virtual void OnSlotAdded(IWorkflowSlotViewModel slot) { }
-                protected virtual void OnSlotRemoved(IWorkflowSlotViewModel slot) { }
+                protected virtual void OnSlotAdded(IWorkflowSlotViewModel slot) => SlotAdded?.Invoke(component, slot);
+                protected virtual void OnSlotRemoved(IWorkflowSlotViewModel slot) => SlotRemoved?.Invoke(component, slot);
             }
 
             /// <summary>
@@ -222,6 +229,11 @@ namespace VeloxDev.Core.WorkflowSystem
             {
                 private IWorkflowTreeViewModel? component = null;
                 private IReadOnlyCollection<IVeloxCommand> commands = [];
+
+                public event EventHandler<IWorkflowNodeViewModel>? NodeAdded;
+                public event EventHandler<IWorkflowNodeViewModel>? NodeRemoved;
+                public event EventHandler<IWorkflowLinkViewModel>? LinkAdded;
+                public event EventHandler<IWorkflowLinkViewModel>? LinkRemoved;
 
                 public virtual void Install(IWorkflowTreeViewModel tree)
                 {
@@ -287,8 +299,8 @@ namespace VeloxDev.Core.WorkflowSystem
                             break;
                     }
                 }
-                protected virtual void OnNodeAdded(IWorkflowNodeViewModel node) { }
-                protected virtual void OnNodeRemoved(IWorkflowNodeViewModel node) { }
+                protected virtual void OnNodeAdded(IWorkflowNodeViewModel node) => NodeAdded?.Invoke(component, node);
+                protected virtual void OnNodeRemoved(IWorkflowNodeViewModel node) => NodeRemoved?.Invoke(component, node);
 
                 private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
                 {
@@ -316,18 +328,18 @@ namespace VeloxDev.Core.WorkflowSystem
                             break;
                     }
                 }
-                protected virtual void OnLinkAdded(IWorkflowLinkViewModel link) { }
-                protected virtual void OnLinkRemoved(IWorkflowLinkViewModel link) { }
+                protected virtual void OnLinkAdded(IWorkflowLinkViewModel link) => LinkAdded?.Invoke(component, link);
+                protected virtual void OnLinkRemoved(IWorkflowLinkViewModel link) => LinkRemoved?.Invoke(component, link);
                 #endregion
 
-                #region Connection Manager
+                #region Connection Manager   
                 public virtual bool ValidateConnection(
                     IWorkflowSlotViewModel sender,
                     IWorkflowSlotViewModel receiver)
                     => true;
 
                 public virtual void SendConnection(IWorkflowSlotViewModel slot)
-                    => component?.StandardApplyConnection(slot);
+                    => component?.StandardSendConnection(slot);
 
                 public virtual void ReceiveConnection(IWorkflowSlotViewModel slot)
                     => component?.StandardReceiveConnection(slot);

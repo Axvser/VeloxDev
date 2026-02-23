@@ -90,7 +90,7 @@ public static class WorkflowTreeEx
 
     #region Connection Manager Extensions
 
-    public static void StandardApplyConnection(this IWorkflowTreeViewModel component, IWorkflowSlotViewModel slot)
+    public static void StandardSendConnection(this IWorkflowTreeViewModel component, IWorkflowSlotViewModel slot)
     {
         var cache = GetCache(component);
 
@@ -182,32 +182,12 @@ public static class WorkflowTreeEx
     public static void StandardRedo(this IWorkflowTreeViewModel component)
     {
         var cache = GetCache(component);
-        lock (cache.StackLock)
-        {
-            if (cache.RedoStack.TryPop(out var pair))
-            {
-                try
-                {
-                    pair.Redo.Invoke();
-                    cache.UndoStack.Push(pair);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine(ex);
-                }
-            }
-        }
-    }
-
-    public static void StandardSubmit(this IWorkflowTreeViewModel component, IWorkflowActionPair actionPair)
-    {
-        var cache = GetCache(component);
-        lock (cache.StackLock)
+        if (cache.RedoStack.TryPop(out var pair))
         {
             try
             {
-                actionPair.Redo.Invoke();
-                cache.UndoStack.Push(actionPair);
+                pair.Redo.Invoke();
+                cache.UndoStack.Push(pair);
             }
             catch (Exception ex)
             {
@@ -216,22 +196,33 @@ public static class WorkflowTreeEx
         }
     }
 
+    public static void StandardSubmit(this IWorkflowTreeViewModel component, IWorkflowActionPair actionPair)
+    {
+        var cache = GetCache(component);
+        try
+        {
+            actionPair.Redo.Invoke();
+            cache.UndoStack.Push(actionPair);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+        }
+    }
+
     public static void StandardUndo(this IWorkflowTreeViewModel component)
     {
         var cache = GetCache(component);
-        lock (cache.StackLock)
+        if (cache.UndoStack.TryPop(out var pair))
         {
-            if (cache.UndoStack.TryPop(out var pair))
+            try
             {
-                try
-                {
-                    pair.Undo.Invoke();
-                    cache.RedoStack.Push(pair);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine(ex);
-                }
+                pair.Undo.Invoke();
+                cache.RedoStack.Push(pair);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
             }
         }
     }
@@ -239,11 +230,8 @@ public static class WorkflowTreeEx
     public static void StandardClearHistory(this IWorkflowTreeViewModel component)
     {
         var cache = GetCache(component);
-        lock (cache.StackLock)
-        {
-            cache.RedoStack.Clear();
-            cache.UndoStack.Clear();
-        }
+        cache.RedoStack.Clear();
+        cache.UndoStack.Clear();
     }
     #endregion
 
@@ -565,7 +553,6 @@ public static class WorkflowTreeEx
         public IWorkflowSlotViewModel? CurrentSender { get; set; }
         public ConcurrentStack<IWorkflowActionPair> RedoStack { get; } = new();
         public ConcurrentStack<IWorkflowActionPair> UndoStack { get; } = new();
-        public object StackLock { get; } = new object();
     }
 
     private static TreeCache GetCache(IWorkflowTreeViewModel component)

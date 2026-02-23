@@ -14,7 +14,7 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IVeloxCommand CreateNodeCommand { get; }        // 创建节点           | parameter IWorkflowNodeViewModel
         public IVeloxCommand SetPointerCommand { get; }        // 触点跟踪           | parameter Anchor
         public IVeloxCommand ResetVirtualLinkCommand { get; }  // 重置虚拟连接       | parameter Null
-        public IVeloxCommand SendConnectionCommand { get; }   // 处理连接构建发起方 | parameter Null
+        public IVeloxCommand SendConnectionCommand { get; }    // 处理连接构建发起方 | parameter Null
         public IVeloxCommand ReceiveConnectionCommand { get; } // 处理连接构建接收方 | parameter Null
 
         public IVeloxCommand SubmitCommand { get; }        // 提交 | parameter IWorkflowActionPair
@@ -27,6 +27,11 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
 
     public interface IWorkflowTreeViewModelHelper : IWorkflowHelper
     {
+        public event EventHandler<IWorkflowNodeViewModel>? NodeAdded;
+        public event EventHandler<IWorkflowNodeViewModel>? NodeRemoved;
+        public event EventHandler<IWorkflowLinkViewModel>? LinkAdded;
+        public event EventHandler<IWorkflowLinkViewModel>? LinkRemoved;
+
         public void Install(IWorkflowTreeViewModel tree);
         public void Uninstall(IWorkflowTreeViewModel tree);
 

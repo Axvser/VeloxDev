@@ -3,7 +3,7 @@ using System.ComponentModel;
 
 namespace VeloxDev.Core.WorkflowSystem;
 
-public class SpatialHashMap(double cellSize)
+public class SpatialGridHashMap(double cellSize) : IWorkflowSpatialMap
 {
     private readonly Dictionary<CellKey, HashSet<IWorkflowNodeViewModel>> _grid = [];
     private readonly Dictionary<IWorkflowNodeViewModel, (Viewport viewport, INotifyPropertyChanged notifier)> _trackedNodes = [];
