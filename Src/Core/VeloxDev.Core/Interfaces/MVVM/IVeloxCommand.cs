@@ -23,8 +23,8 @@ namespace VeloxDev.Core.Interfaces.MVVM
         public void ChangeSemaphore(int semaphore);
 
         public Task ExecuteAsync(object? parameter);
-        Task LockAsync();
-        Task UnLockAsync();
+        public Task LockAsync();
+        public Task UnLockAsync();
         public Task ClearAsync();
         public Task InterruptAsync();
         public Task ContinueAsync();

@@ -88,8 +88,8 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
         var baseWidth = OriginSize.Width + PositiveOffset.Left + NegativeOffset.Left;
         var baseHeight = OriginSize.Height + PositiveOffset.Top + NegativeOffset.Top;
 
-        ActualSize.Width = baseWidth / OriginScale.X;
-        ActualSize.Height = baseHeight / OriginScale.Y;
+        ActualSize.Width = baseWidth * OriginScale.X;
+        ActualSize.Height = baseHeight * OriginScale.Y;
         OnPropertyChanged(nameof(ActualSize));
 
         var scaledOriginWidth = OriginSize.Width * OriginScale.X;

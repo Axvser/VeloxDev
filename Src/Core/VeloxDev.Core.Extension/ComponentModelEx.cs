@@ -3,16 +3,16 @@ using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension
 {
-    public static class WorkflowEx
+    public static class ComponentModelEx
     {
         private static readonly JsonSerializerSettings settings = new()
         {
@@ -27,13 +27,13 @@ namespace VeloxDev.Core.Extension
 
         #region Synchronous Methods
         public static string Serialize<T>(this T workflow)
-            where T : IWorkflowTreeViewModel
+            where T : INotifyPropertyChanged
         {
             return JsonConvert.SerializeObject(workflow, settings);
         }
 
         public static bool TryDeserialize<T>(this string json, out T? workflow)
-            where T : IWorkflowTreeViewModel
+            where T : INotifyPropertyChanged
         {
             try
             {
@@ -52,7 +52,7 @@ namespace VeloxDev.Core.Extension
         /// Asynchronously serializes a workflow object to JSON string
         /// </summary>
         public static async Task<string> SerializeAsync<T>(this T workflow, CancellationToken cancellationToken = default)
-            where T : IWorkflowTreeViewModel
+            where T : INotifyPropertyChanged
         {
             if (workflow == null)
                 throw new ArgumentNullException(nameof(workflow), "Workflow object cannot be null for serialization");
@@ -64,7 +64,7 @@ namespace VeloxDev.Core.Extension
         /// Asynchronously attempts to deserialize a JSON string to workflow object
         /// </summary>
         public static async Task<(bool Success, T? Result)> TryDeserializeAsync<T>(this string json, CancellationToken cancellationToken = default)
-            where T : IWorkflowTreeViewModel
+            where T : INotifyPropertyChanged
         {
             if (string.IsNullOrWhiteSpace(json))
                 throw new ArgumentException("JSON string cannot be null or empty", nameof(json));
@@ -84,7 +84,7 @@ namespace VeloxDev.Core.Extension
         /// Asynchronously deserializes a JSON string to workflow object with exception handling
         /// </summary>
         public static async Task<T> DeserializeAsync<T>(this string json, CancellationToken cancellationToken = default)
-            where T : IWorkflowTreeViewModel
+            where T : INotifyPropertyChanged
         {
             if (string.IsNullOrWhiteSpace(json))
                 throw new ArgumentException("JSON string cannot be null or empty", nameof(json));
@@ -99,7 +99,7 @@ namespace VeloxDev.Core.Extension
         /// Asynchronously serializes a workflow object to a stream
         /// </summary>
         public static async Task SerializeToStreamAsync<T>(this T workflow, Stream stream, CancellationToken cancellationToken = default)
-            where T : IWorkflowTreeViewModel
+            where T : INotifyPropertyChanged
         {
             if (workflow == null)
                 throw new ArgumentNullException(nameof(workflow), "Workflow object cannot be null for serialization");
@@ -123,7 +123,7 @@ namespace VeloxDev.Core.Extension
         /// Asynchronously deserializes a workflow object from a stream
         /// </summary>
         public static async Task<T> DeserializeFromStreamAsync<T>(this Stream stream, CancellationToken cancellationToken = default)
-            where T : IWorkflowTreeViewModel
+            where T : INotifyPropertyChanged
         {
             if (stream == null)
                 throw new ArgumentNullException(nameof(stream), "Source stream cannot be null");
@@ -144,7 +144,7 @@ namespace VeloxDev.Core.Extension
         /// Asynchronously attempts to deserialize a workflow object from a stream
         /// </summary>
         public static async Task<(bool Success, T? Result)> TryDeserializeFromStreamAsync<T>(this Stream stream, CancellationToken cancellationToken = default)
-            where T : IWorkflowTreeViewModel
+            where T : INotifyPropertyChanged
         {
             if (stream == null)
                 throw new ArgumentNullException(nameof(stream), "Source stream cannot be null");
@@ -164,7 +164,7 @@ namespace VeloxDev.Core.Extension
         /// Alternative streaming method using Task-based approach (compatible with netstandard2.0)
         /// </summary>
         public static async Task StreamSerializeAsync<T>(this T workflow, Stream outputStream, CancellationToken cancellationToken = default)
-            where T : IWorkflowTreeViewModel
+            where T : INotifyPropertyChanged
         {
             if (workflow == null)
                 throw new ArgumentNullException(nameof(workflow));
@@ -181,7 +181,7 @@ namespace VeloxDev.Core.Extension
         /// Alternative streaming deserialization method (compatible with netstandard2.0)
         /// </summary>
         public static async Task<T> StreamDeserializeAsync<T>(this Stream inputStream, CancellationToken cancellationToken = default)
-            where T : IWorkflowTreeViewModel
+            where T : INotifyPropertyChanged
         {
             if (inputStream == null)
                 throw new ArgumentNullException(nameof(inputStream));

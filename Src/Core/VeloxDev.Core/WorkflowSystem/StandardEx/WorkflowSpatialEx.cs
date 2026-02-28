@@ -22,7 +22,7 @@ public static class WorkflowSpatialEx
     /// the existing map is returned instead of creating a new one.
     /// </remarks>
     /// 
-    /// <param name="vm">
+    /// <param name="tree">
     /// The workflow tree view model for which to enable virtualization. This parameter cannot be null.
     /// </param>
     /// 
@@ -31,10 +31,9 @@ public static class WorkflowSpatialEx
     /// positive value.
     /// </param>
     /// 
-    /// <returns>
-    /// A spatial hash map associated with the specified workflow tree view model, which can be used to perform
-    /// efficient spatial queries.
-    /// </returns>
+    /// <param name="observable">
+    /// The observable collection that will be used to track the visible nodes and links.
+    /// </param>
     public static int EnableMap<T>(this IWorkflowTreeViewModel tree, double cellSize, T observable)
         where T : Collection<IWorkflowViewModel>, INotifyCollectionChanged
     {
@@ -77,18 +76,8 @@ public static class WorkflowSpatialEx
     /// and callers should ensure that it is properly bound to any UI components that depend on its contents.
     /// </remarks>
     /// 
-    /// <typeparam name="T">
-    /// The type of the observable collection to be virtualized. Must implement both INotifyCollectionChanged and IList
-    /// interfaces.
-    /// </typeparam>
-    /// 
     /// <param name="tree">
     /// The workflow tree view model that provides the spatial context and link mapping for virtualization.
-    /// </param>
-    /// 
-    /// <param name="observable">
-    /// The observable collection that will be updated to contain only the nodes and links currently visible in the
-    /// specified viewport.
     /// </param>
     /// 
     /// <param name="viewport">
@@ -201,11 +190,6 @@ public static class WorkflowSpatialEx
     /// <param name="tree">
     /// The workflow tree view model to be removed from spatial maps and observables. Cannot be null.
     /// </param>
-    /// 
-    /// <returns>
-    /// A bitwise combination of values indicating the outcome: 1 if removed from spatial maps, 4 if removed from
-    /// observables, 2 if not removed from spatial maps, and 8 if not removed from observables.
-    /// </returns>
     public static int ClearMap(this IWorkflowTreeViewModel tree)
     {
         tree.GetHelper().NodeAdded -= OnNodeAdded;
@@ -268,7 +252,7 @@ public static class WorkflowSpatialEx
         if (SpatialMaps.TryGetValue(sender, out var _spatialHashMap))
             _spatialHashMap.Remove(node);
     }
-
+    
     private static void OnLinkAdded(object? sender, IWorkflowLinkViewModel node)
     {
         if (Observables.TryGetValue(sender, out var collection) && collection is Collection<IWorkflowViewModel> observable)

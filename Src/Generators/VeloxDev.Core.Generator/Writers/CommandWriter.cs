@@ -78,28 +78,38 @@ namespace VeloxDev.Core.Generator.Writers
         private int ParseConstructorType(IMethodSymbol methodSymbol)
         {
             var parameters = methodSymbol.Parameters;
+            if (parameters.Length != 1) return 0;
+
             var returnType = methodSymbol.ReturnType;
+            string returnTypeName = returnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-            // 检查返回类型是否为 Task
-            var taskSymbol = methodSymbol.ContainingAssembly.GetTypeByMetadataName("System.Threading.Tasks.Task");
-            bool isTask = taskSymbol != null && SymbolEqualityComparer.Default.Equals(returnType, taskSymbol);
+            // 检查是否返回 Task
+            bool isTask = returnTypeName == "global::System.Threading.Tasks.Task" ||
+                         returnTypeName.StartsWith("global::System.Threading.Tasks.Task<");
 
-            if (isTask && parameters.Length == 1)
+            if (!isTask) return 0;
+
+            var paramType = parameters[0].Type;
+            string paramTypeName = paramType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+            // 精确检查 object? 类型
+            // 方法1：检查可空对象类型
+            bool isObjectOrNullableObject =
+                paramType.SpecialType == SpecialType.System_Object ||
+                (paramType.NullableAnnotation == NullableAnnotation.Annotated &&
+                 paramType.SpecialType == SpecialType.System_Object) ||
+                paramTypeName == "global::System.Object" ||
+                paramTypeName == "global::System.Object?";
+
+            if (isObjectOrNullableObject)
             {
-                var paramType = parameters[0].Type;
+                return 1;  // CreateTaskOnlyWithParameter
+            }
 
-                // 判断是否为 object（包括 object?）
-                if (paramType.SpecialType == SpecialType.System_Object)
-                {
-                    return 1;
-                }
-
-                // 判断是否为 CancellationToken
-                var cancellationTokenSymbol = methodSymbol.ContainingAssembly.GetTypeByMetadataName("System.Threading.CancellationToken");
-                if (cancellationTokenSymbol != null && SymbolEqualityComparer.Default.Equals(paramType, cancellationTokenSymbol))
-                {
-                    return 2;
-                }
+            // 检查 CancellationToken
+            if (paramTypeName == "global::System.Threading.CancellationToken")
+            {
+                return 2;  // CreateTaskOnlyWithCancellationToken
             }
 
             return 0;

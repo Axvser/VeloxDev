@@ -6,11 +6,25 @@
 
 ## 📚 包含内容
 
-* 🔄 基于 Newtonsoft.Json 的 Workflow 序列化扩展
+* 🔄 基于 Newtonsoft.Json 的 ViewModel 序列化扩展
 
 ---
 
-# WorkflowEx 序列化扩展库
+# ViewModel 序列化
+
+> 相对于默认的序列化行为，此扩展提供了一组新特性以便于在MVVM模式下实施正反序列化。
+
+> ① 支持抽象(抽象类、接口、装箱)，序列化将保留原始类型信息
+
+> ② 支持复杂字典Key，支持字典嵌套
+
+> ③ 支持引用处理
+
+> ④ 仅处理实现了 INotifyPropertyChanged 的目标
+
+> ⑤ 仅处理同时具备 public getter 与 public setter 的属性
+
+> 下方是对于 VeloxDev.Core 工作流系统中，视图模型的序列化示例
 
 ### 同步处理
 
