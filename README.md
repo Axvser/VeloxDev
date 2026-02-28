@@ -1,6 +1,12 @@
 ﻿# 🚀 VeloxDev
 
-> 在多个.NET的UI框架中采用一致API完成常见编程任务
+> Velox 原指 Veloxity，寓意“效率”。聚焦 `扩展性` `参数化` `流程化` `插件化` `一致性` 关键词。它充分利用 `Source Generator`，以允许您以足够优雅的代码实现这些关键词
+
+> 问题来了：什么样的功能会被纳入VeloxDev？只说这些关键词太抽象！
+
+> 解释一下：例如，`Animation` 这一概念在 WPF 、Avalonia 、WinUI 等多个UI框架中都有，但它们各自持有一套API，而我们希望获得 `一致性`，所以VeloxDev提供了抽象层，来允许您使用一致的API处理动画；
+> 又例如，`Workflow` 这一概念具备普适性，能用于大量需要`参数化`、`流程化`的场景，因此被选中作为VeloxDev模块之一；
+> 再例如，`AOP` 允许于不修改类定义的前提下实现已有成员的功能编辑，是迈向高 `扩展性` 的基石之一，因此也被选中 ……
 
 [Wiki](https://axvser.github.io/VeloxDev.Wiki/)
 

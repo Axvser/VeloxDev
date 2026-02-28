@@ -1,4 +1,5 @@
-﻿using Demo.ViewModels.Workflow.Helper;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using Demo.ViewModels.Workflow.Helper;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading;
@@ -22,25 +23,29 @@ public partial class TreeViewModel
     [VeloxProperty] private ObservableCollection<IWorkflowViewModel> _visibleItems = [];
 
     [VeloxCommand]
-    private Task PlusScale(object? parameter, CancellationToken ct)
+    private void PlusScale()
     {
         Layout.OriginScale += new Scale(x: 0.1, y: 0.1);
-        return Task.CompletedTask;
     }
 
     [VeloxCommand]
-    private Task MinusScale(object? parameter, CancellationToken ct)
+    private void MinusScale(object? param)
     {
         Layout.OriginScale -= new Scale(x: 0.1, y: 0.1);
-        return Task.CompletedTask;
     }
 
     [VeloxCommand]
-    private async Task Save(object? parameter, CancellationToken ct)
+    private async Task Save(object? parameter)
     {
         if (parameter is not string path) return;
         await Helper.CloseAsync();
         var json = this.Serialize();
-        await File.WriteAllTextAsync(path, json, ct);
+        await File.WriteAllTextAsync(path, json);
+    }
+
+    [VeloxCommand]
+    private async Task Test(CancellationToken ct)
+    {
+        
     }
 }

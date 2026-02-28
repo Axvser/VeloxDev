@@ -172,7 +172,7 @@ public partial class WorkflowView : UserControl
         if (file.Count < 1) return;
         var path = file[0].TryGetLocalPath();
         var value = await file[0].OpenReadAsync();
-        var (success, result) = await WorkflowEx.TryDeserializeFromStreamAsync<TreeViewModel>(value);
+        var (success, result) = await ComponentModelEx.TryDeserializeFromStreamAsync<TreeViewModel>(value);
         if (success && result is not null)
         {
             _workflowViewModel = result;
@@ -296,29 +296,13 @@ public partial class WorkflowView : UserControl
     {
         if (Root_ScrollViewer is not { } viewer || _workflowViewModel is not { } vm) return;
 
-        var scrollOffset = viewer.Offset;
-        var viewport = viewer.Viewport;
-        var layout = vm.Layout;
-
-        // 获取画布的实际逻辑尺寸
-        double canvasLogicalWidth = layout.ActualSize.Width;
-        double canvasLogicalHeight = layout.ActualSize.Height;
-
-        // 转换到逻辑坐标空间
-        double visibleLeft = (scrollOffset.X - layout.ActualOffset.Left) / layout.OriginScale.X;
-        double visibleTop = (scrollOffset.Y - layout.ActualOffset.Top) / layout.OriginScale.Y;
-        double visibleWidth = viewport.Width / layout.OriginScale.X;
-        double visibleHeight = viewport.Height / layout.OriginScale.Y;
-
-        // 边界约束（确保不超出画布范围）
-        visibleLeft = Math.Max(0, Math.Min(visibleLeft, canvasLogicalWidth));
-        visibleTop = Math.Max(0, Math.Min(visibleTop, canvasLogicalHeight));
-        visibleWidth = Math.Min(visibleWidth, canvasLogicalWidth - visibleLeft);
-        visibleHeight = Math.Min(visibleHeight, canvasLogicalHeight - visibleTop);
-
         if (vm.GetHelper() is TreeHelper helper)
         {
-            helper.Virtualize(new Viewport(visibleLeft, visibleTop, visibleWidth, visibleHeight));
+            helper.Virtualize(new Viewport(
+                viewer.Offset.X - vm.Layout.ActualOffset.Left,
+                viewer.Offset.Y - vm.Layout.ActualOffset.Top,
+                viewer.Viewport.Width / vm.Layout.OriginScale.X,
+                viewer.Viewport.Height / vm.Layout.OriginScale.Y));
         }
     }
 

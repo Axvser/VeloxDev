@@ -80,7 +80,7 @@
 					<Button Content="缩小" Width="100" Height="50" Click="MinusScale" />
 					<TextBlock Text="节点总数：" />
 					<TextBlock Text="{Binding Nodes.Count}"/>
-					<TextBlock Text="可见节点数：" />
+					<TextBlock Text="可见组件数：( Node / Link )" />
 					<TextBlock Text="{Binding VisibleItems.Count}" />
 					<local:Rocker x:Name="PART_ROCKER" Width="100" Height="100" Foreground="Lime"/>
 				</StackPanel>

@@ -13,7 +13,7 @@ namespace Demo.Views
         private void Border_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
             if (DataContext is not IWorkflowSlotViewModel slot) return;
-            slot.ApplyConnectionCommand.Execute(null);
+            slot.SendConnectionCommand.Execute(null);
         }
 
         private void Border_PointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)

@@ -21,7 +21,7 @@ namespace Demo.ViewModels.Workflow.Helper
 
             // [ User ] 跟踪任务计数
             _viewModel = node as NodeViewModel;
-            _viewModel!.WorkCommand.TaskStarted += (e) => 
+            _viewModel!.WorkCommand.Started += (e) => 
             { 
                 _dispatcherQueue ??= DispatcherQueue.GetForCurrentThread();
                 _dispatcherQueue?.TryEnqueue(() =>
@@ -29,21 +29,21 @@ namespace Demo.ViewModels.Workflow.Helper
                     _viewModel.RunCount++;
                 });
             };
-            _viewModel!.WorkCommand.TaskExited += (e) =>
+            _viewModel!.WorkCommand.Exited += (e) =>
             {
                 _dispatcherQueue?.TryEnqueue(() =>
                 {
                     _viewModel.RunCount--;
                 });
             };
-            _viewModel!.WorkCommand.TaskEnqueued += (e) =>
+            _viewModel!.WorkCommand.Enqueued += (e) =>
             {
                 _dispatcherQueue?.TryEnqueue(() =>
                 {
                     _viewModel.WaitCount++;
                 });
             };
-            _viewModel!.WorkCommand.TaskDequeued += (e) =>
+            _viewModel!.WorkCommand.Dequeued += (e) =>
             {
                 _dispatcherQueue?.TryEnqueue(() =>
                 {

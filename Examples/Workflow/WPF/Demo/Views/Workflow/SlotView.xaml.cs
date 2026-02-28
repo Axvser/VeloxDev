@@ -16,7 +16,7 @@ public partial class SlotView : UserControl
     {
         if (DataContext is not IWorkflowSlotViewModel context) return;
 
-        context.ApplyConnectionCommand.Execute(null);
+        context.SendConnectionCommand.Execute(null);
 
         e.Handled = true;
     }
