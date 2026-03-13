@@ -12,10 +12,17 @@ namespace VeloxDev.Core.Generator.Writers
         private List<MVVMPropertyFactory> MVVMProperties { get; set; } = [];
         private List<MVVMPropertyFactory> AutoProperties { get; set; } = [];
         private bool IsWorkflowComponent { get; set; } = false;
+        private bool _isBaseClassMvvmGenerated = false;
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
+
+            if (namedTypeSymbol.BaseType != null)
+            {
+                _isBaseClassMvvmGenerated = CheckBaseClassForMvvmInfrastructure(namedTypeSymbol.BaseType);
+            }
+
             ReadMVVMConfig(namedTypeSymbol);
             ReadAutoProperties(namedTypeSymbol);
             IsWorkflowComponent = HasWorkflowAttribute(namedTypeSymbol);
@@ -59,30 +66,65 @@ namespace VeloxDev.Core.Generator.Writers
 
         private bool HasWorkflowAttribute(INamedTypeSymbol symbol)
         {
-            var attributes = symbol.GetAttributes();
-            foreach (var attribute in attributes)
+            foreach (var attribute in symbol.GetAttributes())
             {
                 var attributeClass = attribute.AttributeClass;
                 if (attributeClass == null) continue;
 
-                var attributeFullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
-                if (attributeFullName.Contains("WorkflowBuilder.ViewModel") ||
-                    attributeFullName.Contains("VeloxDev.Core.WorkflowSystem"))
-                {
+                var fullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                if (fullName.Contains("WorkflowBuilder.ViewModel") || fullName.Contains("VeloxDev.Core.WorkflowSystem"))
                     return true;
-                }
 
-                var attributeName = attributeClass.Name;
-                if (attributeName.Contains('`'))
-                {
-                    attributeName = attributeName.Substring(0, attributeName.IndexOf('`'));
-                }
-
-                if (attributeName is "TreeAttribute" or "NodeAttribute" or "SlotAttribute" or "LinkAttribute")
-                {
+                var name = attributeClass.Name;
+                if (name.Contains('`')) name = name.Substring(0, name.IndexOf('`'));
+                if (name is "TreeAttribute" or "NodeAttribute" or "SlotAttribute" or "LinkAttribute")
                     return true;
-                }
+            }
+            return false;
+        }
+
+        private bool CheckBaseClassForMvvmInfrastructure(INamedTypeSymbol? symbol)
+        {
+            if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
+                return false;
+
+            // 1. 检查 [VeloxProperty]
+            if (symbol.GetMembers().Any(m => m.GetAttributes().Any(a =>
+                    a.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).EndsWith("VeloxPropertyAttribute") == true)))
+                return true;
+
+            // 2. 检查工作流特性
+            if (HasWorkflowAttribute(symbol)) return true;
+
+            // 3. 检查主流框架
+            if (HasMainstreamFrameworkFeatures(symbol)) return true;
+
+            return CheckBaseClassForMvvmInfrastructure(symbol.BaseType);
+        }
+
+        private bool HasMainstreamFrameworkFeatures(INamedTypeSymbol symbol)
+        {
+            var fullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+            // 检查基类名称
+            if (fullName.Contains("CommunityToolkit.Mvvm.ComponentModel.ObservableObject") ||
+                fullName.Contains("CommunityToolkit.Mvvm.ComponentModel.ObservableValidator") ||
+                fullName.Contains("Prism.Mvvm.BindableBase") ||
+                fullName.Contains("ReactiveUI.ReactiveObject") ||
+                fullName.Contains("Caliburn.Micro.PropertyChangedBase"))
+                return true;
+
+            // 检查特性
+            foreach (var attr in symbol.GetAttributes())
+            {
+                var attrName = attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                if (attrName is null || string.IsNullOrEmpty(attrName)) continue;
+
+                if (attrName.Contains("CommunityToolkit.Mvvm.ComponentModel.ObservablePropertyAttribute") ||
+                    attrName.Contains("CommunityToolkit.Mvvm.ComponentModel.NotifyPropertyChangedForAttribute") ||
+                    attrName.Contains("Prism.Mvvm") ||
+                    attrName.Contains("ReactiveUI"))
+                    return true;
             }
 
             return false;
@@ -92,11 +134,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         public override string GetFileName()
         {
-            if (Syntax == null || Symbol == null)
-            {
-                return string.Empty;
-            }
-
+            if (Syntax == null || Symbol == null) return string.Empty;
             return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_MVVM.g.cs";
         }
 
@@ -110,38 +148,40 @@ namespace VeloxDev.Core.Generator.Writers
 
         public override string GenerateBody()
         {
-            if (Syntax == null || Symbol == null)
-            {
-                return string.Empty;
-            }
+            if (Syntax == null || Symbol == null) return string.Empty;
 
             var builder = new StringBuilder();
 
-            // 生成事件和方法
-            builder.AppendLine($$"""
-                    public new event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventHandler? PropertyChanging;
-                    public new event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventHandler? PropertyChanged;
-                    public new void OnPropertyChanging(string propertyName)
-                    {
-                        PropertyChanging?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventArgs(propertyName));
-                    }
-                    public new void OnPropertyChanged(string propertyName)
-                    {
-                        PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
-                    }
-                """);
-
-            // 为自动属性生成字段
-            foreach (var factory in AutoProperties)
+            // 仅在基类未生成 MVVM 基础设施时生成事件和方法
+            if (!_isBaseClassMvvmGenerated)
             {
-                var fieldDeclaration = factory.GenerateFieldDeclaration();
-                if (!string.IsNullOrEmpty(fieldDeclaration))
-                {
-                    builder.AppendLine(fieldDeclaration);
-                }
+                // 检查类是否为 sealed
+                bool isSealed = Symbol.IsSealed;
+
+                // 如果是 sealed，不能使用 virtual；否则使用 virtual 以支持多态
+                string methodModifier = isSealed ? "" : "virtual ";
+
+                builder.AppendLine($$"""
+                        public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventHandler? PropertyChanging;
+                        public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventHandler? PropertyChanged;
+                        
+                        public {{methodModifier}}void OnPropertyChanging(string propertyName)
+                        {
+                            PropertyChanging?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventArgs(propertyName));
+                        }
+                        public {{methodModifier}}void OnPropertyChanged(string propertyName)
+                        {
+                            PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
+                        }
+                    """);
             }
 
-            // 生成属性（字段属性和自动属性）
+            foreach (var factory in AutoProperties)
+            {
+                var field = factory.GenerateFieldDeclaration();
+                if (!string.IsNullOrEmpty(field)) builder.AppendLine(field);
+            }
+
             foreach (var factory in MVVMProperties.Concat(AutoProperties))
             {
                 builder.AppendLine(factory.Generate());
