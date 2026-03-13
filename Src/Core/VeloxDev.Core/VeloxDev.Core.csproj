@@ -11,7 +11,7 @@
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core</Title>
-		<Version>3.7.16</Version>
+		<Version>3.7.20</Version>
 		<Authors>Axvser</Authors>
 		<Description>The Core of VeloxDev. Shared those components that can optimize the development experience of WPF/Avalonia/MAUI……</Description>
 		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
@@ -24,7 +24,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" PrivateAssets="all" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="3.7.16" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="3.7.20" />
 	</ItemGroup>
 
 	<ItemGroup>

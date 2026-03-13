@@ -308,10 +308,7 @@ namespace VeloxDev.Core.Generator.Base
                     }
                 }
 
-                var baseTypeName = IsNullable ? FullTypeName.TrimEnd('?') : FullTypeName;
-                var equalityComparison = IsNullable ?
-                    $"global::System.Collections.Generic.EqualityComparer<{baseTypeName}>.Default.Equals({SourceName}, value)" :
-                    $"global::System.Object.Equals({SourceName}, value)";
+                var equalityComparison = $"global::System.Object.Equals({SourceName}, value)";
 
                 // 生成属性访问器，完全保留用户写的修饰符
                 var getter = HasGetter ?
