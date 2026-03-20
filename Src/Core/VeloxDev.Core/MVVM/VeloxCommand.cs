@@ -24,9 +24,13 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         Predicate<object?>? canExecute = null,
         int semaphore = 1)
         =>
-        new((parameter, _) => { command(parameter); return Task.CompletedTask; },
+        new(
+            async (parameter, _) => { await command(parameter).ConfigureAwait(false); },
             canExecute,
-            semaphore);
+            semaphore)
+        {
+            _isCtsNeeded = false
+        };
 
     public static VeloxCommand CreateTaskOnlyWithCancellationToken(
         Func<CancellationToken, Task> command,
@@ -34,7 +38,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         int semaphore = 1)
         =>
         new(
-            (_, ct) => { command(ct); return Task.CompletedTask; },
+            async (_, ct) => { await command(ct).ConfigureAwait(false); },
             canExecute,
             semaphore);
 
@@ -43,7 +47,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         Predicate<object?>? canExecute = null,
         int semaphore = 1)
         : this(
-            (_, __) => command(),
+            async (_, __) => await command().ConfigureAwait(false),
             canExecute,
             semaphore)
     {
@@ -84,7 +88,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
     private int _maxConcurrency = Math.Max(1, semaphore);
     private bool _isForceLocked = false;
 
-    private readonly bool _isCtsNeeded = true;
+    private bool _isCtsNeeded = true;
     private static readonly CancellationToken _defct = new();
 
     public event EventHandler? CanExecuteChanged;
