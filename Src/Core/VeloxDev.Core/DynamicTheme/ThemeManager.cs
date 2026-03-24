@@ -191,8 +191,8 @@ namespace VeloxDev.Core.DynamicTheme
 
                     try
                     {
-                        staticCache = target.GetStaticCache();
-                        activeCache = target.GetActiveCache();
+                        staticCache = target.GetStaticThemeCache();
+                        activeCache = target.GetActiveThemeCache();
                     }
                     catch (Exception ex)
                     {

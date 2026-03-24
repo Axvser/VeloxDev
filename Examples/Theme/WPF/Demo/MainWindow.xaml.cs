@@ -94,14 +94,14 @@ namespace Demo
         private void ThemeValueEx()
         {
             // 动态编辑主题资源值
-            EditThemeValue<Light>(nameof(Background), new object?[] { "#ffffff" });
+            SetThemeValue<Light>(nameof(Background), new object?[] { "#ffffff" });
             // 可以恢复为初始状态
             RestoreThemeValue<Light>(nameof(Foreground));
 
             // 获取静态资源
-            var staticCache = GetStaticCache();
+            var staticCache = GetStaticThemeCache();
             // 获取动态资源
-            var dynamicCache = GetActiveCache();
+            var dynamicCache = GetActiveThemeCache();
 
             /* 此处的“资源”是一个自动生成的复杂结构
                只有被修改过的属性才会存储在动态资源中，否则资源内不会存储东西，切换主题时，动态内容将覆盖静态内容

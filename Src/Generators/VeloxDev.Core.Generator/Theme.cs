@@ -307,16 +307,18 @@ namespace VeloxDev.Core.Generator
             sb.AppendLine("            OnThemeChanging(oldValue, newValue);");
             sb.AppendLine("        }");
             sb.AppendLine();
+
             sb.AppendLine("        public void ExecuteThemeChanged(global::System.Type? oldValue, global::System.Type? newValue)");
             sb.AppendLine("        {");
             sb.AppendLine("            OnThemeChanged(oldValue, newValue);");
             sb.AppendLine("        }");
             sb.AppendLine();
+
             sb.AppendLine("        partial void OnThemeChanging(global::System.Type? oldValue, global::System.Type? newValue);");
             sb.AppendLine("        partial void OnThemeChanged(global::System.Type? oldValue, global::System.Type? newValue);");
             sb.AppendLine();
 
-            sb.AppendLine($"        public void EditThemeValue<T>(global::System.String propertyName, object? newValue) where T : {IThemeFullName}");
+            sb.AppendLine($"        public void SetThemeValue<T>(global::System.String propertyName, object? newValue) where T : {IThemeFullName}");
             sb.AppendLine("        {");
             sb.AppendLine("            if (__velox__Act__ThemeCache__.TryGetValue(propertyName, out var propertyCache) &&");
             sb.AppendLine("                propertyCache.TryGetValue(__velox_Theme__Props__[propertyName], out var typeCache))");
@@ -331,15 +333,73 @@ namespace VeloxDev.Core.Generator
             sb.AppendLine("                    __velox__Act__ThemeCache__[propertyName] = value;");
             sb.AppendLine("                }");
             sb.AppendLine();
+
             sb.AppendLine("                value[__velox_Theme__Props__[propertyName]] = new global::System.Collections.Generic.Dictionary<global::System.Type, object?> { { typeof(T), newValue } };");
+            sb.AppendLine("            }");
+            sb.AppendLine("            UpdatePropertyToCurrentTheme(propertyName);");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+
+            sb.AppendLine($"        public void RestoreThemeValue<T>(global::System.String propertyName) where T : {IThemeFullName}");
+            sb.AppendLine("        {");
+            sb.AppendLine($"           __velox__Act__ThemeCache__.Remove(propertyName);");
+            sb.AppendLine("            UpdatePropertyToCurrentTheme(propertyName);");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+
+            sb.AppendLine("        public global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>> GetStaticThemeCache() => __velox__Def__ThemeCache__;");
+            sb.AppendLine("        public global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>> GetActiveThemeCache() => __velox__Act__ThemeCache__;");
+            sb.AppendLine();
+
+            sb.AppendLine("        public void UpdatePropertyToCurrentTheme(global::System.String propertyName)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            if (!__velox_Theme__Props__.TryGetValue(propertyName, out var propertyInfo) || propertyInfo == null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                return;");
+            sb.AppendLine("            }");
+            sb.AppendLine("            ");
+            sb.AppendLine("            var currentThemeType = " + ThemeManagerFullName + ".Current;");
+            sb.AppendLine("            if (currentThemeType == null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                return;");
+            sb.AppendLine("            }");
+            sb.AppendLine("            ");
+            sb.AppendLine("            object? value = null;");
+            sb.AppendLine("            ");
+            sb.AppendLine("            if (__velox__Act__ThemeCache__.TryGetValue(propertyName, out var propertyCache) &&");
+            sb.AppendLine("                propertyCache.TryGetValue(propertyInfo, out var typeCache) &&");
+            sb.AppendLine("                typeCache.TryGetValue(currentThemeType, out value))");
+            sb.AppendLine("            {");
+            sb.AppendLine("            }");
+            sb.AppendLine("            else if (__velox__Def__ThemeCache__.TryGetValue(propertyName, out var staticPropertyCache) &&");
+            sb.AppendLine("                     staticPropertyCache.TryGetValue(propertyInfo, out var staticTypeCache) &&");
+            sb.AppendLine("                     staticTypeCache.TryGetValue(currentThemeType, out value))");
+            sb.AppendLine("            {");
+            sb.AppendLine("            }");
+            sb.AppendLine("            else");
+            sb.AppendLine("            {");
+            sb.AppendLine("                return;");
+            sb.AppendLine("            }");
+            sb.AppendLine("            ");
+            sb.AppendLine("            try");
+            sb.AppendLine("            {");
+            sb.AppendLine("                propertyInfo.SetValue(this, value);");
+            sb.AppendLine("            }");
+            sb.AppendLine("            catch");
+            sb.AppendLine("            {");
             sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine();
-            sb.AppendLine($"        public void RestoreThemeValue<T>(global::System.String propertyName) where T : {IThemeFullName} => __velox__Act__ThemeCache__.Remove(propertyName);");
+
+            sb.AppendLine("        public void UpdateAllPropertiesToCurrentTheme()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            foreach (var propertyName in __velox_Theme__Props__.Keys)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                UpdatePropertyToCurrentTheme(propertyName);");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
             sb.AppendLine();
-            sb.AppendLine("        public global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>> GetStaticCache() => __velox__Def__ThemeCache__;");
-            sb.AppendLine("        public global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>> GetActiveCache() => __velox__Act__ThemeCache__;");
-            sb.AppendLine();
+
             sb.AppendLine("        public void InitializeTheme()");
             sb.AppendLine("        {");
             sb.AppendLine($"            {ThemeManagerFullName}.Register(this);");
@@ -348,6 +408,8 @@ namespace VeloxDev.Core.Generator
                 sb.AppendLine($"            __velox_Theme__Props__[nameof({propertyName})].SetValue(this, __velox__Def__ThemeCache__[nameof({propertyName})][__velox_Theme__Props__[nameof({propertyName})]][{ThemeManagerFullName}.Current]);");
             }
             sb.AppendLine("        }");
+            sb.AppendLine();
+
             sb.AppendLine("    }");
             sb.AppendLine("}");
 

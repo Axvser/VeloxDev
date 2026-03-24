@@ -64,7 +64,7 @@ partial void OnThemeChanged(Type? oldValue, Type? newValue)
 ### 步骤 4：动态修改主题值（运行时覆盖）
 ```csharp
 // 临时修改 Light 主题的 Background
-EditThemeValue<Light>(nameof(Background), new object?[] { "#ff0000" });
+SetThemeValue<Light>(nameof(Background), new object?[] { "#ff0000" });
 
 // 恢复默认值
 RestoreThemeValue<Light>(nameof(Background));
@@ -95,10 +95,10 @@ RestoreThemeValue<Light>(nameof(Background));
 | 方法 | 说明 |
 |------|------|
 | `InitializeTheme()` | 初始化主题（必须调用） |
-| `EditThemeValue<T>(prop, values)` | 动态覆盖主题值 |
+| `SetThemeValue<T>(prop, values)` | 动态覆盖主题值 |
 | `RestoreThemeValue<T>(prop)` | 恢复默认值 |
-| `GetStaticCache()` | 获取编译时静态资源 |
-| `GetActiveCache()` | 获取运行时动态覆盖资源 |
+| `GetStaticThemeCache()` | 获取编译时静态资源 |
+| `GetActiveThemeCache()` | 获取运行时动态覆盖资源 |
 
 ### 部分方法（可选重写）
 | 方法 | 触发时机 |
