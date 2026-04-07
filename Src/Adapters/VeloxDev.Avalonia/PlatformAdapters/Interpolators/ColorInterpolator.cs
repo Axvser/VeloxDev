@@ -1,7 +1,6 @@
 ﻿using Avalonia.Media;
 using System;
 using System.Collections.Generic;
-using System.Text;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Avalonia.PlatformAdapters.Interpolators
@@ -32,12 +31,12 @@ namespace VeloxDev.Avalonia.PlatformAdapters.Interpolators
                     Clamp((byte)(c1.B + deltaB * t), 0, 255)
                 ));
 #else
-            result.Add(Color.FromArgb(
-                (byte)Math.Clamp(c1.A + deltaA * t, 0, 255),
-                (byte)Math.Clamp(c1.R + deltaR * t, 0, 255),
-                (byte)Math.Clamp(c1.G + deltaG * t, 0, 255),
-                (byte)Math.Clamp(c1.B + deltaB * t, 0, 255)
-            ));
+                result.Add(Color.FromArgb(
+                    (byte)Math.Clamp(c1.A + deltaA * t, 0, 255),
+                    (byte)Math.Clamp(c1.R + deltaR * t, 0, 255),
+                    (byte)Math.Clamp(c1.G + deltaG * t, 0, 255),
+                    (byte)Math.Clamp(c1.B + deltaB * t, 0, 255)
+                ));
 #endif
             }
             result[0] = start;

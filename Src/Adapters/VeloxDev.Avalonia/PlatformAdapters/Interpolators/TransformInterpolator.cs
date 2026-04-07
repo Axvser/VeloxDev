@@ -3,7 +3,6 @@ using Avalonia.Media;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Avalonia.PlatformAdapters.Interpolators

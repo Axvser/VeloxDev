@@ -24,7 +24,7 @@ public partial class MainWindow : Window
 
         var snapshot0 = Rec0.Snapshot();
         var snapshot1 = Rec0.Snapshot(x => ((TranslateTransform)x.RenderTransform!).X, x => x.Fill);
-        var snapshot2 = Rec0.SnapshotExcept(x => x.Width, x => x.Height, x=>x.Fill, x=>x.Opacity);
+        var snapshot2 = Rec0.SnapshotExcept(x => x.Width, x => x.Height, x => x.Fill, x => x.Opacity);
 
         // 于是，可以加载指向 snapshot 的过渡效果
         // 这里记录的快照是初始状态

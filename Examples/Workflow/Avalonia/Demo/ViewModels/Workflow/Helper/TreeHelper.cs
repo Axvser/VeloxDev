@@ -28,7 +28,7 @@ public class TreeHelper : WorkflowHelper.ViewModel.Tree
         // 清理空间索引，5 状态码意味着合理的情况
         if (tree.ClearMap() == 5)
         {
-            
+
         }
 
         _viewModel = null;

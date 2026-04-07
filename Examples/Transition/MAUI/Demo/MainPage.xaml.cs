@@ -1,8 +1,6 @@
 ﻿using Microsoft.Maui.Controls.Shapes;
-using System.Diagnostics;
 using VeloxDev.Core.TransitionSystem;
 using VeloxDev.MAUI.PlatformAdapters;
-using VeloxDev.MAUI.PlatformAdapters.Interpolators;
 
 namespace Demo
 {

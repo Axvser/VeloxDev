@@ -96,7 +96,7 @@ public static class WorkflowSpatialEx
     public static void Virtualize(this IWorkflowTreeViewModel tree, Viewport viewport)
     {
         if (viewport.Width <= 0 || viewport.Height <= 0)
-            throw new ArgumentException("Viewport must have positive width and height.", nameof(viewport));
+            return;
 
         if (!SpatialMaps.TryGetValue(tree, out var map) || !Observables.TryGetValue(tree, out var collection) || collection is not Collection<IWorkflowViewModel> observable)
             throw new ArgumentNullException("The workflow must first successfully enable the spatial map before it can be virtualized.");
@@ -232,7 +232,7 @@ public static class WorkflowSpatialEx
     public static IEnumerable<IWorkflowNodeViewModel> QueryNodes(this IWorkflowTreeViewModel tree, Viewport viewport)
     {
         if (viewport.Width <= 0 || viewport.Height <= 0)
-            throw new ArgumentException("Viewport must have positive width and height.", nameof(viewport));
+            return [];
 
         if (!SpatialMaps.TryGetValue(tree, out var map))
             throw new ArgumentNullException(nameof(tree),
@@ -252,7 +252,7 @@ public static class WorkflowSpatialEx
         if (SpatialMaps.TryGetValue(sender, out var _spatialHashMap))
             _spatialHashMap.Remove(node);
     }
-    
+
     private static void OnLinkAdded(object? sender, IWorkflowLinkViewModel node)
     {
         if (Observables.TryGetValue(sender, out var collection) && collection is Collection<IWorkflowViewModel> observable)

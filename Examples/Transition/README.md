@@ -681,7 +681,7 @@ public class Transition<T> : TransitionCore<T, Transition<T>.StateSnapshot>
 
 ---
 
-## 9. 一句话总结
+## 9. 总结
 
 - `VeloxDev.Core` 解决的是：**动画怎么抽象、怎么插值、怎么调度、怎么播放**
 - 平台适配层解决的是：**属性怎么读写、哪些类型可插值、UI 线程怎么切换**

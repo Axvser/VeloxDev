@@ -20,7 +20,6 @@ public enum Alignments
 public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
 {
     [VeloxProperty] private Size originSize = new(1920, 1080);
-    [VeloxProperty] private Scale originScale = new(1, 1);
     [VeloxProperty] private Offset positiveOffset = new(0, 0);
     [VeloxProperty] private Offset negativeOffset = new(0, 0);
     [VeloxProperty] private Alignments originAlignment = Alignments.Center;
@@ -31,7 +30,6 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
     public bool Equals(CanvasLayout? other)
         => other is not null &&
            OriginSize == other.OriginSize &&
-           OriginScale == other.OriginScale &&
            PositiveOffset == other.PositiveOffset &&
            NegativeOffset == other.NegativeOffset &&
            OriginAlignment == other.OriginAlignment;
@@ -39,7 +37,6 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
     public object Clone() => new CanvasLayout()
     {
         OriginSize = new Size(this.OriginSize.Width, this.OriginSize.Height),
-        OriginScale = new Scale(this.OriginScale.X, this.OriginScale.Y),
         PositiveOffset = new Offset(this.PositiveOffset.Left, this.PositiveOffset.Top),
         NegativeOffset = new Offset(this.NegativeOffset.Left, this.NegativeOffset.Top),
         OriginAlignment = this.OriginAlignment
@@ -50,7 +47,6 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
         if (obj is CanvasLayout layout)
         {
             return OriginSize == layout.OriginSize &&
-                   OriginScale == layout.OriginScale &&
                    PositiveOffset == layout.PositiveOffset &&
                    NegativeOffset == layout.NegativeOffset &&
                    OriginAlignment == layout.OriginAlignment;
@@ -60,7 +56,7 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
 
     public override int GetHashCode()
     {
-        return HashCode.Combine(OriginSize, OriginScale, PositiveOffset, NegativeOffset, OriginAlignment);
+        return HashCode.Combine(OriginSize, PositiveOffset, NegativeOffset, OriginAlignment);
     }
 
     public override string ToString()
@@ -69,7 +65,6 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
             {
                 OriginAlignment    > {{OriginAlignment}}
                 OriginSize     > {{OriginSize}}
-                OriginScale    > {{OriginScale}}
                 PositiveOffset > {{PositiveOffset}}
                 NegativeOffset > {{NegativeOffset}}
                 ActualSize     > {{ActualSize}}
@@ -88,59 +83,58 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
         var baseWidth = OriginSize.Width + PositiveOffset.Left + NegativeOffset.Left;
         var baseHeight = OriginSize.Height + PositiveOffset.Top + NegativeOffset.Top;
 
-        ActualSize.Width = baseWidth * OriginScale.X;
-        ActualSize.Height = baseHeight * OriginScale.Y;
+        ActualSize.Width = baseWidth;
+        ActualSize.Height = baseHeight;
         OnPropertyChanged(nameof(ActualSize));
 
-        var scaledOriginWidth = OriginSize.Width * OriginScale.X;
-        var scaledOriginHeight = OriginSize.Height * OriginScale.Y;
+        var originWidth = OriginSize.Width;
+        var originHeight = OriginSize.Height;
 
-        var scaledNegativeLeft = NegativeOffset.Left * OriginScale.X;
-        var scaledNegativeTop = NegativeOffset.Top * OriginScale.Y;
+        var negativeLeft = NegativeOffset.Left;
+        var negativeTop = NegativeOffset.Top;
 
         ActualOffset = OriginAlignment switch
         {
-            Alignments.TopLeft => new Offset(scaledNegativeLeft, scaledNegativeTop),
+            Alignments.TopLeft => new Offset(negativeLeft, negativeTop),
             Alignments.TopCenter => new Offset(
-                scaledOriginWidth / 2 + scaledNegativeLeft,
-                scaledNegativeTop
+                originWidth / 2 + negativeLeft,
+                negativeTop
             ),
             Alignments.TopRight => new Offset(
-                scaledOriginWidth + scaledNegativeLeft,
-                scaledNegativeTop
+                originWidth + negativeLeft,
+                negativeTop
             ),
             Alignments.CenterLeft => new Offset(
-                scaledNegativeLeft,
-                scaledOriginHeight / 2 + scaledNegativeTop
+                negativeLeft,
+                originHeight / 2 + negativeTop
             ),
             Alignments.Center => new Offset(
-                scaledOriginWidth / 2 + scaledNegativeLeft,
-                scaledOriginHeight / 2 + scaledNegativeTop
+                originWidth / 2 + negativeLeft,
+                originHeight / 2 + negativeTop
             ),
             Alignments.CenterRight => new Offset(
-                scaledOriginWidth + scaledNegativeLeft,
-                scaledOriginHeight / 2 + scaledNegativeTop
+                originWidth + negativeLeft,
+                originHeight / 2 + negativeTop
             ),
             Alignments.BottomLeft => new Offset(
-                scaledNegativeLeft,
-                scaledOriginHeight + scaledNegativeTop
+                negativeLeft,
+                originHeight + negativeTop
             ),
             Alignments.BottomCenter => new Offset(
-                scaledOriginWidth / 2 + scaledNegativeLeft,
-                scaledOriginHeight + scaledNegativeTop
+                originWidth / 2 + negativeLeft,
+                originHeight + negativeTop
             ),
             Alignments.BottomRight => new Offset(
-                scaledOriginWidth + scaledNegativeLeft,
-                scaledOriginHeight + scaledNegativeTop
+                originWidth + negativeLeft,
+                originHeight + negativeTop
             ),
             _ => new Offset(
-                scaledOriginWidth / 2 + scaledNegativeLeft,
-                scaledOriginHeight / 2 + scaledNegativeTop
+                originWidth / 2 + negativeLeft,
+                originHeight / 2 + negativeTop
             )
         };
     }
     partial void OnOriginSizeChanged(Size oldValue, Size newValue) => Update();
-    partial void OnOriginScaleChanged(Scale oldValue, Scale newValue) => Update();
     partial void OnPositiveOffsetChanged(Offset oldValue, Offset newValue) => Update();
     partial void OnNegativeOffsetChanged(Offset oldValue, Offset newValue) => Update();
     partial void OnOriginAlignmentChanged(Alignments oldValue, Alignments newValue) => Update();

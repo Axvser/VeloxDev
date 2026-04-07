@@ -33,7 +33,6 @@ namespace VeloxDev.Core.Interfaces.WorkflowSystem
         public IWorkflowNodeViewModel? Parent { get; set; }
         public SlotChannel Channel { get; set; }
         public SlotState State { get; set; }
-        public VisualPoint VisualPoint { get; set; }
         public Anchor Anchor { get; set; }
         public Offset Offset { get; set; }
         public Size Size { get; set; }

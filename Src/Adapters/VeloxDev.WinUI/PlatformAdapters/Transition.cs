@@ -6,10 +6,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 using Windows.Foundation;
 using Windows.UI;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.WinUI.PlatformAdapters
 {

@@ -9,10 +9,7 @@ using Avalonia.Threading;
 using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
-using System.Threading.Tasks;
 using VeloxDev.Core.Extension;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
@@ -30,15 +27,6 @@ public partial class WorkflowView : UserControl
     public static readonly StyledProperty<Transform> CanvasTransformProperty =
         AvaloniaProperty.Register<WorkflowView, Transform>(nameof(CanvasTransform));
 
-    public static readonly StyledProperty<Transform> GlobalScaleProperty =
-        AvaloniaProperty.Register<WorkflowView, Transform>(nameof(GlobalScale));
-
-    public Transform GlobalScale
-    {
-        get => this.GetValue(GlobalScaleProperty);
-        set => SetValue(GlobalScaleProperty, value);
-    }
-
     public Transform CanvasTransform
     {
         get => this.GetValue(CanvasTransformProperty);
@@ -48,6 +36,7 @@ public partial class WorkflowView : UserControl
     public WorkflowView()
     {
         InitializeComponent();
+        DataContext = _workflowViewModel;
         Root_Canvas.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
         _manager = new WindowNotificationManager(TopLevel.GetTopLevel(this)) { MaxItems = 3 };
 
@@ -57,6 +46,8 @@ public partial class WorkflowView : UserControl
         // 创建定时器（初始不启动）
         _rockerPanTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) }; // ～60 FPS
         _rockerPanTimer.Tick += OnRockerPanTick;
+
+        InitializeNetworkDemo();
     }
 
     private void OnRockerChanged(object? sender, Vector e)
@@ -177,6 +168,8 @@ public partial class WorkflowView : UserControl
         {
             _workflowViewModel = result;
             DataContext = _workflowViewModel;
+            ReLayout(Root_Canvas, _workflowViewModel.Layout);
+            UpdateVisibleRegion();
             _manager.Show(new Notification("OK", $"Workflow Loaded From {path}"));
         }
     }
@@ -284,12 +277,6 @@ public partial class WorkflowView : UserControl
                     )
                 ]
         };
-        GlobalScale = new TransformGroup()
-        {
-            Children = [
-                new ScaleTransform(_workflowViewModel.Layout.OriginScale.X, _workflowViewModel.Layout.OriginScale.Y)
-                ]
-        };
     }
 
     private void UpdateVisibleRegion()
@@ -301,123 +288,216 @@ public partial class WorkflowView : UserControl
             helper.Virtualize(new Viewport(
                 viewer.Offset.X - vm.Layout.ActualOffset.Left,
                 viewer.Offset.Y - vm.Layout.ActualOffset.Top,
-                viewer.Viewport.Width / vm.Layout.OriginScale.X,
-                viewer.Viewport.Height / vm.Layout.OriginScale.Y));
+                viewer.Viewport.Width,
+                viewer.Viewport.Height));
         }
     }
 
-    private async void PlusScale(object? sender, RoutedEventArgs e)
+    private void LoadNetworkDemo(object? sender, RoutedEventArgs e)
     {
-        _workflowViewModel.PlusScaleCommand.Execute(null);
-        ReLayout(Root_Canvas, _workflowViewModel.Layout);
+        InitializeNetworkDemo();
+        _manager.Show(new Notification("OK", "HTTP workflow demo loaded."));
     }
 
-    private async void MinusScale(object? sender, RoutedEventArgs e)
+    private void InitializeNetworkDemo()
     {
-        _workflowViewModel.MinusScaleCommand.Execute(null);
+        _workflowViewModel = CreateNetworkDemo();
+        DataContext = _workflowViewModel;
+        _workflowViewModel.Layout.UpdateCommand.Execute(null);
         ReLayout(Root_Canvas, _workflowViewModel.Layout);
+        UpdateVisibleRegion();
     }
 
-    private async void SimulateData(object? sender, RoutedEventArgs e)
+    private static TreeViewModel CreateNetworkDemo()
     {
-        const int totalNodes = 1000; // 总节点数
-        const int batchSize = 100;   // 每批次处理节点数
-        const double gridSize = 200; // 标准网格大小
-        const double jitter = 30;
-        double canvasSize = gridSize * Math.Sqrt(totalNodes);
+        var tree = new TreeViewModel();
+        tree.Layout.OriginAlignment = Alignments.TopLeft;
+        tree.Layout.OriginSize = new Size(2200, 980);
 
-        var random = new Random(12345);
-        var slotTypes = new[] { SlotChannel.MultipleBoth };
-        var slotSizes = new[] { new Size(20, 20), new Size(25, 25), new Size(30, 30) };
+        var helper = tree.GetHelper();
+        var nodeSize = new Size(300, 260);
+        var controllerSize = new Size(220, 170);
 
-        int gridCount = (int)Math.Ceiling(Math.Sqrt(totalNodes));
-        int generated = 0;
-        int i = 0, j = 0;
+        NodeViewModel CreateNode(
+            string title,
+            NetworkRequestMethod method,
+            string url,
+            string captureKey,
+            double left,
+            double top,
+            string headers = "",
+            string bodyTemplate = "")
+            => new()
+            {
+                Title = title,
+                Method = method,
+                Url = url,
+                Headers = headers,
+                BodyTemplate = bodyTemplate,
+                CaptureKey = captureKey,
+                Size = nodeSize,
+                Anchor = new Anchor(left, top, 0),
+            };
 
-        var workflowViewModel = _workflowViewModel;
-        var workflowHelper = workflowViewModel.GetHelper();
-
-        // 初始化画布
-        workflowViewModel.Layout.OriginSize = new Size(canvasSize, canvasSize);
-        workflowViewModel.Layout.OriginAlignment = Alignments.TopLeft;
-        DataContext = workflowViewModel;
-
-        while (generated < totalNodes)
+        var controller = new ControllerViewModel
         {
-            var batchNodes = new List<NodeViewModel>();
-            var batchSlots = new Dictionary<NodeViewModel, List<SlotViewModel>>(); // 记录每个 node 对应的 slots
+            Size = controllerSize,
+            Anchor = new Anchor(60, 360, 0),
+            SeedPayload = "demo-request-chain",
+            BroadcastMode = WorkflowBroadcastMode.BreadthFirst,
+        };
 
-            int batchGenerated = 0;
-            while (batchGenerated < batchSize && generated < totalNodes)
-            {
-                if (j >= gridCount) { j = 0; i++; }
-                if (i >= gridCount) break;
+        var fetchTodo = CreateNode(
+            "Fetch Todo",
+            NetworkRequestMethod.Get,
+            "https://jsonplaceholder.typicode.com/todos/1",
+            "todo",
+            280,
+            120);
 
-                double baseX = i * gridSize;
-                double baseY = j * gridSize;
-                double x = Math.Max(0, Math.Min(baseX + jitter - random.NextDouble() * jitter * 2, canvasSize - 1));
-                double y = Math.Max(0, Math.Min(baseY + jitter - random.NextDouble() * jitter * 2, canvasSize - 1));
+        var fetchPost = CreateNode(
+            "Fetch Post",
+            NetworkRequestMethod.Get,
+            "https://jsonplaceholder.typicode.com/posts/1",
+            "post",
+            280,
+            470);
 
-                var node = new NodeViewModel
-                {
-                    Size = new Size(180 + random.Next(0, 280), 160 + random.Next(0, 260)),
-                    Anchor = new Anchor(x, y, 0)
-                };
+        var auditTodo = CreateNode(
+            "Audit Todo",
+            NetworkRequestMethod.Post,
+            "https://httpbin.org/post",
+            "audit",
+            640,
+            20,
+            headers: "X-Demo-Source: VeloxDev Workflow",
+            bodyTemplate: "{\"todoSummary\":\"{{todo.summary}}\",\"todoStatus\":\"{{todo.status}}\"}");
 
-                // 先只创建 node，不加 slot
-                batchNodes.Add(node);
-                batchSlots[node] = [];
+        var patchRemote = CreateNode(
+            "Patch Remote",
+            NetworkRequestMethod.Patch,
+            "https://httpbin.org/patch",
+            "patch",
+            640,
+            250,
+            bodyTemplate: "{\"todoUrl\":\"{{todo.url}}\",\"status\":\"processed\"}");
 
-                // 生成 slot 数据（但暂不挂载）
-                int slotCount = random.Next(1, 4);
-                for (int s = 0; s < slotCount; s++)
-                {
-                    var slot = new SlotViewModel
-                    {
-                        VisualPoint = new(
-                            0.9,
-                            random.NextDouble()
-                        ),
-                        Size = slotSizes[random.Next(slotSizes.Length)],
-                        Channel = slotTypes[random.Next(slotTypes.Length)]
-                    };
-                    batchSlots[node].Add(slot);
-                }
+        var deleteRemote = CreateNode(
+            "Delete Remote",
+            NetworkRequestMethod.Delete,
+            "https://httpbin.org/delete",
+            "delete",
+            640,
+            480,
+            headers: "X-Delete-Reason: {{todo.status}}");
 
-                generated++;
-                batchGenerated++;
-                j++;
-            }
+        var syncPost = CreateNode(
+            "Sync Post",
+            NetworkRequestMethod.Post,
+            "https://httpbin.org/post",
+            "sync",
+            1000,
+            140,
+            bodyTemplate: "{\"postUrl\":\"{{post.url}}\",\"summary\":\"{{post.summary}}\"}");
 
-            // 🔑 关键步骤：先批量挂载所有 nodes 到 tree
-            foreach (var node in batchNodes)
-            {
-                workflowHelper.CreateNode(node); // 此时 node 已属于 Tree，DataContext 和绑定生效
-            }
+        var mirrorPost = CreateNode(
+            "Mirror Post",
+            NetworkRequestMethod.Put,
+            "https://httpbin.org/put",
+            "mirror",
+            1000,
+            390,
+            bodyTemplate: "{\"body\":\"{{post.body}}\",\"status\":\"mirrored\"}");
 
-            // 🔑 再批量为已挂载的 nodes 添加 slots
-            foreach (var kvp in batchSlots)
-            {
-                var node = kvp.Key;
-                var slots = kvp.Value;
-                var nodeHelper = node.GetHelper(); // 此时 helper 应已正确初始化（因 node 已挂载）
+        var mergeResults = CreateNode(
+            "Merge Results",
+            NetworkRequestMethod.Post,
+            "https://httpbin.org/post",
+            "merge",
+            1360,
+            210,
+            bodyTemplate: "{\"latest\":\"{{last.summary}}\",\"source\":\"{{last.url}}\"}");
 
-                foreach (var slot in slots)
-                {
-                    nodeHelper.CreateSlot(slot); // 安全：node 已在树中
-                }
-            }
+        var archiveTrace = CreateNode(
+            "Archive Trace",
+            NetworkRequestMethod.Post,
+            "https://httpbin.org/post",
+            "archive",
+            1720,
+            210,
+            bodyTemplate: "{\"merge\":\"{{merge.summary}}\",\"seed\":\"{{seed}}\"}");
 
-            workflowHelper.ClearHistory();
-            _manager.Show(new Notification("Progress", $"Generated {generated:N0} / {totalNodes:N0} nodes"));
-
-            await Task.Yield(); // 让 UI 线程有机会刷新
-
-            if (this.Parent is null) break;
+        foreach (var node in new IWorkflowNodeViewModel[]
+        {
+            controller,
+            fetchTodo,
+            fetchPost,
+            auditTodo,
+            patchRemote,
+            deleteRemote,
+            syncPost,
+            mirrorPost,
+            mergeResults,
+            archiveTrace,
+        })
+        {
+            helper.CreateNode(node);
         }
 
-        workflowViewModel.Layout.UpdateCommand.Execute(null);
-        ReLayout(Root_Canvas, _workflowViewModel.Layout);
-        _manager.Show(new Notification("OK", $"Completed! Generated {generated:N0} nodes"));
+        controller.OutputSlot = CreateOutputSlot(SlotChannel.MultipleTargets);
+        fetchTodo.InputSlot = CreateInputSlot();
+        fetchTodo.OutputSlot = CreateOutputSlot(SlotChannel.MultipleTargets);
+        fetchPost.InputSlot = CreateInputSlot();
+        fetchPost.OutputSlot = CreateOutputSlot(SlotChannel.MultipleTargets);
+        auditTodo.InputSlot = CreateInputSlot();
+        auditTodo.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        patchRemote.InputSlot = CreateInputSlot();
+        patchRemote.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        deleteRemote.InputSlot = CreateInputSlot();
+        deleteRemote.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        syncPost.InputSlot = CreateInputSlot();
+        syncPost.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        mirrorPost.InputSlot = CreateInputSlot();
+        mirrorPost.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        mergeResults.InputSlot = CreateInputSlot(SlotChannel.MultipleSources);
+        mergeResults.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        archiveTrace.InputSlot = CreateInputSlot();
+
+        Connect(tree, controller.OutputSlot!, fetchTodo.InputSlot!);
+        Connect(tree, controller.OutputSlot!, fetchPost.InputSlot!);
+        Connect(tree, fetchTodo.OutputSlot!, auditTodo.InputSlot!);
+        Connect(tree, fetchTodo.OutputSlot!, patchRemote.InputSlot!);
+        Connect(tree, fetchTodo.OutputSlot!, deleteRemote.InputSlot!);
+        Connect(tree, fetchPost.OutputSlot!, syncPost.InputSlot!);
+        Connect(tree, fetchPost.OutputSlot!, mirrorPost.InputSlot!);
+        Connect(tree, auditTodo.OutputSlot!, mergeResults.InputSlot!);
+        Connect(tree, patchRemote.OutputSlot!, mergeResults.InputSlot!);
+        Connect(tree, deleteRemote.OutputSlot!, mergeResults.InputSlot!);
+        Connect(tree, syncPost.OutputSlot!, mergeResults.InputSlot!);
+        Connect(tree, mirrorPost.OutputSlot!, mergeResults.InputSlot!);
+        Connect(tree, mergeResults.OutputSlot!, archiveTrace.InputSlot!);
+
+        helper.ClearHistory();
+        return tree;
+    }
+
+    private static SlotViewModel CreateInputSlot(SlotChannel channel = SlotChannel.OneSource)
+        => new()
+        {
+            Size = new Size(20, 20),
+            Channel = channel,
+        };
+
+    private static SlotViewModel CreateOutputSlot(SlotChannel channel)
+        => new()
+        {
+            Size = new Size(20, 20),
+            Channel = channel,
+        };
+
+    private static void Connect(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    {
+        tree.GetHelper().SendConnection(sender);
+        tree.GetHelper().ReceiveConnection(receiver);
     }
 }

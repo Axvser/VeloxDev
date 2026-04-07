@@ -1,10 +1,10 @@
-﻿using System;
+﻿using Microsoft.UI.Dispatching;
+using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.WorkflowSystem;
-using Microsoft.UI.Dispatching;
 
 namespace Demo.ViewModels.Workflow.Helper
 {
@@ -21,8 +21,8 @@ namespace Demo.ViewModels.Workflow.Helper
 
             // [ User ] 跟踪任务计数
             _viewModel = node as NodeViewModel;
-            _viewModel!.WorkCommand.Started += (e) => 
-            { 
+            _viewModel!.WorkCommand.Started += (e) =>
+            {
                 _dispatcherQueue ??= DispatcherQueue.GetForCurrentThread();
                 _dispatcherQueue?.TryEnqueue(() =>
                 {

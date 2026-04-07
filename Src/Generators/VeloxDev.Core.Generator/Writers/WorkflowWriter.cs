@@ -1,4 +1,4 @@
-﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis;
 using System;
 using System.Linq;
 using System.Text;
@@ -12,13 +12,20 @@ namespace VeloxDev.Core.Generator.Writers
         public const string ObjectFullName = "global::System.Object";
         public const string TaskFullName = "global::System.Threading.Tasks.Task";
         public const string CancellationTokenFullName = "global::System.Threading.CancellationToken";
+        private WorkflowAttributeModel? _workflowModel;
+        private bool _isBaseClassWorkflowGenerated;
+
+        public override void Initialize(Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
+        {
+            base.Initialize(classDeclaration, namedTypeSymbol);
+
+            _workflowModel = GetWorkflowAttributeModel(namedTypeSymbol);
+            _isBaseClassWorkflowGenerated = _workflowModel != null && CheckBaseClassForWorkflowInfrastructure(namedTypeSymbol.BaseType, _workflowModel.WorkflowType);
+        }
 
         public override bool CanWrite()
         {
-            if (Symbol == null) return false;
-
-            var attributes = Symbol.GetAttributes();
-            return attributes.Any(attr => IsWorkflowViewModelAttribute(attr));
+            return Symbol != null && _workflowModel != null;
         }
 
         public override string GetFileName()
@@ -33,17 +40,39 @@ namespace VeloxDev.Core.Generator.Writers
 
         public override string[] GenerateBaseInterfaces()
         {
-            if (Symbol == null) return Array.Empty<string>();
-
-            var attributes = Symbol.GetAttributes();
-            var workflowAttribute = attributes.FirstOrDefault(attr => IsWorkflowViewModelAttribute(attr));
-
-            if (workflowAttribute == null) return Array.Empty<string>();
-
-            var model = CreateWorkflowAttributeModel(workflowAttribute, Symbol);
-            if (model == null) return Array.Empty<string>();
+            var model = _workflowModel;
+            if (model == null || _isBaseClassWorkflowGenerated) return Array.Empty<string>();
 
             return new string[] { GetWorkflowInterfaceName(model.WorkflowType) };
+        }
+
+        private WorkflowAttributeModel? GetWorkflowAttributeModel(INamedTypeSymbol symbol)
+        {
+            var workflowAttribute = symbol.GetAttributes().FirstOrDefault(IsWorkflowViewModelAttribute);
+            return workflowAttribute == null ? null : CreateWorkflowAttributeModel(workflowAttribute, symbol);
+        }
+
+        private bool CheckBaseClassForWorkflowInfrastructure(INamedTypeSymbol? symbol, int workflowType)
+        {
+            if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
+            {
+                return false;
+            }
+
+            if (HasWorkflowInfrastructure(symbol, workflowType))
+            {
+                return true;
+            }
+
+            return CheckBaseClassForWorkflowInfrastructure(symbol.BaseType, workflowType);
+        }
+
+        private bool HasWorkflowInfrastructure(INamedTypeSymbol symbol, int workflowType)
+        {
+            return symbol.GetAttributes()
+                .Where(IsWorkflowViewModelAttribute)
+                .Select(attribute => CreateWorkflowAttributeModel(attribute, symbol))
+                .Any(model => model?.WorkflowType == workflowType);
         }
 
         private bool IsWorkflowViewModelAttribute(AttributeData attribute)
@@ -94,7 +123,7 @@ namespace VeloxDev.Core.Generator.Writers
                 AttributeSymbol = attribute.AttributeClass
             };
 
-            // 解析泛型参数
+            // �������Ͳ���
             if (attribute.AttributeClass is INamedTypeSymbol namedType && namedType.TypeArguments.Length > 0)
             {
                 model.HelperType = namedType.TypeArguments[0];
@@ -104,7 +133,7 @@ namespace VeloxDev.Core.Generator.Writers
                 model.HelperType = GetDefaultHelperType("Tree");
             }
 
-            // 改进的参数解析：正确处理默认值
+            // �Ľ��Ĳ�����������ȷ����Ĭ��ֵ
             var virtualLinkType = GetConstructorArgumentAsType(attribute, "virtualLinkType", 0);
             model.VirtualLinkType = virtualLinkType ?? GetConcreteDefaultVirtualLinkType();
 
@@ -132,7 +161,7 @@ namespace VeloxDev.Core.Generator.Writers
                 model.HelperType = GetDefaultHelperType("Node");
             }
 
-            // 改进的参数解析：提供默认值
+            // �Ľ��Ĳ����������ṩĬ��ֵ
             model.WorkSemaphore = GetConstructorArgumentAsInt(attribute, "workSemaphore", 0) ?? 1;
 
             return model;
@@ -177,7 +206,7 @@ namespace VeloxDev.Core.Generator.Writers
                 model.HelperType = GetDefaultHelperType("Link");
             }
 
-            // 改进的参数解析
+            // �Ľ��Ĳ�������
             var slotType = GetConstructorArgumentAsType(attribute, "slotType", 0);
             model.SlotType = slotType ?? GetConcreteDefaultSlotType();
 
@@ -186,7 +215,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         private INamedTypeSymbol? GetConstructorArgumentAsType(AttributeData attribute, string parameterName, int position)
         {
-            // 优先按名称查找命名参数
+            // ���Ȱ����Ʋ�����������
             foreach (var namedArg in attribute.NamedArguments)
             {
                 if (namedArg.Key == parameterName &&
@@ -197,7 +226,7 @@ namespace VeloxDev.Core.Generator.Writers
                 }
             }
 
-            // 按位置查找构造函数参数
+            // ��λ�ò��ҹ��캯������
             if (position < attribute.ConstructorArguments.Length)
             {
                 var arg = attribute.ConstructorArguments[position];
@@ -212,7 +241,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         private int? GetConstructorArgumentAsInt(AttributeData attribute, string parameterName, int position)
         {
-            // 优先按名称查找命名参数
+            // ���Ȱ����Ʋ�����������
             foreach (var namedArg in attribute.NamedArguments)
             {
                 if (namedArg.Key == parameterName &&
@@ -223,7 +252,7 @@ namespace VeloxDev.Core.Generator.Writers
                 }
             }
 
-            // 按位置查找构造函数参数
+            // ��λ�ò��ҹ��캯������
             if (position < attribute.ConstructorArguments.Length)
             {
                 var arg = attribute.ConstructorArguments[position];
@@ -265,11 +294,11 @@ namespace VeloxDev.Core.Generator.Writers
         {
             if (Symbol == null) return null;
 
-            // 首先在当前程序集中查找
+            // �����ڵ�ǰ�����в���
             var typeSymbol = Symbol.ContainingAssembly?.GetTypeByMetadataName(fullyQualifiedName);
             if (typeSymbol != null) return typeSymbol;
 
-            // 然后在所有引用程序集中查找
+            // Ȼ�����������ó����в���
             foreach (var reference in Symbol.ContainingAssembly.Modules.SelectMany(m => m.ReferencedAssemblySymbols))
             {
                 typeSymbol = reference.GetTypeByMetadataName(fullyQualifiedName);
@@ -291,19 +320,30 @@ namespace VeloxDev.Core.Generator.Writers
             };
         }
 
+        private string GetWorkflowHelperInterfaceName(int workflowType)
+        {
+            return workflowType switch
+            {
+                1 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowTreeViewModelHelper",
+                2 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowNodeViewModelHelper",
+                3 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowSlotViewModelHelper",
+                4 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowLinkViewModelHelper",
+                _ => throw new ArgumentException($"Unknown workflow type: {workflowType}")
+            };
+        }
+
         public override string GenerateBody()
         {
-            if (Symbol == null) return string.Empty;
-
-            var attributes = Symbol.GetAttributes();
-            var workflowAttribute = attributes.FirstOrDefault(attr => IsWorkflowViewModelAttribute(attr));
-
-            if (workflowAttribute == null) return string.Empty;
-
-            var model = CreateWorkflowAttributeModel(workflowAttribute, Symbol);
+            var model = _workflowModel;
             if (model == null) return string.Empty;
 
             var sb = new StringBuilder();
+
+            if (_isBaseClassWorkflowGenerated)
+            {
+                GenerateHelperOverrideBody(sb, model);
+                return sb.ToString();
+            }
 
             switch (model.WorkflowType)
             {
@@ -324,10 +364,17 @@ namespace VeloxDev.Core.Generator.Writers
             return sb.ToString();
         }
 
+        private void GenerateHelperOverrideBody(StringBuilder sb, WorkflowAttributeModel model)
+        {
+            sb.AppendLine($$"""
+                    public override {{GetWorkflowHelperInterfaceName(model.WorkflowType)}} Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+                """);
+        }
+
         private void GenerateTreeBody(StringBuilder sb, TreeAttributeModel model)
         {
             sb.AppendLine($$"""
-         public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+         public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
 
          private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel virtualLink = new {{model.VirtualLinkType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() { Sender = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}(), Receiver = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() };
          private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel> nodes = [];
@@ -562,12 +609,14 @@ namespace VeloxDev.Core.Generator.Writers
         private void GenerateNodeBody(StringBuilder sb, NodeAttributeModel model)
         {
             sb.AppendLine($$"""
-                    public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+                    public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
 
                     private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel? parent = null;
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
                     private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> slots = [];
+                    private {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode broadcastMode = {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode.Parallel;
+                    private {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode reverseBroadcastMode = {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode.Parallel;
 
                     protected virtual {{TaskFullName}} Move({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
@@ -605,6 +654,10 @@ namespace VeloxDev.Core.Generator.Writers
                     protected virtual async {{TaskFullName}} Broadcast({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
                         await Helper.BroadcastAsync(parameter,ct);
+                    }
+                    protected virtual async {{TaskFullName}} ReverseBroadcast({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        await Helper.ReverseBroadcastAsync(parameter,ct);
                     }
                     protected virtual async {{TaskFullName}} Close({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
@@ -684,6 +737,38 @@ namespace VeloxDev.Core.Generator.Writers
                     }
                     partial void OnSlotsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
                     partial void OnSlotsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
+                     public {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode BroadcastMode
+                     {
+                         get => broadcastMode;
+                         set
+                         {
+                            if({{ObjectFullName}}.Equals(broadcastMode,value)) return;
+                            var old = broadcastMode;
+                            OnPropertyChanging(nameof(BroadcastMode));
+                            OnBroadcastModeChanging(old,value);
+                            broadcastMode = value;
+                            OnBroadcastModeChanged(old,value);
+                            OnPropertyChanged(nameof(BroadcastMode));
+                         }
+                     }
+                     partial void OnBroadcastModeChanging({{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode newValue);
+                     partial void OnBroadcastModeChanged({{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode newValue);
+                     public {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode ReverseBroadcastMode
+                     {
+                         get => reverseBroadcastMode;
+                         set
+                         {
+                            if({{ObjectFullName}}.Equals(reverseBroadcastMode,value)) return;
+                            var old = reverseBroadcastMode;
+                            OnPropertyChanging(nameof(ReverseBroadcastMode));
+                            OnReverseBroadcastModeChanging(old,value);
+                            reverseBroadcastMode = value;
+                            OnReverseBroadcastModeChanged(old,value);
+                            OnPropertyChanged(nameof(ReverseBroadcastMode));
+                         }
+                     }
+                     partial void OnReverseBroadcastModeChanging({{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode newValue);
+                     partial void OnReverseBroadcastModeChanged({{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode newValue);
 
                     private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_MoveCommand = null;
                     public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand MoveCommand
@@ -767,6 +852,17 @@ namespace VeloxDev.Core.Generator.Writers
                           return _buffer_BroadcastCommand;
                        }
                     }
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_ReverseBroadcastCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand ReverseBroadcastCommand
+                    {
+                       get
+                       {
+                          _buffer_ReverseBroadcastCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              command: ReverseBroadcast,
+                              canExecute: _ => true);
+                          return _buffer_ReverseBroadcastCommand;
+                       }
+                    }
                     private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_CloseCommand = null;
                     public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand CloseCommand
                     {
@@ -783,14 +879,13 @@ namespace VeloxDev.Core.Generator.Writers
         private void GenerateSlotBody(StringBuilder sb, SlotAttributeModel model)
         {
             sb.AppendLine($$"""
-        public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+        public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
 
         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> targets = [];
         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> sources = [];
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel? parent = null;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel channel = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel.OneBoth;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState state = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState.StandBy;
-        private {{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint visualPoint = new();
         private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
         private {{NAMESPACE_VELOX_WORKFLOW}}.Offset offset = new();
         private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
@@ -916,22 +1011,6 @@ namespace VeloxDev.Core.Generator.Writers
         }
         partial void OnStateChanging({{NAMESPACE_VELOX_IWORKFLOW}}.SlotState oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.SlotState newValue);
         partial void OnStateChanged({{NAMESPACE_VELOX_IWORKFLOW}}.SlotState oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.SlotState newValue);
-        public {{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint VisualPoint
-        {
-            get => visualPoint;
-            set
-            {
-               if({{ObjectFullName}}.Equals(visualPoint,value)) return;
-               var old = visualPoint;
-               OnPropertyChanging(nameof(VisualPoint));
-               OnVisualPointChanging(old, value);
-               visualPoint = value;
-               OnVisualPointChanged(old, value);
-               OnPropertyChanged(nameof(VisualPoint));
-            }
-        }
-        partial void OnVisualPointChanging({{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint oldValue, {{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint newValue);
-        partial void OnVisualPointChanged({{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint oldValue, {{NAMESPACE_VELOX_WORKFLOW}}.VisualPoint newValue);
         public {{NAMESPACE_VELOX_WORKFLOW}}.Anchor Anchor
         {
             get => anchor;
@@ -1052,7 +1131,7 @@ namespace VeloxDev.Core.Generator.Writers
         private void GenerateLinkBody(StringBuilder sb, LinkAttributeModel model)
         {
             sb.AppendLine($$"""
-        public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+        public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
 
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel sender = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel receiver = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();

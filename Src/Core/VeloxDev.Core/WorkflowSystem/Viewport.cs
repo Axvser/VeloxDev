@@ -19,7 +19,7 @@ public readonly struct Viewport(double left, double top, double width, double he
                top + height > Top;
     }
     public bool IntersectsWith(Viewport other) => IntersectsWith(other.Left, other.Top, other.Width, other.Height);
-    public bool Contains(double x, double y) => x >= Left && x < Right && y >= Top && y < Bottom; 
+    public bool Contains(double x, double y) => x >= Left && x < Right && y >= Top && y < Bottom;
     public bool Contains(Viewport other)
     {
         return other.Left >= Left &&

@@ -1,7 +1,7 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
-using Demo.ViewModels.Workflow.Helper;
+﻿using Demo.ViewModels.Workflow.Helper;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.Core.Extension;
@@ -19,19 +19,32 @@ public partial class TreeViewModel
     // …… 自由扩展您的工作流树视图模型
 
     [VeloxProperty] private CanvasLayout layout = new();
-
     [VeloxProperty] private ObservableCollection<IWorkflowViewModel> _visibleItems = [];
+    [VeloxProperty] private ObservableCollection<string> executionLog = [];
 
-    [VeloxCommand]
-    private void PlusScale()
+    public void ResetExecutionLog()
     {
-        Layout.OriginScale += new Scale(x: 0.1, y: 0.1);
+        ExecutionLog.Clear();
+
+        foreach (var node in Nodes.OfType<NodeViewModel>())
+        {
+            node.LastExecutionOrder = 0;
+            node.LastExecutionTrace = "未执行";
+            node.LastStatus = "Idle";
+            node.LastDuration = "-";
+            node.LastError = string.Empty;
+            node.IsRunning = false;
+        }
     }
 
-    [VeloxCommand]
-    private void MinusScale(object? param)
+    public void AppendExecutionLog(string entry)
     {
-        Layout.OriginScale -= new Scale(x: 0.1, y: 0.1);
+        if (string.IsNullOrWhiteSpace(entry))
+        {
+            return;
+        }
+
+        ExecutionLog.Add(entry);
     }
 
     [VeloxCommand]
@@ -46,6 +59,6 @@ public partial class TreeViewModel
     [VeloxCommand]
     private async Task Test(CancellationToken ct)
     {
-        
+
     }
 }

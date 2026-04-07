@@ -1,9 +1,7 @@
 ﻿using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using System;
 using System.Collections.Generic;
-using System.Text;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Avalonia.PlatformAdapters.Interpolators

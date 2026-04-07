@@ -8,7 +8,7 @@ namespace VeloxDev.Core.Interfaces.DynamicTheme
 
         public void ExecuteThemeChanging(Type? oldValue, Type? newValue);
         public void ExecuteThemeChanged(Type? oldValue, Type? newValue);
-        
+
         public void SetThemeValue<T>(string propertyName, object? newValue) where T : ITheme;
         public void RestoreThemeValue<T>(string propertyName) where T : ITheme;
 

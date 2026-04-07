@@ -172,7 +172,13 @@ namespace VeloxDev.Core.WorkflowSystem
                     object? parameter,
                     CancellationToken ct)
                 {
-                    if (component is not null) await component.StandardBroadcastAsync(parameter, ct);
+                    if (component is not null) await component.StandardBroadcastAsync(parameter, component.ResolveConfiguredBroadcastMode(WorkflowBroadcastMode.Parallel), ct);
+                }
+                public virtual async Task ReverseBroadcastAsync(
+                    object? parameter,
+                    CancellationToken ct)
+                {
+                    if (component is not null) await component.StandardReverseBroadcastAsync(parameter, component.ResolveConfiguredReverseBroadcastMode(WorkflowBroadcastMode.Parallel), ct);
                 }
                 public virtual Task WorkAsync(
                     object? parameter,

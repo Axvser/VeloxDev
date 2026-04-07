@@ -1,10 +1,26 @@
 ﻿using VeloxDev.Core.Interfaces.MVVM;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
+using VeloxDev.Core.MVVM;
 
 namespace VeloxDev.Core.WorkflowSystem.StandardEx;
 
 public static class WorkflowNodeEx
 {
+    private static readonly AsyncLocal<WorkflowBroadcastContext?> CurrentBroadcastContext = new();
+    private static readonly AsyncLocal<WorkflowBroadcastContext?> CurrentReverseBroadcastContext = new();
+
+    public static bool IsOrderedBroadcastInProgress()
+        => CurrentBroadcastContext.Value is not null;
+
+    public static bool IsOrderedReverseBroadcastInProgress()
+        => CurrentReverseBroadcastContext.Value is not null;
+
+    public static WorkflowBroadcastMode ResolveConfiguredBroadcastMode(this IWorkflowNodeViewModel component, WorkflowBroadcastMode inheritedMode)
+        => component?.BroadcastMode ?? inheritedMode;
+
+    public static WorkflowBroadcastMode ResolveConfiguredReverseBroadcastMode(this IWorkflowNodeViewModel component, WorkflowBroadcastMode inheritedMode)
+        => component?.ReverseBroadcastMode ?? inheritedMode;
+
     public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands
         (this IWorkflowNodeViewModel component)
         =>
@@ -14,7 +30,8 @@ public static class WorkflowNodeEx
             component.CreateSlotCommand,
             component.DeleteCommand,
             component.WorkCommand,
-            component.BroadcastCommand
+            component.BroadcastCommand,
+            component.ReverseBroadcastCommand
         ];
 
     public static void StandardCreateSlot(this IWorkflowNodeViewModel component, IWorkflowSlotViewModel slot)
@@ -57,6 +74,48 @@ public static class WorkflowNodeEx
             slot.GetHelper().UpdateLayout();
         }
     }
+
+    public static async Task StandardReverseBroadcastAsync(this IWorkflowNodeViewModel component, object? parameter, WorkflowBroadcastMode mode = WorkflowBroadcastMode.Parallel, CancellationToken ct = default)
+    {
+        if (component is null || component.Parent is null) return;
+
+        var previous = CurrentReverseBroadcastContext.Value;
+        var effectiveMode = component.ResolveConfiguredReverseBroadcastMode(mode);
+
+        if (previous is null && effectiveMode == WorkflowBroadcastMode.Parallel)
+        {
+            await StandardReverseBroadcastParallelAsync(component, parameter, ct).ConfigureAwait(false);
+            return;
+        }
+
+        var isRoot = previous is null;
+        var context = previous ?? new WorkflowBroadcastContext();
+
+        if (isRoot)
+        {
+            CurrentReverseBroadcastContext.Value = context;
+        }
+
+        try
+        {
+            if (isRoot)
+            {
+                if (!context.TryVisit(component)) return;
+                await ExecuteReverseNodeAsync(component, parameter, effectiveMode, context, ct).ConfigureAwait(false);
+                return;
+            }
+
+            var sources = await GetValidSourceNodesAsync(component, parameter, context, ct).ConfigureAwait(false);
+            await DispatchReverseNodesAsync(sources, parameter, effectiveMode, context, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (isRoot)
+            {
+                CurrentReverseBroadcastContext.Value = null;
+            }
+        }
+    }
     public static void StandardSetLayer(this IWorkflowNodeViewModel component, int layer)
     {
         if (component is null) return;
@@ -74,6 +133,37 @@ public static class WorkflowNodeEx
             slot.GetHelper().UpdateLayout();
         }
     }
+
+    private static async Task StandardReverseBroadcastParallelAsync(IWorkflowNodeViewModel component, object? parameter, CancellationToken ct)
+    {
+        if (component is null || component.Parent is null) return;
+
+        var validationTasks = new List<Task<(IWorkflowNodeViewModel Node, bool IsValid)>>();
+        foreach (var receiver in component.Slots.ToArray())
+        {
+            foreach (var sender in receiver.Sources.ToArray())
+            {
+                var senderNode = sender.Parent;
+                if (senderNode is null)
+                {
+                    continue;
+                }
+
+                validationTasks.Add(
+                    senderNode.GetHelper().ValidateBroadcastAsync(sender, receiver, parameter, ct)
+                        .ContinueWith(t => (senderNode, t.Result)));
+            }
+        }
+
+        var validationResults = await Task.WhenAll(validationTasks).ConfigureAwait(false);
+        foreach (var (node, isValid) in validationResults)
+        {
+            if (isValid)
+            {
+                node.WorkCommand.Execute(parameter);
+            }
+        }
+    }
     public static void StandardMove(this IWorkflowNodeViewModel component, Offset offset)
     {
         if (component is null) return;
@@ -86,7 +176,49 @@ public static class WorkflowNodeEx
         }
     }
 
-    public static async Task StandardBroadcastAsync(this IWorkflowNodeViewModel component, object? parameter, CancellationToken ct)
+    public static async Task StandardBroadcastAsync(this IWorkflowNodeViewModel component, object? parameter, WorkflowBroadcastMode mode = WorkflowBroadcastMode.Parallel, CancellationToken ct = default)
+    {
+        if (component?.GetHelper() is null) throw new ArgumentException($"Failed to obtain the Helper instance.");
+
+        var previous = CurrentBroadcastContext.Value;
+        var effectiveMode = component.ResolveConfiguredBroadcastMode(mode);
+
+        if (previous is null && effectiveMode == WorkflowBroadcastMode.Parallel)
+        {
+            await StandardBroadcastParallelAsync(component, parameter, ct).ConfigureAwait(false);
+            return;
+        }
+
+        var isRoot = previous is null;
+        var context = previous ?? new WorkflowBroadcastContext();
+
+        if (isRoot)
+        {
+            CurrentBroadcastContext.Value = context;
+        }
+
+        try
+        {
+            if (isRoot)
+            {
+                if (!context.TryVisit(component)) return;
+                await ExecuteForwardNodeAsync(component, parameter, effectiveMode, context, ct).ConfigureAwait(false);
+                return;
+            }
+
+            var receivers = await GetValidReceiverNodesAsync(component, parameter, context, ct).ConfigureAwait(false);
+            await DispatchForwardNodesAsync(receivers, parameter, effectiveMode, context, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (isRoot)
+            {
+                CurrentBroadcastContext.Value = null;
+            }
+        }
+    }
+
+    private static async Task StandardBroadcastParallelAsync(IWorkflowNodeViewModel component, object? parameter, CancellationToken ct)
     {
         if (component is null || component.Parent is null) return;
 
@@ -116,6 +248,423 @@ public static class WorkflowNodeEx
             if (isValid)
             {
                 receiver.Parent?.WorkCommand.Execute(parameter);
+            }
+        }
+    }
+
+    private static async Task<List<IWorkflowNodeViewModel>> GetValidReceiverNodesAsync(
+        IWorkflowNodeViewModel component,
+        object? parameter,
+        WorkflowBroadcastContext context,
+        CancellationToken ct)
+    {
+        List<IWorkflowNodeViewModel> result = [];
+        foreach (var sender in component.Slots.ToArray())
+        {
+            foreach (var receiver in sender.Targets.ToArray())
+            {
+                var receiverNode = receiver.Parent;
+                if (receiverNode is null)
+                {
+                    continue;
+                }
+
+                if (!await component.GetHelper().ValidateBroadcastAsync(sender, receiver, parameter, ct).ConfigureAwait(false))
+                {
+                    continue;
+                }
+
+                if (context is not null && context.HasVisited(receiverNode))
+                {
+                    continue;
+                }
+
+                result.Add(receiverNode);
+            }
+        }
+
+        return result;
+    }
+
+    private static async Task<List<IWorkflowNodeViewModel>> GetValidSourceNodesAsync(
+        IWorkflowNodeViewModel component,
+        object? parameter,
+        WorkflowBroadcastContext context,
+        CancellationToken ct)
+    {
+        List<IWorkflowNodeViewModel> result = [];
+        foreach (var receiver in component.Slots.ToArray())
+        {
+            foreach (var sender in receiver.Sources.ToArray())
+            {
+                var senderNode = sender.Parent;
+                if (senderNode is null)
+                {
+                    continue;
+                }
+
+                if (!await senderNode.GetHelper().ValidateBroadcastAsync(sender, receiver, parameter, ct).ConfigureAwait(false))
+                {
+                    continue;
+                }
+
+                if (context is not null && context.HasVisited(senderNode))
+                {
+                    continue;
+                }
+
+                result.Add(senderNode);
+            }
+        }
+
+        return result;
+    }
+
+    private static async Task ExecuteForwardNodeAsync(
+        IWorkflowNodeViewModel node,
+        object? parameter,
+        WorkflowBroadcastMode inheritedMode,
+        WorkflowBroadcastContext context,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        await ExecuteQueuedWorkAsync(node, parameter, ct).ConfigureAwait(false);
+        var nextMode = node.ResolveConfiguredBroadcastMode(inheritedMode);
+        var receivers = await GetValidReceiverNodesAsync(node, parameter, context, ct).ConfigureAwait(false);
+        await DispatchForwardNodesAsync(receivers, parameter, nextMode, context, ct).ConfigureAwait(false);
+    }
+
+    private static async Task ExecuteReverseNodeAsync(
+        IWorkflowNodeViewModel node,
+        object? parameter,
+        WorkflowBroadcastMode inheritedMode,
+        WorkflowBroadcastContext context,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        await ExecuteQueuedWorkAsync(node, parameter, ct).ConfigureAwait(false);
+        var nextMode = node.ResolveConfiguredReverseBroadcastMode(inheritedMode);
+        var sources = await GetValidSourceNodesAsync(node, parameter, context, ct).ConfigureAwait(false);
+        await DispatchReverseNodesAsync(sources, parameter, nextMode, context, ct).ConfigureAwait(false);
+    }
+
+    private static async Task DispatchForwardNodesAsync(
+        IReadOnlyList<IWorkflowNodeViewModel> nodes,
+        object? parameter,
+        WorkflowBroadcastMode mode,
+        WorkflowBroadcastContext context,
+        CancellationToken ct)
+    {
+        var scheduled = ScheduleNodes(nodes, mode, context);
+        if (scheduled.Count == 0)
+        {
+            return;
+        }
+
+        switch (mode)
+        {
+            case WorkflowBroadcastMode.Parallel:
+                await Task.WhenAll(scheduled.Select(item => ExecuteForwardNodeAsync(item.Node, parameter, item.Mode, context, ct))).ConfigureAwait(false);
+                break;
+            case WorkflowBroadcastMode.BreadthFirst:
+                await ProcessBreadthFirstForwardAsync(scheduled, parameter, context, ct).ConfigureAwait(false);
+                break;
+            case WorkflowBroadcastMode.DepthFirst:
+                await ProcessDepthFirstForwardAsync(scheduled, parameter, context, ct).ConfigureAwait(false);
+                break;
+        }
+    }
+
+    private static async Task DispatchReverseNodesAsync(
+        IReadOnlyList<IWorkflowNodeViewModel> nodes,
+        object? parameter,
+        WorkflowBroadcastMode mode,
+        WorkflowBroadcastContext context,
+        CancellationToken ct)
+    {
+        var scheduled = ScheduleNodes(nodes, mode, context);
+        if (scheduled.Count == 0)
+        {
+            return;
+        }
+
+        switch (mode)
+        {
+            case WorkflowBroadcastMode.Parallel:
+                await Task.WhenAll(scheduled.Select(item => ExecuteReverseNodeAsync(item.Node, parameter, item.Mode, context, ct))).ConfigureAwait(false);
+                break;
+            case WorkflowBroadcastMode.BreadthFirst:
+                await ProcessBreadthFirstReverseAsync(scheduled, parameter, context, ct).ConfigureAwait(false);
+                break;
+            case WorkflowBroadcastMode.DepthFirst:
+                await ProcessDepthFirstReverseAsync(scheduled, parameter, context, ct).ConfigureAwait(false);
+                break;
+        }
+    }
+
+    private static async Task ProcessBreadthFirstForwardAsync(
+        IReadOnlyList<WorkflowDispatchItem> initialItems,
+        object? parameter,
+        WorkflowBroadcastContext context,
+        CancellationToken ct)
+    {
+        var queue = new Queue<WorkflowDispatchItem>(initialItems);
+        while (queue.Count > 0)
+        {
+            var item = queue.Dequeue();
+            await ExecuteQueuedWorkAsync(item.Node, parameter, ct).ConfigureAwait(false);
+            var nextMode = item.Node.ResolveConfiguredBroadcastMode(item.Mode);
+            var receivers = await GetValidReceiverNodesAsync(item.Node, parameter, context, ct).ConfigureAwait(false);
+            var scheduled = ScheduleNodes(receivers, nextMode, context);
+            if (scheduled.Count == 0)
+            {
+                continue;
+            }
+
+            switch (nextMode)
+            {
+                case WorkflowBroadcastMode.Parallel:
+                    await Task.WhenAll(scheduled.Select(next => ExecuteForwardNodeAsync(next.Node, parameter, next.Mode, context, ct))).ConfigureAwait(false);
+                    break;
+                case WorkflowBroadcastMode.BreadthFirst:
+                    foreach (var next in scheduled)
+                    {
+                        queue.Enqueue(next);
+                    }
+                    break;
+                case WorkflowBroadcastMode.DepthFirst:
+                    await ProcessDepthFirstForwardAsync(scheduled, parameter, context, ct).ConfigureAwait(false);
+                    break;
+            }
+        }
+    }
+
+    private static async Task ProcessDepthFirstForwardAsync(
+        IReadOnlyList<WorkflowDispatchItem> initialItems,
+        object? parameter,
+        WorkflowBroadcastContext context,
+        CancellationToken ct)
+    {
+        var stack = new Stack<WorkflowDispatchItem>();
+        PushItems(stack, initialItems);
+        while (stack.Count > 0)
+        {
+            var item = stack.Pop();
+            await ExecuteQueuedWorkAsync(item.Node, parameter, ct).ConfigureAwait(false);
+            var nextMode = item.Node.ResolveConfiguredBroadcastMode(item.Mode);
+            var receivers = await GetValidReceiverNodesAsync(item.Node, parameter, context, ct).ConfigureAwait(false);
+            var scheduled = ScheduleNodes(receivers, nextMode, context);
+            if (scheduled.Count == 0)
+            {
+                continue;
+            }
+
+            switch (nextMode)
+            {
+                case WorkflowBroadcastMode.Parallel:
+                    await Task.WhenAll(scheduled.Select(next => ExecuteForwardNodeAsync(next.Node, parameter, next.Mode, context, ct))).ConfigureAwait(false);
+                    break;
+                case WorkflowBroadcastMode.BreadthFirst:
+                    await ProcessBreadthFirstForwardAsync(scheduled, parameter, context, ct).ConfigureAwait(false);
+                    break;
+                case WorkflowBroadcastMode.DepthFirst:
+                    PushItems(stack, scheduled);
+                    break;
+            }
+        }
+    }
+
+    private static async Task ProcessBreadthFirstReverseAsync(
+        IReadOnlyList<WorkflowDispatchItem> initialItems,
+        object? parameter,
+        WorkflowBroadcastContext context,
+        CancellationToken ct)
+    {
+        var queue = new Queue<WorkflowDispatchItem>(initialItems);
+        while (queue.Count > 0)
+        {
+            var item = queue.Dequeue();
+            await ExecuteQueuedWorkAsync(item.Node, parameter, ct).ConfigureAwait(false);
+            var nextMode = item.Node.ResolveConfiguredReverseBroadcastMode(item.Mode);
+            var sources = await GetValidSourceNodesAsync(item.Node, parameter, context, ct).ConfigureAwait(false);
+            var scheduled = ScheduleNodes(sources, nextMode, context);
+            if (scheduled.Count == 0)
+            {
+                continue;
+            }
+
+            switch (nextMode)
+            {
+                case WorkflowBroadcastMode.Parallel:
+                    await Task.WhenAll(scheduled.Select(next => ExecuteReverseNodeAsync(next.Node, parameter, next.Mode, context, ct))).ConfigureAwait(false);
+                    break;
+                case WorkflowBroadcastMode.BreadthFirst:
+                    foreach (var next in scheduled)
+                    {
+                        queue.Enqueue(next);
+                    }
+                    break;
+                case WorkflowBroadcastMode.DepthFirst:
+                    await ProcessDepthFirstReverseAsync(scheduled, parameter, context, ct).ConfigureAwait(false);
+                    break;
+            }
+        }
+    }
+
+    private static async Task ProcessDepthFirstReverseAsync(
+        IReadOnlyList<WorkflowDispatchItem> initialItems,
+        object? parameter,
+        WorkflowBroadcastContext context,
+        CancellationToken ct)
+    {
+        var stack = new Stack<WorkflowDispatchItem>();
+        PushItems(stack, initialItems);
+        while (stack.Count > 0)
+        {
+            var item = stack.Pop();
+            await ExecuteQueuedWorkAsync(item.Node, parameter, ct).ConfigureAwait(false);
+            var nextMode = item.Node.ResolveConfiguredReverseBroadcastMode(item.Mode);
+            var sources = await GetValidSourceNodesAsync(item.Node, parameter, context, ct).ConfigureAwait(false);
+            var scheduled = ScheduleNodes(sources, nextMode, context);
+            if (scheduled.Count == 0)
+            {
+                continue;
+            }
+
+            switch (nextMode)
+            {
+                case WorkflowBroadcastMode.Parallel:
+                    await Task.WhenAll(scheduled.Select(next => ExecuteReverseNodeAsync(next.Node, parameter, next.Mode, context, ct))).ConfigureAwait(false);
+                    break;
+                case WorkflowBroadcastMode.BreadthFirst:
+                    await ProcessBreadthFirstReverseAsync(scheduled, parameter, context, ct).ConfigureAwait(false);
+                    break;
+                case WorkflowBroadcastMode.DepthFirst:
+                    PushItems(stack, scheduled);
+                    break;
+            }
+        }
+    }
+
+    private static List<WorkflowDispatchItem> ScheduleNodes(
+        IEnumerable<IWorkflowNodeViewModel> nodes,
+        WorkflowBroadcastMode mode,
+        WorkflowBroadcastContext context)
+    {
+        var scheduled = new List<WorkflowDispatchItem>();
+        foreach (var node in nodes)
+        {
+            if (!context.TryVisit(node))
+            {
+                continue;
+            }
+
+            scheduled.Add(new WorkflowDispatchItem(node, mode));
+        }
+
+        return scheduled;
+    }
+
+    private static void PushItems(Stack<WorkflowDispatchItem> stack, IReadOnlyList<WorkflowDispatchItem> items)
+    {
+        for (var i = items.Count - 1; i >= 0; i--)
+        {
+            stack.Push(items[i]);
+        }
+    }
+
+    private static async Task ExecuteQueuedWorkAsync(IWorkflowNodeViewModel node, object? parameter, CancellationToken ct)
+    {
+        var command = node.WorkCommand;
+        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationTokenRegistration registration = default;
+        var terminalRaised = false;
+
+        CommandEventHandler? onCompleted = null;
+        CommandEventHandler? onFailed = null;
+        CommandEventHandler? onCanceled = null;
+        CommandEventHandler? onExited = null;
+
+        void Cleanup()
+        {
+            command.Completed -= onCompleted!;
+            command.Failed -= onFailed!;
+            command.Canceled -= onCanceled!;
+            command.Exited -= onExited!;
+            registration.Dispose();
+        }
+
+        onCompleted = _ =>
+        {
+            terminalRaised = true;
+            Cleanup();
+            tcs.TrySetResult(null);
+        };
+        onFailed = e =>
+        {
+            terminalRaised = true;
+            Cleanup();
+            tcs.TrySetException(e.Exception ?? new InvalidOperationException("The workflow node work command failed."));
+        };
+        onCanceled = _ =>
+        {
+            terminalRaised = true;
+            Cleanup();
+            tcs.TrySetCanceled(ct);
+        };
+        onExited = _ =>
+        {
+            if (terminalRaised)
+            {
+                return;
+            }
+
+            Cleanup();
+            tcs.TrySetResult(null);
+        };
+
+        command.Completed += onCompleted;
+        command.Failed += onFailed;
+        command.Canceled += onCanceled;
+        command.Exited += onExited;
+
+        if (ct.CanBeCanceled)
+        {
+            registration = ct.Register(() =>
+            {
+                Cleanup();
+                tcs.TrySetCanceled(ct);
+            });
+        }
+
+        _ = command.ExecuteAsync(parameter);
+        await tcs.Task.ConfigureAwait(false);
+    }
+
+    private sealed class WorkflowDispatchItem(IWorkflowNodeViewModel node, WorkflowBroadcastMode mode)
+    {
+        public IWorkflowNodeViewModel Node { get; } = node;
+        public WorkflowBroadcastMode Mode { get; } = mode;
+    }
+
+    private sealed class WorkflowBroadcastContext
+    {
+        private readonly object _syncRoot = new();
+        private readonly HashSet<IWorkflowNodeViewModel> _visited = [];
+
+        public bool HasVisited(IWorkflowNodeViewModel node)
+        {
+            lock (_syncRoot)
+            {
+                return _visited.Contains(node);
+            }
+        }
+
+        public bool TryVisit(IWorkflowNodeViewModel node)
+        {
+            lock (_syncRoot)
+            {
+                return _visited.Add(node);
             }
         }
     }
@@ -183,7 +732,6 @@ public static class WorkflowNodeEx
         ));
     }
 
-    // 删除Node的核心逻辑
     private static void ExecuteNodeDeletion(
         IWorkflowTreeViewModel tree,
         IWorkflowNodeViewModel node,
@@ -224,7 +772,6 @@ public static class WorkflowNodeEx
         UpdateAllAffectedStates(connections, node.Slots);
     }
 
-    // 恢复Node的核心逻辑
     private static void RestoreNode(
         IWorkflowTreeViewModel tree,
         IWorkflowNodeViewModel node,
@@ -316,7 +863,6 @@ public static class WorkflowNodeEx
         }
     }
 
-    // 批量更新状态方法
     private static void UpdateAllAffectedStates(
         List<IWorkflowLinkViewModel> connections,
         IList<IWorkflowSlotViewModel> slots)

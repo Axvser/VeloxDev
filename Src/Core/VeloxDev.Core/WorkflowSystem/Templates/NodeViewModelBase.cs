@@ -16,6 +16,8 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         [VeloxProperty] private Anchor anchor = new();
         [VeloxProperty] private Size size = new();
         [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> slots = [];
+        [VeloxProperty] private WorkflowBroadcastMode broadcastMode = WorkflowBroadcastMode.Parallel;
+        [VeloxProperty] private WorkflowBroadcastMode reverseBroadcastMode = WorkflowBroadcastMode.Parallel;
 
         [VeloxCommand]
         protected virtual Task Move(object? parameter, CancellationToken ct)
@@ -60,6 +62,11 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         protected virtual async Task Broadcast(object? parameter, CancellationToken ct)
         {
             await Helper.BroadcastAsync(parameter, ct);
+        }
+        [VeloxCommand]
+        protected virtual async Task ReverseBroadcast(object? parameter, CancellationToken ct)
+        {
+            await Helper.ReverseBroadcastAsync(parameter, ct);
         }
         [VeloxCommand]
         protected virtual async Task Close(object? parameter, CancellationToken ct)

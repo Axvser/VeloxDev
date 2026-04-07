@@ -17,7 +17,6 @@ namespace VeloxDev.Core.WorkflowSystem.Templates
         [VeloxProperty] private IWorkflowNodeViewModel? parent = null;
         [VeloxProperty] private SlotChannel channel = SlotChannel.OneBoth;
         [VeloxProperty] private SlotState state = SlotState.StandBy;
-        [VeloxProperty] private VisualPoint visualPoint = new();
         [VeloxProperty] private Anchor anchor = new();
         [VeloxProperty] private Offset offset = new();
         [VeloxProperty] private Size size = new();

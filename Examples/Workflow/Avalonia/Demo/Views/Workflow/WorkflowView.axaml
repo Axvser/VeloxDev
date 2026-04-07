@@ -57,7 +57,6 @@
 							Height="{Binding Layout.ActualSize.Height}"
 							HorizontalAlignment="Left"
 							VerticalAlignment="Top"
-							RenderTransform="{Binding $parent[local:WorkflowView].GlobalScale}"
 							local:ViewPool.ItemsSource="{Binding VisibleItems}">
 						<Canvas.DataTemplates>
 							<!-- 依照优先级寻找数据模板 >> Self > Parent > App -->
@@ -75,13 +74,24 @@
 					<Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" />
 					<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
 					<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
-					<Button Content="Simulate" Width="100" Height="50" Click="SimulateData" />
-					<Button Content="放大" Width="100" Height="50" Click="PlusScale" />
-					<Button Content="缩小" Width="100" Height="50" Click="MinusScale" />
+                  <Button Content="Load HTTP Demo" Width="120" Height="50" Click="LoadNetworkDemo" />
 					<TextBlock Text="节点总数：" />
 					<TextBlock Text="{Binding Nodes.Count}"/>
 					<TextBlock Text="可见组件数：( Node / Link )" />
 					<TextBlock Text="{Binding VisibleItems.Count}" />
+                 <Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
+						<StackPanel Spacing="6">
+							<TextBlock Text="实际执行顺序" Foreground="#7ec8ff" FontWeight="Bold"/>
+							<TextBlock Text="{Binding ExecutionLog.Count, StringFormat=已记录: {0}}" Foreground="#bdbdbd"/>
+							<ItemsControl ItemsSource="{Binding ExecutionLog}">
+								<ItemsControl.ItemTemplate>
+									<DataTemplate>
+										<TextBlock Text="{Binding .}" Foreground="#d8d8d8" TextWrapping="Wrap"/>
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
+						</StackPanel>
+					</Border>
 					<local:Rocker x:Name="PART_ROCKER" Width="100" Height="100" Foreground="Lime"/>
 				</StackPanel>
 			</ScrollViewer>

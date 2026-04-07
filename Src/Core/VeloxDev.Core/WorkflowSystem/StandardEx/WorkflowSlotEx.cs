@@ -99,24 +99,6 @@ public static class WorkflowSlotEx
     public static void StandardUpdateLayout(this IWorkflowSlotViewModel component)
     {
         if (component.Parent is null) return;
-        var baseLeft = component.VisualPoint.Unit is VisualUnit.Relative ? component.Parent.Size.Width * component.VisualPoint.Left : component.VisualPoint.Left;
-        var baseTop = component.VisualPoint.Unit is VisualUnit.Relative ? component.Parent.Size.Height * component.VisualPoint.Top : component.VisualPoint.Top;
-        var leftOffset = component.VisualPoint.Alignment switch
-        {
-            Alignments.TopLeft or Alignments.CenterLeft or Alignments.BottomLeft => 0d,
-            Alignments.TopCenter or Alignments.Center or Alignments.BottomCenter => component.Size.Width * 0.5d,
-            Alignments.TopRight or Alignments.CenterRight or Alignments.BottomRight => component.Size.Width,
-            _ => 0d
-        };
-        var topOffset = component.VisualPoint.Alignment switch
-        {
-            Alignments.TopLeft or Alignments.TopCenter or Alignments.TopRight => 0d,
-            Alignments.CenterLeft or Alignments.Center or Alignments.CenterRight => component.Size.Height * 0.5d,
-            Alignments.BottomLeft or Alignments.BottomCenter or Alignments.BottomRight => component.Size.Height,
-            _ => 0d
-        };
-        component.Offset.Left = baseLeft - leftOffset;
-        component.Offset.Top = baseTop - topOffset;
         component.Anchor.Left = component.Parent.Anchor.Left + component.Offset.Left + component.Size.Width / 2;
         component.Anchor.Top = component.Parent.Anchor.Top + component.Offset.Top + component.Size.Height / 2;
         component.OnPropertyChanged(nameof(component.Anchor));

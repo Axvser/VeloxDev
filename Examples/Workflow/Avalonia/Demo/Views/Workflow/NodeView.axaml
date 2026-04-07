@@ -6,156 +6,155 @@
 			 x:Class="Demo.NodeView"
 			 xmlns:local="using:Demo"
 			 xmlns:vm="using:Demo.ViewModels"
+          ClipToBounds="False"
 			 x:DataType="vm:NodeViewModel">
-	<Grid RowDefinitions="10*,80*,25*">
-		<!-- 渲染连接器 -->
-		<Canvas Grid.RowSpan="3"
-				Width="{Binding $parent[Grid].Bounds.Width}"
-				Height="{Binding $parent[Grid].Bounds.Height}"
-				ZIndex="6"
-				local:ViewPool.ItemsSource="{Binding Slots}">
-			<Canvas.DataTemplates>
-				<DataTemplate DataType="vm:SlotViewModel">
-					<local:SlotView Width="{Binding Size.Width}"
-									Height="{Binding Size.Height}"
-									Canvas.Left="{Binding Offset.Left}"
-									Canvas.Top="{Binding Offset.Top}"
-									SlotState="{Binding State}"/>
-				</DataTemplate>
-			</Canvas.DataTemplates>
-			<!-- 不同状态下反馈不同的颜色 -->
-			<Canvas.Styles>
+    <Grid RowDefinitions="52,*,54" ClipToBounds="False">
+		<Border Grid.RowSpan="3"
+				CornerRadius="6"
+				BorderThickness="1.5"
+               BorderBrush="{Binding ChromeBorderBrush}"
+				Background="{Binding ChromeBackground}">
+		</Border>
+
+		<Grid Grid.RowSpan="3" ZIndex="6" ClipToBounds="False">
+			<Grid.Styles>
 				<Style Selector="local|SlotView">
 					<Setter Property="Foreground" Value="White"/>
 				</Style>
-				<!-- 发送端 -->
 				<Style Selector="local|SlotView[SlotState=8]">
 					<Setter Property="Foreground" Value="Tomato"/>
 				</Style>
-				<!-- 接收端 -->
 				<Style Selector="local|SlotView[SlotState=16]">
 					<Setter Property="Foreground" Value="Lime"/>
 				</Style>
-				<!-- 双向端 -->
 				<Style Selector="local|SlotView[SlotState=24]">
 					<Setter Property="Foreground" Value="Violet"/>
 				</Style>
-			</Canvas.Styles>
-		</Canvas>
+			</Grid.Styles>
+
+			<local:SlotView x:Name="PART_InputSlot"
+						 Width="20"
+						 Height="20"
+						 HorizontalAlignment="Left"
+						 VerticalAlignment="Center"
+						 Margin="-10,0,0,0"
+						 DataContext="{Binding InputSlot}"
+                       IsVisible="{Binding $parent[local:NodeView].DataContext.HasInputSlot}"
+						 SlotState="{Binding State}"/>
+
+			<local:SlotView x:Name="PART_OutputSlot"
+						 Width="20"
+						 Height="20"
+						 HorizontalAlignment="Right"
+						 VerticalAlignment="Center"
+						 Margin="0,0,-10,0"
+						 DataContext="{Binding OutputSlot}"
+                       IsVisible="{Binding $parent[local:NodeView].DataContext.HasOutputSlot}"
+						 SlotState="{Binding State}"/>
+		</Grid>
 
 		<!-- 标题栏 -->
 		<Border Grid.Row="0"
-				Background="#2d2d2d"
+                Background="{Binding HeaderBackground}"
 				CornerRadius="4,4,0,0"
 				BorderThickness="0,0,0,0.5"
-				BorderBrush="Gray"
+              BorderBrush="{Binding HeaderBorderBrush}"
 				PointerPressed="OnPointerPressed"
 				PointerReleased="OnPointerReleased"
 				PointerMoved="OnPointerMoved"
 				PointerCaptureLost="OnPointerCaptureLost">
-			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-				<TextBlock Text=" SSH Connector " Foreground="White" VerticalAlignment="Center"/>
-			</StackPanel>
+			<Grid ColumnDefinitions="*,Auto" Margin="12,0">
+				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+					<TextBlock Text="{Binding Title}" Foreground="White" VerticalAlignment="Center" FontWeight="Bold"/>
+					<TextBlock Text="•" Foreground="#7ec8ff" VerticalAlignment="Center"/>
+					<TextBlock Text="{Binding Method}" Foreground="#7ec8ff" VerticalAlignment="Center"/>
+                   <Border Background="#1f3d1f"
+							BorderBrush="#7bd97b"
+							BorderThickness="1"
+							CornerRadius="10"
+							Padding="6,1"
+							IsVisible="{Binding HasExecutionOrder}">
+						<TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold" VerticalAlignment="Center"/>
+					</Border>
+				</StackPanel>
+				<StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="0">
+					<TextBlock Text="耗时" Foreground="#bfbfbf" FontSize="10" HorizontalAlignment="Right"/>
+                 <TextBlock Text="{Binding LastDuration}" Foreground="{Binding DurationForeground}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Right"/>
+				</StackPanel>
+			</Grid>
 		</Border>
 
-		<!-- 配参区域 -->
-		<Grid Grid.Row="1" Grid.ColumnDefinitions="8*,2*" Background="#2d2d2d">
-			<!-- 参数配置区 -->
-			<Grid Grid.Column="0">
-				<ScrollViewer VerticalScrollBarVisibility="Auto">
-					<StackPanel Margin="20" Spacing="10">
+       <Border Grid.Row="1" Background="#252525">
+			<ScrollViewer VerticalScrollBarVisibility="Auto">
+				<StackPanel Margin="14" Spacing="10">
+					<Grid ColumnDefinitions="110,*">
+						<TextBlock Text="Method" Foreground="#dcdcdc" VerticalAlignment="Center"/>
+						<ComboBox Grid.Column="1"
+								  ItemsSource="{Binding RequestMethods}"
+								  SelectedItem="{Binding Method, Mode=TwoWay}" />
+					</Grid>
 
-						<!-- 主机配置 -->
-						<Grid ColumnDefinitions="100,*" VerticalAlignment="Center">
-							<TextBlock Text="主机:"
-									   Foreground="White"
-									   VerticalAlignment="Center"/>
-							<TextBox Grid.Column="1"
-									 Text="{Binding Host, Mode=TwoWay}"
-									 Watermark="请输入主机地址"
-									 Background="#3d3d3d"
-									 Foreground="White"
-									 BorderBrush="Gray"
-									 BorderThickness="1"
-									 Padding="5"/>
-						</Grid>
+					<Grid ColumnDefinitions="110,*">
+						<TextBlock Text="Capture Key" Foreground="#dcdcdc" VerticalAlignment="Center"/>
+						<TextBox Grid.Column="1" Text="{Binding CaptureKey, Mode=TwoWay}" Watermark="例如 todo / audit"/>
+					</Grid>
 
-						<!-- 端口配置 -->
-						<Grid ColumnDefinitions="100,*" VerticalAlignment="Center">
-							<TextBlock Text="端口:"
-									   Foreground="White"
-									   VerticalAlignment="Center"/>
-							<TextBox Grid.Column="1"
-									 Text="{Binding Port, Mode=TwoWay}"
-									 Watermark="请输入端口号"
-									 Background="#3d3d3d"
-									 Foreground="White"
-									 BorderBrush="Gray"
-									 BorderThickness="1"
-									 Padding="5"/>
-						</Grid>
+					<TextBlock Text="URL" Foreground="#dcdcdc"/>
+					<TextBox Text="{Binding Url, Mode=TwoWay}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="48"/>
 
-						<!-- 用户名配置 -->
-						<Grid ColumnDefinitions="100,*" VerticalAlignment="Center">
-							<TextBlock Text="用户名:"
-									   Foreground="White"
-									   VerticalAlignment="Center"/>
-							<TextBox Grid.Column="1"
-									 Text="{Binding UserName, Mode=TwoWay}"
-									 Watermark="请输入用户名"
-									 Background="#3d3d3d"
-									 Foreground="White"
-									 BorderBrush="Gray"
-									 BorderThickness="1"
-									 Padding="5"/>
-						</Grid>
+					<TextBlock Text="Headers" Foreground="#dcdcdc"/>
+					<TextBox Text="{Binding Headers, Mode=TwoWay}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="56" Watermark="每行一个 Header，例如 Authorization: Bearer {{token.body}}"/>
 
-						<!-- 密码配置 -->
-						<Grid ColumnDefinitions="100,*" VerticalAlignment="Center">
-							<TextBlock Text="密码:"
-									   Foreground="White"
-									   VerticalAlignment="Center"/>
-							<Grid Grid.Column="1" ColumnDefinitions="*,Auto">
-								<TextBox Grid.Column="0"
-										 Text="{Binding PassWord, Mode=TwoWay}"
-										 Watermark="请输入密码"
-										 Background="#3d3d3d"
-										 Foreground="White"
-										 BorderBrush="Gray"
-										 BorderThickness="1"
-										 Padding="5"/>
-							</Grid>
-						</Grid>
+					<TextBlock Text="Body Template" Foreground="#dcdcdc"/>
+					<TextBox Text="{Binding BodyTemplate, Mode=TwoWay}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="84" Watermark="支持 {{last.summary}} / {{todo.body}} 之类的占位符"/>
 
-						<!-- 双因素认证 -->
-						<Grid ColumnDefinitions="100,*" VerticalAlignment="Center">
-							<TextBlock Text="MFA:"
+					<CheckBox IsChecked="{Binding AutoBroadcast, Mode=TwoWay}" Content="请求成功后自动广播到下游" Foreground="#dcdcdc"/>
+
+					<Grid ColumnDefinitions="110,*">
+						<TextBlock Text="Forward Mode" Foreground="#dcdcdc" VerticalAlignment="Center"/>
+						<ComboBox Grid.Column="1"
+								  ItemsSource="{Binding BroadcastModes}"
+                                 SelectedItem="{Binding BroadcastMode, Mode=TwoWay}" />
+					</Grid>
+
+					<Grid ColumnDefinitions="110,*">
+						<TextBlock Text="Reverse Mode" Foreground="#dcdcdc" VerticalAlignment="Center"/>
+						<ComboBox Grid.Column="1"
+								  ItemsSource="{Binding ReverseBroadcastModes}"
+                                  SelectedItem="{Binding ReverseBroadcastMode, Mode=TwoWay}" />
+					</Grid>
+
+                    <Border Background="{Binding ExecutionBackground}" BorderBrush="{Binding ExecutionBorderBrush}" BorderThickness="1.5" CornerRadius="4" Padding="10">
+						<StackPanel Spacing="4">
+							<TextBlock Text="Execution" Foreground="#7ec8ff" FontWeight="Bold"/>
+                          <TextBlock Text="{Binding LastExecutionTrace, StringFormat=Order: {0}}"
+									   Foreground="#9ee79e"
+									   FontWeight="SemiBold"
+									   TextWrapping="Wrap"/>
+							<TextBlock Text="{Binding LastStatus, StringFormat=Status: {0}}"
 									   Foreground="White"
-									   VerticalAlignment="Center"/>
-							<Grid Grid.Column="1" ColumnDefinitions="*,Auto">
-								<TextBox Grid.Column="0"
-										 Text="{Binding MFA, Mode=TwoWay}"
-										 Watermark="请输入双因素认证码"
-										 Background="#3d3d3d"
-										 Foreground="White"
-										 BorderBrush="Gray"
-										 BorderThickness="1"
-										 Padding="5"/>
-							</Grid>
-						</Grid>
-					</StackPanel>
-				</ScrollViewer>
-			</Grid>
-		</Grid>
+									   FontWeight="SemiBold"/>
+							<TextBlock Text="{Binding LastDuration}"
+									   Foreground="{Binding DurationForeground}"
+									   FontSize="24"
+									   FontWeight="Bold"/>
+							<TextBlock Text="{Binding LastError, StringFormat=Error: {0}}" Foreground="#ff9b9b" TextWrapping="Wrap"/>
+							<TextBlock Text="{Binding LastResponsePreview}" Foreground="#cfcfcf" TextWrapping="Wrap" MaxHeight="90"/>
+						</StackPanel>
+					</Border>
+				</StackPanel>
+			</ScrollViewer>
+		</Border>
 
 		<!-- 功能按键 -->
-		<Border Grid.Row="3"
+        <Border Grid.Row="2"
 				Padding="1"
 				Background="#2d2d2d"
 				CornerRadius="0,0,4,4">
-			<Grid ColumnDefinitions="*,*">
-				<Button Grid.Column="0" Content="Start" Command="{Binding WorkCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
-				<Button Grid.Column="1" Content="End" Command="{Binding CloseCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
+          <Grid ColumnDefinitions="*,*,*">
+				<Button Grid.Column="0" Content="Run" Command="{Binding WorkCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
+				<Button Grid.Column="1" Content="Forward" Command="{Binding BroadcastCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
+				<Button Grid.Column="2" Content="Reverse" Command="{Binding ReverseBroadcastCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
 			</Grid>
 		</Border>
 	</Grid>
