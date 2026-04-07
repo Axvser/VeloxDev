@@ -1,6 +1,4 @@
-﻿using System.Reflection;
-
-namespace VeloxDev.Core.Interfaces.TransitionSystem
+﻿namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
     public interface IUIThreadInspector : IUIThreadInspectorCore
     {
@@ -17,7 +15,7 @@ namespace VeloxDev.Core.Interfaces.TransitionSystem
         public bool IsAppAlive();
         public bool IsUIThread();
         public abstract void ProtectedInvoke(bool isUIThread, Action action, object? priority = default);
-        public object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo);
+        public object? ProtectedGetValue(bool isUIThread, object target, ITransitionProperty property);
         public abstract List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate);
     }
 }

@@ -13,8 +13,8 @@
 		<Description>VeloxDev.Core + WinForms</Description>
 	</PropertyGroup>
 
-	<ItemGroup>
-	  <PackageReference Include="VeloxDev.Core" Version="$(Version)" />
+ <ItemGroup>
+		<ProjectReference Include="..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
 	</ItemGroup>
 
 </Project>

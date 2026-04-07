@@ -50,7 +50,7 @@ namespace VeloxDev.Avalonia.PlatformAdapters
             where T : class
         {
             var snapshot = new Transition<T>.StateSnapshot();
-            var excludedProperties = new HashSet<PropertyInfo>();
+            var excludedProperties = new HashSet<ITransitionProperty>();
 
             // 获取排除的属性
             if (excludedExpressions?.Length > 0)
@@ -66,7 +66,9 @@ namespace VeloxDev.Avalonia.PlatformAdapters
 
             // 拍摄除排除属性外的所有属性
             var allProperties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                                        .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0 && !excludedProperties.Contains(p));
+                                        .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)
+                                        .Select(TransitionProperty.FromProperty)
+                                        .Where(p => !excludedProperties.Contains(p));
 
             foreach (var property in allProperties)
             {
@@ -77,24 +79,22 @@ namespace VeloxDev.Avalonia.PlatformAdapters
             return snapshot;
         }
 
-        private static bool TryGetPropertyFromExpression<T>(Expression<Func<T, object?>> expression, out PropertyInfo? property)
+        private static bool TryGetPropertyFromExpression<T>(Expression<Func<T, object?>> expression, out ITransitionProperty? property)
             where T : class
         {
             property = null;
-
-            if (expression.Body is MemberExpression memberExpr)
+            if (!TransitionProperty.TryCreate(expression, out var parsed) || parsed is null)
             {
-                property = memberExpr.Member as PropertyInfo;
-            }
-            else if (expression.Body is UnaryExpression unaryExpr &&
-                     unaryExpr.Operand is MemberExpression unaryMemberExpr)
-            {
-                property = unaryMemberExpr.Member as PropertyInfo;
+                return false;
             }
 
-            return property != null &&
-                Interpolator.TryGetInterpolator(property.PropertyType, out _) &&
-                property.GetIndexParameters().Length == 0;
+            if (!Interpolator.TryGetInterpolator(parsed.PropertyType, out _) || parsed.PropertyInfo.GetIndexParameters().Length != 0)
+            {
+                return false;
+            }
+
+            property = parsed;
+            return true;
         }
     }
 

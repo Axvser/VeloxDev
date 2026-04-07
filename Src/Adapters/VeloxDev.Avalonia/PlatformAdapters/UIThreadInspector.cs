@@ -1,7 +1,7 @@
 ﻿using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Avalonia.PlatformAdapters
@@ -12,15 +12,15 @@ namespace VeloxDev.Avalonia.PlatformAdapters
 
         public override bool IsUIThread() => Dispatcher.UIThread?.CheckAccess() ?? default;
 
-        public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
+        public override object? ProtectedGetValue(bool isUIThread, object target, ITransitionProperty property)
         {
             if (isUIThread)
             {
-                return propertyInfo.GetValue(target);
+                return property.GetValue(target);
             }
             else
             {
-                return Dispatcher.UIThread?.Invoke(() => propertyInfo.GetValue(target));
+                return Dispatcher.UIThread?.Invoke(() => property.GetValue(target));
             }
         }
 

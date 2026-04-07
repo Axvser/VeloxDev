@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+﻿using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.MAUI.PlatformAdapters
@@ -9,17 +9,17 @@ namespace VeloxDev.MAUI.PlatformAdapters
 
         public override bool IsUIThread() => Application.Current?.Dispatcher?.IsDispatchRequired == false;
 
-        public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
+        public override object? ProtectedGetValue(bool isUIThread, object target, ITransitionProperty property)
         {
             if (isUIThread)
-                return propertyInfo?.GetValue(target);
+                return property.GetValue(target);
 
             var tcs = new TaskCompletionSource<object?>();
             Application.Current?.Dispatcher?.Dispatch(() =>
             {
                 try
                 {
-                    var value = propertyInfo.GetValue(target);
+                    var value = property.GetValue(target);
                     tcs.SetResult(value);
                 }
                 catch (Exception ex)
@@ -58,7 +58,24 @@ namespace VeloxDev.MAUI.PlatformAdapters
             }
             else
             {
-                Application.Current?.Dispatcher?.Dispatch(action);
+                var tcs = new TaskCompletionSource<object?>();
+                if (Application.Current?.Dispatcher?.Dispatch(() =>
+                {
+                    try
+                    {
+                        action.Invoke();
+                        tcs.SetResult(null);
+                    }
+                    catch (Exception ex)
+                    {
+                        tcs.SetException(ex);
+                    }
+                }) != true)
+                {
+                    throw new InvalidOperationException("Failed to dispatch work to the MAUI UI thread.");
+                }
+
+                tcs.Task.GetAwaiter().GetResult();
             }
         }
     }

@@ -46,7 +46,6 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
-    <Reference Include="VeloxDev.Core, Version=3.3.4.0, Culture=neutral, PublicKeyToken=null" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Form1.cs">
@@ -81,6 +80,10 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core\VeloxDev.Core.csproj">
+      <Project>{6B78643E-39FC-5172-0D95-E029DF70733E}</Project>
+      <Name>VeloxDev.Core</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj">
       <Project>{34195111-c8ca-0f5f-cc75-b76ed3b7fe9f}</Project>
       <Name>VeloxDev.WinForms</Name>

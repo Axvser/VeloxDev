@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+﻿using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.WinForms.PlatformAdapters
@@ -29,14 +29,14 @@ namespace VeloxDev.WinForms.PlatformAdapters
 
         public override bool IsUIThread() => Thread.CurrentThread.ManagedThreadId == _uiThreadId;
 
-        public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
+        public override object? ProtectedGetValue(bool isUIThread, object target, ITransitionProperty property)
         {
-            if (isUIThread) return propertyInfo?.GetValue(target);
+            if (isUIThread) return property.GetValue(target);
 
             var tcs = new TaskCompletionSource<object?>();
             _uiSyncContext?.Post(_ =>
             {
-                try { tcs.SetResult(propertyInfo?.GetValue(target)); }
+                try { tcs.SetResult(property.GetValue(target)); }
                 catch (Exception ex) { tcs.SetException(ex); }
             }, null);
             return tcs.Task.GetAwaiter().GetResult();

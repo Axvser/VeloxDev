@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 using VeloxDev.WinUI.PlatformAdapters;
+using Windows.Foundation;
 
 namespace Demo
 {
@@ -16,6 +17,9 @@ namespace Demo
         {
             InitializeComponent();
 
+            Rec0.RenderTransform = CreateRec0Transform();
+            Rec0.Fill = CreateRec0Brush();
+
             // VeloxDev库在 WinUI 执行动画时，必须手动获取主窗口
             UIThreadInspector.SetWindow(this);
 
@@ -24,7 +28,7 @@ namespace Demo
             // 其中，若 Snapshot() 不指定目标属性，则视作记录所有可读可写的、可插值的实例属性
 
             var snapshot0 = Rec0.Snapshot();
-            var snapshot1 = Rec0.Snapshot(x => x.RenderTransform, x => x.Width);
+            var snapshot1 = Rec0.Snapshot(x => x.RenderTransform, x => x.Fill);
             var snapshot2 = Rec0.SnapshotExcept(x => x.Visibility);
 
             // 于是，可以加载指向 snapshot 的过渡效果
@@ -32,7 +36,7 @@ namespace Demo
 
             btnReset.Click += (s, e) =>
             {
-                snapshot0.Effect(TransitionEffects.Empty).Execute(Rec0);
+                CreateRec0Reset().Execute(Rec0);
             };
         }
 
@@ -87,16 +91,45 @@ namespace Demo
         // static 的 Transition<> 字段在 非UIThread 中使用，可能抛出 TypeInitialization 等异常
         // 若希望是 static 的，需要确保这个字段在 UIThread 中实例化
 
-        // 简单动画
+        // 简单动画：演示嵌套属性路径，直接修改 RenderTransform.X，同时配合渐变变化
         private readonly Transition<Rectangle>.StateSnapshot Animation0 =
             Transition<Rectangle>.Create()
-                .Property(r => r.RenderTransform, [new TranslateTransform() { X = 800, Y = 0 }])
+                .Property(r => ((TranslateTransform)r.RenderTransform).X, 400)
+                .Property(r => ((LinearGradientBrush)r.Fill).StartPoint, new Point(0, 1))
+                .Property(r => ((LinearGradientBrush)r.Fill).EndPoint, new Point(1, 1))
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(1),
                     IsAutoReverse = true,
                     LoopTime = 2
                 });
+
+        private static TranslateTransform CreateRec0Transform()
+        {
+            return new TranslateTransform() { X = 0, Y = 0 };
+        }
+
+        private static LinearGradientBrush CreateRec0Brush()
+        {
+            return new LinearGradientBrush()
+            {
+                StartPoint = new Point(0, 0),
+                EndPoint = new Point(1, 0),
+                GradientStops =
+                [
+                    new GradientStop() { Color = Colors.Cyan, Offset = 0 },
+                    new GradientStop() { Color = Colors.Yellow, Offset = 1 },
+                ]
+            };
+        }
+
+        private static Transition<Rectangle>.StateSnapshot CreateRec0Reset()
+        {
+            return Transition<Rectangle>.Create()
+                .Property(r => r.RenderTransform, [CreateRec0Transform()])
+                .Property(r => r.Fill, CreateRec0Brush())
+                .Effect(TransitionEffects.Empty);
+        }
 
         // 延迟动画
         private readonly Transition<Rectangle>.StateSnapshot Animation1 =

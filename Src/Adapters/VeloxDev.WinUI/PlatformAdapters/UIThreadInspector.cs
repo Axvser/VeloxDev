@@ -6,8 +6,8 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Threading.Tasks;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 using WinRT.Interop;
 
@@ -34,17 +34,17 @@ namespace VeloxDev.WinUI.PlatformAdapters
 
         public override bool IsUIThread() => DispatcherQueue?.HasThreadAccess ?? false;
 
-        public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
+        public override object? ProtectedGetValue(bool isUIThread, object target, ITransitionProperty property)
         {
             if (isUIThread)
-                return propertyInfo?.GetValue(target);
+                return property.GetValue(target);
 
             var tcs = new TaskCompletionSource<object?>();
             DispatcherQueue?.TryEnqueue(() =>
             {
                 try
                 {
-                    var value = propertyInfo.GetValue(target);
+                    var value = property.GetValue(target);
                     tcs.SetResult(value);
                 }
                 catch (Exception ex)
@@ -83,10 +83,24 @@ namespace VeloxDev.WinUI.PlatformAdapters
                 return;
             }
 
-            DispatcherQueue?.TryEnqueue(priority, () =>
+            var tcs = new TaskCompletionSource<object?>();
+            if (DispatcherQueue?.TryEnqueue(priority, () =>
             {
-                action();
-            });
+                try
+                {
+                    action();
+                    tcs.SetResult(null);
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            }) != true)
+            {
+                throw new InvalidOperationException("Failed to dispatch work to the WinUI UI thread.");
+            }
+
+            tcs.Task.GetAwaiter().GetResult();
         }
     }
 }

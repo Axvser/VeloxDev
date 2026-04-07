@@ -137,7 +137,7 @@ namespace Demo
             // 说明标签
             var lblDescription = new Label
             {
-                Text = "VeloxDev动画演示 - 红色面板：移动动画，绿色面板：缩放动画，蓝色面板：组合动画",
+                Text = "VeloxDev动画演示 - 红色面板：移动 + 父容器背景色(嵌套属性)，绿色面板：缩放动画，蓝色面板：组合动画",
                 Location = new Point(100, 50),
                 Size = new Size(600, 30),
                 Font = new Font("微软雅黑", 9),
@@ -166,7 +166,7 @@ namespace Demo
         {
 
             // 创建初始快照
-            initialSnapshot1 = panel1.Snapshot();
+            initialSnapshot1 = panel1.Snapshot(x => x.Location, x => x.BackColor, x => x.Parent.BackColor);
             initialSnapshot2 = panel2.Snapshot();
             initialSnapshot3 = panel3.Snapshot();
 
@@ -240,6 +240,7 @@ namespace Demo
         private static readonly Transition<Control>.StateSnapshot Animation0 =
             Transition<Control>.Create()
                 .Property(c => c.Location, new Point(600, 100))  // 移动到右侧
+                .Property(c => c.Parent.BackColor, Color.Moccasin) // 演示嵌套属性动画
                 .Property(c => c.BackColor, Color.Orange)         // 变为橙色
                 .Effect(new TransitionEffect()
                 {

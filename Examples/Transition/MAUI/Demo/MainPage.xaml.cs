@@ -12,12 +12,17 @@ namespace Demo
         {
             InitializeComponent();
 
+            Rec0.Fill = CreateRec0Brush();
+
             // VeloxDev动画的核心概念是 "一切皆状态"
             // 对象可以调用 Snapshot() 创建快照
             // 其中，若 Snapshot() 不指定目标属性，则视作记录所有可读可写的、可插值的实例属性
 
             var snapshot0 = Rec0.Snapshot();
-            var snapshot1 = Rec0.Snapshot(x => x.TranslationX, x => x.TranslationY);
+            var snapshot1 = Rec0.Snapshot(
+                x => x.TranslationX,
+                x => ((LinearGradientBrush)x.Fill!).StartPoint,
+                x => ((LinearGradientBrush)x.Fill!).EndPoint);
             var snapshot2 = Rec0.SnapshotExcept(x => x.IsVisible);
 
             // 于是，可以加载指向 snapshot 的过渡效果
@@ -25,7 +30,7 @@ namespace Demo
 
             btnReset.Clicked += (s, e) =>
             {
-                snapshot1.Effect(TransitionEffects.Empty).Execute(Rec0);
+                CreateRec0Reset().Execute(Rec0);
             };
         }
 
@@ -75,23 +80,40 @@ namespace Demo
 
     public partial class MainPage
     {
-        // 简单动画 - 平移
+        // 简单动画：平移 + 演示嵌套属性路径，直接修改 Fill.StartPoint / Fill.EndPoint
         private static readonly Transition<Rectangle>.StateSnapshot Animation0 =
             Transition<Rectangle>.Create()
-                .Property(r => r.Fill, new LinearGradientBrush()
-                {
-                    GradientStops = 
-                    [ 
-                        new GradientStop(Colors.Cyan,0),
-                        new GradientStop(Colors.Yellow,1)
-                    ]
-                })
+                .Property(r => r.TranslationX, 240)
+                .Property(r => ((LinearGradientBrush)r.Fill!).StartPoint, new Point(0, 1))
+                .Property(r => ((LinearGradientBrush)r.Fill!).EndPoint, new Point(1, 1))
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(2),
                     IsAutoReverse = true,
                     LoopTime = 2,
                 });
+
+        private static LinearGradientBrush CreateRec0Brush()
+        {
+            return new LinearGradientBrush()
+            {
+                StartPoint = new Point(0, 0),
+                EndPoint = new Point(1, 0),
+                GradientStops =
+                [
+                    new GradientStop(Colors.Cyan, 0),
+                    new GradientStop(Colors.Yellow, 1)
+                ]
+            };
+        }
+
+        private static Transition<Rectangle>.StateSnapshot CreateRec0Reset()
+        {
+            return Transition<Rectangle>.Create()
+                .Property(r => r.TranslationX, 0)
+                .Property(r => r.Fill, CreateRec0Brush())
+                .Effect(TransitionEffects.Empty);
+        }
 
         // 延迟动画 - 3D旋转
         private static readonly Transition<Rectangle>.StateSnapshot Animation1 =

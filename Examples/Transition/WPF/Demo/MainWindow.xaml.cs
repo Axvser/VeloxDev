@@ -12,12 +12,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        Rec0.RenderTransform = new TranslateTransform();
+
         // VeloxDev动画的核心概念是 "一切皆状态"
         // 对象可以调用 Snapshot() 创建快照
         // 其中，若 Snapshot() 不指定目标属性，则视作记录所有可读可写的、可插值的实例属性
 
         var snapshot0 = Rec0.Snapshot();
-        var snapshot1 = Rec0.Snapshot(x => x.RenderTransform);
+        var snapshot1 = Rec0.Snapshot(x => ((TranslateTransform)x.RenderTransform).X, x => x.Fill, x => x.Opacity);
         var snapshot2 = Rec0.SnapshotExcept(x => x.Visibility);
 
         // 于是，可以加载指向 snapshot 的过渡效果
@@ -75,11 +77,12 @@ public partial class MainWindow : Window
 
 public partial class MainWindow
 {
-    // 简单动画
+    // 简单动画：演示嵌套属性路径，直接修改 RenderTransform.X
     private static readonly Transition<Rectangle>.StateSnapshot Animation0 =
         Transition<Rectangle>.Create()
             .Property(r => r.Opacity, 0)
-            .Property(r => r.RenderTransform, [new TranslateTransform(800, 0)])
+            .Property(r => ((TranslateTransform)r.RenderTransform).X, 800)
+            .Property(r => r.Fill, new SolidColorBrush(Colors.Orange))
             .Effect(new TransitionEffect()
             {
                 Duration = TimeSpan.FromSeconds(2),

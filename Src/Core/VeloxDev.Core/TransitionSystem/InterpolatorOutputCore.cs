@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using VeloxDev.Core.Interfaces.TransitionSystem;
+﻿using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
@@ -47,10 +46,10 @@ namespace VeloxDev.Core.TransitionSystem
     public abstract class InterpolatorOutputBase : IFrameSequenceCore
     {
         public abstract bool CanSetValue();
-        public virtual Dictionary<PropertyInfo, List<object?>> Frames { get; protected set; } = [];
+        public virtual Dictionary<ITransitionProperty, List<object?>> Frames { get; protected set; } = [];
         public virtual int Count { get; protected set; } = 0;
         public abstract void Update(object target, int frameIndex, bool isUIAccess, object? priority = default);
-        public virtual void AddPropertyInterpolations(PropertyInfo propertyInfo, List<object?> objects)
+        public virtual void AddPropertyInterpolations(ITransitionProperty propertyInfo, List<object?> objects)
         {
             if (Frames.TryGetValue(propertyInfo, out _))
             {

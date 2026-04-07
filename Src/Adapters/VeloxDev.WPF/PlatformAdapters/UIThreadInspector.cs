@@ -1,6 +1,6 @@
-﻿using System.Reflection;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Threading;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.WPF.PlatformAdapters
@@ -11,15 +11,15 @@ namespace VeloxDev.WPF.PlatformAdapters
 
         public override bool IsUIThread() => Application.Current?.Dispatcher?.CheckAccess() ?? default;
 
-        public override object? ProtectedGetValue(bool isUIThread, object target, PropertyInfo propertyInfo)
+        public override object? ProtectedGetValue(bool isUIThread, object target, ITransitionProperty property)
         {
             if (isUIThread)
             {
-                return propertyInfo.GetValue(target);
+                return property.GetValue(target);
             }
             else
             {
-                return Application.Current?.Dispatcher?.Invoke(() => propertyInfo.GetValue(target));
+                return Application.Current?.Dispatcher?.Invoke(() => property.GetValue(target));
             }
         }
 

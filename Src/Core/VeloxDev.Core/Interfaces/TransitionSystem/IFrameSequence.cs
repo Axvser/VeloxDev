@@ -1,6 +1,4 @@
-﻿using System.Reflection;
-
-namespace VeloxDev.Core.Interfaces.TransitionSystem
+﻿namespace VeloxDev.Core.Interfaces.TransitionSystem
 {
     public interface IFrameSequence<TPriorityCore> : IFrameSequenceCore
     {
@@ -17,7 +15,7 @@ namespace VeloxDev.Core.Interfaces.TransitionSystem
         public int Count { get; }
         public void SetValues(object target, int frameIndex);
         public void Update(object target, int frameIndex, bool isUIAccess, object? priority = default);
-        public void AddPropertyInterpolations(PropertyInfo propertyInfo, List<object?> objects);
+        public void AddPropertyInterpolations(ITransitionProperty property, List<object?> objects);
         public void SetCount(int count);
     }
 }
