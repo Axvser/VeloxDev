@@ -1,17 +1,55 @@
-﻿using VeloxDev.Core.MVVM;
+﻿using System.Threading;
+using System.Threading.Tasks;
+using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.Core.WorkflowSystem.StandardEx;
 
 namespace Demo.ViewModels;
 
 [WorkflowBuilder.ViewModel.Node<WorkflowHelper.ViewModel.Node>]
 public partial class ControllerViewModel
 {
-    public ControllerViewModel() => InitializeWorkflow();
+    private SlotViewModel? _outputSlot;
 
-    // 作为一个控制器节点而非任务节点
+    public ControllerViewModel()
+    {
+        InitializeWorkflow();
+        BroadcastMode = WorkflowBroadcastMode.BreadthFirst;
+        ReverseBroadcastMode = WorkflowBroadcastMode.DepthFirst;
+    }
+
+    public System.Array BroadcastModes => System.Enum.GetValues<WorkflowBroadcastMode>();
+    public bool HasOutputSlot => _outputSlot is not null;
+
+    public SlotViewModel? OutputSlot
+    {
+        get => _outputSlot;
+        set
+        {
+            if (ReferenceEquals(_outputSlot, value))
+            {
+                return;
+            }
+
+            var oldValue = _outputSlot;
+            OnPropertyChanging(nameof(OutputSlot));
+            oldValue?.GetHelper().Delete();
+            _outputSlot = value;
+            if (value is not null)
+            {
+                GetHelper().CreateSlot(value);
+            }
+
+            OnPropertyChanged(nameof(OutputSlot));
+            OnPropertyChanged(nameof(HasOutputSlot));
+        }
+    }
 
     // 当前系统是否处于运行中
     [VeloxProperty] private bool isActive = false;
+
+    // 流程种子负载
+    [VeloxProperty] private string seedPayload = "demo-request-chain";
 
     // 打开系统
     [VeloxCommand]
@@ -19,7 +57,20 @@ public partial class ControllerViewModel
     {
         if (IsActive) return;
         IsActive = true;
-        await Helper.BroadcastAsync(0, ct); // 假定信号0表示系统开始启动
+        try
+        {
+            if (Parent is TreeViewModel tree)
+            {
+                tree.ResetExecutionLog();
+            }
+
+            var context = NetworkFlowContext.Create(SeedPayload);
+            await this.StandardBroadcastAsync(context, BroadcastMode, ct);
+        }
+        finally
+        {
+            IsActive = false;
+        }
     }
 
     // 安全地终结整个工作流

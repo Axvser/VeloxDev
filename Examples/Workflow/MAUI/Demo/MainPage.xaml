@@ -1,0 +1,100 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Demo.Controls"
+             x:Class="Demo.MainPage"
+             Title="Workflow"
+             BackgroundColor="#020617">
+
+    <Grid RowDefinitions="Auto,*,220" RowSpacing="16" Padding="20">
+        <Border Grid.Row="0"
+                BackgroundColor="#111827"
+                Padding="16"
+                Stroke="#334155"
+                StrokeThickness="1"
+                StrokeShape="RoundRectangle 18">
+            <VerticalStackLayout Spacing="12">
+                <Label Text="VeloxDev Workflow Demo"
+                       FontAttributes="Bold"
+                       FontSize="24"
+                       TextColor="White" />
+                <Label Text="MAUI 版本改为按现有 Workflow Demo 的布局展示流程节点与连线。"
+                       FontSize="14"
+                       TextColor="#CBD5E1" />
+
+                <Grid ColumnDefinitions="2*,*,Auto,Auto,Auto"
+                      ColumnSpacing="12"
+                      RowDefinitions="Auto,Auto">
+                    <Label Text="Seed Payload"
+                           TextColor="#E2E8F0"
+                           FontAttributes="Bold" />
+                    <Label Grid.Column="1"
+                           Text="Broadcast Mode"
+                           TextColor="#E2E8F0"
+                           FontAttributes="Bold" />
+
+                    <Entry Grid.Row="1"
+                           Text="{Binding Controller.SeedPayload}"
+                           Placeholder="demo-request-chain"
+                           ClearButtonVisibility="WhileEditing" />
+
+                    <Picker Grid.Row="1"
+                            Grid.Column="1"
+                            ItemsSource="{Binding Controller.BroadcastModes}"
+                            SelectedItem="{Binding Controller.BroadcastMode}" />
+
+                    <Button Grid.Row="1"
+                            Grid.Column="2"
+                            Text="运行"
+                            Clicked="RunWorkflowAsync" />
+                    <Button Grid.Row="1"
+                            Grid.Column="3"
+                            Text="停止"
+                            Clicked="StopWorkflowAsync" />
+                    <Button Grid.Row="1"
+                            Grid.Column="4"
+                            Text="重置"
+                            Clicked="ReloadDemoAsync" />
+                </Grid>
+            </VerticalStackLayout>
+        </Border>
+
+        <Border Grid.Row="1"
+                BackgroundColor="#0F172A"
+                Padding="0"
+                Stroke="#1E293B"
+                StrokeThickness="1"
+                StrokeShape="RoundRectangle 18">
+            <ScrollView Orientation="Both">
+                <controls:WorkflowSurfaceView Session="{Binding DemoSession}" />
+            </ScrollView>
+        </Border>
+
+        <Border Grid.Row="2"
+                BackgroundColor="#111827"
+                Padding="16"
+                Stroke="#334155"
+                StrokeThickness="1"
+                StrokeShape="RoundRectangle 18">
+            <Grid RowDefinitions="Auto,*" RowSpacing="12">
+                <Label Text="Execution Log"
+                       FontAttributes="Bold"
+                       FontSize="18"
+                       TextColor="White" />
+
+                <CollectionView Grid.Row="1"
+                                ItemsSource="{Binding ExecutionLog}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Label Text="{Binding .}"
+                                   FontFamily="OpenSansRegular"
+                                   TextColor="#E2E8F0"
+                                   Margin="0,2" />
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </Grid>
+        </Border>
+    </Grid>
+
+</ContentPage>

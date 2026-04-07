@@ -1,5 +1,6 @@
 using Demo.ViewModels;
 using Microsoft.Win32;
+using System;
 using System.IO;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,9 +17,9 @@ public partial class WorkflowView : UserControl
     public WorkflowView()
     {
         InitializeComponent();
+        LoadNetworkDemo();
     }
 
-    // 从指定的json文件加载工作流
     private async void SelectWorkflow(object sender, System.Windows.RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
@@ -35,16 +36,16 @@ public partial class WorkflowView : UserControl
             try
             {
                 using var stream = File.OpenRead(dialog.FileName);
-                var (Success, Result) = await ComponentModelEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
+                var (success, result) = await ComponentModelEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
 
-                if (!Success || Result is null)
+                if (!success || result is null)
                 {
                     System.Windows.MessageBox.Show("文件格式不正确或解析失败。", "加载失败",
                         System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
                     return;
                 }
 
-                _workflowViewModel = Result;
+                _workflowViewModel = result;
                 DataContext = _workflowViewModel;
 
                 System.Windows.MessageBox.Show($"工作流已从 {dialog.FileName} 加载成功。", "加载成功",
@@ -58,7 +59,6 @@ public partial class WorkflowView : UserControl
         }
     }
 
-    // 保存工作流到指定的json文件
     private void SaveWorkflow(object sender, System.Windows.RoutedEventArgs e)
     {
         if (DataContext is not TreeViewModel tree) return;
@@ -71,88 +71,140 @@ public partial class WorkflowView : UserControl
         }
     }
 
-    // 更新当前鼠标所处位置
     private void OnPointerMoved(object sender, MouseEventArgs e)
     {
         if (DataContext is not IWorkflowTreeViewModel tree) return;
-        var point = e.GetPosition(this);
+        var point = e.GetPosition((System.Windows.IInputElement)sender);
         tree.SetPointerCommand.Execute(new Anchor(point.X, point.Y, 0));
     }
 
-    // 重置连接器
     private void OnPointerReleased(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is not IWorkflowTreeViewModel tree) return;
         tree.GetHelper().ResetVirtualLink();
     }
 
-    // 模拟工作流数据
     private void SimulateData(object sender, System.Windows.RoutedEventArgs e)
     {
-        var slot1 = new SlotViewModel()
-        {
-            Offset = new Offset(170, 60),
-            Size = new Size(20, 20),
-            Channel = SlotChannel.OneBoth,
-        };
-        var slot2 = new SlotViewModel()
-        {
-            Offset = new Offset(170, 120),
-            Size = new Size(20, 20),
-            Channel = SlotChannel.MultipleTargets,
-        };
-        var slot3 = new SlotViewModel()
-        {
-            Offset = new Offset(10, 100),
-            Size = new Size(20, 20),
-            Channel = SlotChannel.OneBoth,
-        };
-        var slot4 = new SlotViewModel()
-        {
-            Offset = new Offset(10, 200),
-            Size = new Size(20, 20),
-            Channel = SlotChannel.MultipleSources,
-        };
-        var node1 = new NodeViewModel()
-        {
-            Size = new Size(200, 200),
-            Anchor = new Anchor(50, 50, 1)
-        };
-        var node2 = new NodeViewModel()
-        {
-            Size = new Size(300, 300),
-            Anchor = new Anchor(250, 250, 1)
-        };
+        LoadNetworkDemo();
+    }
 
-        // 控制器节点，仅用于启动、终结
-        var node3 = new ControllerViewModel()
-        {
-            Size = new Size(400, 200),
-            Anchor = new Anchor(400, 400, 1)
-        };
-        var slot5 = new SlotViewModel()
-        {
-            Offset = new Offset(335, 55),
-            Size = new Size(30, 30),
-            Channel = SlotChannel.MultipleTargets,
-        };
-
-        // 给 Tree 挂载 Node
-        _workflowViewModel.GetHelper().CreateNode(node1);
-        _workflowViewModel.GetHelper().CreateNode(node2);
-        _workflowViewModel.GetHelper().CreateNode(node3);
-
-        // 给 Node 挂载 Slot
-        node1.GetHelper().CreateSlot(slot1);
-        node1.GetHelper().CreateSlot(slot2);
-        node2.GetHelper().CreateSlot(slot3);
-        node2.GetHelper().CreateSlot(slot4);
-        node3.GetHelper().CreateSlot(slot5);
-
-        // 清理历史栈，避免非法的重做与撤销
-        _workflowViewModel.GetHelper().ClearHistory();
-
-        // 使用数据上下文
+    private void LoadNetworkDemo()
+    {
+        _workflowViewModel = CreateNetworkDemo();
         DataContext = _workflowViewModel;
+    }
+
+    private static TreeViewModel CreateNetworkDemo()
+    {
+        var tree = new TreeViewModel();
+        var helper = tree.GetHelper();
+        const double nodeWidth = 220;
+        const double nodeHeight = 180;
+        const double controllerWidth = 240;
+        const double controllerHeight = 170;
+
+        NodeViewModel CreateNode(
+            string title,
+            NetworkRequestMethod method,
+            string url,
+            string captureKey,
+            double left,
+            double top,
+            string headers = "",
+            string bodyTemplate = "")
+            => new()
+            {
+                Title = title,
+                Method = method,
+                Url = url,
+                Headers = headers,
+                BodyTemplate = bodyTemplate,
+                CaptureKey = captureKey,
+                Size = new Size(nodeWidth, nodeHeight),
+                Anchor = new Anchor(left, top, 1),
+            };
+
+        var controller = new ControllerViewModel
+        {
+            Size = new Size(controllerWidth, controllerHeight),
+            Anchor = new Anchor(140, 220, 1),
+            SeedPayload = "demo-request-chain",
+            BroadcastMode = WorkflowBroadcastMode.BreadthFirst,
+        };
+
+        var fetchTodo = CreateNode("Fetch Todo", NetworkRequestMethod.Get, "https://jsonplaceholder.typicode.com/todos/1", "todo", 420, 60);
+        var fetchPost = CreateNode("Fetch Post", NetworkRequestMethod.Get, "https://jsonplaceholder.typicode.com/posts/1", "post", 420, 300);
+        var auditTodo = CreateNode("Audit Todo", NetworkRequestMethod.Post, "https://httpbin.org/post", "audit", 710, 20, headers: "X-Demo-Source: VeloxDev Workflow", bodyTemplate: "{\"todoSummary\":\"{{todo.summary}}\",\"todoStatus\":\"{{todo.status}}\"}");
+        var patchRemote = CreateNode("Patch Remote", NetworkRequestMethod.Patch, "https://httpbin.org/patch", "patch", 710, 180, bodyTemplate: "{\"todoUrl\":\"{{todo.url}}\",\"status\":\"processed\"}");
+        var syncPost = CreateNode("Sync Post", NetworkRequestMethod.Post, "https://httpbin.org/post", "sync", 710, 340, bodyTemplate: "{\"postUrl\":\"{{post.url}}\",\"summary\":\"{{post.summary}}\"}");
+        var deleteRemote = CreateNode("Delete Remote", NetworkRequestMethod.Delete, "https://httpbin.org/delete", "delete", 710, 500, headers: "X-Delete-Reason: {{todo.status}}");
+        var archiveTrace = CreateNode("Archive Trace", NetworkRequestMethod.Post, "https://httpbin.org/post", "archive", 1000, 220, bodyTemplate: "{\"last\":\"{{last.summary}}\",\"seed\":\"{{seed}}\"}");
+
+        foreach (var node in new IWorkflowNodeViewModel[]
+        {
+            controller,
+            fetchTodo,
+            fetchPost,
+            auditTodo,
+            patchRemote,
+            syncPost,
+            deleteRemote,
+            archiveTrace,
+        })
+        {
+            helper.CreateNode(node);
+        }
+
+        controller.OutputSlot = CreateOutputSlot(controllerWidth, controllerHeight, SlotChannel.MultipleTargets);
+        fetchTodo.InputSlot = CreateInputSlot(nodeHeight);
+        fetchTodo.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.MultipleTargets);
+        fetchPost.InputSlot = CreateInputSlot(nodeHeight);
+        fetchPost.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.MultipleTargets);
+        auditTodo.InputSlot = CreateInputSlot(nodeHeight);
+        auditTodo.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.OneTarget);
+        patchRemote.InputSlot = CreateInputSlot(nodeHeight);
+        patchRemote.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.OneTarget);
+        syncPost.InputSlot = CreateInputSlot(nodeHeight);
+        syncPost.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.OneTarget);
+        deleteRemote.InputSlot = CreateInputSlot(nodeHeight);
+        deleteRemote.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.OneTarget);
+        archiveTrace.InputSlot = CreateInputSlot(nodeHeight, SlotChannel.MultipleSources);
+
+        Connect(tree, controller.OutputSlot!, fetchTodo.InputSlot!);
+        Connect(tree, controller.OutputSlot!, fetchPost.InputSlot!);
+        Connect(tree, fetchTodo.OutputSlot!, auditTodo.InputSlot!);
+        Connect(tree, fetchTodo.OutputSlot!, patchRemote.InputSlot!);
+        Connect(tree, fetchPost.OutputSlot!, syncPost.InputSlot!);
+        Connect(tree, fetchPost.OutputSlot!, deleteRemote.InputSlot!);
+        Connect(tree, auditTodo.OutputSlot!, archiveTrace.InputSlot!);
+        Connect(tree, patchRemote.OutputSlot!, archiveTrace.InputSlot!);
+        Connect(tree, syncPost.OutputSlot!, archiveTrace.InputSlot!);
+        Connect(tree, deleteRemote.OutputSlot!, archiveTrace.InputSlot!);
+
+        helper.ClearHistory();
+        return tree;
+    }
+
+    private static SlotViewModel CreateInputSlot(double nodeHeight, SlotChannel channel = SlotChannel.OneSource)
+        => new()
+        {
+            Offset = new Offset(0, (nodeHeight - 20) / 2),
+            Size = new Size(20, 20),
+            Channel = channel,
+        };
+
+    private static SlotViewModel CreateOutputSlot(double nodeWidth, double nodeHeight, SlotChannel channel)
+        => new()
+        {
+            Offset = new Offset(nodeWidth - 20, (nodeHeight - 20) / 2),
+            Size = new Size(20, 20),
+            Channel = channel,
+        };
+
+    private static void Connect(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    {
+        tree.GetHelper().SendConnection(sender);
+        tree.GetHelper().ReceiveConnection(receiver);
     }
 }

@@ -6,40 +6,141 @@
              xmlns:local="clr-namespace:Demo.Views.Workflow"
              xmlns:vm="clr-namespace:Demo.ViewModels"
              mc:Ignorable="d"
-             d:DesignHeight="300" d:DesignWidth="300">
+             d:DesignHeight="180" d:DesignWidth="220"
+             d:DataContext="{d:DesignInstance Type=vm:NodeViewModel}">
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="12*" />
-            <RowDefinition Height="90*" />
-        </Grid.RowDefinitions>
+        <Border Background="#0F172A"
+                CornerRadius="12"
+                BorderBrush="#334155"
+                BorderThickness="1" />
 
-        <Border Grid.Row="1" 
-                Padding="1"
-                Background="#2d2d2d"
-                CornerRadius="0,0,4,4" />
+        <Grid Margin="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="34" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-        <!-- 标题栏 -->
-        <Border Grid.Row="0"
-                Background="#2d2d2d"
-                CornerRadius="4,4,0,0"
-                BorderThickness="0,0,0,0.5"
-                BorderBrush="Gray"
-                MouseDown="OnMouseDown"
-                MouseUp="OnMouseUp"
-                MouseMove="OnMouseMove"
-                MouseLeave="OnMouseLeave">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <TextBlock  Text="执行数 [ " Foreground="White" VerticalAlignment="Center"/>
-                <TextBlock  Text="{Binding RunCount}" Foreground="White" VerticalAlignment="Center"/>
-                <TextBlock  Text=" ] " Foreground="White" VerticalAlignment="Center"/>
-                <TextBlock  Text="缓冲数 [ " Foreground="White" VerticalAlignment="Center"/>
-                <TextBlock  Text="{Binding WaitCount}" Foreground="White" VerticalAlignment="Center"/>
-                <TextBlock  Text=" ] " Foreground="White" VerticalAlignment="Center"/>
-            </StackPanel>
-        </Border>
+            <Border Grid.Row="0"
+                    Background="#111827"
+                    CornerRadius="11,11,0,0"
+                    BorderBrush="#1F2937"
+                    BorderThickness="0,0,0,1"
+                    MouseDown="OnMouseDown"
+                    MouseUp="OnMouseUp"
+                    MouseMove="OnMouseMove"
+                    MouseLeave="OnMouseLeave">
+                <Grid Margin="10,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Title}"
+                               VerticalAlignment="Center"
+                               Foreground="White"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis" />
+                    <Border Grid.Column="1"
+                            Padding="8,2"
+                            Margin="8,0,0,0"
+                            Background="#1D4ED8"
+                            CornerRadius="8"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="{Binding ExecutionOrderText}"
+                                   Foreground="White"
+                                   FontSize="10"
+                                   FontWeight="Bold" />
+                    </Border>
+                </Grid>
+            </Border>
 
-        <!-- 插槽区域 -->
-        <Grid Grid.Row="0" Grid.RowSpan="2">
+            <Grid Grid.Row="1" Margin="12,10,12,12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Padding="8,2"
+                            Background="#0B5ED7"
+                            CornerRadius="8"
+                            HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding Method}"
+                                   Foreground="White"
+                                   FontSize="10"
+                                   FontWeight="Bold" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding LastStatus}"
+                               Foreground="#93C5FD"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+                </Grid>
+
+                <TextBlock Grid.Row="1"
+                           Margin="0,8,0,0"
+                           Text="{Binding Url}"
+                           Foreground="#E5E7EB"
+                           FontSize="10"
+                           TextWrapping="Wrap"
+                           TextTrimming="CharacterEllipsis"
+                           MaxHeight="30" />
+
+                <Grid Grid.Row="2" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding LastDuration, StringFormat=Duration: {0}}"
+                               Foreground="#94A3B8"
+                               FontSize="10" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding RunCount, StringFormat=Run: {0}}"
+                               Foreground="#94A3B8"
+                               FontSize="10"
+                               HorizontalAlignment="Right" />
+                </Grid>
+
+                <TextBlock Grid.Row="3"
+                           Margin="0,6,0,0"
+                           Text="{Binding WaitCount, StringFormat=Queue: {0}}"
+                           Foreground="#94A3B8"
+                           FontSize="10" />
+
+                <StackPanel Grid.Row="4" Margin="0,8,0,0">
+                    <TextBlock Text="{Binding LastExecutionTrace, StringFormat=Trace: {0}}"
+                               Foreground="#CBD5E1"
+                               FontSize="10"
+                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxHeight="28" />
+                    <TextBlock Margin="0,6,0,0"
+                               Text="{Binding LastResponsePreview, StringFormat=Preview: {0}}"
+                               Foreground="#E2E8F0"
+                               FontSize="10"
+                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxHeight="40" />
+                    <TextBlock Margin="0,6,0,0"
+                               Text="{Binding LastError, StringFormat=Error: {0}}"
+                               Foreground="#FCA5A5"
+                               FontSize="10"
+                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis"
+                               MaxHeight="28" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <Grid>
             <ItemsControl ItemsSource="{Binding Slots}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -47,15 +148,12 @@
                                 Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}}" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
-
                 <ItemsControl.ItemContainerStyle>
                     <Style TargetType="ContentPresenter">
                         <Setter Property="Canvas.Left" Value="{Binding Offset.Left}" />
                         <Setter Property="Canvas.Top" Value="{Binding Offset.Top}" />
-                        <Setter Property="Panel.ZIndex" Value="{Binding Offset.Layer}" />
                     </Style>
                 </ItemsControl.ItemContainerStyle>
-
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:SlotViewModel}">
                         <local:SlotView Width="{Binding Size.Width}"

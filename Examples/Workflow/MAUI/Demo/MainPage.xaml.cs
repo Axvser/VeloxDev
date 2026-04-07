@@ -1,0 +1,63 @@
+﻿using Demo.ViewModels;
+using Demo.Workflow;
+using System.Collections.ObjectModel;
+
+namespace Demo
+{
+    public partial class MainPage : ContentPage
+    {
+        private WorkflowDemoSession _demo = WorkflowDemoSession.Create();
+
+        public MainPage()
+        {
+            InitializeComponent();
+            BindingContext = this;
+            LoadDemo(WorkflowDemoSession.Create());
+        }
+
+        public WorkflowDemoSession DemoSession => _demo;
+        public ControllerViewModel Controller => _demo.Controller;
+        public ObservableCollection<string> ExecutionLog => _demo.Tree.ExecutionLog;
+
+        private async void RunWorkflowAsync(object? sender, EventArgs e)
+            => await ExecuteAsync(() => Controller.OpenWorkflowCommand.ExecuteAsync(null), "运行工作流失败");
+
+        private async void StopWorkflowAsync(object? sender, EventArgs e)
+            => await ExecuteAsync(() => Controller.CloseWorkflowCommand.ExecuteAsync(null), "停止工作流失败");
+
+        private async void ReloadDemoAsync(object? sender, EventArgs e)
+            => await ExecuteAsync(ReloadDemoInternalAsync, "重置示例失败");
+
+        protected override void OnDisappearing()
+        {
+            base.OnDisappearing();
+            _ = _demo.Tree.GetHelper().CloseAsync();
+        }
+
+        private async Task ReloadDemoInternalAsync()
+        {
+            await _demo.Tree.GetHelper().CloseAsync();
+            LoadDemo(WorkflowDemoSession.Create());
+        }
+
+        private void LoadDemo(WorkflowDemoSession session)
+        {
+            _demo = session;
+            OnPropertyChanged(nameof(DemoSession));
+            OnPropertyChanged(nameof(Controller));
+            OnPropertyChanged(nameof(ExecutionLog));
+        }
+
+        private async Task ExecuteAsync(Func<Task> action, string title)
+        {
+            try
+            {
+                await action();
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert(title, ex.Message, "OK");
+            }
+        }
+    }
+}

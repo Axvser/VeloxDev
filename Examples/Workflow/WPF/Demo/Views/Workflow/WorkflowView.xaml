@@ -5,89 +5,157 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:Demo.Views.Workflow"
              mc:Ignorable="d"
-             d:DesignHeight="300" d:DesignWidth="300"
-             MouseUp="OnPointerReleased"
-             MouseMove="OnPointerMoved">
+             d:DesignHeight="720" d:DesignWidth="1280">
     <UserControl.Resources>
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView Width="{Binding Size.Width}"
-                    Height="{Binding Size.Height}"
-                    IsEnabled="{Binding IsEnabled}"/>
+                            Height="{Binding Size.Height}"
+                            IsEnabled="{Binding IsEnabled}"/>
         </DataTemplate>
         <DataTemplate x:Key="ControllerTemplate">
             <local:ControllerView Width="{Binding Size.Width}"
-                    Height="{Binding Size.Height}"
-                    IsEnabled="{Binding IsEnabled}"/>
+                                  Height="{Binding Size.Height}"
+                                  IsEnabled="{Binding IsEnabled}"/>
         </DataTemplate>
         <local:CustomTemplateSelector x:Key="NodeSelector"
                                       Controller="{StaticResource ControllerTemplate}"
                                       Simulator="{StaticResource NodeTemplate}"/>
     </UserControl.Resources>
-    <Canvas>
-        <Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}"/>
-        <Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" Canvas.Top="100"/>
-        <Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" Canvas.Top="200"/>
-        <Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" Canvas.Top="300"/>
-        <Button Content="Simulate" Width="100" Height="50" Click="SimulateData" Canvas.Top="400"/>
-        
-        <!-- ObservableCollection<IWorkflowNode> Nodes | 所有节点的视图模型存储于此 -->
-        <ItemsControl ItemsSource="{Binding Nodes}"
-                      Canvas.ZIndex="1"
-                      ItemTemplateSelector="{StaticResource NodeSelector}">
-            <!-- 容器模板，推荐显示设定尺寸 -->
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Canvas />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <!-- 若属性作用域超出元素自身，例如此处作用域是Canvas，推荐使用 ItemContainerStyle 实现绑定 -->
-            <ItemsControl.ItemContainerStyle>
-                <Style TargetType="ContentPresenter">
-                    <Setter Property="Canvas.Left"
-                            Value="{Binding Anchor.Left}" />
-                    <Setter Property="Canvas.Top"
-                            Value="{Binding Anchor.Top}" />
-                    <Setter Property="Canvas.ZIndex"
-                            Value="{Binding Anchor.Layer}" />
-                </Style>
-            </ItemsControl.ItemContainerStyle>
-            <!-- 数据模板，在此处决定如何呈现每个节点视图，此处使用模板选择以多元化节点外观 -->
-            
-        </ItemsControl>
 
-        <!-- ObservableCollection<IWorkflowLink> Links | 所有已经建立的连接视图模型存储于此 -->
-        <ItemsControl ItemsSource="{Binding Links}" 
-                      Canvas.ZIndex="-1">
-            <!-- 省略 -->
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Canvas />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <!-- 省略 -->
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
+    <Grid Background="#020617">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0"
+                Margin="20"
+                Padding="18"
+                Background="#111827"
+                CornerRadius="18"
+                BorderBrush="#334155"
+                BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel>
+                    <TextBlock Text="Workflow Demo"
+                               Foreground="White"
+                               FontSize="26"
+                               FontWeight="Bold" />
+                    <TextBlock Margin="0,10,0,0"
+                               Text="展示网络请求链路、广播执行顺序与节点状态变化。"
+                               Foreground="#CBD5E1"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+
+                <UniformGrid Grid.Row="1"
+                             Margin="0,18,0,0"
+                             Columns="1">
+                    <Button Content="Undo" Height="42" Margin="0,0,0,10" Command="{Binding UndoCommand}" />
+                    <Button Content="Redo" Height="42" Margin="0,0,0,10" Command="{Binding RedoCommand}" />
+                    <Button Content="Save" Height="42" Margin="0,0,0,10" Click="SaveWorkflow" />
+                    <Button Content="Load" Height="42" Margin="0,0,0,10" Click="SelectWorkflow" />
+                    <Button Content="Reset Demo" Height="42" Click="SimulateData" />
+                </UniformGrid>
+
+                <Border Grid.Row="2"
+                        Margin="0,18,0,0"
+                        Padding="12"
+                        Background="#0F172A"
+                        CornerRadius="12"
+                        BorderBrush="#1E293B"
+                        BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="Execution Log"
+                                   Foreground="White"
+                                   FontWeight="SemiBold"
+                                   FontSize="16" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Text="运行后会按顺序记录 Controller 与各节点执行轨迹。"
+                                   Foreground="#94A3B8"
+                                   FontSize="11"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <ListBox Grid.Row="3"
+                         Margin="0,14,0,0"
+                         ItemsSource="{Binding ExecutionLog}"
+                         Background="#0B1120"
+                         BorderThickness="0"
+                         Foreground="#E2E8F0"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Column="1"
+                Margin="0,20,20,20"
+                Background="#0B1120"
+                CornerRadius="18"
+                BorderBrush="#1E293B"
+                BorderThickness="1">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          PanningMode="Both">
+                <Canvas x:Name="WorkflowCanvas"
+                        Width="1480"
+                        Height="920"
+                        Background="#0F172A"
+                        MouseUp="OnPointerReleased"
+                        MouseMove="OnPointerMoved">
+                    <ItemsControl ItemsSource="{Binding Nodes}"
+                                  Canvas.ZIndex="1"
+                                  ItemTemplateSelector="{StaticResource NodeSelector}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemContainerStyle>
+                            <Style TargetType="ContentPresenter">
+                                <Setter Property="Canvas.Left" Value="{Binding Anchor.Left}" />
+                                <Setter Property="Canvas.Top" Value="{Binding Anchor.Top}" />
+                                <Setter Property="Canvas.ZIndex" Value="{Binding Anchor.Layer}" />
+                            </Style>
+                        </ItemsControl.ItemContainerStyle>
+                    </ItemsControl>
+
+                    <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="-1">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
+                                                       StartTop="{Binding Sender.Anchor.Top}"
+                                                       EndLeft="{Binding Receiver.Anchor.Left}"
+                                                       EndTop="{Binding Receiver.Anchor.Top}"
+                                                       CanRender="{Binding IsVisible}"
+                                                       IsFlowEnabled="True"
+                                                       FlowColor="#22D3EE"
+                                                       FlowSpeed="3.0"
+                                                       FlowDashArray="10,5"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <local:BezierCurveView DataContext="{Binding VirtualLink}"
+                                           StartLeft="{Binding Sender.Anchor.Left}"
                                            StartTop="{Binding Sender.Anchor.Top}"
                                            EndLeft="{Binding Receiver.Anchor.Left}"
                                            EndTop="{Binding Receiver.Anchor.Top}"
                                            CanRender="{Binding IsVisible}"
-                                           IsFlowEnabled="True"
-                                           FlowColor="#FF00FFFF"
-                                           FlowSpeed="3.0"
-                                           FlowDashArray="10,5"/>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <!-- IWorkflowLink VirtualLink | 预览曲线的视图模型 -->
-        <local:BezierCurveView DataContext="{Binding VirtualLink}"
-                               StartLeft="{Binding Sender.Anchor.Left}"
-                               StartTop="{Binding Sender.Anchor.Top}"
-                               EndLeft="{Binding Receiver.Anchor.Left}"
-                               EndTop="{Binding Receiver.Anchor.Top}"
-                               CanRender="{Binding IsVisible}"
-                               IsVirtual="True"/>
-
-    </Canvas>
+                                           IsVirtual="True"/>
+                </Canvas>
+            </ScrollViewer>
+        </Border>
+    </Grid>
 </UserControl>

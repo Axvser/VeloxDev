@@ -8,10 +8,13 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Border x:Name="Border" 
-            CornerRadius="3"
-            BorderThickness="0" 
-            Background="#aaffffff"
-            PointerPressed="Border_PointerPressed"
-            PointerReleased="Border_PointerReleased"/>
+    <Grid PointerPressed="Border_PointerPressed"
+          PointerReleased="Border_PointerReleased">
+        <Ellipse Fill="#0EA5E9"
+                 Stroke="#E0F2FE"
+                 StrokeThickness="2" />
+        <Ellipse Margin="5"
+                 Fill="#E0F2FE"
+                 Opacity="0.95" />
+    </Grid>
 </UserControl>

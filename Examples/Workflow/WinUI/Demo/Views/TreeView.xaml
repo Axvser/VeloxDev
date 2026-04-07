@@ -8,10 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:viewmodels="using:Demo.ViewModels"
     d:DataContext="{d:DesignInstance Type=viewmodels:TreeViewModel}"
-    mc:Ignorable="d"
-    PointerMoved="Canvas_PointerMoved"
-    PointerReleased="Canvas_PointerReleased"
-    ManipulationMode="All">
+    mc:Ignorable="d">
 
     <UserControl.Resources>
         <DataTemplate x:Key="NodeTemplate">
@@ -33,60 +30,133 @@
                                       NodeTemplate="{StaticResource NodeTemplate}"/>
     </UserControl.Resources>
 
-    <Canvas x:Name="canvas" Background="#1e1e1e">
-        <Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}"/>
-        <Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" Canvas.Top="100"/>
-        <Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" Canvas.Top="200"/>
-        <Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" Canvas.Top="300"/>
-        <Button Content="Simulate" Width="100" Height="50" Click="SimulateData" Canvas.Top="400"/>
+    <Grid Background="#020617">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-        <!-- ObservableCollection<IWorkflowNode> Nodes | 所有节点的视图模型存储于此 -->
-        <local:CanvasItemsControl ItemsSource="{Binding Nodes}"
-                                  Canvas.ZIndex="1" 
-                                  ItemTemplateSelector="{StaticResource NodeSelector}">
-            <local:CanvasItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Canvas />
-                </ItemsPanelTemplate>
-            </local:CanvasItemsControl.ItemsPanel>
-            <!--<local:CanvasItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <local:NodeView Width="{Binding Size.Width}"
-                                    Height="{Binding Size.Height}"
-                                    Canvas.Left="{Binding Anchor.Left}"
-                                    Canvas.Top="{Binding Anchor.Top}"
-                                    Canvas.ZIndex="{Binding Anchor.Layer}"/>
-                </DataTemplate>
-            </local:CanvasItemsControl.ItemTemplate>-->
-        </local:CanvasItemsControl>
+        <Border Grid.Column="0"
+                Margin="20"
+                Padding="18"
+                Background="#111827"
+                CornerRadius="18"
+                BorderBrush="#334155"
+                BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-        <!-- ObservableCollection<IWorkflowLink> Links | 所有已经建立的连接视图模型存储于此 -->
-        <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="-1">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Canvas />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <local:LinkView StartLeft="{Binding Sender.Anchor.Left}"
+                <StackPanel>
+                    <TextBlock Text="Workflow Demo"
+                               Foreground="White"
+                               FontSize="26"
+                               FontWeight="Bold" />
+                    <TextBlock Margin="0,10,0,0"
+                               Text="展示网络请求链路、广播执行顺序与节点状态变化。"
+                               Foreground="#CBD5E1"
+                               TextWrapping="WrapWholeWords" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Margin="0,18,0,0" Spacing="10">
+                    <Button Content="Undo" Height="42" Command="{Binding UndoCommand}" />
+                    <Button Content="Redo" Height="42" Command="{Binding RedoCommand}" />
+                    <Button Content="Save" Height="42" Click="SaveWorkflow" />
+                    <Button Content="Load" Height="42" Click="SelectWorkflow" />
+                    <Button Content="Reset Demo" Height="42" Click="SimulateData" />
+                </StackPanel>
+
+                <Border Grid.Row="2"
+                        Margin="0,18,0,0"
+                        Padding="12"
+                        Background="#0F172A"
+                        CornerRadius="12"
+                        BorderBrush="#1E293B"
+                        BorderThickness="1">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Execution Log"
+                                   Foreground="White"
+                                   FontWeight="SemiBold"
+                                   FontSize="16" />
+                        <TextBlock Text="运行后会按顺序记录 Controller 与各节点执行轨迹。"
+                                   Foreground="#94A3B8"
+                                   FontSize="11"
+                                   TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </Border>
+
+                <ListView Grid.Row="3"
+                          Margin="0,14,0,0"
+                          ItemsSource="{Binding ExecutionLog}"
+                          Background="#0B1120"
+                          BorderThickness="0">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       Foreground="#E2E8F0"
+                                       TextWrapping="WrapWholeWords" />
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+        </Border>
+
+        <Border Grid.Column="1"
+                Margin="0,20,20,20"
+                Background="#0B1120"
+                CornerRadius="18"
+                BorderBrush="#1E293B"
+                BorderThickness="1">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          ZoomMode="Disabled">
+                <Canvas x:Name="canvas"
+                        Width="1480"
+                        Height="920"
+                        Background="#0F172A"
+                        PointerMoved="Canvas_PointerMoved"
+                        PointerReleased="Canvas_PointerReleased">
+                    <local:CanvasItemsControl ItemsSource="{Binding Nodes}"
+                                              Canvas.ZIndex="1"
+                                              ItemTemplateSelector="{StaticResource NodeSelector}">
+                        <local:CanvasItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas />
+                            </ItemsPanelTemplate>
+                        </local:CanvasItemsControl.ItemsPanel>
+                    </local:CanvasItemsControl>
+
+                    <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="-1">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <local:LinkView StartLeft="{Binding Sender.Anchor.Left}"
+                                                StartTop="{Binding Sender.Anchor.Top}"
+                                                EndLeft="{Binding Receiver.Anchor.Left}"
+                                                EndTop="{Binding Receiver.Anchor.Top}"
+                                                CanRender="{Binding IsVisible}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <local:LinkView DataContext="{Binding VirtualLink}"
+                                    Canvas.ZIndex="-1"
+                                    StartLeft="{Binding Sender.Anchor.Left}"
                                     StartTop="{Binding Sender.Anchor.Top}"
                                     EndLeft="{Binding Receiver.Anchor.Left}"
                                     EndTop="{Binding Receiver.Anchor.Top}"
-                                    CanRender="{Binding IsVisible}" />
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <!-- IWorkflowLink VirtualLink | 预览曲线的视图模型 -->
-        <local:LinkView DataContext="{Binding VirtualLink}"
-                        Canvas.ZIndex="-1"
-                        StartLeft="{Binding Sender.Anchor.Left}"
-                        StartTop="{Binding Sender.Anchor.Top}"
-                        EndLeft="{Binding Receiver.Anchor.Left}"
-                        EndTop="{Binding Receiver.Anchor.Top}"
-                        CanRender="{Binding IsVisible}"
-                        IsVirtual="True"/>
-
-    </Canvas>
+                                    CanRender="{Binding IsVisible}"
+                                    IsVirtual="True"/>
+                </Canvas>
+            </ScrollViewer>
+        </Border>
+    </Grid>
 </UserControl>

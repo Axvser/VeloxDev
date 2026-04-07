@@ -6,6 +6,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using VeloxDev.Core.Extension;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
@@ -17,7 +18,6 @@ namespace Demo.Views
     {
         private TreeViewModel ViewModel = new();
 
-        // Win32 API 声明
         [DllImport("user32.dll")]
         private static extern IntPtr GetActiveWindow();
 
@@ -25,32 +25,20 @@ namespace Demo.Views
         private static extern IntPtr GetForegroundWindow();
 
         [DllImport("user32.dll")]
-        private static extern IntPtr GetDesktopWindow();
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetParent(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
-
-        [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
         [DllImport("user32.dll")]
-        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
         [DllImport("user32.dll")]
-        private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+        private static extern bool IsWindowVisible(IntPtr hWnd);
 
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-        private const uint GA_ROOT = 0;
-        private const uint GA_ROOTOWNER = 1;
-        private const uint GA_PARENT = 2;
 
         public TreeView()
         {
             InitializeComponent();
+            LoadNetworkDemo();
         }
 
         private async void SaveWorkflow(object sender, RoutedEventArgs e)
@@ -58,8 +46,6 @@ namespace Demo.Views
             if (DataContext is not TreeViewModel tree) return;
 
             var folderPicker = new Windows.Storage.Pickers.FolderPicker();
-
-            // 使用 Win32 API 获取窗口句柄
             var hwnd = GetActiveWindowHandle();
             if (hwnd != IntPtr.Zero)
             {
@@ -70,20 +56,19 @@ namespace Demo.Views
             folderPicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
 
             var folder = await folderPicker.PickSingleFolderAsync();
-
-            if (folder != null)
+            if (folder is null)
             {
-                string filePath = Path.Combine(folder.Path, "Workflow.json");
-                tree.SaveCommand.Execute(filePath);
-                await ShowMessageAsync("保存成功", $"工作流已保存到：{filePath}");
+                return;
             }
+
+            string filePath = Path.Combine(folder.Path, "Workflow.json");
+            tree.SaveCommand.Execute(filePath);
+            await ShowMessageAsync("保存成功", $"工作流已保存到：{filePath}");
         }
 
         private async void SelectWorkflow(object sender, RoutedEventArgs e)
         {
             var filePicker = new Windows.Storage.Pickers.FileOpenPicker();
-
-            // 使用 Win32 API 获取窗口句柄
             var hwnd = GetActiveWindowHandle();
             if (hwnd != IntPtr.Zero)
             {
@@ -91,205 +76,208 @@ namespace Demo.Views
             }
 
             filePicker.FileTypeFilter.Add(".json");
-            filePicker.FileTypeFilter.Add("*");
             filePicker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
             filePicker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
 
             var file = await filePicker.PickSingleFileAsync();
-
-            if (file != null)
+            if (file is null)
             {
-                try
+                return;
+            }
+
+            try
+            {
+                using var stream = await file.OpenStreamForReadAsync();
+                var (success, result) = await ComponentModelEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
+
+                if (!success || result is null)
                 {
-                    using var stream = await file.OpenStreamForReadAsync();
-                    var (Success, Result) = await ComponentModelEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
-
-                    if (!Success || Result is null)
-                    {
-                        await ShowMessageAsync("加载失败", "文件格式不正确或解析失败。", "确定");
-                        return;
-                    }
-
-                    ViewModel = Result;
-                    DataContext = ViewModel;
-
-                    await ShowMessageAsync("加载成功", $"工作流已从 {file.Name} 加载成功。", "确定");
+                    await ShowMessageAsync("加载失败", "文件格式不正确或解析失败。", "确定");
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    await ShowMessageAsync("错误", $"加载文件失败：{ex.Message}", "确定");
-                }
+
+                ViewModel = result;
+                DataContext = ViewModel;
+                await ShowMessageAsync("加载成功", $"工作流已从 {file.Name} 加载成功。", "确定");
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("错误", $"加载文件失败：{ex.Message}", "确定");
             }
         }
 
-        // 使用 Win32 API 获取活动窗口句柄
         private IntPtr GetActiveWindowHandle()
         {
             try
             {
-                // 方法1：获取当前活动窗口
-                IntPtr hwnd = GetActiveWindow();
+                var hwnd = GetActiveWindow();
                 if (hwnd != IntPtr.Zero)
                 {
-                    Debug.WriteLine($"获取到活动窗口句柄: {hwnd}");
                     return hwnd;
                 }
 
-                // 方法2：获取前台窗口
                 hwnd = GetForegroundWindow();
                 if (hwnd != IntPtr.Zero)
                 {
-                    Debug.WriteLine($"获取到前台窗口句柄: {hwnd}");
                     return hwnd;
                 }
 
-                // 方法3：通过枚举窗口查找 WinUI 窗口
-                hwnd = FindWinUIWindow();
-                if (hwnd != IntPtr.Zero)
-                {
-                    Debug.WriteLine($"通过枚举找到 WinUI 窗口句柄: {hwnd}");
-                    return hwnd;
-                }
-
-                Debug.WriteLine("无法获取窗口句柄");
-                return IntPtr.Zero;
+                return FindDemoWindow();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"获取窗口句柄时出错: {ex.Message}");
+                Debug.WriteLine($"Failed to resolve window handle: {ex.Message}");
                 return IntPtr.Zero;
             }
         }
 
-        // 枚举窗口查找 WinUI 窗口
-        private IntPtr FindWinUIWindow()
+        private static IntPtr FindDemoWindow()
         {
             IntPtr foundHandle = IntPtr.Zero;
 
-            EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
+            EnumWindows((hWnd, _) =>
             {
-                // 检查窗口是否可见
-                if (IsWindowVisible(hWnd))
+                if (!IsWindowVisible(hWnd))
                 {
-                    // 获取窗口标题
-                    var title = new System.Text.StringBuilder(256);
-                    GetWindowText(hWnd, title, title.Capacity);
-
-                    // 获取窗口类名
-                    var className = new System.Text.StringBuilder(256);
-                    GetClassName(hWnd, className, className.Capacity);
-
-                    // 查找包含应用程序名称的窗口（根据你的应用名调整）
-                    if (!string.IsNullOrEmpty(title.ToString()) &&
-                        title.ToString().Contains("Demo") || // 你的应用名称
-                        className.ToString().Contains("ApplicationFrameWindow") ||
-                        className.ToString().Contains("Windows.UI.Core.CoreWindow"))
-                    {
-                        foundHandle = hWnd;
-                        return false; // 停止枚举
-                    }
+                    return true;
                 }
-                return true; // 继续枚举
+
+                var title = new StringBuilder(256);
+                GetWindowText(hWnd, title, title.Capacity);
+                if (title.ToString().Contains("Demo", StringComparison.OrdinalIgnoreCase))
+                {
+                    foundHandle = hWnd;
+                    return false;
+                }
+
+                return true;
             }, IntPtr.Zero);
 
             return foundHandle;
         }
 
-        [DllImport("user32.dll")]
-        private static extern bool IsWindowVisible(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern int GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-
-        // 更简单的方法：直接使用桌面窗口作为后备
-        private IntPtr GetSimpleWindowHandle()
+        private void SimulateData(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                // 首先尝试活动窗口
-                IntPtr hwnd = GetActiveWindow();
-                if (hwnd != IntPtr.Zero) return hwnd;
-
-                // 然后尝试前台窗口
-                hwnd = GetForegroundWindow();
-                if (hwnd != IntPtr.Zero) return hwnd;
-
-                // 最后使用桌面窗口（总是存在）
-                return GetDesktopWindow();
-            }
-            catch
-            {
-                return GetDesktopWindow();
-            }
+            LoadNetworkDemo();
         }
 
-        private void SimulateData(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        private void LoadNetworkDemo()
         {
-            var slot1 = new SlotViewModel()
-            {
-                Offset = new Offset(170, 60),
-                Size = new Size(20, 20),
-                Channel = SlotChannel.OneBoth,
-            };
-            var slot2 = new SlotViewModel()
-            {
-                Offset = new Offset(170, 120),
-                Size = new Size(20, 20),
-                Channel = SlotChannel.MultipleTargets,
-            };
-            var slot3 = new SlotViewModel()
-            {
-                Offset = new Offset(10, 100),
-                Size = new Size(20, 20),
-                Channel = SlotChannel.OneBoth,
-            };
-            var slot4 = new SlotViewModel()
-            {
-                Offset = new Offset(10, 200),
-                Size = new Size(20, 20),
-                Channel = SlotChannel.MultipleSources,
-            };
-            var node1 = new NodeViewModel()
-            {
-                Size = new Size(200, 200),
-                Anchor = new Anchor(50, 50, 1)
-            };
-            var node2 = new NodeViewModel()
-            {
-                Size = new Size(300, 300),
-                Anchor = new Anchor(250, 250, 1)
-            };
-
-            // 控制器节点，仅用于启动、终结
-            var node3 = new ControllerViewModel()
-            {
-                Size = new Size(400, 200),
-                Anchor = new Anchor(400, 400, 1)
-            };
-            var slot5 = new SlotViewModel()
-            {
-                Offset = new Offset(335, 55),
-                Size = new Size(30, 30),
-                Channel = SlotChannel.MultipleTargets,
-            };
-
-            // 给 Tree 挂载 Node
-            ViewModel.GetHelper().CreateNode(node1);
-            ViewModel.GetHelper().CreateNode(node2);
-            ViewModel.GetHelper().CreateNode(node3);
-
-            // 给 Node 挂载 Slot
-            node1.GetHelper().CreateSlot(slot1);
-            node1.GetHelper().CreateSlot(slot2);
-            node2.GetHelper().CreateSlot(slot3);
-            node2.GetHelper().CreateSlot(slot4);
-            node3.GetHelper().CreateSlot(slot5);
-
-            // 清理历史栈，避免非法的重做与撤销
-            ViewModel.GetHelper().ClearHistory();
-
-            // 使用数据上下文
+            ViewModel = CreateNetworkDemo();
             DataContext = ViewModel;
+        }
+
+        private static TreeViewModel CreateNetworkDemo()
+        {
+            var tree = new TreeViewModel();
+            var helper = tree.GetHelper();
+            const double nodeWidth = 220;
+            const double nodeHeight = 180;
+            const double controllerWidth = 240;
+            const double controllerHeight = 170;
+
+            NodeViewModel CreateNode(
+                string title,
+                NetworkRequestMethod method,
+                string url,
+                string captureKey,
+                double left,
+                double top,
+                string headers = "",
+                string bodyTemplate = "")
+                => new()
+                {
+                    Title = title,
+                    Method = method,
+                    Url = url,
+                    Headers = headers,
+                    BodyTemplate = bodyTemplate,
+                    CaptureKey = captureKey,
+                    Size = new Size(nodeWidth, nodeHeight),
+                    Anchor = new Anchor(left, top, 1),
+                };
+
+            var controller = new ControllerViewModel
+            {
+                Size = new Size(controllerWidth, controllerHeight+30),
+                Anchor = new Anchor(140, 220, 1),
+                SeedPayload = "demo-request-chain",
+                BroadcastMode = WorkflowBroadcastMode.BreadthFirst,
+            };
+
+            var fetchTodo = CreateNode("Fetch Todo", NetworkRequestMethod.Get, "https://jsonplaceholder.typicode.com/todos/1", "todo", 420, 60);
+            var fetchPost = CreateNode("Fetch Post", NetworkRequestMethod.Get, "https://jsonplaceholder.typicode.com/posts/1", "post", 420, 300);
+            var auditTodo = CreateNode("Audit Todo", NetworkRequestMethod.Post, "https://httpbin.org/post", "audit", 710, 20, headers: "X-Demo-Source: VeloxDev Workflow", bodyTemplate: "{\"todoSummary\":\"{{todo.summary}}\",\"todoStatus\":\"{{todo.status}}\"}");
+            var patchRemote = CreateNode("Patch Remote", NetworkRequestMethod.Patch, "https://httpbin.org/patch", "patch", 710, 180, bodyTemplate: "{\"todoUrl\":\"{{todo.url}}\",\"status\":\"processed\"}");
+            var syncPost = CreateNode("Sync Post", NetworkRequestMethod.Post, "https://httpbin.org/post", "sync", 710, 340, bodyTemplate: "{\"postUrl\":\"{{post.url}}\",\"summary\":\"{{post.summary}}\"}");
+            var deleteRemote = CreateNode("Delete Remote", NetworkRequestMethod.Delete, "https://httpbin.org/delete", "delete", 710, 500, headers: "X-Delete-Reason: {{todo.status}}");
+            var archiveTrace = CreateNode("Archive Trace", NetworkRequestMethod.Post, "https://httpbin.org/post", "archive", 1000, 220, bodyTemplate: "{\"last\":\"{{last.summary}}\",\"seed\":\"{{seed}}\"}");
+
+            foreach (var node in new IWorkflowNodeViewModel[]
+            {
+                controller,
+                fetchTodo,
+                fetchPost,
+                auditTodo,
+                patchRemote,
+                syncPost,
+                deleteRemote,
+                archiveTrace,
+            })
+            {
+                helper.CreateNode(node);
+            }
+
+            controller.OutputSlot = CreateOutputSlot(controllerWidth, controllerHeight, SlotChannel.MultipleTargets);
+            fetchTodo.InputSlot = CreateInputSlot(nodeHeight);
+            fetchTodo.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.MultipleTargets);
+            fetchPost.InputSlot = CreateInputSlot(nodeHeight);
+            fetchPost.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.MultipleTargets);
+            auditTodo.InputSlot = CreateInputSlot(nodeHeight);
+            auditTodo.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.OneTarget);
+            patchRemote.InputSlot = CreateInputSlot(nodeHeight);
+            patchRemote.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.OneTarget);
+            syncPost.InputSlot = CreateInputSlot(nodeHeight);
+            syncPost.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.OneTarget);
+            deleteRemote.InputSlot = CreateInputSlot(nodeHeight);
+            deleteRemote.OutputSlot = CreateOutputSlot(nodeWidth, nodeHeight, SlotChannel.OneTarget);
+            archiveTrace.InputSlot = CreateInputSlot(nodeHeight, SlotChannel.MultipleSources);
+
+            Connect(tree, controller.OutputSlot!, fetchTodo.InputSlot!);
+            Connect(tree, controller.OutputSlot!, fetchPost.InputSlot!);
+            Connect(tree, fetchTodo.OutputSlot!, auditTodo.InputSlot!);
+            Connect(tree, fetchTodo.OutputSlot!, patchRemote.InputSlot!);
+            Connect(tree, fetchPost.OutputSlot!, syncPost.InputSlot!);
+            Connect(tree, fetchPost.OutputSlot!, deleteRemote.InputSlot!);
+            Connect(tree, auditTodo.OutputSlot!, archiveTrace.InputSlot!);
+            Connect(tree, patchRemote.OutputSlot!, archiveTrace.InputSlot!);
+            Connect(tree, syncPost.OutputSlot!, archiveTrace.InputSlot!);
+            Connect(tree, deleteRemote.OutputSlot!, archiveTrace.InputSlot!);
+
+            helper.ClearHistory();
+            return tree;
+        }
+
+        private static SlotViewModel CreateInputSlot(double nodeHeight, SlotChannel channel = SlotChannel.OneSource)
+            => new()
+            {
+                Offset = new Offset(0, (nodeHeight - 20) / 2),
+                Size = new Size(20, 20),
+                Channel = channel,
+            };
+
+        private static SlotViewModel CreateOutputSlot(double nodeWidth, double nodeHeight, SlotChannel channel)
+            => new()
+            {
+                Offset = new Offset(nodeWidth - 20, (nodeHeight - 20) / 2),
+                Size = new Size(20, 20),
+                Channel = channel,
+            };
+
+        private static void Connect(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+        {
+            tree.GetHelper().SendConnection(sender);
+            tree.GetHelper().ReceiveConnection(receiver);
         }
 
         private void Canvas_PointerReleased(object sender, PointerRoutedEventArgs e)
