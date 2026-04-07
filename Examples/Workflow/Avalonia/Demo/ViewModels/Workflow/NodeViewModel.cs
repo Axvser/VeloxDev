@@ -1,5 +1,6 @@
 ﻿using Demo.ViewModels.Workflow.Helper;
 using System;
+using VeloxDev.Core.Interfaces.WorkflowSystem;
 using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem;
 
@@ -10,14 +11,13 @@ namespace Demo.ViewModels;
     (workSemaphore: 5)]         // 该节点执行Work任务时,最多并发5个,超出自动排队
 public partial class NodeViewModel
 {
-    private SlotViewModel? _inputSlot;
-    private SlotViewModel? _outputSlot;
-
     public NodeViewModel()
     {
         InitializeWorkflow();
         BroadcastMode = WorkflowBroadcastMode.BreadthFirst;
         ReverseBroadcastMode = WorkflowBroadcastMode.DepthFirst;
+        InputSlot = new SlotViewModel();
+        OutputSlot = new SlotViewModel();
     }
 
     public Array RequestMethods => Enum.GetValues<NetworkRequestMethod>();
@@ -35,16 +35,17 @@ public partial class NodeViewModel
     public bool HasExecutionOrder => LastExecutionOrder > 0;
     public string ExecutionOrderText => LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
 
-    public SlotViewModel? InputSlot
+    [VeloxProperty] public partial IWorkflowSlotViewModel? InputSlot { get; set; }
+    [VeloxProperty] public partial IWorkflowSlotViewModel? OutputSlot { get; set; }
+
+    partial void OnInputSlotChanged(IWorkflowSlotViewModel? oldValue, IWorkflowSlotViewModel? newValue)
     {
-        get => _inputSlot;
-        set => ResetSlot(ref _inputSlot, value, nameof(InputSlot), nameof(HasInputSlot));
+        ResetSlot(oldValue, newValue, nameof(HasInputSlot));
     }
 
-    public SlotViewModel? OutputSlot
+    partial void OnOutputSlotChanged(IWorkflowSlotViewModel? oldValue, IWorkflowSlotViewModel? newValue)
     {
-        get => _outputSlot;
-        set => ResetSlot(ref _outputSlot, value, nameof(OutputSlot), nameof(HasOutputSlot));
+        ResetSlot(oldValue, newValue, nameof(HasOutputSlot));
     }
 
     [VeloxProperty] private string title = "HTTP Request";
@@ -79,23 +80,19 @@ public partial class NodeViewModel
         OnPropertyChanged(nameof(ExecutionOrderText));
     }
 
-    private void ResetSlot(ref SlotViewModel? field, SlotViewModel? newValue, string propertyName, string stateName)
+    private void ResetSlot(IWorkflowSlotViewModel? oldValue, IWorkflowSlotViewModel? newValue, string stateName)
     {
-        if (ReferenceEquals(field, newValue))
+        if (ReferenceEquals(oldValue, newValue))
         {
             return;
         }
 
-        var oldValue = field;
-        OnPropertyChanging(propertyName);
         oldValue?.GetHelper().Delete();
-        field = newValue;
         if (newValue is not null)
         {
             GetHelper().CreateSlot(newValue);
         }
 
-        OnPropertyChanged(propertyName);
         OnPropertyChanged(stateName);
     }
 }
