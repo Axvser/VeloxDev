@@ -12,7 +12,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WinUI</Title>
-		<Version>4.0.0</Version>
+		<Version>4.0.1</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinUI</Description>
 	</PropertyGroup>
@@ -22,7 +22,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<PackageReference Include="VeloxDev.Core" Version="4.0.0" />
 	</ItemGroup>
 
 </Project>
