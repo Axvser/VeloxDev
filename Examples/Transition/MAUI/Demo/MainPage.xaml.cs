@@ -114,11 +114,10 @@ namespace Demo
                 .Effect(TransitionEffects.Empty);
         }
 
-        // 延迟动画 - 3D反转旋转
+        // 延迟动画 - 旋转
         private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
             Transition<Rectangle>.Create()
                 .Await(TimeSpan.FromSeconds(2))
-                .Interpolator((Rectangle r) => r.RotationX, new ReverseDoubleInterpolator())
                 .Property(r => r.RotationX, 180)     // MAUI X旋转
                 .Effect(new TransitionEffect()
                 {
