@@ -200,7 +200,8 @@ namespace VeloxDev.WPF
                 // 格式2: 资源键查找
                 if (parameters[0] is string resourceKey)
                 {
-                    if (Application.Current.TryFindResource(resourceKey) is Brush resourceBrush)
+                    if (ThemeResourceLookup.TryFindResource(resourceKey, out var resource)
+                        && resource is Brush resourceBrush)
                         return resourceBrush;
                 }
 
@@ -234,6 +235,12 @@ namespace VeloxDev.WPF
 
             try
             {
+                if (ThemeResourceLookup.TryFindResource(strValue, out var resourceValue)
+                    && targetType.IsInstanceOfType(resourceValue))
+                {
+                    return resourceValue;
+                }
+
                 // 特殊处理Brush类型（WPF的BrushConverter需要单独处理）
                 if (typeof(Brush).IsAssignableFrom(targetType))
                 {
@@ -267,6 +274,52 @@ namespace VeloxDev.WPF
             {
                 return null;
             }
+        }
+    }
+
+    internal static class ThemeResourceLookup
+    {
+        public static bool TryFindResource(object key, out object? value)
+        {
+            value = null;
+
+            if (Application.Current is null)
+            {
+                return false;
+            }
+
+            if (TryFindInDictionary(Application.Current.Resources, key, out value))
+            {
+                return true;
+            }
+
+            value = Application.Current.TryFindResource(key);
+            return value is not null;
+        }
+
+        private static bool TryFindInDictionary(ResourceDictionary? dictionary, object key, out object? value)
+        {
+            value = null;
+            if (dictionary is null)
+            {
+                return false;
+            }
+
+            if (dictionary.Contains(key))
+            {
+                value = dictionary[key];
+                return true;
+            }
+
+            foreach (var mergedDictionary in dictionary.MergedDictionaries)
+            {
+                if (TryFindInDictionary(mergedDictionary, key, out value))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

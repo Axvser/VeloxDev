@@ -87,7 +87,7 @@ namespace VeloxDev.Avalonia.Interpolators
             return pairs;
         }
 
-        private static Transform InterpolateTransformPairs(
+        protected virtual Transform InterpolateTransformPairs(
             List<(Transform? start, Transform? end)> pairs, double t)
         {
             var interpolatedTransforms = new List<Transform>();
@@ -106,7 +106,7 @@ namespace VeloxDev.Avalonia.Interpolators
             };
         }
 
-        private static Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t)
+        protected virtual Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t)
         {
             static Transform GetDefaultTransform(Transform? transform) => transform switch
             {
@@ -136,7 +136,7 @@ namespace VeloxDev.Avalonia.Interpolators
 
                 RotateTransform st when end is RotateTransform et =>
                     new RotateTransform(
-                        Lerp(st.Angle, et.Angle, t),
+                        LerpAngle(st.Angle, et.Angle, t),
                         Lerp(st.CenterX, et.CenterX, t),
                         Lerp(st.CenterY, et.CenterY, t)),
 
@@ -152,9 +152,9 @@ namespace VeloxDev.Avalonia.Interpolators
 
                 Rotate3DTransform st when end is Rotate3DTransform et =>
                     new Rotate3DTransform(
-                        Lerp(st.AngleX, et.AngleX, t),
-                        Lerp(st.AngleY, et.AngleY, t),
-                        Lerp(st.AngleZ, et.AngleZ, t),
+                        LerpAngle(st.AngleX, et.AngleX, t),
+                        LerpAngle(st.AngleY, et.AngleY, t),
+                        LerpAngle(st.AngleZ, et.AngleZ, t),
                         Lerp(st.CenterX, et.CenterX, t),
                         Lerp(st.CenterY, et.CenterY, t),
                         Lerp(st.CenterZ, et.CenterZ, t),
@@ -168,6 +168,8 @@ namespace VeloxDev.Avalonia.Interpolators
             };
         }
 
+        protected virtual double LerpAngle(double start, double end, double t) => Lerp(start, end, t);
+
         private static double Lerp(double a, double b, double t) => a + t * (b - a);
         private static Matrix LerpMatrix(Matrix m1, Matrix m2, double t)
         {
@@ -178,6 +180,32 @@ namespace VeloxDev.Avalonia.Interpolators
                 Lerp(m1.M22, m2.M22, t),
                 Lerp(m1.M31, m2.M31, t),
                 Lerp(m1.M32, m2.M32, t));
+        }
+
+        protected static double LerpDirectionalAngle(double start, double end, double t, bool reverse)
+        {
+            var delta = (end - start) % 360d;
+            if (reverse)
+            {
+                if (delta > 0d)
+                {
+                    delta -= 360d;
+                }
+            }
+            else if (delta < 0d)
+            {
+                delta += 360d;
+            }
+
+            return start + delta * t;
+        }
+    }
+
+    public class ReverseTransformInterpolator : TransformInterpolator
+    {
+        protected override double LerpAngle(double start, double end, double t)
+        {
+            return LerpDirectionalAngle(start, end, t, reverse: true);
         }
     }
 }

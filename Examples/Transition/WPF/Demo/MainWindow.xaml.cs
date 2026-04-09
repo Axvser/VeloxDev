@@ -3,6 +3,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using VeloxDev.Core.TransitionSystem;
 using VeloxDev.TransitionSystem;
+using VeloxDev.WPF.Interpolators;
 
 namespace Demo;
 
@@ -90,10 +91,11 @@ public partial class MainWindow
                 LoopTime = 2,
             });
 
-    // 延迟动画
+    // 延迟动画：反转旋转
     private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(5))
+            .Interpolator((Rectangle r) => r.RenderTransform, new ReverseTransformInterpolator())
             .Property(r => r.RenderTransform, [new RotateTransform(180)])
             .Effect(new TransitionEffect()
             {

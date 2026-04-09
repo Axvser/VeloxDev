@@ -250,7 +250,7 @@ namespace VeloxDev.MAUI
         {
             // 检查元素自身的资源
             if (element is VisualElement visualElement &&
-                visualElement.Resources?.TryGetValue(key, out var resource) == true)
+                ThemeResourceLookup.TryFindInResourceDictionary(visualElement.Resources, key, out var resource))
             {
                 return resource;
             }
@@ -267,10 +267,7 @@ namespace VeloxDev.MAUI
         // MAUI 官方推荐的应用级资源查找
         private static object? FindApplicationResource(string key)
         {
-            if (Application.Current == null) return null;
-
-            // 检查应用级资源
-            if (Application.Current.Resources?.TryGetValue(key, out var resource) == true)
+            if (ThemeResourceLookup.TryFindApplicationResource(key, out var resource))
             {
                 return resource;
             }
@@ -286,13 +283,13 @@ namespace VeloxDev.MAUI
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
             // 参数验证
-            if (parameters == null || parameters.Length != 1 || parameters[0] is not string strValue)
+            if (parameters == null || parameters.Length < 1 || parameters[0] is not string strValue)
                 return null;
 
             try
             {
                 // 1. 尝试资源查找
-                if (Application.Current?.Resources?.TryGetValue(strValue, out var resource) == true &&
+                if (ThemeResourceLookup.TryFindApplicationResource(strValue, out var resource) &&
                     targetType.IsInstanceOfType(resource))
                 {
                     return resource;
@@ -334,6 +331,39 @@ namespace VeloxDev.MAUI
             {
                 return null;
             }
+        }
+    }
+
+    internal static class ThemeResourceLookup
+    {
+        public static bool TryFindApplicationResource(string key, out object? value)
+        {
+            value = null;
+            return TryFindInResourceDictionary(Application.Current?.Resources, key, out value);
+        }
+
+        public static bool TryFindInResourceDictionary(ResourceDictionary? dictionary, string key, out object? value)
+        {
+            value = null;
+            if (dictionary is null)
+            {
+                return false;
+            }
+
+            if (dictionary.TryGetValue(key, out value))
+            {
+                return true;
+            }
+
+            foreach (var mergedDictionary in dictionary.MergedDictionaries)
+            {
+                if (TryFindInResourceDictionary(mergedDictionary, key, out value))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

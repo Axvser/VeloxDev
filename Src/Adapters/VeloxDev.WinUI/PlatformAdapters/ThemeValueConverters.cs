@@ -209,7 +209,7 @@ namespace VeloxDev.WinUI
                     if (parameters[0] is string str)
                     {
                         // 先尝试资源查找
-                        if (Application.Current?.Resources.TryGetValue(str, out var resource) == true)
+                        if (ThemeResourceLookup.TryFindResource(str, out var resource))
                         {
                             if (resource is Brush b)
                                 return b;
@@ -241,7 +241,7 @@ namespace VeloxDev.WinUI
                 try
                 {
                     // 尝试资源查找
-                    if (Application.Current?.Resources.TryGetValue(str, out var resource) == true &&
+                    if (ThemeResourceLookup.TryFindResource(str, out var resource) &&
                         targetType.IsInstanceOfType(resource))
                     {
                         return resource;
@@ -262,6 +262,50 @@ namespace VeloxDev.WinUI
                 catch { }
 
                 return null;
+            }
+        }
+
+        internal static class ThemeResourceLookup
+        {
+            public static bool TryFindResource(object key, out object? value)
+            {
+                value = null;
+                var resources = Application.Current?.Resources;
+                if (resources is null)
+                {
+                    return false;
+                }
+
+                return TryFindInDictionary(resources, key, out value);
+            }
+
+            private static bool TryFindInDictionary(ResourceDictionary dictionary, object key, out object? value)
+            {
+                value = null;
+
+                if (dictionary.TryGetValue(key, out value))
+                {
+                    return true;
+                }
+
+                foreach (var themeDictionary in dictionary.ThemeDictionaries.Values)
+                {
+                    if (themeDictionary is ResourceDictionary resourceDictionary
+                        && TryFindInDictionary(resourceDictionary, key, out value))
+                    {
+                        return true;
+                    }
+                }
+
+                foreach (var mergedDictionary in dictionary.MergedDictionaries)
+                {
+                    if (TryFindInDictionary(mergedDictionary, key, out value))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
             }
         }
     }

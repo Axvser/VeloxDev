@@ -7,6 +7,7 @@ using System;
 using System.Threading.Tasks;
 using VeloxDev.Core.TransitionSystem;
 using VeloxDev.TransitionSystem;
+using VeloxDev.Avalonia.Interpolators;
 
 namespace Demo.Views;
 
@@ -104,10 +105,11 @@ public partial class MainWindow
                 Ease = Eases.Sine.InOut
             });
 
-    // 延迟动画：旋转+移动+背景渐变
+    // 延迟动画：反转旋转+移动+背景渐变
     private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(5))
+            .Interpolator((Rectangle r) => r.RenderTransform, new ReverseTransformInterpolator())
             .Property(r => r.RenderTransform, [new TranslateTransform(-200, 0), new RotateTransform(180)])
             .Property(r => r.Fill,
                 new LinearGradientBrush
@@ -128,9 +130,10 @@ public partial class MainWindow
                 LoopTime = 4,
             });
 
-    // 拼接动画：三维旋转 + 放缩 + 再切换渐变背景
+    // 拼接动画：反转三维旋转 + 放缩 + 再切换渐变背景
     private static readonly Transition<Rectangle>.StateSnapshot Animation2 =
         Transition<Rectangle>.Create()
+            .Interpolator((Rectangle r) => r.RenderTransform, new ReverseTransformInterpolator())
             .Property(r => r.RenderTransform,
             [
                 new TranslateTransform(200, 0),

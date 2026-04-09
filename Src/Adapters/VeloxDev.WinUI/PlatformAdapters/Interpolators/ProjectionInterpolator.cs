@@ -22,9 +22,9 @@ namespace VeloxDev.WinUI.Interpolators
 
                 result.Add(new PlaneProjection
                 {
-                    RotationX = Lerp(s.RotationX, e.RotationX, t),
-                    RotationY = Lerp(s.RotationY, e.RotationY, t),
-                    RotationZ = Lerp(s.RotationZ, e.RotationZ, t),
+                    RotationX = LerpAngle(s.RotationX, e.RotationX, t),
+                    RotationY = LerpAngle(s.RotationY, e.RotationY, t),
+                    RotationZ = LerpAngle(s.RotationZ, e.RotationZ, t),
 
                     CenterOfRotationX = Lerp(s.CenterOfRotationX, e.CenterOfRotationX, t),
                     CenterOfRotationY = Lerp(s.CenterOfRotationY, e.CenterOfRotationY, t),
@@ -40,6 +40,8 @@ namespace VeloxDev.WinUI.Interpolators
             result[^1] = e;
             return result;
         }
+
+        protected virtual double LerpAngle(double start, double end, double t) => Lerp(start, end, t);
 
         private static PlaneProjection Normalize(object? obj)
         {
@@ -59,6 +61,32 @@ namespace VeloxDev.WinUI.Interpolators
                 GlobalOffsetY = 0,
                 GlobalOffsetZ = 0
             };
+        }
+
+        protected static double LerpDirectionalAngle(double start, double end, double t, bool reverse)
+        {
+            var delta = (end - start) % 360d;
+            if (reverse)
+            {
+                if (delta > 0d)
+                {
+                    delta -= 360d;
+                }
+            }
+            else if (delta < 0d)
+            {
+                delta += 360d;
+            }
+
+            return start + delta * t;
+        }
+    }
+
+    public class ReverseProjectionInterpolator : ProjectionInterpolator
+    {
+        protected override double LerpAngle(double start, double end, double t)
+        {
+            return LerpDirectionalAngle(start, end, t, reverse: true);
         }
     }
 }

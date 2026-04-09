@@ -83,7 +83,7 @@ namespace VeloxDev.WPF.Interpolators
             return pairs;
         }
 
-        private static Transform InterpolateTransformPairs(
+        protected virtual Transform InterpolateTransformPairs(
             List<(Transform? start, Transform? end)> pairs, double t)
         {
             var interpolatedTransforms = new List<Transform>();
@@ -102,7 +102,7 @@ namespace VeloxDev.WPF.Interpolators
             };
         }
 
-        private static Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t)
+        protected virtual Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t)
         {
             // 获取默认变换（确保从无到有的过渡平滑）
             static Transform GetDefaultTransform(Transform? transform) => transform switch
@@ -134,7 +134,7 @@ namespace VeloxDev.WPF.Interpolators
 
                 RotateTransform st when end is RotateTransform et =>
                     new RotateTransform(
-                        Lerp(st.Angle, et.Angle, t),
+                        LerpAngle(st.Angle, et.Angle, t),
                         Lerp(st.CenterX, et.CenterX, t),
                         Lerp(st.CenterY, et.CenterY, t)),
 
@@ -159,6 +159,8 @@ namespace VeloxDev.WPF.Interpolators
             };
         }
 
+        protected virtual double LerpAngle(double start, double end, double t) => Lerp(start, end, t);
+
         private static double Lerp(double a, double b, double t) => a + t * (b - a);
         private static Matrix LerpMatrix(Matrix m1, Matrix m2, double t)
         {
@@ -169,6 +171,32 @@ namespace VeloxDev.WPF.Interpolators
                 Lerp(m1.M22, m2.M22, t),
                 Lerp(m1.OffsetX, m2.OffsetX, t),
                 Lerp(m1.OffsetY, m2.OffsetY, t));
+        }
+
+        protected static double LerpDirectionalAngle(double start, double end, double t, bool reverse)
+        {
+            var delta = (end - start) % 360d;
+            if (reverse)
+            {
+                if (delta > 0d)
+                {
+                    delta -= 360d;
+                }
+            }
+            else if (delta < 0d)
+            {
+                delta += 360d;
+            }
+
+            return start + delta * t;
+        }
+    }
+
+    public class ReverseTransformInterpolator : TransformInterpolator
+    {
+        protected override double LerpAngle(double start, double end, double t)
+        {
+            return LerpDirectionalAngle(start, end, t, reverse: true);
         }
     }
 }

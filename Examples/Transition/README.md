@@ -284,7 +284,7 @@ sequenceDiagram
     loop each property in state.Values
         I->>UI: ProtectedGetValue(...)
         UI->>T: read current property value
-        I->>I: resolve interpolator by PropertyType
+        I->>I: prefer property interpolator, then fallback to type interpolator
         I->>UI: ProtectedInterpolate(...)
         I->>O: AddPropertyInterpolations(property, frames)
     end
@@ -414,6 +414,34 @@ Transition.Exit(
     IncludeMutual: true,
     IncludeNoMutual: true);
 ```
+
+### 5.6 为特殊方向语义指定反转插值器
+
+某些平台的旋转属性是直接暴露的标量值，例如 MAUI 的 `Rotation`、`RotationX`、`RotationY`。  
+这种场景通常不需要改动整套 `Transform` 插值策略，而是直接给该属性指定一个反转版本的标量插值器：
+
+```csharp
+using VeloxDev.Core.TransitionSystem.NativeInterpolators;
+
+Transition<Rectangle>.Create()
+    .Interpolator((Rectangle x) => x.RotationX, new ReverseDoubleInterpolator())
+    .Property(x => x.RotationX, 180)
+    .Effect(e => e.Duration = TimeSpan.FromSeconds(1))
+    .Execute(myRect);
+```
+
+而像 WPF / Avalonia / WinUI 这类以 `Transform` / `Projection` 为主的复合变换平台，则更适合直接使用适配层提供的 `ReverseTransformInterpolator` 或 `ReverseProjectionInterpolator`。
+
+```csharp
+// WPF / Avalonia / WinUI
+Transition<Rectangle>.Create()
+    .Interpolator((Rectangle x) => x.RenderTransform, new ReverseTransformInterpolator())
+    .Property(x => x.RenderTransform, [new RotateTransform(180)])
+    .Effect(e => e.Duration = TimeSpan.FromSeconds(1))
+    .Execute(myRect);
+```
+
+当前各平台 Demo 也都包含了对应的反转旋转示例；WinForms 示例由于控件本身未提供原生旋转属性，因此没有单独加入旋转方向例子。
 
 ---
 

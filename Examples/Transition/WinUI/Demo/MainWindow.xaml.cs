@@ -6,6 +6,7 @@ using System;
 using System.Threading.Tasks;
 using VeloxDev.Core.TransitionSystem;
 using VeloxDev.TransitionSystem;
+using VeloxDev.WinUI.Interpolators;
 using Windows.Foundation;
 
 namespace Demo
@@ -130,10 +131,11 @@ namespace Demo
                 .Effect(TransitionEffects.Empty);
         }
 
-        // 延迟动画
+        // 延迟动画：反转旋转
         private readonly Transition<Rectangle>.StateSnapshot Animation1 =
             Transition<Rectangle>.Create()
                 .Await(TimeSpan.FromSeconds(3))
+                .Interpolator((Rectangle r) => r.RenderTransform, new ReverseTransformInterpolator())
                 .Property(r => r.RenderTransform, [new RotateTransform() { Angle = 180 }])
                 .Property(r => r.Fill, new LinearGradientBrush()
                 {
@@ -150,9 +152,10 @@ namespace Demo
                     LoopTime = 2
                 });
 
-        // 拼接动画
+        // 拼接动画：反转投影旋转 + 颜色变化
         private readonly Transition<Rectangle>.StateSnapshot Animation2 =
             Transition<Rectangle>.Create()
+                .Interpolator((Rectangle r) => r.Projection, new ReverseProjectionInterpolator())
                 .Property(r => r.Projection,
                     new PlaneProjection()
                     {
