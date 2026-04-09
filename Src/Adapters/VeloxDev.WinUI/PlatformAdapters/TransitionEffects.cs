@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace VeloxDev.WinUI.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class TransitionEffects
     {

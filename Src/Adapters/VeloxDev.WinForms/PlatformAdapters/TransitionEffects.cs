@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.WinForms.PlatformAdapters
+﻿namespace VeloxDev.TransitionSystem
 {
     public static class TransitionEffects
     {

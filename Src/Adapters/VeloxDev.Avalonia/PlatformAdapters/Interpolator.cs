@@ -2,10 +2,10 @@
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
-using VeloxDev.Avalonia.PlatformAdapters.Interpolators;
+using VeloxDev.Avalonia.Interpolators;
 using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.Avalonia.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class Interpolator : InterpolatorCore<InterpolatorOutput, DispatcherPriority>
     {

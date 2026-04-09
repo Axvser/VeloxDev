@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.Avalonia.PlatformAdapters.Interpolators
+namespace VeloxDev.Avalonia.Interpolators
 {
     public class PixelRectInterpolator : IValueInterpolator
     {

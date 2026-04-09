@@ -2,7 +2,7 @@
 using VeloxDev.Core.Interfaces.TransitionSystem;
 using Windows.Foundation;
 
-namespace VeloxDev.WinUI.PlatformAdapters.Interpolators
+namespace VeloxDev.WinUI.Interpolators
 {
     public class RectInterpolator : IValueInterpolator
     {

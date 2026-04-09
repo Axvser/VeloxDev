@@ -11,7 +11,7 @@ using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 using WinRT.Interop;
 
-namespace VeloxDev.WinUI.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class UIThreadInspector : UIThreadInspectorCore<DispatcherQueuePriority>
     {

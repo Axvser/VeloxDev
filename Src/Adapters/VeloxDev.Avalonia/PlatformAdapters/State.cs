@@ -1,6 +1,6 @@
 ﻿using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.Avalonia.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class State() : StateCore
     {

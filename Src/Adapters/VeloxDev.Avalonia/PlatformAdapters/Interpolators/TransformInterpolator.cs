@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.Avalonia.PlatformAdapters.Interpolators
+namespace VeloxDev.Avalonia.Interpolators
 {
     public class TransformInterpolator : IValueInterpolator
     {

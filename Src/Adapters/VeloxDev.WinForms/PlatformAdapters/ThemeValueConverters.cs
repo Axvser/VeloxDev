@@ -2,7 +2,7 @@
 using System.Globalization;
 using VeloxDev.Core.Interfaces.DynamicTheme;
 
-namespace VeloxDev.WinForms.PlatformAdapters
+namespace VeloxDev.WinForms
 {
     public class DoubleConverter : IThemeValueConverter
     {

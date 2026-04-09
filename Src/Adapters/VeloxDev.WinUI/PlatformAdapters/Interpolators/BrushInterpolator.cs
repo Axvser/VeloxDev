@@ -6,7 +6,7 @@ using VeloxDev.Core.Interfaces.TransitionSystem;
 using Windows.Foundation;
 using Windows.UI;
 
-namespace VeloxDev.WinUI.PlatformAdapters.Interpolators
+namespace VeloxDev.WinUI.Interpolators
 {
     public class BrushInterpolator : IValueInterpolator
     {

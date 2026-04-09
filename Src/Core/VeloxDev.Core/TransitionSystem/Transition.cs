@@ -1,4 +1,5 @@
-﻿using VeloxDev.Core.Interfaces.TransitionSystem;
+﻿using System.Linq.Expressions;
+using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {
@@ -20,6 +21,15 @@ namespace VeloxDev.Core.TransitionSystem
             where T : StateSnapshotCore, new()
         {
             return snapshot.CoreAwaitThen<T>(timeSpan);
+        }
+
+        public static TSnapshot Interpolator<TSnapshot, TTarget, TValue>(
+            this TSnapshot snapshot,
+            Expression<Func<TTarget, TValue>> propertyLambda,
+            IValueInterpolator interpolator)
+            where TSnapshot : StateSnapshotCore, new()
+        {
+            return snapshot.CoreInterpolator<TSnapshot, TTarget, TValue>(propertyLambda, interpolator);
         }
 
         public static void Execute<T>(this T snapshot, object target, bool CanMutualTask = true)

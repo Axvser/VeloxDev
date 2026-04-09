@@ -2,7 +2,7 @@
 using System.Windows.Media.Effects;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.WPF.PlatformAdapters.Interpolators
+namespace VeloxDev.WPF.Interpolators
 {
     public class DropShadowEffectInterpolator : IValueInterpolator
     {

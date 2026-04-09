@@ -2,8 +2,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
 using Avalonia.Interactivity;
 using System;
-using VeloxDev.Avalonia.PlatformAdapters;
+using VeloxDev.Avalonia;
 using VeloxDev.Core.DynamicTheme;
+using VeloxDev.TransitionSystem;
 
 namespace Demo.Views;
 

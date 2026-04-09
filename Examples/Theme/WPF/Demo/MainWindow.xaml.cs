@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using VeloxDev.Core.DynamicTheme;
-using VeloxDev.WPF.PlatformAdapters;
+using VeloxDev.TransitionSystem;
+using VeloxDev.WPF;
 
 namespace Demo
 {

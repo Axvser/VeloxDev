@@ -1,7 +1,7 @@
 ﻿using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.MAUI.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class UIThreadInspector() : UIThreadInspectorCore
     {

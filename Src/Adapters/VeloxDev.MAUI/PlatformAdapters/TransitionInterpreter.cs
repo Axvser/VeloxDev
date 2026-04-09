@@ -1,6 +1,6 @@
 ﻿using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.MAUI.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public partial class TransitionInterpreter() : TransitionInterpreterCore<InterpolatorOutput, TransitionEffect>
     {

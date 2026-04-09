@@ -2,11 +2,11 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using VeloxDev.Core.TransitionSystem;
-using VeloxDev.WinUI.PlatformAdapters.Interpolators;
+using VeloxDev.WinUI.Interpolators;
 using Windows.Foundation;
 using Windows.UI;
 
-namespace VeloxDev.WinUI.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class Interpolator : InterpolatorCore<InterpolatorOutput, DispatcherQueuePriority>
     {

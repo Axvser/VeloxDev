@@ -1,6 +1,6 @@
 ﻿using Microsoft.Maui.Controls.Shapes;
 using VeloxDev.Core.TransitionSystem;
-using VeloxDev.MAUI.PlatformAdapters;
+using VeloxDev.TransitionSystem;
 
 namespace Demo
 {
@@ -13,10 +13,10 @@ namespace Demo
             Rec0.Fill = CreateRec0Brush();
 
             // VeloxDev动画的核心概念是 "一切皆状态"
-            // 对象可以调用 Snapshot() 创建快照
-            // 其中，若 Snapshot() 不指定目标属性，则视作记录所有可读可写的、可插值的实例属性
+            // Snapshot(...) 记录显式指定的属性路径
+            // SnapshotAll() 自动发现并记录当前对象中可动画的属性
 
-            var snapshot0 = Rec0.Snapshot();
+            var snapshot0 = Rec0.SnapshotAll();
             var snapshot1 = Rec0.Snapshot(
                 x => x.TranslationX,
                 x => ((LinearGradientBrush)x.Fill!).StartPoint,

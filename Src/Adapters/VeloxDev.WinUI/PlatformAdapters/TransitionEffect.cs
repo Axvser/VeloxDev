@@ -1,7 +1,7 @@
 ﻿using Microsoft.UI.Dispatching;
 using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.WinUI.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class TransitionEffect : TransitionEffectCore<DispatcherQueuePriority>
     {

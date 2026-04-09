@@ -9,9 +9,9 @@ using VeloxDev.Core.Interfaces.DynamicTheme;
 using Windows.Foundation;
 using Windows.UI;
 
-namespace VeloxDev.WinUI.PlatformAdapters
+namespace VeloxDev.WinUI
 {
-    namespace VeloxDev.WinUI.PlatformAdapters
+    namespace VeloxDev.WinUI
     {
         public class DoubleConverter : IThemeValueConverter
         {

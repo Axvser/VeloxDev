@@ -1,7 +1,7 @@
 ﻿using System.Windows.Threading;
 using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.WPF.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class InterpolatorOutput : InterpolatorOutputCore<UIThreadInspector, DispatcherPriority>
     {

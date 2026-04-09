@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Globalization;
 using VeloxDev.Core.Interfaces.DynamicTheme;
 
-namespace VeloxDev.MAUI.PlatformAdapters
+namespace VeloxDev.MAUI
 {
     public class DoubleConverter : IThemeValueConverter
     {

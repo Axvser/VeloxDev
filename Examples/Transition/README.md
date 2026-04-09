@@ -419,9 +419,13 @@ Transition.Exit(
 
 ## 6. 使用层必须知道的几个规则
 
-### 6.1 `Snapshot()` 不是“录录像”，而是“拍当前状态”
+### 6.1 `Snapshot(...)` / `SnapshotAll()` 不是“录录像”，而是“拍当前状态”
 
-它只记录调用当下的属性值，不会自动追踪后续变化。
+它们都只记录调用当下的属性值，不会自动追踪后续变化。
+
+- `Snapshot(...)`：只记录你显式指定的属性路径
+- `SnapshotAll()`：自动发现并记录当前对象中可动画的属性
+- `SnapshotExcept(...)`：自动发现并记录可动画属性，但排除指定路径及其子路径
 
 ### 6.2 引用类型重置时，必要时请重建对象
 
@@ -455,10 +459,11 @@ Transition<Rectangle>.Create()
 - 方法调用结果
 - 最终不可写的属性链
 
-### 6.4 能不能动画，取决于“有没有插值器”
+### 6.4 能不能自动发现并动画，取决于“有没有插值器”
 
 核心层不是靠“反射万能变化”来做动画，而是靠**类型插值器**。  
-如果某个属性类型没有注册插值器，也不实现 `IInterpolable`，它就不会被正确过渡。
+如果某个属性类型没有注册插值器，也不实现 `IInterpolable`，它就不会被自动发现为“可动画属性”。  
+但你仍然可以通过显式路径 + 属性级插值器的方式把它纳入动画。
 
 ---
 
@@ -629,23 +634,24 @@ public class Transition<T> : TransitionCore<T, Transition<T>.StateSnapshot>
 }
 ```
 
-#### 8）`Snapshot` / `SnapshotExcept` 扩展
+#### 8）`Snapshot` / `SnapshotAll` / `SnapshotExcept` 扩展
 
 这是适配层易被忽略、但非常重要的一步。  
 它决定你的平台用户能不能方便地“拍当前状态”。
 
 至少要提供：
 
-- `obj.Snapshot()`
 - `obj.Snapshot(x => x.Prop1, x => x.Prop2)`
+- `obj.SnapshotAll()`
 - `obj.SnapshotExcept(...)`
 
 实现时建议复用：
 
+- `TransitionSnapshotHelper`
 - `TransitionProperty.TryCreate(...)`
-- `Interpolator.TryGetInterpolator(parsed.PropertyType, out _)`
 
-这样可以保证只记录“框架确实知道怎么插值”的属性。
+其中 `SnapshotAll()` / `SnapshotExcept(...)` 应基于适配层已注册的插值器自动发现可动画属性；
+而 `Snapshot(...)` 则保留为显式路径快照入口。
 
 ---
 

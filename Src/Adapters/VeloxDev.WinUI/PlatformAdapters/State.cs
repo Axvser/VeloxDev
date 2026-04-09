@@ -1,6 +1,6 @@
 ﻿using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.WinUI.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class State() : StateCore
     {

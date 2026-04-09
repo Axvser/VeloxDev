@@ -3,7 +3,7 @@ using System.Windows.Threading;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.WPF.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class UIThreadInspector() : UIThreadInspectorCore<DispatcherPriority>
     {

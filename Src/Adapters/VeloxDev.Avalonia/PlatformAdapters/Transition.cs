@@ -3,13 +3,11 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Reflection;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.Avalonia.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public static class TransitionEx
     {
@@ -17,32 +15,15 @@ namespace VeloxDev.Avalonia.PlatformAdapters
             where T : class
         {
             var snapshot = new Transition<T>.StateSnapshot();
+            TransitionSnapshotHelper.CaptureSpecific(target, snapshot.GetState(), expressions);
+            return snapshot;
+        }
 
-            if (expressions?.Length > 0)
-            {
-                // 拍摄指定属性
-                foreach (var expression in expressions)
-                {
-                    if (TryGetPropertyFromExpression(expression, out var property) && property!.CanRead && property.CanWrite)
-                    {
-                        var currentValue = property.GetValue(target);
-                        snapshot.state.SetValue(property, currentValue);
-                    }
-                }
-            }
-            else
-            {
-                // 拍摄所有实例属性
-                var instanceProperties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                                                .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0);
-
-                foreach (var property in instanceProperties)
-                {
-                    var currentValue = property.GetValue(target);
-                    snapshot.state.SetValue(property, currentValue);
-                }
-            }
-
+        public static Transition<T>.StateSnapshot SnapshotAll<T>(this T target, params Expression<Func<T, object?>>[] extraExpressions)
+            where T : class
+        {
+            var snapshot = new Transition<T>.StateSnapshot();
+            TransitionSnapshotHelper.CaptureAll(target, snapshot.GetState(), static type => Interpolator.TryGetInterpolator(type, out _), extraExpressions);
             return snapshot;
         }
 
@@ -50,51 +31,8 @@ namespace VeloxDev.Avalonia.PlatformAdapters
             where T : class
         {
             var snapshot = new Transition<T>.StateSnapshot();
-            var excludedProperties = new HashSet<ITransitionProperty>();
-
-            // 获取排除的属性
-            if (excludedExpressions?.Length > 0)
-            {
-                foreach (var expression in excludedExpressions)
-                {
-                    if (TryGetPropertyFromExpression(expression, out var property))
-                    {
-                        excludedProperties.Add(property!);
-                    }
-                }
-            }
-
-            // 拍摄除排除属性外的所有属性
-            var allProperties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                                        .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)
-                                        .Select(TransitionProperty.FromProperty)
-                                        .Where(p => !excludedProperties.Contains(p));
-
-            foreach (var property in allProperties)
-            {
-                var currentValue = property.GetValue(target);
-                snapshot.state.SetValue(property, currentValue);
-            }
-
+            TransitionSnapshotHelper.CaptureAllExcept(target, snapshot.GetState(), static type => Interpolator.TryGetInterpolator(type, out _), excludedExpressions);
             return snapshot;
-        }
-
-        private static bool TryGetPropertyFromExpression<T>(Expression<Func<T, object?>> expression, out ITransitionProperty? property)
-            where T : class
-        {
-            property = null;
-            if (!TransitionProperty.TryCreate(expression, out var parsed) || parsed is null)
-            {
-                return false;
-            }
-
-            if (!Interpolator.TryGetInterpolator(parsed.PropertyType, out _) || parsed.PropertyInfo.GetIndexParameters().Length != 0)
-            {
-                return false;
-            }
-
-            property = parsed;
-            return true;
         }
     }
 

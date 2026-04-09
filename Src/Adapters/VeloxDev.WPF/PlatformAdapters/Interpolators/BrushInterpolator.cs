@@ -3,7 +3,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.WPF.PlatformAdapters.Interpolators
+namespace VeloxDev.WPF.Interpolators
 {
     public class BrushInterpolator : IValueInterpolator
     {

@@ -1,6 +1,6 @@
 ﻿using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.MAUI.PlatformAdapters.Interpolators
+namespace VeloxDev.MAUI.Interpolators
 {
     public class SizeInterpolator : IValueInterpolator
     {

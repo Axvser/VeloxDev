@@ -5,8 +5,8 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using System;
 using System.Threading.Tasks;
-using VeloxDev.Avalonia.PlatformAdapters;
 using VeloxDev.Core.TransitionSystem;
+using VeloxDev.TransitionSystem;
 
 namespace Demo.Views;
 
@@ -19,10 +19,10 @@ public partial class MainWindow : Window
         Rec0.RenderTransform = new TranslateTransform();
 
         // VeloxDev动画的核心概念是 "一切皆状态"
-        // 对象可以调用 Snapshot() 创建快照
-        // 其中，若 Snapshot() 不指定目标属性，则视作记录所有可读可写的、可插值的实例属性
+        // Snapshot(...) 记录显式指定的属性路径
+        // SnapshotAll() 自动发现并记录当前对象中可动画的属性
 
-        var snapshot0 = Rec0.Snapshot();
+        var snapshot0 = Rec0.SnapshotAll();
         var snapshot1 = Rec0.Snapshot(x => ((TranslateTransform)x.RenderTransform!).X, x => x.Fill);
         var snapshot2 = Rec0.SnapshotExcept(x => x.Width, x => x.Height, x => x.Fill, x => x.Opacity);
 

@@ -1,8 +1,8 @@
 ﻿using Microsoft.Maui.Controls.Shapes;
 using VeloxDev.Core.TransitionSystem;
-using VeloxDev.MAUI.PlatformAdapters.Interpolators;
+using VeloxDev.MAUI.Interpolators;
 
-namespace VeloxDev.MAUI.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class Interpolator : InterpolatorCore<InterpolatorOutput>
     {

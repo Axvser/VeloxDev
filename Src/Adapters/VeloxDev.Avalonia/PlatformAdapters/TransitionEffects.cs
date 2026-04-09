@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace VeloxDev.Avalonia.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public static class TransitionEffects
     {

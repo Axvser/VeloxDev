@@ -4,9 +4,9 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using VeloxDev.Core.TransitionSystem;
-using VeloxDev.WPF.PlatformAdapters.Interpolators;
+using VeloxDev.WPF.Interpolators;
 
-namespace VeloxDev.WPF.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class Interpolator : InterpolatorCore<InterpolatorOutput, DispatcherPriority>
     {

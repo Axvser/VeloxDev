@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using VeloxDev.Core.Interfaces.DynamicTheme;
 
-namespace VeloxDev.WPF.PlatformAdapters
+namespace VeloxDev.WPF
 {
     public class DoubleConverter : IThemeValueConverter
     {

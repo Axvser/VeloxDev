@@ -1,6 +1,6 @@
 ﻿using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.WinForms.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class TransitionEffect : TransitionEffectCore
     {

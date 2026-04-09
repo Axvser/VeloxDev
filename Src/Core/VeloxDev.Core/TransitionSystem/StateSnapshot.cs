@@ -16,11 +16,13 @@ namespace VeloxDev.Core.TransitionSystem
         where TUIThreadInspectorCore : IUIThreadInspector, new()
         where TTransitionInterpreterCore : class, ITransitionInterpreter, new()
     {
-        public TStateCore state = new();
-        public StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore>? root;
-        public StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore>? next = null;
-        public TEffectCore effect = new();
-        public TInterpolatorCore interpolator = new();
+        protected TStateCore state = new();
+        protected StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore>? root;
+        protected StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore>? next = null;
+        protected TEffectCore effect = new();
+        protected TInterpolatorCore interpolator = new();
+
+        public TStateCore GetState() => state;
 
         internal override void AsRoot()
         {
@@ -117,6 +119,15 @@ namespace VeloxDev.Core.TransitionSystem
             state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
             return result;
         }
+        internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, IValueInterpolator interpolator)
+        {
+            if (this is not T1 result)
+            {
+                throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            }
+            state.SetInterpolator(propertyLambda, interpolator);
+            return result;
+        }
         protected override T1 CoreEffect<T1, T2>(T2 effect)
         {
             if (this is not T1 result)
@@ -161,11 +172,13 @@ namespace VeloxDev.Core.TransitionSystem
         where TUIThreadInspectorCore : IUIThreadInspector<TPriorityCore>, new()
         where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
     {
-        public TStateCore state = new();
-        public StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? root;
-        public StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? next = null;
-        public TEffectCore effect = new();
-        public TInterpolatorCore interpolator = new();
+        protected TStateCore state = new();
+        protected StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? root;
+        protected StateSnapshotCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? next = null;
+        protected TEffectCore effect = new();
+        protected TInterpolatorCore interpolator = new();
+
+        public TStateCore GetState() => state;
 
         internal override void AsRoot()
         {
@@ -262,6 +275,15 @@ namespace VeloxDev.Core.TransitionSystem
             state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
             return result;
         }
+        internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, IValueInterpolator interpolator)
+        {
+            if (this is not T1 result)
+            {
+                throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            }
+            state.SetInterpolator(propertyLambda, interpolator);
+            return result;
+        }
         protected override T1 CoreEffect<T1, T2>(T2 effect)
         {
             if (this is not T1 result)
@@ -313,6 +335,8 @@ namespace VeloxDev.Core.TransitionSystem
         internal abstract T CoreProperty<T, TInterpolable>(Expression<Func<T, TInterpolable>> propertyLambda, TInterpolable newValue)
             where T : class
             where TInterpolable : IInterpolable;
+        internal abstract T1 CoreInterpolator<T1, TTarget, TValue>(Expression<Func<TTarget, TValue>> propertyLambda, IValueInterpolator interpolator)
+            where T1 : StateSnapshotCore;
         protected abstract T1 CoreEffect<T1, T2>(T2 effect) where T2 : ITransitionEffectCore;
         protected abstract T1 CoreEffect<T1, T2>(Action<T2> effectSetter) where T2 : ITransitionEffectCore, new();
         internal abstract IFrameState CoreRecordState();

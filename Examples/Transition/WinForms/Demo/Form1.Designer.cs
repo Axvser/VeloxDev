@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using VeloxDev.Core.TransitionSystem;
-using VeloxDev.WinForms.PlatformAdapters;
+using VeloxDev.TransitionSystem;
 
 namespace Demo
 {
@@ -165,10 +165,10 @@ namespace Demo
         private void Form1_Load(object sender, System.EventArgs e)
         {
 
-            // 创建初始快照
+            // Snapshot(...) 记录显式指定的属性路径，SnapshotAll() 自动记录当前对象中可动画的属性
             initialSnapshot1 = panel1.Snapshot(x => x.Location, x => x.BackColor, x => x.Parent.BackColor);
-            initialSnapshot2 = panel2.Snapshot();
-            initialSnapshot3 = panel3.Snapshot();
+            initialSnapshot2 = panel2.SnapshotAll();
+            initialSnapshot3 = panel3.SnapshotAll();
 
             lblStatus.Text = "系统就绪，可以开始动画演示";
         }

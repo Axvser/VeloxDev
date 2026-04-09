@@ -39,24 +39,15 @@ namespace VeloxDev.Core.TransitionSystem
             {
                 var currentValue = inspector.ProtectedGetValue(isUIAccess, target, kvp.Key);
                 var newValue = kvp.Value;
-                if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator))
+                if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
                 {
-                    if (state.TryGetInterpolator(kvp.Key, out var item))
-                    {
-                        if (item != null)
-                        {
-                            var frames = inspector.ProtectedInterpolate(isUIAccess, () => item.Interpolate(currentValue, newValue, count));
-                            output.AddPropertyInterpolations(kvp.Key, frames);
-                        }
-                    }
-                    else
-                    {
-                        if (interpolator != null)
-                        {
-                            var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
-                            output.AddPropertyInterpolations(kvp.Key, frames);
-                        }
-                    }
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => customInterpolator.Interpolate(currentValue, newValue, count));
+                    output.AddPropertyInterpolations(kvp.Key, frames);
+                }
+                else if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator) && interpolator != null)
+                {
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
+                    output.AddPropertyInterpolations(kvp.Key, frames);
                 }
                 else
                 {
@@ -106,24 +97,15 @@ namespace VeloxDev.Core.TransitionSystem
             {
                 var currentValue = isUIAccess ? kvp.Key.GetValue(target) : inspector.ProtectedGetValue(isUIAccess, target, kvp.Key);
                 var newValue = kvp.Value;
-                if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator))
+                if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
                 {
-                    if (state.TryGetInterpolator(kvp.Key, out var item))
-                    {
-                        if (item != null)
-                        {
-                            var frames = inspector.ProtectedInterpolate(isUIAccess, () => item.Interpolate(currentValue, newValue, count));
-                            output.AddPropertyInterpolations(kvp.Key, frames);
-                        }
-                    }
-                    else
-                    {
-                        if (interpolator != null)
-                        {
-                            var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
-                            output.AddPropertyInterpolations(kvp.Key, frames);
-                        }
-                    }
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => customInterpolator.Interpolate(currentValue, newValue, count));
+                    output.AddPropertyInterpolations(kvp.Key, frames);
+                }
+                else if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator) && interpolator != null)
+                {
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
+                    output.AddPropertyInterpolations(kvp.Key, frames);
                 }
                 else
                 {

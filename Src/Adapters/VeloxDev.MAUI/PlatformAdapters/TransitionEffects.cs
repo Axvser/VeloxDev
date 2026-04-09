@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.MAUI.PlatformAdapters
+﻿namespace VeloxDev.TransitionSystem
 {
     public static class TransitionEffects
     {

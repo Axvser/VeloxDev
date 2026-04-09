@@ -1,7 +1,7 @@
 ﻿using System.Windows;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.WPF.PlatformAdapters.Interpolators
+namespace VeloxDev.WPF.Interpolators
 {
     public class RectInterpolator : IValueInterpolator
     {

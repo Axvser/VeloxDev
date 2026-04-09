@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
-namespace VeloxDev.Avalonia.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class UIThreadInspector() : UIThreadInspectorCore<DispatcherPriority>
     {

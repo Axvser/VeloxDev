@@ -1,7 +1,7 @@
 ﻿using VeloxDev.Core.TransitionSystem;
-using VeloxDev.WinForms.PlatformAdapters.Interpolators;
+using VeloxDev.WinForms.Interpolators;
 
-namespace VeloxDev.WinForms.PlatformAdapters
+namespace VeloxDev.TransitionSystem
 {
     public class Interpolator : InterpolatorCore<InterpolatorOutput>
     {

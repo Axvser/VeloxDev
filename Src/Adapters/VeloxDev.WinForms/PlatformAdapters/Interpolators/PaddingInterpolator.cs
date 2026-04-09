@@ -1,6 +1,6 @@
 ﻿using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.WinForms.PlatformAdapters.Interpolators
+namespace VeloxDev.WinForms.Interpolators
 {
     public class PaddingInterpolator : IValueInterpolator
     {
