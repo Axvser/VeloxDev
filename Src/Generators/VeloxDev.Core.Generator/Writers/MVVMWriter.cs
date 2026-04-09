@@ -12,7 +12,8 @@ namespace VeloxDev.Core.Generator.Writers
         private List<MVVMPropertyFactory> MVVMProperties { get; set; } = [];
         private List<MVVMPropertyFactory> AutoProperties { get; set; } = [];
         private bool IsWorkflowComponent { get; set; } = false;
-        private bool _isBaseClassMvvmGenerated = false;
+        private bool _hasBasePropertyNotificationInfrastructure = false;
+        private bool _hasBaseCollectionNotificationInfrastructure = false;
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
@@ -20,7 +21,8 @@ namespace VeloxDev.Core.Generator.Writers
 
             if (namedTypeSymbol.BaseType != null)
             {
-                _isBaseClassMvvmGenerated = CheckBaseClassForMvvmInfrastructure(namedTypeSymbol.BaseType);
+                _hasBasePropertyNotificationInfrastructure = CheckBaseClassForPropertyInfrastructure(namedTypeSymbol.BaseType);
+                _hasBaseCollectionNotificationInfrastructure = CheckBaseClassForCollectionInfrastructure(namedTypeSymbol.BaseType);
             }
 
             ReadMVVMConfig(namedTypeSymbol);
@@ -83,10 +85,13 @@ namespace VeloxDev.Core.Generator.Writers
             return false;
         }
 
-        private bool CheckBaseClassForMvvmInfrastructure(INamedTypeSymbol? symbol)
+        private bool CheckBaseClassForPropertyInfrastructure(INamedTypeSymbol? symbol)
         {
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
                 return false;
+
+            if (HasPropertyInfrastructureMethods(symbol))
+                return true;
 
             // 1. 检查 [VeloxProperty]
             if (symbol.GetMembers().Any(m => m.GetAttributes().Any(a =>
@@ -99,7 +104,45 @@ namespace VeloxDev.Core.Generator.Writers
             // 3. 检查主流框架
             if (HasMainstreamFrameworkFeatures(symbol)) return true;
 
-            return CheckBaseClassForMvvmInfrastructure(symbol.BaseType);
+            return CheckBaseClassForPropertyInfrastructure(symbol.BaseType);
+        }
+
+        private bool CheckBaseClassForCollectionInfrastructure(INamedTypeSymbol? symbol)
+        {
+            if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
+                return false;
+
+            if (HasCollectionInfrastructureMethods(symbol))
+                return true;
+
+            return CheckBaseClassForCollectionInfrastructure(symbol.BaseType);
+        }
+
+        private bool HasPropertyInfrastructureMethods(INamedTypeSymbol symbol)
+        {
+            var methods = symbol.GetMembers().OfType<IMethodSymbol>().ToList();
+
+            return methods.Any(method =>
+                       method.Name == "OnPropertyChanging" &&
+                       !method.IsStatic &&
+                       method.Parameters.Length == 1 &&
+                       method.Parameters[0].Type.SpecialType == SpecialType.System_String) &&
+                   methods.Any(method =>
+                       method.Name == "OnPropertyChanged" &&
+                       !method.IsStatic &&
+                       method.Parameters.Length == 1 &&
+                       method.Parameters[0].Type.SpecialType == SpecialType.System_String);
+        }
+
+        private bool HasCollectionInfrastructureMethods(INamedTypeSymbol symbol)
+        {
+            return symbol.GetMembers().OfType<IMethodSymbol>().Any(method =>
+                method.Name == "OnCollectionChanged" &&
+                !method.IsStatic &&
+                method.IsGenericMethod &&
+                method.TypeParameters.Length == 1 &&
+                method.Parameters.Length == 4 &&
+                method.Parameters[0].Type.SpecialType == SpecialType.System_String);
         }
 
         private bool HasMainstreamFrameworkFeatures(INamedTypeSymbol symbol)
@@ -152,8 +195,8 @@ namespace VeloxDev.Core.Generator.Writers
 
             var builder = new StringBuilder();
 
-            // 仅在基类未生成 MVVM 基础设施时生成事件和方法
-            if (!_isBaseClassMvvmGenerated)
+            // 仅在基类未生成属性通知基础设施时生成事件和方法
+            if (!_hasBasePropertyNotificationInfrastructure)
             {
                 // 检查类是否为 sealed
                 bool isSealed = Symbol.IsSealed;
@@ -172,6 +215,18 @@ namespace VeloxDev.Core.Generator.Writers
                         public {{methodModifier}}void OnPropertyChanged(string propertyName)
                         {
                             PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
+                        }
+                    """);
+            }
+
+            if (!_hasBaseCollectionNotificationInfrastructure && MVVMProperties.Concat(AutoProperties).Any(property => property.IsNotifyCollectionChanged))
+            {
+                bool isSealed = Symbol.IsSealed;
+                string methodModifier = isSealed ? "" : "virtual ";
+
+                builder.AppendLine($$"""
+                        protected {{methodModifier}}void OnCollectionChanged<T>(string propertyName, global::System.Collections.Specialized.NotifyCollectionChangedEventArgs e, global::System.Collections.Generic.IEnumerable<T>? oldItems, global::System.Collections.Generic.IEnumerable<T>? newItems)
+                        {
                         }
                     """);
             }

@@ -1,13 +1,8 @@
-using System;
-using System.Collections.Specialized;
-using System.ComponentModel;
-using System.Linq;
 using Demo.ViewModels;
 using Demo.Workflow;
-using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Shapes;
-using Microsoft.Maui.Graphics;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using VeloxDev.Core.Interfaces.WorkflowSystem;
 
 namespace Demo.Controls;

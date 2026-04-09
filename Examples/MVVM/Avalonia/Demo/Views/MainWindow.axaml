@@ -3,24 +3,50 @@
         xmlns:vm="using:Demo.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="640"
         x:Class="Demo.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="Demo">
 
     <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
         <vm:MainWindowViewModel/>
     </Design.DataContext>
-    
-    <Grid RowDefinitions="*,*">
-        <TextBlock Grid.Row="0" Text="{Binding Greeting}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-        <Grid Grid.Row="1" ColumnDefinitions="*,*">
-            <Button Grid.Column="0" Content="增加" Command="{Binding PlusCommand}"/>
-            <Button Grid.Column="1" Content="减少" Command="{Binding MinusCommand}"/>
-        </Grid>
-    </Grid>
-    
+
+    <ScrollViewer>
+        <StackPanel Margin="24" Spacing="16">
+            <TextBlock Text="VeloxDev MVVM Demo" FontSize="24" FontWeight="Bold"/>
+            <TextBlock Text="{Binding Greeting}" FontSize="16"/>
+
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <Button Content="增加" Command="{Binding PlusCommand}"/>
+                <Button Content="减少" Command="{Binding MinusCommand}"/>
+            </StackPanel>
+
+            <Border Padding="16" BorderThickness="1" CornerRadius="8">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="INotifyCollectionChanged 新特性演示" FontSize="18" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding CollectionStatus}" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding CollectionTrace}" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding SelectedItemSummary}"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="添加项" Command="{Binding AddItemCommand}"/>
+                        <Button Content="移除选中" Command="{Binding RemoveSelectedItemCommand}"/>
+                        <Button Content="末项移到首位" Command="{Binding MoveLastToFirstCommand}"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="替换整个集合" Command="{Binding ReplaceItemsCommand}"/>
+                        <Button Content="清空集合" Command="{Binding ClearItemsCommand}"/>
+                    </StackPanel>
+
+                    <ListBox Height="220"
+                             ItemsSource="{Binding Items}"
+                             SelectedItem="{Binding SelectedItem}"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+
 </Window>

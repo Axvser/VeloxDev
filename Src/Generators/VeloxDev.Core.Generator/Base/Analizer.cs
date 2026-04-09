@@ -34,6 +34,8 @@ namespace VeloxDev.Core.Generator.Base
                 FieldName = fieldSymbol.Name;
                 PropertyName = GetPropertyNameFromFieldName(fieldSymbol.Name);
                 IsNullable = IsNullableType(fieldSymbol.Type);
+                IsNotifyCollectionChanged = IsNotifyCollectionChangedType(fieldSymbol.Type);
+                CollectionItemTypeName = GetCollectionItemTypeName(fieldSymbol.Type);
             }
 
             public IFieldSymbol Symbol { get; private set; }
@@ -41,6 +43,8 @@ namespace VeloxDev.Core.Generator.Base
             public string FieldName { get; private set; } = string.Empty;
             public string PropertyName { get; private set; } = string.Empty;
             public bool IsNullable { get; private set; }
+            public bool IsNotifyCollectionChanged { get; private set; }
+            public string? CollectionItemTypeName { get; private set; }
 
             private static string GetFullyQualifiedTypeName(ITypeSymbol typeSymbol)
             {
@@ -98,6 +102,8 @@ namespace VeloxDev.Core.Generator.Base
                 HasGetter = propertySymbol.GetMethod != null;
                 HasSetter = propertySymbol.SetMethod != null;
                 IsPartial = IsPartialProperty(propertySymbol);
+                IsNotifyCollectionChanged = IsNotifyCollectionChangedType(propertySymbol.Type);
+                CollectionItemTypeName = GetCollectionItemTypeName(propertySymbol.Type);
             }
 
             public IPropertySymbol Symbol { get; private set; }
@@ -108,6 +114,8 @@ namespace VeloxDev.Core.Generator.Base
             public bool HasGetter { get; private set; }
             public bool HasSetter { get; private set; }
             public bool IsPartial { get; private set; }
+            public bool IsNotifyCollectionChanged { get; private set; }
+            public string? CollectionItemTypeName { get; private set; }
             public string PropertyAccessModifier { get; private set; } = "public";
             public string GetterAccessModifier { get; private set; } = string.Empty;
             public string SetterAccessModifier { get; private set; } = string.Empty;
@@ -214,6 +222,8 @@ namespace VeloxDev.Core.Generator.Base
                 HasGetter = true;
                 HasSetter = true;
                 IsPartial = false;
+                IsNotifyCollectionChanged = fieldAnalizer.IsNotifyCollectionChanged;
+                CollectionItemTypeName = fieldAnalizer.CollectionItemTypeName;
                 PropertyAccessModifier = "public";
                 GetterAccessModifier = string.Empty;
                 SetterAccessModifier = string.Empty;
@@ -232,6 +242,8 @@ namespace VeloxDev.Core.Generator.Base
                 HasGetter = propertyAnalizer.HasGetter;
                 HasSetter = propertyAnalizer.HasSetter;
                 IsPartial = propertyAnalizer.IsPartial;
+                IsNotifyCollectionChanged = propertyAnalizer.IsNotifyCollectionChanged;
+                CollectionItemTypeName = propertyAnalizer.CollectionItemTypeName;
                 PropertyAccessModifier = propertyAnalizer.PropertyAccessModifier;
                 GetterAccessModifier = propertyAnalizer.GetterAccessModifier;
                 SetterAccessModifier = propertyAnalizer.SetterAccessModifier;
@@ -246,6 +258,8 @@ namespace VeloxDev.Core.Generator.Base
             public bool HasGetter { get; private set; }
             public bool HasSetter { get; private set; }
             public bool IsPartial { get; private set; }
+            public bool IsNotifyCollectionChanged { get; private set; }
+            public string? CollectionItemTypeName { get; private set; }
             public string PropertyAccessModifier { get; private set; }
             public string GetterAccessModifier { get; private set; }
             public string SetterAccessModifier { get; private set; }
@@ -254,6 +268,8 @@ namespace VeloxDev.Core.Generator.Base
             public List<string> SetteredBody { get; set; } = [];
 
             private bool IsView { get; set; }
+
+            private string NonNullableFullTypeName => FullTypeName.EndsWith("?") ? FullTypeName.Substring(0, FullTypeName.Length - 1) : FullTypeName;
 
             public string GenerateFieldDeclaration()
             {
@@ -282,32 +298,6 @@ namespace VeloxDev.Core.Generator.Base
 
             public string GenerateViewModel()
             {
-                var setteringBody = new StringBuilder();
-                for (int i = 0; i < SetteringBody.Count; i++)
-                {
-                    if (i == SetteringBody.Count - 1)
-                    {
-                        setteringBody.Append($"{RETRACT}       {SetteringBody[i]}");
-                    }
-                    else
-                    {
-                        setteringBody.AppendLine($"{RETRACT}       {SetteringBody[i]}");
-                    }
-                }
-
-                var setteredBody = new StringBuilder();
-                for (int i = 0; i < SetteredBody.Count; i++)
-                {
-                    if (i == SetteredBody.Count - 1)
-                    {
-                        setteredBody.Append($"{RETRACT}       {SetteredBody[i]}");
-                    }
-                    else
-                    {
-                        setteredBody.AppendLine($"{RETRACT}       {SetteredBody[i]}");
-                    }
-                }
-
                 var equalityComparison = $"global::System.Object.Equals({SourceName}, value)";
 
                 // 生成属性访问器，完全保留用户写的修饰符
@@ -319,16 +309,24 @@ namespace VeloxDev.Core.Generator.Base
                 if (HasSetter)
                 {
                     var setterAccessModifier = !string.IsNullOrEmpty(SetterAccessModifier) ? SetterAccessModifier + " " : "";
+                    List<string> setterLines =
+                    [
+                        $"if({equalityComparison}) return;",
+                        $"var old = {SourceName};",
+                        .. SetteringBody,
+                        $"On{PropertyName}Changing(old, value);",
+                        .. GetCollectionBeforeAssignmentLines(),
+                        $"{SourceName} = value;",
+                        .. GetCollectionAfterAssignmentLines(),
+                        $"On{PropertyName}Changed(old, value);",
+                        .. SetteredBody,
+                    ];
+
+                    var setterBody = BuildMethodBody(setterLines);
                     setter = $$"""
                         {{RETRACT}}    {{setterAccessModifier}}set
                         {{RETRACT}}    {
-                        {{RETRACT}}       if({{equalityComparison}}) return;
-                        {{RETRACT}}       var old = {{SourceName}};
-                        {{setteringBody}}
-                        {{RETRACT}}       On{{PropertyName}}Changing(old, value);
-                        {{RETRACT}}       {{SourceName}} = value;
-                        {{RETRACT}}       On{{PropertyName}}Changed(old, value);
-                        {{setteredBody}}
+                        {{setterBody}}
                         {{RETRACT}}    }
                         """;
                 }
@@ -345,6 +343,7 @@ namespace VeloxDev.Core.Generator.Base
 
                 // 如果是部分属性，添加partial修饰符
                 var partialModifier = IsPartial ? "partial " : string.Empty;
+                var collectionMembers = GenerateCollectionMembers();
 
                 return $$"""
                     {{RETRACT}}{{PropertyAccessModifier}} {{partialModifier}}{{FullTypeName}} {{PropertyName}}
@@ -354,6 +353,168 @@ namespace VeloxDev.Core.Generator.Base
                     {{RETRACT}}}
                     {{changingMethod}}
                     {{changedMethod}}
+                    {{collectionMembers}}
+                    """;
+            }
+
+            private string BuildMethodBody(IEnumerable<string> lines)
+            {
+                StringBuilder builder = new();
+                var actualLines = lines.Where(line => !string.IsNullOrWhiteSpace(line)).ToList();
+
+                for (int i = 0; i < actualLines.Count; i++)
+                {
+                    if (i == actualLines.Count - 1)
+                    {
+                        builder.Append($"{RETRACT}       {actualLines[i]}");
+                    }
+                    else
+                    {
+                        builder.AppendLine($"{RETRACT}       {actualLines[i]}");
+                    }
+                }
+
+                return builder.ToString();
+            }
+
+            private IEnumerable<string> GetCollectionBeforeAssignmentLines()
+            {
+                if (!HasSetter || !IsNotifyCollectionChanged)
+                {
+                    yield break;
+                }
+
+                yield return $"if (old is global::System.Collections.Specialized.INotifyCollectionChanged oldCollection)";
+                yield return "{";
+                yield return $"    oldCollection.CollectionChanged -= On{PropertyName}CollectionChanged;";
+                yield return "}";
+                yield return "if (old is not null)";
+                yield return "{";
+                yield return $"    OnItemRemovedFrom{PropertyName}(Enumerate{PropertyName}Items(old));";
+                yield return "}";
+            }
+
+            private IEnumerable<string> GetCollectionAfterAssignmentLines()
+            {
+                if (!HasSetter || !IsNotifyCollectionChanged)
+                {
+                    yield break;
+                }
+
+                yield return $"if (value is global::System.Collections.Specialized.INotifyCollectionChanged newCollection)";
+                yield return "{";
+                yield return $"    newCollection.CollectionChanged += On{PropertyName}CollectionChanged;";
+                yield return "}";
+                yield return "if (value is not null)";
+                yield return "{";
+                yield return $"    OnItemAddedTo{PropertyName}(Enumerate{PropertyName}Items(value));";
+                yield return "}";
+            }
+
+            private string GenerateCollectionMembers()
+            {
+                if (!HasSetter || !IsNotifyCollectionChanged)
+                {
+                    return string.Empty;
+                }
+
+                var itemParameterType = string.IsNullOrWhiteSpace(CollectionItemTypeName)
+                    ? "global::System.Collections.IEnumerable"
+                    : $"global::System.Collections.Generic.IEnumerable<{CollectionItemTypeName}>";
+
+                if (string.IsNullOrWhiteSpace(CollectionItemTypeName))
+                {
+                    return $$"""
+                        {{RETRACT}}private static {{itemParameterType}} Enumerate{{PropertyName}}Items({{NonNullableFullTypeName}} collection)
+                        {{RETRACT}}{
+                        {{RETRACT}}    return collection;
+                        {{RETRACT}}}
+                        {{RETRACT}}private static {{itemParameterType}} Enumerate{{PropertyName}}Items(global::System.Collections.IList collection)
+                        {{RETRACT}}{
+                        {{RETRACT}}    return collection;
+                        {{RETRACT}}}
+                        {{RETRACT}}private void On{{PropertyName}}CollectionChanged(object? sender, global::System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+                        {{RETRACT}}{
+                        {{RETRACT}}    var oldItems = e.OldItems is null ? null : global::System.Linq.Enumerable.Cast<object?>(e.OldItems);
+                        {{RETRACT}}    var newItems = e.NewItems is null ? null : global::System.Linq.Enumerable.Cast<object?>(e.NewItems);
+                        {{RETRACT}}    OnCollectionChanged(nameof({{PropertyName}}), e, oldItems, newItems);
+                        {{RETRACT}}    switch (e.Action)
+                        {{RETRACT}}    {
+                        {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Add when e.NewItems is not null:
+                        {{RETRACT}}            OnItemAddedTo{{PropertyName}}(Enumerate{{PropertyName}}Items(e.NewItems));
+                        {{RETRACT}}            break;
+                        {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Remove when e.OldItems is not null:
+                        {{RETRACT}}            OnItemRemovedFrom{{PropertyName}}(Enumerate{{PropertyName}}Items(e.OldItems));
+                        {{RETRACT}}            break;
+                        {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Replace:
+                        {{RETRACT}}            if (e.OldItems is not null)
+                        {{RETRACT}}            {
+                        {{RETRACT}}                OnItemRemovedFrom{{PropertyName}}(Enumerate{{PropertyName}}Items(e.OldItems));
+                        {{RETRACT}}            }
+                        {{RETRACT}}            if (e.NewItems is not null)
+                        {{RETRACT}}            {
+                        {{RETRACT}}                OnItemAddedTo{{PropertyName}}(Enumerate{{PropertyName}}Items(e.NewItems));
+                        {{RETRACT}}            }
+                        {{RETRACT}}            break;
+                        {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Move when e.NewItems is not null:
+                        {{RETRACT}}            OnItemMovedIn{{PropertyName}}(Enumerate{{PropertyName}}Items(e.NewItems));
+                        {{RETRACT}}            break;
+                        {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Reset:
+                        {{RETRACT}}            OnItemsResetIn{{PropertyName}}();
+                        {{RETRACT}}            break;
+                        {{RETRACT}}    }
+                        {{RETRACT}}}
+                        {{RETRACT}}partial void OnItemAddedTo{{PropertyName}}({{itemParameterType}} items);
+                        {{RETRACT}}partial void OnItemRemovedFrom{{PropertyName}}({{itemParameterType}} items);
+                        {{RETRACT}}partial void OnItemMovedIn{{PropertyName}}({{itemParameterType}} items);
+                        {{RETRACT}}partial void OnItemsResetIn{{PropertyName}}();
+                        """;
+                }
+
+                return $$"""
+                    {{RETRACT}}private static {{itemParameterType}} Enumerate{{PropertyName}}Items({{NonNullableFullTypeName}} collection)
+                    {{RETRACT}}{
+                    {{RETRACT}}    return global::System.Linq.Enumerable.ToArray(collection);
+                    {{RETRACT}}}
+                    {{RETRACT}}private static {{itemParameterType}} Enumerate{{PropertyName}}Items(global::System.Collections.IList collection)
+                    {{RETRACT}}{
+                    {{RETRACT}}    return global::System.Linq.Enumerable.ToArray(global::System.Linq.Enumerable.Cast<{{CollectionItemTypeName}}>(collection));
+                    {{RETRACT}}}
+                    {{RETRACT}}private void On{{PropertyName}}CollectionChanged(object? sender, global::System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+                    {{RETRACT}}{
+                    {{RETRACT}}    var oldItems = e.OldItems is null ? null : Enumerate{{PropertyName}}Items(e.OldItems);
+                    {{RETRACT}}    var newItems = e.NewItems is null ? null : Enumerate{{PropertyName}}Items(e.NewItems);
+                    {{RETRACT}}    OnCollectionChanged(nameof({{PropertyName}}), e, oldItems, newItems);
+                    {{RETRACT}}    switch (e.Action)
+                    {{RETRACT}}    {
+                    {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Add when e.NewItems is not null:
+                    {{RETRACT}}            OnItemAddedTo{{PropertyName}}(Enumerate{{PropertyName}}Items(e.NewItems));
+                    {{RETRACT}}            break;
+                    {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Remove when e.OldItems is not null:
+                    {{RETRACT}}            OnItemRemovedFrom{{PropertyName}}(Enumerate{{PropertyName}}Items(e.OldItems));
+                    {{RETRACT}}            break;
+                    {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Replace:
+                    {{RETRACT}}            if (e.OldItems is not null)
+                    {{RETRACT}}            {
+                    {{RETRACT}}                OnItemRemovedFrom{{PropertyName}}(Enumerate{{PropertyName}}Items(e.OldItems));
+                    {{RETRACT}}            }
+                    {{RETRACT}}            if (e.NewItems is not null)
+                    {{RETRACT}}            {
+                    {{RETRACT}}                OnItemAddedTo{{PropertyName}}(Enumerate{{PropertyName}}Items(e.NewItems));
+                    {{RETRACT}}            }
+                    {{RETRACT}}            break;
+                    {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Move when e.NewItems is not null:
+                    {{RETRACT}}            OnItemMovedIn{{PropertyName}}(Enumerate{{PropertyName}}Items(e.NewItems));
+                    {{RETRACT}}            break;
+                    {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Reset:
+                    {{RETRACT}}            OnItemsResetIn{{PropertyName}}();
+                    {{RETRACT}}            break;
+                    {{RETRACT}}    }
+                    {{RETRACT}}}
+                    {{RETRACT}}partial void OnItemAddedTo{{PropertyName}}({{itemParameterType}} items);
+                    {{RETRACT}}partial void OnItemRemovedFrom{{PropertyName}}({{itemParameterType}} items);
+                    {{RETRACT}}partial void OnItemMovedIn{{PropertyName}}({{itemParameterType}} items);
+                    {{RETRACT}}partial void OnItemsResetIn{{PropertyName}}();
                     """;
             }
 
@@ -389,6 +550,50 @@ namespace VeloxDev.Core.Generator.Base
         private static bool IsPartialClass(SyntaxNode node)
         {
             return node is ClassDeclarationSyntax classDecl && classDecl.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword));
+        }
+
+        private static bool IsNotifyCollectionChangedType(ITypeSymbol typeSymbol)
+        {
+            if (typeSymbol.ToDisplayString() == "System.Collections.Specialized.INotifyCollectionChanged")
+            {
+                return true;
+            }
+
+            return typeSymbol.AllInterfaces.Any(i => i.ToDisplayString() == "System.Collections.Specialized.INotifyCollectionChanged");
+        }
+
+        private static string? GetCollectionItemTypeName(ITypeSymbol typeSymbol)
+        {
+            if (GetGenericEnumerableInterface(typeSymbol) is not INamedTypeSymbol enumerableInterface ||
+                enumerableInterface.TypeArguments.Length == 0)
+            {
+                return null;
+            }
+
+            return GetFullyQualifiedTypeName(enumerableInterface.TypeArguments[0]);
+        }
+
+        private static INamedTypeSymbol? GetGenericEnumerableInterface(ITypeSymbol typeSymbol)
+        {
+            if (typeSymbol is INamedTypeSymbol namedType &&
+                namedType.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T)
+            {
+                return namedType;
+            }
+
+            return typeSymbol.AllInterfaces
+                .OfType<INamedTypeSymbol>()
+                .FirstOrDefault(i => i.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T);
+        }
+
+        private static string GetFullyQualifiedTypeName(ITypeSymbol typeSymbol)
+        {
+            var displayFormat = new SymbolDisplayFormat(
+                typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+                genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+                miscellaneousOptions: SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+            return typeSymbol.ToDisplayString(displayFormat);
         }
 
         private static IncrementalValueProvider<(Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes)> GetFilteredValue(IncrementalGeneratorInitializationContext context, IncrementalValuesProvider<ClassDeclarationSyntax> classDeclarations)

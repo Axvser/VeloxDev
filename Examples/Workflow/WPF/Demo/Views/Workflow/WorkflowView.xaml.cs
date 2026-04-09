@@ -1,6 +1,5 @@
 using Demo.ViewModels;
 using Microsoft.Win32;
-using System;
 using System.IO;
 using System.Windows.Controls;
 using System.Windows.Input;

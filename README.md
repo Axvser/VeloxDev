@@ -1,12 +1,8 @@
 ﻿# 🚀 VeloxDev
 
-> Velox 原指 Veloxity，寓意“效率”。聚焦 `扩展性` `参数化` `流程化` `插件化` `一致性` 关键词。它充分利用 `Source Generator`，以允许您以足够优雅的代码实现这些关键词
+> VeloxDev 是一组以 `Source Generator` 为核心的 .NET 开发工具，围绕 `一致性`、`扩展性`、`流程化`、`参数化` 与 `插件化` 设计。
 
-> 问题来了：什么样的功能会被纳入VeloxDev？只说这些关键词太抽象！
-
-> 解释一下：例如，`Animation` 这一概念在 WPF 、Avalonia 、WinUI 等多个UI框架中都有，但它们各自持有一套API，而我们希望获得 `一致性`，所以VeloxDev提供了抽象层，来允许您使用一致的API处理动画；
-> 又例如，`Workflow` 这一概念具备普适性，能用于大量需要`参数化`、`流程化`的场景，因此被选中作为VeloxDev模块之一；
-> 再例如，`AOP` 允许于不修改类定义的前提下实现已有成员的功能编辑，是迈向高 `扩展性` 的基石之一，因此也被选中 ……
+> 它将多个常见但分散的能力收敛到统一模型中：例如跨 UI 框架的 `Transition` 动画抽象、基于特性的 `MVVM` 代码生成、可扩展的 `Workflow` 模板、动态 `Theme` 切换、`MonoBehaviour` 式帧循环，以及面向 AOT / AOP 场景的生成支持。
 
 [Wiki](https://axvser.github.io/VeloxDev.Wiki/)
 
@@ -48,7 +44,7 @@
 
 |  框架  | 项目 | NuGet |  依赖第三方库  | 备注 |
 |--------|------|-------|----------------|------|
-| .NET | VeloxDev.Core | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/)| ❌ | 核心库 |
+| .NET | VeloxDev.Core | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/)| ❌ | 核心抽象与生成能力 |
 
 ---
 
@@ -58,13 +54,31 @@
 
 | 功能特性 | 描述 | 是否需要适配层 | 说明 |
 |---------|------|---------------|-----------|
-| 🪶 MVVM  | 自动生成NotifyProperty与Command | ❌ | |
-| 🔁 Workflow  | 可视化拖拽式工作流设计器 | ❌ | |
-| 🎞️ Transition | 跨平台的动画抽象层，支持缓动函数 | ✔ | 需要为不同平台实现具体的插值器、主线程检测器、调度器等 |
-| 🌀 AOP | 面向切面编程的拦截框架 | ❌ | 需要目标框架 ≥ .NET5 |
-| 🎨 Theme | 动态主题切换和样式管理 | ✔ | 需要适配不同平台的样式/资源系统 |
-| ⚙️ MonoBehaviour | 按帧同步的循环刷新机制 | ❌ | |
-| 📦 AOT - Reflect | 在AOT编译项目中生成反射调用代码 | ❌ | |
+| 🪶 MVVM  | 通过 Source Generator 生成通知属性与命令 | ❌ | |
+| 🔁 Workflow  | 提供工作流树、节点、插槽、连线模板与交互辅助 | ❌ | |
+| 🎞️ Transition | 跨平台的插值动画抽象层，支持缓动函数与调度 | ✔ | 需要为不同平台实现具体的插值器、主线程检测器、调度器等 |
+| 🌀 AOP | 编译期注入的切面代理支持 | ❌ | 需要目标框架 ≥ .NET5 |
+| 🎨 Theme | 主题注册、缓存与渐变切换 | ✔ | 需要适配不同平台的样式/资源系统 |
+| ⚙️ MonoBehaviour | 按帧驱动的生命周期循环机制 | ❌ | |
+| 📦 AOT Reflection | 在 AOT / 裁剪场景中生成反射保留代码 | ❌ | |
+
+---
+
+### 🏗️ VeloxDev.Core
+
+`VeloxDev.Core` 是整个 VeloxDev 的基础层，负责承载跨平台抽象、特性声明和生成入口。
+
+它当前主要包含：
+
+* `MVVM`：`[VeloxProperty]` 与 `[VeloxCommand]`，用于生成通知属性、命令以及命令生命周期控制
+* `Workflow`：工作流树 / 节点 / 插槽 / 连线的模板特性与通用交互模型
+* `Transition`：插值动画、缓动、时间调度与状态快照抽象
+* `Theme`：主题对象注册、主题缓存、即时切换与渐变切换
+* `MonoBehaviour`：按帧更新的生命周期模型
+* `AOT Reflection`：面向 AOT 和裁剪环境的反射保留生成
+* `AOP`：在支持的目标框架上提供切面代理标记能力
+
+其中 `Transition` 与 `Theme` 的完整运行通常需要平台适配层配合；而 `MVVM`、`Workflow`、`MonoBehaviour`、`AOT Reflection` 等能力则可直接建立在核心库之上。
 
 ---
 

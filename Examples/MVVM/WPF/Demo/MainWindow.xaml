@@ -1,17 +1,44 @@
-﻿<Window x:Class="Demo.MainWindow"
+<Window x:Class="Demo.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Demo"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="MainWindow" Height="640" Width="900">
     <Window.DataContext>
         <local:MainWindowViewModel/>
     </Window.DataContext>
-    <Grid>
-        <TextBlock Foreground="Black" Text="{Binding Greeting}" Margin="200,50,200,300"/>
-        <Button Content="增加" Command="{Binding PlusCommand}" Margin="0,300,400,50"/>
-        <Button Content="减少" Command="{Binding MinusCommand}" Margin="400,300,0,50"/>
-    </Grid>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="24">
+            <TextBlock Text="VeloxDev MVVM Demo" FontSize="24" FontWeight="Bold" Margin="0,0,0,8"/>
+            <TextBlock Text="{Binding Greeting}" FontSize="16" Margin="0,0,0,16"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                <Button Content="增加" Command="{Binding PlusCommand}" Margin="0,0,12,0" Padding="16,6"/>
+                <Button Content="减少" Command="{Binding MinusCommand}" Padding="16,6"/>
+            </StackPanel>
+
+            <Border Padding="16" BorderThickness="1" BorderBrush="Gray">
+                <StackPanel>
+                    <TextBlock Text="INotifyCollectionChanged 新特性演示" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                    <TextBlock Text="{Binding CollectionStatus}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding CollectionTrace}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding SelectedItemSummary}" Margin="0,0,0,12"/>
+
+                    <WrapPanel Margin="0,0,0,8">
+                        <Button Content="添加项" Command="{Binding AddItemCommand}" Margin="0,0,8,8" Padding="12,6"/>
+                        <Button Content="移除选中" Command="{Binding RemoveSelectedItemCommand}" Margin="0,0,8,8" Padding="12,6"/>
+                        <Button Content="末项移到首位" Command="{Binding MoveLastToFirstCommand}" Margin="0,0,8,8" Padding="12,6"/>
+                        <Button Content="替换整个集合" Command="{Binding ReplaceItemsCommand}" Margin="0,0,8,8" Padding="12,6"/>
+                        <Button Content="清空集合" Command="{Binding ClearItemsCommand}" Margin="0,0,8,8" Padding="12,6"/>
+                    </WrapPanel>
+
+                    <ListBox Height="220"
+                             ItemsSource="{Binding Items}"
+                             SelectedItem="{Binding SelectedItem}"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
 </Window>

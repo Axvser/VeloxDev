@@ -199,7 +199,7 @@ namespace Demo.Views
 
             var controller = new ControllerViewModel
             {
-                Size = new Size(controllerWidth, controllerHeight+30),
+                Size = new Size(controllerWidth, controllerHeight + 30),
                 Anchor = new Anchor(140, 220, 1),
                 SeedPayload = "demo-request-chain",
                 BroadcastMode = WorkflowBroadcastMode.BreadthFirst,
