@@ -48,21 +48,23 @@
 		<!-- 渲染节点编辑器 ( 虚拟化支持 ) -->
 		<Grid Grid.Column="2">
 			<Border BorderBrush="White" BorderThickness="1" CornerRadius="3">
-				<ScrollViewer HorizontalScrollBarVisibility="Auto"
-							  ScrollChanged="OnScrollChanged"
-							  x:Name="Root_ScrollViewer">
-					<Canvas x:DataType="vm:TreeViewModel"
-							x:Name="Root_Canvas"
-							Width="{Binding Layout.ActualSize.Width}"
-							Height="{Binding Layout.ActualSize.Height}"
-							HorizontalAlignment="Left"
-							VerticalAlignment="Top"
-							local:ViewPool.ItemsSource="{Binding VisibleItems}">
-						<Canvas.DataTemplates>
-							<!-- 依照优先级寻找数据模板 >> Self > Parent > App -->
-						</Canvas.DataTemplates>
-					</Canvas>
-				</ScrollViewer>
+              <local:WorkflowGridDecorator x:Name="Root_GridDecorator">
+					<ScrollViewer HorizontalScrollBarVisibility="Auto"
+								  ScrollChanged="OnScrollChanged"
+								  x:Name="Root_ScrollViewer">
+						<Canvas x:DataType="vm:TreeViewModel"
+								x:Name="Root_Canvas"
+								Width="{Binding Layout.ActualSize.Width}"
+								Height="{Binding Layout.ActualSize.Height}"
+								HorizontalAlignment="Left"
+								VerticalAlignment="Top"
+								local:ViewPool.ItemsSource="{Binding VisibleItems}">
+							<Canvas.DataTemplates>
+								<!-- 依照优先级寻找数据模板 >> Self > Parent > App -->
+							</Canvas.DataTemplates>
+						</Canvas>
+					</ScrollViewer>
+				</local:WorkflowGridDecorator>
 			</Border>
 		</Grid>
 

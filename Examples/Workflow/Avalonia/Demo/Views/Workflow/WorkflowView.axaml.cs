@@ -194,6 +194,19 @@ public partial class WorkflowView : UserControl
         UpdateVisibleRegion();
     }
 
+    private void UpdateGridDecorator()
+    {
+        if (Root_GridDecorator is null)
+        {
+            return;
+        }
+
+        Root_GridDecorator.ScrollOffsetX = Root_ScrollViewer?.Offset.X ?? 0;
+        Root_GridDecorator.ScrollOffsetY = Root_ScrollViewer?.Offset.Y ?? 0;
+        Root_GridDecorator.ContentOffsetX = _workflowViewModel.Layout.ActualOffset.Left;
+        Root_GridDecorator.ContentOffsetY = _workflowViewModel.Layout.ActualOffset.Top;
+    }
+
     public static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)
     {
         if (scrollViewer == null) return 0;
@@ -277,11 +290,14 @@ public partial class WorkflowView : UserControl
                     )
                 ]
         };
+        UpdateGridDecorator();
     }
 
     private void UpdateVisibleRegion()
     {
         if (Root_ScrollViewer is not { } viewer || _workflowViewModel is not { } vm) return;
+
+        UpdateGridDecorator();
 
         if (vm.GetHelper() is TreeHelper helper)
         {
