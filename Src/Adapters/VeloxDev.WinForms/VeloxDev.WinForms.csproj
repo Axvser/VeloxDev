@@ -8,13 +8,13 @@
 		<LangVersion>latest</LangVersion>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WinForms</Title>
-		<Version>4.0.1</Version>
+		<Version>4.0.2</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinForms</Description>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="VeloxDev.Core" Version="4.0.0" />
+		<PackageReference Include="VeloxDev.Core" Version="4.0.2" />
 	</ItemGroup>
 
 </Project>
