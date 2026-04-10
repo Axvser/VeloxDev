@@ -6,7 +6,6 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using VeloxDev.Core.Extension;
 using VeloxDev.Core.MVVM;
 
 namespace VeloxDev.Core.Extension.Agent.Workflow;
@@ -16,7 +15,7 @@ public static class WorkflowContextProvider
     private static readonly object SyncRoot = new();
     private static readonly Dictionary<Type, ComponentContext> ComponentContextMap = [];
 
-    public static void AsWorkflowAgent(this Type type)
+    public static void AsWorkflowAgentContextProvider(this Type type)
     {
         if (type is null)
         {
@@ -39,7 +38,7 @@ public static class WorkflowContextProvider
         }
 
         var contextText = componentContexts.Length == 0
-            ? "No workflow components are registered yet. Call AsWorkflowAgent(type) for each component type before using workflow agent tools."
+            ? "No workflow components are registered yet. Call AsWorkflowAgentContextProvider(type) for each component type before using workflow agent tools."
             : string.Join($"{Environment.NewLine}{Environment.NewLine}", componentContexts.Select(context => context.ToString()));
 
         return $"""
@@ -163,7 +162,7 @@ public static class WorkflowContextProvider
             }
         }
 
-        return $"The context for component `{typeName}` was not found. Register the component type by calling AsWorkflowAgent first.";
+        return $"The context for component `{typeName}` was not found. Register the component type by calling AsWorkflowAgentContextProvider first.";
     }
 }
 

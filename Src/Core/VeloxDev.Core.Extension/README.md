@@ -79,10 +79,10 @@ var tree = await readStream.DeserializeFromStreamAsync<MyWorkflowTree>();
 ```csharp
 using VeloxDev.Core.Extension.Agent.Workflow;
 
-typeof(TreeViewModel).AsWorkflowAgent();
-typeof(NodeViewModel).AsWorkflowAgent();
-typeof(SlotViewModel).AsWorkflowAgent();
-typeof(LinkViewModel).AsWorkflowAgent();
+typeof(TreeViewModel).AsWorkflowAgentContextProvider();
+typeof(NodeViewModel).AsWorkflowAgentContextProvider();
+typeof(SlotViewModel).AsWorkflowAgentContextProvider();
+typeof(LinkViewModel).AsWorkflowAgentContextProvider();
 ```
 
 注册后，Agent 可以读取：
@@ -238,6 +238,60 @@ IEnumerable<Delegate> tools = AgentToolEx.ProvideWorkflowAgentTools();
 - 长链路工作流编辑
 - 需要多次修改后再撤销 / 重做
 - 需要依赖运行时状态的 Agent 接管流程
+
+### 2.7 绑定单个 Tree 的 Agent Scope
+
+如果你的实际场景是：宿主程序先自行创建一个 `Tree` 实例，再把这个现有实例交给 Agent 接管，那么更推荐使用 **绑定作用域**，而不是让 Agent 直接接触全局会话工具。
+
+这种模式的特点是：
+
+- Agent 只能操作当前绑定的 `Tree`
+- Agent 无法自行注入别的 `tree` JSON
+- Agent 无法自行切换到别的 `sessionId`
+- `Undo / Redo` 仍然可用，因为作用域内部会维护该 `Tree` 的运行时会话
+
+示例：
+
+```csharp
+using VeloxDev.Core.Extension;
+using VeloxDev.Core.Extension.Agent.Workflow;
+
+var tree = new TreeViewModel();
+
+typeof(TreeViewModel).AsWorkflowAgentContextProvider();
+typeof(NodeViewModel).AsWorkflowAgentContextProvider();
+typeof(SlotViewModel).AsWorkflowAgentContextProvider();
+typeof(LinkViewModel).AsWorkflowAgentContextProvider();
+
+using var scope = tree.CreateWorkflowAgentScope();
+IEnumerable<Delegate> tools = scope.ProvideWorkflowAgentTools();
+```
+
+此时提供给 Agent 的工具仍然包含 `Tree / Node / Slot / Link` 相关操作，但这些操作已经被限制在当前 `tree` 上。
+
+在这种模式下：
+
+- `GetWorkflowTreeState()` 直接读取当前绑定树的快照
+- 类似 `CreateWorkflowNode(...)`、`MoveWorkflowNode(...)` 等方法只需要传递局部请求 JSON
+- 请求中**不允许**再传入 `sessionId` 或 `tree`
+
+例如，绑定作用域下移动节点只需要：
+
+```json
+{
+  "nodeIndex": 0,
+  "offset": {
+    "Left": 120,
+    "Top": 40
+  }
+}
+```
+
+这类作用域包装更适合：
+
+- 宿主已经持有运行中的工作流对象
+- 只想让 Agent 接管当前画布 / 当前流程
+- 不希望 Agent 具备跨工作流切换能力
 
 ---
 

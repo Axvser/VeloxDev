@@ -1,11 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using VeloxDev.Core.Extension.Agent.Workflow;
+using VeloxDev.Core.Interfaces.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension;
 
 public static class AgentToolEx
 {
+    public static WorkflowAgentScope CreateWorkflowAgentScope(this IWorkflowTreeViewModel tree)
+        => new(tree);
+
     public static IEnumerable<Delegate> ProvideWorkflowAgentTools()
     {
         yield return WorkflowContextProvider.GetWorkflowHelper;

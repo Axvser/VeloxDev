@@ -32,6 +32,28 @@ public static class WorkflowAgentTools
     private static readonly object SessionSyncRoot = new();
     private static readonly Dictionary<string, IWorkflowTreeViewModel> Sessions = [];
 
+    internal static string CreateBoundScopeSession(IWorkflowTreeViewModel tree)
+    {
+        if (tree is null)
+        {
+            throw new ArgumentNullException(nameof(tree));
+        }
+
+        var sessionId = Guid.NewGuid().ToString("N");
+        SetSession(sessionId, tree);
+        return sessionId;
+    }
+
+    internal static bool ReleaseBoundScopeSession(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return false;
+        }
+
+        return RemoveSession(sessionId);
+    }
+
     [Description("Create or refresh a live workflow runtime session from a workflow tree JSON payload. Use session mode for runtime-only operations such as undo and redo.")]
     public static string CreateWorkflowSession([Description(TreeRequestJsonDescription)] string requestJson)
     {
