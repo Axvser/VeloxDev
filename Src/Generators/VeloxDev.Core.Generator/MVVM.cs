@@ -24,6 +24,7 @@ namespace VeloxDev.Core.Generator
             {
                 var writer = new MVVMWriter();
                 writer.Initialize(kvp.Value, kvp.Key);
+
                 if (writer.CanWrite())
                 {
                     context.AddSource(

@@ -263,6 +263,8 @@ namespace VeloxDev.Core.Generator.Base
             public string PropertyAccessModifier { get; private set; }
             public string GetterAccessModifier { get; private set; }
             public string SetterAccessModifier { get; private set; }
+            public bool UseWorkflowSlotLifecycle { get; set; }
+            public bool UseWorkflowSlotAutoCreation { get; set; }
 
             public List<string> SetteringBody { get; set; } = [];
             public List<string> SetteredBody { get; set; } = [];
@@ -301,9 +303,7 @@ namespace VeloxDev.Core.Generator.Base
                 var equalityComparison = $"global::System.Object.Equals({SourceName}, value)";
 
                 // 生成属性访问器，完全保留用户写的修饰符
-                var getter = HasGetter ?
-                    $"{RETRACT}    {(!string.IsNullOrEmpty(GetterAccessModifier) ? GetterAccessModifier + " " : "")}get => {SourceName};" :
-                    string.Empty;
+                var getter = HasGetter ? GenerateGetter() : string.Empty;
 
                 string setter;
                 if (HasSetter)
@@ -313,10 +313,12 @@ namespace VeloxDev.Core.Generator.Base
                     [
                         $"if({equalityComparison}) return;",
                         $"var old = {SourceName};",
+                        .. GetWorkflowSlotBeforeAssignmentLines(),
                         .. SetteringBody,
                         $"On{PropertyName}Changing(old, value);",
                         .. GetCollectionBeforeAssignmentLines(),
                         $"{SourceName} = value;",
+                        .. GetWorkflowSlotAfterAssignmentLines(),
                         .. GetCollectionAfterAssignmentLines(),
                         $"On{PropertyName}Changed(old, value);",
                         .. SetteredBody,
@@ -344,6 +346,7 @@ namespace VeloxDev.Core.Generator.Base
                 // 如果是部分属性，添加partial修饰符
                 var partialModifier = IsPartial ? "partial " : string.Empty;
                 var collectionMembers = GenerateCollectionMembers();
+                var workflowSlotMembers = GenerateWorkflowSlotMembers();
 
                 return $$"""
                     {{RETRACT}}{{PropertyAccessModifier}} {{partialModifier}}{{FullTypeName}} {{PropertyName}}
@@ -354,6 +357,25 @@ namespace VeloxDev.Core.Generator.Base
                     {{changingMethod}}
                     {{changedMethod}}
                     {{collectionMembers}}
+                    {{workflowSlotMembers}}
+                    """;
+            }
+
+            private string GenerateGetter()
+            {
+                var getterAccessModifier = !string.IsNullOrEmpty(GetterAccessModifier) ? GetterAccessModifier + " " : string.Empty;
+
+                if (!UseWorkflowSlotLifecycle || IsNullable || !UseWorkflowSlotAutoCreation)
+                {
+                    return $"{RETRACT}    {getterAccessModifier}get => {SourceName};";
+                }
+
+                var getterBody = BuildMethodBody(GetWorkflowSlotGetterLines());
+                return $$"""
+                    {{RETRACT}}    {{getterAccessModifier}}get
+                    {{RETRACT}}    {
+                    {{getterBody}}
+                    {{RETRACT}}    }
                     """;
             }
 
@@ -409,6 +431,67 @@ namespace VeloxDev.Core.Generator.Base
                 yield return "{";
                 yield return $"    OnItemAddedTo{PropertyName}(Enumerate{PropertyName}Items(value));";
                 yield return "}";
+            }
+
+            private IEnumerable<string> GetWorkflowSlotBeforeAssignmentLines()
+            {
+                if (!HasSetter || !UseWorkflowSlotLifecycle)
+                {
+                    yield break;
+                }
+
+                yield return "if (old is not null)";
+                yield return "{";
+                yield return "    old.DeleteCommand.Execute(null);";
+                yield return "}";
+            }
+
+            private IEnumerable<string> GetWorkflowSlotAfterAssignmentLines()
+            {
+                if (!HasSetter || !UseWorkflowSlotLifecycle)
+                {
+                    yield break;
+                }
+
+                yield return "if (value is not null)";
+                yield return "{";
+                yield return "    CreateSlotCommand.Execute(value);";
+                yield return "}";
+            }
+
+            private IEnumerable<string> GetWorkflowSlotGetterLines()
+            {
+                yield return $"if ({SourceName} is null)";
+                yield return "{";
+                yield return $"    {SourceName} = Create{PropertyName}WorkflowSlot();";
+                yield return $"    CreateSlotCommand.Execute({SourceName});";
+                yield return "}";
+                yield return $"return {SourceName};";
+            }
+
+            private string GenerateWorkflowSlotMembers()
+            {
+                if (!UseWorkflowSlotLifecycle || IsNullable || !UseWorkflowSlotAutoCreation)
+                {
+                    return string.Empty;
+                }
+
+                return $$"""
+                    {{RETRACT}}private {{FullTypeName}} Create{{PropertyName}}WorkflowSlot()
+                    {{RETRACT}}{
+                    {{RETRACT}}    try
+                    {{RETRACT}}    {
+                    {{RETRACT}}        if (global::System.Activator.CreateInstance(typeof({{NonNullableFullTypeName}}), true) is {{FullTypeName}} created)
+                    {{RETRACT}}        {
+                    {{RETRACT}}            return created;
+                    {{RETRACT}}        }
+                    {{RETRACT}}    }
+                    {{RETRACT}}    catch
+                    {{RETRACT}}    {
+                    {{RETRACT}}    }
+                    {{RETRACT}}    return ({{FullTypeName}})(object)new global::VeloxDev.Core.WorkflowSystem.Templates.SlotViewModelBase();
+                    {{RETRACT}}}
+                    """;
             }
 
             private string GenerateCollectionMembers()

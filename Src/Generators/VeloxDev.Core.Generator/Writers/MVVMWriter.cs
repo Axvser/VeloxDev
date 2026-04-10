@@ -12,6 +12,8 @@ namespace VeloxDev.Core.Generator.Writers
         private List<MVVMPropertyFactory> MVVMProperties { get; set; } = [];
         private List<MVVMPropertyFactory> AutoProperties { get; set; } = [];
         private bool IsWorkflowComponent { get; set; } = false;
+        private bool _isWorkflowComponentOrBase = false;
+        private bool _isWorkflowNodeComponentOrBase = false;
         private bool _hasBasePropertyNotificationInfrastructure = false;
         private bool _hasBaseCollectionNotificationInfrastructure = false;
 
@@ -25,6 +27,8 @@ namespace VeloxDev.Core.Generator.Writers
                 _hasBaseCollectionNotificationInfrastructure = CheckBaseClassForCollectionInfrastructure(namedTypeSymbol.BaseType);
             }
 
+            _isWorkflowComponentOrBase = HasWorkflowAttributeInHierarchy(namedTypeSymbol);
+            _isWorkflowNodeComponentOrBase = HasWorkflowNodeAttributeInHierarchy(namedTypeSymbol);
             ReadMVVMConfig(namedTypeSymbol);
             ReadAutoProperties(namedTypeSymbol);
             IsWorkflowComponent = HasWorkflowAttribute(namedTypeSymbol);
@@ -39,11 +43,16 @@ namespace VeloxDev.Core.Generator.Writers
                     .Where(field => field.GetAttributes().Any(attr =>
                         attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
                         NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
-                    .Select(field => new MVVMFieldAnalizer(field))
-                    .Select(analizer => new MVVMPropertyFactory(analizer, "public", false)
+                    .Select(field =>
                     {
-                        SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
-                        SetteredBody = [$"OnPropertyChanged(nameof({analizer.PropertyName}));"],
+                        var analizer = new MVVMFieldAnalizer(field);
+                        var factory = new MVVMPropertyFactory(analizer, "public", false)
+                        {
+                            SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
+                            SetteredBody = [$"OnPropertyChanged(nameof({analizer.PropertyName}));"],
+                        };
+                        ConfigureWorkflowSlotProperty(factory, field, field.Type);
+                        return factory;
                     })
             ];
         }
@@ -57,13 +66,105 @@ namespace VeloxDev.Core.Generator.Writers
                     .Where(property => property.GetAttributes().Any(attr =>
                         attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
                         NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
-                    .Select(property => new MVVMPropertyAnalizer(property))
-                    .Select(analizer => new MVVMPropertyFactory(analizer, "public", false)
+                    .Select(property =>
                     {
-                        SetteringBody = analizer.HasSetter ? [$"OnPropertyChanging(nameof({analizer.PropertyName}));"] : [],
-                        SetteredBody = analizer.HasSetter ? [$"OnPropertyChanged(nameof({analizer.PropertyName}));"] : [],
+                        var analizer = new MVVMPropertyAnalizer(property);
+                        var factory = new MVVMPropertyFactory(analizer, "public", false)
+                        {
+                            SetteringBody = analizer.HasSetter ? [$"OnPropertyChanging(nameof({analizer.PropertyName}));"] : [],
+                            SetteredBody = analizer.HasSetter ? [$"OnPropertyChanged(nameof({analizer.PropertyName}));"] : [],
+                        };
+                        ConfigureWorkflowSlotProperty(factory, property, property.Type);
+                        return factory;
                     })
             ];
+        }
+
+        private void ConfigureWorkflowSlotProperty(MVVMPropertyFactory factory, ISymbol memberSymbol, ITypeSymbol typeSymbol)
+        {
+            factory.UseWorkflowSlotLifecycle = _isWorkflowComponentOrBase &&
+                                              _isWorkflowNodeComponentOrBase &&
+                                              IsWorkflowSlotViewModelType(typeSymbol);
+
+            if (!factory.UseWorkflowSlotLifecycle || factory.IsNullable)
+            {
+                factory.UseWorkflowSlotAutoCreation = false;
+                return;
+            }
+
+            factory.UseWorkflowSlotAutoCreation = CanAutoCreateWorkflowSlot(typeSymbol);
+        }
+
+        private bool CanAutoCreateWorkflowSlot(ITypeSymbol typeSymbol)
+        {
+            return CanInstantiateWorkflowSlotType(typeSymbol) || CanUseWorkflowSlotFallback(typeSymbol);
+        }
+
+        private bool CanInstantiateWorkflowSlotType(ITypeSymbol typeSymbol)
+        {
+            if (typeSymbol is not INamedTypeSymbol namedType)
+                return false;
+
+            if (namedType.TypeKind == TypeKind.Interface || namedType.IsAbstract)
+                return false;
+
+            if (namedType.TypeKind == TypeKind.TypeParameter)
+                return false;
+
+            if (namedType.IsValueType)
+                return true;
+
+            if (namedType.InstanceConstructors.Length == 0)
+                return true;
+
+            return namedType.InstanceConstructors.Any(ctor => !ctor.IsStatic && ctor.Parameters.Length == 0);
+        }
+
+        private bool CanUseWorkflowSlotFallback(ITypeSymbol typeSymbol)
+        {
+            if (Symbol == null)
+                return false;
+
+            var slotBaseSymbol = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.Core.WorkflowSystem.Templates.SlotViewModelBase");
+            if (slotBaseSymbol == null)
+                return false;
+
+            return IsAssignableFrom(typeSymbol, slotBaseSymbol);
+        }
+
+        private static INamedTypeSymbol? ResolveTypeByMetadataName(IAssemblySymbol assembly, string metadataName)
+        {
+            return assembly.GetTypeByMetadataName(metadataName)
+                ?? assembly.Modules.SelectMany(module => module.ReferencedAssemblySymbols)
+                    .Select(reference => reference.GetTypeByMetadataName(metadataName))
+                    .FirstOrDefault(type => type != null);
+        }
+
+        private static bool IsAssignableFrom(ITypeSymbol destinationType, ITypeSymbol sourceType)
+        {
+            var comparer = SymbolEqualityComparer.Default;
+
+            if (comparer.Equals(destinationType, sourceType))
+                return true;
+
+            if (destinationType.SpecialType == SpecialType.System_Object)
+                return true;
+
+            if (destinationType.TypeKind == TypeKind.Interface)
+            {
+                return sourceType.AllInterfaces.Any(i => comparer.Equals(i, destinationType));
+            }
+
+            var current = sourceType.BaseType;
+            while (current != null)
+            {
+                if (comparer.Equals(current, destinationType))
+                    return true;
+
+                current = current.BaseType;
+            }
+
+            return false;
         }
 
         private bool HasWorkflowAttribute(INamedTypeSymbol symbol)
@@ -83,6 +184,53 @@ namespace VeloxDev.Core.Generator.Writers
                     return true;
             }
             return false;
+        }
+
+        private bool HasWorkflowAttributeInHierarchy(INamedTypeSymbol? symbol)
+        {
+            if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
+                return false;
+
+            return HasWorkflowAttribute(symbol) || HasWorkflowAttributeInHierarchy(symbol.BaseType);
+        }
+
+        private bool HasWorkflowNodeAttributeInHierarchy(INamedTypeSymbol? symbol)
+        {
+            if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
+                return false;
+
+            return HasWorkflowNodeAttribute(symbol) || HasWorkflowNodeAttributeInHierarchy(symbol.BaseType);
+        }
+
+        private bool HasWorkflowNodeAttribute(INamedTypeSymbol symbol)
+        {
+            foreach (var attribute in symbol.GetAttributes())
+            {
+                var attributeClass = attribute.AttributeClass;
+                if (attributeClass == null) continue;
+
+                var fullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                if (fullName.Contains("WorkflowBuilder.ViewModel.NodeAttribute"))
+                    return true;
+
+                var name = attributeClass.Name;
+                if (name.Contains('`')) name = name.Substring(0, name.IndexOf('`'));
+                if (name is "NodeAttribute")
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
+        {
+            var fullName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (fullName == NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowSlotViewModel")
+                return true;
+
+            return typeSymbol.AllInterfaces.Any(i =>
+                i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowSlotViewModel");
         }
 
         private bool CheckBaseClassForPropertyInfrastructure(INamedTypeSymbol? symbol)

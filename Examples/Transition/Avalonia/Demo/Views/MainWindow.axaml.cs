@@ -5,9 +5,9 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using System;
 using System.Threading.Tasks;
+using VeloxDev.Avalonia.Interpolators;
 using VeloxDev.Core.TransitionSystem;
 using VeloxDev.TransitionSystem;
-using VeloxDev.Avalonia.Interpolators;
 
 namespace Demo.Views;
 

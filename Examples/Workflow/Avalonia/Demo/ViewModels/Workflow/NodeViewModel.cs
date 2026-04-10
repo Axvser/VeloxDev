@@ -16,8 +16,6 @@ public partial class NodeViewModel
         InitializeWorkflow();
         BroadcastMode = WorkflowBroadcastMode.BreadthFirst;
         ReverseBroadcastMode = WorkflowBroadcastMode.DepthFirst;
-        InputSlot = new SlotViewModel();
-        OutputSlot = new SlotViewModel();
     }
 
     public Array RequestMethods => Enum.GetValues<NetworkRequestMethod>();
@@ -35,15 +33,15 @@ public partial class NodeViewModel
     public bool HasExecutionOrder => LastExecutionOrder > 0;
     public string ExecutionOrderText => LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
 
-    [VeloxProperty] public partial IWorkflowSlotViewModel? InputSlot { get; set; }
-    [VeloxProperty] public partial IWorkflowSlotViewModel? OutputSlot { get; set; }
+    [VeloxProperty] public partial IWorkflowSlotViewModel InputSlot { get; set; }
+    [VeloxProperty] public partial IWorkflowSlotViewModel OutputSlot { get; set; }
 
-    partial void OnInputSlotChanged(IWorkflowSlotViewModel? oldValue, IWorkflowSlotViewModel? newValue)
+    partial void OnInputSlotChanged(IWorkflowSlotViewModel oldValue, IWorkflowSlotViewModel newValue)
     {
         ResetSlot(oldValue, newValue, nameof(HasInputSlot));
     }
 
-    partial void OnOutputSlotChanged(IWorkflowSlotViewModel? oldValue, IWorkflowSlotViewModel? newValue)
+    partial void OnOutputSlotChanged(IWorkflowSlotViewModel oldValue, IWorkflowSlotViewModel newValue)
     {
         ResetSlot(oldValue, newValue, nameof(HasOutputSlot));
     }

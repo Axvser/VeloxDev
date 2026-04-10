@@ -63,7 +63,7 @@ namespace VeloxDev.Core.Generator.Writers
                 // Auto 命名规则
                 if (commandName == "Auto")
                 {
-                    commandName = methodSymbol.Name;
+                    commandName = methodSymbol.Name.Replace("Async", "");
                 }
 
                 // 构造方式分析
