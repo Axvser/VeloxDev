@@ -8,26 +8,11 @@ public static class WorkflowSlotEx
         (this IWorkflowSlotViewModel component)
         =>
         [
-            component.SetSizeCommand,
             component.SendConnectionCommand,
             component.ReceiveConnectionCommand,
             component.DeleteCommand
         ];
 
-    public static void StandardSetSize(this IWorkflowSlotViewModel component, Size size)
-    {
-        component.Size.Width = size.Width;
-        component.Size.Height = size.Height;
-        component.OnPropertyChanged(nameof(component.Size));
-        component.GetHelper().UpdateLayout();
-    }
-    public static void StandardSetOffset(this IWorkflowSlotViewModel component, Offset offset)
-    {
-        component.Offset.Left = offset.Left;
-        component.Offset.Top = offset.Top;
-        component.OnPropertyChanged(nameof(component.Offset));
-        component.GetHelper().UpdateLayout();
-    }
     public static void StandardSetChannel(this IWorkflowSlotViewModel component, SlotChannel channel)
     {
         if (component.Parent?.Parent is null) return;
@@ -89,20 +74,7 @@ public static class WorkflowSlotEx
         }
         component.Channel = channel;
     }
-    public static void StandardSetLayer(this IWorkflowSlotViewModel component, int layer)
-    {
-        component.Anchor.Layer = layer;
-        component.OnPropertyChanged(nameof(component.Anchor));
-    }
 
-    public static void StandardUpdateLayout(this IWorkflowSlotViewModel component)
-    {
-        if (component.Parent is null) return;
-        component.Anchor.Left = component.Parent.Anchor.Left + component.Offset.Left + component.Size.Width / 2;
-        component.Anchor.Top = component.Parent.Anchor.Top + component.Offset.Top + component.Size.Height / 2;
-        component.OnPropertyChanged(nameof(component.Anchor));
-        component.OnPropertyChanged(nameof(component.Offset));
-    }
     public static void StandardUpdateState(this IWorkflowSlotViewModel component)
     {
         bool hasOutgoingConnections = component.Targets.Count > 0;

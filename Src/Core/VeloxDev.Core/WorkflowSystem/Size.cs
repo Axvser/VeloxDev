@@ -1,14 +1,22 @@
-﻿using VeloxDev.AOT;
+﻿using VeloxDev.AI;
+using VeloxDev.AOT;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
+[AgentContext(AgentLanguages.Chinese, "表示一个二维尺寸")]
+[AgentContext(AgentLanguages.English, "Represents a two-dimensional size")]
 [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 public sealed partial class Size(double width = 0d, double height = 0d) : ICloneable, IEquatable<Size>
 {
     [VeloxProperty]
+    [AgentContext(AgentLanguages.Chinese, "宽度，像素单位")]
+    [AgentContext(AgentLanguages.English, "Width in pixels")]
     private double _width = width;
+
     [VeloxProperty]
+    [AgentContext(AgentLanguages.Chinese, "高度，像素单位")]
+    [AgentContext(AgentLanguages.English, "Height in pixels")]
     private double _height = height;
 
     public override bool Equals(object? obj)

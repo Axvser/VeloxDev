@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using VeloxDev.Core.Extension.Agent.Workflow;
-using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension;
 
@@ -25,11 +25,8 @@ public static class AgentToolEx
         yield return WorkflowAgentTools.MoveWorkflowNode;
         yield return WorkflowAgentTools.SetWorkflowNodeAnchor;
         yield return WorkflowAgentTools.SetWorkflowNodeSize;
-        yield return WorkflowAgentTools.SetWorkflowNodeBroadcastMode;
-        yield return WorkflowAgentTools.SetWorkflowNodeReverseBroadcastMode;
         yield return WorkflowAgentTools.InvokeWorkflowNodeWorkAsync;
         yield return WorkflowAgentTools.InvokeWorkflowNodeBroadcastAsync;
-        yield return WorkflowAgentTools.InvokeWorkflowNodeReverseBroadcastAsync;
         yield return WorkflowAgentTools.GetWorkflowSlotJson;
         yield return WorkflowAgentTools.CreateWorkflowSlot;
         yield return WorkflowAgentTools.DeleteWorkflowSlot;

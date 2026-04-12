@@ -125,7 +125,7 @@ namespace VeloxDev.Generators.Writers
             if (Symbol == null)
                 return false;
 
-            var slotBaseSymbol = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.Templates.SlotViewModelBase");
+            var slotBaseSymbol = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.SlotViewModelBase");
             if (slotBaseSymbol == null)
                 return false;
 
@@ -175,7 +175,7 @@ namespace VeloxDev.Generators.Writers
                 if (attributeClass == null) continue;
 
                 var fullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                if (fullName.Contains("WorkflowBuilder.ViewModel") || fullName.Contains("VeloxDev.WorkflowSystem"))
+                if (fullName.Contains("WorkflowBuilder") || fullName.Contains("VeloxDev.WorkflowSystem"))
                     return true;
 
                 var name = attributeClass.Name;
@@ -210,7 +210,7 @@ namespace VeloxDev.Generators.Writers
                 if (attributeClass == null) continue;
 
                 var fullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                if (fullName.Contains("WorkflowBuilder.ViewModel.NodeAttribute"))
+                if (fullName.Contains("WorkflowBuilder.NodeAttribute"))
                     return true;
 
                 var name = attributeClass.Name;

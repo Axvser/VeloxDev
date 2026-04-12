@@ -1,51 +1,86 @@
 ﻿using System.Collections.ObjectModel;
+using VeloxDev.AI;
 using VeloxDev.MVVM;
 
-namespace VeloxDev.WorkflowSystem
+namespace VeloxDev.WorkflowSystem;
+
+[AgentContext(AgentLanguages.Chinese,"工作流Tree组件接口，维护一个工作空间内所有Node、Slot和Link组件")]
+[AgentContext(AgentLanguages.English,"Workflow Tree component interface, maintaining all Node, Slot, and Link components within a workspace")]
+public interface IWorkflowTreeViewModel : IWorkflowViewModel
 {
-    public interface IWorkflowTreeViewModel : IWorkflowViewModel
-    {
-        public IWorkflowLinkViewModel VirtualLink { get; set; }
-        public ObservableCollection<IWorkflowNodeViewModel> Nodes { get; set; }
-        public ObservableCollection<IWorkflowLinkViewModel> Links { get; set; }
-        public Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>> LinksMap { get; set; }
+    [AgentContext(AgentLanguages.Chinese,"仅在建立连接的过程中可见")]
+    [AgentContext(AgentLanguages.English,"Only visible during the connection establishment process")]
+    public IWorkflowLinkViewModel VirtualLink { get; set; }
 
-        public IVeloxCommand CreateNodeCommand { get; }        // 创建节点           | parameter IWorkflowNodeViewModel
-        public IVeloxCommand SetPointerCommand { get; }        // 触点跟踪           | parameter Anchor
-        public IVeloxCommand ResetVirtualLinkCommand { get; }  // 重置虚拟连接       | parameter Null
-        public IVeloxCommand SendConnectionCommand { get; }    // 处理连接构建发起方 | parameter Null
-        public IVeloxCommand ReceiveConnectionCommand { get; } // 处理连接构建接收方 | parameter Null
+    [AgentContext(AgentLanguages.Chinese,"所有Node组件")]
+    [AgentContext(AgentLanguages.English,"All Node components")]
+    public ObservableCollection<IWorkflowNodeViewModel> Nodes { get; set; }
 
-        public IVeloxCommand SubmitCommand { get; }        // 提交 | parameter IWorkflowActionPair
-        public IVeloxCommand RedoCommand { get; }          // 重做 | parameter Null
-        public IVeloxCommand UndoCommand { get; }          // 撤销 | parameter Null
+    [AgentContext(AgentLanguages.Chinese,"所有Link组件")]
+    [AgentContext(AgentLanguages.English,"All Link components")]
+    public ObservableCollection<IWorkflowLinkViewModel> Links { get; set; }
 
-        public IWorkflowTreeViewModelHelper GetHelper();
-        public void SetHelper(IWorkflowTreeViewModelHelper helper);
-    }
+    [AgentContext(AgentLanguages.Chinese,"Slot组件之间的连接关系映射")]
+    [AgentContext(AgentLanguages.English,"Mapping of connections between Slot components")]
+    public Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>> LinksMap { get; set; }
 
-    public interface IWorkflowTreeViewModelHelper : IWorkflowHelper
-    {
-        public event EventHandler<IWorkflowNodeViewModel>? NodeAdded;
-        public event EventHandler<IWorkflowNodeViewModel>? NodeRemoved;
-        public event EventHandler<IWorkflowLinkViewModel>? LinkAdded;
-        public event EventHandler<IWorkflowLinkViewModel>? LinkRemoved;
+    [AgentContext(AgentLanguages.Chinese,"创建节点，参数为IWorkflowNodeViewModel")]
+    [AgentContext(AgentLanguages.English,"Create node command, parameter is IWorkflowNodeViewModel")]
+    public IVeloxCommand CreateNodeCommand { get; }
 
-        public void Install(IWorkflowTreeViewModel tree);
-        public void Uninstall(IWorkflowTreeViewModel tree);
+    [AgentContext(AgentLanguages.Chinese,"更新触点位置，参数为Anchor")]
+    [AgentContext(AgentLanguages.English,"Update pointer position, parameter is Anchor")]
+    public IVeloxCommand SetPointerCommand { get; }
 
-        public void CreateNode(IWorkflowNodeViewModel node);
-        public IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver);
+    [AgentContext(AgentLanguages.Chinese,"重置虚拟连接，参数为Null")]
+    [AgentContext(AgentLanguages.English,"Reset virtual link, parameter is Null")]
+    public IVeloxCommand ResetVirtualLinkCommand { get; }
 
-        public void SetPointer(Anchor anchor);
-        public bool ValidateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver);
-        public void SendConnection(IWorkflowSlotViewModel slot);
-        public void ReceiveConnection(IWorkflowSlotViewModel slot);
-        public void ResetVirtualLink();
+    [AgentContext(AgentLanguages.Chinese, "发起连接构建，参数为IWorkflowSlotViewModel")]
+    [AgentContext(AgentLanguages.English, "Initiate connection construction, parameter is IWorkflowSlotViewModel")]
+    public IVeloxCommand SendConnectionCommand { get; }
 
-        public void Submit(IWorkflowActionPair actionPair);
-        public void Redo();
-        public void Undo();
-        public void ClearHistory();
-    }
+    [AgentContext(AgentLanguages.Chinese, "接收连接构建，参数为IWorkflowSlotViewModel")]
+    [AgentContext(AgentLanguages.English, "Receive connection construction, parameter is IWorkflowSlotViewModel")]
+    public IVeloxCommand ReceiveConnectionCommand { get; }
+    
+    [AgentContext(AgentLanguages.Chinese, "提交操作，参数为IWorkflowActionPair")]
+    [AgentContext(AgentLanguages.English, "Submit action, parameter is IWorkflowActionPair")]
+    public IVeloxCommand SubmitCommand { get; }
+
+    [AgentContext(AgentLanguages.Chinese, "重做操作，参数为Null")]
+    [AgentContext(AgentLanguages.English, "Redo action, parameter is Null")]
+    public IVeloxCommand RedoCommand { get; }
+
+    [AgentContext(AgentLanguages.Chinese, "撤销操作，参数为Null")]
+    [AgentContext(AgentLanguages.English, "Undo action, parameter is Null")]
+    public IVeloxCommand UndoCommand { get; }
+
+    public IWorkflowTreeViewModelHelper GetHelper();
+    public void SetHelper(IWorkflowTreeViewModelHelper helper);
+}
+
+public interface IWorkflowTreeViewModelHelper : IWorkflowHelper
+{
+    public event EventHandler<IWorkflowNodeViewModel>? NodeAdded;
+    public event EventHandler<IWorkflowNodeViewModel>? NodeRemoved;
+    public event EventHandler<IWorkflowLinkViewModel>? LinkAdded;
+    public event EventHandler<IWorkflowLinkViewModel>? LinkRemoved;
+
+    public void Install(IWorkflowTreeViewModel tree);
+    public void Uninstall(IWorkflowTreeViewModel tree);
+
+    public void CreateNode(IWorkflowNodeViewModel node);
+    public IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver);
+
+    public void SetPointer(Anchor anchor);
+    public bool ValidateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver);
+    public void SendConnection(IWorkflowSlotViewModel slot);
+    public void ReceiveConnection(IWorkflowSlotViewModel slot);
+    public void ResetVirtualLink();
+
+    public void Submit(IWorkflowActionPair actionPair);
+    public void Redo();
+    public void Undo();
+    public void ClearHistory();
 }

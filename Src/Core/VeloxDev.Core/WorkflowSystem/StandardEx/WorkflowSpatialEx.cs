@@ -100,80 +100,58 @@ public static class WorkflowSpatialEx
         if (!SpatialMaps.TryGetValue(tree, out var map) || !Observables.TryGetValue(tree, out var collection) || collection is not Collection<IWorkflowViewModel> observable)
             throw new ArgumentNullException("The workflow must first successfully enable the spatial map before it can be virtualized.");
 
-        // 网格哈希查询
-        HashSet<IWorkflowNodeViewModel> newVisibleNotes = [.. map.Query(viewport)];
-        // 原始集合拷贝
-        HashSet<IWorkflowViewModel> oldVisibleItems = [.. observable.OfType<IWorkflowViewModel>()];
-
-        // 待移除节点
-        var toRemove = oldVisibleItems.OfType<IWorkflowNodeViewModel>().Where(item => !newVisibleNotes.Contains(item)).ToList();
-        // 待添加节点
-        var toAdd = newVisibleNotes.Where(item => !oldVisibleItems.Contains(item)).ToList();
-
-        // 先移除
-        foreach (IWorkflowNodeViewModel node in toRemove)
+        HashSet<IWorkflowNodeViewModel> visibleNodes = [.. map.Query(viewport)];
+        HashSet<IWorkflowNodeViewModel> hydratedNodes = ExpandVisibleNodesWithNeighbors(tree, visibleNodes);
+        List<IWorkflowViewModel> desiredItems = [tree.VirtualLink];
+        HashSet<IWorkflowViewModel> desiredSet = new(WorkflowReferenceEqualityComparer<IWorkflowViewModel>.Instance)
         {
-            observable.Remove(node);
+            tree.VirtualLink
+        };
+
+        foreach (var node in hydratedNodes)
+        {
+            AddDesiredItem(desiredItems, desiredSet, node);
+        }
+
+        foreach (var node in visibleNodes)
+        {
             foreach (var slot in node.Slots)
             {
-                // 若发起者与接受者都不可见，则移除连接
                 foreach (var target in slot.Targets)
                 {
-                    if (target.Parent is not null &&
-                        slot.Parent is not null &&
-                        !newVisibleNotes.Contains(slot.Parent) &&
-                        !newVisibleNotes.Contains(target.Parent) &&
-                        tree.LinksMap.TryGetValue(target, out var targets) &&
-                        targets.TryGetValue(slot, out var link))
+                    if (slot.Parent is not null &&
+                        target.Parent is not null &&
+                        tree.LinksMap.TryGetValue(slot, out var targets) &&
+                        targets.TryGetValue(target, out var link))
                     {
-                        observable.Remove(link);
+                        AddDesiredItem(desiredItems, desiredSet, link);
                     }
                 }
+
                 foreach (var source in slot.Sources)
                 {
                     if (source.Parent is not null &&
                         slot.Parent is not null &&
-                        !newVisibleNotes.Contains(source.Parent) &&
-                        !newVisibleNotes.Contains(slot.Parent) &&
                         tree.LinksMap.TryGetValue(source, out var targets) &&
                         targets.TryGetValue(slot, out var link))
                     {
-                        observable.Remove(link);
+                        AddDesiredItem(desiredItems, desiredSet, link);
                     }
                 }
             }
         }
 
-        // 再添加
-        foreach (IWorkflowNodeViewModel node in toAdd)
+        foreach (var item in observable.OfType<IWorkflowViewModel>().ToArray())
         {
-            observable.Add(node);
-            foreach (var slot in node.Slots)
+            if (!desiredSet.Contains(item))
             {
-                // 若发起者或接受者可见，则添加连接
-                foreach (var target in slot.Targets)
-                {
-                    if (target.Parent is not null &&
-                        slot.Parent is not null &&
-                        (newVisibleNotes.Contains(target.Parent) || newVisibleNotes.Contains(slot.Parent)) &&
-                        tree.LinksMap.TryGetValue(slot, out var targets) &&
-                        targets.TryGetValue(target, out var link))
-                    {
-                        observable.Add(link);
-                    }
-                }
-                foreach (var source in slot.Sources)
-                {
-                    if (source.Parent is not null &&
-                        slot.Parent is not null &&
-                        (newVisibleNotes.Contains(slot.Parent) || newVisibleNotes.Contains(source.Parent)) &&
-                        tree.LinksMap.TryGetValue(source, out var targets) &&
-                        targets.TryGetValue(slot, out var link))
-                    {
-                        observable.Add(link);
-                    }
-                }
+                RemoveAll(observable, item);
             }
+        }
+
+        foreach (var item in desiredItems)
+        {
+            AddIfMissing(observable, item);
         }
     }
 
@@ -255,12 +233,88 @@ public static class WorkflowSpatialEx
     private static void OnLinkAdded(object? sender, IWorkflowLinkViewModel node)
     {
         if (Observables.TryGetValue(sender, out var collection) && collection is Collection<IWorkflowViewModel> observable)
-            observable.Add(node);
+        {
+            var senderVisible = node.Sender?.Parent is IWorkflowViewModel senderNode && observable.Contains(senderNode);
+            var receiverVisible = node.Receiver?.Parent is IWorkflowViewModel receiverNode && observable.Contains(receiverNode);
+            if (senderVisible || receiverVisible)
+            {
+                AddIfMissing(observable, node);
+            }
+        }
     }
 
     private static void OnLinkRemoved(object? sender, IWorkflowLinkViewModel node)
     {
         if (Observables.TryGetValue(sender, out var collection) && collection is Collection<IWorkflowViewModel> observable)
-            observable.Remove(node);
+            RemoveAll(observable, node);
+    }
+
+    private static void AddIfMissing(Collection<IWorkflowViewModel> observable, IWorkflowViewModel item)
+    {
+        if (!observable.Contains(item))
+        {
+            observable.Add(item);
+        }
+    }
+
+    private static void AddDesiredItem(List<IWorkflowViewModel> desiredItems, HashSet<IWorkflowViewModel> desiredSet, IWorkflowViewModel item)
+    {
+        if (desiredSet.Add(item))
+        {
+            desiredItems.Add(item);
+        }
+    }
+
+    private static HashSet<IWorkflowNodeViewModel> ExpandVisibleNodesWithNeighbors(
+        IWorkflowTreeViewModel tree,
+        HashSet<IWorkflowNodeViewModel> visibleNodes)
+    {
+        var hydratedNodes = new HashSet<IWorkflowNodeViewModel>(visibleNodes, WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+
+        foreach (var node in visibleNodes)
+        {
+            foreach (var slot in node.Slots)
+            {
+                foreach (var target in slot.Targets)
+                {
+                    if (target.Parent is IWorkflowNodeViewModel targetNode &&
+                        tree.LinksMap.TryGetValue(slot, out var targets) &&
+                        targets.ContainsKey(target))
+                    {
+                        hydratedNodes.Add(targetNode);
+                    }
+                }
+
+                foreach (var source in slot.Sources)
+                {
+                    if (source.Parent is IWorkflowNodeViewModel sourceNode &&
+                        tree.LinksMap.TryGetValue(source, out var targets) &&
+                        targets.ContainsKey(slot))
+                    {
+                        hydratedNodes.Add(sourceNode);
+                    }
+                }
+            }
+        }
+
+        return hydratedNodes;
+    }
+
+    private static void RemoveAll(Collection<IWorkflowViewModel> observable, IWorkflowViewModel item)
+    {
+        while (observable.Contains(item))
+        {
+            observable.Remove(item);
+        }
+    }
+
+    private sealed class WorkflowReferenceEqualityComparer<T> : IEqualityComparer<T>
+        where T : class
+    {
+        public static readonly WorkflowReferenceEqualityComparer<T> Instance = new();
+
+        public bool Equals(T? x, T? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
     }
 }

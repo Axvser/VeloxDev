@@ -58,7 +58,7 @@ public class SpatialGridHashMap(double cellSize) : IWorkflowSpatialMap
     }
 
     private static Viewport GetCurrentViewport(IWorkflowNodeViewModel node)
-        => new(node.Anchor.Left, node.Anchor.Top, node.Size.Width, node.Size.Height);
+        => new(node.Anchor.Horizontal, node.Anchor.Vertical, node.Size.Width, node.Size.Height);
 
     private void RegisterNode(IWorkflowNodeViewModel node, Viewport initialViewport)
     {
@@ -122,9 +122,9 @@ public class SpatialGridHashMap(double cellSize) : IWorkflowSpatialMap
     {
         if (viewport.IsEmpty) yield break;
 
-        int minX = (int)Math.Floor(viewport.Left / _cellSize);
+        int minX = (int)Math.Floor(viewport.Horizontal / _cellSize);
         int maxX = (int)Math.Ceiling(viewport.Right / _cellSize);
-        int minY = (int)Math.Floor(viewport.Top / _cellSize);
+        int minY = (int)Math.Floor(viewport.Vertical / _cellSize);
         int maxY = (int)Math.Ceiling(viewport.Bottom / _cellSize);
 
         for (int x = minX; x < maxX; x++)

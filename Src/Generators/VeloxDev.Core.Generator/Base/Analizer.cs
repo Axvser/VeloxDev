@@ -489,7 +489,7 @@ namespace VeloxDev.Generators.Base
                     {{RETRACT}}    catch
                     {{RETRACT}}    {
                     {{RETRACT}}    }
-                    {{RETRACT}}    return ({{FullTypeName}})(object)new global::VeloxDev.WorkflowSystem.Templates.SlotViewModelBase();
+                    {{RETRACT}}    return ({{FullTypeName}})(object)new global::VeloxDev.WorkflowSystem.SlotViewModelBase();
                     {{RETRACT}}}
                     """;
             }

@@ -6,7 +6,7 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using VeloxDev.Core.MVVM;
+using VeloxDev.MVVM;
 
 namespace VeloxDev.Core.Extension.Agent.Workflow;
 

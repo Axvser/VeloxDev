@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading.Tasks;
-using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension.Agent.Workflow;
 
@@ -15,7 +15,6 @@ public sealed class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IDisposabl
     private const string ScopedMoveNodeRequestJsonDescription = "A JSON request string for the bound workflow tree containing required `nodeIndex` and required `offset` JSON. Do not provide `sessionId` or `tree`.";
     private const string ScopedSetNodeAnchorRequestJsonDescription = "A JSON request string for the bound workflow tree containing required `nodeIndex` and required `anchor` JSON. Do not provide `sessionId` or `tree`.";
     private const string ScopedSetNodeSizeRequestJsonDescription = "A JSON request string for the bound workflow tree containing required `nodeIndex` and required `size` JSON. Do not provide `sessionId` or `tree`.";
-    private const string ScopedSetNodeBroadcastModeRequestJsonDescription = "A JSON request string for the bound workflow tree containing required `nodeIndex` and required `broadcastMode` enum value. Do not provide `sessionId` or `tree`.";
     private const string ScopedNodeOperationRequestJsonDescription = "A JSON request string for the bound workflow tree containing required `nodeIndex` and optional `parameter`. Do not provide `sessionId` or `tree`.";
     private const string ScopedSlotRequestJsonDescription = "A JSON request string for the bound workflow tree containing required `nodeIndex` and required `slotIndex`. Do not provide `sessionId` or `tree`.";
     private const string ScopedCreateSlotRequestJsonDescription = "A JSON request string for the bound workflow tree containing required `nodeIndex` and required `slot` JSON. Do not provide `sessionId` or `tree`.";
@@ -45,11 +44,8 @@ public sealed class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IDisposabl
         yield return MoveWorkflowNode;
         yield return SetWorkflowNodeAnchor;
         yield return SetWorkflowNodeSize;
-        yield return SetWorkflowNodeBroadcastMode;
-        yield return SetWorkflowNodeReverseBroadcastMode;
         yield return InvokeWorkflowNodeWorkAsync;
         yield return InvokeWorkflowNodeBroadcastAsync;
-        yield return InvokeWorkflowNodeReverseBroadcastAsync;
         yield return GetWorkflowSlotJson;
         yield return CreateWorkflowSlot;
         yield return DeleteWorkflowSlot;
@@ -103,14 +99,6 @@ public sealed class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IDisposabl
     public string SetWorkflowNodeSize([Description(ScopedSetNodeSizeRequestJsonDescription)] string requestJson)
         => Execute(WorkflowAgentTools.SetWorkflowNodeSize, requestJson);
 
-    [Description("Set the forward broadcast mode of the node identified by nodeIndex inside the bound workflow tree.")]
-    public string SetWorkflowNodeBroadcastMode([Description(ScopedSetNodeBroadcastModeRequestJsonDescription)] string requestJson)
-        => Execute(WorkflowAgentTools.SetWorkflowNodeBroadcastMode, requestJson);
-
-    [Description("Set the reverse broadcast mode of the node identified by nodeIndex inside the bound workflow tree.")]
-    public string SetWorkflowNodeReverseBroadcastMode([Description(ScopedSetNodeBroadcastModeRequestJsonDescription)] string requestJson)
-        => Execute(WorkflowAgentTools.SetWorkflowNodeReverseBroadcastMode, requestJson);
-
     [Description("Invoke WorkAsync on the node identified by nodeIndex inside the bound workflow tree.")]
     public Task<string> InvokeWorkflowNodeWorkAsync([Description(ScopedNodeOperationRequestJsonDescription)] string requestJson)
         => ExecuteAsync(WorkflowAgentTools.InvokeWorkflowNodeWorkAsync, requestJson);
@@ -118,10 +106,6 @@ public sealed class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IDisposabl
     [Description("Invoke BroadcastAsync on the node identified by nodeIndex inside the bound workflow tree.")]
     public Task<string> InvokeWorkflowNodeBroadcastAsync([Description(ScopedNodeOperationRequestJsonDescription)] string requestJson)
         => ExecuteAsync(WorkflowAgentTools.InvokeWorkflowNodeBroadcastAsync, requestJson);
-
-    [Description("Invoke ReverseBroadcastAsync on the node identified by nodeIndex inside the bound workflow tree.")]
-    public Task<string> InvokeWorkflowNodeReverseBroadcastAsync([Description(ScopedNodeOperationRequestJsonDescription)] string requestJson)
-        => ExecuteAsync(WorkflowAgentTools.InvokeWorkflowNodeReverseBroadcastAsync, requestJson);
 
     [Description("Get one slot JSON snapshot by zero-based nodeIndex and slotIndex from the bound workflow tree.")]
     public string GetWorkflowSlotJson([Description(ScopedSlotRequestJsonDescription)] string requestJson)

@@ -35,7 +35,7 @@ namespace VeloxDev.Generators.Writers
 
         public override string[] GenerateBaseTypes()
         {
-            return new string[] { };
+            return [];
         }
 
         public override string[] GenerateBaseInterfaces()
@@ -43,7 +43,7 @@ namespace VeloxDev.Generators.Writers
             var model = _workflowModel;
             if (model == null || _isBaseClassWorkflowGenerated) return Array.Empty<string>();
 
-            return new string[] { GetWorkflowInterfaceName(model.WorkflowType) };
+            return [GetWorkflowInterfaceName(model.WorkflowType)];
         }
 
         private WorkflowAttributeModel? GetWorkflowAttributeModel(INamedTypeSymbol symbol)
@@ -81,10 +81,10 @@ namespace VeloxDev.Generators.Writers
             if (attributeClass == null) return false;
 
             var fullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            return fullName.Contains("WorkflowBuilder.ViewModel.TreeAttribute") ||
-                   fullName.Contains("WorkflowBuilder.ViewModel.NodeAttribute") ||
-                   fullName.Contains("WorkflowBuilder.ViewModel.SlotAttribute") ||
-                   fullName.Contains("WorkflowBuilder.ViewModel.LinkAttribute");
+            return fullName.Contains("WorkflowBuilder.TreeAttribute") ||
+                   fullName.Contains("WorkflowBuilder.NodeAttribute") ||
+                   fullName.Contains("WorkflowBuilder.SlotAttribute") ||
+                   fullName.Contains("WorkflowBuilder.LinkAttribute");
         }
 
         private WorkflowAttributeModel? CreateWorkflowAttributeModel(AttributeData attribute, INamedTypeSymbol targetClass)
@@ -94,19 +94,19 @@ namespace VeloxDev.Generators.Writers
 
             var fullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-            if (fullName.Contains("WorkflowBuilder.ViewModel.TreeAttribute"))
+            if (fullName.Contains("WorkflowBuilder.TreeAttribute"))
             {
                 return CreateTreeModel(attribute, targetClass);
             }
-            else if (fullName.Contains("WorkflowBuilder.ViewModel.NodeAttribute"))
+            else if (fullName.Contains("WorkflowBuilder.NodeAttribute"))
             {
                 return CreateNodeModel(attribute, targetClass);
             }
-            else if (fullName.Contains("WorkflowBuilder.ViewModel.SlotAttribute"))
+            else if (fullName.Contains("WorkflowBuilder.SlotAttribute"))
             {
                 return CreateSlotModel(attribute, targetClass);
             }
-            else if (fullName.Contains("WorkflowBuilder.ViewModel.LinkAttribute"))
+            else if (fullName.Contains("WorkflowBuilder.LinkAttribute"))
             {
                 return CreateLinkModel(attribute, targetClass);
             }
@@ -123,7 +123,6 @@ namespace VeloxDev.Generators.Writers
                 AttributeSymbol = attribute.AttributeClass
             };
 
-            // �������Ͳ���
             if (attribute.AttributeClass is INamedTypeSymbol namedType && namedType.TypeArguments.Length > 0)
             {
                 model.HelperType = namedType.TypeArguments[0];
@@ -133,7 +132,6 @@ namespace VeloxDev.Generators.Writers
                 model.HelperType = GetDefaultHelperType("Tree");
             }
 
-            // �Ľ��Ĳ�����������ȷ����Ĭ��ֵ
             var virtualLinkType = GetConstructorArgumentAsType(attribute, "virtualLinkType", 0);
             model.VirtualLinkType = virtualLinkType ?? GetConcreteDefaultVirtualLinkType();
 
@@ -161,7 +159,6 @@ namespace VeloxDev.Generators.Writers
                 model.HelperType = GetDefaultHelperType("Node");
             }
 
-            // �Ľ��Ĳ����������ṩĬ��ֵ
             model.WorkSemaphore = GetConstructorArgumentAsInt(attribute, "workSemaphore", 0) ?? 1;
 
             return model;
@@ -206,7 +203,6 @@ namespace VeloxDev.Generators.Writers
                 model.HelperType = GetDefaultHelperType("Link");
             }
 
-            // �Ľ��Ĳ�������
             var slotType = GetConstructorArgumentAsType(attribute, "slotType", 0);
             model.SlotType = slotType ?? GetConcreteDefaultSlotType();
 
@@ -215,7 +211,6 @@ namespace VeloxDev.Generators.Writers
 
         private INamedTypeSymbol? GetConstructorArgumentAsType(AttributeData attribute, string parameterName, int position)
         {
-            // ���Ȱ����Ʋ�����������
             foreach (var namedArg in attribute.NamedArguments)
             {
                 if (namedArg.Key == parameterName &&
@@ -226,7 +221,6 @@ namespace VeloxDev.Generators.Writers
                 }
             }
 
-            // ��λ�ò��ҹ��캯������
             if (position < attribute.ConstructorArguments.Length)
             {
                 var arg = attribute.ConstructorArguments[position];
@@ -241,7 +235,6 @@ namespace VeloxDev.Generators.Writers
 
         private int? GetConstructorArgumentAsInt(AttributeData attribute, string parameterName, int position)
         {
-            // ���Ȱ����Ʋ�����������
             foreach (var namedArg in attribute.NamedArguments)
             {
                 if (namedArg.Key == parameterName &&
@@ -252,7 +245,6 @@ namespace VeloxDev.Generators.Writers
                 }
             }
 
-            // ��λ�ò��ҹ��캯������
             if (position < attribute.ConstructorArguments.Length)
             {
                 var arg = attribute.ConstructorArguments[position];
@@ -275,30 +267,28 @@ namespace VeloxDev.Generators.Writers
         private INamedTypeSymbol? GetConcreteDefaultVirtualLinkType()
         {
             return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkViewModelBase")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.Templates.LinkViewModelBase");
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkViewModelBase");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualSlotType()
         {
             return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotViewModelBase")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.Templates.SlotViewModelBase");
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotViewModelBase");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultSlotType()
         {
             return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotViewModelBase")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.Templates.SlotViewModelBase");
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotViewModelBase");
         }
 
         private INamedTypeSymbol? GetTypeSymbolFromReferencedAssemblies(string fullyQualifiedName)
         {
             if (Symbol == null) return null;
 
-            // �����ڵ�ǰ�����в���
             var typeSymbol = Symbol.ContainingAssembly?.GetTypeByMetadataName(fullyQualifiedName);
             if (typeSymbol != null) return typeSymbol;
 
-            // Ȼ�����������ó����в���
             foreach (var reference in Symbol.ContainingAssembly.Modules.SelectMany(m => m.ReferencedAssemblySymbols))
             {
                 typeSymbol = reference.GetTypeByMetadataName(fullyQualifiedName);
@@ -615,8 +605,8 @@ namespace VeloxDev.Generators.Writers
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
                     private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> slots = [];
-                    private {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode broadcastMode = {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode.Parallel;
-                    private {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode reverseBroadcastMode = {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode.Parallel;
+                    private {{NAMESPACE_VELOX_WORKFLOW}}.BroadcastMode broadcastMode = {{NAMESPACE_VELOX_WORKFLOW}}.BroadcastMode.Parallel;
+                    private {{NAMESPACE_VELOX_WORKFLOW}}.BroadcastMode reverseBroadcastMode = {{NAMESPACE_VELOX_WORKFLOW}}.BroadcastMode.Parallel;
 
                     protected virtual {{TaskFullName}} Move({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
@@ -654,10 +644,6 @@ namespace VeloxDev.Generators.Writers
                     protected virtual async {{TaskFullName}} Broadcast({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
                         await Helper.BroadcastAsync(parameter,ct);
-                    }
-                    protected virtual async {{TaskFullName}} ReverseBroadcast({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-                    {
-                        await Helper.ReverseBroadcastAsync(parameter,ct);
                     }
                     protected virtual async {{TaskFullName}} Close({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
@@ -737,39 +723,6 @@ namespace VeloxDev.Generators.Writers
                     }
                     partial void OnSlotsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
                     partial void OnSlotsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-                     public {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode BroadcastMode
-                     {
-                         get => broadcastMode;
-                         set
-                         {
-                            if({{ObjectFullName}}.Equals(broadcastMode,value)) return;
-                            var old = broadcastMode;
-                            OnPropertyChanging(nameof(BroadcastMode));
-                            OnBroadcastModeChanging(old,value);
-                            broadcastMode = value;
-                            OnBroadcastModeChanged(old,value);
-                            OnPropertyChanged(nameof(BroadcastMode));
-                         }
-                     }
-                     partial void OnBroadcastModeChanging({{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode newValue);
-                     partial void OnBroadcastModeChanged({{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode newValue);
-                     public {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode ReverseBroadcastMode
-                     {
-                         get => reverseBroadcastMode;
-                         set
-                         {
-                            if({{ObjectFullName}}.Equals(reverseBroadcastMode,value)) return;
-                            var old = reverseBroadcastMode;
-                            OnPropertyChanging(nameof(ReverseBroadcastMode));
-                            OnReverseBroadcastModeChanging(old,value);
-                            reverseBroadcastMode = value;
-                            OnReverseBroadcastModeChanged(old,value);
-                            OnPropertyChanged(nameof(ReverseBroadcastMode));
-                         }
-                     }
-                     partial void OnReverseBroadcastModeChanging({{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode newValue);
-                     partial void OnReverseBroadcastModeChanged({{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.WorkflowBroadcastMode newValue);
-
                     private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_MoveCommand = null;
                     public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand MoveCommand
                     {
@@ -852,17 +805,6 @@ namespace VeloxDev.Generators.Writers
                           return _buffer_BroadcastCommand;
                        }
                     }
-                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_ReverseBroadcastCommand = null;
-                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand ReverseBroadcastCommand
-                    {
-                       get
-                       {
-                          _buffer_ReverseBroadcastCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              command: ReverseBroadcast,
-                              canExecute: _ => true);
-                          return _buffer_ReverseBroadcastCommand;
-                       }
-                    }
                     private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_CloseCommand = null;
                     public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand CloseCommand
                     {
@@ -884,18 +826,10 @@ namespace VeloxDev.Generators.Writers
         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> targets = [];
         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> sources = [];
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel? parent = null;
-        private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel channel = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel.OneBoth;
+        private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel channel = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel.MultipleBoth;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState state = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState.StandBy;
         private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
-        private {{NAMESPACE_VELOX_WORKFLOW}}.Offset offset = new();
-        private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
 
-        protected virtual {{TaskFullName}} SetSize({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
-        {
-            if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Size scale) return {{TaskFullName}}.CompletedTask;
-            Helper.SetSize(scale);
-            return {{TaskFullName}}.CompletedTask;
-        }
         protected virtual {{TaskFullName}} SetChannel({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
         {
             if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel slotChannel) return {{TaskFullName}}.CompletedTask;
@@ -1027,50 +961,7 @@ namespace VeloxDev.Generators.Writers
         }
         partial void OnAnchorChanging({{NAMESPACE_VELOX_WORKFLOW}}.Anchor oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Anchor newValue);
         partial void OnAnchorChanged({{NAMESPACE_VELOX_WORKFLOW}}.Anchor oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Anchor newValue);
-        public {{NAMESPACE_VELOX_WORKFLOW}}.Offset Offset
-        {
-            get => offset;
-            set
-            {
-               if({{ObjectFullName}}.Equals(offset,value)) return;
-               var old = offset;
-               OnPropertyChanging(nameof(Offset));
-               OnOffsetChanging(old,value);
-               offset = value;
-               OnOffsetChanged(old,value);
-               OnPropertyChanged(nameof(Offset));
-            }
-        }
-        partial void OnOffsetChanging({{NAMESPACE_VELOX_WORKFLOW}}.Offset oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Offset newValue);
-        partial void OnOffsetChanged({{NAMESPACE_VELOX_WORKFLOW}}.Offset oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Offset newValue);
-        public {{NAMESPACE_VELOX_WORKFLOW}}.Size Size
-        {
-            get => size;
-            set
-            {
-               if({{ObjectFullName}}.Equals(size,value)) return;
-               var old = size;
-               OnPropertyChanging(nameof(Size));
-               OnSizeChanging(old,value);
-               size = value;
-               OnSizeChanged(old,value);
-               OnPropertyChanged(nameof(Size));
-            }
-        }
-        partial void OnSizeChanging({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
-        partial void OnSizeChanged({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
 
-        private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SetSizeCommand = null;
-        public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SetSizeCommand
-        {
-           get
-           {
-              _buffer_SetSizeCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                  command: SetSize,
-                  canExecute: _ => true);
-              return _buffer_SetSizeCommand;
-           }
-        }
         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_SetChannelCommand = null;
         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand SetChannelCommand
         {

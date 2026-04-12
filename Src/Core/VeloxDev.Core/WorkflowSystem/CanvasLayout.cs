@@ -37,8 +37,8 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
     public object Clone() => new CanvasLayout()
     {
         OriginSize = new Size(this.OriginSize.Width, this.OriginSize.Height),
-        PositiveOffset = new Offset(this.PositiveOffset.Left, this.PositiveOffset.Top),
-        NegativeOffset = new Offset(this.NegativeOffset.Left, this.NegativeOffset.Top),
+        PositiveOffset = new Offset(this.PositiveOffset.Horizontal, this.PositiveOffset.Vertical),
+        NegativeOffset = new Offset(this.NegativeOffset.Horizontal, this.NegativeOffset.Vertical),
         OriginAlignment = this.OriginAlignment
     };
 
@@ -80,8 +80,8 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
     }
     private void Update()
     {
-        var baseWidth = OriginSize.Width + PositiveOffset.Left + NegativeOffset.Left;
-        var baseHeight = OriginSize.Height + PositiveOffset.Top + NegativeOffset.Top;
+        var baseWidth = OriginSize.Width + PositiveOffset.Horizontal + NegativeOffset.Horizontal;
+        var baseHeight = OriginSize.Height + PositiveOffset.Vertical + NegativeOffset.Vertical;
 
         ActualSize.Width = baseWidth;
         ActualSize.Height = baseHeight;
@@ -90,8 +90,8 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
         var originWidth = OriginSize.Width;
         var originHeight = OriginSize.Height;
 
-        var negativeLeft = NegativeOffset.Left;
-        var negativeTop = NegativeOffset.Top;
+        var negativeLeft = NegativeOffset.Horizontal;
+        var negativeTop = NegativeOffset.Vertical;
 
         ActualOffset = OriginAlignment switch
         {

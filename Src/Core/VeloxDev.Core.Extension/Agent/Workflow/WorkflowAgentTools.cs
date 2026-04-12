@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading.Tasks;
-using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension.Agent.Workflow;
 
@@ -17,7 +17,6 @@ public static class WorkflowAgentTools
     private const string MoveNodeRequestJsonDescription = "A JSON request string containing optional `sessionId`, optional `tree`, required `nodeIndex`, and required `offset` JSON.";
     private const string SetNodeAnchorRequestJsonDescription = "A JSON request string containing optional `sessionId`, optional `tree`, required `nodeIndex`, and required `anchor` JSON.";
     private const string SetNodeSizeRequestJsonDescription = "A JSON request string containing optional `sessionId`, optional `tree`, required `nodeIndex`, and required `size` JSON.";
-    private const string SetNodeBroadcastModeRequestJsonDescription = "A JSON request string containing optional `sessionId`, optional `tree`, required `nodeIndex`, and required `broadcastMode` enum value.";
     private const string NodeOperationRequestJsonDescription = "A JSON request string containing optional `sessionId`, optional `tree`, required `nodeIndex`, and optional `parameter` JSON passed to the node runtime operation.";
     private const string SlotRequestJsonDescription = "A JSON request string containing optional `sessionId`, optional `tree`, required `nodeIndex`, and required `slotIndex`.";
     private const string CreateSlotRequestJsonDescription = "A JSON request string containing optional `sessionId`, optional `tree`, required `nodeIndex`, and required `slot` JSON for the slot to create.";
@@ -169,26 +168,6 @@ public static class WorkflowAgentTools
         return CreateTreeResponse(tree, sessionId);
     }
 
-    [Description("Set the forward broadcast mode of the node identified by nodeIndex.")]
-    public static string SetWorkflowNodeBroadcastMode([Description(SetNodeBroadcastModeRequestJsonDescription)] string requestJson)
-    {
-        var request = DeserializeRequest<WorkflowSetNodeBroadcastModeRequest>(requestJson);
-        var (tree, sessionId) = ResolveTree(request);
-        GetNode(tree, request.NodeIndex).BroadcastMode = DeserializeEnum<WorkflowBroadcastMode>(request.BroadcastMode, nameof(request.BroadcastMode));
-        PersistSession(sessionId, tree);
-        return CreateTreeResponse(tree, sessionId);
-    }
-
-    [Description("Set the reverse broadcast mode of the node identified by nodeIndex.")]
-    public static string SetWorkflowNodeReverseBroadcastMode([Description(SetNodeBroadcastModeRequestJsonDescription)] string requestJson)
-    {
-        var request = DeserializeRequest<WorkflowSetNodeBroadcastModeRequest>(requestJson);
-        var (tree, sessionId) = ResolveTree(request);
-        GetNode(tree, request.NodeIndex).ReverseBroadcastMode = DeserializeEnum<WorkflowBroadcastMode>(request.BroadcastMode, nameof(request.BroadcastMode));
-        PersistSession(sessionId, tree);
-        return CreateTreeResponse(tree, sessionId);
-    }
-
     [Description("Invoke WorkAsync on the node identified by nodeIndex and pass request.parameter as the runtime parameter.")]
     public static async Task<string> InvokeWorkflowNodeWorkAsync([Description(NodeOperationRequestJsonDescription)] string requestJson)
     {
@@ -207,17 +186,6 @@ public static class WorkflowAgentTools
         var (tree, sessionId) = ResolveTree(request);
         var node = GetNode(tree, request.NodeIndex);
         await node.GetHelper().BroadcastAsync(ConvertParameter(request.Parameter), default).ConfigureAwait(false);
-        PersistSession(sessionId, tree);
-        return CreateTreeResponse(tree, sessionId);
-    }
-
-    [Description("Invoke ReverseBroadcastAsync on the node identified by nodeIndex and pass request.parameter as the runtime parameter.")]
-    public static async Task<string> InvokeWorkflowNodeReverseBroadcastAsync([Description(NodeOperationRequestJsonDescription)] string requestJson)
-    {
-        var request = DeserializeRequest<WorkflowNodeOperationRequest>(requestJson);
-        var (tree, sessionId) = ResolveTree(request);
-        var node = GetNode(tree, request.NodeIndex);
-        await node.GetHelper().ReverseBroadcastAsync(ConvertParameter(request.Parameter), default).ConfigureAwait(false);
         PersistSession(sessionId, tree);
         return CreateTreeResponse(tree, sessionId);
     }
@@ -259,7 +227,6 @@ public static class WorkflowAgentTools
         var request = DeserializeRequest<WorkflowSetSlotSizeRequest>(requestJson);
         var (tree, sessionId) = ResolveTree(request);
         var slot = GetSlot(tree, request.NodeIndex, request.SlotIndex);
-        slot.GetHelper().SetSize(DeserializeValue<Size>(request.Size, nameof(request.Size)));
         PersistSession(sessionId, tree);
         return CreateTreeResponse(tree, sessionId);
     }
@@ -657,11 +624,6 @@ public static class WorkflowAgentTools
     private sealed class WorkflowSetNodeSizeRequest : WorkflowNodeRequest
     {
         public JToken? Size { get; set; }
-    }
-
-    private sealed class WorkflowSetNodeBroadcastModeRequest : WorkflowNodeRequest
-    {
-        public JToken? BroadcastMode { get; set; }
     }
 
     private sealed class WorkflowNodeOperationRequest : WorkflowNodeRequest

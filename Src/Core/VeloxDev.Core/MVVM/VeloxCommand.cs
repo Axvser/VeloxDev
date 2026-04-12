@@ -100,12 +100,34 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
     public event CommandEventHandler? Canceled;
     public event CommandEventHandler? Exited;
 
+    private void RaiseCanExecuteChanged()
+    {
+        try
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void RaiseCommandEvent(CommandEventHandler? handler, CommandEventArgs args)
+    {
+        try
+        {
+            handler?.Invoke(args);
+        }
+        catch
+        {
+        }
+    }
+
     public bool CanExecute(object? parameter)
         => (_canExecute?.Invoke(parameter) ?? true) && !_isForceLocked;
 
     public void Execute(object? parameter) => _ = ExecuteAsync(parameter);
 
-    public void Notify() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    public void Notify() => RaiseCanExecuteChanged();
 
     public void Lock() => _ = LockAsync();
     public void UnLock() => _ = UnLockAsync();
@@ -121,7 +143,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         {
             item.Cts = new();
         }
-        Created?.Invoke(item);
+        RaiseCommandEvent(Created, item);
 
         await _stateLock.WaitAsync().ConfigureAwait(false);
         try
@@ -129,7 +151,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             if (_isForceLocked)
             {
                 item.Cts?.Cancel();
-                Canceled?.Invoke(item.With(CommandEventType.Canceled));
+                RaiseCommandEvent(Canceled, item.With(CommandEventType.Canceled));
                 return;
             }
 
@@ -141,7 +163,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             else
             {
                 _pendingQueue.Enqueue(item);
-                Enqueued?.Invoke(item.With(CommandEventType.Enqueued));
+                RaiseCommandEvent(Enqueued, item.With(CommandEventType.Enqueued));
             }
         }
         finally
@@ -153,7 +175,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
 
     private async Task ExecuteCoreAsync(CommandEventArgs item)
     {
-        Started?.Invoke(item.With(CommandEventType.Started));
+        RaiseCommandEvent(Started, item.With(CommandEventType.Started));
 
         try
         {
@@ -165,15 +187,15 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             {
                 await _command(item.Parameter, _defct).ConfigureAwait(false);
             }
-            Completed?.Invoke(item.With(CommandEventType.Completed));
+            RaiseCommandEvent(Completed, item.With(CommandEventType.Completed));
         }
         catch (OperationCanceledException)
         {
-            Canceled?.Invoke(item.With(CommandEventType.Canceled));
+            RaiseCommandEvent(Canceled, item.With(CommandEventType.Canceled));
         }
         catch (Exception ex)
         {
-            Failed?.Invoke(item.With(CommandEventType.Failed, ex));
+            RaiseCommandEvent(Failed, item.With(CommandEventType.Failed, ex));
         }
         finally
         {
@@ -193,8 +215,8 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             _stateLock.Release();
         }
 
-        Exited?.Invoke(completed.With(CommandEventType.Exited));
-        Notify();
+        RaiseCommandEvent(Exited, completed.With(CommandEventType.Exited));
+        RaiseCanExecuteChanged();
 
         await TryStartPendingAsync().ConfigureAwait(false);
     }
@@ -250,7 +272,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         foreach (var it in activeToCancel)
         {
             it.Cts?.Cancel();
-            Canceled?.Invoke(it.With(CommandEventType.Canceled));
+            RaiseCommandEvent(Canceled, it.With(CommandEventType.Canceled));
         }
 
         await UnLockAsync().ConfigureAwait(false);
@@ -272,7 +294,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
             while (_pendingQueue.Count > 0)
             {
                 var item = _pendingQueue.Dequeue();
-                Dequeued?.Invoke(item.With(CommandEventType.Dequeued));
+                RaiseCommandEvent(Dequeued, item.With(CommandEventType.Dequeued));
                 pendingToCancel.Add(item);
             }
         }
@@ -284,7 +306,7 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
         foreach (var it in pendingToCancel.Concat(activeToCancel))
         {
             it.Cts?.Cancel();
-            Canceled?.Invoke(it.With(CommandEventType.Canceled));
+            RaiseCommandEvent(Canceled, it.With(CommandEventType.Canceled));
         }
 
         await UnLockAsync().ConfigureAwait(false);
@@ -347,11 +369,11 @@ public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,
 
         foreach (var next in toStart)
         {
-            Dequeued?.Invoke(next.With(CommandEventType.Dequeued));
+            RaiseCommandEvent(Dequeued, next.With(CommandEventType.Dequeued));
             _ = ExecuteCoreAsync(next);
         }
 
-        Notify();
+        RaiseCanExecuteChanged();
     }
 }
 
