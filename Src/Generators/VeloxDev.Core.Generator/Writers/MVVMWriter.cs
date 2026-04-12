@@ -3,9 +3,9 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using static VeloxDev.Core.Generator.Base.Analizer;
+using static VeloxDev.Generator.Base.Analizer;
 
-namespace VeloxDev.Core.Generator.Writers
+namespace VeloxDev.Generator.Writers
 {
     public class MVVMWriter : WriterBase
     {
@@ -125,7 +125,7 @@ namespace VeloxDev.Core.Generator.Writers
             if (Symbol == null)
                 return false;
 
-            var slotBaseSymbol = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.Core.WorkflowSystem.Templates.SlotViewModelBase");
+            var slotBaseSymbol = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.Templates.SlotViewModelBase");
             if (slotBaseSymbol == null)
                 return false;
 
@@ -175,7 +175,7 @@ namespace VeloxDev.Core.Generator.Writers
                 if (attributeClass == null) continue;
 
                 var fullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                if (fullName.Contains("WorkflowBuilder.ViewModel") || fullName.Contains("VeloxDev.Core.WorkflowSystem"))
+                if (fullName.Contains("WorkflowBuilder.ViewModel") || fullName.Contains("VeloxDev.WorkflowSystem"))
                     return true;
 
                 var name = attributeClass.Name;

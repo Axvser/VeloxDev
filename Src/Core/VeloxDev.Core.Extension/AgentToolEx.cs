@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using VeloxDev.Core.Extension.Agent.Workflow;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
+using VeloxDev.Core.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension;
 

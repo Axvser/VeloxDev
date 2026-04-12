@@ -1,5 +1,4 @@
 ﻿using System.Runtime.CompilerServices;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem
 {

@@ -32,7 +32,7 @@ namespace VeloxDev.Core.Generator
                     SyntaxFactory.SingletonSeparatedList<BaseTypeSyntax>(
                         SyntaxFactory.SimpleBaseType(
                             SyntaxFactory.QualifiedName(
-                                SyntaxFactory.ParseName("global::VeloxDev.Core.Interfaces.AspectOriented"),
+                                SyntaxFactory.ParseName("global::VeloxDev.Core.AspectOriented"),
                                 SyntaxFactory.IdentifierName("IProxy")))));
                 var interfaceDeclaration = SyntaxFactory.InterfaceDeclaration(interfaceName)
                     .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))

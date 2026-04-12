@@ -15,9 +15,9 @@ namespace VeloxDev.Core.Generator
     public class Theme : IIncrementalGenerator
     {
         private const string ThemeManagerFullName = "global::VeloxDev.Core.DynamicTheme.ThemeManager";
-        private const string IThemeFullName = "global::VeloxDev.Core.Interfaces.DynamicTheme.ITheme";
-        private const string IThemeObjectFullName = "global::VeloxDev.Core.Interfaces.DynamicTheme.IThemeObject";
-        private const string IThemeValueConverterFullName = "global::VeloxDev.Core.Interfaces.DynamicTheme.IThemeValueConverter";
+        private const string IThemeFullName = "global::VeloxDev.Core.DynamicTheme.ITheme";
+        private const string IThemeObjectFullName = "global::VeloxDev.Core.DynamicTheme.IThemeObject";
+        private const string IThemeValueConverterFullName = "global::VeloxDev.Core.DynamicTheme.IThemeValueConverter";
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {

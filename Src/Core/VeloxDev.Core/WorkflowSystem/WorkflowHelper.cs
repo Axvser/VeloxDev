@@ -1,6 +1,5 @@
 ﻿using System.Collections.Specialized;
-using VeloxDev.Core.Interfaces.MVVM;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
+using VeloxDev.Core.MVVM;
 using VeloxDev.Core.WorkflowSystem.StandardEx;
 using VeloxDev.Core.WorkflowSystem.Templates;
 

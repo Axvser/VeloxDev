@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace VeloxDev.Core.Generator.Writers
+namespace VeloxDev.Generator.Writers
 {
     public class CommandWriter : WriterBase
     {

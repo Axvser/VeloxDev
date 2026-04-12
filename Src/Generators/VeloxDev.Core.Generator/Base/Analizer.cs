@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-namespace VeloxDev.Core.Generator.Base
+namespace VeloxDev.Generator.Base
 {
     public static class Analizer
     {
@@ -489,7 +489,7 @@ namespace VeloxDev.Core.Generator.Base
                     {{RETRACT}}    catch
                     {{RETRACT}}    {
                     {{RETRACT}}    }
-                    {{RETRACT}}    return ({{FullTypeName}})(object)new global::VeloxDev.Core.WorkflowSystem.Templates.SlotViewModelBase();
+                    {{RETRACT}}    return ({{FullTypeName}})(object)new global::VeloxDev.WorkflowSystem.Templates.SlotViewModelBase();
                     {{RETRACT}}}
                     """;
             }

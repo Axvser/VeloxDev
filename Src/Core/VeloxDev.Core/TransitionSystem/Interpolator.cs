@@ -1,7 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Drawing;
 using System.Numerics;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem.NativeInterpolators;
 
 namespace VeloxDev.Core.TransitionSystem

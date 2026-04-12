@@ -1,8 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using VeloxDev.Core.Interfaces.DynamicTheme;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.Core.DynamicTheme

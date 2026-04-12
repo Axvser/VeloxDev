@@ -1,6 +1,4 @@
-﻿using VeloxDev.Core.Interfaces.TransitionSystem;
-
-namespace VeloxDev.Core.TransitionSystem
+﻿namespace VeloxDev.Core.TransitionSystem
 {
     public abstract class UIThreadInspectorCore<TPriorityCore> : UIThreadInspectorBase, IUIThreadInspector<TPriorityCore>
     {

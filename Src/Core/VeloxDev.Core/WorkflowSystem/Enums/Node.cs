@@ -2,9 +2,6 @@ namespace VeloxDev.Core.WorkflowSystem;
 
 /// <summary>
 /// Defines the traversal strategy used by workflow broadcast and reverse-broadcast operations.
-/// <para><see cref="Parallel"/> ( default )</para>
-/// <para><see cref="BreadthFirst"/></para>
-/// <para><see cref="DepthFirst"/> </para>
 /// </summary>
 public enum WorkflowBroadcastMode
 {

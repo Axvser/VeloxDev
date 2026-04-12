@@ -1,5 +1,4 @@
-﻿using VeloxDev.Core.Interfaces.TransitionSystem;
-using VeloxDev.Core.TimeLine;
+﻿using VeloxDev.Core.TimeLine;
 using VeloxDev.Core.WeakTypes;
 
 namespace VeloxDev.Core.TransitionSystem

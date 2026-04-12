@@ -1,5 +1,4 @@
 ﻿using System.Drawing;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 
 namespace VeloxDev.Core.TransitionSystem.NativeInterpolators
 {

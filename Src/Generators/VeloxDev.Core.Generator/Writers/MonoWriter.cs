@@ -40,7 +40,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         public override string[] GenerateBaseInterfaces()
         {
-            return IsMono ? ["global::VeloxDev.Core.Interfaces.MonoBehaviour.IMonoBehaviour"] : [];
+            return IsMono ? ["global::VeloxDev.Core.MonoBehaviour.IMonoBehaviour"] : [];
         }
 
         public override string GenerateBody()

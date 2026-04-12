@@ -1,7 +1,7 @@
 ﻿#if NET
 
 using System.Reflection;
-using VeloxDev.Core.Interfaces.AspectOriented;
+using VeloxDev.Core.AspectOriented;
 
 namespace VeloxDev.Core.AspectOriented
 {

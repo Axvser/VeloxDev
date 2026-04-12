@@ -2,7 +2,7 @@
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
 
-namespace VeloxDev.Core.Generator.Writers
+namespace VeloxDev.Generator.Writers
 {
     public class AopWriter : WriterBase
     {
@@ -58,7 +58,7 @@ namespace VeloxDev.Core.Generator.Writers
                     {
                         if (_proxy == null)
                         {
-                            var newproxy = global::VeloxDev.Core.AspectOriented.ProxyEx.CreateProxy<{{strAop}}>(this);
+                            var newproxy = global::VeloxDev.AspectOriented.ProxyEx.CreateProxy<{{strAop}}>(this);
                             _proxy = newproxy;
                             return newproxy;
                         }

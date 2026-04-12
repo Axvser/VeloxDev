@@ -3,7 +3,7 @@ using System;
 using System.Linq;
 using System.Text;
 
-namespace VeloxDev.Core.Generator.Writers
+namespace VeloxDev.Generator.Writers
 {
     public class WorkflowWriter : WriterBase
     {
@@ -269,25 +269,25 @@ namespace VeloxDev.Core.Generator.Writers
         {
             var defaultHelperName = $"WorkflowHelper.ViewModel.{workflowType}";
             return GetTypeSymbolFromReferencedAssemblies(defaultHelperName) ??
-                   GetTypeSymbolFromReferencedAssemblies($"VeloxDev.Core.WorkflowSystem.{defaultHelperName}");
+                   GetTypeSymbolFromReferencedAssemblies($"VeloxDev.WorkflowSystem.{defaultHelperName}");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualLinkType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.LinkViewModelBase")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.Templates.LinkViewModelBase");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkViewModelBase")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.Templates.LinkViewModelBase");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualSlotType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.SlotViewModelBase")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.Templates.SlotViewModelBase");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotViewModelBase")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.Templates.SlotViewModelBase");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultSlotType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.SlotViewModelBase")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.Core.WorkflowSystem.Templates.SlotViewModelBase");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotViewModelBase")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.Templates.SlotViewModelBase");
         }
 
         private INamedTypeSymbol? GetTypeSymbolFromReferencedAssemblies(string fullyQualifiedName)

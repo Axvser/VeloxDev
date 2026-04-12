@@ -1,5 +1,4 @@
 ﻿using System.Windows.Input;
-using VeloxDev.Core.Interfaces.MVVM;
 
 namespace VeloxDev.Core.MVVM
 {

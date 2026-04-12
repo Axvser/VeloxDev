@@ -1,6 +1,4 @@
-﻿using VeloxDev.Core.Interfaces.DynamicTheme;
-
-namespace VeloxDev.Core.DynamicTheme
+﻿namespace VeloxDev.Core.DynamicTheme
 {
     /// <summary>
     /// Configure the context for dynamic theme switching

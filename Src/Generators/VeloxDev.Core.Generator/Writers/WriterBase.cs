@@ -11,11 +11,11 @@ namespace VeloxDev.Core.Generator.Writers
     public abstract class WriterBase : ICodeWriter
     {
         public const string NAMESPACE_VELOX_TIMELINE = "global::VeloxDev.Core.TimeLine";
-        public const string NAMESPACE_VELOX_IMVVM = "global::VeloxDev.Core.Interfaces.MVVM";
+        public const string NAMESPACE_VELOX_IMVVM = "global::VeloxDev.Core.MVVM";
         public const string NAMESPACE_VELOX_MVVM = "global::VeloxDev.Core.MVVM";
         public const string NAMESPACE_VELOX_AOP = "global::VeloxDev.Core.AopInterfaces";
         public const string NAMESPACE_SYSTEM_MVVM = "global::System.ComponentModel";
-        public const string NAMESPACE_VELOX_IWORKFLOW = "global::VeloxDev.Core.Interfaces.WorkflowSystem";
+        public const string NAMESPACE_VELOX_IWORKFLOW = "global::VeloxDev.Core.WorkflowSystem";
         public const string NAMESPACE_VELOX_WORKFLOW = "global::VeloxDev.Core.WorkflowSystem";
 
         public ClassDeclarationSyntax? Syntax { get; protected set; }

@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.Interfaces.WorkflowSystem
+﻿namespace VeloxDev.Core.WorkflowSystem
 {
     public interface IWorkflowHelper
     {

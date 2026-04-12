@@ -1,7 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using VeloxDev.Core.Interfaces.MonoBehaviour;
+using VeloxDev.Core.MonoBehaviour;
 
 namespace VeloxDev.Core.TimeLine
 {

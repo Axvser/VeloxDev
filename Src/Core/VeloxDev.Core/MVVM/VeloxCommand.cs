@@ -1,6 +1,4 @@
-﻿using VeloxDev.Core.Interfaces.MVVM;
-
-namespace VeloxDev.Core.MVVM;
+﻿namespace VeloxDev.Core.MVVM;
 
 public enum CommandEventType : int
 {

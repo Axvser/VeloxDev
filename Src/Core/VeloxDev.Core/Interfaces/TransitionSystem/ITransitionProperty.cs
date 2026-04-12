@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace VeloxDev.Core.Interfaces.TransitionSystem
+namespace VeloxDev.Core.TransitionSystem
 {
     public interface ITransitionProperty
     {

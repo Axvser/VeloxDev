@@ -1,7 +1,6 @@
 ﻿using System.Windows.Input;
-using VeloxDev.Core.MVVM;
 
-namespace VeloxDev.Core.Interfaces.MVVM
+namespace VeloxDev.Core.MVVM
 {
     public interface IVeloxCommand : ICommand
     {

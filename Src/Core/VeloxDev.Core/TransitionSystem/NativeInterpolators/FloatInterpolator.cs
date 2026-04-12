@@ -1,6 +1,4 @@
-﻿using VeloxDev.Core.Interfaces.TransitionSystem;
-
-namespace VeloxDev.Core.TransitionSystem.NativeInterpolators
+﻿namespace VeloxDev.Core.TransitionSystem.NativeInterpolators
 {
     public class FloatInterpolator : IValueInterpolator
     {

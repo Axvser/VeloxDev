@@ -1,4 +1,4 @@
-﻿using VeloxDev.Core.Interfaces.MVVM;
+﻿using VeloxDev.Core.MVVM;
 
 namespace VeloxDev.Core.WorkflowSystem.StandardEx;
 
