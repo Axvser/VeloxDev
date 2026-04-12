@@ -1,7 +1,6 @@
 ﻿using System.Windows.Media.Media3D;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.WPF.Interpolators
+namespace VeloxDev.TransitionSystem.Interpolators
 {
     public class Vector3DInterpolator : IValueInterpolator
     {

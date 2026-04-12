@@ -60,16 +60,16 @@ var tree = await readStream.DeserializeFromStreamAsync<MyWorkflowTree>();
 
 ## 2. Workflow Agent 接管能力
 
-`VeloxDev.Core` 的 `Tree / Node / Slot / Link` 已经具备脱离 GUI 运行的核心结构与命令能力。`VeloxDev.Core.Extension` 在此基础上补充了一套面向 Agent 的 JSON 工具层，使大模型可以基于上下文与 JSON 快照接管 Workflow 操作。
+`VeloxDev.Core` 负责提供工作流框架层的语义上下文；`VeloxDev.Core.Extension` 在此基础上提供低 Token 的运行时协议层，使 Agent 可以基于稳定 id、增量变更和批量 Patch 接管 Workflow 操作。
 
 ### 2.1 设计目标
 
 核心目标如下：
 
-1. 先向 Agent 暴露组件上下文，而不是只暴露方法名
-2. Agent 基于组件上下文理解每种组件的 JSON 结构
-3. 所有工作流操作都以 JSON 请求 / JSON 响应进行
-4. Agent 可以在“读取当前状态 → 推理下一步 → 提交新请求”的闭环中持续接管工作流
+1. 先向 Agent 暴露框架语义上下文，而不是只暴露方法名
+2. 运行时协议优先返回摘要、增量和受影响对象，而不是默认返回整棵树
+3. 使用稳定 id（`nodeId` / `slotId` / `linkId`）而不是长期依赖索引
+4. 使用批量 Patch 和增量同步减少多轮往返和上下文膨胀
 5. 对需要运行时状态的能力（如 `Undo / Redo`）提供会话模式支持
 
 ### 2.2 注册组件上下文
@@ -77,6 +77,7 @@ var tree = await readStream.DeserializeFromStreamAsync<MyWorkflowTree>();
 在把 Workflow 交给 Agent 前，先注册希望暴露给 Agent 的组件类型：
 
 ```csharp
+using VeloxDev.AI.Workflow;
 using VeloxDev.Core.Extension.Agent.Workflow;
 
 typeof(TreeViewModel).AsWorkflowAgentContextProvider();
@@ -87,21 +88,26 @@ typeof(LinkViewModel).AsWorkflowAgentContextProvider();
 
 注册后，Agent 可以读取：
 
-- 类型描述
-- 属性描述
-- 组件 JSON 示例
+- 框架接口与模板组件的上下文文档
+- 枚举和值类型语义表
+- 用户组件按 `Tree / Node / Slot / Link` 分区的上下文表
+- 单个类型的详细上下文
 
 ### 2.3 获取 Agent 指南
 
 ```csharp
 var helper = WorkflowContextProvider.GetWorkflowHelper();
+var bootstrap = WorkflowProtocolTools.GetWorkflowBootstrap();
+var framework = WorkflowProtocolTools.GetWorkflowContextSection("{\"section\":\"framework\"}");
 var nodeContext = WorkflowContextProvider.GetComponentContext("NodeViewModel");
 ```
 
 其中：
 
-- `GetWorkflowHelper()` 返回 Agent 使用工作流工具所需的英文手册
-- `GetComponentContext(string)` 返回单个组件的英文上下文描述
+- `GetWorkflowHelper()` 返回推荐工具循环与兼容说明
+- `GetWorkflowBootstrap()` 返回低 Token 协议层的启动文档
+- `GetWorkflowContextSection(...)` 按需返回上下文分区
+- `GetComponentContext(string)` 返回单个类型上下文
 
 > 约定：扩展库中所有直接提供给 Agent 的描述均为英文；`README` 维持中文简体。
 
@@ -113,95 +119,193 @@ using VeloxDev.Core.Extension;
 IEnumerable<Delegate> tools = AgentToolEx.ProvideWorkflowAgentTools();
 ```
 
-当前已开放的能力包括：
+推荐优先使用的新协议层能力包括：
 
-#### 会话类工具
+#### Bootstrap / Context Tools
 
-- `CreateWorkflowSession`
-- `GetWorkflowSessionState`
-- `ReleaseWorkflowSession`
+- `GetWorkflowBootstrap`
+- `GetWorkflowBootstrapInLanguage`
+- `GetWorkflowContextSection`
 
-#### Tree 类工具
+#### Compact Runtime Protocol Tools
 
-- `NormalizeWorkflowTreeJson`
-- `CloseWorkflowTreeAsync`
-- `SetWorkflowPointer`
-- `ResetWorkflowVirtualLink`
-- `UndoWorkflowTree`
-- `RedoWorkflowTree`
-- `ClearWorkflowTreeHistory`
+- `OpenWorkflowSession`
+- `QueryWorkflowGraph`
+- `GetWorkflowTargetCapabilities`
+- `GetWorkflowPropertyValue`
+- `ValidateWorkflowPatch`
+- `ApplyWorkflowPatch`
+- `InvokeWorkflowActionAsync`
+- `InvokeWorkflowCommandAsync`
+- `InvokeWorkflowMethodAsync`
+- `GetWorkflowChanges`
+- `GetWorkflowDiagnostics`
+- `ReleaseWorkflowProtocolSession`
 
-#### Node 类工具
+其中：
 
-- `GetWorkflowNodeJson`
-- `CreateWorkflowNode`
-- `DeleteWorkflowNode`
-- `MoveWorkflowNode`
-- `SetWorkflowNodeAnchor`
-- `SetWorkflowNodeSize`
-- `SetWorkflowNodeBroadcastMode`
-- `SetWorkflowNodeReverseBroadcastMode`
-- `InvokeWorkflowNodeWorkAsync`
-- `InvokeWorkflowNodeBroadcastAsync`
-- `InvokeWorkflowNodeReverseBroadcastAsync`
+- `OpenWorkflowSession` 返回 `sessionId + revision + summary + context hashes`
+- `QueryWorkflowGraph` 支持 `summary / tree / node / slot / link` 五种查询模式
+- `QueryWorkflowGraph` 可通过 `includeJson: true` 返回单个对象的实时 JSON 参考
+- `GetWorkflowTargetCapabilities` 返回当前目标上可被 Agent 完整接管的属性、命令、方法目录
+- `GetWorkflowPropertyValue` 精确读取一个已授权属性路径的当前值
+- `ValidateWorkflowPatch` 以 detached clone dry-run 方式验证 patch，不修改 live session
+- `ApplyWorkflowPatch` 支持批量图编辑与通用属性编辑，默认返回 `delta`
+- `InvokeWorkflowCommandAsync` 反射调用已授权的命令属性
+- `InvokeWorkflowMethodAsync` 反射调用已授权的方法
+- `GetWorkflowChanges` 用于按 revision 拉取增量变化
 
-#### Slot 类工具
+### 2.5 新协议请求模式
 
-- `GetWorkflowSlotJson`
-- `CreateWorkflowSlot`
-- `DeleteWorkflowSlot`
-- `SetWorkflowSlotSize`
-- `SetWorkflowSlotChannel`
-- `ValidateWorkflowConnection`
-- `ConnectWorkflowSlots`
-
-#### Link 类工具
-
-- `GetWorkflowLinkJson`
-- `DeleteWorkflowLink`
-- `SetWorkflowLinkVisibility`
-
-### 2.5 请求模式
-
-所有 Workflow Agent Tool 都接收一个 `string requestJson`，其内容本身是 JSON 对象。
+新协议层所有 Tool 都接收一个 `string requestJson`，其内容本身是 JSON 对象。
 
 常见字段如下：
 
-- `sessionId`：可选，绑定运行时工作流会话
-- `tree`：可选，工作流树 JSON；无会话模式时通常必须提供
-- `nodeIndex`：节点索引，对应 `tree.Nodes`
-- `slotIndex`：插槽索引，对应 `node.Slots`
-- `linkIndex`：连接索引，对应 `tree.Links`
-- `node` / `slot`：用于创建组件的组件 JSON
-- `anchor` / `size` / `offset`：几何对象 JSON
-- `parameter`：传给 `Work / Broadcast / ReverseBroadcast` 的任意 JSON 参数
-- `broadcastMode` / `reverseBroadcastMode` / `channel` / `isVisible`：标量配置项
+- `sessionId`：运行时协议会话 id
+- `tree`：可选，首次建会话或刷新会话时使用的完整树 JSON
+- `revision` / `expectedRevision`：增量同步与乐观并发控制
+- `queryMode`：`summary / tree / node / slot / link`
+- `includeJson`：是否返回目标对象的实时 JSON 参考
+- `id` / `nodeId` / `slotId` / `linkId`：稳定组件 id
+- `targetId` / `targetTree`：反射接管目标选择器
+- `operations`：批量 Patch 操作数组
+- `returnMode`：`delta / affected / snapshot`
+- `action`：运行时动作，如 `work / broadcast / close / undo / redo / clearHistory`
+- `commandName` / `methodName`：已授权命令或方法名称
+- `arguments`：方法调用参数数组
 
-示例：创建节点
+Patch 额外支持：
+
+- `setProperty`：更新单个可写公共属性，支持 `propertyPath`
+- `setProperties`：一次更新多个可写公共属性
+- `replaceObject`：将完整对象快照合并回现有运行时对象
+
+反射接管约束：
+
+- 只有能够从运行时成员、接口声明、基类声明或字段映射中解析到 `AgentContext` 的属性 / 命令 / 方法才允许被 Agent 调用
+- 命令属性支持 `ICommand` 与 `IVeloxCommand`
+- 方法支持同步返回值、`Task` 和 `Task<T>`，并自动绑定 JSON 参数
+
+白名单策略：
+
+- 可通过 `WorkflowAgentMemberWhitelist` 对属性、命令、方法分别配置 host-side 白名单
+- 若某一类成员未配置白名单，则该类中所有已标注 `AgentContext` 的成员默认可控
+- 一旦配置白名单，则只有白名单中的已标注成员可被 Agent 调用
+
+示例：打开协议会话
 
 ```json
 {
   "tree": {
-    "$type": "Demo.ViewModels.TreeViewModel, Demo",
+    "$type": "Demo.ViewModels.Workflow.TreeViewModel, Demo",
     "Nodes": [],
     "Links": []
   },
-  "node": {
-    "$type": "Demo.ViewModels.NodeViewModel, Demo",
-    "Title": "HTTP Request"
-  }
+  "languageCode": "zh"
 }
 ```
 
-示例：连接两个 Slot
+示例：dry-run 校验 patch
 
 ```json
 {
   "sessionId": "workflow-session-id",
-  "senderNodeIndex": 0,
-  "senderSlotIndex": 0,
-  "receiverNodeIndex": 1,
-  "receiverSlotIndex": 0
+  "expectedRevision": 4,
+  "operations": [
+    {
+      "op": "setProperty",
+      "nodeId": "node-1",
+      "propertyPath": "Anchor.Horizontal",
+      "value": 320
+    }
+  ]
+}
+```
+
+示例：读取单个属性值
+
+```json
+{
+  "sessionId": "workflow-session-id",
+  "nodeId": "node-1",
+  "propertyPath": "Anchor.Horizontal"
+}
+```
+
+示例：调用命令属性
+
+```json
+{
+  "sessionId": "workflow-session-id",
+  "nodeId": "node-1",
+  "commandName": "WorkCommand",
+  "parameter": {
+    "message": "run"
+  }
+}
+```
+
+示例：调用方法
+
+```json
+{
+  "sessionId": "workflow-session-id",
+  "targetTree": true,
+  "methodName": "InitializeWorkflow",
+  "arguments": []
+}
+```
+
+示例：更新单个对象属性
+
+```json
+{
+  "sessionId": "workflow-session-id",
+  "expectedRevision": 4,
+  "returnMode": "affected",
+  "operations": [
+    {
+      "op": "setProperty",
+      "nodeId": "node-1",
+      "propertyPath": "Anchor.Horizontal",
+      "value": 320
+    },
+    {
+      "op": "setProperties",
+      "targetId": "node-1",
+      "properties": {
+        "Size.Width": 260,
+        "Size.Height": 120
+      }
+    }
+  ]
+}
+```
+
+示例：查询摘要
+
+```json
+{
+  "sessionId": "workflow-session-id",
+  "queryMode": "summary"
+}
+```
+
+示例：提交 Patch
+
+```json
+{
+  "sessionId": "workflow-session-id",
+  "expectedRevision": 3,
+  "returnMode": "delta",
+  "operations": [
+    {
+      "op": "createNode",
+      "node": {
+        "$type": "Demo.ViewModels.Workflow.NodeViewModel, Demo"
+      }
+    }
+  ]
 }
 ```
 
@@ -249,6 +353,7 @@ IEnumerable<Delegate> tools = AgentToolEx.ProvideWorkflowAgentTools();
 - Agent 无法自行注入别的 `tree` JSON
 - Agent 无法自行切换到别的 `sessionId`
 - `Undo / Redo` 仍然可用，因为作用域内部会维护该 `Tree` 的运行时会话
+- 作用域只暴露新协议层工具，并会自动注入协议会话 id
 
 示例：
 

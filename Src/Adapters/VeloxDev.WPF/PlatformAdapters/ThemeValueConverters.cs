@@ -2,9 +2,8 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
-using VeloxDev.Core.Interfaces.DynamicTheme;
 
-namespace VeloxDev.WPF
+namespace VeloxDev.DynamicTheme
 {
     public class DoubleConverter : IThemeValueConverter
     {

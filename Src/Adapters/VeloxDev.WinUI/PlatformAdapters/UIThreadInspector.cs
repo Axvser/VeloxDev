@@ -7,8 +7,6 @@ using Microsoft.UI.Xaml;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using VeloxDev.Core.Interfaces.TransitionSystem;
-using VeloxDev.Core.TransitionSystem;
 using WinRT.Interop;
 
 namespace VeloxDev.TransitionSystem

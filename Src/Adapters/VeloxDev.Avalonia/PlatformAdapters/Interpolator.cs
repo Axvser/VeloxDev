@@ -2,8 +2,7 @@
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
-using VeloxDev.Avalonia.Interpolators;
-using VeloxDev.Core.TransitionSystem;
+using VeloxDev.TransitionSystem.NativeInterpolators;
 
 namespace VeloxDev.TransitionSystem
 {

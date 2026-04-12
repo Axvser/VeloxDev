@@ -11,6 +11,7 @@
 
 - `MVVM`：基于特性的通知属性与命令生成
 - `Workflow`：工作流树、节点、插槽、连线及其辅助模板
+- `AI Workflow Context`：面向 Agent 的工作流语义上下文收集、类型注册与文档生成
 - `TransitionSystem`：动画状态、属性路径、插值器、调度与播放抽象
 - `DynamicTheme`：主题注册、缓存、切换与渐变切换抽象
 - `MonoBehaviour`：按帧驱动的生命周期模型
@@ -46,3 +47,35 @@
 - GitHub: https://github.com/Axvser/VeloxDev
 - Wiki: https://axvser.github.io/VeloxDev.Wiki/
 - Examples: 请参考仓库中的 `Examples` 目录
+
+## Workflow Agent Context
+
+`VeloxDev.Core` 现已提供工作流框架层的 Agent 语义上下文能力，职责是以尽量稳定、低歧义的方式描述框架本身和用户注册组件，而不是直接承担运行时接管协议。
+
+核心入口位于：
+
+- `VeloxDev.AI.Workflow.WorkflowAgentContextRegistry`
+- `VeloxDev.AI.Workflow.WorkflowAgentContextProvider`
+- `VeloxDev.AI.Workflow.WorkflowAgentToolProvider`
+
+典型用法：
+
+```csharp
+using VeloxDev.AI.Workflow;
+
+typeof(TreeViewModel).RegisterWorkflowAgentContext();
+typeof(NodeViewModel).RegisterWorkflowAgentContext();
+
+var document = WorkflowAgentContextProvider.ProvideWorkflowAgentContextDocument(AgentLanguages.English);
+var nodeContext = typeof(NodeViewModel).ProvideClassAgentContext(AgentLanguages.Chinese);
+IEnumerable<Delegate> tools = WorkflowAgentToolProvider.ProvideWorkflowAgentTools();
+```
+
+当前核心库提供：
+
+- 工作流接口、模板组件、枚举、值类型的统一上下文文档
+- 用户注册组件按 `Tree / Node / Slot / Link` 分区的上下文表
+- 面向 Agent 的按章节读取和按类型读取入口
+- 英文标题结构 + 多语言 `AgentContext` 语义内容
+
+如果需要统一的新运行时接管协议、低 Token 增量同步、Patch 批处理、能力枚举、反射属性/命令/方法接管与 dry-run 校验，请安装 `VeloxDev.Core.Extension`。

@@ -6,6 +6,8 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using VeloxDev.AI;
+using CoreWorkflowAgent = VeloxDev.AI.Workflow;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Core.Extension.Agent.Workflow;
@@ -22,6 +24,8 @@ public static class WorkflowContextProvider
             throw new ArgumentNullException(nameof(type));
         }
 
+        CoreWorkflowAgent.WorkflowAgentContextRegistry.RegisterWorkflowAgentContext(type);
+
         lock (SyncRoot)
         {
             ComponentContextMap[type] = new ComponentContext(type);
@@ -31,138 +35,66 @@ public static class WorkflowContextProvider
     [Description("Read the workflow agent role definition, tool conventions, request contracts, and the registered component contexts before calling any workflow agent tool.")]
     public static string GetWorkflowHelper()
     {
-        ComponentContext[] componentContexts;
-        lock (SyncRoot)
-        {
-            componentContexts = [.. ComponentContextMap.Values.OrderBy(context => context.TypeName, StringComparer.Ordinal)];
-        }
-
-        var contextText = componentContexts.Length == 0
-            ? "No workflow components are registered yet. Call AsWorkflowAgentContextProvider(type) for each component type before using workflow agent tools."
-            : string.Join($"{Environment.NewLine}{Environment.NewLine}", componentContexts.Select(context => context.ToString()));
-
         return $"""
-        $Role: You are an in-process agent running inside a .NET application. You must use the following tools and contracts to take over workflow operations.
+        $Role: You are an in-process agent running inside a .NET application. Use the workflow protocol tools below as the only runtime takeover contract.
 
-        # Workflow Tools Manual
+        # Workflow Agent Helper
 
-        ## 1. Registered component context
+        ## 1. Recommended tool loop
 
-        > Read the supported workflow component types, type descriptions, property descriptions, and serialized JSON examples below. These contexts define the JSON shapes that must be used in later tool calls.
+        1. Read `GetWorkflowBootstrap` once.
+        2. Read only the required semantic section through `GetWorkflowContextSection`.
+        3. Open or refresh a runtime session through `OpenWorkflowSession`.
+        4. Read compact projections through `QueryWorkflowGraph`.
+        5. Inspect annotated takeover surface through `GetWorkflowTargetCapabilities` when needed.
+        6. Validate edits through `ValidateWorkflowPatch` before destructive changes.
+        7. Submit batched edits through `ApplyWorkflowPatch`.
+        8. Execute runtime actions, commands, or methods through `InvokeWorkflowActionAsync`, `InvokeWorkflowCommandAsync`, and `InvokeWorkflowMethodAsync`.
+        9. Synchronize incrementally through `GetWorkflowChanges` and `GetWorkflowDiagnostics`.
 
-        {contextText}
+        ## 2. Token strategy
 
-        ## 2. JSON-first operating model
+        - Prefer `queryMode: summary` for the first read.
+        - Prefer stable ids such as `nodeId`, `slotId`, and `linkId`.
+        - Prefer `ValidateWorkflowPatch` before `ApplyWorkflowPatch` for multi-step edits.
+        - Prefer `ApplyWorkflowPatch` over one-change-per-call mutation flows.
+        - Prefer `returnMode: delta` unless a full snapshot is necessary.
+        - Prefer `GetWorkflowChanges` over repeatedly fetching the entire tree.
 
-        ### 2.1 Dynamic reading and creation from JSON
-        - Every workflow agent tool uses JSON requests and JSON responses.
-        - Reuse the documented `$type` values and property names exactly as provided by the registered component contexts.
-        - If a JSON example contains `$id` or `$ref`, preserve the reference semantics in later requests.
-        - Only assign public writable properties unless a sample explicitly shows a different runtime shape.
-        - When a property is interface-based, abstract, or polymorphic, provide a concrete `$type` that can actually be instantiated.
+        ## 3. Context entry points
 
-        ### 2.2 Workflow takeover constraints
-        - Determine the target component type from the registered contexts before constructing a request.
-        - Prefer minimal updates based on the latest returned JSON snapshot instead of rebuilding unrelated fields.
-        - Use JSON arrays for collections and JSON objects for dictionaries.
-        - If a property has no extra description, fall back to the minimal valid value for its `.NET` type.
-        - Always continue from the latest tool response. Do not reason from stale snapshots.
-        - If only a skeleton JSON sample is available, treat it as the minimum safe contract for that type.
+        - `GetWorkflowAgentContextDocument`
+        - `GetWorkflowFrameworkContext`
+        - `GetWorkflowEnumContext`
+        - `GetWorkflowValueTypeContext`
+        - `GetRegisteredWorkflowComponentContext`
+        - `GetWorkflowTypeAgentContext`
 
-        ### 2.3 Execution strategy
-        - Read the component context before choosing the next tool.
-        - Follow the loop: read current JSON -> understand structure -> build the next JSON request.
-        - Reuse the latest returned workflow JSON whenever you perform consecutive operations on the same graph.
+        ## 4. Runtime takeover tools
 
-        ## 3. Runtime session model
+        - `OpenWorkflowSession`
+        - `QueryWorkflowGraph`
+        - `GetWorkflowTargetCapabilities`
+        - `GetWorkflowPropertyValue`
+        - `ValidateWorkflowPatch`
+        - `ApplyWorkflowPatch`
+        - `InvokeWorkflowActionAsync`
+        - `InvokeWorkflowCommandAsync`
+        - `InvokeWorkflowMethodAsync`
+        - `GetWorkflowChanges`
+        - `GetWorkflowDiagnostics`
+        - `ReleaseWorkflowProtocolSession`
 
-        - Stateless mode: send a full `tree` payload in each request. This is simple and deterministic.
-        - Session mode: call `CreateWorkflowSession` first, then send `sessionId` in later requests. Use this mode for runtime-only capabilities such as `UndoWorkflowTree`, `RedoWorkflowTree`, and `ClearWorkflowTreeHistory`.
-        - A request may contain both `sessionId` and `tree`. If both are provided, the tool treats the `tree` payload as the latest snapshot and refreshes the runtime session.
+        ## 5. Registered component context
 
-        ## 4. Request contract
-
-        - All workflow agent tools accept a single JSON request string.
-        - Common fields:
-          - `sessionId`: optional string, used to bind the request to a live runtime workflow session.
-          - `tree`: optional workflow tree JSON object. Required in stateless mode.
-        - Component targeting fields:
-          - `nodeIndex`: zero-based index in `tree.Nodes`.
-          - `slotIndex`: zero-based index in `node.Slots`.
-          - `linkIndex`: zero-based index in `tree.Links`.
-        - Value payload fields:
-          - `node`, `slot`: component JSON object used for creation.
-          - `anchor`, `size`, `offset`: value objects for geometry updates.
-          - `parameter`: any JSON value passed into work or broadcast operations.
-          - `broadcastMode`, `reverseBroadcastMode`, `channel`, `isVisible`: scalar configuration values.
-
-        ## 5. Tool catalog
-
-        ### 5.1 Session tools
-        - `CreateWorkflowSession`
-        - `GetWorkflowSessionState`
-        - `ReleaseWorkflowSession`
-
-        ### 5.2 Tree tools
-        - `NormalizeWorkflowTreeJson`
-        - `CloseWorkflowTreeAsync`
-        - `SetWorkflowPointer`
-        - `ResetWorkflowVirtualLink`
-        - `UndoWorkflowTree`
-        - `RedoWorkflowTree`
-        - `ClearWorkflowTreeHistory`
-
-        ### 5.3 Node tools
-        - `GetWorkflowNodeJson`
-        - `CreateWorkflowNode`
-        - `DeleteWorkflowNode`
-        - `MoveWorkflowNode`
-        - `SetWorkflowNodeAnchor`
-        - `SetWorkflowNodeSize`
-        - `SetWorkflowNodeBroadcastMode`
-        - `SetWorkflowNodeReverseBroadcastMode`
-        - `InvokeWorkflowNodeWorkAsync`
-        - `InvokeWorkflowNodeBroadcastAsync`
-        - `InvokeWorkflowNodeReverseBroadcastAsync`
-
-        ### 5.4 Slot tools
-        - `GetWorkflowSlotJson`
-        - `CreateWorkflowSlot`
-        - `DeleteWorkflowSlot`
-        - `SetWorkflowSlotSize`
-        - `SetWorkflowSlotChannel`
-        - `ValidateWorkflowConnection`
-        - `ConnectWorkflowSlots`
-
-        ### 5.5 Link tools
-        - `GetWorkflowLinkJson`
-        - `DeleteWorkflowLink`
-        - `SetWorkflowLinkVisibility`
+        {CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideRegisteredWorkflowComponentContext(AgentLanguages.English)}
         """;
     }
 
     [Description("Get the context for a single registered workflow component by full type name or simple type name.")]
     public static string GetComponentContext([Description("The full type name or simple type name of a registered workflow component.")] string typeName)
     {
-        if (string.IsNullOrWhiteSpace(typeName))
-        {
-            throw new ArgumentException("Component type name cannot be null or empty.", nameof(typeName));
-        }
-
-        lock (SyncRoot)
-        {
-            foreach (var item in ComponentContextMap)
-            {
-                if (string.Equals(item.Key.FullName, typeName, StringComparison.Ordinal)
-                    || string.Equals(item.Key.Name, typeName, StringComparison.Ordinal)
-                    || string.Equals(item.Value.TypeName, typeName, StringComparison.Ordinal))
-                {
-                    return item.Value.ToString();
-                }
-            }
-        }
-
-        return $"The context for component `{typeName}` was not found. Register the component type by calling AsWorkflowAgentContextProvider first.";
+        return CoreWorkflowAgent.WorkflowAgentTools.GetWorkflowTypeAgentContext(typeName);
     }
 }
 
@@ -305,7 +237,7 @@ public partial class ComponentContext(Type componentType)
 
     private static bool TryCreateSampleInstance(Type type, out INotifyPropertyChanged instance)
     {
-        instance = null;
+        instance = null!;
 
         if (!typeof(INotifyPropertyChanged).IsAssignableFrom(type) || type.IsAbstract || type.IsInterface)
         {

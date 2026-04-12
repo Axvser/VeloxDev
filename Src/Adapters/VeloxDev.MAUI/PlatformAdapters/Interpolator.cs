@@ -1,6 +1,5 @@
 ﻿using Microsoft.Maui.Controls.Shapes;
-using VeloxDev.Core.TransitionSystem;
-using VeloxDev.MAUI.Interpolators;
+using VeloxDev.TransitionSystem.Interpolators;
 
 namespace VeloxDev.TransitionSystem
 {

@@ -4,8 +4,6 @@ using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
-using VeloxDev.Core.Interfaces.TransitionSystem;
-using VeloxDev.Core.TransitionSystem;
 using Windows.Foundation;
 using Windows.UI;
 

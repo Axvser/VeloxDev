@@ -1,9 +1,8 @@
 ﻿using Microsoft.UI.Xaml.Media;
 using System.Collections.Generic;
 using System.Linq;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.WinUI.Interpolators
+namespace VeloxDev.TransitionSystem.Interpolators
 {
     public class TransformInterpolator : IValueInterpolator
     {

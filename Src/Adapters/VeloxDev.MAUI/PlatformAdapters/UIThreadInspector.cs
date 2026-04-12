@@ -1,7 +1,4 @@
-﻿using VeloxDev.Core.Interfaces.TransitionSystem;
-using VeloxDev.Core.TransitionSystem;
-
-namespace VeloxDev.TransitionSystem
+﻿namespace VeloxDev.TransitionSystem
 {
     public class UIThreadInspector() : UIThreadInspectorCore
     {

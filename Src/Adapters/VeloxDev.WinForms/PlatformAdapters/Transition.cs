@@ -1,6 +1,4 @@
 ﻿using System.Linq.Expressions;
-using VeloxDev.Core.Interfaces.TransitionSystem;
-using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.TransitionSystem
 {

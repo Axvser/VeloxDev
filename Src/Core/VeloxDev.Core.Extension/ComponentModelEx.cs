@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections;
@@ -24,6 +25,21 @@ namespace VeloxDev.Core.Extension
             ContractResolver = new WritablePropertiesOnlyResolver(),
             Converters = [new DictionaryKeyConverter()]
         };
+
+        internal static JsonSerializer CreateJsonSerializer()
+            => JsonSerializer.Create(settings);
+
+        internal static object? DeserializeToType(this JToken token, Type targetType)
+        {
+            if (token == null)
+                throw new ArgumentNullException(nameof(token));
+            if (targetType == null)
+                throw new ArgumentNullException(nameof(targetType));
+
+            return token.Type == JTokenType.Null
+                ? null
+                : token.ToObject(targetType, CreateJsonSerializer());
+        }
 
         #region Synchronous Methods
         public static string Serialize<T>(this T workflow)

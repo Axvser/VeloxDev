@@ -2,11 +2,10 @@
 using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 using Windows.Foundation;
 using Windows.UI;
 
-namespace VeloxDev.WinUI.Interpolators
+namespace VeloxDev.TransitionSystem.Interpolators
 {
     public class BrushInterpolator : IValueInterpolator
     {

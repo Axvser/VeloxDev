@@ -1,7 +1,6 @@
 ﻿using System.Windows;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.WPF.Interpolators
+namespace VeloxDev.TransitionSystem.Interpolators
 {
     public class SizeInterpolator : IValueInterpolator
     {

@@ -15,7 +15,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-       <ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<PackageReference Include="VeloxDev.Core" Version="4.1.0" />
 	</ItemGroup>
 
 	<ItemGroup>

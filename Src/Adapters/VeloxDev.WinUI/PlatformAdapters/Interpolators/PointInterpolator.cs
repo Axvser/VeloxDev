@@ -1,8 +1,7 @@
 ﻿using System.Collections.Generic;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 using Windows.Foundation;
 
-namespace VeloxDev.WinUI.Interpolators
+namespace VeloxDev.TransitionSystem.Interpolators
 {
     public class PointInterpolator : IValueInterpolator
     {

@@ -5,9 +5,8 @@ using Avalonia.Utilities;
 using System;
 using System.ComponentModel;
 using System.Globalization;
-using VeloxDev.Core.Interfaces.DynamicTheme;
 
-namespace VeloxDev.Avalonia
+namespace VeloxDev.DynamicTheme
 {
     public class DoubleConverter : IThemeValueConverter
     {

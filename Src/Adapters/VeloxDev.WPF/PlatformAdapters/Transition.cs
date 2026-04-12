@@ -4,8 +4,6 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Media3D;
 using System.Windows.Threading;
-using VeloxDev.Core.Interfaces.TransitionSystem;
-using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.TransitionSystem
 {

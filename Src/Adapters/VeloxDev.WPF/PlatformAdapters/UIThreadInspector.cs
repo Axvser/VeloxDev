@@ -1,7 +1,5 @@
 ﻿using System.Windows;
 using System.Windows.Threading;
-using VeloxDev.Core.Interfaces.TransitionSystem;
-using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.TransitionSystem
 {

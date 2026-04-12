@@ -1,5 +1,4 @@
 ﻿using Avalonia.Threading;
-using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.TransitionSystem
 {

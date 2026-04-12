@@ -3,9 +3,8 @@ using Microsoft.Maui.Graphics.Converters;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
-using VeloxDev.Core.Interfaces.DynamicTheme;
 
-namespace VeloxDev.MAUI
+namespace VeloxDev.DynamicTheme
 {
     public class DoubleConverter : IThemeValueConverter
     {

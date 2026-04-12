@@ -1,5 +1,4 @@
 ﻿using Microsoft.UI.Dispatching;
-using VeloxDev.Core.TransitionSystem;
 
 namespace VeloxDev.TransitionSystem
 {

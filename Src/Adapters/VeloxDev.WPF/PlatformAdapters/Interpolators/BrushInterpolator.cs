@@ -1,9 +1,8 @@
 ﻿using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.WPF.Interpolators
+namespace VeloxDev.TransitionSystem.Interpolators
 {
     public class BrushInterpolator : IValueInterpolator
     {

@@ -1,5 +1,4 @@
-﻿using VeloxDev.Core.TransitionSystem;
-using VeloxDev.WinForms.Interpolators;
+﻿using VeloxDev.TransitionSystem.Interpolators;
 
 namespace VeloxDev.TransitionSystem
 {

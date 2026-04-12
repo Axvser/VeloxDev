@@ -3,9 +3,8 @@ using Avalonia.Media;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.Avalonia.Interpolators
+namespace VeloxDev.TransitionSystem.NativeInterpolators
 {
     public class TransformInterpolator : IValueInterpolator
     {

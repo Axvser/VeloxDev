@@ -3,8 +3,7 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Media3D;
 using System.Windows.Threading;
-using VeloxDev.Core.TransitionSystem;
-using VeloxDev.WPF.Interpolators;
+using VeloxDev.TransitionSystem.Interpolators;
 
 namespace VeloxDev.TransitionSystem
 {

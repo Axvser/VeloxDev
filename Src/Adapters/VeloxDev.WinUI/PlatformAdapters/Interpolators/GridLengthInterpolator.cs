@@ -1,8 +1,7 @@
 ﻿using Microsoft.UI.Xaml;
 using System.Collections.Generic;
-using VeloxDev.Core.Interfaces.TransitionSystem;
 
-namespace VeloxDev.WinUI.Interpolators
+namespace VeloxDev.TransitionSystem.Interpolators
 {
     public class GridLengthInterpolator : IValueInterpolator
     {
