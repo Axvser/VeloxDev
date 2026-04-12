@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.WorkflowSystem;
+﻿namespace VeloxDev.WorkflowSystem;
 
 public readonly struct Viewport(double left, double top, double width, double height) : IEquatable<Viewport>
 {

@@ -1,4 +1,4 @@
-namespace VeloxDev.Core.WorkflowSystem;
+namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
 /// Defines the traversal strategy used by workflow broadcast and reverse-broadcast operations.

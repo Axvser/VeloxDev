@@ -4,10 +4,10 @@ using Microsoft.CodeAnalysis.Text;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
-using VeloxDev.Generator.Base;
-using VeloxDev.Generator.Writers;
+using VeloxDev.Generators.Base;
+using VeloxDev.Generators.Writers;
 
-namespace VeloxDev.Generator
+namespace VeloxDev.Generators
 {
     [Generator(LanguageNames.CSharp)]
     public class Workflow : IIncrementalGenerator

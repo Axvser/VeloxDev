@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.WorkflowSystem;
+﻿namespace VeloxDev.WorkflowSystem;
 
 [Flags] // 语义优先级 : Multiple > One > None
 public enum SlotChannel : int

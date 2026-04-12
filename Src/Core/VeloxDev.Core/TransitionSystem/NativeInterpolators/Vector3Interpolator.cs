@@ -1,6 +1,6 @@
 ﻿using System.Numerics;
 
-namespace VeloxDev.Core.TransitionSystem.NativeInterpolators
+namespace VeloxDev.TransitionSystem.NativeInterpolators
 {
 #if NETCOREAPP || NETFRAMEWORK || NET
     public class Vector3Interpolator : IValueInterpolator

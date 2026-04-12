@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.DynamicTheme
+﻿namespace VeloxDev.DynamicTheme
 {
     /// <summary>
     /// Configure the context for dynamic theme switching

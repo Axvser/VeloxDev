@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel;
-using VeloxDev.Core.MVVM;
+using VeloxDev.MVVM;
 
-namespace VeloxDev.Core.WorkflowSystem
+namespace VeloxDev.WorkflowSystem
 {
     public interface IWorkflowViewModel : INotifyPropertyChanging, INotifyPropertyChanged
     {

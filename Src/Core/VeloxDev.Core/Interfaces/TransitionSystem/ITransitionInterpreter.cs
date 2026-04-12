@@ -1,6 +1,6 @@
-﻿using VeloxDev.Core.TimeLine;
+﻿using VeloxDev.TimeLine;
 
-namespace VeloxDev.Core.TransitionSystem
+namespace VeloxDev.TransitionSystem
 {
     public interface ITransitionInterpreter<TPriorityCore> : ITransitionInterpreterCore
     {

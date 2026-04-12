@@ -1,6 +1,6 @@
 ﻿using System.Drawing;
 
-namespace VeloxDev.Core.TransitionSystem.NativeInterpolators
+namespace VeloxDev.TransitionSystem.NativeInterpolators
 {
     public class PointInterpolator : IValueInterpolator
     {

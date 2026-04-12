@@ -9,15 +9,15 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 
-namespace VeloxDev.Core.Generator
+namespace VeloxDev.Generators
 {
     [Generator(LanguageNames.CSharp)]
     public class Theme : IIncrementalGenerator
     {
-        private const string ThemeManagerFullName = "global::VeloxDev.Core.DynamicTheme.ThemeManager";
-        private const string IThemeFullName = "global::VeloxDev.Core.DynamicTheme.ITheme";
-        private const string IThemeObjectFullName = "global::VeloxDev.Core.DynamicTheme.IThemeObject";
-        private const string IThemeValueConverterFullName = "global::VeloxDev.Core.DynamicTheme.IThemeValueConverter";
+        private const string ThemeManagerFullName = "global::VeloxDev.DynamicTheme.ThemeManager";
+        private const string IThemeFullName = "global::VeloxDev.DynamicTheme.ITheme";
+        private const string IThemeObjectFullName = "global::VeloxDev.DynamicTheme.IThemeObject";
+        private const string IThemeValueConverterFullName = "global::VeloxDev.DynamicTheme.IThemeValueConverter";
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -30,27 +30,27 @@ namespace VeloxDev.Core.Generator
             }
 
             var classWith3Params = context.SyntaxProvider.ForAttributeWithMetadataName(
-                "VeloxDev.Core.DynamicTheme.ThemeConfigAttribute`3",
+                "VeloxDev.DynamicTheme.ThemeConfigAttribute`3",
                 predicate: static (node, _) => node is ClassDeclarationSyntax,
                 transform: Transform).Collect();
 
             var classWith4Params = context.SyntaxProvider.ForAttributeWithMetadataName(
-                "VeloxDev.Core.DynamicTheme.ThemeConfigAttribute`4",
+                "VeloxDev.DynamicTheme.ThemeConfigAttribute`4",
                 predicate: static (node, _) => node is ClassDeclarationSyntax,
                 transform: Transform).Collect();
 
             var classWith5Params = context.SyntaxProvider.ForAttributeWithMetadataName(
-                "VeloxDev.Core.DynamicTheme.ThemeConfigAttribute`5",
+                "VeloxDev.DynamicTheme.ThemeConfigAttribute`5",
                 predicate: static (node, _) => node is ClassDeclarationSyntax,
                 transform: Transform).Collect();
 
             var classWith6Params = context.SyntaxProvider.ForAttributeWithMetadataName(
-                "VeloxDev.Core.DynamicTheme.ThemeConfigAttribute`6",
+                "VeloxDev.DynamicTheme.ThemeConfigAttribute`6",
                 predicate: static (node, _) => node is ClassDeclarationSyntax,
                 transform: Transform).Collect();
 
             var classWith7Params = context.SyntaxProvider.ForAttributeWithMetadataName(
-                "VeloxDev.Core.DynamicTheme.ThemeConfigAttribute`7",
+                "VeloxDev.DynamicTheme.ThemeConfigAttribute`7",
                 predicate: static (node, _) => node is ClassDeclarationSyntax,
                 transform: Transform).Collect();
 

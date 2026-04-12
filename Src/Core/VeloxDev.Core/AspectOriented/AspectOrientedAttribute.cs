@@ -1,6 +1,6 @@
 ﻿#if NET5_0_OR_GREATER
 
-namespace VeloxDev.Core.AspectOriented
+namespace VeloxDev.AspectOriented
 {
     /// <summary>
     /// Apply dynamic proxies to the target to support aspect-oriented programming

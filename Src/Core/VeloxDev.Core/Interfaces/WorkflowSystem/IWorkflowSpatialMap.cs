@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.WorkflowSystem;
+﻿namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
 /// Defines methods for managing and querying workflow nodes within a spatial index.

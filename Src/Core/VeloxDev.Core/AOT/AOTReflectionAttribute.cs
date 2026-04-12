@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.AOT
+﻿namespace VeloxDev.AOT
 {
     /// <summary>
     /// Keep The Reflection Context In AOT

@@ -3,7 +3,7 @@ using System;
 using System.Linq;
 using System.Text;
 
-namespace VeloxDev.Generator.Writers
+namespace VeloxDev.Generators.Writers
 {
     public class WorkflowWriter : WriterBase
     {

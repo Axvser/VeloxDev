@@ -1,7 +1,7 @@
-﻿using VeloxDev.Core.AOT;
-using VeloxDev.Core.MVVM;
+﻿using VeloxDev.AOT;
+using VeloxDev.MVVM;
 
-namespace VeloxDev.Core.WorkflowSystem;
+namespace VeloxDev.WorkflowSystem;
 
 [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 public sealed partial class Size(double width = 0d, double height = 0d) : ICloneable, IEquatable<Size>

@@ -1,9 +1,9 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using VeloxDev.Core.MonoBehaviour;
+using VeloxDev.MonoBehaviour;
 
-namespace VeloxDev.Core.TimeLine
+namespace VeloxDev.TimeLine
 {
     public static class MonoBehaviourManager
     {

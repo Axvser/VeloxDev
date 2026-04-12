@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel;
 
-namespace VeloxDev.Core.MVVM
+namespace VeloxDev.MVVM
 {
     /// <summary>
     /// Marks and generates a notification property that supports <see cref="INotifyPropertyChanging"/> and <see cref="INotifyPropertyChanged"/>.

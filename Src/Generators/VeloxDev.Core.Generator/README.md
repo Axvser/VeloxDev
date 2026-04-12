@@ -1,12 +1,12 @@
-﻿# VeloxDev.Core.Generator
+﻿# VeloxDev.Generators
 
-[![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Generator?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core.Generator/)
+[![NuGet](https://img.shields.io/nuget/v/VeloxDev.Generators?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Generators/)
 
-> 使用源生成以优化 VeloxDev.Core 使用体验
+> 使用源生成以优化 VeloxDev 使用体验
 
 ## 通用生成支持
 
-> 以下生成运行在所有使用 VeloxDev.Core 的项目中
+> 以下生成运行在所有使用 VeloxDev 的项目中
 
 - ⌈ AspectOriented ⌋ 动态拦截或编辑属性、方法的调用 ✔
 - ⌈ MonoBehaviour ⌋ 实时帧刷新行为 ✔

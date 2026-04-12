@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.WorkflowSystem
+﻿namespace VeloxDev.WorkflowSystem
 {
     public sealed class WorkflowBuilder
     {

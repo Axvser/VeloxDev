@@ -2,7 +2,7 @@
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
 
-namespace VeloxDev.Core.Generator.Writers
+namespace VeloxDev.Generators.Writers
 {
     public class MonoWriter : WriterBase
     {
@@ -40,7 +40,7 @@ namespace VeloxDev.Core.Generator.Writers
 
         public override string[] GenerateBaseInterfaces()
         {
-            return IsMono ? ["global::VeloxDev.Core.MonoBehaviour.IMonoBehaviour"] : [];
+            return IsMono ? ["global::VeloxDev.MonoBehaviour.IMonoBehaviour"] : [];
         }
 
         public override string GenerateBody()

@@ -4,10 +4,10 @@ using Microsoft.CodeAnalysis.Text;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
-using VeloxDev.Core.Generator.Base;
-using VeloxDev.Core.Generator.Writers;
+using VeloxDev.Generators.Base;
+using VeloxDev.Generators.Writers;
 
-namespace VeloxDev.Core.Generator
+namespace VeloxDev.Generators
 {
     [Generator(LanguageNames.CSharp)]
     public class AopProxy : IIncrementalGenerator

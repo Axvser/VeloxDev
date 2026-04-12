@@ -1,7 +1,7 @@
 ﻿#if NET
 using System.Reflection;
 
-namespace VeloxDev.Core.AspectOriented
+namespace VeloxDev.AspectOriented
 {
     public delegate object? ProxyHandler(object?[]? parameters, object? previous);
 

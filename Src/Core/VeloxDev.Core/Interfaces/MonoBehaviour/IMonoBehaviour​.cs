@@ -1,6 +1,6 @@
-﻿using VeloxDev.Core.TimeLine;
+﻿using VeloxDev.TimeLine;
 
-namespace VeloxDev.Core.MonoBehaviour;
+namespace VeloxDev.MonoBehaviour;
 
 public interface IMonoBehaviour​
 {

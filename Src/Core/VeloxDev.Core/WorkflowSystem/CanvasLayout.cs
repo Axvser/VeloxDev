@@ -1,7 +1,7 @@
-﻿using VeloxDev.Core.AOT;
-using VeloxDev.Core.MVVM;
+﻿using VeloxDev.AOT;
+using VeloxDev.MVVM;
 
-namespace VeloxDev.Core.WorkflowSystem;
+namespace VeloxDev.WorkflowSystem;
 
 public enum Alignments
 {

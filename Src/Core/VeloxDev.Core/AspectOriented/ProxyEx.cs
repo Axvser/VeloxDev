@@ -1,9 +1,9 @@
 ﻿#if NET
 
 using System.Reflection;
-using VeloxDev.Core.AspectOriented;
+using VeloxDev.AspectOriented;
 
-namespace VeloxDev.Core.AspectOriented
+namespace VeloxDev.AspectOriented
 {
     public enum ProxyMembers
     {

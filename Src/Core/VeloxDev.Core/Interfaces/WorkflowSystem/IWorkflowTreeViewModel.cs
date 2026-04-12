@@ -1,7 +1,7 @@
 ﻿using System.Collections.ObjectModel;
-using VeloxDev.Core.MVVM;
+using VeloxDev.MVVM;
 
-namespace VeloxDev.Core.WorkflowSystem
+namespace VeloxDev.WorkflowSystem
 {
     public interface IWorkflowTreeViewModel : IWorkflowViewModel
     {

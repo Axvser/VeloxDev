@@ -1,7 +1,7 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace VeloxDev.Core.Generator.Base
+namespace VeloxDev.Generators.Base
 {
     public interface ICodeWriter
     {

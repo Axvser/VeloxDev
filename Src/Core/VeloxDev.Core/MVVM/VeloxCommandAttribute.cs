@@ -1,6 +1,6 @@
 ﻿using System.Windows.Input;
 
-namespace VeloxDev.Core.MVVM
+namespace VeloxDev.MVVM
 {
     /// <summary>
     /// Marks and automatically constructs an <see cref="IVeloxCommand"/> : <see cref="ICommand"/> instance.

@@ -1,178 +1,177 @@
 ﻿using System.Collections.Concurrent;
 using System.Drawing;
 using System.Numerics;
-using VeloxDev.Core.TransitionSystem.NativeInterpolators;
+using VeloxDev.TransitionSystem.NativeInterpolators;
 
-namespace VeloxDev.Core.TransitionSystem
+namespace VeloxDev.TransitionSystem.Abstractions;
+
+public abstract class InterpolatorCore<
+    TOutputCore,
+    TPriorityCore> : InterpolatorCore, IFrameInterpolator<TPriorityCore>
+    where TOutputCore : IFrameSequence<TPriorityCore>, new()
 {
-    public abstract class InterpolatorCore<
-        TOutputCore,
-        TPriorityCore> : InterpolatorCore, IFrameInterpolator<TPriorityCore>
-        where TOutputCore : IFrameSequence<TPriorityCore>, new()
+    public override IFrameSequenceCore Interpolate(
+        object target,
+        IFrameState state,
+        ITransitionEffectCore effect,
+        bool isUIAccess,
+        IUIThreadInspectorCore inspector)
     {
-        public override IFrameSequenceCore Interpolate(
-            object target,
-            IFrameState state,
-            ITransitionEffectCore effect,
-            bool isUIAccess,
-            IUIThreadInspectorCore inspector)
-        {
-            if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to ITransitionEffect<TPriorityCore> !");
-            if (inspector is not IUIThreadInspector<TPriorityCore> cvt_inspector) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to IUIThreadInspector<TPriorityCore> !");
+        if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to ITransitionEffect<TPriorityCore> !");
+        if (inspector is not IUIThreadInspector<TPriorityCore> cvt_inspector) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to IUIThreadInspector<TPriorityCore> !");
 
-            return Interpolate(target, state, cvt_effect, isUIAccess, cvt_inspector);
-        }
-
-        public virtual IFrameSequence<TPriorityCore> Interpolate(
-            object target,
-            IFrameState state,
-            ITransitionEffect<TPriorityCore> effect,
-            bool isUIAccess,
-            IUIThreadInspector<TPriorityCore> inspector)
-        {
-            var output = new TOutputCore();
-            var count = (int)(effect.Duration.TotalMilliseconds / (1000.0 / effect.FPS));
-            count = count > 0 ? count : 1;
-            output.SetCount(count);
-            foreach (var kvp in state.Values)
-            {
-                var currentValue = inspector.ProtectedGetValue(isUIAccess, target, kvp.Key);
-                var newValue = kvp.Value;
-                if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
-                {
-                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => customInterpolator.Interpolate(currentValue, newValue, count));
-                    output.AddPropertyInterpolations(kvp.Key, frames);
-                }
-                else if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator) && interpolator != null)
-                {
-                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
-                    output.AddPropertyInterpolations(kvp.Key, frames);
-                }
-                else
-                {
-                    if (currentValue is IInterpolable v1)
-                    {
-                        var frames = inspector.ProtectedInterpolate(isUIAccess, () => v1.Interpolate(currentValue, newValue, count));
-                        output.AddPropertyInterpolations(kvp.Key, frames);
-                    }
-                    else if (newValue is IInterpolable v2)
-                    {
-                        var frames = inspector.ProtectedInterpolate(isUIAccess, () => v2.Interpolate(currentValue, newValue, count));
-                        output.AddPropertyInterpolations(kvp.Key, frames);
-                    }
-                }
-            }
-            return output;
-        }
+        return Interpolate(target, state, cvt_effect, isUIAccess, cvt_inspector);
     }
 
-    public abstract class InterpolatorCore<TOutputCore> : InterpolatorCore, IFrameInterpolator
-        where TOutputCore : IFrameSequence, new()
+    public virtual IFrameSequence<TPriorityCore> Interpolate(
+        object target,
+        IFrameState state,
+        ITransitionEffect<TPriorityCore> effect,
+        bool isUIAccess,
+        IUIThreadInspector<TPriorityCore> inspector)
     {
-        public override IFrameSequenceCore Interpolate(
-            object target,
-            IFrameState state,
-            ITransitionEffectCore effect,
-            bool isUIAccess,
-            IUIThreadInspectorCore inspector)
+        var output = new TOutputCore();
+        var count = (int)(effect.Duration.TotalMilliseconds / (1000.0 / effect.FPS));
+        count = count > 0 ? count : 1;
+        output.SetCount(count);
+        foreach (var kvp in state.Values)
         {
-            if (inspector is not IUIThreadInspector cvt_inspector) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to IUIThreadInspector !");
-
-            return Interpolate(target, state, effect, isUIAccess, cvt_inspector);
-        }
-
-        public virtual IFrameSequence Interpolate(
-            object target,
-            IFrameState state,
-            ITransitionEffectCore effect,
-            bool isUIAccess,
-            IUIThreadInspector inspector)
-        {
-            var output = new TOutputCore();
-            var count = (int)(effect.Duration.TotalMilliseconds / (1000.0 / effect.FPS));
-            count = count > 0 ? count : 1;
-            output.SetCount(count);
-            foreach (var kvp in state.Values)
+            var currentValue = inspector.ProtectedGetValue(isUIAccess, target, kvp.Key);
+            var newValue = kvp.Value;
+            if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
             {
-                var currentValue = isUIAccess ? kvp.Key.GetValue(target) : inspector.ProtectedGetValue(isUIAccess, target, kvp.Key);
-                var newValue = kvp.Value;
-                if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
-                {
-                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => customInterpolator.Interpolate(currentValue, newValue, count));
-                    output.AddPropertyInterpolations(kvp.Key, frames);
-                }
-                else if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator) && interpolator != null)
-                {
-                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
-                    output.AddPropertyInterpolations(kvp.Key, frames);
-                }
-                else
-                {
-                    if (currentValue is IInterpolable v1)
-                    {
-                        var frames = inspector.ProtectedInterpolate(isUIAccess, () => v1.Interpolate(currentValue, newValue, count));
-                        output.AddPropertyInterpolations(kvp.Key, frames);
-                    }
-                    else if (newValue is IInterpolable v2)
-                    {
-                        var frames = inspector.ProtectedInterpolate(isUIAccess, () => v2.Interpolate(currentValue, newValue, count));
-                        output.AddPropertyInterpolations(kvp.Key, frames);
-                    }
-                }
+                var frames = inspector.ProtectedInterpolate(isUIAccess, () => customInterpolator.Interpolate(currentValue, newValue, count));
+                output.AddPropertyInterpolations(kvp.Key, frames);
             }
-            return output;
-        }
-    }
-
-    public abstract class InterpolatorCore : IFrameInterpolatorCore
-    {
-        static InterpolatorCore()
-        {
-            RegisterInterpolator(typeof(double), new DoubleInterpolator());
-            RegisterInterpolator(typeof(float), new FloatInterpolator());
-            RegisterInterpolator(typeof(long), new LongInterpolator());
-            RegisterInterpolator(typeof(Point), new PointInterpolator());
-            RegisterInterpolator(typeof(PointF), new PointFInterpolator());
-            RegisterInterpolator(typeof(Size), new SizeInterpolator());
-            RegisterInterpolator(typeof(SizeF), new SizeFInterpolator());
-            RegisterInterpolator(typeof(Color), new ColorInterpolator());
-            RegisterInterpolator(typeof(Rectangle), new RectangleInterpolator());
-            RegisterInterpolator(typeof(RectangleF), new RectangleFInterpolator());
-#if NETCOREAPP || NETFRAMEWORK || NET
-            RegisterInterpolator(typeof(Vector2), new Vector2Interpolator());
-            RegisterInterpolator(typeof(Vector3), new Vector3Interpolator());
-            RegisterInterpolator(typeof(Vector4), new Vector4Interpolator());
-            RegisterInterpolator(typeof(Quaternion), new QuaternionInterpolator());
-#endif
-        }
-
-        public static ConcurrentDictionary<Type, IValueInterpolator> NativeInterpolators { get; protected set; } = [];
-
-        public static bool TryGetInterpolator(Type type, out IValueInterpolator? interpolator)
-        {
-            if (NativeInterpolators.TryGetValue(type, out interpolator))
+            else if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator) && interpolator != null)
             {
-                return true;
-            }
-            interpolator = null;
-            return false;
-        }
-        public static bool RegisterInterpolator(Type type, IValueInterpolator interpolator)
-        {
-            if (NativeInterpolators.TryGetValue(type, out var oldValue))
-            {
-                return NativeInterpolators.TryUpdate(type, interpolator, oldValue);
+                var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
+                output.AddPropertyInterpolations(kvp.Key, frames);
             }
             else
             {
-                return NativeInterpolators.TryAdd(type, interpolator);
+                if (currentValue is IInterpolable v1)
+                {
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v1.Interpolate(currentValue, newValue, count));
+                    output.AddPropertyInterpolations(kvp.Key, frames);
+                }
+                else if (newValue is IInterpolable v2)
+                {
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v2.Interpolate(currentValue, newValue, count));
+                    output.AddPropertyInterpolations(kvp.Key, frames);
+                }
             }
         }
-        public static bool UnregisterInterpolator(Type type, out IValueInterpolator? interpolator)
-        {
-            return NativeInterpolators.TryRemove(type, out interpolator);
-        }
-
-        public abstract IFrameSequenceCore Interpolate(object target, IFrameState state, ITransitionEffectCore effect, bool isUIAccess, IUIThreadInspectorCore inspector);
+        return output;
     }
+}
+
+public abstract class InterpolatorCore<TOutputCore> : InterpolatorCore, IFrameInterpolator
+    where TOutputCore : IFrameSequence, new()
+{
+    public override IFrameSequenceCore Interpolate(
+        object target,
+        IFrameState state,
+        ITransitionEffectCore effect,
+        bool isUIAccess,
+        IUIThreadInspectorCore inspector)
+    {
+        if (inspector is not IUIThreadInspector cvt_inspector) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to IUIThreadInspector !");
+
+        return Interpolate(target, state, effect, isUIAccess, cvt_inspector);
+    }
+
+    public virtual IFrameSequence Interpolate(
+        object target,
+        IFrameState state,
+        ITransitionEffectCore effect,
+        bool isUIAccess,
+        IUIThreadInspector inspector)
+    {
+        var output = new TOutputCore();
+        var count = (int)(effect.Duration.TotalMilliseconds / (1000.0 / effect.FPS));
+        count = count > 0 ? count : 1;
+        output.SetCount(count);
+        foreach (var kvp in state.Values)
+        {
+            var currentValue = isUIAccess ? kvp.Key.GetValue(target) : inspector.ProtectedGetValue(isUIAccess, target, kvp.Key);
+            var newValue = kvp.Value;
+            if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
+            {
+                var frames = inspector.ProtectedInterpolate(isUIAccess, () => customInterpolator.Interpolate(currentValue, newValue, count));
+                output.AddPropertyInterpolations(kvp.Key, frames);
+            }
+            else if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator) && interpolator != null)
+            {
+                var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
+                output.AddPropertyInterpolations(kvp.Key, frames);
+            }
+            else
+            {
+                if (currentValue is IInterpolable v1)
+                {
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v1.Interpolate(currentValue, newValue, count));
+                    output.AddPropertyInterpolations(kvp.Key, frames);
+                }
+                else if (newValue is IInterpolable v2)
+                {
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v2.Interpolate(currentValue, newValue, count));
+                    output.AddPropertyInterpolations(kvp.Key, frames);
+                }
+            }
+        }
+        return output;
+    }
+}
+
+public abstract class InterpolatorCore : IFrameInterpolatorCore
+{
+    static InterpolatorCore()
+    {
+        RegisterInterpolator(typeof(double), new DoubleInterpolator());
+        RegisterInterpolator(typeof(float), new FloatInterpolator());
+        RegisterInterpolator(typeof(long), new LongInterpolator());
+        RegisterInterpolator(typeof(Point), new PointInterpolator());
+        RegisterInterpolator(typeof(PointF), new PointFInterpolator());
+        RegisterInterpolator(typeof(Size), new SizeInterpolator());
+        RegisterInterpolator(typeof(SizeF), new SizeFInterpolator());
+        RegisterInterpolator(typeof(Color), new ColorInterpolator());
+        RegisterInterpolator(typeof(Rectangle), new RectangleInterpolator());
+        RegisterInterpolator(typeof(RectangleF), new RectangleFInterpolator());
+#if NETCOREAPP || NETFRAMEWORK || NET
+        RegisterInterpolator(typeof(Vector2), new Vector2Interpolator());
+        RegisterInterpolator(typeof(Vector3), new Vector3Interpolator());
+        RegisterInterpolator(typeof(Vector4), new Vector4Interpolator());
+        RegisterInterpolator(typeof(Quaternion), new QuaternionInterpolator());
+#endif
+    }
+
+    public static ConcurrentDictionary<Type, IValueInterpolator> NativeInterpolators { get; protected set; } = [];
+
+    public static bool TryGetInterpolator(Type type, out IValueInterpolator? interpolator)
+    {
+        if (NativeInterpolators.TryGetValue(type, out interpolator))
+        {
+            return true;
+        }
+        interpolator = null;
+        return false;
+    }
+    public static bool RegisterInterpolator(Type type, IValueInterpolator interpolator)
+    {
+        if (NativeInterpolators.TryGetValue(type, out var oldValue))
+        {
+            return NativeInterpolators.TryUpdate(type, interpolator, oldValue);
+        }
+        else
+        {
+            return NativeInterpolators.TryAdd(type, interpolator);
+        }
+    }
+    public static bool UnregisterInterpolator(Type type, out IValueInterpolator? interpolator)
+    {
+        return NativeInterpolators.TryRemove(type, out interpolator);
+    }
+
+    public abstract IFrameSequenceCore Interpolate(object target, IFrameState state, ITransitionEffectCore effect, bool isUIAccess, IUIThreadInspectorCore inspector);
 }

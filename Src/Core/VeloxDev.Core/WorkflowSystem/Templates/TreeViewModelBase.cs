@@ -1,8 +1,8 @@
 ﻿using System.Collections.ObjectModel;
-using VeloxDev.Core.AOT;
-using VeloxDev.Core.MVVM;
+using VeloxDev.AOT;
+using VeloxDev.MVVM;
 
-namespace VeloxDev.Core.WorkflowSystem.Templates
+namespace VeloxDev.WorkflowSystem.Templates
 {
     [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
     public partial class TreeViewModelBase : IWorkflowTreeViewModel

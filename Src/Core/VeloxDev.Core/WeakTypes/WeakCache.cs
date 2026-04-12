@@ -1,6 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 
-namespace VeloxDev.Core.WeakTypes
+namespace VeloxDev.WeakTypes
 {
     public sealed class WeakCache<TTargetKey, TCacheKey> where TTargetKey : class where TCacheKey : class
     {

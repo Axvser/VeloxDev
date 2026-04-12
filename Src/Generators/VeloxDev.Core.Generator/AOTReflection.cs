@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace VeloxDev.Core.Generator
+namespace VeloxDev.Generators
 {
     [Generator(LanguageNames.CSharp)]
     public sealed class AOTReflection : IIncrementalGenerator
@@ -26,7 +26,7 @@ namespace VeloxDev.Core.Generator
                                 var symbol = ctx.SemanticModel.GetSymbolInfo(attr).Symbol?.ContainingType;
                                 if (symbol is null) continue;
 
-                                if (symbol.ToDisplayString() == "VeloxDev.Core.AOT.AOTReflectionAttribute")
+                                if (symbol.ToDisplayString() == "VeloxDev.AOT.AOTReflectionAttribute")
                                 {
                                     var typeSymbol = ctx.SemanticModel.GetDeclaredSymbol(cds) as INamedTypeSymbol;
                                     if (typeSymbol is not null)
@@ -70,7 +70,7 @@ namespace VeloxDev.Core.Generator
             foreach (var type in types)
             {
                 var attr = type.GetAttributes().FirstOrDefault(a =>
-                    a.AttributeClass?.ToDisplayString() == "VeloxDev.Core.AOT.AOTReflectionAttribute");
+                    a.AttributeClass?.ToDisplayString() == "VeloxDev.AOT.AOTReflectionAttribute");
                 if (attr is not null && attr.ConstructorArguments.Length > 0)
                 {
                     var firstArg = attr.ConstructorArguments[0];
@@ -133,7 +133,7 @@ namespace VeloxDev.Core.Generator
                 sb.AppendLine($"            _ = typeof({fullName}).GetTypeInfo();");
 
                 var attr = type.GetAttributes().FirstOrDefault(a =>
-                    a.AttributeClass?.ToDisplayString() == "VeloxDev.Core.AOT.AOTReflectionAttribute");
+                    a.AttributeClass?.ToDisplayString() == "VeloxDev.AOT.AOTReflectionAttribute");
 
                 // 读取构造函数参数（支持主构造函数）
                 string? nsArg = null;

@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 
-namespace VeloxDev.Core.DynamicTheme
+namespace VeloxDev.DynamicTheme
 {
     public interface IThemeObject
     {

@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.WorkflowSystem
+﻿namespace VeloxDev.WorkflowSystem
 {
     /// <summary>
     /// Provide a pair of redo and undo actions for workflow operations

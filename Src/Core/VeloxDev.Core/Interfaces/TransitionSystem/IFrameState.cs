@@ -2,7 +2,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace VeloxDev.Core.TransitionSystem
+namespace VeloxDev.TransitionSystem
 {
     public interface IFrameState
     {

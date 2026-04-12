@@ -1,9 +1,9 @@
 ﻿using System.Collections.Specialized;
-using VeloxDev.Core.MVVM;
-using VeloxDev.Core.WorkflowSystem.StandardEx;
-using VeloxDev.Core.WorkflowSystem.Templates;
+using VeloxDev.MVVM;
+using VeloxDev.WorkflowSystem.StandardEx;
+using VeloxDev.WorkflowSystem.Templates;
 
-namespace VeloxDev.Core.WorkflowSystem
+namespace VeloxDev.WorkflowSystem
 {
     public static class WorkflowHelper
     {

@@ -1,6 +1,6 @@
 ﻿using System.Collections;
 
-namespace VeloxDev.Core.WeakTypes
+namespace VeloxDev.WeakTypes
 {
     public sealed class WeakStack<T> : IEnumerable<T> where T : class
     {

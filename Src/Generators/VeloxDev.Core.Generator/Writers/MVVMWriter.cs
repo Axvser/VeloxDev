@@ -3,9 +3,9 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using static VeloxDev.Generator.Base.Analizer;
+using static VeloxDev.Generators.Base.Analizer;
 
-namespace VeloxDev.Generator.Writers
+namespace VeloxDev.Generators.Writers
 {
     public class MVVMWriter : WriterBase
     {

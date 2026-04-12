@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.TransitionSystem.NativeInterpolators
+﻿namespace VeloxDev.TransitionSystem.NativeInterpolators
 {
     public class DoubleInterpolator : IValueInterpolator
     {

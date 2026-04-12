@@ -2,7 +2,7 @@
 using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
 
-namespace VeloxDev.Core.WorkflowSystem.StandardEx;
+namespace VeloxDev.WorkflowSystem.StandardEx;
 
 #pragma warning disable
 

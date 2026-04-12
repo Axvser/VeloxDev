@@ -2,7 +2,7 @@
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
 
-namespace VeloxDev.Core.Generator.Base
+namespace VeloxDev.Generators.Base
 {
     internal static class AnalizeHelper
     {

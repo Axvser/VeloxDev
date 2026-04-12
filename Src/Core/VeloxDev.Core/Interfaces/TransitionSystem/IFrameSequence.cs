@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.TransitionSystem
+﻿namespace VeloxDev.TransitionSystem
 {
     public interface IFrameSequence<TPriorityCore> : IFrameSequenceCore
     {

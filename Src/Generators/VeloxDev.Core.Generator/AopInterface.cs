@@ -7,9 +7,9 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using VeloxDev.Core.Generator.Base;
+using VeloxDev.Generators.Base;
 
-namespace VeloxDev.Core.Generator
+namespace VeloxDev.Generators
 {
     [Generator(LanguageNames.CSharp)]
     public class AopInterface : IIncrementalGenerator
@@ -32,7 +32,7 @@ namespace VeloxDev.Core.Generator
                     SyntaxFactory.SingletonSeparatedList<BaseTypeSyntax>(
                         SyntaxFactory.SimpleBaseType(
                             SyntaxFactory.QualifiedName(
-                                SyntaxFactory.ParseName("global::VeloxDev.Core.AspectOriented"),
+                                SyntaxFactory.ParseName("global::VeloxDev.AspectOriented"),
                                 SyntaxFactory.IdentifierName("IProxy")))));
                 var interfaceDeclaration = SyntaxFactory.InterfaceDeclaration(interfaceName)
                     .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
@@ -114,7 +114,7 @@ namespace VeloxDev.Core.Generator
                     interfaceDeclaration = interfaceDeclaration.AddMembers(methodSignature);
                 }
 
-                NamespaceDeclarationSyntax namespaceDeclaration = SyntaxFactory.NamespaceDeclaration(SyntaxFactory.ParseName("VeloxDev.Core.AopInterfaces"))
+                NamespaceDeclarationSyntax namespaceDeclaration = SyntaxFactory.NamespaceDeclaration(SyntaxFactory.ParseName("VeloxDev.AopInterfaces"))
                     .AddMembers(interfaceDeclaration);
                 string generatedCode = namespaceDeclaration.NormalizeWhitespace().ToFullString();
                 context.AddSource($"{interfaceName}.g.cs", SourceText.From(generatedCode, Encoding.UTF8));

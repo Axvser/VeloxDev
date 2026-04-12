@@ -1,6 +1,6 @@
-﻿# VeloxDev.Core
+﻿# VeloxDev
 
-`VeloxDev.Core` 是 VeloxDev 的基础包，负责提供整个框架共享的抽象、生成能力与可复用基础设施。
+`VeloxDev` 是 VeloxDev 的基础包，负责提供整个框架共享的抽象、生成能力与可复用基础设施。
 
 它主要面向两类场景：
 
@@ -17,7 +17,7 @@
 - `AOT Reflection`：面向 AOT / 裁剪场景的反射保留支持
 - `AOP`：支持目标框架下的切面代理基础能力
 
-## 什么时候只安装 `VeloxDev.Core`
+## 什么时候只安装 `VeloxDev`
 
 适合以下情况：
 

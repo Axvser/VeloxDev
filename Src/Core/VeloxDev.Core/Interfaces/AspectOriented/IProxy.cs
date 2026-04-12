@@ -1,6 +1,6 @@
 ﻿#if NET
 
-namespace VeloxDev.Core.AspectOriented
+namespace VeloxDev.AspectOriented
 {
     public interface IProxy
     {

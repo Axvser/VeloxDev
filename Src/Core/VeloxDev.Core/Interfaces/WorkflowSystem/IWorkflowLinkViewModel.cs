@@ -1,6 +1,6 @@
-﻿using VeloxDev.Core.MVVM;
+﻿using VeloxDev.MVVM;
 
-namespace VeloxDev.Core.WorkflowSystem
+namespace VeloxDev.WorkflowSystem
 {
     public interface IWorkflowLinkViewModel : IWorkflowViewModel
     {

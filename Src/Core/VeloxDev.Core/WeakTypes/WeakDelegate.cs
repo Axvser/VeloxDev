@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.WeakTypes
+﻿namespace VeloxDev.WeakTypes
 {
     public sealed class WeakDelegate<TDelegate>
         where TDelegate : Delegate

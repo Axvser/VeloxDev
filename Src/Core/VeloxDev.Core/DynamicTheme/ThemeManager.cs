@@ -1,9 +1,10 @@
 ﻿using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using VeloxDev.Core.TransitionSystem;
+using VeloxDev.TransitionSystem;
+using VeloxDev.TransitionSystem.Abstractions;
 
-namespace VeloxDev.Core.DynamicTheme
+namespace VeloxDev.DynamicTheme
 {
     /// <summary>
     /// Select how to get the initial value when the theme animation starts

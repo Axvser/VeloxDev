@@ -1,9 +1,9 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using VeloxDev.Core.MVVM;
+using VeloxDev.MVVM;
 
-namespace VeloxDev.Core.WorkflowSystem.StandardEx;
+namespace VeloxDev.WorkflowSystem.StandardEx;
 
 #pragma warning disable
 

@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel;
 
-namespace VeloxDev.Core.WorkflowSystem;
+namespace VeloxDev.WorkflowSystem;
 
 public class SpatialGridHashMap(double cellSize) : IWorkflowSpatialMap
 {

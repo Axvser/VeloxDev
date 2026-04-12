@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.TimeLine
+﻿namespace VeloxDev.TimeLine
 {
     /// <summary>
     /// Enables the instance to run MonoBehaviour-like lifecycle methods in the TimeLine system.

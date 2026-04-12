@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.TimeLine;
+﻿namespace VeloxDev.TimeLine;
 
 public class FrameEventArgs : TimeLineEventArgs
 {

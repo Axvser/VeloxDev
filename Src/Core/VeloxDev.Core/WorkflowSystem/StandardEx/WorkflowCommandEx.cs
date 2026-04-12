@@ -1,6 +1,6 @@
-﻿using VeloxDev.Core.MVVM;
+﻿using VeloxDev.MVVM;
 
-namespace VeloxDev.Core.WorkflowSystem.StandardEx;
+namespace VeloxDev.WorkflowSystem.StandardEx;
 
 public static class WorkflowCommandEx
 {

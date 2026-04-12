@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-namespace VeloxDev.Generator.Base
+namespace VeloxDev.Generators.Base
 {
     public static class Analizer
     {

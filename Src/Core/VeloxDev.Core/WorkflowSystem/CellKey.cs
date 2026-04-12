@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.Core.WorkflowSystem;
+﻿namespace VeloxDev.WorkflowSystem;
 
 public readonly struct CellKey(int x, int y) : IEquatable<CellKey>
 {
