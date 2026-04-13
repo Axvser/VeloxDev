@@ -1,7 +1,7 @@
 ﻿using System.Collections.Specialized;
 using System.Windows;
-using VeloxDev.Core.AopInterfaces;
-using VeloxDev.Core.AspectOriented;
+using VeloxDev.AopInterfaces;
+using VeloxDev.AspectOriented;
 
 namespace Demo
 {

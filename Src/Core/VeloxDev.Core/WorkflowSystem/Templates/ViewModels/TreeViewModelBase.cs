@@ -5,8 +5,8 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
-[AgentContext(AgentLanguages.Chinese,"工作流Tree组件接口的默认实现类")]
-[AgentContext(AgentLanguages.English,"The default implementation class of the workflow Tree component interface")]
+[AgentContext(AgentLanguages.Chinese, "工作流Tree组件接口的默认实现类")]
+[AgentContext(AgentLanguages.English, "The default implementation class of the workflow Tree component interface")]
 [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 public partial class TreeViewModelBase : IWorkflowTreeViewModel
 {

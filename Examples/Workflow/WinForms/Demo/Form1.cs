@@ -62,10 +62,6 @@ namespace Demo
             seedTextBox.DataBindings.Clear();
             seedTextBox.DataBindings.Add(nameof(TextBox.Text), _controllerBindingSource, nameof(ControllerViewModel.SeedPayload), false, DataSourceUpdateMode.OnPropertyChanged);
 
-            broadcastModeComboBox.DataBindings.Clear();
-            broadcastModeComboBox.DataSource = _demo.Controller.BroadcastModes;
-            broadcastModeComboBox.DataBindings.Add(nameof(ComboBox.SelectedItem), _controllerBindingSource, nameof(ControllerViewModel.BroadcastMode), true, DataSourceUpdateMode.OnPropertyChanged);
-
             workflowSurfaceControl.Session = _demo;
 
             ReloadExecutionLog();

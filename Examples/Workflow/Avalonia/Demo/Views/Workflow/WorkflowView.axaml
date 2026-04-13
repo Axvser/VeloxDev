@@ -6,7 +6,7 @@
 			 x:Class="Demo.WorkflowView"
 			 xmlns:local="using:Demo"
 			 xmlns:vm="using:Demo.ViewModels"
-			 xmlns:workflow="using:VeloxDev.Core.Interfaces.WorkflowSystem"
+			 xmlns:workflow="using:VeloxDev.WorkflowSystem"
 			 x:DataType="vm:TreeViewModel"
 			 PointerReleased="OnPointerReleased"
 			 PointerMoved="OnPointerMoved">
@@ -17,25 +17,25 @@
 		<DataTemplate DataType="vm:NodeViewModel">
 			<local:NodeView Width="{Binding Size.Width}"
 							Height="{Binding Size.Height}"
-							Canvas.Left="{Binding Anchor.Left}"
-							Canvas.Top="{Binding Anchor.Top}"
+							Canvas.Left="{Binding Anchor.Horizontal}"
+							Canvas.Top="{Binding Anchor.Vertical}"
 							ZIndex="{Binding Anchor.Layer}"
 							RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
 		</DataTemplate>
 		<DataTemplate DataType="vm:ControllerViewModel">
 			<local:ControllerView Width="{Binding Size.Width}"
 								  Height="{Binding Size.Height}"
-								  Canvas.Left="{Binding Anchor.Left}"
-								  Canvas.Top="{Binding Anchor.Top}"
+								  Canvas.Left="{Binding Anchor.Horizontal}"
+								  Canvas.Top="{Binding Anchor.Vertical}"
 								  ZIndex="{Binding Anchor.Layer}"
 								  RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
 		</DataTemplate>
 		<!-- 连接线模板 -->
 		<DataTemplate DataType="workflow:IWorkflowLinkViewModel">
-			<local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
-								   StartTop="{Binding Sender.Anchor.Top}"
-								   EndLeft="{Binding Receiver.Anchor.Left}"
-								   EndTop="{Binding Receiver.Anchor.Top}"
+			<local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+								   StartTop="{Binding Sender.Anchor.Vertical}"
+								   EndLeft="{Binding Receiver.Anchor.Horizontal}"
+								   EndTop="{Binding Receiver.Anchor.Vertical}"
 								   CanRender="{Binding IsVisible}"
 								   Width="{Binding $parent[Canvas].Bounds.Width}"
 								   Height="{Binding $parent[Canvas].Bounds.Height}"
@@ -76,7 +76,7 @@
 					<Button Content="Redo" Width="100" Height="50" Command="{Binding RedoCommand}" />
 					<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
 					<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
-                  <Button Content="Load HTTP Demo" Width="120" Height="50" Click="LoadNetworkDemo" />
+                  <Button Content="Load Workflow Demo" Width="140" Height="50" Click="LoadNetworkDemo" />
 					<TextBlock Text="节点总数：" />
 					<TextBlock Text="{Binding Nodes.Count}"/>
 					<TextBlock Text="可见组件数：( Node / Link )" />

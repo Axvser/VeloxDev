@@ -9,160 +9,157 @@
     mc:Ignorable="d">
 
     <Grid>
-        <Border Background="#0F172A"
-                BorderBrush="#334155"
-                BorderThickness="1"
-                CornerRadius="12" />
+        <Grid.RowDefinitions>
+            <RowDefinition Height="52" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="54" />
+        </Grid.RowDefinitions>
 
-        <Grid Margin="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="34" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <Border Grid.RowSpan="3"
+                CornerRadius="6"
+                BorderThickness="1.5"
+                BorderBrush="{Binding ChromeBorderBrush}"
+                Background="{Binding ChromeBackground}" />
 
-            <Border Grid.Row="0"
-                    Background="#111827"
-                    CornerRadius="11,11,0,0"
-                    BorderBrush="#1F2937"
-                    BorderThickness="0,0,0,1"
-                    ManipulationDelta="Border_ManipulationDelta"
-                    ManipulationMode="All">
-                <Grid Margin="10,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding Title}"
-                               VerticalAlignment="Center"
-                               Foreground="White"
-                               FontSize="13"
-                               FontWeight="SemiBold"
-                               TextTrimming="CharacterEllipsis" />
-                    <Border Grid.Column="1"
-                            Margin="8,0,0,0"
-                            Padding="8,2"
-                            Background="#1D4ED8"
-                            CornerRadius="8"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="{Binding ExecutionOrderText}"
-                                   Foreground="White"
-                                   FontSize="10"
-                                   FontWeight="Bold" />
-                    </Border>
-                </Grid>
-            </Border>
+        <Grid Grid.RowSpan="3" Canvas.ZIndex="6">
+            <local:SlotView x:Name="PART_InputSlot"
+                            Width="20"
+                            Height="20"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Margin="-10,0,0,0"
+                            DataContext="{Binding InputSlot}"
+                            SlotState="{Binding State}" />
 
-            <Grid Grid.Row="1" Margin="12,10,12,12">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Border Padding="8,2"
-                            Background="#0B5ED7"
-                            CornerRadius="8"
-                            HorizontalAlignment="Left">
-                        <TextBlock Text="{Binding Method}"
-                                   Foreground="White"
-                                   FontSize="10"
-                                   FontWeight="Bold" />
-                    </Border>
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding LastStatus}"
-                               Foreground="#93C5FD"
-                               FontSize="11"
-                               FontWeight="SemiBold"
-                               VerticalAlignment="Center" />
-                </Grid>
-
-                <TextBlock Grid.Row="1"
-                           Margin="0,8,0,0"
-                           Text="{Binding Url}"
-                           Foreground="#E5E7EB"
-                           FontSize="10"
-                           TextWrapping="WrapWholeWords"
-                           TextTrimming="CharacterEllipsis"
-                           MaxLines="2" />
-
-                <Grid Grid.Row="2" Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Foreground="#94A3B8"
-                               FontSize="10">
-                        <Run Text="Duration: " />
-                        <Run Text="{Binding LastDuration}" />
-                    </TextBlock>
-                    <TextBlock Grid.Column="1"
-                               Foreground="#94A3B8"
-                               FontSize="10"
-                               HorizontalAlignment="Right">
-                        <Run Text="Run: " />
-                        <Run Text="{Binding RunCount}" />
-                    </TextBlock>
-                </Grid>
-
-                <TextBlock Grid.Row="3"
-                           Margin="0,6,0,0"
-                           Foreground="#94A3B8"
-                           FontSize="10">
-                    <Run Text="Queue: " />
-                    <Run Text="{Binding WaitCount}" />
-                </TextBlock>
-
-                <StackPanel Grid.Row="4" Margin="0,8,0,0" Spacing="6">
-                    <TextBlock Foreground="#CBD5E1"
-                               FontSize="10"
-                               TextWrapping="WrapWholeWords"
-                               TextTrimming="CharacterEllipsis"
-                               MaxLines="2">
-                        <Run Text="Trace: " />
-                        <Run Text="{Binding LastExecutionTrace}" />
-                    </TextBlock>
-                    <TextBlock Foreground="#E2E8F0"
-                               FontSize="10"
-                               TextWrapping="WrapWholeWords"
-                               TextTrimming="CharacterEllipsis"
-                               MaxLines="3">
-                        <Run Text="Preview: " />
-                        <Run Text="{Binding LastResponsePreview}" />
-                    </TextBlock>
-                    <TextBlock Foreground="#FCA5A5"
-                               FontSize="10"
-                               TextWrapping="WrapWholeWords"
-                               TextTrimming="CharacterEllipsis"
-                               MaxLines="2">
-                        <Run Text="Error: " />
-                        <Run Text="{Binding LastError}" />
-                    </TextBlock>
-                </StackPanel>
-            </Grid>
+            <local:SlotView x:Name="PART_OutputSlot"
+                            Width="20"
+                            Height="20"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,-10,0"
+                            DataContext="{Binding OutputSlot}"
+                            SlotState="{Binding State}" />
         </Grid>
 
-        <local:CanvasItemsControl ItemsSource="{Binding Slots}">
-            <local:CanvasItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Canvas />
-                </ItemsPanelTemplate>
-            </local:CanvasItemsControl.ItemsPanel>
-            <local:CanvasItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <local:SlotView Width="{Binding Size.Width}"
-                                    Height="{Binding Size.Height}"
-                                    Canvas.Left="{Binding Offset.Left}"
-                                    Canvas.Top="{Binding Offset.Top}"
-                                    Canvas.ZIndex="{Binding Anchor.Layer}"/>
-                </DataTemplate>
-            </local:CanvasItemsControl.ItemTemplate>
-        </local:CanvasItemsControl>
+        <Border Grid.Row="0"
+                Background="{Binding HeaderBackground}"
+                CornerRadius="4,4,0,0"
+                BorderThickness="0,0,0,0.5"
+                BorderBrush="{Binding HeaderBorderBrush}"
+                PointerPressed="OnPointerPressed"
+                PointerReleased="OnPointerReleased"
+                PointerMoved="OnPointerMoved"
+                PointerCaptureLost="OnPointerCaptureLost">
+            <Grid Margin="12,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                    <TextBlock Text="{Binding Title}" Foreground="White" VerticalAlignment="Center" FontWeight="Bold" />
+                    <Border x:Name="ExecutionOrderBadge"
+                            Padding="6,1"
+                            Background="#1F3D1F"
+                            BorderBrush="#7BD97B"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Visibility="Collapsed">
+                        <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#C8FFC8" FontWeight="Bold" VerticalAlignment="Center" />
+                    </Border>
+                    <Border x:Name="WorkLoadBadge"
+                            Padding="6,1"
+                            Background="#2B2440"
+                            BorderBrush="#B799FF"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Visibility="Collapsed">
+                        <TextBlock Text="{Binding WorkLoadText}" Foreground="#E4D8FF" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </Border>
+                </StackPanel>
+                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock Text="耗时" Foreground="#BFBFBF" FontSize="10" HorizontalAlignment="Right" />
+                    <TextBlock Text="{Binding LastDuration}" Foreground="{Binding DurationForeground}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Right" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Background="#252525">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="14" Spacing="10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Delay" Foreground="#DCDCDC" VerticalAlignment="Center" />
+                        <NumberBox Grid.Column="1"
+                                   Minimum="100"
+                                   Maximum="10000"
+                                   SmallChange="100"
+                                   Value="{Binding DelayMilliseconds, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Title" Foreground="#DCDCDC" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </Grid>
+
+                    <CheckBox IsChecked="{Binding AutoBroadcast, Mode=TwoWay}">
+                        <TextBlock Text="执行完成后自动广播到下游" Foreground="#DCDCDC" />
+                    </CheckBox>
+
+                    <Border Background="{Binding ExecutionBackground}"
+                            BorderBrush="{Binding ExecutionBorderBrush}"
+                            BorderThickness="1.5"
+                            CornerRadius="4"
+                            Padding="10">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Execution" Foreground="#7EC8FF" FontWeight="Bold" />
+                            <TextBlock Foreground="#FFD54A" FontWeight="SemiBold">
+                                <Run Text="Active: " />
+                                <Run Text="{Binding RunCount}" />
+                            </TextBlock>
+                            <TextBlock Foreground="#D6B7FF" FontWeight="SemiBold">
+                                <Run Text="Queued: " />
+                                <Run Text="{Binding WaitCount}" />
+                            </TextBlock>
+                            <TextBlock Foreground="#9EE79E" FontWeight="SemiBold" TextWrapping="WrapWholeWords">
+                                <Run Text="Order: " />
+                                <Run Text="{Binding LastExecutionTrace}" />
+                            </TextBlock>
+                            <TextBlock Foreground="White" FontWeight="SemiBold">
+                                <Run Text="Status: " />
+                                <Run Text="{Binding LastStatus}" />
+                            </TextBlock>
+                            <TextBlock Text="{Binding LastDuration}" Foreground="{Binding DurationForeground}" FontSize="24" FontWeight="Bold" />
+                            <TextBlock Foreground="#FF9B9B" TextWrapping="WrapWholeWords">
+                                <Run Text="Error: " />
+                                <Run Text="{Binding LastError}" />
+                            </TextBlock>
+                            <TextBlock Text="{Binding LastResponsePreview}" Foreground="#CFCFCF" TextWrapping="WrapWholeWords" MaxLines="5" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Border Grid.Row="2" Padding="1" Background="#2D2D2D" CornerRadius="0,0,4,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Command="{Binding WorkCommand}">
+                    <TextBlock Text="Run" Foreground="White" />
+                </Button>
+                <Button Grid.Column="1" Command="{Binding BroadcastCommand}">
+                    <TextBlock Text="Forward" Foreground="White" />
+                </Button>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

@@ -1,8 +1,11 @@
+using VeloxDev.WorkflowSystem;
+
 namespace Demo.ViewModels;
 
 public sealed class NetworkFlowContext
 {
     private readonly object _syncRoot = new();
+    private readonly HashSet<int> _scheduledNodes = [];
     private int _executionSequence;
 
     public Dictionary<string, string> Variables { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -65,6 +68,35 @@ public sealed class NetworkFlowContext
 
         return entry;
     }
+
+    public bool TryScheduleNode(IWorkflowNodeViewModel node)
+    {
+        if (node is null)
+        {
+            throw new ArgumentNullException(nameof(node));
+        }
+
+        lock (_syncRoot)
+        {
+            return _scheduledNodes.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(node));
+        }
+    }
 }
 
-public sealed record NetworkFlowRecord(string CaptureKey, string Method, string Url, int StatusCode, string Summary);
+public sealed class NetworkFlowRecord
+{
+    public NetworkFlowRecord(string captureKey, string method, string url, int statusCode, string summary)
+    {
+        CaptureKey = captureKey;
+        Method = method;
+        Url = url;
+        StatusCode = statusCode;
+        Summary = summary;
+    }
+
+    public string CaptureKey { get; }
+    public string Method { get; }
+    public string Url { get; }
+    public int StatusCode { get; }
+    public string Summary { get; }
+}

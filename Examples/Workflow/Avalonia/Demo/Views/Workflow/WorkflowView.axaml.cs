@@ -8,12 +8,11 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
+using Demo.Workflow;
 using System;
 using System.IO;
-using VeloxDev.Core.Extension;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
-using VeloxDev.Core.WorkflowSystem;
-using Size = VeloxDev.Core.WorkflowSystem.Size;
+using VeloxDev.MVVM.Serialization;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo;
 
@@ -178,8 +177,8 @@ public partial class WorkflowView : UserControl
     {
         var point = e.GetPosition(Root_Canvas);
         _workflowViewModel.SetPointerCommand.Execute(new Anchor(
-            point.X - _workflowViewModel.Layout.ActualOffset.Left,
-            point.Y - _workflowViewModel.Layout.ActualOffset.Top,
+            point.X - _workflowViewModel.Layout.ActualOffset.Horizontal,
+            point.Y - _workflowViewModel.Layout.ActualOffset.Vertical,
             0));
     }
 
@@ -203,8 +202,8 @@ public partial class WorkflowView : UserControl
 
         Root_GridDecorator.ScrollOffsetX = Root_ScrollViewer?.Offset.X ?? 0;
         Root_GridDecorator.ScrollOffsetY = Root_ScrollViewer?.Offset.Y ?? 0;
-        Root_GridDecorator.ContentOffsetX = _workflowViewModel.Layout.ActualOffset.Left;
-        Root_GridDecorator.ContentOffsetY = _workflowViewModel.Layout.ActualOffset.Top;
+        Root_GridDecorator.ContentOffsetX = _workflowViewModel.Layout.ActualOffset.Horizontal;
+        Root_GridDecorator.ContentOffsetY = _workflowViewModel.Layout.ActualOffset.Vertical;
     }
 
     public static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)
@@ -285,8 +284,8 @@ public partial class WorkflowView : UserControl
         {
             Children = [
                 new TranslateTransform(
-                    _workflowViewModel.Layout.ActualOffset.Left,
-                    _workflowViewModel.Layout.ActualOffset.Top
+                    _workflowViewModel.Layout.ActualOffset.Horizontal,
+                    _workflowViewModel.Layout.ActualOffset.Vertical
                     )
                 ]
         };
@@ -299,11 +298,11 @@ public partial class WorkflowView : UserControl
 
         UpdateGridDecorator();
 
-        if (vm.GetHelper() is TreeHelper helper)
+        if (vm.GetHelper() is MapHelper helper)
         {
             helper.Virtualize(new Viewport(
-                viewer.Offset.X - vm.Layout.ActualOffset.Left,
-                viewer.Offset.Y - vm.Layout.ActualOffset.Top,
+                viewer.Offset.X - vm.Layout.ActualOffset.Horizontal,
+                viewer.Offset.Y - vm.Layout.ActualOffset.Vertical,
                 viewer.Viewport.Width,
                 viewer.Viewport.Height));
         }
@@ -312,208 +311,15 @@ public partial class WorkflowView : UserControl
     private void LoadNetworkDemo(object? sender, RoutedEventArgs e)
     {
         InitializeNetworkDemo();
-        _manager.Show(new Notification("OK", "HTTP workflow demo loaded."));
+        _manager.Show(new Notification("OK", "Workflow demo loaded."));
     }
 
     private void InitializeNetworkDemo()
     {
-        _workflowViewModel = CreateNetworkDemo();
+        _workflowViewModel = WorkflowDemoSession.Create().Tree;
         DataContext = _workflowViewModel;
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
         ReLayout(Root_Canvas, _workflowViewModel.Layout);
         UpdateVisibleRegion();
-    }
-
-    private static TreeViewModel CreateNetworkDemo()
-    {
-        var tree = new TreeViewModel();
-        tree.Layout.OriginAlignment = Alignments.TopLeft;
-        tree.Layout.OriginSize = new Size(2200, 980);
-
-        var helper = tree.GetHelper();
-        var nodeSize = new Size(300, 260);
-        var controllerSize = new Size(220, 170);
-
-        NodeViewModel CreateNode(
-            string title,
-            NetworkRequestMethod method,
-            string url,
-            string captureKey,
-            double left,
-            double top,
-            string headers = "",
-            string bodyTemplate = "")
-            => new()
-            {
-                Title = title,
-                Method = method,
-                Url = url,
-                Headers = headers,
-                BodyTemplate = bodyTemplate,
-                CaptureKey = captureKey,
-                Size = nodeSize,
-                Anchor = new Anchor(left, top, 0),
-            };
-
-        var controller = new ControllerViewModel
-        {
-            Size = controllerSize,
-            Anchor = new Anchor(60, 360, 0),
-            SeedPayload = "demo-request-chain",
-            BroadcastMode = WorkflowBroadcastMode.BreadthFirst,
-        };
-
-        var fetchTodo = CreateNode(
-            "Fetch Todo",
-            NetworkRequestMethod.Get,
-            "https://jsonplaceholder.typicode.com/todos/1",
-            "todo",
-            280,
-            120);
-
-        var fetchPost = CreateNode(
-            "Fetch Post",
-            NetworkRequestMethod.Get,
-            "https://jsonplaceholder.typicode.com/posts/1",
-            "post",
-            280,
-            470);
-
-        var auditTodo = CreateNode(
-            "Audit Todo",
-            NetworkRequestMethod.Post,
-            "https://httpbin.org/post",
-            "audit",
-            640,
-            20,
-            headers: "X-Demo-Source: VeloxDev Workflow",
-            bodyTemplate: "{\"todoSummary\":\"{{todo.summary}}\",\"todoStatus\":\"{{todo.status}}\"}");
-
-        var patchRemote = CreateNode(
-            "Patch Remote",
-            NetworkRequestMethod.Patch,
-            "https://httpbin.org/patch",
-            "patch",
-            640,
-            250,
-            bodyTemplate: "{\"todoUrl\":\"{{todo.url}}\",\"status\":\"processed\"}");
-
-        var deleteRemote = CreateNode(
-            "Delete Remote",
-            NetworkRequestMethod.Delete,
-            "https://httpbin.org/delete",
-            "delete",
-            640,
-            480,
-            headers: "X-Delete-Reason: {{todo.status}}");
-
-        var syncPost = CreateNode(
-            "Sync Post",
-            NetworkRequestMethod.Post,
-            "https://httpbin.org/post",
-            "sync",
-            1000,
-            140,
-            bodyTemplate: "{\"postUrl\":\"{{post.url}}\",\"summary\":\"{{post.summary}}\"}");
-
-        var mirrorPost = CreateNode(
-            "Mirror Post",
-            NetworkRequestMethod.Put,
-            "https://httpbin.org/put",
-            "mirror",
-            1000,
-            390,
-            bodyTemplate: "{\"body\":\"{{post.body}}\",\"status\":\"mirrored\"}");
-
-        var mergeResults = CreateNode(
-            "Merge Results",
-            NetworkRequestMethod.Post,
-            "https://httpbin.org/post",
-            "merge",
-            1360,
-            210,
-            bodyTemplate: "{\"latest\":\"{{last.summary}}\",\"source\":\"{{last.url}}\"}");
-
-        var archiveTrace = CreateNode(
-            "Archive Trace",
-            NetworkRequestMethod.Post,
-            "https://httpbin.org/post",
-            "archive",
-            1720,
-            210,
-            bodyTemplate: "{\"merge\":\"{{merge.summary}}\",\"seed\":\"{{seed}}\"}");
-
-        foreach (var node in new IWorkflowNodeViewModel[]
-        {
-            controller,
-            fetchTodo,
-            fetchPost,
-            auditTodo,
-            patchRemote,
-            deleteRemote,
-            syncPost,
-            mirrorPost,
-            mergeResults,
-            archiveTrace,
-        })
-        {
-            helper.CreateNode(node);
-        }
-
-        controller.OutputSlot = CreateOutputSlot(SlotChannel.MultipleTargets);
-        fetchTodo.InputSlot = CreateInputSlot();
-        fetchTodo.OutputSlot = CreateOutputSlot(SlotChannel.MultipleTargets);
-        fetchPost.InputSlot = CreateInputSlot();
-        fetchPost.OutputSlot = CreateOutputSlot(SlotChannel.MultipleTargets);
-        auditTodo.InputSlot = CreateInputSlot();
-        auditTodo.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        patchRemote.InputSlot = CreateInputSlot();
-        patchRemote.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        deleteRemote.InputSlot = CreateInputSlot();
-        deleteRemote.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        syncPost.InputSlot = CreateInputSlot();
-        syncPost.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        mirrorPost.InputSlot = CreateInputSlot();
-        mirrorPost.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        mergeResults.InputSlot = CreateInputSlot(SlotChannel.MultipleSources);
-        mergeResults.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        archiveTrace.InputSlot = CreateInputSlot();
-
-        Connect(tree, controller.OutputSlot!, fetchTodo.InputSlot!);
-        Connect(tree, controller.OutputSlot!, fetchPost.InputSlot!);
-        Connect(tree, fetchTodo.OutputSlot!, auditTodo.InputSlot!);
-        Connect(tree, fetchTodo.OutputSlot!, patchRemote.InputSlot!);
-        Connect(tree, fetchTodo.OutputSlot!, deleteRemote.InputSlot!);
-        Connect(tree, fetchPost.OutputSlot!, syncPost.InputSlot!);
-        Connect(tree, fetchPost.OutputSlot!, mirrorPost.InputSlot!);
-        Connect(tree, auditTodo.OutputSlot!, mergeResults.InputSlot!);
-        Connect(tree, patchRemote.OutputSlot!, mergeResults.InputSlot!);
-        Connect(tree, deleteRemote.OutputSlot!, mergeResults.InputSlot!);
-        Connect(tree, syncPost.OutputSlot!, mergeResults.InputSlot!);
-        Connect(tree, mirrorPost.OutputSlot!, mergeResults.InputSlot!);
-        Connect(tree, mergeResults.OutputSlot!, archiveTrace.InputSlot!);
-
-        helper.ClearHistory();
-        return tree;
-    }
-
-    private static SlotViewModel CreateInputSlot(SlotChannel channel = SlotChannel.OneSource)
-        => new()
-        {
-            Size = new Size(20, 20),
-            Channel = channel,
-        };
-
-    private static SlotViewModel CreateOutputSlot(SlotChannel channel)
-        => new()
-        {
-            Size = new Size(20, 20),
-            Channel = channel,
-        };
-
-    private static void Connect(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
-    {
-        tree.GetHelper().SendConnection(sender);
-        tree.GetHelper().ReceiveConnection(receiver);
     }
 }

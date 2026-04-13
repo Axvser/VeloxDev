@@ -78,7 +78,7 @@ var tree = await readStream.DeserializeFromStreamAsync<MyWorkflowTree>();
 
 ```csharp
 using VeloxDev.AI.Workflow;
-using VeloxDev.Core.Extension.Agent.Workflow;
+using VeloxDev.AI.Workflow;
 
 typeof(TreeViewModel).AsWorkflowAgentContextProvider();
 typeof(NodeViewModel).AsWorkflowAgentContextProvider();
@@ -359,7 +359,7 @@ Patch 额外支持：
 
 ```csharp
 using VeloxDev.Core.Extension;
-using VeloxDev.Core.Extension.Agent.Workflow;
+using VeloxDev.AI.Workflow;
 
 var tree = new TreeViewModel();
 

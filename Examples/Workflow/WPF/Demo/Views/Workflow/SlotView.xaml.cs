@@ -1,17 +1,45 @@
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
+using System.Windows.Media;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
 public partial class SlotView : UserControl
 {
+    public static readonly DependencyProperty SlotStateProperty = DependencyProperty.Register(
+        nameof(SlotState),
+        typeof(SlotState),
+        typeof(SlotView),
+        new PropertyMetadata(SlotState.StandBy, OnSlotStateChanged));
+
     public SlotView()
     {
         InitializeComponent();
+        UpdateForeground();
     }
 
-    // 当鼠标按下，将 输入/输入口 设定为 输出口
+    public SlotState SlotState
+    {
+        get => (SlotState)GetValue(SlotStateProperty);
+        set => SetValue(SlotStateProperty, value);
+    }
+
+    private static void OnSlotStateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((SlotView)d).UpdateForeground();
+
+    private void UpdateForeground()
+    {
+        Foreground = SlotState switch
+        {
+            var state when state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver) => Brushes.Violet,
+            var state when state.HasFlag(SlotState.Sender) => Brushes.Tomato,
+            var state when state.HasFlag(SlotState.Receiver) => Brushes.Lime,
+            _ => Brushes.White,
+        };
+    }
+
     private void OnPointerPressed(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is not IWorkflowSlotViewModel context) return;
@@ -21,7 +49,6 @@ public partial class SlotView : UserControl
         e.Handled = true;
     }
 
-    // 当鼠标按下，将 输入/输入口 设定为 输入口
     private void OnPointerReleased(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is not IWorkflowSlotViewModel context) return;

@@ -1,20 +1,16 @@
-﻿using VeloxDev.Core.Interfaces.WorkflowSystem;
-using VeloxDev.Core.WorkflowSystem;
-using VeloxDev.Core.WorkflowSystem.StandardEx;
+﻿using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace Demo.ViewModels.Workflow.Helper;
 
-public class TreeHelper : WorkflowHelper.ViewModel.Tree
+public class MapHelper : TreeHelper<TreeViewModel>
 {
-    private TreeViewModel? _viewModel;
-
     public override void Install(IWorkflowTreeViewModel tree)
     {
         base.Install(tree);
-        _viewModel = tree as TreeViewModel;
 
         // 使能空间索引，-1 状态码意味着使能失败
-        if (_viewModel is not null && tree.EnableMap(240, _viewModel.VisibleItems) > -1)
+        if (Component is not null && tree.EnableMap(240, Component.VisibleItems) > -1)
         {
             // 240 描述一个典型网格的大小，与节点的典型大小相匹配时能获得更好的性能
             // VisibleItems 是一个可通知集合，此处与Map绑定后，虚拟化的结果将同步给该集合
@@ -30,9 +26,7 @@ public class TreeHelper : WorkflowHelper.ViewModel.Tree
         {
 
         }
-
-        _viewModel = null;
     }
 
-    public void Virtualize(Viewport viewport) => _viewModel?.Virtualize(viewport); // 执行虚拟化
+    public void Virtualize(Viewport viewport) => Component?.Virtualize(viewport); // 执行虚拟化
 }

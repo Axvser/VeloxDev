@@ -1,9 +1,10 @@
 using Demo.ViewModels;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
@@ -12,10 +13,13 @@ public partial class NodeView : UserControl
     private bool _isDragging;
     private Point _lastPosition;
     private Canvas? _parentCanvas;
+    private INotifyPropertyChanged? _propertyChangedSource;
 
     public NodeView()
     {
         InitializeComponent();
+        DataContextChanged += OnDataContextChanged;
+        SizeChanged += (_, _) => SyncSlots();
     }
 
     protected override void OnVisualParentChanged(DependencyObject oldParent)
@@ -35,26 +39,30 @@ public partial class NodeView : UserControl
         return FindVisualParent<T>(parentObject);
     }
 
-    // 鼠标按下时，获取鼠标相对于容器左上角的坐标，并记录为拖拽中
     private void OnMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (_parentCanvas == null || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
         _isDragging = true;
         _lastPosition = e.GetPosition(_parentCanvas);
+        Mouse.Capture(sender as IInputElement ?? this);
         e.Handled = true;
     }
 
-    // 鼠标离开时，并记录为非拖拽中
     private void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
         _isDragging = false;
+        Mouse.Capture(null);
+        SyncSlots();
     }
 
-    // 鼠标移动发生在拖拽模式时，请更新节点视图模型的 Anchor
     private void OnMouseMove(object sender, MouseEventArgs e)
     {
         if (!_isDragging || _parentCanvas == null) return;
 
-        // 计算鼠标位置偏移量
         var currentPosition = e.GetPosition(_parentCanvas);
         var delta = currentPosition - _lastPosition;
 
@@ -64,11 +72,64 @@ public partial class NodeView : UserControl
         }
 
         _lastPosition = currentPosition;
+        SyncSlots();
         e.Handled = true;
     }
 
-    private void OnMouseLeave(object sender, MouseEventArgs e)
+    private void OnLostMouseCapture(object sender, MouseEventArgs e)
     {
         _isDragging = false;
+    }
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_propertyChangedSource is not null)
+        {
+            _propertyChangedSource.PropertyChanged -= OnNodePropertyChanged;
+            _propertyChangedSource = null;
+        }
+
+        if (e.NewValue is INotifyPropertyChanged notify)
+        {
+            _propertyChangedSource = notify;
+            notify.PropertyChanged += OnNodePropertyChanged;
+        }
+
+        SyncSlots();
+    }
+
+    private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(NodeViewModel.Anchor) or nameof(NodeViewModel.Size) or nameof(NodeViewModel.InputSlot) or nameof(NodeViewModel.OutputSlot) or nameof(NodeViewModel.HasInputSlot) or nameof(NodeViewModel.HasOutputSlot))
+        {
+            Dispatcher.Invoke(SyncSlots);
+        }
+    }
+
+    private void SyncSlots()
+    {
+        if (DataContext is not NodeViewModel node)
+        {
+            return;
+        }
+
+        PART_InputSlot.Visibility = node.HasInputSlot ? Visibility.Visible : Visibility.Collapsed;
+        PART_OutputSlot.Visibility = node.HasOutputSlot ? Visibility.Visible : Visibility.Collapsed;
+
+        SyncSlot(node, node.InputSlot, isInput: true);
+        SyncSlot(node, node.OutputSlot, isInput: false);
+    }
+
+    private static void SyncSlot(IWorkflowNodeViewModel node, IWorkflowSlotViewModel? slot, bool isInput)
+    {
+        if (slot is null)
+        {
+            return;
+        }
+
+        slot.Anchor = new Anchor(
+            node.Anchor.Horizontal + (isInput ? 0 : node.Size.Width),
+            node.Anchor.Vertical + (node.Size.Height / 2),
+            slot.Anchor.Layer);
     }
 }

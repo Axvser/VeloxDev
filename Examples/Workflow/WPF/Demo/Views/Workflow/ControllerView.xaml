@@ -4,125 +4,82 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:Demo.Views.Workflow"
-             xmlns:vm="clr-namespace:Demo.ViewModels"
              mc:Ignorable="d"
-             d:DesignHeight="170" d:DesignWidth="240"
-             d:DataContext="{d:DesignInstance Type=vm:ControllerViewModel}">
+             ClipToBounds="False"
+             d:DesignHeight="170" d:DesignWidth="220">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
 
-    <Grid>
-        <Border Background="#0B1120"
-                CornerRadius="12"
-                BorderBrush="#334155"
-                BorderThickness="1" />
+    <Grid ClipToBounds="False">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="52" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="56" />
+        </Grid.RowDefinitions>
 
-        <Grid Margin="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="34" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <Border Grid.RowSpan="3"
+                CornerRadius="5"
+                BorderThickness="1"
+                BorderBrush="White"
+                Background="#2D2D2D" />
 
-            <Border Grid.Row="0"
-                    Background="#0F172A"
-                    CornerRadius="11,11,0,0"
-                    BorderBrush="#1F2937"
-                    BorderThickness="0,0,0,1"
-                    MouseDown="OnMouseDown"
-                    MouseUp="OnMouseUp"
-                    MouseMove="OnMouseMove"
-                    MouseLeave="OnMouseLeave">
-                <Grid Margin="10,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Network Flow Controller"
-                               VerticalAlignment="Center"
-                               Foreground="White"
-                               FontSize="13"
-                               FontWeight="SemiBold" />
-                    <Border Grid.Column="1"
-                            Padding="8,2"
-                            Background="#14532D"
-                            CornerRadius="8"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="{Binding IsActive, StringFormat=Active: {0}}"
-                                   Foreground="White"
-                                   FontSize="10"
-                                   FontWeight="Bold" />
-                    </Border>
-                </Grid>
-            </Border>
+        <Border Grid.Row="0"
+                CornerRadius="5,5,0,0"
+                Background="#2D2D2D"
+                MouseLeftButtonDown="OnMouseDown"
+                MouseLeftButtonUp="OnMouseUp"
+                MouseMove="OnMouseMove"
+                LostMouseCapture="OnLostMouseCapture">
+            <TextBlock Text="Network Flow Controller"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Center"
+                       Foreground="White" />
+        </Border>
 
-            <Grid Grid.Row="1" Margin="12,10,12,12">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
+        <Border Grid.Row="1"
+                Background="#252525"
+                Padding="16">
+            <StackPanel>
+                <TextBlock Text="种子负载" Foreground="#DCDCDC" />
+                <TextBox Margin="0,8,0,0"
+                         Text="{Binding SeedPayload, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBlock Margin="0,8,0,0"
+                           Text="控制器节点只负责把初始上下文送入工作流。后续节点是否继续广播，仅由节点自身决定。"
+                           Foreground="#BDBDBD"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
 
-                <TextBlock Text="Seed Payload"
-                           Foreground="#CBD5E1"
-                           FontSize="10"
-                           FontWeight="SemiBold" />
-                <TextBox Grid.Row="1"
-                         Margin="0,6,0,0"
-                         Text="{Binding SeedPayload, UpdateSourceTrigger=PropertyChanged}"
-                         Background="#111827"
-                         Foreground="White"
-                         BorderBrush="#334155"
-                         BorderThickness="1"
-                         Padding="8,4" />
-                <ComboBox Grid.Row="2"
-                          Margin="0,8,0,0"
-                          ItemsSource="{Binding BroadcastModes}"
-                          SelectedItem="{Binding BroadcastMode}"
-                          Background="#111827"
-                          Foreground="Red"
-                          BorderBrush="#334155" />
-
-                <Grid Grid.Row="3" Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Button Content="Run"
-                            Margin="0,0,6,0"
-                            Command="{Binding OpenWorkflowCommand}"
-                            Background="#0B5ED7"
-                            Foreground="White"
-                            BorderBrush="#1D4ED8"
-                            FocusVisualStyle="{x:Null}" />
-                    <Button Grid.Column="1"
-                            Content="Close"
-                            Margin="6,0,0,0"
-                            Command="{Binding CloseWorkflowCommand}"
-                            Background="#1F2937"
-                            Foreground="White"
-                            BorderBrush="#334155"
-                            FocusVisualStyle="{x:Null}" />
-                </Grid>
+        <Border Grid.Row="2"
+                Background="#2D2D2D"
+                CornerRadius="0,0,5,5"
+                Padding="8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0"
+                        Margin="0,0,4,0"
+                        Content="Run Flow"
+                        Command="{Binding OpenWorkflowCommand}" />
+                <Button Grid.Column="1"
+                        Margin="4,0,0,0"
+                        Content="Close Tree"
+                        Command="{Binding CloseWorkflowCommand}" />
             </Grid>
-        </Grid>
+        </Border>
 
-        <ItemsControl ItemsSource="{Binding Slots}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Canvas />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemContainerStyle>
-                <Style TargetType="ContentPresenter">
-                    <Setter Property="Canvas.Left" Value="{Binding Offset.Left}" />
-                    <Setter Property="Canvas.Top" Value="{Binding Offset.Top}" />
-                </Style>
-            </ItemsControl.ItemContainerStyle>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <local:SlotView Width="{Binding Size.Width}"
-                                    Height="{Binding Size.Height}"/>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <local:SlotView x:Name="PART_OutputSlot"
+                        Width="20"
+                        Height="20"
+                        Grid.RowSpan="3"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,-10,0"
+                        DataContext="{Binding OutputSlot}"
+                        Visibility="{Binding HasOutputSlot, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        SlotState="{Binding State}" />
     </Grid>
 </UserControl>

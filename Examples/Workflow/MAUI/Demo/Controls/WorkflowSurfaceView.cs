@@ -3,7 +3,7 @@ using Demo.Workflow;
 using Microsoft.Maui.Controls.Shapes;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Controls;
 
@@ -238,8 +238,8 @@ public sealed class WorkflowSurfaceView : ContentView
             return;
         }
 
-        var width = Math.Max(1280, visualNodes.Max(x => x.Anchor.Left + x.Size.Width) + 80);
-        var height = Math.Max(760, visualNodes.Max(x => x.Anchor.Top + x.Size.Height) + 80);
+        var width = Math.Max(1280, visualNodes.Max(x => x.Anchor.Horizontal + x.Size.Width) + 80);
+        var height = Math.Max(760, visualNodes.Max(x => x.Anchor.Vertical + x.Size.Height) + 80);
 
         WidthRequest = width;
         HeightRequest = height;
@@ -252,12 +252,13 @@ public sealed class WorkflowSurfaceView : ContentView
 
         foreach (var node in visualNodes)
         {
-            var card = new WorkflowNodeCardView(node, IsWorkflowActive);
+            var card = new WorkflowNodeCardView(this, node, IsWorkflowActive);
             _cards[node] = card;
             _nodesLayer.Children.Add(card);
             UpdateNodeLayout(node);
         }
 
+        SyncAllSlotAnchors();
         QueueLinksInvalidateCore();
     }
 
@@ -268,7 +269,104 @@ public sealed class WorkflowSurfaceView : ContentView
             return;
         }
 
-        AbsoluteLayout.SetLayoutBounds(card, new Rect(node.Anchor.Left, node.Anchor.Top, node.Size.Width, node.Size.Height));
+        AbsoluteLayout.SetLayoutBounds(card, new Rect(node.Anchor.Horizontal, node.Anchor.Vertical, node.Size.Width, node.Size.Height));
+        SyncNodeSlotAnchors(node);
+    }
+
+    private void BeginConnection(IWorkflowSlotViewModel slot)
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        slot.SendConnectionCommand.Execute(null);
+        QueueLinksInvalidateCore();
+    }
+
+    private void UpdateConnectionPointer(Anchor anchor)
+    {
+        if (_session is null || !_session.Tree.VirtualLink.IsVisible)
+        {
+            return;
+        }
+
+        _session.Tree.SetPointerCommand.Execute(anchor);
+        QueueLinksInvalidateCore();
+    }
+
+    private void CompleteConnection(Anchor anchor, IWorkflowSlotViewModel sourceSlot)
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        var receiver = HitTestSlot(anchor, sourceSlot);
+        if (receiver is not null)
+        {
+            receiver.ReceiveConnectionCommand.Execute(null);
+        }
+        else
+        {
+            _session.Tree.ResetVirtualLinkCommand.Execute(null);
+        }
+
+        QueueLinksInvalidateCore();
+    }
+
+    private IWorkflowSlotViewModel? HitTestSlot(Anchor anchor, IWorkflowSlotViewModel? exclude = null)
+    {
+        if (_session is null)
+        {
+            return null;
+        }
+
+        const double radius = 18d;
+        var radiusSquared = radius * radius;
+
+        foreach (var slot in EnumerateSlots(_session))
+        {
+            if (ReferenceEquals(slot, exclude))
+            {
+                continue;
+            }
+
+            var dx = slot.Anchor.Horizontal - anchor.Horizontal;
+            var dy = slot.Anchor.Vertical - anchor.Vertical;
+            if ((dx * dx) + (dy * dy) <= radiusSquared)
+            {
+                return slot;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<IWorkflowSlotViewModel> EnumerateSlots(WorkflowDemoSession session)
+    {
+        foreach (var node in session.Tree.Nodes)
+        {
+            if (node is NodeViewModel workflowNode)
+            {
+                if (workflowNode.InputSlot is not null)
+                {
+                    yield return workflowNode.InputSlot;
+                }
+
+                if (workflowNode.OutputSlot is not null)
+                {
+                    yield return workflowNode.OutputSlot;
+                }
+
+                continue;
+            }
+
+            if (node is ControllerViewModel controller && controller.OutputSlot is not null)
+            {
+                yield return controller.OutputSlot;
+            }
+        }
     }
 
     private bool IsWorkflowActive()
@@ -296,6 +394,18 @@ public sealed class WorkflowSurfaceView : ContentView
                 DrawLink(canvas, link);
             }
 
+            if (Session.Tree.VirtualLink.IsVisible)
+            {
+                DrawLink(canvas, Session.Tree.VirtualLink, Color.FromArgb("#E2E8F0"));
+            }
+
+            foreach (var node in Session.Tree.Nodes)
+            {
+                DrawSlot(canvas, (node as NodeViewModel)?.InputSlot);
+                DrawSlot(canvas, (node as NodeViewModel)?.OutputSlot);
+                DrawSlot(canvas, (node as ControllerViewModel)?.OutputSlot);
+            }
+
             canvas.RestoreState();
         }
 
@@ -315,19 +425,19 @@ public sealed class WorkflowSurfaceView : ContentView
             }
         }
 
-        private static void DrawLink(ICanvas canvas, IWorkflowLinkViewModel link)
+        private static void DrawLink(ICanvas canvas, IWorkflowLinkViewModel link, Color? strokeColor = null)
         {
-            var startX = (float)link.Sender.Anchor.Left;
-            var startY = (float)link.Sender.Anchor.Top;
-            var endX = (float)link.Receiver.Anchor.Left;
-            var endY = (float)link.Receiver.Anchor.Top;
+            var startX = (float)link.Sender.Anchor.Horizontal;
+            var startY = (float)link.Sender.Anchor.Vertical;
+            var endX = (float)link.Receiver.Anchor.Horizontal;
+            var endY = (float)link.Receiver.Anchor.Vertical;
             var controlOffset = Math.Max(80, Math.Abs(endX - startX) * 0.45f);
 
             var path = new PathF();
             path.MoveTo(startX, startY);
             path.CurveTo(startX + controlOffset, startY, endX - controlOffset, endY, endX, endY);
 
-            canvas.StrokeColor = Color.FromArgb("#22D3EE");
+            canvas.StrokeColor = strokeColor ?? Color.FromArgb("#22D3EE");
             canvas.StrokeSize = 4;
             canvas.DrawPath(path);
 
@@ -335,18 +445,84 @@ public sealed class WorkflowSurfaceView : ContentView
             canvas.FillCircle(startX, startY, 5);
             canvas.FillCircle(endX, endY, 5);
         }
+
+        private static void DrawSlot(ICanvas canvas, IWorkflowSlotViewModel? slot)
+        {
+            if (slot is null)
+            {
+                return;
+            }
+
+            canvas.FillColor = ResolveSlotColor(slot.State);
+            canvas.FillCircle((float)slot.Anchor.Horizontal, (float)slot.Anchor.Vertical, 10);
+            canvas.StrokeColor = Colors.White;
+            canvas.StrokeSize = 1.5f;
+            canvas.DrawCircle((float)slot.Anchor.Horizontal, (float)slot.Anchor.Vertical, 10);
+        }
+
+        private static Color ResolveSlotColor(SlotState state)
+            => state switch
+            {
+                var value when value.HasFlag(SlotState.Sender) && value.HasFlag(SlotState.Receiver) => Colors.Violet,
+                var value when value.HasFlag(SlotState.Sender) => Colors.Tomato,
+                var value when value.HasFlag(SlotState.Receiver) => Colors.Lime,
+                _ => Colors.White,
+            };
+    }
+
+    private void SyncAllSlotAnchors()
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        foreach (var node in _session.Tree.Nodes)
+        {
+            SyncNodeSlotAnchors(node);
+        }
+    }
+
+    private static void SyncNodeSlotAnchors(IWorkflowNodeViewModel node)
+    {
+        if (node is NodeViewModel workflowNode)
+        {
+            SyncSlotAnchor(node, workflowNode.InputSlot, isInput: true);
+            SyncSlotAnchor(node, workflowNode.OutputSlot, isInput: false);
+            return;
+        }
+
+        if (node is ControllerViewModel controller)
+        {
+            SyncSlotAnchor(node, controller.OutputSlot, isInput: false);
+        }
+    }
+
+    private static void SyncSlotAnchor(IWorkflowNodeViewModel node, IWorkflowSlotViewModel? slot, bool isInput)
+    {
+        if (slot is null)
+        {
+            return;
+        }
+
+        slot.Anchor = new Anchor(
+            node.Anchor.Horizontal + (isInput ? 0 : node.Size.Width),
+            node.Anchor.Vertical + (node.Size.Height / 2),
+            slot.Anchor.Layer);
     }
 
     private sealed class WorkflowNodeCardView : Border
     {
+        private readonly WorkflowSurfaceView _owner;
         private readonly IWorkflowNodeViewModel _node;
         private readonly Func<bool> _isWorkflowActive;
         private readonly Label _stateLabel;
         private double _lastPanX;
         private double _lastPanY;
 
-        public WorkflowNodeCardView(IWorkflowNodeViewModel node, Func<bool> isWorkflowActive)
+        public WorkflowNodeCardView(WorkflowSurfaceView owner, IWorkflowNodeViewModel node, Func<bool> isWorkflowActive)
         {
+            _owner = owner;
             _node = node;
             _isWorkflowActive = isWorkflowActive;
             BindingContext = node;
@@ -369,9 +545,7 @@ public sealed class WorkflowSurfaceView : ContentView
                 VerticalTextAlignment = TextAlignment.Center
             };
 
-            Content = node is ControllerViewModel controller
-                ? BuildControllerCard(controller)
-                : BuildNodeCard((NodeViewModel)node);
+            Content = BuildInteractiveCard();
 
             if (_node is INotifyPropertyChanged notify)
             {
@@ -385,6 +559,73 @@ public sealed class WorkflowSurfaceView : ContentView
             }
 
             RefreshVisualState();
+        }
+
+        private View BuildInteractiveCard()
+        {
+            var root = new Grid();
+            root.Children.Add(_node is ControllerViewModel controller
+                ? BuildControllerCard(controller)
+                : BuildNodeCard((NodeViewModel)_node));
+
+            if (_node is NodeViewModel workflowNode)
+            {
+                if (workflowNode.InputSlot is not null)
+                {
+                    root.Children.Add(CreateSlotHotspot(workflowNode.InputSlot, true));
+                }
+
+                if (workflowNode.OutputSlot is not null)
+                {
+                    root.Children.Add(CreateSlotHotspot(workflowNode.OutputSlot, false));
+                }
+            }
+            else if (_node is ControllerViewModel controllerNode && controllerNode.OutputSlot is not null)
+            {
+                root.Children.Add(CreateSlotHotspot(controllerNode.OutputSlot, false));
+            }
+
+            return root;
+        }
+
+        private View CreateSlotHotspot(IWorkflowSlotViewModel slot, bool isInput)
+        {
+            var hotspot = new Grid
+            {
+                WidthRequest = 28,
+                HeightRequest = 28,
+                HorizontalOptions = isInput ? LayoutOptions.Start : LayoutOptions.End,
+                VerticalOptions = LayoutOptions.Center,
+                Margin = isInput ? new Thickness(-14, 0, 0, 0) : new Thickness(0, 0, -14, 0),
+                BackgroundColor = Colors.Transparent
+            };
+
+            var pan = new PanGestureRecognizer();
+            pan.PanUpdated += (_, e) =>
+            {
+                var anchor = new Anchor(
+                    slot.Anchor.Horizontal + e.TotalX,
+                    slot.Anchor.Vertical + e.TotalY,
+                    slot.Anchor.Layer);
+
+                switch (e.StatusType)
+                {
+                    case GestureStatus.Started:
+                        _owner.BeginConnection(slot);
+                        _owner.UpdateConnectionPointer(anchor);
+                        break;
+                    case GestureStatus.Running:
+                        _owner.UpdateConnectionPointer(anchor);
+                        break;
+                    case GestureStatus.Completed:
+                    case GestureStatus.Canceled:
+                        _owner.CompleteConnection(anchor, slot);
+                        break;
+                }
+            };
+
+            hotspot.GestureRecognizers.Add(pan);
+            return hotspot;
         }
 
         public void Disconnect()
@@ -415,9 +656,6 @@ public sealed class WorkflowSurfaceView : ContentView
             var seed = new Label { TextColor = Color.FromArgb("#D1D5DB"), LineBreakMode = LineBreakMode.WordWrap };
             seed.SetBinding(Label.TextProperty, nameof(ControllerViewModel.SeedPayload), stringFormat: "Seed: {0}");
 
-            var mode = new Label { TextColor = Color.FromArgb("#D1D5DB") };
-            mode.SetBinding(Label.TextProperty, nameof(ControllerViewModel.BroadcastMode), stringFormat: "Mode: {0}");
-
             Grid.SetColumn(_stateLabel, 1);
 
             return new VerticalStackLayout
@@ -431,10 +669,9 @@ public sealed class WorkflowSurfaceView : ContentView
                         Children = { title, _stateLabel }
                     },
                     seed,
-                    mode,
                     new Label
                     {
-                        Text = "Controller 会触发整条请求链路，并把执行日志同步到下方。",
+                        Text = "Controller 会触发整条请求链路。后续节点是否继续广播，仅由节点自身决定。",
                         TextColor = Color.FromArgb("#CBD5E1"),
                         LineBreakMode = LineBreakMode.WordWrap
                     }
@@ -464,11 +701,11 @@ public sealed class WorkflowSurfaceView : ContentView
 
             _stateLabel.SetBinding(Label.TextProperty, nameof(NodeViewModel.LastStatus), stringFormat: "Status: {0}");
 
-            var method = new Label { TextColor = Color.FromArgb("#BAE6FD"), FontAttributes = FontAttributes.Bold };
-            method.SetBinding(Label.TextProperty, nameof(NodeViewModel.Method), stringFormat: "Method: {0}");
+            var delay = new Label { TextColor = Color.FromArgb("#BAE6FD"), FontAttributes = FontAttributes.Bold };
+            delay.SetBinding(Label.TextProperty, nameof(NodeViewModel.DelayMilliseconds), stringFormat: "Delay: {0} ms");
 
-            var url = new Label { TextColor = Color.FromArgb("#E2E8F0"), LineBreakMode = LineBreakMode.TailTruncation, MaxLines = 2 };
-            url.SetBinding(Label.TextProperty, nameof(NodeViewModel.Url), stringFormat: "URL: {0}");
+            var queue = new Label { TextColor = Color.FromArgb("#E2E8F0") };
+            queue.SetBinding(Label.TextProperty, nameof(NodeViewModel.WaitCount), stringFormat: "Queue: {0}");
 
             var duration = new Label { TextColor = Color.FromArgb("#CBD5E1") };
             duration.SetBinding(Label.TextProperty, nameof(NodeViewModel.LastDuration), stringFormat: "Duration: {0}");
@@ -490,8 +727,8 @@ public sealed class WorkflowSurfaceView : ContentView
                         Children = { title, order }
                     },
                     _stateLabel,
-                    method,
-                    url,
+                    delay,
+                    queue,
                     duration,
                     trace,
                     preview
@@ -540,7 +777,7 @@ public sealed class WorkflowSurfaceView : ContentView
                     var deltaY = e.TotalY - _lastPanY;
                     _lastPanX = e.TotalX;
                     _lastPanY = e.TotalY;
-                    _node.MoveCommand.Execute(new VeloxDev.Core.WorkflowSystem.Offset(deltaX, deltaY));
+                    _node.MoveCommand.Execute(new Offset(deltaX, deltaY));
                     break;
                 case GestureStatus.Canceled:
                 case GestureStatus.Completed:

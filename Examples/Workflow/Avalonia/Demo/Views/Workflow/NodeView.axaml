@@ -66,8 +66,6 @@
 			<Grid ColumnDefinitions="*,Auto" Margin="12,0">
 				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
 					<TextBlock Text="{Binding Title}" Foreground="White" VerticalAlignment="Center" FontWeight="Bold"/>
-					<TextBlock Text="•" Foreground="#7ec8ff" VerticalAlignment="Center"/>
-					<TextBlock Text="{Binding Method}" Foreground="#7ec8ff" VerticalAlignment="Center"/>
                    <Border Background="#1f3d1f"
 							BorderBrush="#7bd97b"
 							BorderThickness="1"
@@ -75,6 +73,14 @@
 							Padding="6,1"
 							IsVisible="{Binding HasExecutionOrder}">
 						<TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold" VerticalAlignment="Center"/>
+					</Border>
+                   <Border Background="#2b2440"
+							BorderBrush="#b799ff"
+							BorderThickness="1"
+							CornerRadius="10"
+							Padding="6,1"
+							IsVisible="{Binding HasWorkLoad}">
+                     <TextBlock Text="{Binding WorkLoadText}" Foreground="#e4d8ff" FontWeight="SemiBold" VerticalAlignment="Center"/>
 					</Border>
 				</StackPanel>
 				<StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="0">
@@ -88,45 +94,26 @@
 			<ScrollViewer VerticalScrollBarVisibility="Auto">
 				<StackPanel Margin="14" Spacing="10">
 					<Grid ColumnDefinitions="110,*">
-						<TextBlock Text="Method" Foreground="#dcdcdc" VerticalAlignment="Center"/>
-						<ComboBox Grid.Column="1"
-								  ItemsSource="{Binding RequestMethods}"
-								  SelectedItem="{Binding Method, Mode=TwoWay}" />
+                      <TextBlock Text="Delay" Foreground="#dcdcdc" VerticalAlignment="Center"/>
+						<NumericUpDown Grid.Column="1"
+								   Minimum="100"
+								   Maximum="10000"
+								   Increment="100"
+								   Value="{Binding DelayMilliseconds, Mode=TwoWay}"/>
 					</Grid>
 
-					<Grid ColumnDefinitions="110,*">
-						<TextBlock Text="Capture Key" Foreground="#dcdcdc" VerticalAlignment="Center"/>
-						<TextBox Grid.Column="1" Text="{Binding CaptureKey, Mode=TwoWay}" Watermark="例如 todo / audit"/>
+                    <Grid ColumnDefinitions="110,*">
+						<TextBlock Text="Title" Foreground="#dcdcdc" VerticalAlignment="Center"/>
+						<TextBox Grid.Column="1" Text="{Binding Title, Mode=TwoWay}"/>
 					</Grid>
 
-					<TextBlock Text="URL" Foreground="#dcdcdc"/>
-					<TextBox Text="{Binding Url, Mode=TwoWay}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="48"/>
-
-					<TextBlock Text="Headers" Foreground="#dcdcdc"/>
-					<TextBox Text="{Binding Headers, Mode=TwoWay}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="56" Watermark="每行一个 Header，例如 Authorization: Bearer {{token.body}}"/>
-
-					<TextBlock Text="Body Template" Foreground="#dcdcdc"/>
-					<TextBox Text="{Binding BodyTemplate, Mode=TwoWay}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="84" Watermark="支持 {{last.summary}} / {{todo.body}} 之类的占位符"/>
-
-					<CheckBox IsChecked="{Binding AutoBroadcast, Mode=TwoWay}" Content="请求成功后自动广播到下游" Foreground="#dcdcdc"/>
-
-					<Grid ColumnDefinitions="110,*">
-						<TextBlock Text="Forward Mode" Foreground="#dcdcdc" VerticalAlignment="Center"/>
-						<ComboBox Grid.Column="1"
-								  ItemsSource="{Binding BroadcastModes}"
-                                 SelectedItem="{Binding BroadcastMode, Mode=TwoWay}" />
-					</Grid>
-
-					<Grid ColumnDefinitions="110,*">
-						<TextBlock Text="Reverse Mode" Foreground="#dcdcdc" VerticalAlignment="Center"/>
-						<ComboBox Grid.Column="1"
-								  ItemsSource="{Binding ReverseBroadcastModes}"
-                                  SelectedItem="{Binding ReverseBroadcastMode, Mode=TwoWay}" />
-					</Grid>
+                    <CheckBox IsChecked="{Binding AutoBroadcast, Mode=TwoWay}" Content="执行完成后自动广播到下游" Foreground="#dcdcdc"/>
 
                     <Border Background="{Binding ExecutionBackground}" BorderBrush="{Binding ExecutionBorderBrush}" BorderThickness="1.5" CornerRadius="4" Padding="10">
 						<StackPanel Spacing="4">
 							<TextBlock Text="Execution" Foreground="#7ec8ff" FontWeight="Bold"/>
+                           <TextBlock Text="{Binding RunCount, StringFormat=Active: {0}}" Foreground="#ffd54a" FontWeight="SemiBold"/>
+							<TextBlock Text="{Binding WaitCount, StringFormat=Queued: {0}}" Foreground="#d6b7ff" FontWeight="SemiBold"/>
                           <TextBlock Text="{Binding LastExecutionTrace, StringFormat=Order: {0}}"
 									   Foreground="#9ee79e"
 									   FontWeight="SemiBold"
@@ -154,7 +141,6 @@
           <Grid ColumnDefinitions="*,*,*">
 				<Button Grid.Column="0" Content="Run" Command="{Binding WorkCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
 				<Button Grid.Column="1" Content="Forward" Command="{Binding BroadcastCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
-				<Button Grid.Column="2" Content="Reverse" Command="{Binding ReverseBroadcastCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
 			</Grid>
 		</Border>
 	</Grid>

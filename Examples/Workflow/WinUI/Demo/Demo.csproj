@@ -49,8 +49,7 @@
   </ItemGroup>
 	
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WinUI\VeloxDev.WinUI.csproj" />
-    <ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
+    <ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
   </ItemGroup>
 
   <ItemGroup>

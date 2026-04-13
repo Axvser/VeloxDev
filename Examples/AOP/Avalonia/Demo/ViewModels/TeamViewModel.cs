@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using VeloxDev.Core.AspectOriented;
-using VeloxDev.Core.MVVM;
+using VeloxDev.AspectOriented;
+using VeloxDev.MVVM;
 
 namespace Demo.ViewModels;
 

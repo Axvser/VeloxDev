@@ -6,11 +6,11 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using VeloxDev.AI;
-using CoreWorkflowAgent = VeloxDev.AI.Workflow;
 using VeloxDev.MVVM;
+using VeloxDev.MVVM.Serialization;
+using CoreWorkflowAgent = VeloxDev.AI.Workflow;
 
-namespace VeloxDev.Core.Extension.Agent.Workflow;
+namespace VeloxDev.AI.Workflow;
 
 public static class WorkflowContextProvider
 {
@@ -31,7 +31,7 @@ public static class WorkflowContextProvider
             ComponentContextMap[type] = new ComponentContext(type);
         }
     }
-    
+
     [Description("Read the workflow agent role definition, tool conventions, request contracts, and the registered component contexts before calling any workflow agent tool.")]
     public static string GetWorkflowHelper()
     {

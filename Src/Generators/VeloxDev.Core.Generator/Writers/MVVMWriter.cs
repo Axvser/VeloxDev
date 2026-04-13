@@ -191,7 +191,7 @@ namespace VeloxDev.Generators.Writers
             return false;
         }
 
-                private bool HasWorkflowAttributeInHierarchy(INamedTypeSymbol? symbol)
+        private bool HasWorkflowAttributeInHierarchy(INamedTypeSymbol? symbol)
         {
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
                 return false;
@@ -234,7 +234,8 @@ namespace VeloxDev.Generators.Writers
 
             // 继续递归检查基类上的特性（保持原有行为）
             return HasWorkflowAttributeInHierarchy(symbol.BaseType);
-        }        private bool HasWorkflowNodeAttributeInHierarchy(INamedTypeSymbol? symbol)
+        }
+        private bool HasWorkflowNodeAttributeInHierarchy(INamedTypeSymbol? symbol)
         {
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
                 return false;
@@ -265,7 +266,8 @@ namespace VeloxDev.Generators.Writers
             }
 
             return false;
-        }private bool HasWorkflowNodeAttribute(INamedTypeSymbol symbol)
+        }
+        private bool HasWorkflowNodeAttribute(INamedTypeSymbol symbol)
         {
             foreach (var attribute in symbol.GetAttributes())
             {
@@ -285,7 +287,7 @@ namespace VeloxDev.Generators.Writers
             return false;
         }
 
-                        private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
+        private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
         {
             // 1) 尝试解析 SlotAttribute 符号以进行符号比较
             INamedTypeSymbol? slotAttributeSymbol = null;
@@ -346,7 +348,8 @@ namespace VeloxDev.Generators.Writers
             }
 
             return false;
-        }private bool CheckBaseClassForPropertyInfrastructure(INamedTypeSymbol? symbol)
+        }
+        private bool CheckBaseClassForPropertyInfrastructure(INamedTypeSymbol? symbol)
         {
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
                 return false;

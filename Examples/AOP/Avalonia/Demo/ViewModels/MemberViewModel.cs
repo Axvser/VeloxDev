@@ -1,4 +1,4 @@
-using VeloxDev.Core.MVVM;
+using VeloxDev.MVVM;
 
 namespace Demo.ViewModels;
 

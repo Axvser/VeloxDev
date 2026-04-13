@@ -6,7 +6,7 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using VeloxDev.WorkflowSystem;
 
-namespace VeloxDev.Core.Extension.Agent.Workflow;
+namespace VeloxDev.AI.Workflow;
 
 public sealed class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IDisposable
 {

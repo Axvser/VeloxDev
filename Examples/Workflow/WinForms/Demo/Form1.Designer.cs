@@ -37,8 +37,6 @@
             reloadButton = new Button();
             stopButton = new Button();
             runButton = new Button();
-            broadcastModeComboBox = new ComboBox();
-            broadcastModeLabel = new Label();
             seedTextBox = new TextBox();
             seedLabel = new Label();
             titleLabel = new Label();
@@ -76,8 +74,6 @@
             toolbarPanel.Controls.Add(reloadButton);
             toolbarPanel.Controls.Add(stopButton);
             toolbarPanel.Controls.Add(runButton);
-            toolbarPanel.Controls.Add(broadcastModeComboBox);
-            toolbarPanel.Controls.Add(broadcastModeLabel);
             toolbarPanel.Controls.Add(seedTextBox);
             toolbarPanel.Controls.Add(seedLabel);
             toolbarPanel.Controls.Add(titleLabel);
@@ -114,7 +110,7 @@
             summaryLabel.Name = "summaryLabel";
             summaryLabel.Size = new Size(356, 51);
             summaryLabel.TabIndex = 8;
-            summaryLabel.Text = "示例链路：Controller → Fetch Todo / Fetch Post → Audit / Patch / Sync / Delete → Archive Trace。";
+            summaryLabel.Text = "示例链路展示最简化的 Workflow 行为：节点只模拟耗时执行，并直接向下游广播。";
             // 
             // reloadButton
             // 
@@ -145,24 +141,6 @@
             runButton.Text = "运行工作流";
             runButton.UseVisualStyleBackColor = true;
             runButton.Click += RunWorkflow;
-            // 
-            // broadcastModeComboBox
-            // 
-            broadcastModeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            broadcastModeComboBox.FormattingEnabled = true;
-            broadcastModeComboBox.Location = new Point(95, 118);
-            broadcastModeComboBox.Name = "broadcastModeComboBox";
-            broadcastModeComboBox.Size = new Size(89, 25);
-            broadcastModeComboBox.TabIndex = 4;
-            // 
-            // broadcastModeLabel
-            // 
-            broadcastModeLabel.AutoSize = true;
-            broadcastModeLabel.Location = new Point(4, 122);
-            broadcastModeLabel.Name = "broadcastModeLabel";
-            broadcastModeLabel.Size = new Size(85, 17);
-            broadcastModeLabel.TabIndex = 3;
-            broadcastModeLabel.Text = "Broadcast：";
             // 
             // seedTextBox
             // 
@@ -250,8 +228,6 @@
         private Button reloadButton;
         private Button stopButton;
         private Button runButton;
-        private ComboBox broadcastModeComboBox;
-        private Label broadcastModeLabel;
         private TextBox seedTextBox;
         private Label seedLabel;
         private Label titleLabel;

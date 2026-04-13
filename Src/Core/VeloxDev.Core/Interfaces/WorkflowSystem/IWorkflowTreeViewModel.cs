@@ -4,36 +4,36 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
-[AgentContext(AgentLanguages.Chinese,"工作流Tree组件接口，维护一个工作空间内所有Node、Slot和Link组件")]
-[AgentContext(AgentLanguages.English,"Workflow Tree component interface, maintaining all Node, Slot, and Link components within a workspace")]
+[AgentContext(AgentLanguages.Chinese, "工作流Tree组件接口，维护一个工作空间内所有Node、Slot和Link组件")]
+[AgentContext(AgentLanguages.English, "Workflow Tree component interface, maintaining all Node, Slot, and Link components within a workspace")]
 public interface IWorkflowTreeViewModel : IWorkflowViewModel
 {
-    [AgentContext(AgentLanguages.Chinese,"仅在建立连接的过程中可见")]
-    [AgentContext(AgentLanguages.English,"Only visible during the connection establishment process")]
+    [AgentContext(AgentLanguages.Chinese, "仅在建立连接的过程中可见")]
+    [AgentContext(AgentLanguages.English, "Only visible during the connection establishment process")]
     public IWorkflowLinkViewModel VirtualLink { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese,"所有Node组件")]
-    [AgentContext(AgentLanguages.English,"All Node components")]
+    [AgentContext(AgentLanguages.Chinese, "所有Node组件")]
+    [AgentContext(AgentLanguages.English, "All Node components")]
     public ObservableCollection<IWorkflowNodeViewModel> Nodes { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese,"所有Link组件")]
-    [AgentContext(AgentLanguages.English,"All Link components")]
+    [AgentContext(AgentLanguages.Chinese, "所有Link组件")]
+    [AgentContext(AgentLanguages.English, "All Link components")]
     public ObservableCollection<IWorkflowLinkViewModel> Links { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese,"Slot组件之间的连接关系映射")]
-    [AgentContext(AgentLanguages.English,"Mapping of connections between Slot components")]
+    [AgentContext(AgentLanguages.Chinese, "Slot组件之间的连接关系映射")]
+    [AgentContext(AgentLanguages.English, "Mapping of connections between Slot components")]
     public Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>> LinksMap { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese,"创建节点，参数为IWorkflowNodeViewModel")]
-    [AgentContext(AgentLanguages.English,"Create node command, parameter is IWorkflowNodeViewModel")]
+    [AgentContext(AgentLanguages.Chinese, "创建节点，参数为IWorkflowNodeViewModel")]
+    [AgentContext(AgentLanguages.English, "Create node command, parameter is IWorkflowNodeViewModel")]
     public IVeloxCommand CreateNodeCommand { get; }
 
-    [AgentContext(AgentLanguages.Chinese,"更新触点位置，参数为Anchor")]
-    [AgentContext(AgentLanguages.English,"Update pointer position, parameter is Anchor")]
+    [AgentContext(AgentLanguages.Chinese, "更新触点位置，参数为Anchor")]
+    [AgentContext(AgentLanguages.English, "Update pointer position, parameter is Anchor")]
     public IVeloxCommand SetPointerCommand { get; }
 
-    [AgentContext(AgentLanguages.Chinese,"重置虚拟连接，参数为Null")]
-    [AgentContext(AgentLanguages.English,"Reset virtual link, parameter is Null")]
+    [AgentContext(AgentLanguages.Chinese, "重置虚拟连接，参数为Null")]
+    [AgentContext(AgentLanguages.English, "Reset virtual link, parameter is Null")]
     public IVeloxCommand ResetVirtualLinkCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "发起连接构建，参数为IWorkflowSlotViewModel")]
@@ -43,7 +43,7 @@ public interface IWorkflowTreeViewModel : IWorkflowViewModel
     [AgentContext(AgentLanguages.Chinese, "接收连接构建，参数为IWorkflowSlotViewModel")]
     [AgentContext(AgentLanguages.English, "Receive connection construction, parameter is IWorkflowSlotViewModel")]
     public IVeloxCommand ReceiveConnectionCommand { get; }
-    
+
     [AgentContext(AgentLanguages.Chinese, "提交操作，参数为IWorkflowActionPair")]
     [AgentContext(AgentLanguages.English, "Submit action, parameter is IWorkflowActionPair")]
     public IVeloxCommand SubmitCommand { get; }

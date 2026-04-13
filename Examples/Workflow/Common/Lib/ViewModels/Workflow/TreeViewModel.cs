@@ -1,17 +1,12 @@
 ﻿using Demo.ViewModels.Workflow.Helper;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using VeloxDev.Core.Extension;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
-using VeloxDev.Core.MVVM;
-using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.MVVM;
+using VeloxDev.MVVM.Serialization;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[WorkflowBuilder.ViewModel.Tree<TreeHelper>]
+[WorkflowBuilder.Tree<MapHelper>]
 public partial class TreeViewModel
 {
     public TreeViewModel() => InitializeWorkflow();
@@ -21,6 +16,24 @@ public partial class TreeViewModel
     [VeloxProperty] private CanvasLayout layout = new();
     [VeloxProperty] private ObservableCollection<IWorkflowViewModel> _visibleItems = [];
     [VeloxProperty] private ObservableCollection<string> executionLog = [];
+    [VeloxProperty] private bool isWorkflowRunning = false;
+
+    public void BeginWorkflowRun()
+    {
+        ResetExecutionLog();
+        SetWorkflowRunning(true);
+    }
+
+    public void EndWorkflowRun()
+    {
+        SetWorkflowRunning(false);
+    }
+
+    public void RefreshWorkflowRunningState()
+    {
+        var isRunning = Nodes.OfType<NodeViewModel>().Any(node => node.IsRunning || node.RunCount > 0 || node.WaitCount > 0);
+        SetWorkflowRunning(isRunning);
+    }
 
     public void ResetExecutionLog()
     {
@@ -34,7 +47,11 @@ public partial class TreeViewModel
             node.LastDuration = "-";
             node.LastError = string.Empty;
             node.IsRunning = false;
+            node.RunCount = 0;
+            node.WaitCount = 0;
         }
+
+        SetWorkflowRunning(false);
     }
 
     public void AppendExecutionLog(string entry)
@@ -53,12 +70,26 @@ public partial class TreeViewModel
         if (parameter is not string path) return;
         await Helper.CloseAsync();
         var json = this.Serialize();
-        await File.WriteAllTextAsync(path, json);
+        using var writer = new StreamWriter(path, append: false);
+        await writer.WriteAsync(json).ConfigureAwait(false);
     }
 
     [VeloxCommand]
     private async Task Test(CancellationToken ct)
     {
 
+    }
+
+    private void SetWorkflowRunning(bool isRunning)
+    {
+        if (IsWorkflowRunning != isRunning)
+        {
+            IsWorkflowRunning = isRunning;
+        }
+
+        if (Nodes.OfType<ControllerViewModel>().FirstOrDefault() is { } controller && controller.IsActive != isRunning)
+        {
+            controller.IsActive = isRunning;
+        }
     }
 }

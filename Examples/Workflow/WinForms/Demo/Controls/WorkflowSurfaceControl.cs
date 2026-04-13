@@ -2,8 +2,7 @@ using Demo.ViewModels;
 using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
-using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.WorkflowSystem;
 using WFSize = System.Drawing.Size;
 
 namespace Demo.Controls;
@@ -12,6 +11,8 @@ public sealed class WorkflowSurfaceControl : Panel
 {
     private readonly Dictionary<IWorkflowNodeViewModel, WorkflowNodeControl> _cards = [];
     private WorkflowDemoSession? _session;
+
+    internal bool IsConnectionActive => _session?.Tree.VirtualLink.IsVisible == true;
 
     public WorkflowSurfaceControl()
     {
@@ -146,6 +147,7 @@ public sealed class WorkflowSurfaceControl : Panel
         if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
         {
             card.Bounds = CreateBounds(node);
+            SyncNodeSlotAnchors(node);
             UpdateCanvasSize();
             Invalidate();
             return;
@@ -185,6 +187,7 @@ public sealed class WorkflowSurfaceControl : Panel
                 Controls.Add(card);
             }
 
+            SyncAllSlotAnchors();
             UpdateCanvasSize();
             RefreshCards();
         }
@@ -196,7 +199,7 @@ public sealed class WorkflowSurfaceControl : Panel
     }
 
     private Rectangle CreateBounds(IWorkflowNodeViewModel node)
-        => new((int)Math.Round(node.Anchor.Left), (int)Math.Round(node.Anchor.Top), (int)Math.Round(node.Size.Width), (int)Math.Round(node.Size.Height));
+        => new((int)Math.Round(node.Anchor.Horizontal), (int)Math.Round(node.Anchor.Vertical), (int)Math.Round(node.Size.Width), (int)Math.Round(node.Size.Height));
 
     private void UpdateCanvasSize()
     {
@@ -206,8 +209,8 @@ public sealed class WorkflowSurfaceControl : Panel
             return;
         }
 
-        var width = Math.Max(1280, (int)Math.Ceiling(_session.Tree.Nodes.Max(x => x.Anchor.Left + x.Size.Width) + 80));
-        var height = Math.Max(760, (int)Math.Ceiling(_session.Tree.Nodes.Max(x => x.Anchor.Top + x.Size.Height) + 80));
+        var width = Math.Max(1280, (int)Math.Ceiling(_session.Tree.Nodes.Max(x => x.Anchor.Horizontal + x.Size.Width) + 80));
+        var height = Math.Max(760, (int)Math.Ceiling(_session.Tree.Nodes.Max(x => x.Anchor.Vertical + x.Size.Height) + 80));
         AutoScrollMinSize = new WFSize(width, height);
     }
 
@@ -222,6 +225,48 @@ public sealed class WorkflowSurfaceControl : Panel
     }
 
     private bool IsWorkflowActive() => _session?.Controller.IsActive == true;
+
+    internal void BeginConnection(IWorkflowSlotViewModel slot)
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        slot.SendConnectionCommand.Execute(null);
+        Invalidate();
+    }
+
+    internal void UpdateConnection(Point clientPoint)
+    {
+        if (_session is null || !IsConnectionActive)
+        {
+            return;
+        }
+
+        _session.Tree.SetPointerCommand.Execute(ToCanvasAnchor(clientPoint));
+        Invalidate();
+    }
+
+    internal void EndConnection(Point clientPoint, IWorkflowSlotViewModel? sourceSlot = null)
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        var receiver = HitTestSlot(ToCanvasAnchor(clientPoint), sourceSlot);
+        if (receiver is not null)
+        {
+            receiver.ReceiveConnectionCommand.Execute(null);
+        }
+        else
+        {
+            _session.Tree.ResetVirtualLinkCommand.Execute(null);
+        }
+
+        Invalidate();
+    }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -242,19 +287,165 @@ public sealed class WorkflowSurfaceControl : Panel
 
         foreach (var link in _session.Tree.Links.Where(x => x.IsVisible))
         {
-            var startX = (float)link.Sender.Anchor.Left;
-            var startY = (float)link.Sender.Anchor.Top;
-            var endX = (float)link.Receiver.Anchor.Left;
-            var endY = (float)link.Receiver.Anchor.Top;
-            var controlOffset = Math.Max(80f, Math.Abs(endX - startX) * 0.45f);
+            DrawLink(e.Graphics, pen, endpointBrush, link);
+        }
 
-            using var path = new System.Drawing.Drawing2D.GraphicsPath();
-            path.AddBezier(startX, startY, startX + controlOffset, startY, endX - controlOffset, endY, endX, endY);
-            e.Graphics.DrawPath(pen, path);
-            e.Graphics.FillEllipse(endpointBrush, startX - 5, startY - 5, 10, 10);
-            e.Graphics.FillEllipse(endpointBrush, endX - 5, endY - 5, 10, 10);
+        if (_session.Tree.VirtualLink.IsVisible)
+        {
+            using var virtualPen = new Pen(Color.FromArgb(226, 232, 240), 3f);
+            using var virtualBrush = new SolidBrush(Color.FromArgb(226, 232, 240));
+            DrawLink(e.Graphics, virtualPen, virtualBrush, _session.Tree.VirtualLink);
+        }
+
+        using var slotPen = new Pen(Color.White, 1.5f);
+        foreach (var node in _session.Tree.Nodes)
+        {
+            DrawSlot(e.Graphics, slotPen, (node as NodeViewModel)?.InputSlot);
+            DrawSlot(e.Graphics, slotPen, (node as NodeViewModel)?.OutputSlot);
+            DrawSlot(e.Graphics, slotPen, (node as ControllerViewModel)?.OutputSlot);
         }
     }
+
+    private void SyncAllSlotAnchors()
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        foreach (var node in _session.Tree.Nodes)
+        {
+            SyncNodeSlotAnchors(node);
+        }
+    }
+
+    private static void SyncNodeSlotAnchors(IWorkflowNodeViewModel node)
+    {
+        if (node is NodeViewModel workflowNode)
+        {
+            SyncSlotAnchor(node, workflowNode.InputSlot, isInput: true);
+            SyncSlotAnchor(node, workflowNode.OutputSlot, isInput: false);
+            return;
+        }
+
+        if (node is ControllerViewModel controller)
+        {
+            SyncSlotAnchor(node, controller.OutputSlot, isInput: false);
+        }
+    }
+
+    private static void SyncSlotAnchor(IWorkflowNodeViewModel node, IWorkflowSlotViewModel? slot, bool isInput)
+    {
+        if (slot is null)
+        {
+            return;
+        }
+
+        slot.Anchor = new Anchor(
+            node.Anchor.Horizontal + (isInput ? 0 : node.Size.Width),
+            node.Anchor.Vertical + (node.Size.Height / 2),
+            slot.Anchor.Layer);
+    }
+
+    private static void DrawSlot(Graphics graphics, Pen pen, IWorkflowSlotViewModel? slot)
+    {
+        if (slot is null)
+        {
+            return;
+        }
+
+        using var brush = new SolidBrush(ResolveSlotColor(slot.State));
+        var x = (float)slot.Anchor.Horizontal - 10;
+        var y = (float)slot.Anchor.Vertical - 10;
+        graphics.FillEllipse(brush, x, y, 20, 20);
+        graphics.DrawEllipse(pen, x, y, 20, 20);
+    }
+
+    private static void DrawLink(Graphics graphics, Pen pen, Brush endpointBrush, IWorkflowLinkViewModel link)
+    {
+        var startX = (float)link.Sender.Anchor.Horizontal;
+        var startY = (float)link.Sender.Anchor.Vertical;
+        var endX = (float)link.Receiver.Anchor.Horizontal;
+        var endY = (float)link.Receiver.Anchor.Vertical;
+        var controlOffset = Math.Max(80f, Math.Abs(endX - startX) * 0.45f);
+
+        using var path = new System.Drawing.Drawing2D.GraphicsPath();
+        path.AddBezier(startX, startY, startX + controlOffset, startY, endX - controlOffset, endY, endX, endY);
+        graphics.DrawPath(pen, path);
+        graphics.FillEllipse(endpointBrush, startX - 5, startY - 5, 10, 10);
+        graphics.FillEllipse(endpointBrush, endX - 5, endY - 5, 10, 10);
+    }
+
+    private Anchor ToCanvasAnchor(Point clientPoint)
+        => new(clientPoint.X - AutoScrollPosition.X, clientPoint.Y - AutoScrollPosition.Y, 0);
+
+    private IWorkflowSlotViewModel? HitTestSlot(Anchor anchor, IWorkflowSlotViewModel? exclude = null)
+    {
+        if (_session is null)
+        {
+            return null;
+        }
+
+        const double radius = 18d;
+        var radiusSquared = radius * radius;
+
+        foreach (var slot in EnumerateSlots())
+        {
+            if (ReferenceEquals(slot, exclude))
+            {
+                continue;
+            }
+
+            var dx = slot.Anchor.Horizontal - anchor.Horizontal;
+            var dy = slot.Anchor.Vertical - anchor.Vertical;
+            if ((dx * dx) + (dy * dy) <= radiusSquared)
+            {
+                return slot;
+            }
+        }
+
+        return null;
+    }
+
+    private IEnumerable<IWorkflowSlotViewModel> EnumerateSlots()
+    {
+        if (_session is null)
+        {
+            yield break;
+        }
+
+        foreach (var node in _session.Tree.Nodes)
+        {
+            if (node is NodeViewModel workflowNode)
+            {
+                if (workflowNode.InputSlot is not null)
+                {
+                    yield return workflowNode.InputSlot;
+                }
+
+                if (workflowNode.OutputSlot is not null)
+                {
+                    yield return workflowNode.OutputSlot;
+                }
+
+                continue;
+            }
+
+            if (node is ControllerViewModel controller && controller.OutputSlot is not null)
+            {
+                yield return controller.OutputSlot;
+            }
+        }
+    }
+
+    private static Color ResolveSlotColor(SlotState state)
+        => state switch
+        {
+            var value when value.HasFlag(SlotState.Sender) && value.HasFlag(SlotState.Receiver) => Color.Violet,
+            var value when value.HasFlag(SlotState.Sender) => Color.Tomato,
+            var value when value.HasFlag(SlotState.Receiver) => Color.Lime,
+            _ => Color.White,
+        };
 
     private void DrawGrid(Graphics graphics)
     {
@@ -322,16 +513,16 @@ public sealed class WorkflowSurfaceControl : Panel
                 _titleLabel.Text = "Network Flow Controller";
                 _stateLabel.Text = controller.IsActive ? "State: Active" : "State: Idle";
                 _line1Label.Text = $"Seed: {controller.SeedPayload}";
-                _line2Label.Text = $"Mode: {controller.BroadcastMode}";
-                _line3Label.Text = "Controller 会触发整条请求链路，并把执行日志同步到左侧。";
+                _line2Label.Text = $"Seed: {controller.SeedPayload}";
+                _line3Label.Text = "Controller 会触发整条请求链路。后续节点是否继续广播，仅由节点自身决定。";
             }
             else
             {
                 var node = (NodeViewModel)_node;
                 _titleLabel.Text = $"{node.Title}   {node.ExecutionOrderText}";
                 _stateLabel.Text = $"Status: {node.LastStatus}";
-                _line1Label.Text = $"Method: {node.Method} | Duration: {node.LastDuration}";
-                _line2Label.Text = $"URL: {node.Url}";
+                _line1Label.Text = $"Delay: {node.DelayMilliseconds} ms | Duration: {node.LastDuration}";
+                _line2Label.Text = $"Run: {node.RunCount} | Queue: {node.WaitCount}";
                 _line3Label.Text = string.IsNullOrWhiteSpace(node.LastError)
                     ? $"Preview: {node.LastResponsePreview}"
                     : $"Error: {node.LastError}";
@@ -391,12 +582,40 @@ public sealed class WorkflowSurfaceControl : Panel
 
         private void OnMouseDown(object? sender, MouseEventArgs e)
         {
+            if (e.Button != MouseButtons.Left)
+            {
+                return;
+            }
+
+            if (Parent is WorkflowSurfaceControl surface)
+            {
+                var localPoint = PointToClient(Control.MousePosition);
+                if (TryGetSlotAt(localPoint, out var slot) && slot is not null)
+                {
+                    if (sender is Control control)
+                    {
+                        control.Capture = true;
+                    }
+
+                    surface.BeginConnection(slot);
+                    surface.UpdateConnection(surface.PointToClient(Control.MousePosition));
+                    _dragging = false;
+                    return;
+                }
+            }
+
             _dragging = true;
             _lastMouse = Parent?.PointToClient(Control.MousePosition) ?? Point.Empty;
         }
 
         private void OnMouseMove(object? sender, MouseEventArgs e)
         {
+            if (Parent is WorkflowSurfaceControl surface && surface.IsConnectionActive)
+            {
+                surface.UpdateConnection(surface.PointToClient(Control.MousePosition));
+                return;
+            }
+
             if (!_dragging || Parent is null)
             {
                 return;
@@ -413,7 +632,59 @@ public sealed class WorkflowSurfaceControl : Panel
         }
 
         private void OnMouseUp(object? sender, MouseEventArgs e)
-            => _dragging = false;
+        {
+            if (sender is Control control)
+            {
+                control.Capture = false;
+            }
+
+            if (Parent is WorkflowSurfaceControl surface && surface.IsConnectionActive)
+            {
+                surface.EndConnection(surface.PointToClient(Control.MousePosition));
+                _dragging = false;
+                return;
+            }
+
+            _dragging = false;
+        }
+
+        private bool TryGetSlotAt(Point localPoint, out IWorkflowSlotViewModel? slot)
+        {
+            slot = null;
+            const double radius = 16d;
+
+            if (_node is NodeViewModel node)
+            {
+                if (node.InputSlot is not null && IsWithinSlot(localPoint, 0d, Height / 2d, radius))
+                {
+                    slot = node.InputSlot;
+                    return true;
+                }
+
+                if (node.OutputSlot is not null && IsWithinSlot(localPoint, Width, Height / 2d, radius))
+                {
+                    slot = node.OutputSlot;
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (_node is ControllerViewModel controller && controller.OutputSlot is not null && IsWithinSlot(localPoint, Width, Height / 2d, radius))
+            {
+                slot = controller.OutputSlot;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsWithinSlot(Point point, double centerX, double centerY, double radius)
+        {
+            var dx = point.X - centerX;
+            var dy = point.Y - centerY;
+            return (dx * dx) + (dy * dy) <= radius * radius;
+        }
 
         private static Label CreateLabel(Font font, Color color, int left, int top, int width, int height)
             => new()

@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using CoreWorkflowAgent = VeloxDev.AI.Workflow;
-using VeloxDev.Core.Extension.Agent.Workflow;
 using VeloxDev.WorkflowSystem;
 
-namespace VeloxDev.Core.Extension;
+namespace VeloxDev.AI.Workflow;
 
 public static class AgentToolEx
 {
@@ -13,7 +11,7 @@ public static class AgentToolEx
 
     public static IEnumerable<Delegate> ProvideWorkflowAgentTools()
     {
-        foreach (var tool in CoreWorkflowAgent.WorkflowAgentToolProvider.ProvideWorkflowAgentTools())
+        foreach (var tool in WorkflowAgentToolProvider.ProvideWorkflowAgentTools())
         {
             yield return tool;
         }

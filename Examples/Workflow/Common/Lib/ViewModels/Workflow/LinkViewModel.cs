@@ -1,8 +1,8 @@
-using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[WorkflowBuilder.ViewModel.Link<WorkflowHelper.ViewModel.Link>]
+[WorkflowBuilder.Link<LinkHelper>]
 public partial class LinkViewModel
 {
     public LinkViewModel() => InitializeWorkflow();

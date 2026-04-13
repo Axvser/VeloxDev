@@ -178,10 +178,10 @@
 
 当前核心库已经提供：
 
-- `WorkflowHelper.ViewModel.Tree`
-- `WorkflowHelper.ViewModel.Node`
-- `WorkflowHelper.ViewModel.Slot`
-- `WorkflowHelper.ViewModel.Link`
+- `TreeHelper`
+- `NodeHelper`
+- `SlotHelper`
+- `LinkHelper`
 
 这些标准 Helper 会把默认行为委托到 `StandardEx` 扩展方法。
 
@@ -210,7 +210,7 @@ ViewModel
 
 ## 5.1 广播模式现在支持按节点动态切换
 
-当前 `WorkflowBroadcastMode` 支持：
+当前 `BroadcastMode` 支持：
 
 - `Parallel`
 - `BreadthFirst`
@@ -338,7 +338,7 @@ sequenceDiagram
     N->>C: execute
     C->>H: WorkAsync(data, ct)
     H->>H: custom business logic
-    H->>EX: StandardBroadcastAsync(data, mode, ct)
+    H->>EX: StandardBroadcastAsync(data, ct)
     EX->>EX: ValidateBroadcastAsync(sender, receiver)
     EX->>SN: receiver.Parent.WorkCommand.Execute(...)
 ```
@@ -354,7 +354,7 @@ sequenceDiagram
 正向传播入口：
 
 - `helper.BroadcastAsync(parameter, ct)`
-- `node.StandardBroadcastAsync(parameter, mode, ct)`
+- `node.StandardBroadcastAsync(parameter, ct)`
 
 正向传播会沿：
 
@@ -367,7 +367,7 @@ sequenceDiagram
 反向传播入口：
 
 - `helper.ReverseBroadcastAsync(parameter, ct)`
-- `node.StandardReverseBroadcastAsync(parameter, mode, ct)`
+- `node.StandardReverseBroadcastAsync(parameter, ct)`
 
 反向传播会沿：
 
@@ -375,21 +375,7 @@ sequenceDiagram
 
 回溯上游节点。
 
-### 7.3 三种传播模式
-
-传播模式由：
-
-- `WorkflowBroadcastMode`
-
-控制，当前支持：
-
-| 模式 | 说明 |
-|---|---|
-| `Parallel` | 并行扇出，保持原有默认行为 |
-| `BreadthFirst` | 广度优先，按层传播 |
-| `DepthFirst` | 深度优先，沿一条分支优先传播 |
-
-### 7.4 边校验
+### 7.3 边校验
 
 无论正向还是反向传播，都会经过：
 
@@ -441,7 +427,7 @@ public partial class MyLink
 ### 8.2 自定义 `NodeHelper`
 
 ```csharp
-public class NodeHelper : WorkflowHelper.ViewModel.Node
+public class NodeHelper : NodeHelper
 {
     public override async Task WorkAsync(object? parameter, CancellationToken ct)
     {
@@ -469,14 +455,14 @@ public class NodeHelper : WorkflowHelper.ViewModel.Node
 public override async Task WorkAsync(object? parameter, CancellationToken ct)
 {
     await DoBusinessAsync(parameter, ct);
-    await node.StandardBroadcastAsync(parameter, WorkflowBroadcastMode.DepthFirst, ct);
+    await node.StandardBroadcastAsync(parameter, BroadcastMode.DepthFirst, ct);
 }
 ```
 
 或者反向回溯：
 
 ```csharp
-await node.StandardReverseBroadcastAsync(parameter, WorkflowBroadcastMode.BreadthFirst, ct);
+await node.StandardReverseBroadcastAsync(parameter, BroadcastMode.BreadthFirst, ct);
 ```
 
 ---

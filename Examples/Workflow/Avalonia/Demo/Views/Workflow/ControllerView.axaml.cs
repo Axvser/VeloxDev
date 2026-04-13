@@ -6,8 +6,7 @@ using Demo.ViewModels;
 using System;
 using System.ComponentModel;
 using System.Linq;
-using VeloxDev.Core.WorkflowSystem;
-using VeloxDev.Core.WorkflowSystem.StandardEx;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo;
 
@@ -114,14 +113,29 @@ public partial class ControllerView : UserControl
             return;
         }
 
+        if (_parentCanvas is not null)
+        {
+            var centerOnCanvas = PART_OutputSlot.TranslatePoint(new Point(PART_OutputSlot.Bounds.Width / 2, PART_OutputSlot.Bounds.Height / 2), _parentCanvas);
+            if (centerOnCanvas is not null)
+            {
+                var actualOffset = (node.Parent as TreeViewModel)?.Layout.ActualOffset;
+                node.OutputSlot.Anchor = new Anchor(
+                    centerOnCanvas.Value.X - (actualOffset?.Horizontal ?? 0),
+                    centerOnCanvas.Value.Y - (actualOffset?.Vertical ?? 0),
+                    node.OutputSlot.Anchor.Layer);
+                return;
+            }
+        }
+
         var center = PART_OutputSlot.TranslatePoint(new Point(PART_OutputSlot.Bounds.Width / 2, PART_OutputSlot.Bounds.Height / 2), this);
         if (center is null)
         {
             return;
         }
 
-        node.OutputSlot.StandardSetOffset(new Offset(
-            center.Value.X - PART_OutputSlot.Bounds.Width / 2,
-            center.Value.Y - PART_OutputSlot.Bounds.Height / 2));
+        node.OutputSlot.Anchor = new Anchor(
+            node.Anchor.Horizontal + center.Value.X,
+            node.Anchor.Vertical + center.Value.Y,
+            node.OutputSlot.Anchor.Layer);
     }
 }

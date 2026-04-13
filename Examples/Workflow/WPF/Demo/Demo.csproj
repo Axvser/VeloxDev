@@ -9,12 +9,15 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="Microsoft.CodeAnalysis" Version="5.0.0" />
+		<PackageReference Include="Microsoft.CodeAnalysis" Version="5.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WPF\VeloxDev.WPF.csproj" />
-	  <ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
+		<ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
 	</ItemGroup>
-	
+
+	<ItemGroup>
+	  <Folder Include="ViewModels\Workflow\Helper\" />
+	</ItemGroup>
+
 </Project>

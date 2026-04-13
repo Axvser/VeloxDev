@@ -1,7 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo;
 

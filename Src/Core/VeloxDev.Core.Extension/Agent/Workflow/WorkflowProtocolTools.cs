@@ -10,12 +10,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using VeloxDev.AI;
-using CoreWorkflowAgent = VeloxDev.AI.Workflow;
 using VeloxDev.MVVM;
+using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
-namespace VeloxDev.Core.Extension.Agent.Workflow;
+namespace VeloxDev.AI.Workflow;
 
 public static class WorkflowProtocolTools
 {
@@ -60,14 +59,14 @@ public static class WorkflowProtocolTools
         return normalizedSection switch
         {
             "bootstrap" => CreateBootstrapDocument(language),
-            "document" => CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideWorkflowAgentContextDocument(language),
-            "framework" => CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideWorkflowFrameworkContext(language),
-            "enums" => CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideWorkflowEnumContext(language),
-            "valuetypes" => CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideWorkflowValueTypeContext(language),
-            "registeredcomponents" => CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideRegisteredWorkflowComponentContext(language),
-            "othermembers" => CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideWorkflowOtherAnnotatedMemberContext(language),
-            "registeredtypes" => CoreWorkflowAgent.WorkflowAgentTools.ListRegisteredWorkflowComponentTypes(),
-            "type" => CoreWorkflowAgent.WorkflowAgentTools.GetWorkflowTypeAgentContextInLanguage(
+            "document" => WorkflowAgentContextProvider.ProvideWorkflowAgentContextDocument(language),
+            "framework" => WorkflowAgentContextProvider.ProvideWorkflowFrameworkContext(language),
+            "enums" => WorkflowAgentContextProvider.ProvideWorkflowEnumContext(language),
+            "valuetypes" => WorkflowAgentContextProvider.ProvideWorkflowValueTypeContext(language),
+            "registeredcomponents" => WorkflowAgentContextProvider.ProvideRegisteredWorkflowComponentContext(language),
+            "othermembers" => WorkflowAgentContextProvider.ProvideWorkflowOtherAnnotatedMemberContext(language),
+            "registeredtypes" => WorkflowAgentTools.ListRegisteredWorkflowComponentTypes(),
+            "type" => WorkflowAgentTools.GetWorkflowTypeAgentContextInLanguage(
                 request.TypeName ?? throw new ArgumentException("typeName is required when section is `type`.", nameof(requestJson)),
                 language.ToLanguageCode()),
             _ => throw new ArgumentException($"Unsupported context section: {section}", nameof(requestJson))
@@ -810,8 +809,8 @@ public static class WorkflowProtocolTools
             ["sessionId"] = session.SessionId,
             ["revision"] = session.Revision,
             ["languageCode"] = session.Language.ToLanguageCode(),
-            ["schemaHash"] = ComputeSha256(CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideWorkflowFrameworkContext(AgentLanguages.English)),
-            ["contextHash"] = ComputeSha256(CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideWorkflowAgentContextDocument(session.Language))
+            ["schemaHash"] = ComputeSha256(WorkflowAgentContextProvider.ProvideWorkflowFrameworkContext(AgentLanguages.English)),
+            ["contextHash"] = ComputeSha256(WorkflowAgentContextProvider.ProvideWorkflowAgentContextDocument(session.Language))
         };
 
         if (includeSummary)
@@ -1018,7 +1017,7 @@ public static class WorkflowProtocolTools
     }
 
     private static JValue CreateTypeContextToken(Type type, AgentLanguages language)
-        => new(CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideTypeAgentContext(type, language));
+        => new(WorkflowAgentContextProvider.ProvideTypeAgentContext(type, language));
 
     private static IWorkflowNodeViewModel GetNodeById(WorkflowProtocolSession session, string? nodeId)
     {
@@ -1720,8 +1719,8 @@ public static class WorkflowProtocolTools
         builder.AppendLine("- When no whitelist exists for a member kind, all annotated members of that kind remain available.");
         builder.AppendLine();
         builder.AppendLine($"Default language code: `{language.ToLanguageCode()}`");
-        builder.AppendLine($"Framework context hash: `{ComputeSha256(CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideWorkflowFrameworkContext(AgentLanguages.English))}`");
-        builder.AppendLine($"Document context hash: `{ComputeSha256(CoreWorkflowAgent.WorkflowAgentContextProvider.ProvideWorkflowAgentContextDocument(language))}`");
+        builder.AppendLine($"Framework context hash: `{ComputeSha256(WorkflowAgentContextProvider.ProvideWorkflowFrameworkContext(AgentLanguages.English))}`");
+        builder.AppendLine($"Document context hash: `{ComputeSha256(WorkflowAgentContextProvider.ProvideWorkflowAgentContextDocument(language))}`");
         return builder.ToString().TrimEnd();
     }
 

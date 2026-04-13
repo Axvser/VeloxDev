@@ -4,7 +4,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using VeloxDev.Core.MVVM;
+using VeloxDev.MVVM;
 
 namespace Demo.ViewModels;
 

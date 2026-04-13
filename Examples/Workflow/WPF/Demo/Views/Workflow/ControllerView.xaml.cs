@@ -1,9 +1,10 @@
 ﻿using Demo.ViewModels;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow
 {
@@ -12,10 +13,13 @@ namespace Demo.Views.Workflow
         private bool _isDragging;
         private Point _lastPosition;
         private Canvas? _parentCanvas;
+        private INotifyPropertyChanged? _propertyChangedSource;
 
         public ControllerView()
         {
             InitializeComponent();
+            DataContextChanged += OnDataContextChanged;
+            SizeChanged += (_, _) => SyncOutputSlot();
         }
 
         protected override void OnVisualParentChanged(DependencyObject oldParent)
@@ -35,26 +39,30 @@ namespace Demo.Views.Workflow
             return FindVisualParent<T>(parentObject);
         }
 
-        // 鼠标按下时，获取鼠标相对于容器左上角的坐标，并记录为拖拽中
         private void OnMouseDown(object sender, MouseButtonEventArgs e)
         {
+            if (_parentCanvas == null || e.LeftButton != MouseButtonState.Pressed)
+            {
+                return;
+            }
+
             _isDragging = true;
             _lastPosition = e.GetPosition(_parentCanvas);
+            Mouse.Capture(sender as IInputElement ?? this);
             e.Handled = true;
         }
 
-        // 鼠标离开时，并记录为非拖拽中
         private void OnMouseUp(object sender, MouseButtonEventArgs e)
         {
             _isDragging = false;
+            Mouse.Capture(null);
+            SyncOutputSlot();
         }
 
-        // 鼠标移动发生在拖拽模式时，请更新节点视图模型的 Anchor
         private void OnMouseMove(object sender, MouseEventArgs e)
         {
             if (!_isDragging || _parentCanvas == null) return;
 
-            // 计算鼠标位置偏移量
             var currentPosition = e.GetPosition(_parentCanvas);
             var delta = currentPosition - _lastPosition;
 
@@ -64,12 +72,56 @@ namespace Demo.Views.Workflow
             }
 
             _lastPosition = currentPosition;
+            SyncOutputSlot();
             e.Handled = true;
         }
 
-        private void OnMouseLeave(object sender, MouseEventArgs e)
+        private void OnLostMouseCapture(object sender, MouseEventArgs e)
         {
             _isDragging = false;
+        }
+
+        private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (_propertyChangedSource is not null)
+            {
+                _propertyChangedSource.PropertyChanged -= OnControllerPropertyChanged;
+                _propertyChangedSource = null;
+            }
+
+            if (e.NewValue is INotifyPropertyChanged notify)
+            {
+                _propertyChangedSource = notify;
+                notify.PropertyChanged += OnControllerPropertyChanged;
+            }
+
+            SyncOutputSlot();
+        }
+
+        private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(ControllerViewModel.Anchor) or nameof(ControllerViewModel.Size) or nameof(ControllerViewModel.OutputSlot))
+            {
+                Dispatcher.Invoke(SyncOutputSlot);
+            }
+        }
+
+        private void SyncOutputSlot()
+        {
+            if (DataContext is not ControllerViewModel controller)
+            {
+                return;
+            }
+
+            if (controller.OutputSlot is null)
+            {
+                return;
+            }
+
+            controller.OutputSlot.Anchor = new Anchor(
+                controller.Anchor.Horizontal + controller.Size.Width,
+                controller.Anchor.Vertical + (controller.Size.Height / 2),
+                controller.OutputSlot.Anchor.Layer);
         }
     }
 }

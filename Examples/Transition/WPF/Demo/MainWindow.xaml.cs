@@ -1,9 +1,8 @@
 ﻿using System.Windows;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using VeloxDev.Core.TransitionSystem;
 using VeloxDev.TransitionSystem;
-using VeloxDev.WPF.Interpolators;
+using VeloxDev.TransitionSystem.Interpolators;
 
 namespace Demo;
 

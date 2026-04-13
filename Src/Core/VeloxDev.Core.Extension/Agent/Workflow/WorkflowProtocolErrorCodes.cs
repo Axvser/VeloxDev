@@ -1,4 +1,4 @@
-namespace VeloxDev.Core.Extension.Agent.Workflow;
+namespace VeloxDev.AI.Workflow;
 
 public static class WorkflowProtocolErrorCodes
 {

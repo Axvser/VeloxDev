@@ -74,7 +74,10 @@ public sealed class ViewManager(Panel panel)
                 if (e.OldItems != null)
                 {
                     foreach (object item in e.OldItems)
+                    {
+                        _pendingViews.RemoveAll(x => ReferenceEquals(x, item));
                         HideViewFor(item);
+                    }
                 }
                 break;
 

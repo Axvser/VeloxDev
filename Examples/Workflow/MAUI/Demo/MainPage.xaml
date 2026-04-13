@@ -18,18 +18,14 @@
                        FontAttributes="Bold"
                        FontSize="24"
                        TextColor="White" />
-                <Label Text="MAUI 版本改为按现有 Workflow Demo 的布局展示流程节点与连线。"
+                <Label Text="MAUI 版本展示最简化的 Workflow 行为：节点模拟耗时执行，并直接向下游广播。"
                        FontSize="14"
                        TextColor="#CBD5E1" />
 
-                <Grid ColumnDefinitions="2*,*,Auto,Auto,Auto"
+                <Grid ColumnDefinitions="2*,Auto,Auto,Auto"
                       ColumnSpacing="12"
                       RowDefinitions="Auto,Auto">
                     <Label Text="Seed Payload"
-                           TextColor="#E2E8F0"
-                           FontAttributes="Bold" />
-                    <Label Grid.Column="1"
-                           Text="Broadcast Mode"
                            TextColor="#E2E8F0"
                            FontAttributes="Bold" />
 
@@ -38,21 +34,16 @@
                            Placeholder="demo-request-chain"
                            ClearButtonVisibility="WhileEditing" />
 
-                    <Picker Grid.Row="1"
-                            Grid.Column="1"
-                            ItemsSource="{Binding Controller.BroadcastModes}"
-                            SelectedItem="{Binding Controller.BroadcastMode}" />
-
                     <Button Grid.Row="1"
-                            Grid.Column="2"
+                            Grid.Column="1"
                             Text="运行"
                             Clicked="RunWorkflowAsync" />
                     <Button Grid.Row="1"
-                            Grid.Column="3"
+                            Grid.Column="2"
                             Text="停止"
                             Clicked="StopWorkflowAsync" />
                     <Button Grid.Row="1"
-                            Grid.Column="4"
+                            Grid.Column="3"
                             Text="重置"
                             Clicked="ReloadDemoAsync" />
                 </Grid>

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace VeloxDev.Core.Extension.Agent.Workflow;
+namespace VeloxDev.AI.Workflow;
 
 public static class WorkflowAgentMemberWhitelist
 {

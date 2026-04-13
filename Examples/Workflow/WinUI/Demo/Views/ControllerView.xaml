@@ -9,117 +9,64 @@
     mc:Ignorable="d">
 
     <Grid>
-        <Border Background="#0B1120"
-                BorderBrush="#334155"
+        <Grid.RowDefinitions>
+            <RowDefinition Height="52" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="56" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.RowSpan="3"
                 BorderThickness="1"
-                CornerRadius="12" />
+                CornerRadius="5"
+                BorderBrush="White"
+                Background="#2D2D2D" />
 
-        <Grid Margin="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="34" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <Border Grid.Row="0"
+                CornerRadius="5,5,0,0"
+                Background="#2D2D2D"
+                PointerPressed="OnPointerPressed"
+                PointerReleased="OnPointerReleased"
+                PointerMoved="OnPointerMoved"
+                PointerCaptureLost="OnPointerCaptureLost">
+            <TextBlock Text="Network Flow Controller"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Center"
+                       Foreground="White" />
+        </Border>
 
-            <Border Grid.Row="0"
-                    Background="#0F172A"
-                    CornerRadius="11,11,0,0"
-                    BorderBrush="#1F2937"
-                    BorderThickness="0,0,0,1"
-                    ManipulationDelta="Border_ManipulationDelta"
-                    ManipulationMode="All">
-                <Grid Margin="10,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Network Flow Controller"
-                               VerticalAlignment="Center"
-                               Foreground="White"
-                               FontSize="13"
-                               FontWeight="SemiBold" />
-                    <Border Grid.Column="1"
-                            Padding="8,2"
-                            Background="#14532D"
-                            CornerRadius="8"
-                            VerticalAlignment="Center">
-                        <TextBlock Foreground="White"
-                                   FontSize="10"
-                                   FontWeight="Bold">
-                            <Run Text="Active: " />
-                            <Run Text="{Binding IsActive}" />
-                        </TextBlock>
-                    </Border>
-                </Grid>
-            </Border>
+        <Border Grid.Row="1" Background="#252525" Padding="16">
+            <StackPanel Spacing="10">
+                <TextBlock Text="种子负载" Foreground="#DCDCDC" />
+                <TextBox Text="{Binding SeedPayload, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBlock Text="控制器节点只负责把初始上下文送入工作流。后续节点是否继续广播，仅由节点自身决定。"
+                           Foreground="#BDBDBD"
+                           TextWrapping="WrapWholeWords" />
+            </StackPanel>
+        </Border>
 
-            <Grid Grid.Row="1" Margin="12,10,12,12">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <TextBlock Text="Seed Payload"
-                           Foreground="#CBD5E1"
-                           FontSize="10"
-                           FontWeight="SemiBold" />
-                <TextBox Grid.Row="1"
-                         Margin="0,6,0,0"
-                         Text="{Binding SeedPayload, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         Background="#111827"
-                         Foreground="White"
-                         BorderBrush="#334155"
-                         BorderThickness="1"
-                         Padding="8,4" />
-                <ComboBox Grid.Row="2"
-                          Margin="0,8,0,0"
-                          ItemsSource="{Binding BroadcastModes}"
-                          SelectedItem="{Binding BroadcastMode, Mode=TwoWay}"
-                          Background="#111827"
-                          Foreground="White"
-                          BorderBrush="#334155" />
-
-                <Grid Grid.Row="3" Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Button Margin="0"
-                            Command="{Binding OpenWorkflowCommand}"
-                            Background="#0B5ED7"
-                            BorderBrush="#1D4ED8">
-                        <TextBlock Text="Run"
-                                   Foreground="White"
-                                   FontWeight="SemiBold" />
-                    </Button>
-                    <Button Grid.Column="1"
-                            Margin="0"
-                            Command="{Binding CloseWorkflowCommand}"
-                            Background="#1F2937"
-                            BorderBrush="#334155">
-                        <TextBlock Text="Close"
-                                   Foreground="White"
-                                   FontWeight="SemiBold" />
-                    </Button>
-                </Grid>
+        <Border Grid.Row="2" Background="#2D2D2D" CornerRadius="0,0,5,5" Padding="8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Margin="0,0,4,0" Command="{Binding OpenWorkflowCommand}">
+                    <TextBlock Text="Run Flow" Foreground="White" />
+                </Button>
+                <Button Grid.Column="1" Margin="4,0,0,0" Command="{Binding CloseWorkflowCommand}">
+                    <TextBlock Text="Close Tree" Foreground="White" />
+                </Button>
             </Grid>
-        </Grid>
+        </Border>
 
-        <local:CanvasItemsControl ItemsSource="{Binding Slots}">
-            <local:CanvasItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Canvas />
-                </ItemsPanelTemplate>
-            </local:CanvasItemsControl.ItemsPanel>
-            <local:CanvasItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <local:SlotView Width="{Binding Size.Width}"
-                                    Height="{Binding Size.Height}"
-                                    Canvas.Left="{Binding Offset.Left}"
-                                    Canvas.Top="{Binding Offset.Top}"/>
-                </DataTemplate>
-            </local:CanvasItemsControl.ItemTemplate>
-        </local:CanvasItemsControl>
+        <local:SlotView x:Name="PART_OutputSlot"
+                        Width="20"
+                        Height="20"
+                        Grid.RowSpan="3"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,-10,0"
+                        DataContext="{Binding OutputSlot}"
+                        SlotState="{Binding State}" />
     </Grid>
 </UserControl>

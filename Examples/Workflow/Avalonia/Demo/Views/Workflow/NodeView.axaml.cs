@@ -1,11 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using System;
 using System.ComponentModel;
-using VeloxDev.Core.Interfaces.WorkflowSystem;
-using VeloxDev.Core.WorkflowSystem;
-using VeloxDev.Core.WorkflowSystem.StandardEx;
+using System.Linq;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo;
 
@@ -13,13 +13,17 @@ public partial class NodeView : UserControl
 {
     private Point _lastPoint;
     private bool _isDragging;
-    private Canvas? _dragCanvas;
+    private Canvas? _parentCanvas;
     private INotifyPropertyChanged? _propertyChangedSource;
 
     public NodeView()
     {
         InitializeComponent();
-        AttachedToVisualTree += (_, _) => SyncSlotLayouts();
+        AttachedToVisualTree += (_, _) =>
+        {
+            _parentCanvas = this.GetVisualAncestors().OfType<Canvas>().FirstOrDefault();
+            SyncSlotLayouts();
+        };
         DataContextChanged += OnDataContextChanged;
         PropertyChanged += (_, e) =>
         {
@@ -32,13 +36,10 @@ public partial class NodeView : UserControl
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        // 查找祖先中的 Canvas
-        _dragCanvas = FindAncestorOfType<Canvas>();
-
-        if (_dragCanvas == null)
+        if (_parentCanvas == null)
             return;
 
-        _lastPoint = e.GetPosition(_dragCanvas);
+        _lastPoint = e.GetPosition(_parentCanvas);
         _isDragging = true;
         e.Pointer.Capture(sender as IInputElement);
     }
@@ -49,16 +50,15 @@ public partial class NodeView : UserControl
         {
             _isDragging = false;
             e.Pointer.Capture(null);
-            _dragCanvas = null;
         }
     }
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (!_isDragging || DataContext is not IWorkflowNodeViewModel node || _dragCanvas == null)
+        if (!_isDragging || DataContext is not IWorkflowNodeViewModel node || _parentCanvas == null)
             return;
 
-        var current = e.GetPosition(_dragCanvas);
+        var current = e.GetPosition(_parentCanvas);
         var offset = new Offset(current.X - _lastPoint.X, current.Y - _lastPoint.Y);
         node.MoveCommand.Execute(offset);
         _lastPoint = current;
@@ -68,7 +68,6 @@ public partial class NodeView : UserControl
     private void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
         _isDragging = false;
-        _dragCanvas = null;
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
@@ -114,27 +113,29 @@ public partial class NodeView : UserControl
             return;
         }
 
+        if (_parentCanvas is not null)
+        {
+            var centerOnCanvas = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), _parentCanvas);
+            if (centerOnCanvas is not null)
+            {
+                var actualOffset = (node.Parent as ViewModels.TreeViewModel)?.Layout.ActualOffset;
+                slot.Anchor = new Anchor(
+                    centerOnCanvas.Value.X - (actualOffset?.Horizontal ?? 0),
+                    centerOnCanvas.Value.Y - (actualOffset?.Vertical ?? 0),
+                    slot.Anchor.Layer);
+                return;
+            }
+        }
+
         var center = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), this);
         if (center is null)
         {
             return;
         }
 
-        slot.StandardSetOffset(new Offset(
-            center.Value.X - control.Bounds.Width / 2,
-            center.Value.Y - control.Bounds.Height / 2));
-    }
-
-    // 辅助方法：查找祖先
-    private T? FindAncestorOfType<T>() where T : class
-    {
-        var parent = Parent;
-        while (parent != null)
-        {
-            if (parent is T result)
-                return result;
-            parent = (parent as Visual)?.Parent;
-        }
-        return null;
+        slot.Anchor = new Anchor(
+            node.Anchor.Horizontal + center.Value.X,
+            node.Anchor.Vertical + center.Value.Y,
+            slot.Anchor.Layer);
     }
 }

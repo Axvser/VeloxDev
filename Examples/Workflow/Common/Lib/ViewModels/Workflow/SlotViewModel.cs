@@ -1,8 +1,8 @@
-using VeloxDev.Core.WorkflowSystem;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[WorkflowBuilder.ViewModel.Slot<WorkflowHelper.ViewModel.Slot>]
+[WorkflowBuilder.Slot<SlotHelper>]
 public partial class SlotViewModel
 {
     public SlotViewModel() => InitializeWorkflow();

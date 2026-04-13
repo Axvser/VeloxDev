@@ -2,8 +2,8 @@
 using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using VeloxDev.Core.TransitionSystem;
 using VeloxDev.TransitionSystem;
+using VeloxDev.TransitionSystem.Abstractions;
 
 namespace Demo
 {

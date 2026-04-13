@@ -4,9 +4,8 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Threading.Tasks;
-using VeloxDev.Core.TransitionSystem;
 using VeloxDev.TransitionSystem;
-using VeloxDev.WinUI.Interpolators;
+using VeloxDev.TransitionSystem.Interpolators;
 using Windows.Foundation;
 
 namespace Demo

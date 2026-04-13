@@ -22,93 +22,28 @@
                                       Simulator="{StaticResource NodeTemplate}"/>
     </UserControl.Resources>
 
-    <Grid Background="#020617">
+    <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="280" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="2*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="8*" />
         </Grid.ColumnDefinitions>
-
-        <Border Grid.Column="0"
-                Margin="20"
-                Padding="18"
-                Background="#111827"
-                CornerRadius="18"
-                BorderBrush="#334155"
-                BorderThickness="1">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <StackPanel>
-                    <TextBlock Text="Workflow Demo"
-                               Foreground="White"
-                               FontSize="26"
-                               FontWeight="Bold" />
-                    <TextBlock Margin="0,10,0,0"
-                               Text="展示网络请求链路、广播执行顺序与节点状态变化。"
-                               Foreground="#CBD5E1"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-
-                <UniformGrid Grid.Row="1"
-                             Margin="0,18,0,0"
-                             Columns="1">
-                    <Button Content="Undo" Height="42" Margin="0,0,0,10" Command="{Binding UndoCommand}" />
-                    <Button Content="Redo" Height="42" Margin="0,0,0,10" Command="{Binding RedoCommand}" />
-                    <Button Content="Save" Height="42" Margin="0,0,0,10" Click="SaveWorkflow" />
-                    <Button Content="Load" Height="42" Margin="0,0,0,10" Click="SelectWorkflow" />
-                    <Button Content="Reset Demo" Height="42" Click="SimulateData" />
-                </UniformGrid>
-
-                <Border Grid.Row="2"
-                        Margin="0,18,0,0"
-                        Padding="12"
-                        Background="#0F172A"
-                        CornerRadius="12"
-                        BorderBrush="#1E293B"
-                        BorderThickness="1">
-                    <StackPanel>
-                        <TextBlock Text="Execution Log"
-                                   Foreground="White"
-                                   FontWeight="SemiBold"
-                                   FontSize="16" />
-                        <TextBlock Margin="0,6,0,0"
-                                   Text="运行后会按顺序记录 Controller 与各节点执行轨迹。"
-                                   Foreground="#94A3B8"
-                                   FontSize="11"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-
-                <ListBox Grid.Row="3"
-                         Margin="0,14,0,0"
-                         ItemsSource="{Binding ExecutionLog}"
-                         Background="#0B1120"
-                         BorderThickness="0"
-                         Foreground="#E2E8F0"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
-            </Grid>
-        </Border>
-
-        <Border Grid.Column="1"
-                Margin="0,20,20,20"
-                Background="#0B1120"
-                CornerRadius="18"
-                BorderBrush="#1E293B"
-                BorderThickness="1">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Auto"
-                          PanningMode="Both">
-                <Canvas x:Name="WorkflowCanvas"
-                        Width="1480"
-                        Height="920"
-                        Background="#0F172A"
-                        MouseUp="OnPointerReleased"
-                        MouseMove="OnPointerMoved">
+        <Grid Grid.Column="2">
+            <Border Margin="0,20,20,20"
+                    BorderBrush="White"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Background="#0B1120">
+                <ScrollViewer x:Name="RootScrollViewer"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              PanningMode="Both"
+                              MouseLeftButtonUp="OnPointerReleased"
+                              PreviewMouseMove="OnPointerMoved">
+                    <Canvas x:Name="WorkflowCanvas"
+                            Width="{Binding Layout.ActualSize.Width}"
+                            Height="{Binding Layout.ActualSize.Height}"
+                            Background="#0F172A">
                     <ItemsControl ItemsSource="{Binding Nodes}"
                                   Canvas.ZIndex="1"
                                   ItemTemplateSelector="{StaticResource NodeSelector}">
@@ -119,8 +54,8 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemContainerStyle>
                             <Style TargetType="ContentPresenter">
-                                <Setter Property="Canvas.Left" Value="{Binding Anchor.Left}" />
-                                <Setter Property="Canvas.Top" Value="{Binding Anchor.Top}" />
+                                <Setter Property="Canvas.Left" Value="{Binding Anchor.Horizontal}" />
+                                <Setter Property="Canvas.Top" Value="{Binding Anchor.Vertical}" />
                                 <Setter Property="Canvas.ZIndex" Value="{Binding Anchor.Layer}" />
                             </Style>
                         </ItemsControl.ItemContainerStyle>
@@ -134,28 +69,75 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Left}"
-                                                       StartTop="{Binding Sender.Anchor.Top}"
-                                                       EndLeft="{Binding Receiver.Anchor.Left}"
-                                                       EndTop="{Binding Receiver.Anchor.Top}"
+                                <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                                       StartTop="{Binding Sender.Anchor.Vertical}"
+                                                       EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                                       EndTop="{Binding Receiver.Anchor.Vertical}"
                                                        CanRender="{Binding IsVisible}"
-                                                       IsFlowEnabled="True"
-                                                       FlowColor="#22D3EE"
-                                                       FlowSpeed="3.0"
-                                                       FlowDashArray="10,5"/>
+                                                       FlowColor="White"/>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
                     <local:BezierCurveView DataContext="{Binding VirtualLink}"
-                                           StartLeft="{Binding Sender.Anchor.Left}"
-                                           StartTop="{Binding Sender.Anchor.Top}"
-                                           EndLeft="{Binding Receiver.Anchor.Left}"
-                                           EndTop="{Binding Receiver.Anchor.Top}"
+                                           StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                           StartTop="{Binding Sender.Anchor.Vertical}"
+                                           EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                           EndTop="{Binding Receiver.Anchor.Vertical}"
                                            CanRender="{Binding IsVisible}"
+                                           FlowColor="White"
                                            IsVirtual="True"/>
-                </Canvas>
+                    </Canvas>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Column="0" Margin="20,20,0,20">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Button Content="Undo" Width="100" Height="50" Command="{Binding UndoCommand}" />
+                    <Button Content="Redo" Width="100" Height="50" Margin="0,8,0,0" Command="{Binding RedoCommand}" />
+                    <Button Content="Save" Width="100" Height="50" Margin="0,8,0,0" Click="SaveWorkflow" />
+                    <Button Content="Select" Width="100" Height="50" Margin="0,8,0,0" Click="SelectWorkflow" />
+                    <Button Content="Load Workflow Demo" Width="140" Height="50" Margin="0,8,0,0" Click="LoadNetworkDemo" />
+
+                    <TextBlock Margin="0,12,0,0" Text="节点总数：" Foreground="White" />
+                    <TextBlock Text="{Binding Nodes.Count}" Foreground="White" />
+                    <TextBlock Margin="0,8,0,0" Text="连接总数：" Foreground="White" />
+                    <TextBlock Text="{Binding Links.Count}" Foreground="White" />
+
+                    <Border Margin="0,12,0,0"
+                            Padding="10"
+                            Background="#202020"
+                            BorderBrush="#4C4C4C"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <StackPanel>
+                            <TextBlock Text="实际执行顺序"
+                                       Foreground="#7EC8FF"
+                                       FontWeight="Bold" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Text="{Binding ExecutionLog.Count, StringFormat=已记录: {0}}"
+                                       Foreground="#BDBDBD" />
+                            <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding ExecutionLog}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding .}"
+                                                   Foreground="#D8D8D8"
+                                                   TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </ScrollViewer>
-        </Border>
+        </Grid>
+
+        <GridSplitter Grid.Column="1"
+                      Width="5"
+                      Background="Gray"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch" />
     </Grid>
 </UserControl>

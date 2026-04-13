@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFrameworks>net10.0-android</TargetFrameworks>
@@ -57,7 +57,7 @@
 		<!-- Images -->
 		<MauiImage Include="Resources\Images\*" />
 		<MauiImage Update="Resources\Images\dotnet_bot.png" Resize="True" BaseSize="300,185" />
-		
+
 		<!-- Custom Fonts -->
 		<MauiFont Include="Resources\Fonts\*" />
 
@@ -71,17 +71,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.MAUI\VeloxDev.MAUI.csproj" />
-      <ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<Compile Include="..\..\WPF\Demo\ViewModels\Workflow\ControllerViewModel.cs" Link="ViewModels\Workflow\ControllerViewModel.cs" />
-		<Compile Include="..\..\WPF\Demo\ViewModels\Workflow\LinkViewModel.cs" Link="ViewModels\Workflow\LinkViewModel.cs" />
-		<Compile Include="..\..\WPF\Demo\ViewModels\Workflow\NetworkFlowContext.cs" Link="ViewModels\Workflow\NetworkFlowContext.cs" />
-		<Compile Include="..\..\WPF\Demo\ViewModels\Workflow\NetworkRequestMethod.cs" Link="ViewModels\Workflow\NetworkRequestMethod.cs" />
-		<Compile Include="..\..\WPF\Demo\ViewModels\Workflow\NodeViewModel.cs" Link="ViewModels\Workflow\NodeViewModel.cs" />
-		<Compile Include="..\..\WPF\Demo\ViewModels\Workflow\SlotViewModel.cs" Link="ViewModels\Workflow\SlotViewModel.cs" />
+	  <Folder Include="ViewModels\Workflow\" />
 	</ItemGroup>
 
 </Project>
