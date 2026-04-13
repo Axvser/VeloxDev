@@ -82,8 +82,13 @@ namespace VeloxDev.Generators.Writers
 
         private void ConfigureWorkflowSlotProperty(MVVMPropertyFactory factory, ISymbol memberSymbol, ITypeSymbol typeSymbol)
         {
-            factory.UseWorkflowSlotLifecycle = _isWorkflowComponentOrBase &&
-                                              _isWorkflowNodeComponentOrBase &&
+            // Re-evaluate workflow-class recognition based on the member's declaring type
+            var ownerType = memberSymbol?.ContainingType as INamedTypeSymbol;
+            var isWorkflowComponentOrBase = HasWorkflowAttributeInHierarchy(ownerType);
+            var isWorkflowNodeOrBase = HasWorkflowNodeAttributeInHierarchy(ownerType);
+
+            factory.UseWorkflowSlotLifecycle = isWorkflowComponentOrBase &&
+                                              isWorkflowNodeOrBase &&
                                               IsWorkflowSlotViewModelType(typeSymbol);
 
             if (!factory.UseWorkflowSlotLifecycle || factory.IsNullable)
@@ -186,23 +191,81 @@ namespace VeloxDev.Generators.Writers
             return false;
         }
 
-        private bool HasWorkflowAttributeInHierarchy(INamedTypeSymbol? symbol)
+                private bool HasWorkflowAttributeInHierarchy(INamedTypeSymbol? symbol)
         {
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
                 return false;
 
-            return HasWorkflowAttribute(symbol) || HasWorkflowAttributeInHierarchy(symbol.BaseType);
-        }
+            // 首先检查显式的工作流特性
+            if (HasWorkflowAttribute(symbol)) return true;
 
-        private bool HasWorkflowNodeAttributeInHierarchy(INamedTypeSymbol? symbol)
+            // 其次检查类型及其基类是否实现了任一工作流接口（Tree/Node/Slot/Link）
+            INamedTypeSymbol? treeInterface = null;
+            INamedTypeSymbol? nodeInterface = null;
+            INamedTypeSymbol? slotInterface = null;
+            INamedTypeSymbol? linkInterface = null;
+
+            if (Symbol != null)
+            {
+                treeInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.IWorkflowTreeViewModel");
+                nodeInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.IWorkflowNodeViewModel");
+                slotInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel");
+                linkInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.IWorkflowLinkViewModel");
+            }
+
+            var comparer = SymbolEqualityComparer.Default;
+            var current = symbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                if (treeInterface != null && current.AllInterfaces.Any(i => comparer.Equals(i, treeInterface))) return true;
+                if (nodeInterface != null && current.AllInterfaces.Any(i => comparer.Equals(i, nodeInterface))) return true;
+                if (slotInterface != null && current.AllInterfaces.Any(i => comparer.Equals(i, slotInterface))) return true;
+                if (linkInterface != null && current.AllInterfaces.Any(i => comparer.Equals(i, linkInterface))) return true;
+
+                // 回退到字符串比较，以防解析失败
+                if (current.AllInterfaces.Any(i =>
+                    i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).StartsWith(NAMESPACE_VELOX_IWORKFLOW)))
+                {
+                    return true;
+                }
+
+                current = current.BaseType;
+            }
+
+            // 继续递归检查基类上的特性（保持原有行为）
+            return HasWorkflowAttributeInHierarchy(symbol.BaseType);
+        }        private bool HasWorkflowNodeAttributeInHierarchy(INamedTypeSymbol? symbol)
         {
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
                 return false;
 
-            return HasWorkflowNodeAttribute(symbol) || HasWorkflowNodeAttributeInHierarchy(symbol.BaseType);
-        }
+            var current = symbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                // 1) 显式 Node 特性
+                if (HasWorkflowNodeAttribute(current)) return true;
 
-        private bool HasWorkflowNodeAttribute(INamedTypeSymbol symbol)
+                // 2) 检查当前类型是否直接实现了 IWorkflowNodeViewModel（接口名匹配或符号匹配）
+                foreach (var iface in current.Interfaces)
+                {
+                    var ifaceName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    if (ifaceName.EndsWith("IWorkflowNodeViewModel") || iface.Name == "IWorkflowNodeViewModel")
+                        return true;
+                }
+
+                // 3) 检查当前类型或其基类实现的所有接口（防止显式基类接口未出现在 Interfaces 列表）
+                foreach (var iface in current.AllInterfaces)
+                {
+                    var ifaceName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    if (ifaceName.EndsWith("IWorkflowNodeViewModel") || iface.Name == "IWorkflowNodeViewModel")
+                        return true;
+                }
+
+                current = current.BaseType;
+            }
+
+            return false;
+        }private bool HasWorkflowNodeAttribute(INamedTypeSymbol symbol)
         {
             foreach (var attribute in symbol.GetAttributes())
             {
@@ -222,18 +285,68 @@ namespace VeloxDev.Generators.Writers
             return false;
         }
 
-        private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
+                        private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
         {
-            var fullName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (fullName == NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowSlotViewModel")
-                return true;
+            // 1) 尝试解析 SlotAttribute 符号以进行符号比较
+            INamedTypeSymbol? slotAttributeSymbol = null;
+            if (Symbol != null)
+            {
+                slotAttributeSymbol = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "WorkflowBuilder.SlotAttribute")
+                                      ?? ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.SlotAttribute");
+            }
 
-            return typeSymbol.AllInterfaces.Any(i =>
-                i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
-                NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowSlotViewModel");
-        }
+            var comparer = SymbolEqualityComparer.Default;
 
-        private bool CheckBaseClassForPropertyInfrastructure(INamedTypeSymbol? symbol)
+            if (typeSymbol is INamedTypeSymbol namedType)
+            {
+                var current = namedType;
+                while (current != null)
+                {
+                    foreach (var attr in current.GetAttributes())
+                    {
+                        var attrClass = attr.AttributeClass;
+                        if (attrClass == null) continue;
+
+                        if (slotAttributeSymbol != null)
+                        {
+                            if (comparer.Equals(attrClass, slotAttributeSymbol)) return true;
+                        }
+                        else
+                        {
+                            var fullAttrName = attrClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                            if (fullAttrName.Contains("WorkflowBuilder.SlotAttribute") || attrClass.Name.StartsWith("SlotAttribute"))
+                                return true;
+                        }
+                    }
+
+                    current = current.BaseType;
+                }
+            }
+
+            // 2) 检查是否实现了 IWorkflowSlotViewModel 接口（使用符号比较优先）
+            INamedTypeSymbol? slotInterface = null;
+            if (Symbol != null)
+            {
+                slotInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel");
+            }
+
+            if (slotInterface != null)
+            {
+                if (comparer.Equals(typeSymbol, slotInterface)) return true;
+                if (typeSymbol.AllInterfaces.Any(i => comparer.Equals(i, slotInterface))) return true;
+            }
+            else
+            {
+                var fullName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                if (fullName == NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowSlotViewModel")
+                    return true;
+
+                if (typeSymbol.AllInterfaces.Any(i => i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowSlotViewModel"))
+                    return true;
+            }
+
+            return false;
+        }private bool CheckBaseClassForPropertyInfrastructure(INamedTypeSymbol? symbol)
         {
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
                 return false;
@@ -394,3 +507,7 @@ namespace VeloxDev.Generators.Writers
         }
     }
 }
+
+
+
+
