@@ -232,54 +232,7 @@ public partial class WorkflowView : UserControl
 
     private void ReLayout(Canvas canvas, CanvasLayout layout)
     {
-        switch (layout.OriginAlignment)
-        {
-            case Alignments.TopLeft:
-                canvas.VerticalAlignment = VerticalAlignment.Top;
-                canvas.HorizontalAlignment = HorizontalAlignment.Left;
-                canvas.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
-                break;
-            case Alignments.TopCenter:
-                canvas.VerticalAlignment = VerticalAlignment.Top;
-                canvas.HorizontalAlignment = HorizontalAlignment.Left;
-                canvas.RenderTransformOrigin = new RelativePoint(0.5, 0, RelativeUnit.Relative);
-                break;
-            case Alignments.TopRight:
-                canvas.VerticalAlignment = VerticalAlignment.Top;
-                canvas.HorizontalAlignment = HorizontalAlignment.Right;
-                canvas.RenderTransformOrigin = new RelativePoint(1, 0, RelativeUnit.Relative);
-                break;
-            case Alignments.CenterLeft:
-                canvas.VerticalAlignment = VerticalAlignment.Center;
-                canvas.HorizontalAlignment = HorizontalAlignment.Left;
-                canvas.RenderTransformOrigin = new RelativePoint(0, 0.5, RelativeUnit.Relative);
-                break;
-            case Alignments.Center:
-                canvas.VerticalAlignment = VerticalAlignment.Center;
-                canvas.HorizontalAlignment = HorizontalAlignment.Center;
-                canvas.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
-                break;
-            case Alignments.CenterRight:
-                canvas.VerticalAlignment = VerticalAlignment.Center;
-                canvas.HorizontalAlignment = HorizontalAlignment.Right;
-                canvas.RenderTransformOrigin = new RelativePoint(1, 0.5, RelativeUnit.Relative);
-                break;
-            case Alignments.BottomLeft:
-                canvas.VerticalAlignment = VerticalAlignment.Bottom;
-                canvas.HorizontalAlignment = HorizontalAlignment.Left;
-                canvas.RenderTransformOrigin = new RelativePoint(0, 1, RelativeUnit.Relative);
-                break;
-            case Alignments.BottomCenter:
-                canvas.VerticalAlignment = VerticalAlignment.Bottom;
-                canvas.HorizontalAlignment = HorizontalAlignment.Center;
-                canvas.RenderTransformOrigin = new RelativePoint(0.5, 1, RelativeUnit.Relative);
-                break;
-            case Alignments.BottomRight:
-                canvas.VerticalAlignment = VerticalAlignment.Bottom;
-                canvas.HorizontalAlignment = HorizontalAlignment.Right;
-                canvas.RenderTransformOrigin = new RelativePoint(1, 1, RelativeUnit.Relative);
-                break;
-        }
+        canvas.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
         CanvasTransform = new TransformGroup()
         {
             Children = [
@@ -298,7 +251,7 @@ public partial class WorkflowView : UserControl
 
         UpdateGridDecorator();
 
-        if (vm.GetHelper() is MapHelper helper)
+        if (vm.GetHelper() is AgentHelper helper)
         {
             helper.Virtualize(new Viewport(
                 viewer.Offset.X - vm.Layout.ActualOffset.Horizontal,

@@ -8,6 +8,11 @@ namespace Demo.ViewModels.Workflow.Helper
     public partial class HttpHelper<T> : NodeHelper<T>
         where T : NodeViewModel
     {
+        public override Task<bool> ValidateBroadcastAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, object? parameter, CancellationToken ct)
+        {
+            return base.ValidateBroadcastAsync(sender, receiver, parameter, ct);
+        }
+
         private NodeViewModel? _viewModel;
         private CommandEventHandler? _startedHandler;
         private CommandEventHandler? _exitedHandler;

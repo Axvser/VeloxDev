@@ -208,51 +208,6 @@ ViewModel
 
 ---
 
-## 5.1 广播模式现在支持按节点动态切换
-
-当前 `BroadcastMode` 支持：
-
-- `Parallel`
-- `BreadthFirst`
-- `DepthFirst`
-
-并且模式不再只在根节点固定一次。现在可以让**每个执行节点**决定自己的下游传播策略。
-
-核心做法已经合并到 `IWorkflowNodeViewModel` 自身：
-
-- `BroadcastMode`
-- `ReverseBroadcastMode`
-
-当某个节点执行完成后：
-
-- 正向传播会读取该节点的 `BroadcastMode`
-- 反向传播会读取该节点的 `ReverseBroadcastMode`
-- 然后从该节点开始，对它的下游 / 上游分支切换到新的传播策略
-
-这意味着你现在可以得到这样的链路行为：
-
-```text
-Controller      : BreadthFirst
-Fetch Todo      : Parallel
-Audit Trace     : DepthFirst
-Patch Remote    : BreadthFirst
-Cleanup Lease   : Parallel
-```
-
-也就是说：
-
-- 模式是**沿链路传递**的
-- 但每个节点都可以在自己的位置**覆盖并切换后续传播策略**
-
-在 `Examples/Workflow/Avalonia/Demo` 中，节点面板已经直接提供：
-
-- `Forward Mode`
-- `Reverse Mode`
-
-因此可以直接在 Demo 中可视化验证节点级模式切换。
-
----
-
 ## 6. 源生成器在 Workflow 里做了什么
 
 工作流系统的大量样板代码都不是手写的，而是通过：
@@ -449,22 +404,6 @@ public class NodeHelper : NodeHelper
 }
 ```
 
-如果你想显式指定传播模式：
-
-```csharp
-public override async Task WorkAsync(object? parameter, CancellationToken ct)
-{
-    await DoBusinessAsync(parameter, ct);
-    await node.StandardBroadcastAsync(parameter, BroadcastMode.DepthFirst, ct);
-}
-```
-
-或者反向回溯：
-
-```csharp
-await node.StandardReverseBroadcastAsync(parameter, BroadcastMode.BreadthFirst, ct);
-```
-
 ---
 
 ### 8.3 使用命令驱动交互
@@ -584,11 +523,7 @@ bool ok = json.TryDeSerialize(out MyTree? restored);
 2. 再为四类组件各自指定 `Helper`
 3. 在 `NodeHelper.WorkAsync(...)` 中实现节点工作逻辑
 4. 在 `ValidateBroadcastAsync(...)` 中补边校验
-5. 根据需要选择：
-   - `Parallel`
-   - `BreadthFirst`
-   - `DepthFirst`
-6. 再把 UI 的拖拽、连线、缩放等交互绑到命令上
+5. 再把 UI 的拖拽、连线、缩放等交互绑到命令上
 
 ---
 

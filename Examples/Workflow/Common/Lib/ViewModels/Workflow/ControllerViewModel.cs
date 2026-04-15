@@ -1,9 +1,11 @@
-﻿using VeloxDev.MVVM;
+﻿using VeloxDev.AI;
+using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace Demo.ViewModels;
 
+[AgentContext(AgentLanguages.Chinese, "派生的Node组件之一，作为任务发起者")]
 [WorkflowBuilder.Node<NodeHelper>]
 public partial class ControllerViewModel
 {

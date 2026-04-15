@@ -605,8 +605,6 @@ namespace VeloxDev.Generators.Writers
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
                     private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> slots = [];
-                    private {{NAMESPACE_VELOX_WORKFLOW}}.BroadcastMode broadcastMode = {{NAMESPACE_VELOX_WORKFLOW}}.BroadcastMode.Parallel;
-                    private {{NAMESPACE_VELOX_WORKFLOW}}.BroadcastMode reverseBroadcastMode = {{NAMESPACE_VELOX_WORKFLOW}}.BroadcastMode.Parallel;
 
                     protected virtual {{TaskFullName}} Move({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {

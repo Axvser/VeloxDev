@@ -1,7 +1,9 @@
+using VeloxDev.AI;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
+[AgentContext(AgentLanguages.Chinese, "派生的Slot组件之一")]
 [WorkflowBuilder.Slot<SlotHelper>]
 public partial class SlotViewModel
 {

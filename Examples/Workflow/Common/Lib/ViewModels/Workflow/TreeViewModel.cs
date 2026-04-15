@@ -1,22 +1,59 @@
 ﻿using Demo.ViewModels.Workflow.Helper;
 using System.Collections.ObjectModel;
+using VeloxDev.AI;
+using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[WorkflowBuilder.Tree<MapHelper>]
+[AgentContext(AgentLanguages.Chinese, "派生的Tree组件之一")]
+[WorkflowBuilder.Tree<AgentHelper>]
 public partial class TreeViewModel
 {
     public TreeViewModel() => InitializeWorkflow();
 
     // …… 自由扩展您的工作流树视图模型
 
+    [AgentContext(AgentLanguages.Chinese, "画布布局上下文")]
     [VeloxProperty] private CanvasLayout layout = new();
+
     [VeloxProperty] private ObservableCollection<IWorkflowViewModel> _visibleItems = [];
     [VeloxProperty] private ObservableCollection<string> executionLog = [];
     [VeloxProperty] private bool isWorkflowRunning = false;
+
+    [VeloxCommand]
+    public async Task AskAsync(object? parameter, CancellationToken ct)
+    {
+        //await AgentContextTest();
+
+        if (parameter is not string message ||
+            Helper is not AgentHelper helper ||
+            helper.Agent is null ||
+            helper.Session is null)
+            return;
+
+        try
+        {
+            var response = await helper.Agent.RunAsync(
+                message).ConfigureAwait(false);
+
+            if (response is not null)
+            {
+                var text = response.Text;
+                AppendExecutionLog(text ?? string.Empty);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // canceled by caller - ignore
+        }
+        catch (Exception ex)
+        {
+            AppendExecutionLog($"Error: {ex.Message}");
+        }
+    }
 
     public void BeginWorkflowRun()
     {
@@ -75,9 +112,22 @@ public partial class TreeViewModel
     }
 
     [VeloxCommand]
-    private async Task Test(CancellationToken ct)
+    private Task AgentContextTest()
     {
+        var context = this.AsAgentScope()
+            .WithComponents(AgentLanguages.Chinese,
+                typeof(NodeViewModel),
+                typeof(ControllerViewModel),
+                typeof(SlotViewModel),
+                typeof(LinkViewModel),
+                typeof(TreeViewModel))
+            .ProvideAllContexts(AgentLanguages.English);
 
+        ExecutionLog.Add(context);
+
+        File.WriteAllText(@"E://agent.md", context);
+
+        return Task.CompletedTask;
     }
 
     private void SetWorkflowRunning(bool isRunning)

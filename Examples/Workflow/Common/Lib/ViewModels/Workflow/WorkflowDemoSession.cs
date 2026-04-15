@@ -1,7 +1,6 @@
 using Demo.ViewModels;
 using System.Collections.ObjectModel;
 using VeloxDev.WorkflowSystem;
-using VeloxSize = VeloxDev.WorkflowSystem.Size;
 
 namespace Demo.Workflow;
 
@@ -11,7 +10,7 @@ public sealed class WorkflowDemoSession
     {
         Tree = tree;
         Controller = controller;
-        Nodes = new ObservableCollection<NodeViewModel>(nodes);
+        Nodes = [..nodes];
     }
 
     public TreeViewModel Tree { get; }
@@ -21,12 +20,11 @@ public sealed class WorkflowDemoSession
     public static WorkflowDemoSession Create()
     {
         var tree = new TreeViewModel();
-        tree.Layout.OriginAlignment = Alignments.TopLeft;
-        tree.Layout.OriginSize = new VeloxSize(2200, 980);
+        tree.Layout.OriginSize = new Size(2200, 980);
 
         var helper = tree.GetHelper();
-        var nodeSize = new VeloxSize(300, 260);
-        var controllerSize = new VeloxSize(220, 170);
+        var nodeSize = new Size(300, 260);
+        var controllerSize = new Size(220, 170);
 
         NodeViewModel CreateNode(string title, int delayMilliseconds, double left, double top)
             => new()

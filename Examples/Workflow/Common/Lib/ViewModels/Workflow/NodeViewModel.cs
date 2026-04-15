@@ -1,15 +1,42 @@
 ﻿using Demo.ViewModels.Workflow.Helper;
+using VeloxDev.AI;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[WorkflowBuilder.Node             // 构造一个Node组件用于Workflow
-    <HttpHelper<NodeViewModel>>   // 逻辑块抽离至自定义的NodeHelper
-    (workSemaphore: 5)]           // 该节点执行Work任务时,最多并发5个,超出自动排队
+[AgentContext(AgentLanguages.Chinese, "派生的Node组件之一，作为任务执行者")]
+[WorkflowBuilder.Node
+    <HttpHelper<NodeViewModel>>
+    (workSemaphore: 5)]
 public partial class NodeViewModel
 {
     public NodeViewModel() => InitializeWorkflow();
+
+    [AgentContext(AgentLanguages.Chinese, "输入口")]
+    [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
+
+    [AgentContext(AgentLanguages.Chinese, "输出口")]
+    [VeloxProperty] public partial SlotViewModel OutputSlot { get; set; }
+
+    [AgentContext(AgentLanguages.Chinese, "标题")]
+    [VeloxProperty] private string title = "Workflow Step";
+
+    [AgentContext(AgentLanguages.Chinese, "模拟延迟时间")]
+    [VeloxProperty] private int delayMilliseconds = 1200;
+
+    [AgentContext(AgentLanguages.Chinese, "是否自动广播给下游节点")]
+    [VeloxProperty] private bool autoBroadcast = true;
+
+    [VeloxProperty] private bool isRunning = false;
+    [VeloxProperty] private string lastStatus = "Idle";
+    [VeloxProperty] private string lastDuration = "-";
+    [VeloxProperty] private string lastResponsePreview = "等待执行";
+    [VeloxProperty] private string lastError = string.Empty;
+    [VeloxProperty] private int lastExecutionOrder = 0;
+    [VeloxProperty] private string lastExecutionTrace = "未执行";
+    [VeloxProperty] private int runCount = 0;
+    [VeloxProperty] private int waitCount = 0;
 
     public bool HasInputSlot => _inputSlot is not null;
     public bool HasOutputSlot => _outputSlot is not null;
@@ -24,22 +51,6 @@ public partial class NodeViewModel
     public string ExecutionOrderText => LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
     public bool HasWorkLoad => RunCount > 0 || WaitCount > 0;
     public string WorkLoadText => $"Run: {RunCount} · Queue: {WaitCount}";
-
-    [VeloxProperty] public partial IWorkflowSlotViewModel InputSlot { get; set; }
-    [VeloxProperty] public partial IWorkflowSlotViewModel OutputSlot { get; set; }
-
-    [VeloxProperty] private string title = "Workflow Step";
-    [VeloxProperty] private int delayMilliseconds = 1200;
-    [VeloxProperty] private bool autoBroadcast = true;
-    [VeloxProperty] private bool isRunning = false;
-    [VeloxProperty] private string lastStatus = "Idle";
-    [VeloxProperty] private string lastDuration = "-";
-    [VeloxProperty] private string lastResponsePreview = "等待执行";
-    [VeloxProperty] private string lastError = string.Empty;
-    [VeloxProperty] private int lastExecutionOrder = 0;
-    [VeloxProperty] private string lastExecutionTrace = "未执行";
-    [VeloxProperty] private int runCount = 0;
-    [VeloxProperty] private int waitCount = 0;
 
     partial void OnIsRunningChanged(bool oldValue, bool newValue)
     {

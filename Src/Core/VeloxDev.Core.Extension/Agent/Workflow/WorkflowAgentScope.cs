@@ -1,140 +1,143 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Threading.Tasks;
+using System.Text;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.AI.Workflow;
 
-public sealed class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IDisposable
+public class WorkflowAgentScope(IWorkflowTreeViewModel tree)
 {
-    private readonly string _protocolSessionId = WorkflowProtocolTools.CreateBoundScopeSession(tree ?? throw new ArgumentNullException(nameof(tree)));
-    private bool _disposed;
-
     public IWorkflowTreeViewModel Tree { get; } = tree;
 
-    public IEnumerable<Delegate> ProvideWorkflowAgentTools()
+    private static readonly Type[] FrameworkEnums =
+        [typeof(SlotChannel), typeof(SlotState)];
+
+    private static readonly Type[] FrameworkInterfaces =
+        [typeof(IWorkflowTreeViewModel), typeof(IWorkflowNodeViewModel), typeof(IWorkflowSlotViewModel), typeof(IWorkflowLinkViewModel), typeof(IWorkflowViewModel)];
+
+    private static readonly Type[] FrameworkComponents =
+        [typeof(TreeViewModelBase), typeof(NodeViewModelBase), typeof(SlotViewModelBase), typeof(LinkViewModelBase),
+         typeof(Anchor),typeof(Offset),typeof(Size)
+        ];
+
+    private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerEnums = [];
+    private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerInterfaces = [];
+    private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerComponents = [];
+
+    public WorkflowAgentScope WithEnums(AgentLanguages language, params Type[] enums)
     {
-        ThrowIfDisposed();
-        yield return WorkflowContextProvider.GetWorkflowHelper;
-        yield return WorkflowContextProvider.GetComponentContext;
-        yield return GetWorkflowBootstrap;
-        yield return GetWorkflowContextSection;
-        yield return GetWorkflowGraphSummary;
-        yield return QueryWorkflowGraph;
-        yield return GetWorkflowTargetCapabilities;
-        yield return GetWorkflowPropertyValue;
-        yield return ValidateWorkflowPatch;
-        yield return ApplyWorkflowPatch;
-        yield return InvokeWorkflowActionAsync;
-        yield return InvokeWorkflowCommandAsync;
-        yield return InvokeWorkflowMethodAsync;
-        yield return GetWorkflowChanges;
-        yield return GetWorkflowDiagnostics;
+        if (CustomerEnums.TryGetValue(language, out var set))
+        {
+            foreach (var item in enums)
+            {
+                set.Add(item);
+            }
+        }
+        else
+        {
+            CustomerEnums[language] = [.. enums];
+        }
+        return this;
     }
 
-    [Description("Read the compact workflow bootstrap document for the bound workflow tree scope.")]
-    public string GetWorkflowBootstrap()
-        => WorkflowProtocolTools.GetWorkflowBootstrap();
-
-    [Description("Read one workflow semantic context section for the bound workflow tree scope.")]
-    public string GetWorkflowContextSection([Description("A JSON request string containing `section`, optional `languageCode`, and optional `typeName` when section is `type`.")] string requestJson)
-        => WorkflowProtocolTools.GetWorkflowContextSection(requestJson);
-
-    [Description("Get the compact summary projection for the bound workflow tree scope.")]
-    public string GetWorkflowGraphSummary()
-        => StripSessionId(WorkflowProtocolTools.QueryWorkflowGraph(BuildProtocolScopedRequest("{\"queryMode\":\"summary\"}")));
-
-    [Description("Query the bound workflow graph using the compact protocol. Do not provide `sessionId` or `tree`.")]
-    public string QueryWorkflowGraph([Description("A JSON request string containing optional `queryMode`, optional stable `id`, and optional flags `includeSlots`, `includeLinks`, `includeConnections`, and `includeContext`. Do not provide `sessionId` or `tree`.")] string requestJson)
-        => StripSessionId(WorkflowProtocolTools.QueryWorkflowGraph(BuildProtocolScopedRequest(requestJson)));
-
-    [Description("Get the agent-controllable annotated properties, commands, and methods for one bound workflow target. Do not provide `sessionId` or `tree`.")]
-    public string GetWorkflowTargetCapabilities([Description("A JSON request string containing one target selector: `targetId`, `nodeId`, `slotId`, `linkId`, or `targetTree` true. Do not provide `sessionId` or `tree`.")] string requestJson)
-        => StripSessionId(WorkflowProtocolTools.GetWorkflowTargetCapabilities(BuildProtocolScopedRequest(requestJson)));
-
-    [Description("Read one agent-controllable property value from a bound workflow target. Do not provide `sessionId` or `tree`.")]
-    public string GetWorkflowPropertyValue([Description("A JSON request string containing a target selector and required `propertyPath`. Do not provide `sessionId` or `tree`.")] string requestJson)
-        => StripSessionId(WorkflowProtocolTools.GetWorkflowPropertyValue(BuildProtocolScopedRequest(requestJson)));
-
-    [Description("Perform a dry-run validation for a compact workflow patch against the bound workflow tree scope. Do not provide `sessionId` or `tree`.")]
-    public string ValidateWorkflowPatch([Description("A JSON request string matching `ApplyWorkflowPatch`. Do not provide `sessionId` or `tree`.")] string requestJson)
-        => StripSessionId(WorkflowProtocolTools.ValidateWorkflowPatch(BuildProtocolScopedRequest(requestJson)));
-
-    [Description("Apply a compact batch patch to the bound workflow tree scope. Do not provide `sessionId` or `tree`.")]
-    public string ApplyWorkflowPatch([Description("A JSON request string containing optional `expectedRevision`, optional `returnMode`, and required `operations` array. Do not provide `sessionId` or `tree`.")] string requestJson)
-        => StripSessionId(WorkflowProtocolTools.ApplyWorkflowPatch(BuildProtocolScopedRequest(requestJson)));
-
-    [Description("Invoke one runtime workflow action inside the bound workflow tree scope. Do not provide `sessionId` or `tree`.")]
-    public Task<string> InvokeWorkflowActionAsync([Description("A JSON request string containing required `action`, optional stable ids such as `nodeId`, `slotId`, or `linkId`, and optional `parameter`. Do not provide `sessionId` or `tree`.")] string requestJson)
-        => ExecuteProtocolAsync(WorkflowProtocolTools.InvokeWorkflowActionAsync, requestJson);
-
-    [Description("Invoke one agent-controllable command on a bound workflow target. Do not provide `sessionId` or `tree`.")]
-    public Task<string> InvokeWorkflowCommandAsync([Description("A JSON request string containing a target selector, required `commandName`, and optional `parameter`. Do not provide `sessionId` or `tree`.")] string requestJson)
-        => ExecuteProtocolAsync(WorkflowProtocolTools.InvokeWorkflowCommandAsync, requestJson);
-
-    [Description("Invoke one agent-controllable method on a bound workflow target. Do not provide `sessionId` or `tree`.")]
-    public Task<string> InvokeWorkflowMethodAsync([Description("A JSON request string containing a target selector, required `methodName`, and optional `arguments` array. Do not provide `sessionId` or `tree`.")] string requestJson)
-        => ExecuteProtocolAsync(WorkflowProtocolTools.InvokeWorkflowMethodAsync, requestJson);
-
-    [Description("Get compact protocol change records for the bound workflow tree scope.")]
-    public string GetWorkflowChanges([Description("A JSON request string containing optional `sinceRevision`. Do not provide `sessionId` or `tree`.")] string requestJson)
-        => StripSessionId(WorkflowProtocolTools.GetWorkflowChanges(BuildProtocolScopedRequest(requestJson)));
-
-    [Description("Get compact workflow diagnostics for the bound workflow tree scope.")]
-    public string GetWorkflowDiagnostics()
-        => StripSessionId(WorkflowProtocolTools.GetWorkflowDiagnostics(BuildProtocolScopedRequest(null)));
-
-    public void Dispose()
+    public WorkflowAgentScope WithInterfaces(AgentLanguages language, params Type[] interfaces)
     {
-        if (_disposed)
+        if (CustomerInterfaces.TryGetValue(language, out var set))
         {
-            return;
+            foreach (var item in interfaces)
+            {
+                set.Add(item);
+            }
         }
-
-        WorkflowProtocolTools.ReleaseBoundScopeSession(_protocolSessionId);
-        _disposed = true;
-        GC.SuppressFinalize(this);
+        else
+        {
+            CustomerInterfaces[language] = [.. interfaces];
+        }
+        return this;
     }
 
-    private async Task<string> ExecuteProtocolAsync(Func<string, Task<string>> tool, string requestJson)
-        => StripSessionId(await tool.Invoke(BuildProtocolScopedRequest(requestJson)).ConfigureAwait(false));
-
-    private string BuildProtocolScopedRequest(string? requestJson)
+    public WorkflowAgentScope WithComponents(AgentLanguages language, params Type[] components)
     {
-        ThrowIfDisposed();
-        var request = string.IsNullOrWhiteSpace(requestJson)
-            ? new JObject()
-            : JObject.Parse(requestJson!);
-
-        if (request.Property("sessionId", StringComparison.OrdinalIgnoreCase) is not null)
+        if (CustomerComponents.TryGetValue(language, out var set))
         {
-            throw new ArgumentException("Scoped workflow protocol requests must not contain `sessionId`.", nameof(requestJson));
+            foreach (var item in components)
+            {
+                set.Add(item);
+            }
         }
-
-        if (request.Property("tree", StringComparison.OrdinalIgnoreCase) is not null)
+        else
         {
-            throw new ArgumentException("Scoped workflow protocol requests must not contain `tree`.", nameof(requestJson));
+            CustomerComponents[language] = [.. components];
         }
-
-        request["sessionId"] = _protocolSessionId;
-        return request.ToString(Formatting.None);
+        return this;
     }
 
-    private static string StripSessionId(string responseJson)
+    public string ProvideAllContexts(AgentLanguages language)
     {
-        var response = JObject.Parse(responseJson);
-        response.Remove("sessionId");
-        return response.ToString(Formatting.Indented);
+        var result = new StringBuilder();
+
+        result.AppendLine($"# Workflow Agent Context");
+        result.AppendLine();
+        result.AppendLine("> Agent can learn about the structure of the Workflow Framework and how to Takeover a workflow system with Takeover Protocol.");
+        result.AppendLine("> Agent can read source code from https://github.com/Axvser/VeloxDev");
+        result.AppendLine();
+        result.AppendLine("## Framework Context");
+        result.AppendLine();
+        result.AppendLine(ProvideFrameworkContext(language));
+        result.AppendLine();
+        result.AppendLine("## Customer Context");
+        result.AppendLine();
+        result.AppendLine(ProvideCustomerContext(language));
+
+        return result.ToString();
     }
 
-    private void ThrowIfDisposed()
+    public string ProvideFrameworkContext(AgentLanguages language = AgentLanguages.English)
     {
-        if (_disposed)
+        var result = new StringBuilder();
+
+        foreach (var framework in FrameworkEnums)
         {
-            throw new ObjectDisposedException(nameof(WorkflowAgentScope));
+            result.AppendLine(AgentContextCollector.GetEnumContext(framework, language));
         }
+        foreach (var framework in FrameworkInterfaces)
+        {
+            result.AppendLine(AgentContextCollector.GetInterfaceContext(framework, language));
+        }
+        foreach (var framework in FrameworkComponents)
+        {
+            result.AppendLine(AgentContextCollector.GetClassContext(framework, language));
+        }
+
+        return result.ToString();
+    }
+
+    public string ProvideCustomerContext(AgentLanguages language = AgentLanguages.English)
+    {
+        var result = new StringBuilder();
+
+        foreach (var kvp in CustomerEnums)
+        {
+            foreach (var framework in kvp.Value)
+            {
+                result.AppendLine(AgentContextCollector.GetEnumContext(framework, kvp.Key));
+            }
+        }
+        foreach (var kvp in CustomerInterfaces)
+        {
+            foreach (var framework in kvp.Value)
+            {
+                result.AppendLine(AgentContextCollector.GetInterfaceContext(framework, kvp.Key));
+            }
+        }
+        foreach (var kvp in CustomerComponents)
+        {
+            foreach (var framework in kvp.Value)
+            {
+                result.AppendLine(AgentContextCollector.GetClassContext(framework, kvp.Key));
+            }
+        }
+
+        return result.ToString();
     }
 }
