@@ -1,7 +1,10 @@
 using Demo.ViewModels;
+using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
 using Microsoft.Win32;
+using System.Collections.Specialized;
 using System.IO;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using VeloxDev.MVVM.Serialization;
@@ -12,14 +15,29 @@ namespace Demo.Views.Workflow;
 public partial class WorkflowView : UserControl
 {
     private TreeViewModel _workflowViewModel = new();
+    private bool _isPanning;
+    private Point _panStart;
+    private Vector _panStartOffset;
 
     public WorkflowView()
     {
         InitializeComponent();
-        LoadNetworkDemo(this, new System.Windows.RoutedEventArgs());
+        InitializeNetworkDemo();
     }
 
-    private async void SelectWorkflow(object sender, System.Windows.RoutedEventArgs e)
+    private void OnCanvasPointerPressed(object sender, MouseButtonEventArgs e)
+    {
+        if (e.MiddleButton == MouseButtonState.Pressed)
+        {
+            _isPanning = true;
+            _panStart = e.GetPosition(this);
+            _panStartOffset = new Vector(RootScrollViewer.HorizontalOffset, RootScrollViewer.VerticalOffset);
+            Mouse.Capture(RootScrollViewer);
+            e.Handled = true;
+        }
+    }
+
+    private async void SelectWorkflow(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
         {
@@ -39,26 +57,28 @@ public partial class WorkflowView : UserControl
 
                 if (!success || result is null)
                 {
-                    System.Windows.MessageBox.Show("文件格式不正确或解析失败。", "加载失败",
-                        System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                    MessageBox.Show("文件格式不正确或解析失败。", "加载失败",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
+                UnsubscribeAutoScroll(_workflowViewModel);
                 _workflowViewModel = result;
                 DataContext = _workflowViewModel;
+                SubscribeAutoScroll(_workflowViewModel);
 
-                System.Windows.MessageBox.Show($"工作流已从 {dialog.FileName} 加载成功。", "加载成功",
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                MessageBox.Show($"工作流已从 {dialog.FileName} 加载成功。", "加载成功",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"加载文件失败：{ex.Message}", "错误",
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                MessageBox.Show($"加载文件失败：{ex.Message}", "错误",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
 
-    private void SaveWorkflow(object sender, System.Windows.RoutedEventArgs e)
+    private void SaveWorkflow(object sender, RoutedEventArgs e)
     {
         if (DataContext is not TreeViewModel tree) return;
 
@@ -67,11 +87,23 @@ public partial class WorkflowView : UserControl
         if (dialog.ShowDialog() == true)
         {
             tree.SaveCommand.Execute(Path.Combine(dialog.FolderName, "Workflow.json"));
+            MessageBox.Show($"Workflow Saved At {dialog.FolderName}", "OK");
         }
     }
 
     private void OnPointerMoved(object sender, MouseEventArgs e)
     {
+        if (_isPanning)
+        {
+            var current = e.GetPosition(this);
+            var deltaX = _panStart.X - current.X;
+            var deltaY = _panStart.Y - current.Y;
+            RootScrollViewer.ScrollToHorizontalOffset(_panStartOffset.X + deltaX);
+            RootScrollViewer.ScrollToVerticalOffset(_panStartOffset.Y + deltaY);
+            e.Handled = true;
+            return;
+        }
+
         if (DataContext is not TreeViewModel tree) return;
         var point = e.GetPosition(WorkflowCanvas);
         tree.SetPointerCommand.Execute(new Anchor(
@@ -82,14 +114,84 @@ public partial class WorkflowView : UserControl
 
     private void OnPointerReleased(object sender, MouseButtonEventArgs e)
     {
+        if (_isPanning)
+        {
+            _isPanning = false;
+            Mouse.Capture(null);
+            e.Handled = true;
+            return;
+        }
+
         if (DataContext is not IWorkflowTreeViewModel tree) return;
         tree.VirtualLink.Sender.State &= ~SlotState.PreviewSender;
         tree.ResetVirtualLinkCommand.Execute(null);
     }
 
-    private void LoadNetworkDemo(object sender, System.Windows.RoutedEventArgs e)
+    private void LoadNetworkDemo(object sender, RoutedEventArgs e)
     {
+        InitializeNetworkDemo();
+    }
+
+    private void InitializeNetworkDemo()
+    {
+        UnsubscribeAutoScroll(_workflowViewModel);
         _workflowViewModel = WorkflowDemoSession.Create().Tree;
         DataContext = _workflowViewModel;
+        SubscribeAutoScroll(_workflowViewModel);
+        _workflowViewModel.Layout.UpdateCommand.Execute(null);
+    }
+
+    private void OnSendToAgent(object sender, RoutedEventArgs e)
+    {
+        var text = AgentInput?.Text?.Trim();
+        if (string.IsNullOrEmpty(text)) return;
+        _workflowViewModel.AskCommand.Execute(text);
+        AgentInput!.Text = string.Empty;
+    }
+
+    private void OnAgentInputKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            OnSendToAgent(sender, e);
+            e.Handled = true;
+        }
+    }
+
+    private void SubscribeAutoScroll(TreeViewModel vm)
+    {
+        vm.AgentLog.CollectionChanged += OnAgentLogChanged;
+        vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
+        if (vm.GetHelper() is AgentHelper helper)
+            helper.ToolCalled += OnAgentToolCalled;
+    }
+
+    private void UnsubscribeAutoScroll(TreeViewModel vm)
+    {
+        vm.AgentLog.CollectionChanged -= OnAgentLogChanged;
+        vm.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
+        if (vm.GetHelper() is AgentHelper helper)
+            helper.ToolCalled -= OnAgentToolCalled;
+    }
+
+    private void OnAgentToolCalled()
+    {
+        // Refresh on UI thread if needed
+    }
+
+    private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        ScrollToEnd(AgentLogScroller);
+    }
+
+    private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        ScrollToEnd(ExecutionLogScroller);
+    }
+
+    private static void ScrollToEnd(ScrollViewer? scroller)
+    {
+        if (scroller is null) return;
+        scroller.ScrollToEnd();
     }
 }

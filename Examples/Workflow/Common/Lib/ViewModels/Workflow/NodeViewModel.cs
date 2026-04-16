@@ -5,7 +5,8 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[AgentContext(AgentLanguages.Chinese, "派生的Node组件之一，作为任务执行者，默认大小为 300*260 ")]
+[AgentContext(AgentLanguages.Chinese, "派生的Node组件之一，作为任务执行者，默认大小为 320*260 ")]
+[AgentContext(AgentLanguages.English, "A derived Node component that acts as a task executor. Default size: 320×260. Never use Size(0,0).")]
 [WorkflowBuilder.Node
     <HttpHelper<NodeViewModel>>
     (workSemaphore: 5)]

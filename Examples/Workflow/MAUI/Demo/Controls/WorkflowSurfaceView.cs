@@ -258,6 +258,17 @@ public sealed class WorkflowSurfaceView : ContentView
             UpdateNodeLayout(node);
         }
 
+        // Add slot hotspots to _nodesLayer directly (above cards) so they
+        // are not clipped by card Borders and can receive touch/pointer input.
+        foreach (var card in _cards.Values)
+        {
+            card.CreateExternalSlotHotspots();
+            foreach (var hotspot in card.ExternalHotspots)
+            {
+                _nodesLayer.Children.Add(hotspot);
+            }
+        }
+
         SyncAllSlotAnchors();
         QueueLinksInvalidateCore();
     }
@@ -270,6 +281,7 @@ public sealed class WorkflowSurfaceView : ContentView
         }
 
         AbsoluteLayout.SetLayoutBounds(card, new Rect(node.Anchor.Horizontal, node.Anchor.Vertical, node.Size.Width, node.Size.Height));
+        card.UpdateHotspotPositions();
         SyncNodeSlotAnchors(node);
     }
 
@@ -561,6 +573,10 @@ public sealed class WorkflowSurfaceView : ContentView
             RefreshVisualState();
         }
 
+        private readonly List<View> _externalHotspots = [];
+
+        public IReadOnlyList<View> ExternalHotspots => _externalHotspots;
+
         private View BuildInteractiveCard()
         {
             var root = new Grid();
@@ -568,24 +584,57 @@ public sealed class WorkflowSurfaceView : ContentView
                 ? BuildControllerCard(controller)
                 : BuildNodeCard((NodeViewModel)_node));
 
+            // Slot hotspots are added to the parent _nodesLayer directly
+            // so they are NOT clipped by this Border and can receive gestures
+            // even when they overflow outside the node bounds.
+            return root;
+        }
+
+        public void CreateExternalSlotHotspots()
+        {
             if (_node is NodeViewModel workflowNode)
             {
                 if (workflowNode.InputSlot is not null)
-                {
-                    root.Children.Add(CreateSlotHotspot(workflowNode.InputSlot, true));
-                }
-
+                    _externalHotspots.Add(CreateSlotHotspot(workflowNode.InputSlot, true));
                 if (workflowNode.OutputSlot is not null)
-                {
-                    root.Children.Add(CreateSlotHotspot(workflowNode.OutputSlot, false));
-                }
+                    _externalHotspots.Add(CreateSlotHotspot(workflowNode.OutputSlot, false));
             }
             else if (_node is ControllerViewModel controllerNode && controllerNode.OutputSlot is not null)
             {
-                root.Children.Add(CreateSlotHotspot(controllerNode.OutputSlot, false));
+                _externalHotspots.Add(CreateSlotHotspot(controllerNode.OutputSlot, false));
             }
+        }
 
-            return root;
+        public void UpdateHotspotPositions()
+        {
+            int idx = 0;
+            if (_node is NodeViewModel wn)
+            {
+                if (wn.InputSlot is not null && idx < _externalHotspots.Count)
+                {
+                    var h = _externalHotspots[idx++];
+                    AbsoluteLayout.SetLayoutBounds(h, new Rect(
+                        _node.Anchor.Horizontal - 14,
+                        _node.Anchor.Vertical + (_node.Size.Height / 2) - 14,
+                        28, 28));
+                }
+                if (wn.OutputSlot is not null && idx < _externalHotspots.Count)
+                {
+                    var h = _externalHotspots[idx++];
+                    AbsoluteLayout.SetLayoutBounds(h, new Rect(
+                        _node.Anchor.Horizontal + _node.Size.Width - 14,
+                        _node.Anchor.Vertical + (_node.Size.Height / 2) - 14,
+                        28, 28));
+                }
+            }
+            else if (_node is ControllerViewModel ctrl && ctrl.OutputSlot is not null && idx < _externalHotspots.Count)
+            {
+                var h = _externalHotspots[idx++];
+                AbsoluteLayout.SetLayoutBounds(h, new Rect(
+                    _node.Anchor.Horizontal + _node.Size.Width - 14,
+                    _node.Anchor.Vertical + (_node.Size.Height / 2) - 14,
+                    28, 28));
+            }
         }
 
         private View CreateSlotHotspot(IWorkflowSlotViewModel slot, bool isInput)
@@ -639,6 +688,8 @@ public sealed class WorkflowSurfaceView : ContentView
             {
                 panGesture.PanUpdated -= OnPanUpdated;
             }
+
+            _externalHotspots.Clear();
         }
 
         private View BuildControllerCard(ControllerViewModel controller)
@@ -764,6 +815,9 @@ public sealed class WorkflowSurfaceView : ContentView
             _stateLabel.TextColor = foreground;
         }
 
+        private double _panStartX;
+        private double _panStartY;
+
         private void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
         {
             switch (e.StatusType)
@@ -771,16 +825,36 @@ public sealed class WorkflowSurfaceView : ContentView
                 case GestureStatus.Started:
                     _lastPanX = 0;
                     _lastPanY = 0;
+                    _panStartX = _node.Anchor.Horizontal;
+                    _panStartY = _node.Anchor.Vertical;
                     break;
                 case GestureStatus.Running:
-                    var deltaX = e.TotalX - _lastPanX;
-                    var deltaY = e.TotalY - _lastPanY;
+                    // Use lightweight Translation for visual feedback during drag
+                    TranslationX = e.TotalX;
+                    TranslationY = e.TotalY;
+                    // Also move hotspots visually
+                    foreach (var h in _externalHotspots)
+                    {
+                        h.TranslationX = e.TotalX;
+                        h.TranslationY = e.TotalY;
+                    }
                     _lastPanX = e.TotalX;
                     _lastPanY = e.TotalY;
-                    _node.MoveCommand.Execute(new Offset(deltaX, deltaY));
                     break;
                 case GestureStatus.Canceled:
                 case GestureStatus.Completed:
+                    // Reset translation and commit final position via MoveCommand
+                    TranslationX = 0;
+                    TranslationY = 0;
+                    foreach (var h in _externalHotspots)
+                    {
+                        h.TranslationX = 0;
+                        h.TranslationY = 0;
+                    }
+                    if (_lastPanX != 0 || _lastPanY != 0)
+                    {
+                        _node.MoveCommand.Execute(new Offset(_lastPanX, _lastPanY));
+                    }
                     _lastPanX = 0;
                     _lastPanY = 0;
                     break;

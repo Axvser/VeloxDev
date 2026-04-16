@@ -508,13 +508,13 @@ public sealed class WorkflowAgentToolkit
         return CommandInvoker.Invoke(component, commandName, jsonParameter);
     }
 
-    [Description("Creates a node and adds it to the tree via CreateNodeCommand. Optionally set width/height to override the default size; if omitted, view rendering assigns a default. Use GetComponentContext to discover each type's documented default size.")]
+    [Description("Creates a node and adds it to the tree via CreateNodeCommand. IMPORTANT: Nodes must NEVER have Size(0,0). Always provide width/height, or use GetComponentContext first to discover the type's documented default size. If you cannot determine the default, use width=300 height=260 as a safe fallback.")]
     private string CreateNode(
         [Description("Fully-qualified type name.")] string fullTypeName,
         [Description("Left px.")] double left = 0,
         [Description("Top px.")] double top = 0,
-        [Description("Width px. 0 = use view default.")] double width = 0,
-        [Description("Height px. 0 = use view default.")] double height = 0)
+        [Description("Width px. Must be > 0. Use GetComponentContext to discover defaults.")] double width = 0,
+        [Description("Height px. Must be > 0. Use GetComponentContext to discover defaults.")] double height = 0)
     {
         var type = TypeIntrospector.ResolveType(fullTypeName);
         if (type == null)
@@ -522,24 +522,57 @@ public sealed class WorkflowAgentToolkit
         if (!typeof(IWorkflowNodeViewModel).IsAssignableFrom(type))
             return Error($"'{fullTypeName}' does not implement IWorkflowNodeViewModel.");
 
+        // Resolve non-zero size: prefer caller value > AgentContext default > random fallback
+        if (width <= 0 || height <= 0)
+        {
+            var resolved = ResolveDefaultSize(type);
+            if (width <= 0) width = resolved.Width;
+            if (height <= 0) height = resolved.Height;
+        }
+
         try
         {
             var node = (IWorkflowNodeViewModel)Activator.CreateInstance(type);
             node.Anchor = new Anchor(left, top, 0);
             Tree.CreateNodeCommand.Execute(node);
-            if (width > 0 && height > 0)
-                node.SetSizeCommand.Execute(new Size(width, height));
+            node.SetSizeCommand.Execute(new Size(width, height));
             return JsonConvert.SerializeObject(new
             {
                 status = "ok",
                 id = GetComponentId(node),
                 i = IndexOfNode(node),
+                w = width,
+                h = height,
             }, Formatting.None);
         }
         catch (Exception ex)
         {
             return Error($"Failed to create node: {ex.Message}");
         }
+    }
+
+    private static Size ResolveDefaultSize(Type nodeType)
+    {
+        // Try to extract size from AgentContext attributes (any language)
+        foreach (var lang in new[] { AgentLanguages.English, AgentLanguages.Chinese })
+        {
+            var contexts = AgentContextReader.GetContexts(nodeType, lang);
+            foreach (var ctx in contexts)
+            {
+                // Look for patterns like "300×260", "300*260", "300x260"
+                var match = System.Text.RegularExpressions.Regex.Match(ctx, @"(\d{2,4})\s*[×xX\*]\s*(\d{2,4})");
+                if (match.Success
+                    && double.TryParse(match.Groups[1].Value, out var w) && w > 0
+                    && double.TryParse(match.Groups[2].Value, out var h) && h > 0)
+                {
+                    return new Size(w, h);
+                }
+            }
+        }
+
+        // Random fallback — never return 0
+        var rng = new Random();
+        return new Size(rng.Next(200, 400), rng.Next(150, 300));
     }
 
     [Description("Creates a dynamic slot on a node via CreateSlotCommand. Only use when the node does NOT already define typed slot properties (e.g. InputSlot/OutputSlot) — those are auto-created by source generator.")]

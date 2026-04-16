@@ -95,9 +95,10 @@
 
                     <TextBlock Margin="0,12,0,0" Text="节点总数：" Foreground="White" />
                     <TextBlock Text="{Binding Nodes.Count}" Foreground="White" />
-                    <TextBlock Margin="0,8,0,0" Text="连接总数：" Foreground="White" />
-                    <TextBlock Text="{Binding Links.Count}" Foreground="White" />
+                    <TextBlock Margin="0,8,0,0" Text="可见组件数：( Node / Link )" Foreground="White" />
+                    <TextBlock Text="{Binding VisibleItems.Count}" Foreground="White" />
 
+                    <!-- Agent 对话 -->
                     <Border Margin="0,12,0,0"
                             Padding="10"
                             Background="#202020"
@@ -105,19 +106,62 @@
                             BorderThickness="1"
                             CornerRadius="4">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="实际执行顺序" Foreground="#7EC8FF" FontWeight="Bold" />
-                            <TextBlock Foreground="#BDBDBD">
-                                <Run Text="已记录: " />
-                                <Run Text="{Binding ExecutionLog.Count}" />
-                            </TextBlock>
-                            <ItemsControl ItemsSource="{Binding ExecutionLog}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding}" Foreground="#D8D8D8" TextWrapping="WrapWholeWords" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="Agent 对话" Foreground="#7EC8FF" FontWeight="Bold" VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="1"
+                                              IsOn="{Binding UseStreamingAgentResponse, Mode=TwoWay}"
+                                              OnContent="流式"
+                                              OffContent="普通"
+                                              FontSize="11"
+                                              Margin="0,-6,0,-6" />
+                            </Grid>
+                            <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" x:Name="AgentLogScroller">
+                                <ItemsControl ItemsSource="{Binding AgentLog}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" Foreground="#D8D8D8" TextWrapping="WrapWholeWords" Margin="0,2" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox x:Name="AgentInput"
+                                         Grid.Column="0"
+                                         PlaceholderText="输入消息..."
+                                         Background="#2D2D2D"
+                                         Foreground="White"
+                                         KeyDown="OnAgentInputKeyDown" />
+                                <Button Grid.Column="1"
+                                        Content="发送"
+                                        Margin="4,0,0,0"
+                                        Click="OnSendToAgent" />
+                            </Grid>
                         </StackPanel>
+                    </Border>
+
+                    <!-- 执行记录 -->
+                    <Border Margin="0,12,0,0"
+                            Padding="10"
+                            Background="#202020"
+                            BorderBrush="#4C4C4C"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <ScrollViewer MaxHeight="250" VerticalScrollBarVisibility="Auto" x:Name="ExecutionLogScroller">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="实际执行顺序" Foreground="#7EC8FF" FontWeight="Bold" />
+                                <TextBlock Foreground="#BDBDBD">
+                                    <Run Text="已记录: " />
+                                    <Run Text="{Binding ExecutionLog.Count}" />
+                                </TextBlock>
+                                <ItemsControl ItemsSource="{Binding ExecutionLog}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" Foreground="#D8D8D8" TextWrapping="WrapWholeWords" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Border>
                 </StackPanel>
             </ScrollViewer>

@@ -6,7 +6,7 @@
              Title="Workflow"
              BackgroundColor="#020617">
 
-    <Grid RowDefinitions="Auto,*,220" RowSpacing="16" Padding="20">
+    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="16" Padding="20">
         <Border Grid.Row="0"
                 BackgroundColor="#111827"
                 Padding="16"
@@ -22,7 +22,7 @@
                        FontSize="14"
                        TextColor="#CBD5E1" />
 
-                <Grid ColumnDefinitions="2*,Auto,Auto,Auto"
+                <Grid ColumnDefinitions="2*,Auto,Auto,Auto,Auto,Auto,Auto"
                       ColumnSpacing="12"
                       RowDefinitions="Auto,Auto">
                     <Label Text="Seed Payload"
@@ -46,6 +46,14 @@
                             Grid.Column="3"
                             Text="重置"
                             Clicked="ReloadDemoAsync" />
+                    <Button Grid.Row="1"
+                            Grid.Column="4"
+                            Text="Undo"
+                            Command="{Binding Tree.UndoCommand}" />
+                    <Button Grid.Row="1"
+                            Grid.Column="5"
+                            Text="Redo"
+                            Command="{Binding Tree.RedoCommand}" />
                 </Grid>
             </VerticalStackLayout>
         </Border>
@@ -61,31 +69,77 @@
             </ScrollView>
         </Border>
 
-        <Border Grid.Row="2"
-                BackgroundColor="#111827"
-                Padding="16"
-                Stroke="#334155"
-                StrokeThickness="1"
-                StrokeShape="RoundRectangle 18">
-            <Grid RowDefinitions="Auto,*" RowSpacing="12">
-                <Label Text="Execution Log"
-                       FontAttributes="Bold"
-                       FontSize="18"
-                       TextColor="White" />
+        <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="12">
+            <!-- Agent 对话 -->
+            <Border BackgroundColor="#111827"
+                    Padding="16"
+                    Stroke="#334155"
+                    StrokeThickness="1"
+                    StrokeShape="RoundRectangle 18">
+                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Text="Agent 对话"
+                               FontAttributes="Bold"
+                               FontSize="18"
+                               TextColor="#7EC8FF" />
+                        <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
+                            <Label Text="流式" TextColor="#CBD5E1" VerticalTextAlignment="Center" />
+                            <Switch IsToggled="{Binding Tree.UseStreamingAgentResponse}" />
+                        </HorizontalStackLayout>
+                    </Grid>
+                    <CollectionView Grid.Row="1"
+                                    ItemsSource="{Binding Tree.AgentLog}"
+                                    HeightRequest="180"
+                                    ItemsUpdatingScrollMode="KeepLastItemInView">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate>
+                                <Label Text="{Binding .}"
+                                       FontFamily="OpenSansRegular"
+                                       TextColor="#D8D8D8"
+                                       Margin="0,2" />
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry x:Name="AgentInput"
+                               Placeholder="输入消息..."
+                               BackgroundColor="#2D2D2D"
+                               TextColor="White"
+                               Completed="OnAgentInputCompleted" />
+                        <Button Grid.Column="1"
+                                Text="发送"
+                                Clicked="OnSendToAgent" />
+                    </Grid>
+                </Grid>
+            </Border>
 
-                <CollectionView Grid.Row="1"
-                                ItemsSource="{Binding ExecutionLog}">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate>
-                            <Label Text="{Binding .}"
-                                   FontFamily="OpenSansRegular"
-                                   TextColor="#E2E8F0"
-                                   Margin="0,2" />
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
-            </Grid>
-        </Border>
+            <!-- 执行记录 -->
+            <Border Grid.Column="1"
+                    BackgroundColor="#111827"
+                    Padding="16"
+                    Stroke="#334155"
+                    StrokeThickness="1"
+                    StrokeShape="RoundRectangle 18">
+                <Grid RowDefinitions="Auto,*" RowSpacing="12">
+                    <Label Text="Execution Log"
+                           FontAttributes="Bold"
+                           FontSize="18"
+                           TextColor="#7EC8FF" />
+
+                    <CollectionView Grid.Row="1"
+                                    ItemsSource="{Binding ExecutionLog}">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate>
+                                <Label Text="{Binding .}"
+                                       FontFamily="OpenSansRegular"
+                                       TextColor="#E2E8F0"
+                                       Margin="0,2" />
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 
 </ContentPage>

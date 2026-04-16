@@ -17,6 +17,7 @@ namespace Demo
 
         public WorkflowDemoSession DemoSession => _demo;
         public ControllerViewModel Controller => _demo.Controller;
+        public TreeViewModel Tree => _demo.Tree;
         public ObservableCollection<string> ExecutionLog => _demo.Tree.ExecutionLog;
 
         private async void RunWorkflowAsync(object? sender, EventArgs e)
@@ -45,7 +46,21 @@ namespace Demo
             _demo = session;
             OnPropertyChanged(nameof(DemoSession));
             OnPropertyChanged(nameof(Controller));
+            OnPropertyChanged(nameof(Tree));
             OnPropertyChanged(nameof(ExecutionLog));
+        }
+
+        private void OnSendToAgent(object? sender, EventArgs e)
+        {
+            var text = AgentInput?.Text?.Trim();
+            if (string.IsNullOrEmpty(text)) return;
+            _demo.Tree.AskCommand.Execute(text);
+            AgentInput!.Text = string.Empty;
+        }
+
+        private void OnAgentInputCompleted(object? sender, EventArgs e)
+        {
+            OnSendToAgent(sender, e);
         }
 
         private async Task ExecuteAsync(Func<Task> action, string title)

@@ -1,9 +1,11 @@
 using Demo.ViewModels;
+using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using System;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -38,7 +40,7 @@ namespace Demo.Views
         public TreeView()
         {
             InitializeComponent();
-            LoadNetworkDemo(this, new RoutedEventArgs());
+            InitializeNetworkDemo();
         }
 
         private async void SaveWorkflow(object sender, RoutedEventArgs e)
@@ -63,7 +65,7 @@ namespace Demo.Views
 
             string filePath = Path.Combine(folder.Path, "Workflow.json");
             tree.SaveCommand.Execute(filePath);
-            await ShowMessageAsync("±£¥Ê≥…π¶", $"π§◊˜¡˜“—±£¥ÊµΩ£∫{filePath}");
+            await ShowMessageAsync("‰øùÂ≠òÊàêÂäü", $"Â∑•‰ΩúÊµÅÂ∑≤‰øùÂ≠òÂà∞Ôºö{filePath}");
         }
 
         private async void SelectWorkflow(object sender, RoutedEventArgs e)
@@ -92,24 +94,34 @@ namespace Demo.Views
 
                 if (!success || result is null)
                 {
-                    await ShowMessageAsync("º”‘ÿ ß∞‹", "Œƒº˛∏Ò Ω≤ª’˝»∑ªÚΩ‚Œˆ ß∞‹°£", "»∑∂®");
+                    await ShowMessageAsync("Âä†ËΩΩÂ§±Ë¥•", "Êñá‰ª∂Ê†ºÂºè‰∏çÊ≠£Á°ÆÊàñËß£ÊûêÂ§±Ë¥•„ÄÇ", "Á°ÆÂÆö");
                     return;
                 }
 
+                UnsubscribeAutoScroll(ViewModel);
                 ViewModel = result;
                 DataContext = ViewModel;
-                await ShowMessageAsync("º”‘ÿ≥…π¶", $"π§◊˜¡˜“—¥” {file.Name} º”‘ÿ≥…π¶°£", "»∑∂®");
+                SubscribeAutoScroll(ViewModel);
+                await ShowMessageAsync("Âä†ËΩΩÊàêÂäü", $"Â∑•‰ΩúÊµÅÂ∑≤‰ªé {file.Name} Âä†ËΩΩÊàêÂäü„ÄÇ", "Á°ÆÂÆö");
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("¥ÌŒÛ", $"º”‘ÿŒƒº˛ ß∞‹£∫{ex.Message}", "»∑∂®");
+                await ShowMessageAsync("ÈîôËØØ", $"Âä†ËΩΩÊñá‰ª∂Â§±Ë¥•Ôºö{ex.Message}", "Á°ÆÂÆö");
             }
         }
 
         private void LoadNetworkDemo(object sender, RoutedEventArgs e)
         {
+            InitializeNetworkDemo();
+        }
+
+        private void InitializeNetworkDemo()
+        {
+            UnsubscribeAutoScroll(ViewModel);
             ViewModel = WorkflowDemoSession.Create().Tree;
             DataContext = ViewModel;
+            SubscribeAutoScroll(ViewModel);
+            ViewModel.Layout.UpdateCommand.Execute(null);
         }
 
         private IntPtr GetActiveWindowHandle()
@@ -183,7 +195,60 @@ namespace Demo.Views
             ViewModel.SetPointerCommand.Execute(anchor);
         }
 
-        private async Task ShowMessageAsync(string title, string message, string primaryButtonText = "»∑∂®")
+        private void OnSendToAgent(object sender, RoutedEventArgs e)
+        {
+            var text = AgentInput?.Text?.Trim();
+            if (string.IsNullOrEmpty(text)) return;
+            ViewModel.AskCommand.Execute(text);
+            AgentInput!.Text = string.Empty;
+        }
+
+        private void OnAgentInputKeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                OnSendToAgent(sender, e);
+                e.Handled = true;
+            }
+        }
+
+        private void SubscribeAutoScroll(TreeViewModel vm)
+        {
+            vm.AgentLog.CollectionChanged += OnAgentLogChanged;
+            vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
+            if (vm.GetHelper() is AgentHelper helper)
+                helper.ToolCalled += OnAgentToolCalled;
+        }
+
+        private void UnsubscribeAutoScroll(TreeViewModel vm)
+        {
+            vm.AgentLog.CollectionChanged -= OnAgentLogChanged;
+            vm.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
+            if (vm.GetHelper() is AgentHelper helper)
+                helper.ToolCalled -= OnAgentToolCalled;
+        }
+
+        private void OnAgentToolCalled()
+        {
+        }
+
+        private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            ScrollToEnd(AgentLogScroller);
+        }
+
+        private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            ScrollToEnd(ExecutionLogScroller);
+        }
+
+        private static void ScrollToEnd(ScrollViewer? scroller)
+        {
+            if (scroller is null) return;
+            scroller.ChangeView(null, scroller.ScrollableHeight, null);
+        }
+
+        private async Task ShowMessageAsync(string title, string message, string primaryButtonText = "Á°ÆÂÆö")
         {
             var dialog = new ContentDialog
             {
