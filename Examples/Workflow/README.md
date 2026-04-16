@@ -16,6 +16,49 @@
 
 ---
 
+## 0. 前置准备：获取 Qwen API Key
+
+所有 Workflow Demo 的 **Agent 对话功能** 依赖阿里云百炼平台提供的 Qwen 大模型 API。  
+运行 Demo 前，请先完成以下步骤：
+
+### 0.1 获取 API Key
+
+1. 访问 [阿里云百炼平台文档页](https://bailian.console.aliyun.com/cn-beijing?tab=doc#/doc)  
+2. 注册 / 登录阿里云账号  
+3. 在百炼控制台中创建 API Key（免费额度即可运行 Demo）
+
+### 0.2 配置环境变量
+
+Demo 通过环境变量 **`DASHSCOPE_API_KEY`** 读取密钥。  
+请根据你的操作系统选择以下方式之一进行配置：
+
+**Windows（PowerShell，当前会话生效）：**
+
+```powershell
+$env:DASHSCOPE_API_KEY = "sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+```
+
+**Windows（永久生效，需重启终端 / IDE）：**
+
+```powershell
+[System.Environment]::SetEnvironmentVariable('DASHSCOPE_API_KEY', 'sk-xxxxxxxxxxxxxxxxxxxxxxxx', 'User')
+```
+
+**macOS / Linux：**
+
+```bash
+export DASHSCOPE_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+```
+
+> 💡 如果你在 **Visual Studio** 中运行项目，设置环境变量后需要 **重启 Visual Studio** 才能生效。
+
+### 0.3 验证
+
+启动任意 Workflow Demo（Avalonia / WPF / WinUI / MAUI / WinForms），  
+在左侧 **Agent 对话** 面板中发送消息，如果收到模型回复，说明配置成功。
+
+---
+
 ## 1. 核心理念：工作流 = 图结构组件 + Helper 驱动业务
 
 在当前架构里，一个工作流不是“某种流程脚本对象”，而是一张由组件组成的图：

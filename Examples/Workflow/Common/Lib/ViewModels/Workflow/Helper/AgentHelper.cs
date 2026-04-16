@@ -11,6 +11,16 @@ namespace Demo.ViewModels.Workflow.Helper;
 
 public class AgentHelper : TreeHelper<TreeViewModel>
 {
+    // ── Qwen (DashScope) 配置 ──
+    // Agent 功能需要阿里云百炼平台的 Qwen API Key。
+    // 获取方式：访问 https://bailian.console.aliyun.com/cn-beijing?tab=doc#/doc
+    //          注册/登录后在控制台创建 API Key，然后设置到以下环境变量中：
+    //
+    //   Windows PowerShell:  $env:DASHSCOPE_API_KEY = "sk-xxxx"
+    //   Windows 永久生效:    [System.Environment]::SetEnvironmentVariable('DASHSCOPE_API_KEY','sk-xxxx','User')
+    //   macOS / Linux:       export DASHSCOPE_API_KEY="sk-xxxx"
+    //
+    //   设置后需重启 Visual Studio / 终端才能生效。
     private const string EnvironmentVariableName = "DASHSCOPE_API_KEY";
     private const string Endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1";
     private const string Model = "qwen-plus";
