@@ -73,3 +73,19 @@ public partial class NodeViewModel
     [VeloxProperty] private string title = "Workflow Step";
 }
 ```
+
+## Workflow Agent 运行时接管（MAF Functions）
+
+安装 `VeloxDev.Core.Extension` 后，Agent 可获得基于 Microsoft Agent Framework 的完整工具集，在单个 Tree 内自由操作：
+
+```csharp
+var scope = tree.AsAgentScope()
+    .WithComponents(AgentLanguages.English, typeof(NodeViewModel), ...);
+
+// 上下文 + 工具一次性提供给 Agent
+var agent = client.AsAIAgent(
+    instructions: scope.ProvideAllContexts(AgentLanguages.English),
+    tools: scope.ProvideTools());
+```
+
+Agent 可执行的操作包括：节点查询/移动/删除/调整大小、连线建立/断开、工作执行、撤销/重做、类型自省（按 FullTypeName 获取 JSON 结构）、属性 Patch（按 JSON 修改组件属性）。

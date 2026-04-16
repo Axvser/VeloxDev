@@ -21,13 +21,14 @@ public partial class TreeViewModel
 
     [VeloxProperty] private ObservableCollection<IWorkflowViewModel> _visibleItems = [];
     [VeloxProperty] private ObservableCollection<string> executionLog = [];
+    [VeloxProperty] private ObservableCollection<string> agentLog = [];
     [VeloxProperty] private bool isWorkflowRunning = false;
+    
+    [VeloxProperty] private bool useStreamingAgentResponse = true;
 
     [VeloxCommand]
     public async Task AskAsync(object? parameter, CancellationToken ct)
     {
-        //await AgentContextTest();
-
         if (parameter is not string message ||
             Helper is not AgentHelper helper ||
             helper.Agent is null ||
@@ -36,22 +37,51 @@ public partial class TreeViewModel
 
         try
         {
+            AppendAgentLog($"🧑 {message}");
+
+            if (UseStreamingAgentResponse)
+            {
+                await AskStreamingCoreAsync(helper, message);
+                return;
+            }
+
             var response = await helper.Agent.RunAsync(
-                message).ConfigureAwait(false);
+                message, helper.Session);
 
             if (response is not null)
             {
                 var text = response.Text;
-                AppendExecutionLog(text ?? string.Empty);
+                AppendAgentLog($"🤖 {text ?? string.Empty}");
             }
         }
         catch (OperationCanceledException)
         {
-            // canceled by caller - ignore
         }
         catch (Exception ex)
         {
-            AppendExecutionLog($"Error: {ex.Message}");
+            AppendAgentLog($"❌ Error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Isolated into a separate method so that the JIT compilation of
+    /// <c>IAsyncEnumerable&lt;T&gt;</c> / <c>await foreach</c> does not
+    /// prevent <see cref="AskAsync"/> from executing at all when the
+    /// required runtime type cannot be resolved.
+    /// </summary>
+    private async Task AskStreamingCoreAsync(AgentHelper helper, string message)
+    {
+        AgentLog.Add("🤖 ");
+        var lastIndex = AgentLog.Count - 1;
+
+        await foreach (var response in helper.Agent!.RunStreamingAsync(
+            message, helper.Session!))
+        {
+            var text = response.Text;
+            if (!string.IsNullOrEmpty(text))
+            {
+                AgentLog[lastIndex] += text;
+            }
         }
     }
 
@@ -97,8 +127,16 @@ public partial class TreeViewModel
         {
             return;
         }
-
         ExecutionLog.Add(entry);
+    }
+
+    public void AppendAgentLog(string entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry))
+        {
+            return;
+        }
+        AgentLog.Add(entry);
     }
 
     [VeloxCommand]

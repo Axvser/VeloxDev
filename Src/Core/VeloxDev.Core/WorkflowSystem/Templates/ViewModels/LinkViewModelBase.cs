@@ -7,9 +7,10 @@ namespace VeloxDev.WorkflowSystem;
 [AgentContext(AgentLanguages.Chinese, "工作流Link组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Link component interface")]
 [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
-public partial class LinkViewModelBase : IWorkflowLinkViewModel
+public partial class LinkViewModelBase : IWorkflowLinkViewModel, IWorkflowIdentifiable
 {
     private IWorkflowLinkViewModelHelper Helper = new LinkHelper();
+    public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     public LinkViewModelBase() { InitializeWorkflow(); }
 

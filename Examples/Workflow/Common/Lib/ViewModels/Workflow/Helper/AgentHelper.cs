@@ -1,6 +1,6 @@
 ﻿using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using OpenAI;
-using OpenAI.Responses;
 using System.ClientModel;
 using VeloxDev.AI;
 using VeloxDev.AI.Workflow;
@@ -30,7 +30,7 @@ public class AgentHelper : TreeHelper<TreeViewModel>
         }
 
         // 初始化Agent
-        Agent = await ProvideAgent(tree);
+        Agent = await ProvideAgent(tree, this);
         Session = await Agent.CreateSessionAsync();
     }
 
@@ -48,44 +48,50 @@ public class AgentHelper : TreeHelper<TreeViewModel>
         Session = null;
     }
 
+    /// <summary>
+    /// Raised after each agent tool call. Subscribe from the View to trigger virtualization with a fresh viewport.
+    /// </summary>
+    public event Action? ToolCalled;
+
     public void Virtualize(Viewport viewport) 
     {
         Component?.Virtualize(viewport); // 执行虚拟化
     }
 
-    public static async Task<ChatClientAgent> ProvideAgent(IWorkflowTreeViewModel tree)
+    public static async Task<ChatClientAgent> ProvideAgent(IWorkflowTreeViewModel tree, AgentHelper helper)
     {
         // 以单个Tree作为Agent的接管范围（域）
         var scope = tree.AsAgentScope()
             // 在每个域中包含开发者自定义的工作流组件
-            .WithComponents(AgentLanguages.Chinese,
+            .WithComponents(AgentLanguages.English,
                 typeof(NodeViewModel),
                 typeof(ControllerViewModel),
                 typeof(SlotViewModel),
                 typeof(LinkViewModel),
                 typeof(TreeViewModel))
             .WithEnums(AgentLanguages.English, [])
-            .WithInterfaces(AgentLanguages.Dutch, []);
+            .WithInterfaces(AgentLanguages.English, [])
+            .WithToolCallCallback((_, _, _) => helper.ToolCalled?.Invoke());
 
-        // 工作流框架级别上下文
-        var framework = scope.ProvideFrameworkContext(AgentLanguages.English);
-        // 开发着自定义级别上下文
-        var customer = scope.ProvideCustomerContext(AgentLanguages.English);
+        // 工作流框架级别上下文 + 开发者自定义级别上下文
+        var contextPrompt = scope.ProvideAllContexts(AgentLanguages.English);
+
+        // 创建MAF工具集：Agent可通过这些Functions自由操作Tree内部的所有组件
+        var tools = scope.ProvideTools();
 
         var apiKey = Environment.GetEnvironmentVariable(EnvironmentVariableName);
 
-#pragma warning disable OPENAI001
-        var client = new OpenAIClient(
-            new ApiKeyCredential(apiKey),
-            new OpenAIClientOptions
-            {
-                Endpoint = new Uri(Endpoint)
-            }).GetResponsesClient();
-#pragma warning restore OPENAI001
+var chatClient = new OpenAIClient(
+    new ApiKeyCredential(apiKey),
+    new OpenAIClientOptions
+    {
+        Endpoint = new Uri(Endpoint)
+    }).GetChatClient(string.IsNullOrWhiteSpace(Model) ? "qwen-plus" : Model)
+      .AsIChatClient();
 
-        var agent = client.AsAIAgent(
-            model: string.IsNullOrWhiteSpace(Model) ? "qwen-plus" : Model,
-            tools: []);
+var agent = chatClient.AsAIAgent(
+    instructions: contextPrompt,
+    tools: tools);
 
         return agent;
     }

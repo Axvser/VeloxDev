@@ -22,5 +22,6 @@ public interface IWorkflowViewModel : INotifyPropertyChanging, INotifyPropertyCh
 
     [AgentContext(AgentLanguages.Chinese, "终结所有执行中的任务，参数为Null")]
     [AgentContext(AgentLanguages.English, "Terminates all ongoing tasks, parameter is Null")]
+    [AgentCommandParameter]
     public IVeloxCommand CloseCommand { get; }
 }

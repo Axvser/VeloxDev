@@ -56,7 +56,7 @@
 |---------|------|---------------|-----------|
 | 🪶 MVVM  | 通过 Source Generator 生成通知属性与命令 | ❌ | |
 | 🔁 Workflow  | 提供工作流树、节点、插槽、连线模板与交互辅助 | ❌ | |
-| 🤖 Workflow Agent  | 提供工作流语义上下文与统一低 Token 运行时接管协议 | `Core` 语义 ❌ / `Extension` 协议 ✔ | 支持上下文文档、稳定 id、增量变更、批量 Patch 与反射接管 |
+| 🤖 Workflow Agent  | 提供工作流语义上下文与基于 MAF 的完整运行时接管工具集 | `Core` 语义 ❌ / `Extension` 工具 ✔ | 支持上下文文档、MAF Functions（查询/移动/连线/执行/撤销重做）、类型自省、JSON Patch |
 | 🎞️ Transition | 跨平台的插值动画抽象层，支持缓动函数与调度 | ✔ | 需要为不同平台实现具体的插值器、主线程检测器、调度器等 |
 | 🌀 AOP | 编译期注入的切面代理支持 | ❌ | 需要目标框架 ≥ .NET5 |
 | 🎨 Theme | 主题注册、缓存与渐变切换 | ✔ | 需要适配不同平台的样式/资源系统 |
@@ -86,7 +86,7 @@
 
 其中 `Transition` 与 `Theme` 的完整运行通常需要平台适配层配合；而 `MVVM`、`Workflow`、`MonoBehaviour`、`AOT Reflection` 等能力则可直接建立在核心库之上。
 
-此外，`VeloxDev.Core` 现已包含工作流面向 Agent 的语义上下文收集能力；如果需要让 Agent 通过统一的新运行时协议对工作流进行接管、增量同步、批量 Patch 与反射调用，请安装 `VeloxDev.Core.Extension`。
+此外，`VeloxDev.Core` 现已包含工作流面向 Agent 的语义上下文收集能力；如果需要让 Agent 通过 Microsoft Agent Framework (MAF) 的 Function Calling 对工作流进行运行时接管（查询、移动、连线、执行、属性修改、类型自省等），请安装 `VeloxDev.Core.Extension`。
 
 ---
 
@@ -148,6 +148,20 @@
 - 任务并发、排队
 - 操作取消
 - 丰富的扩展点
+
+#### Workflow Agent 支持
+
+VeloxDev 的 Workflow 体系原生支持 AI Agent 接管。核心层（`VeloxDev.Core`）提供：
+- `IWorkflowIdentifiable` — 组件运行时唯一标识
+- `[AgentContext]` / `[AgentCommandParameter]` — 面向 Agent 的语义上下文特性
+- `AgentContextCollector` — 枚举、接口、类的结构化文档收集
+
+扩展层（`VeloxDev.Core.Extension`）提供完整的运行时接管能力：
+- 基于 **Microsoft Agent Framework (MAF)** 的 30 个 Function Calling 工具
+- 覆盖查询、变更、连接、执行、撤销重做、类型自省、状态快照、批量操作、克隆等全部场景
+- 三层安全机制保护框架内部属性不被误修改
+
+> 详细的架构说明、原理介绍与完整 API 列表请参阅 [`VeloxDev.Core.Extension` README](Src/Core/VeloxDev.Core.Extension/README.md)。
 
 ---
 

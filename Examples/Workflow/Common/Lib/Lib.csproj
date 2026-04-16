@@ -9,6 +9,7 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.1.0" />
+	  <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.6" />
 	</ItemGroup>
 
 	<ItemGroup>

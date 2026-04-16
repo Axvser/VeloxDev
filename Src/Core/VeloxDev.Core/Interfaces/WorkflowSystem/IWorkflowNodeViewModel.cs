@@ -26,30 +26,37 @@ public interface IWorkflowNodeViewModel : IWorkflowViewModel
 
     [AgentContext(AgentLanguages.Chinese, "移动节点，参数为Offset")]
     [AgentContext(AgentLanguages.English, "Move node command, parameter is Offset")]
+    [AgentCommandParameter(typeof(Offset))]
     public IVeloxCommand MoveCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "设置锚点坐标，参数为Anchor")]
     [AgentContext(AgentLanguages.English, "Set anchor command, parameter is Anchor")]
+    [AgentCommandParameter(typeof(Anchor))]
     public IVeloxCommand SetAnchorCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "设置节点尺寸，参数为Size")]
     [AgentContext(AgentLanguages.English, "Set size command, parameter is Size")]
+    [AgentCommandParameter(typeof(Size))]
     public IVeloxCommand SetSizeCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "创建Slot，参数为IWorkflowSlotViewModel")]
     [AgentContext(AgentLanguages.English, "Create slot command, parameter is IWorkflowSlotViewModel")]
+    [AgentCommandParameter(typeof(IWorkflowSlotViewModel))]
     public IVeloxCommand CreateSlotCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "删除当前Node，参数为Null，相关Slot和Link会被删除")]
     [AgentContext(AgentLanguages.English, "Delete the current node, parameter is Null, related Slots and Links will be deleted")]
+    [AgentCommandParameter]
     public IVeloxCommand DeleteCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "执行节点工作，参数为Nullable")]
     [AgentContext(AgentLanguages.English, "Execute node work command, parameter is Nullable")]
+    [AgentCommandParameter]
     public IVeloxCommand WorkCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "正向广播数据，参数为Nullable")]
     [AgentContext(AgentLanguages.English, "Broadcast data forward, parameter is Nullable")]
+    [AgentCommandParameter]
     public IVeloxCommand BroadcastCommand { get; }
 
     public IWorkflowNodeViewModelHelper GetHelper();

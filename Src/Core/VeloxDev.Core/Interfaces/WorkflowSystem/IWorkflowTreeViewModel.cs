@@ -26,34 +26,42 @@ public interface IWorkflowTreeViewModel : IWorkflowViewModel
 
     [AgentContext(AgentLanguages.Chinese, "创建节点，参数为IWorkflowNodeViewModel")]
     [AgentContext(AgentLanguages.English, "Create node command, parameter is IWorkflowNodeViewModel")]
+    [AgentCommandParameter(typeof(IWorkflowNodeViewModel))]
     public IVeloxCommand CreateNodeCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "更新触点位置，参数为Anchor")]
     [AgentContext(AgentLanguages.English, "Update pointer position, parameter is Anchor")]
+    [AgentCommandParameter(typeof(Anchor))]
     public IVeloxCommand SetPointerCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "重置虚拟连接，参数为Null")]
     [AgentContext(AgentLanguages.English, "Reset virtual link, parameter is Null")]
+    [AgentCommandParameter]
     public IVeloxCommand ResetVirtualLinkCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "发起连接构建，参数为IWorkflowSlotViewModel")]
     [AgentContext(AgentLanguages.English, "Initiate connection construction, parameter is IWorkflowSlotViewModel")]
+    [AgentCommandParameter(typeof(IWorkflowSlotViewModel))]
     public IVeloxCommand SendConnectionCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "接收连接构建，参数为IWorkflowSlotViewModel")]
     [AgentContext(AgentLanguages.English, "Receive connection construction, parameter is IWorkflowSlotViewModel")]
+    [AgentCommandParameter(typeof(IWorkflowSlotViewModel))]
     public IVeloxCommand ReceiveConnectionCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "提交操作，参数为IWorkflowActionPair")]
     [AgentContext(AgentLanguages.English, "Submit action, parameter is IWorkflowActionPair")]
+    [AgentCommandParameter(typeof(IWorkflowActionPair))]
     public IVeloxCommand SubmitCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "重做操作，参数为Null")]
     [AgentContext(AgentLanguages.English, "Redo action, parameter is Null")]
+    [AgentCommandParameter]
     public IVeloxCommand RedoCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "撤销操作，参数为Null")]
     [AgentContext(AgentLanguages.English, "Undo action, parameter is Null")]
+    [AgentCommandParameter]
     public IVeloxCommand UndoCommand { get; }
 
     public IWorkflowTreeViewModelHelper GetHelper();

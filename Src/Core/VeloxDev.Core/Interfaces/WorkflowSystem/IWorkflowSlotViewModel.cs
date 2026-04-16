@@ -34,18 +34,22 @@ public interface IWorkflowSlotViewModel : IWorkflowViewModel
 
     [AgentContext(AgentLanguages.Chinese, "设定通道，参数为SlotChannel")]
     [AgentContext(AgentLanguages.English, "Set channel command, parameter is SlotChannel")]
+    [AgentCommandParameter(typeof(SlotChannel))]
     public IVeloxCommand SetChannelCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "作为连接构建发起方，参数为Null")]
     [AgentContext(AgentLanguages.English, "Start connection construction as the sender, parameter is Null")]
+    [AgentCommandParameter]
     public IVeloxCommand SendConnectionCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "作为连接构建接收方，参数为Null")]
     [AgentContext(AgentLanguages.English, "Accept connection construction as the receiver, parameter is Null")]
+    [AgentCommandParameter]
     public IVeloxCommand ReceiveConnectionCommand { get; }
 
     [AgentContext(AgentLanguages.Chinese, "删除当前Slot，参数为Null，相关Link会被删除")]
     [AgentContext(AgentLanguages.English, "Delete the current slot, parameter is Null, related Links will be deleted")]
+    [AgentCommandParameter]
     public IVeloxCommand DeleteCommand { get; }
 
     public IWorkflowSlotViewModelHelper GetHelper();

@@ -117,14 +117,16 @@ public static class AgentContextCollector
         {
             result.AppendLine("Commands:");
             result.AppendLine();
-            result.AppendLine("| Name | Description |");
-            result.AppendLine("| ---- | ----------- |");
+            result.AppendLine("| Name | ParameterType | Description |");
+            result.AppendLine("| ---- | ------------- | ----------- |");
 
             foreach (var cmdProp in commandProps)
             {
                 var descList = GetAgentContext(cmdProp, language);
                 var descText = string.Join("; ", descList.Select((ctx, i) => $"[{i + 1}-{ctx}]"));
-                result.AppendLine($"| {cmdProp.Name} | {descText} |");
+                var paramAttr = cmdProp.GetCustomAttribute<AgentCommandParameterAttribute>();
+                var paramType = paramAttr?.ParameterType?.FullName ?? "(none)";
+                result.AppendLine($"| {cmdProp.Name} | {paramType} | {descText} |");
             }
         }
         result.AppendLine();
@@ -149,7 +151,7 @@ public static class AgentContextCollector
         foreach (var baseInterface in baseInterfaces)
             result.AppendLine($"- {baseInterface}");
         result.AppendLine();
-        result.AppendLine("Descriptions:");
+        result.AppendLine("Developer Instructions (AUTHORITATIVE — these override any runtime default values):");
         foreach (var context in GetAgentContext(type, language))
         {
             result.AppendLine($"- {context}");
@@ -204,8 +206,8 @@ public static class AgentContextCollector
 
         result.AppendLine("Commands:");
         result.AppendLine();
-        result.AppendLine("| Name | Description |");
-        result.AppendLine("| ---- | ----------- |");
+        result.AppendLine("| Name | ParameterType | Description |");
+        result.AppendLine("| ---- | ------------- | ----------- |");
 
         var commands = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .Select(m => new
@@ -221,7 +223,9 @@ public static class AgentContextCollector
         {
             string description = string.Join("; ", item.Contexts.Select((ctx, i) => $"[{i + 1}-{ctx}]"));
             string commandName = item.Method.Name.Replace("Async", "");
-            result.AppendLine($"| {commandName} | {description} |");
+            var paramAttr = item.Method.GetCustomAttribute<AgentCommandParameterAttribute>();
+            var paramType = paramAttr?.ParameterType?.FullName ?? "(none)";
+            result.AppendLine($"| {commandName} | {paramType} | {description} |");
         }
         result.AppendLine();
 

@@ -15,8 +15,12 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Agents.AI" Version="1.1.0" />
+		<PackageReference Include="Microsoft.Extensions.AI" Version="10.5.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-		<PackageReference Include="VeloxDev.Core" Version="4.2.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

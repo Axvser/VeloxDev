@@ -21,6 +21,7 @@ public interface IWorkflowLinkViewModel : IWorkflowViewModel
 
     [AgentContext(AgentLanguages.Chinese, "删除当前连接，参数为Null")]
     [AgentContext(AgentLanguages.English, "Delete the current connection, parameter is Null")]
+    [AgentCommandParameter]
     public IVeloxCommand DeleteCommand { get; }
 
     public IWorkflowLinkViewModelHelper GetHelper();
