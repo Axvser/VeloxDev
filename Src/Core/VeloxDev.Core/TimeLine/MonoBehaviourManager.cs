@@ -21,7 +21,6 @@ namespace VeloxDev.TimeLine
         private const int DEFAULT_TARGET_FPS = 60;
         private const int DEFAULT_FIXED_UPDATE_INTERVAL_MS = 16;
 
-        private const int MAX_WRAPPER_POOL_SIZE = 100;
         private const int DEFAULT_OBJECT_POOL_SIZE = 50;
         private const int MAX_CONFIG_CACHE_DURATION_MS = 1000;
 
@@ -31,40 +30,75 @@ namespace VeloxDev.TimeLine
         private const int MIN_UPDATE_INTERVAL_MS = 1;
         private const int MAX_UPDATE_INTERVAL_MS = 1000;
 
+        // 自旋阈值：低于此毫秒数用纯自旋，高于则 Thread.Sleep(1) + 尾部自旋
+        private const int SPIN_ONLY_THRESHOLD_MS = 2;
+
         #endregion
 
         #region 内部类
 
-        private class BehaviorWrapper(IMonoBehaviour behavior, int executionOrder)
+        private sealed class BehaviorWrapper
         {
-            public IMonoBehaviour Behavior { get; } = behavior;
-            public int ExecutionOrder { get; } = executionOrder;
-            public readonly object LockObject = new();
-        }
+            public IMonoBehaviour? Behavior;
+            public int ExecutionOrder;
+            public volatile bool IsActive;
 
-        private class ConfigChangeRequest
-        {
-            public int? TargetFPS { get; set; }
-            public int? FixedUpdateInterval { get; set; }
-            public float? TimeScale { get; set; }
-            public bool? PauseState { get; set; }
-        }
-
-        private class ObjectPool<T>(int maxSize) where T : class, new()
-        {
-            private readonly ConcurrentQueue<T> _pool = new();
-            private readonly int _maxSize = maxSize;
-
-            public T Get()
+            public void Reset(IMonoBehaviour behavior, int order)
             {
-                return _pool.TryDequeue(out var item) ? item : new T();
+                Behavior = behavior;
+                ExecutionOrder = order;
+                IsActive = true;
             }
 
+            public void Clear()
+            {
+                Behavior = null;
+                IsActive = false;
+            }
+        }
+
+        private sealed class ConfigChangeRequest
+        {
+            public int? TargetFPS;
+            public int? FixedUpdateInterval;
+            public float? TimeScale;
+            public bool? PauseState;
+
+            public void Reset()
+            {
+                TargetFPS = null;
+                FixedUpdateInterval = null;
+                TimeScale = null;
+                PauseState = null;
+            }
+        }
+
+        private sealed class ObjectPool<T>(int maxSize) where T : class, new()
+        {
+            private readonly ConcurrentStack<T> _pool = new();
+            private int _count;
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public T Get()
+            {
+                if (_pool.TryPop(out var item))
+                {
+                    Interlocked.Decrement(ref _count);
+                    return item;
+                }
+                return new T();
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Return(T item)
             {
-                if (_pool.Count < _maxSize)
+                if (Interlocked.Increment(ref _count) <= maxSize)
                 {
-                    _pool.Enqueue(item);
+                    _pool.Push(item);
+                }
+                else
+                {
+                    Interlocked.Decrement(ref _count);
                 }
             }
         }
@@ -78,42 +112,48 @@ namespace VeloxDev.TimeLine
         private static readonly ConcurrentQueue<IMonoBehaviour> _removeQueue = new();
         private static readonly ConcurrentQueue<ConfigChangeRequest> _configQueue = new();
         private static readonly ConcurrentQueue<Action> _mainThreadQueue = new();
-        private static readonly BlockingCollection<FrameEventArgs> _fixedUpdateEvents = [];
 
-        private static volatile bool _isRunning = false;
-        private static volatile bool _isPaused = false;
-        private static float _timeScale = DEFAULT_TIME_SCALE;
+        // FixedUpdate 事件用无锁环形缓冲替代 BlockingCollection
+        private static readonly ConcurrentQueue<FrameEventArgs> _fixedUpdateEvents = new();
+
+        private static volatile bool _isRunning;
+        private static volatile bool _isPaused;
+
+        // 使用 Interlocked 安全读写的字段，通过 long/int 包装 float
+        private static long _timeScaleBits = BitConverter.DoubleToInt64Bits(DEFAULT_TIME_SCALE);
         private static int _targetFPS = DEFAULT_TARGET_FPS;
         private static int _fixedUpdateInterval = DEFAULT_FIXED_UPDATE_INTERVAL_MS;
 
-        private static long _totalTimeMs = 0;
-        private static long _lastFrameTime = 0;
-        private static int _currentFPS = 0;
-        private static int _fpsCounter = 0;
-        private static long _fpsLastUpdateTime = 0;
-        private static long _totalFrames = 0;
-        private static int _instanceCounter = 0;
+        private static long _totalTimeMs;
+        private static long _lastFrameTime;
+        private static int _currentFPS;
+        private static int _fpsCounter;
+        private static long _fpsLastUpdateTime;
+        private static long _totalFrames;
+        private static int _instanceCounter;
 
         private static CancellationTokenSource _mainCancellationTokenSource = new();
-        private static Task? _updateTask;
-        private static Task? _fixedUpdateTask;
+        private static Thread? _updateThread;
+        private static Thread? _fixedUpdateThread;
 
-        private static volatile bool _isUpdateThreadActive = false;
-        private static volatile bool _isFixedUpdateThreadActive = false;
-        private static long _updateThreadLastActivity = 0;
-        private static long _fixedUpdateThreadLastActivity = 0;
-        private static readonly object _threadStatusLock = new();
+        private static volatile bool _isUpdateThreadActive;
+        private static volatile bool _isFixedUpdateThreadActive;
+        private static long _updateThreadLastActivity;
+        private static long _fixedUpdateThreadLastActivity;
 
         private static readonly ObjectPool<FrameEventArgs> _frameEventArgsPool = new(DEFAULT_OBJECT_POOL_SIZE);
         private static readonly ObjectPool<ConfigChangeRequest> _configRequestPool = new(DEFAULT_OBJECT_POOL_SIZE);
-        private static readonly ConcurrentQueue<BehaviorWrapper> _wrapperPool = new();
+        private static readonly ObjectPool<BehaviorWrapper> _wrapperPool = new(DEFAULT_OBJECT_POOL_SIZE);
 
         private static double _cachedTargetFrameTime = 1000.0 / DEFAULT_TARGET_FPS;
-        private static long _lastConfigCheckTime = 0;
-        private static BehaviorWrapper[] _cachedWrappers = [];
+        private static long _lastConfigCheckTime;
+
+        // 缓存的排序包装器数组 — volatile 确保跨线程可见性
+        private static volatile BehaviorWrapper[] _cachedWrappers = [];
+        private static volatile bool _wrappersNeedSort;
 
         private static readonly Stopwatch _frameTimer = new();
-        private static readonly long _minSleepThreshold = TimeSpan.FromMilliseconds(MIN_SLEEP_MS).Ticks;
+        private static readonly long _ticksPerMs = Stopwatch.Frequency / 1000;
 
         public static event EventHandler? OnSystemStarted;
         public static event EventHandler? OnSystemPaused;
@@ -127,19 +167,19 @@ namespace VeloxDev.TimeLine
         public static bool IsRunning => _isRunning;
         public static bool IsPaused => _isPaused;
         public static int CurrentFPS => _currentFPS;
-        public static int TargetFPS => _targetFPS;
-        public static long TotalTimeMs => _totalTimeMs;
-        public static long TotalFrames => _totalFrames;
+        public static int TargetFPS => Volatile.Read(ref _targetFPS);
+        public static long TotalTimeMs => Interlocked.Read(ref _totalTimeMs);
+        public static long TotalFrames => Interlocked.Read(ref _totalFrames);
         public static int ActiveBehaviorCount => _behaviors.Count;
-        public static float TimeScale => _timeScale;
+        public static float TimeScale => (float)BitConverter.Int64BitsToDouble(Interlocked.Read(ref _timeScaleBits));
 
         public static string SystemStatus => !_isRunning ? "Stopped" : _isPaused ? "Paused" : "Running";
 
         public static bool IsUpdateThreadAlive => _isRunning && _isUpdateThreadActive &&
-            (GetCurrentTimestamp() - _updateThreadLastActivity) < THREAD_INACTIVITY_TIMEOUT_MS;
+            (GetCurrentTimestamp() - Interlocked.Read(ref _updateThreadLastActivity)) < THREAD_INACTIVITY_TIMEOUT_MS;
 
         public static bool IsFixedUpdateThreadAlive => _isRunning && _isFixedUpdateThreadActive &&
-            (GetCurrentTimestamp() - _fixedUpdateThreadLastActivity) < THREAD_INACTIVITY_TIMEOUT_MS;
+            (GetCurrentTimestamp() - Interlocked.Read(ref _fixedUpdateThreadLastActivity)) < THREAD_INACTIVITY_TIMEOUT_MS;
 
         #endregion
 
@@ -149,15 +189,16 @@ namespace VeloxDev.TimeLine
         {
             if (fps < MIN_FPS || fps > MAX_FPS) return;
             var request = _configRequestPool.Get();
+            request.Reset();
             request.TargetFPS = fps;
             _configQueue.Enqueue(request);
-            _cachedTargetFrameTime = 1000.0 / fps;
         }
 
         public static void SetFixedUpdateInterval(int intervalMs)
         {
             if (intervalMs < MIN_UPDATE_INTERVAL_MS || intervalMs > MAX_UPDATE_INTERVAL_MS) return;
             var request = _configRequestPool.Get();
+            request.Reset();
             request.FixedUpdateInterval = intervalMs;
             _configQueue.Enqueue(request);
         }
@@ -167,6 +208,7 @@ namespace VeloxDev.TimeLine
             if (timeScale < MIN_TIME_SCALE) timeScale = MIN_TIME_SCALE;
             if (timeScale > MAX_TIME_SCALE) timeScale = MAX_TIME_SCALE;
             var request = _configRequestPool.Get();
+            request.Reset();
             request.TimeScale = timeScale;
             _configQueue.Enqueue(request);
         }
@@ -181,58 +223,68 @@ namespace VeloxDev.TimeLine
         {
             if (_isRunning) return;
 
-            lock (_threadStatusLock)
+            _isRunning = true;
+            _isPaused = false;
+            _isUpdateThreadActive = false;
+            _isFixedUpdateThreadActive = false;
+            Interlocked.Exchange(ref _updateThreadLastActivity, 0);
+            Interlocked.Exchange(ref _fixedUpdateThreadLastActivity, 0);
+
+            _mainCancellationTokenSource = new CancellationTokenSource();
+            _lastFrameTime = GetCurrentTimestamp();
+            _fpsLastUpdateTime = _lastFrameTime;
+            _frameTimer.Restart();
+
+            RebuildCachedWrappers();
+
+            var token = _mainCancellationTokenSource.Token;
+
+            _fixedUpdateThread = new Thread(() => FixedUpdateLoop(token))
             {
-                _isRunning = true;
-                _isPaused = false;
-                _isUpdateThreadActive = false;
-                _isFixedUpdateThreadActive = false;
-                _updateThreadLastActivity = 0;
-                _fixedUpdateThreadLastActivity = 0;
+                Name = "VeloxDev.FixedUpdate",
+                IsBackground = true,
+                Priority = ThreadPriority.AboveNormal
+            };
 
-                _mainCancellationTokenSource = new CancellationTokenSource();
-                _lastFrameTime = GetCurrentTimestamp();
-                _fpsLastUpdateTime = _lastFrameTime;
-                _frameTimer.Restart();
+            _updateThread = new Thread(() => UpdateLoop(token))
+            {
+                Name = "VeloxDev.Update",
+                IsBackground = true,
+                Priority = ThreadPriority.AboveNormal
+            };
 
-                UpdateCachedWrappers();
+            _fixedUpdateThread.Start();
+            _updateThread.Start();
 
-                _fixedUpdateTask = Task.Run(() => FixedUpdateLoop(_mainCancellationTokenSource.Token), _mainCancellationTokenSource.Token);
-                _updateTask = Task.Run(() => UpdateLoop(_mainCancellationTokenSource.Token), _mainCancellationTokenSource.Token);
-
-                OnSystemStarted?.Invoke(null, EventArgs.Empty);
-            }
+            OnSystemStarted?.Invoke(null, EventArgs.Empty);
         }
 
         public static async Task StopAsync()
         {
             if (!_isRunning) return;
 
-            lock (_threadStatusLock)
-            {
-                _isRunning = false;
-                _isPaused = false;
-                _isUpdateThreadActive = false;
-                _isFixedUpdateThreadActive = false;
-            }
+            _isRunning = false;
+            _isPaused = false;
+            _isUpdateThreadActive = false;
+            _isFixedUpdateThreadActive = false;
 
             _mainCancellationTokenSource.Cancel();
             _frameTimer.Stop();
 
             try
             {
-                var stopTasks = new List<Task>();
-                if (_updateTask != null) stopTasks.Add(_updateTask);
-                if (_fixedUpdateTask != null) stopTasks.Add(_fixedUpdateTask);
-
-                if (stopTasks.Count > 0)
-                    await Task.WhenAll(stopTasks).ConfigureAwait(false);
+                // 等待线程退出，设置合理超时
+                await Task.Run(() =>
+                {
+                    _updateThread?.Join(RESTART_SHUTDOWN_TIMEOUT_MS);
+                    _fixedUpdateThread?.Join(RESTART_SHUTDOWN_TIMEOUT_MS);
+                }).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { }
+            catch (Exception) { /* 静默处理 */ }
             finally
             {
-                _updateTask = null;
-                _fixedUpdateTask = null;
+                _updateThread = null;
+                _fixedUpdateThread = null;
                 ResetStatistics();
                 ClearQueues();
             }
@@ -257,7 +309,6 @@ namespace VeloxDev.TimeLine
         public static async Task RestartAsync()
         {
             var stopwatch = Stopwatch.StartNew();
-
             await ExecuteRestartAsync().ConfigureAwait(false);
 
             if (stopwatch.ElapsedMilliseconds > 5)
@@ -266,15 +317,15 @@ namespace VeloxDev.TimeLine
             }
         }
 
-        public static void RegisterBehaviour(IMonoBehaviour behavior) => ExecuteOnMainThread(() =>
+        public static void RegisterBehaviour(IMonoBehaviour behavior)
         {
             if (behavior != null) _addQueue.Enqueue(behavior);
-        });
+        }
 
-        public static void UnregisterBehaviour(IMonoBehaviour behavior) => ExecuteOnMainThread(() =>
+        public static void UnregisterBehaviour(IMonoBehaviour behavior)
         {
             if (behavior != null) _removeQueue.Enqueue(behavior);
-        });
+        }
 
         #endregion
 
@@ -282,10 +333,8 @@ namespace VeloxDev.TimeLine
 
         private static async Task ExecuteRestartAsync()
         {
-            // 阶段1: 请求停止
-            await StopAsync();
+            await StopAsync().ConfigureAwait(false);
 
-            // 阶段2: 等待系统完全停止
             var shutdownConfirmed = await WaitForConditionAsync(
                 timeout: TimeSpan.FromMilliseconds(RESTART_SHUTDOWN_TIMEOUT_MS),
                 checkInterval: TimeSpan.FromMilliseconds(DEFAULT_RESTART_CHECK_INTERVAL_MS),
@@ -294,11 +343,10 @@ namespace VeloxDev.TimeLine
 
             if (!shutdownConfirmed)
             {
-                Debug.WriteLine($"Warning: Force restarting after timeout");
+                Debug.WriteLine("Warning: Force restarting after timeout");
                 ForceCleanup();
             }
 
-            // 阶段3: 验证所有队列已清空
             await WaitForConditionAsync(
                 timeout: TimeSpan.FromMilliseconds(RESTART_QUEUE_CLEAR_TIMEOUT_MS),
                 checkInterval: TimeSpan.FromMilliseconds(DEFAULT_RESTART_CHECK_INTERVAL_MS / 2),
@@ -306,29 +354,18 @@ namespace VeloxDev.TimeLine
                                _configQueue.IsEmpty && _mainThreadQueue.IsEmpty
             ).ConfigureAwait(false);
 
-            // 阶段4: 重新启动
             Start();
         }
 
         private static async Task<bool> WaitForConditionAsync(TimeSpan timeout, TimeSpan checkInterval, Func<bool> condition)
         {
             var stopwatch = Stopwatch.StartNew();
-            var spinWait = new SpinWait();
 
-            // 完全自旋等待，不进行任何线程切换
             while (stopwatch.Elapsed < timeout)
             {
                 if (condition()) return true;
-
-                // 使用优化的自旋策略替代Task.Delay
-                var spinStart = Stopwatch.GetTimestamp();
-                var targetTicks = spinStart + (long)(checkInterval.TotalSeconds * Stopwatch.Frequency);
-
-                while (Stopwatch.GetTimestamp() < targetTicks)
-                {
-                    if (condition()) return true;
-                    spinWait.SpinOnce();
-                }
+                // 重启不在热路径中，用 Task.Delay 即可，避免 CPU 浪费
+                await Task.Delay((int)Math.Max(1, checkInterval.TotalMilliseconds)).ConfigureAwait(false);
             }
 
             return false;
@@ -340,13 +377,12 @@ namespace VeloxDev.TimeLine
             _mainCancellationTokenSource?.Dispose();
             _mainCancellationTokenSource = new CancellationTokenSource();
 
-            _updateTask = null;
-            _fixedUpdateTask = null;
+            _updateThread = null;
+            _fixedUpdateThread = null;
             _isRunning = false;
             _isUpdateThreadActive = false;
             _isFixedUpdateThreadActive = false;
 
-            // 清空所有队列
             ClearQueues();
         }
 
@@ -354,13 +390,10 @@ namespace VeloxDev.TimeLine
 
         #region 主循环
 
-        private static async Task FixedUpdateLoop(CancellationToken token)
+        private static void FixedUpdateLoop(CancellationToken token)
         {
-            lock (_threadStatusLock)
-            {
-                _isFixedUpdateThreadActive = true;
-                _fixedUpdateThreadLastActivity = GetCurrentTimestamp();
-            }
+            _isFixedUpdateThreadActive = true;
+            Interlocked.Exchange(ref _fixedUpdateThreadLastActivity, GetCurrentTimestamp());
 
             long lastFixedUpdateTime = GetCurrentTimestamp();
 
@@ -368,58 +401,58 @@ namespace VeloxDev.TimeLine
             {
                 while (_isRunning && !token.IsCancellationRequested)
                 {
-                    lock (_threadStatusLock) { _fixedUpdateThreadLastActivity = GetCurrentTimestamp(); }
+                    Interlocked.Exchange(ref _fixedUpdateThreadLastActivity, GetCurrentTimestamp());
 
                     if (_isPaused)
                     {
-                        await HighPrecisionSpinWait(DEFAULT_PAUSE_DELAY_MS, token).ConfigureAwait(false);
+                        PrecisionSleep(DEFAULT_PAUSE_DELAY_MS, token);
                         continue;
                     }
 
                     var currentTime = GetCurrentTimestamp();
+                    var interval = Volatile.Read(ref _fixedUpdateInterval);
                     var elapsed = currentTime - lastFixedUpdateTime;
 
-                    if (elapsed >= _fixedUpdateInterval)
+                    if (elapsed >= interval)
                     {
-                        var fixedFrameArgs = CreateFixedFrameEventArgs((int)elapsed);
-                        await ExecuteBehaviorsFixedUpdate(fixedFrameArgs, token).ConfigureAwait(false);
+                        var fixedFrameArgs = CreateFrameEventArgs((int)elapsed);
+                        ExecuteBehaviorsFixedUpdateSync(fixedFrameArgs, token);
 
                         if (!fixedFrameArgs.Handled)
-                            _fixedUpdateEvents.Add(fixedFrameArgs, token);
+                            _fixedUpdateEvents.Enqueue(fixedFrameArgs);
+                        else
+                            _frameEventArgsPool.Return(fixedFrameArgs);
 
                         lastFixedUpdateTime = currentTime;
                     }
 
-                    var nextUpdateTime = lastFixedUpdateTime + _fixedUpdateInterval;
-                    var waitTime = nextUpdateTime - GetCurrentTimestamp();
+                    var nextUpdateTime = lastFixedUpdateTime + interval;
+                    var waitTime = (int)(nextUpdateTime - GetCurrentTimestamp());
                     if (waitTime > 0)
-                        await HighPrecisionSpinWait((int)waitTime, token).ConfigureAwait(false);
+                        PrecisionSleep(waitTime, token);
                 }
             }
             catch (OperationCanceledException) { }
             finally
             {
-                lock (_threadStatusLock) { _isFixedUpdateThreadActive = false; }
+                _isFixedUpdateThreadActive = false;
             }
         }
 
-        private static async Task UpdateLoop(CancellationToken token)
+        private static void UpdateLoop(CancellationToken token)
         {
-            lock (_threadStatusLock)
-            {
-                _isUpdateThreadActive = true;
-                _updateThreadLastActivity = GetCurrentTimestamp();
-            }
+            _isUpdateThreadActive = true;
+            Interlocked.Exchange(ref _updateThreadLastActivity, GetCurrentTimestamp());
 
             try
             {
                 while (_isRunning && !token.IsCancellationRequested)
                 {
-                    lock (_threadStatusLock) { _updateThreadLastActivity = GetCurrentTimestamp(); }
+                    Interlocked.Exchange(ref _updateThreadLastActivity, GetCurrentTimestamp());
 
                     if (_isPaused)
                     {
-                        await HighPrecisionSpinWait(DEFAULT_PAUSE_DELAY_MS, token).ConfigureAwait(false);
+                        PrecisionSleep(DEFAULT_PAUSE_DELAY_MS, token);
                         continue;
                     }
 
@@ -429,25 +462,27 @@ namespace VeloxDev.TimeLine
                     var deltaTime = CalculateDeltaTime(frameStartTime);
                     if (deltaTime <= 0)
                     {
-                        await HighPrecisionSpinWait(MIN_SLEEP_MS, token).ConfigureAwait(false);
+                        PrecisionSleep(MIN_SLEEP_MS, token);
                         continue;
                     }
 
                     var frameArgs = CreateFrameEventArgs(deltaTime);
-                    ProcessFixedUpdateEvents();
+                    DrainFixedUpdateEvents();
 
-                    await ExecuteBehaviorsUpdate(frameArgs, token).ConfigureAwait(false);
-                    await ExecuteBehaviorsLateUpdate(frameArgs, token).ConfigureAwait(false);
+                    ExecuteBehaviorsUpdateSync(frameArgs, token);
+                    ExecuteBehaviorsLateUpdateSync(frameArgs, token);
+
+                    _frameEventArgsPool.Return(frameArgs);
 
                     UpdatePerformanceStats(frameStartTime, deltaTime);
-                    await FrameRateControl(frameStartTime, token).ConfigureAwait(false);
-                    _totalFrames++;
+                    FrameRateControlSync(frameStartTime, token);
+                    Interlocked.Increment(ref _totalFrames);
                 }
             }
             catch (OperationCanceledException) { }
             finally
             {
-                lock (_threadStatusLock) { _isUpdateThreadActive = false; }
+                _isUpdateThreadActive = false;
             }
         }
 
@@ -455,66 +490,78 @@ namespace VeloxDev.TimeLine
 
         #region 行为执行
 
-        private static Task ExecuteBehaviorsUpdate(FrameEventArgs frameArgs, CancellationToken token) =>
-            ExecuteBehaviorsMethod(wrapper =>
-            {
-                lock (wrapper.LockObject)
-                {
-                    wrapper.Behavior.InvokeUpdate(frameArgs);
-                }
-            }, frameArgs, token);
-
-        private static Task ExecuteBehaviorsLateUpdate(FrameEventArgs frameArgs, CancellationToken token) =>
-            ExecuteBehaviorsMethod(wrapper =>
-            {
-                lock (wrapper.LockObject)
-                {
-                    wrapper.Behavior.InvokeLateUpdate(frameArgs);
-                }
-            }, frameArgs, token);
-
-        private static Task ExecuteBehaviorsFixedUpdate(FrameEventArgs frameArgs, CancellationToken token) =>
-            ExecuteBehaviorsMethod(wrapper =>
-            {
-                lock (wrapper.LockObject)
-                {
-                    wrapper.Behavior.InvokeFixedUpdate(frameArgs);
-                }
-            }, frameArgs, token);
-
-        private static Task ExecuteBehaviorsMethod(Action<BehaviorWrapper> action, FrameEventArgs frameArgs, CancellationToken token)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ExecuteBehaviorsUpdateSync(FrameEventArgs frameArgs, CancellationToken token)
         {
-            if (_behaviors.IsEmpty || frameArgs.Handled || token.IsCancellationRequested)
-                return Task.CompletedTask;
-
-            var wrappers = _cachedWrappers;
-            if (wrappers.Length == 0 || _lastConfigCheckTime + MAX_CONFIG_CACHE_DURATION_MS < GetCurrentTimestamp())
+            var wrappers = GetCachedWrappers();
+            for (int i = 0; i < wrappers.Length; i++)
             {
-                UpdateCachedWrappers();
-                wrappers = _cachedWrappers;
-                _lastConfigCheckTime = GetCurrentTimestamp();
+                if (frameArgs.Handled || token.IsCancellationRequested) break;
+                var w = wrappers[i];
+                if (w is { IsActive: true, Behavior: not null })
+                {
+                    try { w.Behavior.InvokeUpdate(frameArgs); }
+                    catch (Exception ex) { Debug.WriteLine($"Update error: {ex.Message}"); }
+                }
             }
+        }
 
-            foreach (var wrapper in wrappers)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ExecuteBehaviorsLateUpdateSync(FrameEventArgs frameArgs, CancellationToken token)
+        {
+            var wrappers = GetCachedWrappers();
+            for (int i = 0; i < wrappers.Length; i++)
             {
-                if (wrapper?.Behavior == null || frameArgs.Handled || token.IsCancellationRequested)
-                    break;
-
-                action(wrapper);
+                if (frameArgs.Handled || token.IsCancellationRequested) break;
+                var w = wrappers[i];
+                if (w is { IsActive: true, Behavior: not null })
+                {
+                    try { w.Behavior.InvokeLateUpdate(frameArgs); }
+                    catch (Exception ex) { Debug.WriteLine($"LateUpdate error: {ex.Message}"); }
+                }
             }
+        }
 
-            return Task.CompletedTask;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ExecuteBehaviorsFixedUpdateSync(FrameEventArgs frameArgs, CancellationToken token)
+        {
+            var wrappers = GetCachedWrappers();
+            for (int i = 0; i < wrappers.Length; i++)
+            {
+                if (frameArgs.Handled || token.IsCancellationRequested) break;
+                var w = wrappers[i];
+                if (w is { IsActive: true, Behavior: not null })
+                {
+                    try { w.Behavior.InvokeFixedUpdate(frameArgs); }
+                    catch (Exception ex) { Debug.WriteLine($"FixedUpdate error: {ex.Message}"); }
+                }
+            }
         }
 
         #endregion
 
         #region 辅助方法
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static BehaviorWrapper[] GetCachedWrappers()
+        {
+            var currentTime = GetCurrentTimestamp();
+            if (_wrappersNeedSort || Interlocked.Read(ref _lastConfigCheckTime) + MAX_CONFIG_CACHE_DURATION_MS < currentTime)
+            {
+                RebuildCachedWrappers();
+                Interlocked.Exchange(ref _lastConfigCheckTime, currentTime);
+            }
+            return _cachedWrappers;
+        }
+
         private static void ProcessMainThreadOperations()
         {
-            while (_mainThreadQueue.TryDequeue(out var action))
+            // 限制每帧处理数量，防止卡顿
+            int processed = 0;
+            while (processed < 64 && _mainThreadQueue.TryDequeue(out var action))
             {
                 try { action(); } catch (Exception ex) { Debug.WriteLine($"Main thread error: {ex.Message}"); }
+                processed++;
             }
 
             ProcessConfigChanges();
@@ -526,120 +573,166 @@ namespace VeloxDev.TimeLine
         {
             while (_configQueue.TryDequeue(out var config))
             {
-                if (config.TargetFPS.HasValue) _targetFPS = config.TargetFPS.Value;
-                if (config.FixedUpdateInterval.HasValue) _fixedUpdateInterval = config.FixedUpdateInterval.Value;
-                if (config.TimeScale.HasValue) _timeScale = config.TimeScale.Value;
-                if (config.PauseState.HasValue) _isPaused = config.PauseState.Value;
+                if (config.TargetFPS.HasValue)
+                {
+                    Volatile.Write(ref _targetFPS, config.TargetFPS.Value);
+                    _cachedTargetFrameTime = 1000.0 / config.TargetFPS.Value;
+                }
+                if (config.FixedUpdateInterval.HasValue)
+                    Volatile.Write(ref _fixedUpdateInterval, config.FixedUpdateInterval.Value);
+                if (config.TimeScale.HasValue)
+                    Interlocked.Exchange(ref _timeScaleBits, BitConverter.DoubleToInt64Bits(config.TimeScale.Value));
+                if (config.PauseState.HasValue)
+                    _isPaused = config.PauseState.Value;
+
+                config.Reset();
                 _configRequestPool.Return(config);
             }
         }
 
         private static void ProcessAddedBehaviors()
         {
+            bool added = false;
             while (_addQueue.TryDequeue(out var behavior))
             {
                 if (behavior == null) continue;
 
-                var wrapper = _wrapperPool.TryDequeue(out var pooled) ? pooled :
-                    new BehaviorWrapper(behavior, Interlocked.Increment(ref _instanceCounter));
+                var wrapper = _wrapperPool.Get();
+                wrapper.Reset(behavior, Interlocked.Increment(ref _instanceCounter));
 
                 _behaviors[GetBehaviorHash(behavior)] = wrapper;
                 SafeExecute(behavior.InvokeAwake);
                 SafeExecute(behavior.InvokeStart);
-                UpdateCachedWrappers();
+                added = true;
             }
+            if (added) _wrappersNeedSort = true;
         }
 
         private static void ProcessRemovedBehaviors()
         {
+            bool removed = false;
             while (_removeQueue.TryDequeue(out var behavior))
             {
                 if (behavior != null && _behaviors.TryRemove(GetBehaviorHash(behavior), out var wrapper))
                 {
-                    if (_wrapperPool.Count < MAX_WRAPPER_POOL_SIZE) _wrapperPool.Enqueue(wrapper);
+                    wrapper.Clear();
+                    _wrapperPool.Return(wrapper);
+                    removed = true;
                 }
-                UpdateCachedWrappers();
             }
+            if (removed) _wrappersNeedSort = true;
         }
 
-        private static FrameEventArgs CreateFixedFrameEventArgs(int deltaTime) => CreateFrameEventArgs(deltaTime);
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static FrameEventArgs CreateFrameEventArgs(int deltaTime)
         {
+            var ts = (float)BitConverter.Int64BitsToDouble(Interlocked.Read(ref _timeScaleBits));
             var frameArgs = _frameEventArgsPool.Get();
-            frameArgs.DeltaTime = (int)(deltaTime * _timeScale);
-            frameArgs.TotalTime = (int)_totalTimeMs;
+            frameArgs.DeltaTime = (int)(deltaTime * ts);
+            frameArgs.TotalTime = (int)Interlocked.Read(ref _totalTimeMs);
             frameArgs.CurrentFPS = _currentFPS;
-            frameArgs.TargetFPS = _targetFPS;
+            frameArgs.TargetFPS = Volatile.Read(ref _targetFPS);
             frameArgs.Handled = false;
             return frameArgs;
         }
 
-        private static void ProcessFixedUpdateEvents()
+        private static void DrainFixedUpdateEvents()
         {
-            while (_fixedUpdateEvents.TryTake(out var fixedEvent))
+            while (_fixedUpdateEvents.TryDequeue(out var fixedEvent))
                 _frameEventArgsPool.Return(fixedEvent);
         }
 
-        private static async Task FrameRateControl(long frameStartTime, CancellationToken token)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void FrameRateControlSync(long frameStartTime, CancellationToken token)
         {
             var elapsed = GetCurrentTimestamp() - frameStartTime;
-            if (elapsed < _cachedTargetFrameTime)
+            var target = _cachedTargetFrameTime;
+            if (elapsed < target)
             {
-                var sleepTime = (int)(_cachedTargetFrameTime - elapsed);
-                if (sleepTime > 0) await HighPrecisionSpinWait(sleepTime, token).ConfigureAwait(false);
+                var sleepTime = (int)(target - elapsed);
+                if (sleepTime > 0) PrecisionSleep(sleepTime, token);
             }
         }
 
-        private static Task HighPrecisionSpinWait(int milliseconds, CancellationToken token)
+        /// <summary>
+        /// 高精度睡眠：长等待用 Thread.Sleep(1) 节省 CPU，尾部自旋保精度
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void PrecisionSleep(int milliseconds, CancellationToken token)
         {
-            if (milliseconds <= 0 || token.IsCancellationRequested)
-                return Task.CompletedTask;
+            if (milliseconds <= 0) return;
 
-            var targetTicks = _frameTimer.ElapsedTicks + (milliseconds * 10000);
-            var spinWait = new SpinWait();
+            var targetTicks = _frameTimer.ElapsedTicks + (long)milliseconds * _ticksPerMs;
 
-            // 纯自旋等待，不进行任何线程切换
+            // 长等待阶段：Thread.Sleep(1) 实际精度约 1-2ms，节约 CPU
+            if (milliseconds > SPIN_ONLY_THRESHOLD_MS)
+            {
+                var sleepUntilTicks = targetTicks - SPIN_ONLY_THRESHOLD_MS * _ticksPerMs;
+                while (_frameTimer.ElapsedTicks < sleepUntilTicks)
+                {
+                    if (token.IsCancellationRequested) return;
+                    Thread.Sleep(1);
+                }
+            }
+
+            // 尾部自旋：高精度等待最后 ~2ms
+            var sw = new SpinWait();
             while (_frameTimer.ElapsedTicks < targetTicks)
             {
-                if (token.IsCancellationRequested)
-                    break;
-
-                // 使用优化的自旋策略
-                if (targetTicks - _frameTimer.ElapsedTicks > _minSleepThreshold * 10)
-                {
-                    // 长等待时适度降低CPU使用率
-                    for (int i = 0; i < 50; i++)
-                    {
-                        if (_frameTimer.ElapsedTicks >= targetTicks || token.IsCancellationRequested)
-                            break;
-                        spinWait.SpinOnce();
-                    }
-                }
-                else
-                {
-                    // 短等待时最高精度自旋
-                    spinWait.SpinOnce();
-                }
+                if (token.IsCancellationRequested) return;
+                sw.SpinOnce();
             }
-
-            return Task.CompletedTask;
         }
 
-        private static void UpdateCachedWrappers() => _cachedWrappers = [.. _behaviors.Values.OrderBy(w => w.ExecutionOrder)];
+        private static void RebuildCachedWrappers()
+        {
+            var values = _behaviors.Values;
+            var arr = new BehaviorWrapper[values.Count];
+            int idx = 0;
+            foreach (var v in values)
+            {
+                if (v is { IsActive: true })
+                    arr[idx++] = v;
+            }
+
+            // 插入排序 — 行为数量通常很少，避免 LINQ 分配
+            for (int i = 1; i < idx; i++)
+            {
+                var key = arr[i];
+                int j = i - 1;
+                while (j >= 0 && arr[j].ExecutionOrder > key.ExecutionOrder)
+                {
+                    arr[j + 1] = arr[j];
+                    j--;
+                }
+                arr[j + 1] = key;
+            }
+
+            if (idx < arr.Length)
+                Array.Resize(ref arr, idx);
+
+            _cachedWrappers = arr;
+            _wrappersNeedSort = false;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int GetBehaviorHash(IMonoBehaviour behavior) => RuntimeHelpers.GetHashCode(behavior);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static long GetCurrentTimestamp() => Stopwatch.GetTimestamp() * 1000 / Stopwatch.Frequency;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int CalculateDeltaTime(long currentTime)
         {
-            if (_lastFrameTime <= 0) return 1;
-            return Math.Max(1, (int)(currentTime - _lastFrameTime));
+            var last = Volatile.Read(ref _lastFrameTime);
+            if (last <= 0) return 1;
+            return Math.Max(1, (int)(currentTime - last));
         }
 
         private static void UpdatePerformanceStats(long frameStartTime, int deltaTime)
         {
-            _totalTimeMs += deltaTime;
-            _lastFrameTime = frameStartTime;
+            Interlocked.Add(ref _totalTimeMs, deltaTime);
+            Volatile.Write(ref _lastFrameTime, frameStartTime);
             _fpsCounter++;
 
             var currentTime = GetCurrentTimestamp();
@@ -658,18 +751,29 @@ namespace VeloxDev.TimeLine
 
         private static void ResetStatistics()
         {
-            _totalTimeMs = 0; _currentFPS = 0; _fpsCounter = 0;
-            _fpsLastUpdateTime = 0; _totalFrames = 0; _lastFrameTime = 0;
-            _lastConfigCheckTime = 0;
+            Interlocked.Exchange(ref _totalTimeMs, 0);
+            _currentFPS = 0;
+            _fpsCounter = 0;
+            _fpsLastUpdateTime = 0;
+            Interlocked.Exchange(ref _totalFrames, 0);
+            Volatile.Write(ref _lastFrameTime, 0);
+            Interlocked.Exchange(ref _lastConfigCheckTime, 0);
         }
 
         private static void ClearQueues()
         {
-            while (_fixedUpdateEvents.TryTake(out var frameEvent))
-                if (frameEvent is FrameEventArgs args) _frameEventArgsPool.Return(args);
+            while (_fixedUpdateEvents.TryDequeue(out var args))
+                _frameEventArgsPool.Return(args);
 
-            while (_configQueue.TryDequeue(out var config)) _configRequestPool.Return(config);
+            while (_configQueue.TryDequeue(out var config))
+            {
+                config.Reset();
+                _configRequestPool.Return(config);
+            }
+
             while (_mainThreadQueue.TryDequeue(out _)) { }
+            while (_addQueue.TryDequeue(out _)) { }
+            while (_removeQueue.TryDequeue(out _)) { }
         }
 
         #endregion
