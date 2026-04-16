@@ -1,16 +1,13 @@
+using Microsoft.Extensions.AI;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.AI;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using VeloxDev.AI.Workflow.Protocols;
-using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.AI.Workflow.Functions;
@@ -113,7 +110,7 @@ public sealed class WorkflowAgentToolkit
     private string Track(string toolName, string result)
     {
         _toolCallCount++;
-        _scope.OnToolCalled?.Invoke(toolName, result, _toolCallCount);
+        _scope.RaiseToolCalled(toolName, result, _toolCallCount);
         if (_scope.MaxToolCalls.HasValue && _toolCallCount > _scope.MaxToolCalls.Value)
             return Error($"Tool call limit ({_scope.MaxToolCalls.Value}) exceeded.");
         return result;
@@ -712,7 +709,7 @@ public sealed class WorkflowAgentToolkit
             var toolName = op["tool"]?.ToString();
             var args = op["args"] as JObject ?? new JObject();
 
-            if (string.IsNullOrEmpty(toolName) || !toolMap.TryGetValue(toolName, out var handler))
+            if (string.IsNullOrEmpty(toolName) || !toolMap.TryGetValue(toolName!, out var handler))
             {
                 results.Add(new JObject { ["tool"] = toolName, ["status"] = "error", ["message"] = $"Unknown tool '{toolName}'." });
                 continue;
@@ -742,19 +739,19 @@ public sealed class WorkflowAgentToolkit
             ["DeleteNode"] = a => DeleteNode(a.Value<int>("nodeIndex")),
             ["DeleteSlot"] = a => DeleteSlot(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex")),
             ["ConnectSlots"] = a => ConnectSlots(a.Value<int>("senderNodeIndex"), a.Value<int>("senderSlotIndex"), a.Value<int>("receiverNodeIndex"), a.Value<int>("receiverSlotIndex")),
-            ["ConnectSlotsById"] = a => ConnectSlotsById(a.Value<string>("senderSlotId"), a.Value<string>("receiverSlotId")),
+            ["ConnectSlotsById"] = a => ConnectSlotsById(a.Value<string>("senderSlotId")!, a.Value<string>("receiverSlotId")!),
             ["DisconnectSlots"] = a => DisconnectSlots(a.Value<int>("senderNodeIndex"), a.Value<int>("senderSlotIndex"), a.Value<int>("receiverNodeIndex"), a.Value<int>("receiverSlotIndex")),
             ["ExecuteWork"] = a => ExecuteWork(a.Value<int>("nodeIndex"), a.Value<string>("parameter")),
             ["BroadcastNode"] = a => BroadcastNode(a.Value<int>("nodeIndex"), a.Value<string>("parameter")),
             ["Undo"] = _ => Undo(),
             ["Redo"] = _ => Redo(),
-            ["PatchNodeProperties"] = a => PatchNodeProperties(a.Value<int>("nodeIndex"), a.Value<string>("jsonPatch")),
-            ["PatchComponentById"] = a => PatchComponentById(a.Value<string>("runtimeId"), a.Value<string>("jsonPatch")),
-            ["ExecuteCommandOnNode"] = a => ExecuteCommandOnNode(a.Value<int>("nodeIndex"), a.Value<string>("commandName"), a.Value<string>("jsonParameter")),
-            ["ExecuteCommandById"] = a => ExecuteCommandById(a.Value<string>("runtimeId"), a.Value<string>("commandName"), a.Value<string>("jsonParameter")),
-            ["CreateNode"] = a => CreateNode(a.Value<string>("fullTypeName"), a.Value<double?>("left") ?? 0, a.Value<double?>("top") ?? 0, a.Value<double?>("width") ?? 0, a.Value<double?>("height") ?? 0),
-            ["CreateSlotOnNode"] = a => CreateSlotOnNode(a.Value<int>("nodeIndex"), a.Value<string>("fullSlotTypeName"), a.Value<string>("channel") ?? "OneBoth"),
-            ["CloneNodes"] = a => CloneNodes(a.Value<string>("nodeIndicesJson"), a.Value<double?>("offsetX") ?? 200, a.Value<double?>("offsetY") ?? 0),
+            ["PatchNodeProperties"] = a => PatchNodeProperties(a.Value<int>("nodeIndex"), a.Value<string>("jsonPatch")!),
+            ["PatchComponentById"] = a => PatchComponentById(a.Value<string>("runtimeId")!, a.Value<string>("jsonPatch")!),
+            ["ExecuteCommandOnNode"] = a => ExecuteCommandOnNode(a.Value<int>("nodeIndex"), a.Value<string>("commandName")!, a.Value<string>("jsonParameter")),
+            ["ExecuteCommandById"] = a => ExecuteCommandById(a.Value<string>("runtimeId")!, a.Value<string>("commandName")!, a.Value<string>("jsonParameter")),
+            ["CreateNode"] = a => CreateNode(a.Value<string>("fullTypeName")!, a.Value<double?>("left") ?? 0, a.Value<double?>("top") ?? 0, a.Value<double?>("width") ?? 0, a.Value<double?>("height") ?? 0),
+            ["CreateSlotOnNode"] = a => CreateSlotOnNode(a.Value<int>("nodeIndex"), a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "OneBoth"),
+            ["CloneNodes"] = a => CloneNodes(a.Value<string>("nodeIndicesJson")!, a.Value<double?>("offsetX") ?? 200, a.Value<double?>("offsetY") ?? 0),
         };
     }
 
@@ -776,8 +773,8 @@ public sealed class WorkflowAgentToolkit
     private bool TryGetSlot(int nodeIndex, int slotIndex, out IWorkflowSlotViewModel? slot, out string error)
     {
         slot = null;
-        if (!TryGetNode(nodeIndex, out var node, out error)) return false;
-        if (slotIndex < 0 || slotIndex >= node!.Slots.Count)
+        if (!TryGetNode(nodeIndex, out var node, out error) || node is null) return false;
+        if (slotIndex < 0 || slotIndex >= node.Slots.Count)
         {
             error = Error($"Slot index {slotIndex} out of range [0,{node.Slots.Count}) on node {nodeIndex}.");
             return false;

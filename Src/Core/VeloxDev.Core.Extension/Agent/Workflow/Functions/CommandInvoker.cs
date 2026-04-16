@@ -1,13 +1,10 @@
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Windows.Input;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using VeloxDev.AI;
 using VeloxDev.MVVM;
-using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.AI.Workflow.Functions;
 
@@ -108,7 +105,7 @@ public static class CommandInvoker
         {
             try
             {
-                parameter = JsonConvert.DeserializeObject(jsonParameter, paramType);
+                parameter = JsonConvert.DeserializeObject(jsonParameter!, paramType);
             }
             catch (Exception ex)
             {

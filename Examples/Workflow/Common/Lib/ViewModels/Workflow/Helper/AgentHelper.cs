@@ -53,7 +53,7 @@ public class AgentHelper : TreeHelper<TreeViewModel>
     /// </summary>
     public event Action? ToolCalled;
 
-    public void Virtualize(Viewport viewport) 
+    public void Virtualize(Viewport viewport)
     {
         Component?.Virtualize(viewport); // 执行虚拟化
     }
@@ -71,7 +71,7 @@ public class AgentHelper : TreeHelper<TreeViewModel>
                 typeof(TreeViewModel))
             .WithEnums(AgentLanguages.English, [])
             .WithInterfaces(AgentLanguages.English, [])
-            .WithToolCallCallback((_, _, _) => helper.ToolCalled?.Invoke());
+            .WithToolCallCallback((_, _) => helper.ToolCalled?.Invoke());
 
         // 工作流框架级别上下文 + 开发者自定义级别上下文
         var contextPrompt = scope.ProvideAllContexts(AgentLanguages.English);
@@ -81,17 +81,17 @@ public class AgentHelper : TreeHelper<TreeViewModel>
 
         var apiKey = Environment.GetEnvironmentVariable(EnvironmentVariableName);
 
-var chatClient = new OpenAIClient(
-    new ApiKeyCredential(apiKey),
-    new OpenAIClientOptions
-    {
-        Endpoint = new Uri(Endpoint)
-    }).GetChatClient(string.IsNullOrWhiteSpace(Model) ? "qwen-plus" : Model)
-      .AsIChatClient();
+        var chatClient = new OpenAIClient(
+            new ApiKeyCredential(apiKey),
+            new OpenAIClientOptions
+            {
+                Endpoint = new Uri(Endpoint)
+            }).GetChatClient(string.IsNullOrWhiteSpace(Model) ? "qwen-plus" : Model)
+              .AsIChatClient();
 
-var agent = chatClient.AsAIAgent(
-    instructions: contextPrompt,
-    tools: tools);
+        var agent = chatClient.AsAIAgent(
+            instructions: contextPrompt,
+            tools: tools);
 
         return agent;
     }

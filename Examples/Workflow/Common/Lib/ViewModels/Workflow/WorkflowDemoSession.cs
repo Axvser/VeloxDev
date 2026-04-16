@@ -10,7 +10,7 @@ public sealed class WorkflowDemoSession
     {
         Tree = tree;
         Controller = controller;
-        Nodes = [..nodes];
+        Nodes = [.. nodes];
     }
 
     public TreeViewModel Tree { get; }

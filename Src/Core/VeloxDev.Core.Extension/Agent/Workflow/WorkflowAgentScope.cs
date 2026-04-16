@@ -1,13 +1,15 @@
-﻿using System;
+﻿using Microsoft.Extensions.AI;
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Text;
-using Microsoft.Extensions.AI;
 using VeloxDev.AI.Workflow.Functions;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.AI.Workflow;
 
-public class WorkflowAgentScope(IWorkflowTreeViewModel tree)
+public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNotifier
 {
     public IWorkflowTreeViewModel Tree { get; } = tree;
 
@@ -16,10 +18,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree)
     /// </summary>
     public int? MaxToolCalls { get; private set; }
 
-    /// <summary>
-    /// Callback invoked after each tool call. Parameters: tool name, result string, current call count.
-    /// </summary>
-    public Action<string, string, int>? OnToolCalled { get; private set; }
+    /// <inheritdoc />
+    public event EventHandler<AgentToolCallEventArgs>? ToolCalled;
 
     private static readonly Type[] FrameworkEnums =
         [typeof(SlotChannel), typeof(SlotState)];
@@ -42,10 +42,18 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree)
         return this;
     }
 
-    public WorkflowAgentScope WithToolCallCallback(Action<string, string, int> callback)
+    public WorkflowAgentScope WithToolCallCallback(EventHandler<AgentToolCallEventArgs> handler)
     {
-        OnToolCalled = callback;
+        ToolCalled += handler;
         return this;
+    }
+
+    /// <summary>
+    /// Raises the <see cref="ToolCalled"/> event. Called by <see cref="WorkflowAgentToolkit"/> after each tool invocation.
+    /// </summary>
+    internal void RaiseToolCalled(string toolName, string result, int callCount)
+    {
+        ToolCalled?.Invoke(this, new AgentToolCallEventArgs(toolName, result, callCount));
     }
 
     public WorkflowAgentScope WithEnums(AgentLanguages language, params Type[] enums)
@@ -213,26 +221,34 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree)
         result.AppendLine();
         result.AppendLine("## Discovery Flow");
         result.AppendLine();
-        result.AppendLine("1. **GetWorkflowSummary** → orient (counts + types)");
-        result.AppendLine("2. **GetComponentContext** → **BEFORE creating or configuring a component**, call this to read the developer's [AgentContext] descriptions. These describe default sizes, property semantics, and intended usage. This is essential context.");
+        result.AppendLine("1. **Component descriptions are pre-loaded above** — you already know each type's [AgentContext] including default sizes and property meanings.");
+        result.AppendLine("2. **GetWorkflowSummary** → orient (counts + types in the current tree)");
         result.AppendLine("3. **ListNodes** → compact list with IDs");
         result.AppendLine("4. **GetNodeDetail(ById)** → slot details for specific node");
         result.AppendLine("5. **ListComponentCommands** → discover commands before executing");
+        result.AppendLine("6. **GetComponentContext** → call only if you need the full property table or command parameter details beyond what is pre-loaded.");
+        result.AppendLine();
+        result.AppendLine("## 📌 Default Value Resolution (CRITICAL)");
+        result.AppendLine();
+        result.AppendLine("When the user refers to \"default\" values (e.g. \"默认大小\", \"default size\", \"reset to default\"), resolve them using this **strict priority order**:");
+        result.AppendLine();
+        result.AppendLine("1. **[AgentContext] developer instructions** (pre-loaded above or from GetComponentContext). Example: \"默认大小为 200*100\" means width=200, height=100. This is **ALWAYS authoritative**.");
+        result.AppendLine("2. **GetComponentContext full property table** — if the pre-loaded description doesn't cover the specific property, call GetComponentContext for the full table which includes per-property defaults.");
+        result.AppendLine("3. **NEVER** use runtime values from other nodes, GetTypeSchema `defaultJson`, or guesswork as \"defaults\". Those are runtime state, not intended defaults.");
+        result.AppendLine();
+        result.AppendLine("⚠️ **GetTypeSchema `defaultJson` shows runtime zero-initialized values (e.g. Size={0,0}).** These are NOT the intended defaults. The authoritative defaults are in the [AgentContext] descriptions. Always prefer Developer Instructions over `defaultJson`.");
         result.AppendLine();
         result.AppendLine("## 🔧 Node Creation Protocol");
         result.AppendLine();
         result.AppendLine("When the user asks to create a node (e.g. \"在原点创建一个节点\"), follow these steps **in order**:");
         result.AppendLine();
-        result.AppendLine("1. **If you have never seen the available component types**, call **GetWorkflowSummary** to discover all registered node types.");
-        result.AppendLine("2. **Choose the most appropriate node type** from the registered customer component types. If only one node type exists, use it. If multiple exist, pick the one that best fits the user's intent, or ask the user to clarify.");
-        result.AppendLine("3. **If you have never read the [AgentContext] for that type**, call **GetComponentContext** with its fully-qualified type name. This returns the developer's descriptions including default size, property meanings, and intended defaults.");
-        result.AppendLine("4. **Apply defaults from [AgentContext]**: If the context says \"默认大小为 200*100\", use `width=200, height=100` in CreateNode. If the user explicitly specifies different values, use the user's values instead.");
-        result.AppendLine("5. **Call CreateNode** with the resolved type, position, and size.");
-        result.AppendLine("6. **Set AgentContext-described properties** via PatchNodeProperties if the defaults differ from what the user wants.");
+        result.AppendLine("1. **Choose the most appropriate node type** from the pre-loaded customer component types above. If only one node type exists, use it. If multiple exist, pick the one that best fits the user's intent, or ask the user to clarify.");
+        result.AppendLine("2. **Read the pre-loaded [AgentContext] description** for that type (already in your context above). Extract the default size and any other defaults.");
+        result.AppendLine("3. **Apply defaults from [AgentContext]**: If the description says \"默认大小为 200*100\", use `width=200, height=100` in CreateNode. If the user explicitly specifies different values, use the user's values instead.");
+        result.AppendLine("4. **Call CreateNode** with the resolved type, position, and size.");
+        result.AppendLine("5. **Set AgentContext-described properties** via PatchNodeProperties if the defaults differ from what the user wants.");
         result.AppendLine();
         result.AppendLine("**Key principle**: Defaults from [AgentContext] are the baseline. User instructions override them. Never ignore documented defaults; never ask the user for information that [AgentContext] already provides.");
-        result.AppendLine();
-        result.AppendLine("⚠️ **GetTypeSchema `defaultJson` shows runtime zero-initialized values (e.g. Size={0,0}).** These are NOT the intended defaults. The authoritative defaults are in **GetComponentContext → Developer Instructions**. Always prefer Developer Instructions over `defaultJson`.");
         result.AppendLine();
         result.AppendLine("## AgentContext Property Rule");
         result.AppendLine();
@@ -258,6 +274,20 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree)
             foreach (var t in kvp.Value)
                 result.AppendLine($"- `{t.FullName}` (customer component)");
         }
+
+        // ── Pre-loaded Customer Component Context ──
+        // Embed class-level [AgentContext] descriptions for all registered customer
+        // types directly into the prompt. This eliminates the need for the Agent to
+        // call GetComponentContext before its first operation — defaults, property
+        // semantics, and intended usage are known from the start.
+        result.AppendLine();
+        result.AppendLine("## 📋 Pre-loaded Component Descriptions (from [AgentContext])");
+        result.AppendLine();
+        result.AppendLine("The following developer instructions are **AUTHORITATIVE** for each customer component type.");
+        result.AppendLine("They define default sizes, property semantics, and intended usage. Treat them as ground truth.");
+        result.AppendLine("You already have this information — do NOT call GetComponentContext again for these types unless specifically needing full property tables.");
+        result.AppendLine();
+        AppendPreloadedComponentDescriptions(result, language);
         result.AppendLine();
         result.AppendLine("> Call **GetComponentContext** with any type name above to get full documentation.");
 
@@ -324,4 +354,88 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree)
     /// with <c>ChatOptions.Tools</c> or <c>AsAIAgent(tools: ...)</c>.
     /// </summary>
     public IList<AITool> ProvideTools() => CreateToolkit().CreateTools();
+
+    /// <summary>
+    /// Appends a condensed description block for each registered customer component,
+    /// including class-level [AgentContext] instructions and per-property [AgentContext]
+    /// annotations. This gives the Agent immediate knowledge of defaults and semantics
+    /// without needing a tool call.
+    /// </summary>
+    private void AppendPreloadedComponentDescriptions(StringBuilder result, AgentLanguages language)
+    {
+        // Customer enums
+        foreach (var kvp in CustomerEnums)
+        {
+            foreach (var t in kvp.Value)
+                AppendTypeQuickRef(result, t, kvp.Key);
+        }
+        // Customer interfaces
+        foreach (var kvp in CustomerInterfaces)
+        {
+            foreach (var t in kvp.Value)
+                AppendTypeQuickRef(result, t, kvp.Key);
+        }
+        // Customer components (most important — these carry default sizes, property descriptions)
+        foreach (var kvp in CustomerComponents)
+        {
+            foreach (var t in kvp.Value)
+                AppendTypeQuickRef(result, t, kvp.Key);
+        }
+    }
+
+    /// <summary>
+    /// Appends a quick-reference block for a single type: class-level descriptions,
+    /// plus [AgentContext]-annotated property summaries.
+    /// </summary>
+    private static void AppendTypeQuickRef(StringBuilder result, Type type, AgentLanguages language)
+    {
+        var classContexts = AgentContextCollector.GetAgentContext(type, language);
+
+        result.AppendLine($"### `{type.FullName}`");
+        result.AppendLine();
+
+        if (classContexts.Length > 0)
+        {
+            result.AppendLine("**Developer Instructions:**");
+            foreach (var ctx in classContexts)
+                result.AppendLine($"- {ctx}");
+            result.AppendLine();
+        }
+
+        // Collect property-level [AgentContext] from fields (source-generated [VeloxProperty] backing fields)
+        // and public properties
+        var entries = new List<(string name, string typeName, string[] descriptions)>();
+
+        foreach (var field in type.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance))
+        {
+            var descs = AgentContextCollector.GetAgentContext(field, language);
+            if (descs.Length == 0) continue;
+
+            // Derive public property name from backing field
+            var name = field.Name.TrimStart('_');
+            if (name.Length > 0) name = char.ToUpper(name[0]) + name.Substring(1);
+            entries.Add((name, field.FieldType.Name, descs));
+        }
+
+        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var descs = AgentContextCollector.GetAgentContext(prop, language);
+            if (descs.Length == 0) continue;
+            // Skip if already added from backing field
+            if (entries.Any(e => e.name == prop.Name)) continue;
+            entries.Add((prop.Name, prop.PropertyType.Name, descs));
+        }
+
+        if (entries.Count > 0)
+        {
+            result.AppendLine("| Property | Type | Description |");
+            result.AppendLine("|---|---|---|");
+            foreach (var (name, typeName, descs) in entries)
+            {
+                var descText = string.Join("; ", descs);
+                result.AppendLine($"| {name} | {typeName} | {descText} |");
+            }
+            result.AppendLine();
+        }
+    }
 }

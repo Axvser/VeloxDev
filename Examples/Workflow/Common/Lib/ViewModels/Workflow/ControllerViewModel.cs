@@ -11,8 +11,13 @@ public partial class ControllerViewModel
 {
     public ControllerViewModel() => InitializeWorkflow();
 
+    [AgentContext(AgentLanguages.Chinese, "输出口")]
     [VeloxProperty] public partial SlotViewModel OutputSlot { get; set; }
+
+    [AgentContext(AgentLanguages.Chinese, "是否处于活跃状态")]
     [VeloxProperty] private bool isActive = false;
+
+    [AgentContext(AgentLanguages.Chinese, "种子负载，工作流执行时的初始数据")]
     [VeloxProperty] private string seedPayload = "demo-request-chain";
 
     [VeloxCommand]

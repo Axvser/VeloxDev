@@ -9,25 +9,19 @@ namespace VeloxDev.AI.Workflow;
 
 public static class AgentContextCollector
 {
+    /// <summary>
+    /// Delegates to <see cref="AgentContextReader.GetContexts(Type, AgentLanguages)"/> in Core.
+    /// Kept for backward compatibility.
+    /// </summary>
     public static string[] GetAgentContext(Type type, AgentLanguages language)
-    {
-        var contexts =
-            type.GetCustomAttributes<AgentContextAttribute>(inherit: false)
-            .Where(c => c.Language == language)
-            .Select(c => c.Context)
-            .ToArray();
-        return contexts;
-    }
+        => AgentContextReader.GetContexts(type, language);
 
+    /// <summary>
+    /// Delegates to <see cref="AgentContextReader.GetContexts(MemberInfo, AgentLanguages)"/> in Core.
+    /// Kept for backward compatibility.
+    /// </summary>
     public static string[] GetAgentContext(MemberInfo member, AgentLanguages language)
-    {
-        var contexts =
-            member.GetCustomAttributes<AgentContextAttribute>(inherit: false)
-            .Where(c => c.Language == language)
-            .Select(c => c.Context)
-            .ToArray();
-        return contexts;
-    }
+        => AgentContextReader.GetContexts(member, language);
 
     public static string GetEnumContext(Type enumType, AgentLanguages language)
     {

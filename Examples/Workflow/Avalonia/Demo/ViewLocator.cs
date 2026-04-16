@@ -23,6 +23,6 @@ namespace Demo
             return new TextBlock { Text = "Not Found: " + name };
         }
 
-        public bool Match(object? data) => typeof(INotifyPropertyChanged).IsAssignableFrom(data.GetType());
+        public bool Match(object? data) => data is not null && typeof(INotifyPropertyChanged).IsAssignableFrom(data.GetType());
     }
 }

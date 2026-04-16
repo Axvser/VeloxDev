@@ -134,7 +134,6 @@ public partial class WorkflowView : UserControl
     private async void SaveWorkflow(object? sender, RoutedEventArgs e)
     {
         var topLevel = TopLevel.GetTopLevel(this);
-        _manager.Show(new Notification("No", $"Workflow Saved"));
         if (topLevel is null) return;
         var folder = await topLevel.StorageProvider.OpenFolderPickerAsync(
             new FolderPickerOpenOptions
@@ -143,7 +142,6 @@ public partial class WorkflowView : UserControl
             });
         if (folder.Count < 1) return;
         var path = folder[0].TryGetLocalPath();
-        _manager.Show(new Notification("Pre", $"Workflow Saved At {path}"));
         if (path is null) return;
         _workflowViewModel.SaveCommand.Execute(Path.Combine(path, "Workflow.json"));
         _manager.Show(new Notification("OK", $"Workflow Saved At {path}"));

@@ -1,9 +1,9 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Windows.Input;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
@@ -131,31 +131,10 @@ public static class ComponentPatcher
     }
 
     /// <summary>
-    /// Checks whether a property has a backing command on the type or its interfaces.
-    /// Looks for "Set{PropertyName}Command" or "{PropertyName}Command" patterns.
+    /// Delegates to <see cref="AgentCommandDiscoverer.FindBackingCommand"/> in Core.
     /// </summary>
-    private static string FindBackingCommand(Type type, string propertyName)
-    {
-        var candidates = new[] { $"Set{propertyName}Command", $"{propertyName}Command" };
-
-        foreach (var cmdName in candidates)
-        {
-            // Check concrete type
-            var cmdProp = type.GetProperty(cmdName, BindingFlags.Public | BindingFlags.Instance);
-            if (cmdProp != null && typeof(ICommand).IsAssignableFrom(cmdProp.PropertyType))
-                return cmdName;
-
-            // Check interfaces
-            foreach (var iface in type.GetInterfaces())
-            {
-                cmdProp = iface.GetProperty(cmdName);
-                if (cmdProp != null && typeof(ICommand).IsAssignableFrom(cmdProp.PropertyType))
-                    return cmdName;
-            }
-        }
-
-        return null;
-    }
+    private static string? FindBackingCommand(Type type, string propertyName)
+        => AgentCommandDiscoverer.FindBackingCommand(type, propertyName);
 
     /// <summary>
     /// Copies all writable scalar (non-command-backed) properties from source to target.

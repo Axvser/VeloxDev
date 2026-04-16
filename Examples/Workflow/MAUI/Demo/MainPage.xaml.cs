@@ -56,7 +56,7 @@ namespace Demo
             }
             catch (Exception ex)
             {
-                await DisplayAlert(title, ex.Message, "OK");
+                await DisplayAlertAsync(title, ex.Message, "OK");
             }
         }
     }

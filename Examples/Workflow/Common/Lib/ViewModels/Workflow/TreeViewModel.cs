@@ -23,7 +23,7 @@ public partial class TreeViewModel
     [VeloxProperty] private ObservableCollection<string> executionLog = [];
     [VeloxProperty] private ObservableCollection<string> agentLog = [];
     [VeloxProperty] private bool isWorkflowRunning = false;
-    
+
     [VeloxProperty] private bool useStreamingAgentResponse = true;
 
     [VeloxCommand]

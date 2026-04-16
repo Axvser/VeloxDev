@@ -26,6 +26,6 @@ public partial class CustomTemplateSelector : DataTemplateSelector
     protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
     {
         Debug.WriteLine($"SelectTemplateCore with container called: {item?.GetType().Name}, Container={container?.GetType().Name}");
-        return SelectTemplateCore(item);
+        return SelectTemplateCore(item!);
     }
 }

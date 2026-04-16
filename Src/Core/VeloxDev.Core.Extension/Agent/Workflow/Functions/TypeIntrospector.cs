@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using VeloxDev.AI;
-using VeloxDev.AI.Workflow;
+using System;
+using System.Linq;
+using System.Reflection;
 
 namespace VeloxDev.AI.Workflow.Functions;
 
@@ -16,29 +13,10 @@ namespace VeloxDev.AI.Workflow.Functions;
 public static class TypeIntrospector
 {
     /// <summary>
-    /// Resolves a <see cref="Type"/> by its full name, searching all loaded assemblies.
+    /// Delegates to <see cref="AgentTypeResolver.ResolveType"/> in Core.
     /// </summary>
     public static Type? ResolveType(string fullTypeName)
-    {
-        if (string.IsNullOrWhiteSpace(fullTypeName)) return null;
-
-        // Try direct resolution first
-        var type = Type.GetType(fullTypeName);
-        if (type != null) return type;
-
-        // Search all loaded assemblies
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            try
-            {
-                type = asm.GetType(fullTypeName, throwOnError: false);
-                if (type != null) return type;
-            }
-            catch { /* skip unloadable assemblies */ }
-        }
-
-        return null;
-    }
+        => AgentTypeResolver.ResolveType(fullTypeName);
 
     /// <summary>
     /// Produces a JSON schema-like description of a type including its properties,

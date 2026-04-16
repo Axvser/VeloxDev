@@ -2,7 +2,7 @@
 
 > VeloxDev 是一组面向现代 .NET 的开发工具与基础设施，围绕 `Source Generator`、`跨平台抽象` 与 `可扩展运行时模型` 设计。
 
-> 它将多个常见但彼此分散的能力收敛到统一体系中：包括基于特性的 `MVVM` 代码生成、可扩展的 `Workflow` 模板、跨 UI 框架的 `TransitionSystem` 动画抽象、动态 `Theme` 切换、`MonoBehaviour` 式帧循环，以及面向 AOT / AOP 场景的生成支持。
+> 它将多个常见但彼此分散的能力收敛到统一体系中：包括基于特性的 `MVVM` 代码生成、可扩展的 `Workflow` 模板、跨 UI 框架的 `TransitionSystem` 动画抽象、动态 `Theme` 切换、`MonoBehaviour` 式帧循环、面向 AOT / AOP 场景的生成支持，以及通用的 `Agent 反射基础设施`。
 
 [Wiki](https://axvser.github.io/VeloxDev.Wiki/)
 
@@ -15,6 +15,7 @@
   * [🏗️ VeloxDev.Core](#veloxdevcore)
   * [🪶 MVVM Toolkit](#mvvm-toolkit)
   * [⛓️ Workflow](#workflow)
+  * [🤖 Agent Infrastructure](#-agent-infrastructure)
   * [🎞️ 插值动画](#-插值动画)
   * [🌀 AOP 编程](#-aop-编程)
   * [🎨 ThemeManager](#-thememanager)
@@ -56,7 +57,8 @@
 |---------|------|---------------|-----------|
 | 🪶 MVVM  | 通过 Source Generator 生成通知属性与命令 | ❌ | |
 | 🔁 Workflow  | 提供工作流树、节点、插槽、连线模板与交互辅助 | ❌ | |
-| 🤖 Workflow Agent  | 提供工作流语义上下文与基于 MAF 的完整运行时接管工具集 | `Core` 语义 ❌ / `Extension` 工具 ✔ | 支持上下文文档、MAF Functions（查询/移动/连线/执行/撤销重做）、类型自省、JSON Patch |
+| 🤖 Agent Infrastructure | 通用的 Agent 反射基础设施：属性读写、方法调用、命令发现执行、语义上下文、类型解析 | ❌ | `Core` 提供零依赖通用能力 |
+| 🤖 Workflow Agent  | 提供工作流语义上下文与基于 MAF 的完整运行时接管工具集 | `Core` 语义 ❌ / `Extension` 工具 ✔ | 基于 Agent Infrastructure 构建，支持上下文文档、MAF Functions、类型自省、JSON Patch |
 | 🎞️ Transition | 跨平台的插值动画抽象层，支持缓动函数与调度 | ✔ | 需要为不同平台实现具体的插值器、主线程检测器、调度器等 |
 | 🌀 AOP | 编译期注入的切面代理支持 | ❌ | 需要目标框架 ≥ .NET5 |
 | 🎨 Theme | 主题注册、缓存与渐变切换 | ✔ | 需要适配不同平台的样式/资源系统 |
@@ -73,6 +75,7 @@
 
 * `MVVM`：`[VeloxProperty]` 与 `[VeloxCommand]`，用于生成通知属性、命令以及命令生命周期控制
 * `Workflow`：工作流树 / 节点 / 插槽 / 连线的模板特性与通用交互模型
+* `AI`：通用的 Agent 反射基础设施——属性读写、方法调用、命令发现执行、语义上下文读取、类型解析（零第三方依赖）
 * `Transition`：插值动画、缓动、时间调度与状态快照抽象
 * `Theme`：主题对象注册、主题缓存、即时切换与渐变切换
 * `MonoBehaviour`：按帧更新的生命周期模型
@@ -84,9 +87,9 @@
 - 对上，为业务代码提供统一的特性、接口与基础运行模型
 - 对下，为各平台适配层提供可复用的动画、主题与线程抽象
 
-其中 `Transition` 与 `Theme` 的完整运行通常需要平台适配层配合；而 `MVVM`、`Workflow`、`MonoBehaviour`、`AOT Reflection` 等能力则可直接建立在核心库之上。
+其中 `Transition` 与 `Theme` 的完整运行通常需要平台适配层配合；而 `MVVM`、`Workflow`、`AI`、`MonoBehaviour`、`AOT Reflection` 等能力则可直接建立在核心库之上。
 
-此外，`VeloxDev.Core` 现已包含工作流面向 Agent 的语义上下文收集能力；如果需要让 Agent 通过 Microsoft Agent Framework (MAF) 的 Function Calling 对工作流进行运行时接管（查询、移动、连线、执行、属性修改、类型自省等），请安装 `VeloxDev.Core.Extension`。
+`VeloxDev.Core.AI` 模块提供的通用反射能力适用于任何 .NET 项目中的 Agent 场景，不限于工作流框架；如果需要让 Agent 通过 Microsoft Agent Framework (MAF) 的 Function Calling 对工作流进行运行时接管，请安装 `VeloxDev.Core.Extension`。
 
 ---
 
@@ -151,17 +154,67 @@
 
 #### Workflow Agent 支持
 
-VeloxDev 的 Workflow 体系原生支持 AI Agent 接管。核心层（`VeloxDev.Core`）提供：
+VeloxDev 的 Workflow 体系原生支持 AI Agent 接管，构建在核心层的通用 Agent 反射基础设施之上。
+
+核心层（`VeloxDev.Core`）提供：
 - `IWorkflowIdentifiable` — 组件运行时唯一标识
 - `[AgentContext]` / `[AgentCommandParameter]` — 面向 Agent 的语义上下文特性
-- `AgentContextCollector` — 枚举、接口、类的结构化文档收集
+- `AgentContextReader` / `AgentPropertyAccessor` / `AgentMethodInvoker` / `AgentCommandDiscoverer` / `AgentTypeResolver` — 通用反射能力（详见 [Agent Infrastructure](#-agent-infrastructure)）
 
 扩展层（`VeloxDev.Core.Extension`）提供完整的运行时接管能力：
-- 基于 **Microsoft Agent Framework (MAF)** 的 30 个 Function Calling 工具
+- 基于 **Microsoft Agent Framework (MAF)** 的 30+ 个 Function Calling 工具
 - 覆盖查询、变更、连接、执行、撤销重做、类型自省、状态快照、批量操作、克隆等全部场景
 - 三层安全机制保护框架内部属性不被误修改
+- **预加载上下文**：注册的组件类型的 `[AgentContext]` 描述（含默认值）直接嵌入 Prompt，Agent 无需额外工具调用即可获知默认尺寸、属性语义等
 
 > 详细的架构说明、原理介绍与完整 API 列表请参阅 [`VeloxDev.Core.Extension` README](Src/Core/VeloxDev.Core.Extension/README.md)。
+
+---
+
+### 🤖 Agent Infrastructure
+
+`VeloxDev.Core.AI` 提供了一组零第三方依赖的通用反射工具，适用于任何 .NET 项目中的 Agent 场景——不限于工作流框架。
+
+| 类 | 能力 | 适用场景 |
+|---|---|---|
+| `AgentPropertyAccessor` | `DiscoverProperties` / `GetPropertyValue` / `SetPropertyValue` / `SetProperties` / `CopyScalarProperties` | Agent 修改任意对象属性，支持批量 Patch、类型转换、黑名单过滤 |
+| `AgentMethodInvoker` | `DiscoverMethods` / `Invoke` / `InvokeStatic` | Agent 调用任意对象方法，支持重载解析、参数默认值填充 |
+| `AgentCommandDiscoverer` | `DiscoverCommands` / `Execute` / `CanExecuteCommand` / `FindBackingCommand` | Agent 发现并执行 `ICommand`，读取参数类型和 `[AgentContext]` 描述 |
+| `AgentContextReader` | `GetContexts(Type)` / `GetContexts(MemberInfo)` / `HasAgentContext` | 读取 `[AgentContext]` 标注的语义上下文 |
+| `AgentTypeResolver` | `ResolveType(string)` | 按全名在所有已加载程序集中查找类型 |
+
+#### 标注特性
+
+| 特性 | 说明 |
+|------|------|
+| `[AgentContext(lang, desc)]` | 为类型或成员标注面向 Agent 的语义描述（支持多语言、多条） |
+| `[AgentCommandParameter(type)]` | 标注命令所期望的参数 .NET 类型 |
+
+#### 使用示例
+
+```csharp
+// 发现对象上所有 Agent 可见的属性
+var props = AgentPropertyAccessor.DiscoverProperties(myViewModel, AgentLanguages.Chinese);
+
+// 通过反射设置属性
+AgentPropertyAccessor.SetPropertyValue(myViewModel, "Title", "新标题");
+
+// 发现并执行命令
+var commands = AgentCommandDiscoverer.DiscoverCommands(myViewModel, AgentLanguages.Chinese);
+AgentCommandDiscoverer.Execute(myViewModel, "Delete");
+
+// 调用任意方法
+AgentMethodInvoker.Invoke(myService, "ProcessData", 42, "hello");
+
+// 读取语义上下文
+var descriptions = AgentContextReader.GetContexts(typeof(NodeViewModel), AgentLanguages.Chinese);
+// → ["派生的Node组件之一，作为任务执行者，默认大小为 200*100"]
+
+// 跨程序集类型解析
+var type = AgentTypeResolver.ResolveType("Demo.ViewModels.NodeViewModel");
+```
+
+这些工具被 `VeloxDev.Core.Extension` 中的 Workflow Agent 体系作为底层依赖使用，但它们完全独立于工作流——任何 MVVM ViewModel、服务对象或自定义组件都可以直接使用。
 
 ---
 
