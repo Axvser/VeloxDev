@@ -8,7 +8,7 @@ namespace VeloxDev.WorkflowSystem.StandardEx;
 
 public static class WorkflowSpatialEx
 {
-    private static readonly ConditionalWeakTable<object, IWorkflowSpatialMap> SpatialMaps = new();
+    private static readonly ConditionalWeakTable<object, WorkflowSpatialManager> SpatialManagers = new();
     private static readonly ConditionalWeakTable<object, object> Observables = new();
 
     /// <summary>
@@ -40,26 +40,18 @@ public static class WorkflowSpatialEx
         {
             return -1;
         }
-        if (SpatialMaps.TryGetValue(tree, out _) && Observables.TryGetValue(tree, out _))
+        if (SpatialManagers.TryGetValue(tree, out _) && Observables.TryGetValue(tree, out _))
         {
             return 0;
         }
-        var newMap = new SpatialGridHashMap(cellSize);
-        SpatialMaps.Add(tree, newMap);
+
+        var manager = new WorkflowSpatialManager(tree, cellSize);
+        SpatialManagers.Add(tree, manager);
         Observables.Add(tree, observable);
-        tree.GetHelper().NodeAdded += OnNodeAdded;
-        tree.GetHelper().NodeRemoved += OnNodeRemoved;
-        tree.GetHelper().LinkAdded += OnLinkAdded;
-        tree.GetHelper().LinkRemoved += OnLinkRemoved;
+
         observable.Clear();
         observable.Add(tree.VirtualLink);
-        if (tree?.Nodes != null)
-        {
-            foreach (var node in tree.Nodes)
-            {
-                newMap.Insert(node);
-            }
-        }
+
         return 1;
     }
 
@@ -97,22 +89,37 @@ public static class WorkflowSpatialEx
         if (viewport.Width <= 0 || viewport.Height <= 0)
             return;
 
-        if (!SpatialMaps.TryGetValue(tree, out var map) || !Observables.TryGetValue(tree, out var collection) || collection is not Collection<IWorkflowViewModel> observable)
+        if (!SpatialManagers.TryGetValue(tree, out var manager) || !Observables.TryGetValue(tree, out var collection) || collection is not Collection<IWorkflowViewModel> observable)
             throw new ArgumentNullException("The workflow must first successfully enable the spatial map before it can be virtualized.");
 
-        HashSet<IWorkflowNodeViewModel> visibleNodes = [.. map.Query(viewport)];
-        HashSet<IWorkflowNodeViewModel> hydratedNodes = ExpandVisibleNodesWithNeighbors(tree, visibleNodes);
+        // Query nodes from spatial index
+        HashSet<IWorkflowNodeViewModel> visibleNodes = [.. manager.QueryNodes(viewport)];
+
+        // Query links directly from spatial index - this correctly handles links spanning distant nodes
+        HashSet<IWorkflowLinkViewModel> visibleLinks = [.. manager.QueryLinks(viewport)];
+
+        // Expand to include neighbor nodes that have visible links
+        HashSet<IWorkflowNodeViewModel> hydratedNodes = ExpandVisibleNodesWithNeighbors(tree, visibleNodes, visibleLinks);
+
         List<IWorkflowViewModel> desiredItems = [tree.VirtualLink];
         HashSet<IWorkflowViewModel> desiredSet = new(WorkflowReferenceEqualityComparer<IWorkflowViewModel>.Instance)
         {
             tree.VirtualLink
         };
 
+        // Add all hydrated nodes
         foreach (var node in hydratedNodes)
         {
             AddDesiredItem(desiredItems, desiredSet, node);
         }
 
+        // Add all visible links (from spatial query)
+        foreach (var link in visibleLinks)
+        {
+            AddDesiredItem(desiredItems, desiredSet, link);
+        }
+
+        // Also add links connected to visible nodes (for nodes that are in viewport)
         foreach (var node in visibleNodes)
         {
             foreach (var slot in node.Slots)
@@ -169,16 +176,21 @@ public static class WorkflowSpatialEx
     /// </param>
     public static int ClearMap(this IWorkflowTreeViewModel tree)
     {
-        tree.GetHelper().NodeAdded -= OnNodeAdded;
-        tree.GetHelper().NodeRemoved -= OnNodeRemoved;
-        tree.GetHelper().LinkAdded -= OnLinkAdded;
-        tree.GetHelper().LinkRemoved -= OnLinkRemoved;
-        if (SpatialMaps.TryGetValue(tree, out var _spatialHashMap))
-            _spatialHashMap.Clear();
+        var r1 = 2;
+        var r2 = 8;
+
+        if (SpatialManagers.TryGetValue(tree, out var manager))
+        {
+            manager.Dispose();
+            r1 = SpatialManagers.Remove(tree) ? 1 : 2;
+        }
+
         if (Observables.TryGetValue(tree, out var _observable) && _observable is Collection<IWorkflowViewModel> observable)
+        {
             observable.Remove(tree.VirtualLink);
-        var r1 = SpatialMaps.Remove(tree) ? 1 : 2;
-        var r2 = Observables.Remove(tree) ? 4 : 8;
+            r2 = Observables.Remove(tree) ? 4 : 8;
+        }
+
         return r1 | r2;
     }
 
@@ -211,42 +223,77 @@ public static class WorkflowSpatialEx
         if (viewport.Width <= 0 || viewport.Height <= 0)
             return [];
 
-        if (!SpatialMaps.TryGetValue(tree, out var map))
+        if (!SpatialManagers.TryGetValue(tree, out var manager))
             throw new ArgumentNullException(nameof(tree),
                 "The workflow must first successfully enable the spatial map before it can be selected.");
 
-        return map.Query(viewport);
+        return manager.QueryNodes(viewport);
     }
 
-    private static void OnNodeAdded(object? sender, IWorkflowNodeViewModel node)
+    /// <summary>
+    /// Selects and returns all workflow links that intersect with the specified viewport.
+    /// This method correctly handles links that span across distant nodes by using
+    /// the link's own bounding box for spatial queries.
+    /// </summary>
+    /// 
+    /// <param name="tree">
+    /// The workflow tree view model containing the links.
+    /// </param>
+    /// 
+    /// <param name="viewport">
+    /// The rectangular region to query for intersecting links.
+    /// </param>
+    /// 
+    /// <returns>
+    /// An enumerable collection of <see cref="IWorkflowLinkViewModel"/> instances
+    /// that intersect with the specified viewport.
+    /// </returns>
+    /// 
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if the spatial map has not been enabled for the workflow tree.
+    /// </exception>
+    public static IEnumerable<IWorkflowLinkViewModel> QueryLinks(this IWorkflowTreeViewModel tree, Viewport viewport)
     {
-        if (SpatialMaps.TryGetValue(sender, out var _spatialHashMap))
-            _spatialHashMap.Insert(node);
+        if (viewport.Width <= 0 || viewport.Height <= 0)
+            return [];
+
+        if (!SpatialManagers.TryGetValue(tree, out var manager))
+            throw new ArgumentNullException(nameof(tree),
+                "The workflow must first successfully enable the spatial map before it can be selected.");
+
+        return manager.QueryLinks(viewport);
     }
 
-    private static void OnNodeRemoved(object? sender, IWorkflowNodeViewModel node)
+    /// <summary>
+    /// Selects and returns all workflow view models (nodes and links) that intersect with the specified viewport.
+    /// </summary>
+    /// 
+    /// <param name="tree">
+    /// The workflow tree view model containing the elements.
+    /// </param>
+    /// 
+    /// <param name="viewport">
+    /// The rectangular region to query for intersecting elements.
+    /// </param>
+    /// 
+    /// <returns>
+    /// An enumerable collection of <see cref="IWorkflowViewModel"/> instances
+    /// that intersect with the specified viewport.
+    /// </returns>
+    /// 
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if the spatial map has not been enabled for the workflow tree.
+    /// </exception>
+    public static IEnumerable<IWorkflowViewModel> QueryAll(this IWorkflowTreeViewModel tree, Viewport viewport)
     {
-        if (SpatialMaps.TryGetValue(sender, out var _spatialHashMap))
-            _spatialHashMap.Remove(node);
-    }
+        if (viewport.Width <= 0 || viewport.Height <= 0)
+            return [];
 
-    private static void OnLinkAdded(object? sender, IWorkflowLinkViewModel node)
-    {
-        if (Observables.TryGetValue(sender, out var collection) && collection is Collection<IWorkflowViewModel> observable)
-        {
-            var senderVisible = node.Sender?.Parent is IWorkflowViewModel senderNode && observable.Contains(senderNode);
-            var receiverVisible = node.Receiver?.Parent is IWorkflowViewModel receiverNode && observable.Contains(receiverNode);
-            if (senderVisible || receiverVisible)
-            {
-                AddIfMissing(observable, node);
-            }
-        }
-    }
+        if (!SpatialManagers.TryGetValue(tree, out var manager))
+            throw new ArgumentNullException(nameof(tree),
+                "The workflow must first successfully enable the spatial map before it can be selected.");
 
-    private static void OnLinkRemoved(object? sender, IWorkflowLinkViewModel node)
-    {
-        if (Observables.TryGetValue(sender, out var collection) && collection is Collection<IWorkflowViewModel> observable)
-            RemoveAll(observable, node);
+        return manager.QueryAll(viewport);
     }
 
     private static void AddIfMissing(Collection<IWorkflowViewModel> observable, IWorkflowViewModel item)
@@ -267,10 +314,25 @@ public static class WorkflowSpatialEx
 
     private static HashSet<IWorkflowNodeViewModel> ExpandVisibleNodesWithNeighbors(
         IWorkflowTreeViewModel tree,
-        HashSet<IWorkflowNodeViewModel> visibleNodes)
+        HashSet<IWorkflowNodeViewModel> visibleNodes,
+        HashSet<IWorkflowLinkViewModel> visibleLinks)
     {
         var hydratedNodes = new HashSet<IWorkflowNodeViewModel>(visibleNodes, WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
 
+        // Add nodes from visible links (for links that span distant nodes)
+        foreach (var link in visibleLinks)
+        {
+            if (link.Sender?.Parent is IWorkflowNodeViewModel senderNode)
+            {
+                hydratedNodes.Add(senderNode);
+            }
+            if (link.Receiver?.Parent is IWorkflowNodeViewModel receiverNode)
+            {
+                hydratedNodes.Add(receiverNode);
+            }
+        }
+
+        // Also add neighbor nodes connected to visible nodes
         foreach (var node in visibleNodes)
         {
             foreach (var slot in node.Slots)
