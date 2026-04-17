@@ -16,6 +16,7 @@ namespace VeloxDev.Generators.Writers
         private bool _isWorkflowNodeComponentOrBase = false;
         private bool _hasBasePropertyNotificationInfrastructure = false;
         private bool _hasBaseCollectionNotificationInfrastructure = false;
+        private bool _hasBaseWorkflowSlotInfrastructure = false;
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
@@ -25,6 +26,7 @@ namespace VeloxDev.Generators.Writers
             {
                 _hasBasePropertyNotificationInfrastructure = CheckBaseClassForPropertyInfrastructure(namedTypeSymbol.BaseType);
                 _hasBaseCollectionNotificationInfrastructure = CheckBaseClassForCollectionInfrastructure(namedTypeSymbol.BaseType);
+                _hasBaseWorkflowSlotInfrastructure = CheckBaseClassForWorkflowSlotInfrastructure(namedTypeSymbol.BaseType);
             }
 
             _isWorkflowComponentOrBase = HasWorkflowAttributeInHierarchy(namedTypeSymbol);
@@ -94,10 +96,25 @@ namespace VeloxDev.Generators.Writers
             if (!factory.UseWorkflowSlotLifecycle || factory.IsNullable)
             {
                 factory.UseWorkflowSlotAutoCreation = false;
-                return;
+            }
+            else
+            {
+                factory.UseWorkflowSlotAutoCreation = CanAutoCreateWorkflowSlot(typeSymbol);
             }
 
-            factory.UseWorkflowSlotAutoCreation = CanAutoCreateWorkflowSlot(typeSymbol);
+            // Check if the type is a collection of Slot items (INotifyCollectionChanged + ICollection<T> where T is Slot)
+            factory.UseWorkflowSlotCollectionLifecycle = false;
+            if (isWorkflowComponentOrBase && isWorkflowNodeOrBase &&
+                factory.IsNotifyCollectionChanged && !string.IsNullOrWhiteSpace(factory.CollectionItemTypeName))
+            {
+                var collectionItemTypeSymbol = GetCollectionItemTypeSymbol(typeSymbol);
+                if (collectionItemTypeSymbol != null &&
+                    IsWorkflowSlotViewModelType(collectionItemTypeSymbol) &&
+                    IsGenericCollectionType(typeSymbol))
+                {
+                    factory.UseWorkflowSlotCollectionLifecycle = true;
+                }
+            }
         }
 
         private bool CanAutoCreateWorkflowSlot(ITypeSymbol typeSymbol)
@@ -349,6 +366,34 @@ namespace VeloxDev.Generators.Writers
 
             return false;
         }
+        private static ITypeSymbol? GetCollectionItemTypeSymbol(ITypeSymbol typeSymbol)
+        {
+            // Check IEnumerable<T> to get T's type symbol
+            if (typeSymbol is INamedTypeSymbol namedType &&
+                namedType.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T &&
+                namedType.TypeArguments.Length > 0)
+            {
+                return namedType.TypeArguments[0];
+            }
+
+            var enumerableInterface = typeSymbol.AllInterfaces
+                .FirstOrDefault(i => i.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T);
+
+            return enumerableInterface?.TypeArguments.Length > 0 ? enumerableInterface.TypeArguments[0] : null;
+        }
+
+        private static bool IsGenericCollectionType(ITypeSymbol typeSymbol)
+        {
+            // Check if the type implements ICollection<T>
+            if (typeSymbol is INamedTypeSymbol namedType &&
+                namedType.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.ICollection<T>")
+            {
+                return true;
+            }
+
+            return typeSymbol.AllInterfaces.Any(i =>
+                i.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.ICollection<T>");
+        }
         private bool CheckBaseClassForPropertyInfrastructure(INamedTypeSymbol? symbol)
         {
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
@@ -380,6 +425,25 @@ namespace VeloxDev.Generators.Writers
                 return true;
 
             return CheckBaseClassForCollectionInfrastructure(symbol.BaseType);
+        }
+
+        private bool CheckBaseClassForWorkflowSlotInfrastructure(INamedTypeSymbol? symbol)
+        {
+            if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
+                return false;
+
+            if (HasWorkflowSlotInfrastructureMethods(symbol))
+                return true;
+
+            return CheckBaseClassForWorkflowSlotInfrastructure(symbol.BaseType);
+        }
+
+        private bool HasWorkflowSlotInfrastructureMethods(INamedTypeSymbol symbol)
+        {
+            var methods = symbol.GetMembers().OfType<IMethodSymbol>().ToList();
+            return methods.Any(m => m.Name == "OnWorkflowSlotAdded" && !m.IsStatic && m.Parameters.Length == 1) &&
+                   methods.Any(m => m.Name == "OnWorkflowSlotRemoved" && !m.IsStatic && m.Parameters.Length == 1) &&
+                   methods.Any(m => m.Name == "CreateWorkflowSlot" && !m.IsStatic && m.IsGenericMethod);
         }
 
         private bool HasPropertyInfrastructureMethods(INamedTypeSymbol symbol)
@@ -491,6 +555,38 @@ namespace VeloxDev.Generators.Writers
                 builder.AppendLine($$"""
                         protected {{methodModifier}}void OnCollectionChanged<T>(string propertyName, global::System.Collections.Specialized.NotifyCollectionChangedEventArgs e, global::System.Collections.Generic.IEnumerable<T>? oldItems, global::System.Collections.Generic.IEnumerable<T>? newItems)
                         {
+                        }
+                    """);
+            }
+
+            if (!_hasBaseWorkflowSlotInfrastructure && !IsWorkflowComponent &&
+                MVVMProperties.Concat(AutoProperties).Any(p => p.UseWorkflowSlotLifecycle || p.UseWorkflowSlotCollectionLifecycle))
+            {
+                bool isSealed = Symbol.IsSealed;
+                string methodModifier = isSealed ? "" : "virtual ";
+
+                builder.AppendLine($$"""
+                        public {{methodModifier}}T CreateWorkflowSlot<T>() where T : class, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel
+                        {
+                            try
+                            {
+                                if (global::System.Activator.CreateInstance(typeof(T), true) is T created)
+                                {
+                                    return created;
+                                }
+                            }
+                            catch
+                            {
+                            }
+                            return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotViewModelBase();
+                        }
+                        protected {{methodModifier}}void OnWorkflowSlotAdded({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot)
+                        {
+                            CreateSlotCommand.Execute(slot);
+                        }
+                        protected {{methodModifier}}void OnWorkflowSlotRemoved({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot)
+                        {
+                            slot?.DeleteCommand.Execute(null);
                         }
                     """);
             }

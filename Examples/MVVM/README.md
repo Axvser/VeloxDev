@@ -1,6 +1,10 @@
 ﻿# VeloxDev MVVM & Command System  
 
+[← 返回主页](../../README.md)
+
 **编译时生成属性通知 · 声明式异步命令 · 内置并发控制与生命周期事件**
+
+> 💡 本文档覆盖 **快速上手 → 完整 API**，可直接对照 Demo 源码（`Examples/MVVM/` 下各平台子目录）阅读。
 
 ---
 

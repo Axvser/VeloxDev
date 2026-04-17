@@ -359,6 +359,21 @@ public sealed class WorkflowSurfaceView : ContentView
     {
         foreach (var node in session.Tree.Nodes)
         {
+            if (node is BoolSelectorNodeViewModel boolSelector)
+            {
+                if (boolSelector.InputSlot is not null) yield return boolSelector.InputSlot;
+                if (boolSelector.TrueSlot is not null) yield return boolSelector.TrueSlot;
+                if (boolSelector.FalseSlot is not null) yield return boolSelector.FalseSlot;
+                continue;
+            }
+
+            if (node is EnumSelectorNodeViewModel enumSelector)
+            {
+                if (enumSelector.InputSlot is not null) yield return enumSelector.InputSlot;
+                foreach (var slot in enumSelector.OutputSlots) yield return slot;
+                continue;
+            }
+
             if (node is NodeViewModel workflowNode)
             {
                 if (workflowNode.InputSlot is not null)
@@ -413,9 +428,23 @@ public sealed class WorkflowSurfaceView : ContentView
 
             foreach (var node in Session.Tree.Nodes)
             {
-                DrawSlot(canvas, (node as NodeViewModel)?.InputSlot);
-                DrawSlot(canvas, (node as NodeViewModel)?.OutputSlot);
-                DrawSlot(canvas, (node as ControllerViewModel)?.OutputSlot);
+                if (node is BoolSelectorNodeViewModel boolSelector)
+                {
+                    DrawSlot(canvas, boolSelector.InputSlot);
+                    DrawSlot(canvas, boolSelector.TrueSlot);
+                    DrawSlot(canvas, boolSelector.FalseSlot);
+                }
+                else if (node is EnumSelectorNodeViewModel enumSelector)
+                {
+                    DrawSlot(canvas, enumSelector.InputSlot);
+                    foreach (var slot in enumSelector.OutputSlots) DrawSlot(canvas, slot);
+                }
+                else
+                {
+                    DrawSlot(canvas, (node as NodeViewModel)?.InputSlot);
+                    DrawSlot(canvas, (node as NodeViewModel)?.OutputSlot);
+                    DrawSlot(canvas, (node as ControllerViewModel)?.OutputSlot);
+                }
             }
 
             canvas.RestoreState();
@@ -497,6 +526,25 @@ public sealed class WorkflowSurfaceView : ContentView
 
     private static void SyncNodeSlotAnchors(IWorkflowNodeViewModel node)
     {
+        if (node is BoolSelectorNodeViewModel boolSelector)
+        {
+            SyncSlotAnchor(node, boolSelector.InputSlot, isInput: true);
+            SyncSlotAnchorAtFraction(node, boolSelector.TrueSlot, 1.0 / 3);
+            SyncSlotAnchorAtFraction(node, boolSelector.FalseSlot, 2.0 / 3);
+            return;
+        }
+
+        if (node is EnumSelectorNodeViewModel enumSelector)
+        {
+            SyncSlotAnchor(node, enumSelector.InputSlot, isInput: true);
+            var count = enumSelector.OutputSlots.Count;
+            for (var i = 0; i < count; i++)
+            {
+                SyncSlotAnchorAtFraction(node, enumSelector.OutputSlots[i], (i + 1.0) / (count + 1));
+            }
+            return;
+        }
+
         if (node is NodeViewModel workflowNode)
         {
             SyncSlotAnchor(node, workflowNode.InputSlot, isInput: true);
@@ -520,6 +568,19 @@ public sealed class WorkflowSurfaceView : ContentView
         slot.Anchor = new Anchor(
             node.Anchor.Horizontal + (isInput ? 0 : node.Size.Width),
             node.Anchor.Vertical + (node.Size.Height / 2),
+            slot.Anchor.Layer);
+    }
+
+    private static void SyncSlotAnchorAtFraction(IWorkflowNodeViewModel node, IWorkflowSlotViewModel? slot, double fraction)
+    {
+        if (slot is null)
+        {
+            return;
+        }
+
+        slot.Anchor = new Anchor(
+            node.Anchor.Horizontal + node.Size.Width,
+            node.Anchor.Vertical + (node.Size.Height * fraction),
             slot.Anchor.Layer);
     }
 
@@ -580,19 +641,37 @@ public sealed class WorkflowSurfaceView : ContentView
         private View BuildInteractiveCard()
         {
             var root = new Grid();
-            root.Children.Add(_node is ControllerViewModel controller
-                ? BuildControllerCard(controller)
-                : BuildNodeCard((NodeViewModel)_node));
+            if (_node is ControllerViewModel controller)
+                root.Children.Add(BuildControllerCard(controller));
+            else if (_node is BoolSelectorNodeViewModel boolSelector)
+                root.Children.Add(BuildBoolSelectorCard(boolSelector));
+            else if (_node is EnumSelectorNodeViewModel enumSelector)
+                root.Children.Add(BuildEnumSelectorCard(enumSelector));
+            else
+                root.Children.Add(BuildNodeCard((NodeViewModel)_node));
 
-            // Slot hotspots are added to the parent _nodesLayer directly
-            // so they are NOT clipped by this Border and can receive gestures
-            // even when they overflow outside the node bounds.
             return root;
         }
 
         public void CreateExternalSlotHotspots()
         {
-            if (_node is NodeViewModel workflowNode)
+            if (_node is BoolSelectorNodeViewModel boolSelector)
+            {
+                if (boolSelector.InputSlot is not null)
+                    _externalHotspots.Add(CreateSlotHotspot(boolSelector.InputSlot, true));
+                if (boolSelector.TrueSlot is not null)
+                    _externalHotspots.Add(CreateSlotHotspot(boolSelector.TrueSlot, false));
+                if (boolSelector.FalseSlot is not null)
+                    _externalHotspots.Add(CreateSlotHotspot(boolSelector.FalseSlot, false));
+            }
+            else if (_node is EnumSelectorNodeViewModel enumSelector)
+            {
+                if (enumSelector.InputSlot is not null)
+                    _externalHotspots.Add(CreateSlotHotspot(enumSelector.InputSlot, true));
+                foreach (var slot in enumSelector.OutputSlots)
+                    _externalHotspots.Add(CreateSlotHotspot(slot, false));
+            }
+            else if (_node is NodeViewModel workflowNode)
             {
                 if (workflowNode.InputSlot is not null)
                     _externalHotspots.Add(CreateSlotHotspot(workflowNode.InputSlot, true));
@@ -608,7 +687,54 @@ public sealed class WorkflowSurfaceView : ContentView
         public void UpdateHotspotPositions()
         {
             int idx = 0;
-            if (_node is NodeViewModel wn)
+            if (_node is BoolSelectorNodeViewModel bs)
+            {
+                if (bs.InputSlot is not null && idx < _externalHotspots.Count)
+                {
+                    var h = _externalHotspots[idx++];
+                    AbsoluteLayout.SetLayoutBounds(h, new Rect(
+                        _node.Anchor.Horizontal - 14,
+                        _node.Anchor.Vertical + (_node.Size.Height / 2) - 14,
+                        28, 28));
+                }
+                if (bs.TrueSlot is not null && idx < _externalHotspots.Count)
+                {
+                    var h = _externalHotspots[idx++];
+                    AbsoluteLayout.SetLayoutBounds(h, new Rect(
+                        _node.Anchor.Horizontal + _node.Size.Width - 14,
+                        _node.Anchor.Vertical + (_node.Size.Height / 3) - 14,
+                        28, 28));
+                }
+                if (bs.FalseSlot is not null && idx < _externalHotspots.Count)
+                {
+                    var h = _externalHotspots[idx++];
+                    AbsoluteLayout.SetLayoutBounds(h, new Rect(
+                        _node.Anchor.Horizontal + _node.Size.Width - 14,
+                        _node.Anchor.Vertical + (_node.Size.Height * 2 / 3) - 14,
+                        28, 28));
+                }
+            }
+            else if (_node is EnumSelectorNodeViewModel es)
+            {
+                if (es.InputSlot is not null && idx < _externalHotspots.Count)
+                {
+                    var h = _externalHotspots[idx++];
+                    AbsoluteLayout.SetLayoutBounds(h, new Rect(
+                        _node.Anchor.Horizontal - 14,
+                        _node.Anchor.Vertical + (_node.Size.Height / 2) - 14,
+                        28, 28));
+                }
+                var count = es.OutputSlots.Count;
+                for (var i = 0; i < count && idx < _externalHotspots.Count; i++)
+                {
+                    var h = _externalHotspots[idx++];
+                    AbsoluteLayout.SetLayoutBounds(h, new Rect(
+                        _node.Anchor.Horizontal + _node.Size.Width - 14,
+                        _node.Anchor.Vertical + (_node.Size.Height * (i + 1.0) / (count + 1)) - 14,
+                        28, 28));
+                }
+            }
+            else if (_node is NodeViewModel wn)
             {
                 if (wn.InputSlot is not null && idx < _externalHotspots.Count)
                 {
@@ -730,6 +856,56 @@ public sealed class WorkflowSurfaceView : ContentView
             };
         }
 
+        private View BuildBoolSelectorCard(BoolSelectorNodeViewModel node)
+        {
+            var title = new Label
+            {
+                FontSize = 18,
+                FontAttributes = FontAttributes.Bold,
+                TextColor = Colors.White
+            };
+            title.SetBinding(Label.TextProperty, nameof(BoolSelectorNodeViewModel.Title));
+
+            _stateLabel.SetBinding(Label.TextProperty, nameof(BoolSelectorNodeViewModel.Condition), stringFormat: "Condition: {0}");
+
+            var routed = new Label { TextColor = Color.FromArgb("#E2E8F0") };
+            routed.SetBinding(Label.TextProperty, nameof(BoolSelectorNodeViewModel.LastRouted), stringFormat: "Last Routed: {0}");
+
+            return new VerticalStackLayout
+            {
+                Spacing = 8,
+                Children = { title, _stateLabel, routed }
+            };
+        }
+
+        private View BuildEnumSelectorCard(EnumSelectorNodeViewModel node)
+        {
+            var title = new Label
+            {
+                FontSize = 18,
+                FontAttributes = FontAttributes.Bold,
+                TextColor = Colors.White
+            };
+            title.SetBinding(Label.TextProperty, nameof(EnumSelectorNodeViewModel.Title));
+
+            var enumType = new Label { TextColor = Color.FromArgb("#BAE6FD"), FontAttributes = FontAttributes.Bold };
+            enumType.Text = $"Enum: {node.EnumType?.Name ?? "-"}";
+
+            _stateLabel.Text = $"Selected: {node.SelectedValue ?? "-"}";
+
+            var routed = new Label { TextColor = Color.FromArgb("#E2E8F0") };
+            routed.SetBinding(Label.TextProperty, nameof(EnumSelectorNodeViewModel.LastRouted), stringFormat: "Last Routed: {0}");
+
+            var slots = new Label { TextColor = Color.FromArgb("#CBD5E1") };
+            slots.Text = $"Outputs: {node.OutputSlots.Count}";
+
+            return new VerticalStackLayout
+            {
+                Spacing = 8,
+                Children = { title, enumType, _stateLabel, routed, slots }
+            };
+        }
+
         private View BuildNodeCard(NodeViewModel node)
         {
             var title = new Label
@@ -805,6 +981,14 @@ public sealed class WorkflowSurfaceView : ContentView
                 BackgroundColor = controller.IsActive ? Color.FromArgb("#0F766E") : Color.FromArgb("#1E293B");
                 Stroke = new SolidColorBrush(controller.IsActive ? Color.FromArgb("#67E8F9") : Color.FromArgb("#475569"));
                 _stateLabel.TextColor = controller.IsActive ? Color.FromArgb("#A7F3D0") : Color.FromArgb("#CBD5E1");
+                return;
+            }
+
+            if (_node is BoolSelectorNodeViewModel or EnumSelectorNodeViewModel)
+            {
+                BackgroundColor = Color.FromArgb("#1E293B");
+                Stroke = new SolidColorBrush(Color.FromArgb("#475569"));
+                _stateLabel.TextColor = Color.FromArgb("#CBD5E1");
                 return;
             }
 

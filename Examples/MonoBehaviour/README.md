@@ -1,6 +1,10 @@
 ﻿# VeloxDev TimeLine System
 
+[← 返回主页](../../README.md)
+
 C# 生命周期与帧驱动
+
+> 💡 本文档覆盖 **快速上手 → 完整 API**，可直接对照 Demo 源码（`Examples/MonoBehaviour/` 下各平台子目录）阅读。
 
 ---
 

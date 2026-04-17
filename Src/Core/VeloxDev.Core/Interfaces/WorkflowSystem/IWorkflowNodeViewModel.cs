@@ -59,6 +59,11 @@ public interface IWorkflowNodeViewModel : IWorkflowViewModel
     [AgentCommandParameter]
     public IVeloxCommand BroadcastCommand { get; }
 
+    [AgentContext(AgentLanguages.Chinese, "反向广播数据，参数为Nullable")]
+    [AgentContext(AgentLanguages.English, "Broadcast data in reverse direction, parameter is Nullable")]
+    [AgentCommandParameter]
+    public IVeloxCommand ReverseBroadcastCommand { get; }
+
     public IWorkflowNodeViewModelHelper GetHelper();
     public void SetHelper(IWorkflowNodeViewModelHelper helper);
 }
@@ -78,6 +83,7 @@ public interface IWorkflowNodeViewModelHelper : IWorkflowHelper
 
     public Task WorkAsync(object? parameter, CancellationToken ct);
     public Task BroadcastAsync(object? parameter, CancellationToken ct);
+    public Task ReverseBroadcastAsync(object? parameter, CancellationToken ct);
     public Task<bool> ValidateBroadcastAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, object? parameter, CancellationToken ct);
 
     public void Delete();

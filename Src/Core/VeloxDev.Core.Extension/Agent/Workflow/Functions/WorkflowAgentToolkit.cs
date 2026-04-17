@@ -2,6 +2,7 @@ using Microsoft.Extensions.AI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -40,7 +41,7 @@ public sealed class WorkflowAgentToolkit
         AITool T(Delegate method, string name)
             => new TrackedAIFunction(AIFunctionFactory.Create(method, name), this);
 
-        return new List<AITool>
+        var tools = new List<AITool>
         {
             // ── Query ──
             T(ListNodes, nameof(ListNodes)),
@@ -79,7 +80,18 @@ public sealed class WorkflowAgentToolkit
             T(BatchExecute, nameof(BatchExecute)),
             // ── Clone ──
             T(CloneNodes, nameof(CloneNodes)),
+            // ── Slot Collections ──
+            T(ListSlotProperties, nameof(ListSlotProperties)),
+            T(AddSlotToCollection, nameof(AddSlotToCollection)),
+            T(RemoveSlotFromCollection, nameof(RemoveSlotFromCollection)),
+            T(SetEnumSlotCollection, nameof(SetEnumSlotCollection)),
         };
+
+        // Merge developer-registered custom tools
+        foreach (var tool in _scope.CustomTools)
+            tools.Add(tool);
+
+        return tools;
     }
 
     /// <summary>
@@ -178,6 +190,9 @@ public sealed class WorkflowAgentToolkit
 
         AppendScalarProperties(obj, node);
 
+        // Build slot→property name mapping for richer context
+        var slotPropertyMap = BuildSlotPropertyMap(node);
+
         var slotsArr = new JArray();
         for (int s = 0; s < node.Slots.Count; s++)
         {
@@ -189,6 +204,8 @@ public sealed class WorkflowAgentToolkit
                 ["ch"] = slot.Channel.ToString(),
                 ["st"] = slot.State.ToString(),
             };
+            if (slotPropertyMap.TryGetValue(slot, out var propName))
+                slotObj["prop"] = propName;
 
             if (slot.Targets.Count > 0)
             {
@@ -608,6 +625,311 @@ public sealed class WorkflowAgentToolkit
         }
     }
 
+    // ────────────────────────── Slot Collection Functions ──────────────────────────
+
+    [Description("Lists slot properties on a node type: named single slots and slot collection properties. Shows property name, whether it's a collection, current count, and slot IDs.")]
+    private string ListSlotProperties(
+        [Description("Node index.")] int nodeIndex)
+    {
+        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
+        var result = new JArray();
+        var type = node!.GetType();
+        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (!prop.CanRead) continue;
+            if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
+            {
+                var slot = prop.GetValue(node) as IWorkflowSlotViewModel;
+                result.Add(new JObject
+                {
+                    ["name"] = prop.Name,
+                    ["collection"] = false,
+                    ["id"] = slot != null ? GetComponentId(slot) : null,
+                    ["ch"] = slot?.Channel.ToString(),
+                });
+            }
+            else if (IsSlotCollection(prop.PropertyType, out _))
+            {
+                var col = prop.GetValue(node) as IList;
+                var ids = new JArray();
+                if (col != null)
+                {
+                    foreach (var item in col)
+                    {
+                        if (item is IWorkflowSlotViewModel s)
+                            ids.Add(GetComponentId(s));
+                    }
+                }
+                var entry = new JObject
+                {
+                    ["name"] = prop.Name,
+                    ["collection"] = true,
+                    ["count"] = col?.Count ?? 0,
+                    ["ids"] = ids,
+                };
+
+                // Expose EnumSlotCollection metadata if present
+                var enumAttr = prop.GetCustomAttribute<AI.EnumSlotCollectionAttribute>();
+                if (enumAttr != null)
+                {
+                    entry["enumDriven"] = true;
+                    // Discover current enum type via [EnumSlotValue] attribute binding
+                    var enumTypeProp = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                        .FirstOrDefault(p => p.GetCustomAttribute<AI.SlotsEnumTypeAttribute>()?.CollectionPropertyName == prop.Name);
+                    if (enumTypeProp != null)
+                    {
+                        var currentEnumType = enumTypeProp.GetValue(node) as Type;
+                        entry["currentEnumType"] = currentEnumType?.FullName;
+                        if (currentEnumType != null && currentEnumType.IsEnum)
+                            entry["enumValues"] = new JArray(Enum.GetNames(currentEnumType));
+                        var attr = enumTypeProp.GetCustomAttribute<AI.SlotsEnumTypeAttribute>()!;
+                        if (attr.AllowedEnumTypes.Length > 0)
+                            entry["allowedEnumTypes"] = new JArray(attr.AllowedEnumTypes.Select(t => t.FullName));
+                    }
+                    entry["hint"] = "Use SetEnumSlotCollection to set or change the enum type. Do NOT add/remove slots manually.";
+                }
+
+                result.Add(entry);
+            }
+        }
+        return result.ToString(Formatting.None);
+    }
+
+    [Description("Adds a new slot to a collection property on a node (e.g. OutputSlots). The slot is created via the node's CreateWorkflowSlot infrastructure and added to the collection, triggering lifecycle events.")]
+    private string AddSlotToCollection(
+        [Description("Node index.")] int nodeIndex,
+        [Description("Name of the slot collection property, e.g. 'OutputSlots'.")] string propertyName,
+        [Description("Fully-qualified slot type name.")] string fullSlotTypeName,
+        [Description("Channel: 'OneSender','OneReceiver','OneBoth','ManySender','ManyReceiver','ManyBoth'.")] string channel = "MultipleBoth")
+    {
+        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
+        var prop = node!.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+        if (prop == null) return Error($"Property '{propertyName}' not found on {node.GetType().Name}.");
+        if (!IsSlotCollection(prop.PropertyType, out _))
+            return Error($"Property '{propertyName}' is not a slot collection.");
+
+        var col = prop.GetValue(node) as IList;
+        if (col == null) return Error($"Collection '{propertyName}' is null.");
+
+        var slotType = TypeIntrospector.ResolveType(fullSlotTypeName);
+        if (slotType == null) return Error($"Type '{fullSlotTypeName}' not found.");
+        if (!typeof(IWorkflowSlotViewModel).IsAssignableFrom(slotType))
+            return Error($"'{fullSlotTypeName}' does not implement IWorkflowSlotViewModel.");
+
+        try
+        {
+            // Use CreateWorkflowSlot<T> via reflection to leverage node's infrastructure
+            var createMethod = node.GetType().GetMethod("CreateWorkflowSlot");
+            IWorkflowSlotViewModel slot;
+            if (createMethod != null)
+            {
+                var generic = createMethod.MakeGenericMethod(slotType);
+                slot = (IWorkflowSlotViewModel)generic.Invoke(node, null)!;
+            }
+            else
+            {
+                slot = (IWorkflowSlotViewModel)Activator.CreateInstance(slotType);
+            }
+            if (Enum.TryParse<SlotChannel>(channel, true, out var ch))
+                slot.Channel = ch;
+            col.Add(slot);
+            return JsonConvert.SerializeObject(new
+            {
+                status = "ok",
+                id = GetComponentId(slot),
+                count = col.Count,
+            }, Formatting.None);
+        }
+        catch (Exception ex)
+        {
+            return Error($"Failed to add slot: {ex.Message}");
+        }
+    }
+
+    [Description("Removes a slot from a collection property on a node by slot runtime ID. Triggers lifecycle events (OnWorkflowSlotRemoved).")]
+    private string RemoveSlotFromCollection(
+        [Description("Node index.")] int nodeIndex,
+        [Description("Name of the slot collection property, e.g. 'OutputSlots'.")] string propertyName,
+        [Description("Runtime ID of the slot to remove.")] string slotRuntimeId)
+    {
+        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
+        var prop = node!.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+        if (prop == null) return Error($"Property '{propertyName}' not found on {node.GetType().Name}.");
+        if (!IsSlotCollection(prop.PropertyType, out _))
+            return Error($"Property '{propertyName}' is not a slot collection.");
+
+        var col = prop.GetValue(node) as IList;
+        if (col == null) return Error($"Collection '{propertyName}' is null.");
+
+        for (int i = 0; i < col.Count; i++)
+        {
+            if (col[i] is IWorkflowSlotViewModel slot && GetComponentId(slot) == slotRuntimeId)
+            {
+                col.RemoveAt(i);
+                return Ok($"Removed slot '{slotRuntimeId}' from '{propertyName}'. Count={col.Count}.");
+            }
+        }
+        return Error($"Slot '{slotRuntimeId}' not found in '{propertyName}'.");
+    }
+
+    [Description("Sets or changes the enum type on an [EnumSlotCollection]-marked slot collection. Resolves the enum type by full name, clears all existing slots in the collection, and recreates one slot per enum value. Returns the new slot IDs and enum labels.")]
+    private string SetEnumSlotCollection(
+        [Description("Node index.")] int nodeIndex,
+        [Description("Name of the slot collection property marked with [EnumSlotCollection], e.g. 'OutputSlots'.")] string propertyName,
+        [Description("Fully-qualified enum type name, e.g. 'Demo.ViewModels.NetworkRequestMethod'.")] string fullEnumTypeName)
+    {
+        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
+        var type = node!.GetType();
+        var prop = type.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+        if (prop == null) return Error($"Property '{propertyName}' not found on {type.Name}.");
+        if (prop.GetCustomAttribute<AI.EnumSlotCollectionAttribute>() == null)
+            return Error($"Property '{propertyName}' is not marked with [EnumSlotCollection].");
+        if (!IsSlotCollection(prop.PropertyType, out var slotItemType))
+            return Error($"Property '{propertyName}' is not a slot collection.");
+
+        var enumType = TypeIntrospector.ResolveType(fullEnumTypeName);
+        if (enumType == null) return Error($"Type '{fullEnumTypeName}' not found.");
+        if (!enumType.IsEnum) return Error($"'{fullEnumTypeName}' is not an enum type.");
+
+        // Try to set an EnumType property if the node exposes one via [SlotsEnumType] binding
+        var enumTypeProp = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(p => p.GetCustomAttribute<AI.SlotsEnumTypeAttribute>()?.CollectionPropertyName == propertyName);
+        if (enumTypeProp != null && enumTypeProp.CanWrite && enumTypeProp.PropertyType == typeof(Type))
+        {
+            // Validate against allowed enum types if specified
+            var slotsAttr = enumTypeProp.GetCustomAttribute<AI.SlotsEnumTypeAttribute>()!;
+            if (slotsAttr.AllowedEnumTypes.Length > 0 && !slotsAttr.AllowedEnumTypes.Contains(enumType))
+            {
+                var allowed = string.Join(", ", slotsAttr.AllowedEnumTypes.Select(t => t.FullName));
+                return Error($"Enum type '{fullEnumTypeName}' is not allowed for '{propertyName}'. Allowed types: {allowed}");
+            }
+
+            // Setting EnumType triggers the node's own RebuildOutputSlots logic
+            enumTypeProp.SetValue(node, enumType);
+        }
+        else
+        {
+            // Fallback: manually clear and rebuild the collection
+            var col = prop.GetValue(node) as IList;
+            if (col == null) return Error($"Collection '{propertyName}' is null.");
+
+            while (col.Count > 0)
+                col.RemoveAt(col.Count - 1);
+
+            var createMethod = node.GetType().GetMethod("CreateWorkflowSlot");
+            var enumValues = Enum.GetValues(enumType);
+            foreach (var _ in enumValues)
+            {
+                IWorkflowSlotViewModel slot;
+                if (createMethod != null)
+                {
+                    var generic = createMethod.MakeGenericMethod(slotItemType ?? typeof(IWorkflowSlotViewModel));
+                    slot = (IWorkflowSlotViewModel)generic.Invoke(node, null)!;
+                }
+                else
+                {
+                    slot = (IWorkflowSlotViewModel)Activator.CreateInstance(slotItemType ?? typeof(IWorkflowSlotViewModel))!;
+                }
+                slot.Channel = SlotChannel.MultipleTargets;
+                col.Add(slot);
+            }
+        }
+
+        // Nudge the node position to force the view to re-layout slot anchors.
+        // A tiny move (+0.5, 0) then back (-0.5, 0) triggers Anchor recalculation
+        // without visibly changing position, avoiding stale connection lines.
+        node.MoveCommand.Execute(new Offset(0.5, 0));
+        node.MoveCommand.Execute(new Offset(-0.5, 0));
+
+        // Build result with slot IDs and labels
+        var resultCol = prop.GetValue(node) as IList;
+        var names = Enum.GetNames(enumType);
+        var ids = new JArray();
+        if (resultCol != null)
+        {
+            for (int i = 0; i < resultCol.Count; i++)
+            {
+                if (resultCol[i] is IWorkflowSlotViewModel s)
+                {
+                    ids.Add(new JObject
+                    {
+                        ["id"] = GetComponentId(s),
+                        ["label"] = i < names.Length ? names[i] : "?",
+                    });
+                }
+            }
+        }
+        return new JObject
+        {
+            ["ok"] = true,
+            ["enumType"] = enumType.FullName,
+            ["collection"] = propertyName,
+            ["count"] = ids.Count,
+            ["slots"] = ids,
+        }.ToString(Formatting.None);
+    }
+
+    /// <summary>
+    /// Builds a reverse map from slot instance → property name (e.g. "InputSlot", "OutputSlots[2]").
+    /// </summary>
+    private static Dictionary<IWorkflowSlotViewModel, string> BuildSlotPropertyMap(IWorkflowNodeViewModel node)
+    {
+        var map = new Dictionary<IWorkflowSlotViewModel, string>();
+        foreach (var prop in node.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (!prop.CanRead) continue;
+            try
+            {
+                if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
+                {
+                    if (prop.GetValue(node) is IWorkflowSlotViewModel slot)
+                        map[slot] = prop.Name;
+                }
+                else if (IsSlotCollection(prop.PropertyType, out _))
+                {
+                    if (prop.GetValue(node) is IList col)
+                    {
+                        for (int i = 0; i < col.Count; i++)
+                        {
+                            if (col[i] is IWorkflowSlotViewModel s)
+                                map[s] = $"{prop.Name}[{i}]";
+                        }
+                    }
+                }
+            }
+            catch { /* skip inaccessible */ }
+        }
+        return map;
+    }
+
+    private static bool IsSlotCollection(Type type, out Type? itemType)
+    {
+        itemType = null;
+        if (type.IsGenericType)
+        {
+            var args = type.GetGenericArguments();
+            if (args.Length == 1 && typeof(IWorkflowSlotViewModel).IsAssignableFrom(args[0])
+                && typeof(IEnumerable).IsAssignableFrom(type))
+            {
+                itemType = args[0];
+                return true;
+            }
+        }
+        foreach (var iface in type.GetInterfaces())
+        {
+            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(ICollection<>))
+            {
+                var args = iface.GetGenericArguments();
+                if (args.Length == 1 && typeof(IWorkflowSlotViewModel).IsAssignableFrom(args[0]))
+                {
+                    itemType = args[0];
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // ────────────────────────── Clone ──────────────────────────
 
     [Description("Clones a set of nodes (by indices) with their internal connections to a new position. Returns mapping of old→new node IDs.")]
@@ -785,6 +1107,10 @@ public sealed class WorkflowAgentToolkit
             ["CreateNode"] = a => CreateNode(a.Value<string>("fullTypeName")!, a.Value<double?>("left") ?? 0, a.Value<double?>("top") ?? 0, a.Value<double?>("width") ?? 0, a.Value<double?>("height") ?? 0),
             ["CreateSlotOnNode"] = a => CreateSlotOnNode(a.Value<int>("nodeIndex"), a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "OneBoth"),
             ["CloneNodes"] = a => CloneNodes(a.Value<string>("nodeIndicesJson")!, a.Value<double?>("offsetX") ?? 200, a.Value<double?>("offsetY") ?? 0),
+            ["ListSlotProperties"] = a => ListSlotProperties(a.Value<int>("nodeIndex")),
+            ["AddSlotToCollection"] = a => AddSlotToCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "MultipleBoth"),
+            ["RemoveSlotFromCollection"] = a => RemoveSlotFromCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("slotRuntimeId")!),
+            ["SetEnumSlotCollection"] = a => SetEnumSlotCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullEnumTypeName")!),
         };
     }
 
@@ -876,6 +1202,24 @@ public sealed class WorkflowAgentToolkit
                 {
                     var val = prop.GetValue(target);
                     obj[prop.Name] = val != null ? JToken.FromObject(val) : JValue.CreateNull();
+                }
+                catch { /* skip inaccessible */ }
+            }
+            else if (pt == typeof(Type))
+            {
+                try
+                {
+                    var val = prop.GetValue(target) as Type;
+                    obj[prop.Name] = val?.FullName;
+                }
+                catch { /* skip inaccessible */ }
+            }
+            else if (pt.IsEnum)
+            {
+                try
+                {
+                    var val = prop.GetValue(target);
+                    obj[prop.Name] = val?.ToString();
                 }
                 catch { /* skip inaccessible */ }
             }

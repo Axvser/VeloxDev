@@ -1,5 +1,7 @@
 ﻿# VeloxDev.Core.Extension
 
+[![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Extension?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core.Extension/) · [← 返回主页](../../../README.md)
+
 VeloxDev.Core.Extension 为 `VeloxDev.Core` 提供以下扩展能力：
 
 - **通用 Agent 工具集（AgentObjectToolkit）**：将任意 .NET 对象包装为 10 个 MAF `AITool`（属性读写、命令执行、方法调用），不限于工作流——适用于所有 .NET 项目。

@@ -265,6 +265,7 @@ namespace VeloxDev.Generators.Base
             public string SetterAccessModifier { get; private set; }
             public bool UseWorkflowSlotLifecycle { get; set; }
             public bool UseWorkflowSlotAutoCreation { get; set; }
+            public bool UseWorkflowSlotCollectionLifecycle { get; set; }
 
             public List<string> SetteringBody { get; set; } = [];
             public List<string> SetteredBody { get; set; } = [];
@@ -412,6 +413,13 @@ namespace VeloxDev.Generators.Base
                 yield return "}";
                 yield return "if (old is not null)";
                 yield return "{";
+                if (UseWorkflowSlotCollectionLifecycle)
+                {
+                    yield return $"    foreach (var _slotItem in Enumerate{PropertyName}Items(old))";
+                    yield return "    {";
+                    yield return "        OnWorkflowSlotRemoved(_slotItem);";
+                    yield return "    }";
+                }
                 yield return $"    OnItemRemovedFrom{PropertyName}(Enumerate{PropertyName}Items(old));";
                 yield return "}";
             }
@@ -429,6 +437,13 @@ namespace VeloxDev.Generators.Base
                 yield return "}";
                 yield return "if (value is not null)";
                 yield return "{";
+                if (UseWorkflowSlotCollectionLifecycle)
+                {
+                    yield return $"    foreach (var _slotItem in Enumerate{PropertyName}Items(value))";
+                    yield return "    {";
+                    yield return "        OnWorkflowSlotAdded(_slotItem);";
+                    yield return "    }";
+                }
                 yield return $"    OnItemAddedTo{PropertyName}(Enumerate{PropertyName}Items(value));";
                 yield return "}";
             }
@@ -442,7 +457,7 @@ namespace VeloxDev.Generators.Base
 
                 yield return "if (old is not null)";
                 yield return "{";
-                yield return "    old.DeleteCommand.Execute(null);";
+                yield return "    OnWorkflowSlotRemoved(old);";
                 yield return "}";
             }
 
@@ -455,7 +470,7 @@ namespace VeloxDev.Generators.Base
 
                 yield return "if (value is not null)";
                 yield return "{";
-                yield return "    CreateSlotCommand.Execute(value);";
+                yield return "    OnWorkflowSlotAdded(value);";
                 yield return "}";
             }
 
@@ -463,35 +478,15 @@ namespace VeloxDev.Generators.Base
             {
                 yield return $"if ({SourceName} is null)";
                 yield return "{";
-                yield return $"    {SourceName} = Create{PropertyName}WorkflowSlot();";
-                yield return $"    CreateSlotCommand.Execute({SourceName});";
+                yield return $"    {SourceName} = CreateWorkflowSlot<{NonNullableFullTypeName}>();";
+                yield return $"    OnWorkflowSlotAdded({SourceName});";
                 yield return "}";
                 yield return $"return {SourceName};";
             }
 
             private string GenerateWorkflowSlotMembers()
             {
-                if (!UseWorkflowSlotLifecycle || IsNullable || !UseWorkflowSlotAutoCreation)
-                {
-                    return string.Empty;
-                }
-
-                return $$"""
-                    {{RETRACT}}private {{FullTypeName}} Create{{PropertyName}}WorkflowSlot()
-                    {{RETRACT}}{
-                    {{RETRACT}}    try
-                    {{RETRACT}}    {
-                    {{RETRACT}}        if (global::System.Activator.CreateInstance(typeof({{NonNullableFullTypeName}}), true) is {{FullTypeName}} created)
-                    {{RETRACT}}        {
-                    {{RETRACT}}            return created;
-                    {{RETRACT}}        }
-                    {{RETRACT}}    }
-                    {{RETRACT}}    catch
-                    {{RETRACT}}    {
-                    {{RETRACT}}    }
-                    {{RETRACT}}    return ({{FullTypeName}})(object)new global::VeloxDev.WorkflowSystem.SlotViewModelBase();
-                    {{RETRACT}}}
-                    """;
+                return string.Empty;
             }
 
             private string GenerateCollectionMembers()
@@ -554,6 +549,22 @@ namespace VeloxDev.Generators.Base
                         """;
                 }
 
+                var slotLifecycleAdd = UseWorkflowSlotCollectionLifecycle
+                    ? $"{RETRACT}        foreach (var _slotItem in Enumerate{PropertyName}Items(e.NewItems))\n{RETRACT}        {{\n{RETRACT}            OnWorkflowSlotAdded(_slotItem);\n{RETRACT}        }}"
+                    : string.Empty;
+
+                var slotLifecycleRemove = UseWorkflowSlotCollectionLifecycle
+                    ? $"{RETRACT}        foreach (var _slotItem in Enumerate{PropertyName}Items(e.OldItems))\n{RETRACT}        {{\n{RETRACT}            OnWorkflowSlotRemoved(_slotItem);\n{RETRACT}        }}"
+                    : string.Empty;
+
+                var slotLifecycleReplaceRemove = UseWorkflowSlotCollectionLifecycle
+                    ? $"{RETRACT}            foreach (var _slotItem in Enumerate{PropertyName}Items(e.OldItems))\n{RETRACT}            {{\n{RETRACT}                OnWorkflowSlotRemoved(_slotItem);\n{RETRACT}            }}"
+                    : string.Empty;
+
+                var slotLifecycleReplaceAdd = UseWorkflowSlotCollectionLifecycle
+                    ? $"{RETRACT}            foreach (var _slotItem in Enumerate{PropertyName}Items(e.NewItems))\n{RETRACT}            {{\n{RETRACT}                OnWorkflowSlotAdded(_slotItem);\n{RETRACT}            }}"
+                    : string.Empty;
+
                 return $$"""
                     {{RETRACT}}private static {{itemParameterType}} Enumerate{{PropertyName}}Items({{NonNullableFullTypeName}} collection)
                     {{RETRACT}}{
@@ -571,18 +582,22 @@ namespace VeloxDev.Generators.Base
                     {{RETRACT}}    switch (e.Action)
                     {{RETRACT}}    {
                     {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Add when e.NewItems is not null:
+                    {{slotLifecycleAdd}}
                     {{RETRACT}}            OnItemAddedTo{{PropertyName}}(Enumerate{{PropertyName}}Items(e.NewItems));
                     {{RETRACT}}            break;
                     {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Remove when e.OldItems is not null:
+                    {{slotLifecycleRemove}}
                     {{RETRACT}}            OnItemRemovedFrom{{PropertyName}}(Enumerate{{PropertyName}}Items(e.OldItems));
                     {{RETRACT}}            break;
                     {{RETRACT}}        case global::System.Collections.Specialized.NotifyCollectionChangedAction.Replace:
                     {{RETRACT}}            if (e.OldItems is not null)
                     {{RETRACT}}            {
+                    {{slotLifecycleReplaceRemove}}
                     {{RETRACT}}                OnItemRemovedFrom{{PropertyName}}(Enumerate{{PropertyName}}Items(e.OldItems));
                     {{RETRACT}}            }
                     {{RETRACT}}            if (e.NewItems is not null)
                     {{RETRACT}}            {
+                    {{slotLifecycleReplaceAdd}}
                     {{RETRACT}}                OnItemAddedTo{{PropertyName}}(Enumerate{{PropertyName}}Items(e.NewItems));
                     {{RETRACT}}            }
                     {{RETRACT}}            break;

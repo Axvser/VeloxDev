@@ -51,11 +51,13 @@ namespace Demo
             {
                 _demo.Controller.PropertyChanged -= OnControllerPropertyChanged;
                 _demo.Tree.ExecutionLog.CollectionChanged -= OnExecutionLogCollectionChanged;
+                _demo.Tree.AgentLog.CollectionChanged -= OnAgentLogCollectionChanged;
             }
 
             _demo = session;
             _demo.Controller.PropertyChanged += OnControllerPropertyChanged;
             _demo.Tree.ExecutionLog.CollectionChanged += OnExecutionLogCollectionChanged;
+            _demo.Tree.AgentLog.CollectionChanged += OnAgentLogCollectionChanged;
 
             _controllerBindingSource.DataSource = _demo.Controller;
 
@@ -134,6 +136,55 @@ namespace Demo
             {
                 MessageBox.Show(this, ex.Message, title, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private void OnSendToAgent(object? sender, EventArgs e)
+        {
+            var text = agentInputTextBox.Text?.Trim();
+            if (string.IsNullOrEmpty(text) || _demo is null) return;
+            _demo.Tree.AskCommand.Execute(text);
+            agentInputTextBox.Text = string.Empty;
+        }
+
+        private void OnAgentInputKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                OnSendToAgent(sender, e);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+        }
+
+        private void OnAgentLogCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(ReloadAgentLog);
+                return;
+            }
+
+            ReloadAgentLog();
+        }
+
+        private void ReloadAgentLog()
+        {
+            if (_demo is null) return;
+
+            agentLogListBox.BeginUpdate();
+            agentLogListBox.Items.Clear();
+
+            foreach (var entry in _demo.Tree.AgentLog)
+            {
+                agentLogListBox.Items.Add(entry);
+            }
+
+            if (agentLogListBox.Items.Count > 0)
+            {
+                agentLogListBox.TopIndex = agentLogListBox.Items.Count - 1;
+            }
+
+            agentLogListBox.EndUpdate();
         }
     }
 }

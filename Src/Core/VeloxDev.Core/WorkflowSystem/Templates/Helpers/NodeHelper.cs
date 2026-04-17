@@ -48,6 +48,12 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper
     {
         if (Component is not null) await Component.StandardBroadcastAsync(parameter, ct);
     }
+    public virtual async Task ReverseBroadcastAsync(
+        object? parameter,
+        CancellationToken ct)
+    {
+        if (Component is not null) await Component.StandardReverseBroadcastAsync(parameter, ct);
+    }
     public virtual Task WorkAsync(
         object? parameter,
         CancellationToken ct)

@@ -17,9 +17,21 @@
                                   Height="{Binding Size.Height}"
                                   IsEnabled="{Binding IsEnabled}"/>
         </DataTemplate>
+        <DataTemplate x:Key="BoolSelectorTemplate">
+            <local:BoolSelectorNodeView Width="{Binding Size.Width}"
+                                        Height="{Binding Size.Height}"
+                                        IsEnabled="{Binding IsEnabled}"/>
+        </DataTemplate>
+        <DataTemplate x:Key="EnumSelectorTemplate">
+            <local:EnumSelectorNodeView Width="{Binding Size.Width}"
+                                        Height="{Binding Size.Height}"
+                                        IsEnabled="{Binding IsEnabled}"/>
+        </DataTemplate>
         <local:CustomTemplateSelector x:Key="NodeSelector"
                                       Controller="{StaticResource ControllerTemplate}"
-                                      Simulator="{StaticResource NodeTemplate}"/>
+                                      Simulator="{StaticResource NodeTemplate}"
+                                      BoolSelector="{StaticResource BoolSelectorTemplate}"
+                                      EnumSelector="{StaticResource EnumSelectorTemplate}"/>
     </UserControl.Resources>
 
     <Grid>
@@ -128,7 +140,8 @@
                                           Foreground="White"
                                           VerticalAlignment="Center" />
                             </Grid>
-                            <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" x:Name="AgentLogScroller">
+                            <ScrollViewer MaxHeight="300" x:Name="AgentLogScroller"
+                                          VerticalScrollBarVisibility="Auto">
                                 <ItemsControl ItemsSource="{Binding AgentLog}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
@@ -168,15 +181,19 @@
                                 <TextBlock Margin="0,6,0,0"
                                            Text="{Binding ExecutionLog.Count, StringFormat=已记录: {0}}"
                                            Foreground="#BDBDBD" />
-                                <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding ExecutionLog}">
-                                    <ItemsControl.ItemTemplate>
+                                <ListBox Margin="0,6,0,0" ItemsSource="{Binding ExecutionLog}"
+                                         Background="Transparent" BorderThickness="0"
+                                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                         VirtualizingStackPanel.IsVirtualizing="True"
+                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
+                                    <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding .}"
                                                        Foreground="#D8D8D8"
                                                        TextWrapping="Wrap" />
                                         </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
                             </StackPanel>
                         </ScrollViewer>
                     </Border>

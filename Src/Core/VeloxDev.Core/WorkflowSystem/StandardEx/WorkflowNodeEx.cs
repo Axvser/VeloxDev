@@ -13,7 +13,8 @@ public static class WorkflowNodeEx
             component.CreateSlotCommand,
             component.DeleteCommand,
             component.WorkCommand,
-            component.BroadcastCommand
+            component.BroadcastCommand,
+            component.ReverseBroadcastCommand
         ];
 
     public static void StandardCreateSlot(this IWorkflowNodeViewModel component, IWorkflowSlotViewModel slot)
@@ -104,6 +105,132 @@ public static class WorkflowNodeEx
         {
             ct.ThrowIfCancellationRequested();
             node.WorkCommand.Execute(parameter);
+        }
+    }
+
+    public static async Task StandardReverseBroadcastAsync(this IWorkflowNodeViewModel component, object? parameter, CancellationToken ct = default)
+    {
+        var helper = component?.GetHelper() ?? throw new ArgumentException($"Failed to obtain the Helper instance.");
+
+        List<IWorkflowNodeViewModel> nodes = [];
+        foreach (var receiver in component.Slots.ToArray())
+        {
+            ct.ThrowIfCancellationRequested();
+
+            foreach (var sender in receiver.Sources.ToArray())
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var senderNode = sender.Parent;
+                if (senderNode is null)
+                {
+                    continue;
+                }
+
+                if (!await helper.ValidateBroadcastAsync(sender, receiver, parameter, ct).ConfigureAwait(false))
+                {
+                    continue;
+                }
+
+                nodes.Add(senderNode);
+            }
+        }
+
+        foreach (var node in nodes)
+        {
+            ct.ThrowIfCancellationRequested();
+            node.WorkCommand.Execute(parameter);
+        }
+    }
+
+    /// <summary>
+    /// Search downstream (forward) nodes along the propagation chain starting from the given node.
+    /// Uses BFS with depth limiting and an optional predicate filter.
+    /// </summary>
+    /// <param name="component">The starting node.</param>
+    /// <param name="predicate">Optional filter predicate. If null, all reachable nodes are returned.</param>
+    /// <param name="maxDepth">Maximum search depth. 0 means unlimited.</param>
+    /// <returns>An enumerable of matching downstream nodes (excluding the starting node).</returns>
+    public static IEnumerable<IWorkflowNodeViewModel> SearchForwardNodes(
+        this IWorkflowNodeViewModel component,
+        Func<IWorkflowNodeViewModel, bool>? predicate = null,
+        int maxDepth = 0)
+    {
+        return SearchRelativeNodesCore(component, forward: true, predicate, maxDepth);
+    }
+
+    /// <summary>
+    /// Search upstream (reverse) nodes along the propagation chain starting from the given node.
+    /// Uses BFS with depth limiting and an optional predicate filter.
+    /// </summary>
+    /// <param name="component">The starting node.</param>
+    /// <param name="predicate">Optional filter predicate. If null, all reachable nodes are returned.</param>
+    /// <param name="maxDepth">Maximum search depth. 0 means unlimited.</param>
+    /// <returns>An enumerable of matching upstream nodes (excluding the starting node).</returns>
+    public static IEnumerable<IWorkflowNodeViewModel> SearchReverseNodes(
+        this IWorkflowNodeViewModel component,
+        Func<IWorkflowNodeViewModel, bool>? predicate = null,
+        int maxDepth = 0)
+    {
+        return SearchRelativeNodesCore(component, forward: false, predicate, maxDepth);
+    }
+
+    /// <summary>
+    /// Search both forward and reverse nodes simultaneously along the propagation chain.
+    /// </summary>
+    /// <param name="component">The starting node.</param>
+    /// <param name="predicate">Optional filter predicate. If null, all reachable nodes are returned.</param>
+    /// <param name="maxDepth">Maximum search depth. 0 means unlimited.</param>
+    /// <returns>An enumerable of matching nodes from both directions (excluding the starting node).</returns>
+    public static IEnumerable<IWorkflowNodeViewModel> SearchAllRelativeNodes(
+        this IWorkflowNodeViewModel component,
+        Func<IWorkflowNodeViewModel, bool>? predicate = null,
+        int maxDepth = 0)
+    {
+        var visited = new HashSet<IWorkflowNodeViewModel> { component };
+        foreach (var node in SearchRelativeNodesCore(component, true, null, maxDepth, visited))
+        {
+            if (predicate is null || predicate(node)) yield return node;
+        }
+        foreach (var node in SearchRelativeNodesCore(component, false, null, maxDepth, visited))
+        {
+            if (predicate is null || predicate(node)) yield return node;
+        }
+    }
+
+    private static IEnumerable<IWorkflowNodeViewModel> SearchRelativeNodesCore(
+        IWorkflowNodeViewModel start,
+        bool forward,
+        Func<IWorkflowNodeViewModel, bool>? predicate,
+        int maxDepth,
+        HashSet<IWorkflowNodeViewModel>? visited = null)
+    {
+        visited ??= new HashSet<IWorkflowNodeViewModel> { start };
+        var queue = new Queue<(IWorkflowNodeViewModel Node, int Depth)>();
+        queue.Enqueue((start, 0));
+
+        while (queue.Count > 0)
+        {
+            var (current, depth) = queue.Dequeue();
+
+            if (maxDepth > 0 && depth >= maxDepth) continue;
+
+            foreach (var slot in current.Slots)
+            {
+                var neighbors = forward ? slot.Targets : slot.Sources;
+                foreach (var neighbor in neighbors)
+                {
+                    var neighborNode = neighbor.Parent;
+                    if (neighborNode is null || !visited.Add(neighborNode)) continue;
+
+                    if (predicate is null || predicate(neighborNode))
+                    {
+                        yield return neighborNode;
+                    }
+
+                    queue.Enqueue((neighborNode, depth + 1));
+                }
+            }
         }
     }
 

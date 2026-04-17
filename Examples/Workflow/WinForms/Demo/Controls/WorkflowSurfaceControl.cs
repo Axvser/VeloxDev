@@ -300,9 +300,23 @@ public sealed class WorkflowSurfaceControl : Panel
         using var slotPen = new Pen(Color.White, 1.5f);
         foreach (var node in _session.Tree.Nodes)
         {
-            DrawSlot(e.Graphics, slotPen, (node as NodeViewModel)?.InputSlot);
-            DrawSlot(e.Graphics, slotPen, (node as NodeViewModel)?.OutputSlot);
-            DrawSlot(e.Graphics, slotPen, (node as ControllerViewModel)?.OutputSlot);
+            if (node is BoolSelectorNodeViewModel boolSelector)
+            {
+                DrawSlot(e.Graphics, slotPen, boolSelector.InputSlot);
+                DrawSlot(e.Graphics, slotPen, boolSelector.TrueSlot);
+                DrawSlot(e.Graphics, slotPen, boolSelector.FalseSlot);
+            }
+            else if (node is EnumSelectorNodeViewModel enumSelector)
+            {
+                DrawSlot(e.Graphics, slotPen, enumSelector.InputSlot);
+                foreach (var slot in enumSelector.OutputSlots) DrawSlot(e.Graphics, slotPen, slot);
+            }
+            else
+            {
+                DrawSlot(e.Graphics, slotPen, (node as NodeViewModel)?.InputSlot);
+                DrawSlot(e.Graphics, slotPen, (node as NodeViewModel)?.OutputSlot);
+                DrawSlot(e.Graphics, slotPen, (node as ControllerViewModel)?.OutputSlot);
+            }
         }
     }
 
@@ -321,6 +335,25 @@ public sealed class WorkflowSurfaceControl : Panel
 
     private static void SyncNodeSlotAnchors(IWorkflowNodeViewModel node)
     {
+        if (node is BoolSelectorNodeViewModel boolSelector)
+        {
+            SyncSlotAnchor(node, boolSelector.InputSlot, isInput: true);
+            SyncSlotAnchorAtFraction(node, boolSelector.TrueSlot, 1.0 / 3);
+            SyncSlotAnchorAtFraction(node, boolSelector.FalseSlot, 2.0 / 3);
+            return;
+        }
+
+        if (node is EnumSelectorNodeViewModel enumSelector)
+        {
+            SyncSlotAnchor(node, enumSelector.InputSlot, isInput: true);
+            var count = enumSelector.OutputSlots.Count;
+            for (var i = 0; i < count; i++)
+            {
+                SyncSlotAnchorAtFraction(node, enumSelector.OutputSlots[i], (i + 1.0) / (count + 1));
+            }
+            return;
+        }
+
         if (node is NodeViewModel workflowNode)
         {
             SyncSlotAnchor(node, workflowNode.InputSlot, isInput: true);
@@ -344,6 +377,19 @@ public sealed class WorkflowSurfaceControl : Panel
         slot.Anchor = new Anchor(
             node.Anchor.Horizontal + (isInput ? 0 : node.Size.Width),
             node.Anchor.Vertical + (node.Size.Height / 2),
+            slot.Anchor.Layer);
+    }
+
+    private static void SyncSlotAnchorAtFraction(IWorkflowNodeViewModel node, IWorkflowSlotViewModel? slot, double fraction)
+    {
+        if (slot is null)
+        {
+            return;
+        }
+
+        slot.Anchor = new Anchor(
+            node.Anchor.Horizontal + node.Size.Width,
+            node.Anchor.Vertical + (node.Size.Height * fraction),
             slot.Anchor.Layer);
     }
 
@@ -416,6 +462,21 @@ public sealed class WorkflowSurfaceControl : Panel
 
         foreach (var node in _session.Tree.Nodes)
         {
+            if (node is BoolSelectorNodeViewModel boolSelector)
+            {
+                if (boolSelector.InputSlot is not null) yield return boolSelector.InputSlot;
+                if (boolSelector.TrueSlot is not null) yield return boolSelector.TrueSlot;
+                if (boolSelector.FalseSlot is not null) yield return boolSelector.FalseSlot;
+                continue;
+            }
+
+            if (node is EnumSelectorNodeViewModel enumSelector)
+            {
+                if (enumSelector.InputSlot is not null) yield return enumSelector.InputSlot;
+                foreach (var slot in enumSelector.OutputSlots) yield return slot;
+                continue;
+            }
+
             if (node is NodeViewModel workflowNode)
             {
                 if (workflowNode.InputSlot is not null)
@@ -516,6 +577,22 @@ public sealed class WorkflowSurfaceControl : Panel
                 _line2Label.Text = $"Seed: {controller.SeedPayload}";
                 _line3Label.Text = "Controller 会触发整条请求链路。后续节点是否继续广播，仅由节点自身决定。";
             }
+            else if (_node is BoolSelectorNodeViewModel boolSelector)
+            {
+                _titleLabel.Text = boolSelector.Title;
+                _stateLabel.Text = $"Condition: {boolSelector.Condition}";
+                _line1Label.Text = $"Last Routed: {boolSelector.LastRouted}";
+                _line2Label.Text = "Slots: Input / True / False";
+                _line3Label.Text = "根据 Condition 将输入路由到 TrueSlot 或 FalseSlot。";
+            }
+            else if (_node is EnumSelectorNodeViewModel enumSelector)
+            {
+                _titleLabel.Text = enumSelector.Title;
+                _stateLabel.Text = $"Selected: {enumSelector.SelectedValue ?? "-"}";
+                _line1Label.Text = $"Enum: {enumSelector.EnumType?.Name ?? "-"}";
+                _line2Label.Text = $"Outputs: {enumSelector.OutputSlots.Count}";
+                _line3Label.Text = $"Last Routed: {enumSelector.LastRouted}";
+            }
             else
             {
                 var node = (NodeViewModel)_node;
@@ -537,6 +614,15 @@ public sealed class WorkflowSurfaceControl : Panel
             {
                 BackColor = controller.IsActive ? Color.FromArgb(15, 118, 110) : Color.FromArgb(30, 41, 59);
                 _stateLabel.ForeColor = controller.IsActive ? Color.FromArgb(167, 243, 208) : Color.FromArgb(203, 213, 225);
+                Invalidate();
+                return;
+            }
+
+            if (_node is BoolSelectorNodeViewModel or EnumSelectorNodeViewModel)
+            {
+                BackColor = Color.FromArgb(30, 41, 59);
+                _stateLabel.ForeColor = Color.FromArgb(203, 213, 225);
+                Tag = Color.FromArgb(71, 85, 105);
                 Invalidate();
                 return;
             }
@@ -652,6 +738,51 @@ public sealed class WorkflowSurfaceControl : Panel
         {
             slot = null;
             const double radius = 16d;
+
+            if (_node is BoolSelectorNodeViewModel boolSelector)
+            {
+                if (boolSelector.InputSlot is not null && IsWithinSlot(localPoint, 0d, Height / 2d, radius))
+                {
+                    slot = boolSelector.InputSlot;
+                    return true;
+                }
+
+                if (boolSelector.TrueSlot is not null && IsWithinSlot(localPoint, Width, Height / 3d, radius))
+                {
+                    slot = boolSelector.TrueSlot;
+                    return true;
+                }
+
+                if (boolSelector.FalseSlot is not null && IsWithinSlot(localPoint, Width, Height * 2d / 3, radius))
+                {
+                    slot = boolSelector.FalseSlot;
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (_node is EnumSelectorNodeViewModel enumSelector)
+            {
+                if (enumSelector.InputSlot is not null && IsWithinSlot(localPoint, 0d, Height / 2d, radius))
+                {
+                    slot = enumSelector.InputSlot;
+                    return true;
+                }
+
+                var count = enumSelector.OutputSlots.Count;
+                for (var i = 0; i < count; i++)
+                {
+                    var y = Height * (i + 1.0) / (count + 1);
+                    if (IsWithinSlot(localPoint, Width, y, radius))
+                    {
+                        slot = enumSelector.OutputSlots[i];
+                        return true;
+                    }
+                }
+
+                return false;
+            }
 
             if (_node is NodeViewModel node)
             {

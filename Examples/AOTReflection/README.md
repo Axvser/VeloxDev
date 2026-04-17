@@ -1,6 +1,10 @@
 ﻿# VeloxDev AOT Reflection Generator  
 
+[← 返回主页](../../README.md)
+
 **编译时生成反射调用代码以在 AOT 保留反射上下文**
+
+> 💡 本文档覆盖 **快速上手 → 完整 API**，可直接对照 Demo 源码（`Examples/AOTReflection/`）阅读。
 
 ---
 

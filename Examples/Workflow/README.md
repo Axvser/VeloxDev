@@ -1,5 +1,9 @@
 ﻿# VeloxDev Workflow System
 
+[← 返回主页](../../README.md) · [Extension README（Agent 工具集）](../../Src/Core/VeloxDev.Core.Extension/README.md)
+
+> Avalonia的工作流Demo持有最大力度的支持，推荐作为参考
+
 `VeloxDev.Core.WorkflowSystem` 是一套**面向图结构组件的工作流内核**。  
 它不关注平台 UI 兼容层，而关注：
 
@@ -277,6 +281,7 @@ ViewModel
   - `DeleteCommand`
   - `WorkCommand`
   - `BroadcastCommand`
+  - `ReverseBroadcastCommand`
   - `CloseCommand`
 - 行为包装方法：
   - `Move(...)`
@@ -286,6 +291,7 @@ ViewModel
   - `Delete(...)`
   - `Work(...)`
   - `Broadcast(...)`
+  - `ReverseBroadcast(...)`
   - `Close(...)`
 - `GetHelper()` / `SetHelper(...)` / `InitializeWorkflow()`
 - 属性变更钩子：
@@ -386,6 +392,40 @@ sequenceDiagram
 - 节点状态检查
 - 节流与过滤
 
+### 7.4 图搜索：SearchRelativeNode
+
+`WorkflowNodeEx` 提供了一组扩展方法，允许从任意节点出发，沿传播链按条件搜索关联节点：
+
+| 方法 | 方向 | 说明 |
+|------|------|------|
+| `SearchForwardNodes(predicate?, maxDepth)` | 正向（沿 `Slot.Targets`） | 从当前节点向下游 BFS 搜索 |
+| `SearchReverseNodes(predicate?, maxDepth)` | 反向（沿 `Slot.Sources`） | 从当前节点向上游 BFS 搜索 |
+| `SearchAllRelativeNodes(predicate?, maxDepth)` | 双向 | 同时搜索上下游，共享 visited 集合避免重复 |
+
+参数说明：
+
+- `predicate`：可选过滤条件，`null` 表示返回所有可达节点
+- `maxDepth`：最大搜索深度，`0` 表示不限深度
+
+返回值为 `IEnumerable<IWorkflowNodeViewModel>`（惰性求值），不包含起始节点自身。
+
+**使用示例：**
+
+```csharp
+// 查找下游所有节点（不限深度）
+var allDownstream = node.SearchForwardNodes();
+
+// 查找上游 2 层内的特定类型节点
+var sources = node.SearchReverseNodes(
+    predicate: n => n is MySpecialNode,
+    maxDepth: 2);
+
+// 双向搜索所有关联节点
+var allRelated = node.SearchAllRelativeNodes();
+```
+
+> 💡 内部使用 BFS + `HashSet` visited 避免环路，性能开销可控。
+
 ---
 
 ## 8. 先学会用：最小工作流写法
@@ -454,6 +494,7 @@ public class NodeHelper : NodeHelper
 ```csharp
 node.MoveCommand.Execute(new Offset(10, 20));
 node.WorkCommand.Execute(payload);
+node.ReverseBroadcastCommand.Execute(data);
 
 slot.SendConnectionCommand.Execute(null);
 slot.ReceiveConnectionCommand.Execute(null);
@@ -558,7 +599,62 @@ bool ok = json.TryDeSerialize(out MyTree? restored);
 
 ---
 
-## 11. 推荐开发方式
+## 11. Agent 集成：枚举驱动的 Slot 集合
+
+当节点需要根据枚举类型动态生成一组输出口时，框架提供两个配套特性：
+
+### 11.1 `[EnumSlotCollection]`
+
+标记在 **Slot 集合属性** 上，声明该集合由枚举驱动，元素与枚举值 1:1 对应。
+
+```csharp
+[VeloxProperty]
+[EnumSlotCollection]
+public partial ObservableCollection<SlotViewModel> OutputSlots { get; set; }
+```
+
+Agent 通过 `ListSlotProperties` 发现带此标记的集合（返回 `enumDriven: true`），  
+并通过 `SetEnumSlotCollection` 工具设置或更改枚举类型。
+
+### 11.2 `[SlotsEnumType]`
+
+标记在 **Type 属性** 上，声明该属性是哪个 `[EnumSlotCollection]` 集合的枚举类型驱动器，  
+并可选地限制允许使用的枚举类型。
+
+```csharp
+[SlotsEnumType(nameof(OutputSlots), typeof(NetworkRequestMethod))]
+public Type? EnumType { get; set; }
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `collectionPropertyName` | 目标 Slot 集合属性名 |
+| `allowedEnumTypes` | 可选的 `params Type[]`，限制允许的枚举类型；为空则接受任何枚举 |
+
+**关键行为：**
+
+- `PatchNodeProperties` 会自动 **拒绝** 修改 `[SlotsEnumType]` 标记的属性，强制走 `SetEnumSlotCollection` 工具
+- `ListSlotProperties` 返回 `allowedEnumTypes` 字段，告知 Agent 允许哪些枚举类型
+- `SetEnumSlotCollection` 在设置时校验枚举类型是否在允许列表中
+
+### 11.3 完整示例
+
+```csharp
+[WorkflowBuilder.Node<EnumSelectorHelper>(workSemaphore: 1)]
+public partial class EnumSelectorNodeViewModel
+{
+    [VeloxProperty]
+    [EnumSlotCollection]
+    public partial ObservableCollection<SlotViewModel> OutputSlots { get; set; }
+
+    [SlotsEnumType(nameof(OutputSlots), typeof(NetworkRequestMethod))]
+    public Type? EnumType { get; set; }
+}
+```
+
+---
+
+## 12. 推荐开发方式
 
 建议按下面顺序开发自己的工作流：
 
@@ -570,10 +666,12 @@ bool ok = json.TryDeSerialize(out MyTree? restored);
 
 ---
 
-## 12. 总结
+## 13. 总结
 
 - `Workflow` 的本体是一张由 `Tree / Node / Slot / Link` 组成的图
 - `Helper` 负责注入行为，`StandardEx` 负责默认实现
 - 源生成器负责补齐组件样板代码
 - `Node` 可以做正向传播，也可以做反向传播
 - 传播模式支持：`Parallel / BreadthFirst / DepthFirst`
+- `SearchForwardNodes` / `SearchReverseNodes` / `SearchAllRelativeNodes` 支持从任意节点按条件搜索关联节点
+- `[EnumSlotCollection]` + `[SlotsEnumType]` 实现声明式枚举驱动 Slot 集合，Agent 通过 `SetEnumSlotCollection` 操作，`PatchNodeProperties` 会拒绝直接修改

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Windows.Input;
+using VeloxDev.AI;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
@@ -109,9 +110,43 @@ public static class ComponentPatcher
                 continue;
             }
 
+            // Reject [SlotsEnumType]-marked properties — must use SetEnumSlotCollection tool
+            if (prop.GetCustomAttribute<SlotsEnumTypeAttribute>() != null)
+            {
+                results.Add(new JObject
+                {
+                    ["property"] = propName,
+                    ["status"] = "rejected",
+                    ["reason"] = $"'{propName}' is an enum-type driver marked with [SlotsEnumType]. Use the 'SetEnumSlotCollection' tool instead of direct patching.",
+                });
+                continue;
+            }
+
             try
             {
-                var value = kv.Value?.DeserializeToType(prop.PropertyType);
+                object? value;
+                // Special handling: if the property is System.Type, resolve from type name string
+                if (prop.PropertyType == typeof(Type))
+                {
+                    var typeName = kv.Value?.ToString();
+                    if (string.IsNullOrEmpty(typeName))
+                    {
+                        value = null;
+                    }
+                    else
+                    {
+                        value = TypeIntrospector.ResolveType(typeName!);
+                        if (value == null)
+                        {
+                            results.Add(new JObject { ["property"] = propName, ["status"] = "error", ["reason"] = $"Type '{typeName}' not found." });
+                            continue;
+                        }
+                    }
+                }
+                else
+                {
+                    value = kv.Value?.DeserializeToType(prop.PropertyType);
+                }
                 prop.SetValue(target, value);
                 successCount++;
                 results.Add(new JObject { ["property"] = propName, ["status"] = "ok" });

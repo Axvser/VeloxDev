@@ -1,26 +1,26 @@
 ﻿# 🚀 VeloxDev
 
-> VeloxDev 是一组面向现代 .NET 的开发工具与基础设施，围绕 `Source Generator`、`跨平台抽象` 与 `可扩展运行时模型` 设计。
+[![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget&label=VeloxDev.Core)](https://www.nuget.org/packages/VeloxDev.Core/)
+[![GitHub](https://img.shields.io/badge/GitHub-Axvser%2FVeloxDev-blue?logo=github)](https://github.com/Axvser/VeloxDev)
 
-> 它将多个常见但彼此分散的能力收敛到统一体系中：包括基于特性的 `MVVM` 代码生成、可扩展的 `Workflow` 模板、跨 UI 框架的 `TransitionSystem` 动画抽象、动态 `Theme` 切换、`MonoBehaviour` 式帧循环、面向 AOT / AOP 场景的生成支持，以及通用的 `Agent 反射基础设施`。
-
-[Wiki](https://axvser.github.io/VeloxDev.Wiki/)
+> **VeloxDev** 是一组面向现代 .NET 的开发工具与基础设施，围绕 `Source Generator`、`跨平台抽象` 与 `可扩展运行时模型` 设计。它将多个常见但彼此分散的能力收敛到统一体系中：MVVM 代码生成、可扩展 Workflow 模板、跨 UI 框架动画抽象、动态 Theme 切换、MonoBehaviour 式帧循环、AOT / AOP 生成支持，以及通用的 Agent 反射基础设施。
 
 ---
 
 ## 📚 目录
 
-* [✨ 概览](#-概览)
-
-  * [🏗️ VeloxDev.Core](#veloxdevcore)
-  * [🪶 MVVM Toolkit](#mvvm-toolkit)
-  * [⛓️ Workflow](#workflow)
-  * [🤖 Agent Infrastructure](#-agent-infrastructure)
-  * [🎞️ 插值动画](#-插值动画)
-  * [🌀 AOP 编程](#-aop-编程)
-  * [🎨 ThemeManager](#-thememanager)
-  * [⚙️ MonoBehaviour](#-monobehaviour)
-  * [📦 AOT Reflection](#-aot-reflection)
+- [⬇️ 获取](#-获取)
+- [✨ 功能概览](#-功能概览)
+- [🏗️ VeloxDev.Core](#️-veloxdevcore)
+- [🪶 MVVM Toolkit](#-mvvm-toolkit)
+- [⛓️ Workflow](#️-workflow)
+- [🤖 Agent Infrastructure](#-agent-infrastructure)
+- [🎞️ 插值动画](#️-插值动画)
+- [🌀 AOP 编程](#-aop-编程)
+- [🎨 ThemeManager](#-thememanager)
+- [⚙️ MonoBehaviour](#️-monobehaviour)
+- [📦 AOT Reflection](#-aot-reflection)
+- [📖 详细文档索引](#-详细文档索引)
 
 ---
 
@@ -49,21 +49,21 @@
 
 ---
 
-## ✨ 概览
+## ✨ 功能概览
 
-> Examples 目录下编写了对应的 demo
+> 每个功能都有对应的跨平台 Demo（见 `Examples` 目录），覆盖 WPF / Avalonia / WinUI / MAUI / WinForms。
 
-| 功能特性 | 描述 | 是否需要适配层 | 说明 |
-|---------|------|---------------|-----------|
-| 🪶 MVVM  | 通过 Source Generator 生成通知属性与命令 | ❌ | |
-| 🔁 Workflow  | 提供工作流树、节点、插槽、连线模板与交互辅助 | ❌ | |
-| 🤖 Agent Infrastructure | 通用的 Agent 反射基础设施：属性读写、方法调用、命令发现执行、语义上下文、类型解析 | ❌ | `Core` 提供零依赖通用能力 |
-| 🤖 Workflow Agent  | 提供工作流语义上下文与基于 MAF 的完整运行时接管工具集 | `Core` 语义 ❌ / `Extension` 工具 ✔ | 基于 Agent Infrastructure 构建，支持上下文文档、MAF Functions、类型自省、JSON Patch |
-| 🎞️ Transition | 跨平台的插值动画抽象层，支持缓动函数与调度 | ✔ | 需要为不同平台实现具体的插值器、主线程检测器、调度器等 |
-| 🌀 AOP | 编译期注入的切面代理支持 | ❌ | 需要目标框架 ≥ .NET5 |
-| 🎨 Theme | 主题注册、缓存与渐变切换 | ✔ | 需要适配不同平台的样式/资源系统 |
-| ⚙️ MonoBehaviour | 按帧驱动的生命周期循环机制 | ❌ | |
-| 📦 AOT Reflection | 在 AOT / 裁剪场景中生成反射保留代码 | ❌ | |
+| 功能 | 描述 | 需要适配层 | 详细文档 |
+|------|------|:---------:|---------|
+| 🪶 **MVVM** | Source Generator 生成通知属性与异步命令 | ❌ | [→ 文档](Examples/MVVM/README.md) |
+| ⛓️ **Workflow** | 工作流树、节点、插槽、连线模板与交互辅助 | ❌ | [→ 文档](Examples/Workflow/README.md) |
+| 🤖 **Agent Infrastructure** | 零依赖反射工具：属性读写、方法调用、命令发现执行、语义上下文 | ❌ | [→ Core 文档](Src/Core/VeloxDev.Core/README.md) |
+| 🤖 **Workflow Agent** | 基于 MAF 的 30+ Function Calling 运行时接管工具集 | ✔ Extension | [→ Extension 文档](Src/Core/VeloxDev.Core.Extension/README.md) |
+| 🎞️ **Transition** | 跨平台的状态插值动画：缓动、循环、Fluent API | ✔ | [→ 文档](Examples/Transition/README.md) |
+| 🌀 **AOP** | 编译期注入的切面代理，支持前后置钩子与方法替换 | ❌ | [→ 文档](Examples/AOP/README.md) |
+| 🎨 **Theme** | 主题注册、缓存、渐变切换 | ✔ | [→ 文档](Examples/Theme/README.md) |
+| ⚙️ **MonoBehaviour** | 按帧驱动的生命周期循环机制 | ❌ | [→ 文档](Examples/MonoBehaviour/README.md) |
+| 📦 **AOT Reflection** | AOT / 裁剪场景中的反射保留代码生成 | ❌ | [→ 文档](Examples/AOTReflection/README.md) |
 
 ---
 
@@ -173,48 +173,30 @@ VeloxDev 的 Workflow 体系原生支持 AI Agent 接管，构建在核心层的
 
 ### 🤖 Agent Infrastructure
 
-`VeloxDev.Core.AI` 提供了一组零第三方依赖的通用反射工具，适用于任何 .NET 项目中的 Agent 场景——不限于工作流框架。
+`VeloxDev.Core.AI` 提供了一组**零第三方依赖**的通用反射工具，适用于任何 .NET 项目中的 Agent 场景——不限于工作流框架。
 
-| 类 | 能力 | 适用场景 |
-|---|---|---|
-| `AgentPropertyAccessor` | `DiscoverProperties` / `GetPropertyValue` / `SetPropertyValue` / `SetProperties` / `CopyScalarProperties` | Agent 修改任意对象属性，支持批量 Patch、类型转换、黑名单过滤 |
-| `AgentMethodInvoker` | `DiscoverMethods` / `Invoke` / `InvokeStatic` | Agent 调用任意对象方法，支持重载解析、参数默认值填充 |
-| `AgentCommandDiscoverer` | `DiscoverCommands` / `Execute` / `CanExecuteCommand` / `FindBackingCommand` | Agent 发现并执行 `ICommand`，读取参数类型和 `[AgentContext]` 描述 |
-| `AgentContextReader` | `GetContexts(Type)` / `GetContexts(MemberInfo)` / `HasAgentContext` | 读取 `[AgentContext]` 标注的语义上下文 |
-| `AgentTypeResolver` | `ResolveType(string)` | 按全名在所有已加载程序集中查找类型 |
+**核心能力一览：**
 
-#### 标注特性
+| 类 | 一句话说明 |
+|---|---|
+| `AgentPropertyAccessor` | 反射属性读写，支持批量 Patch、类型转换、黑名单 |
+| `AgentMethodInvoker` | 反射方法调用，支持重载解析、参数默认值 |
+| `AgentCommandDiscoverer` | ICommand 发现与执行 |
+| `AgentContextReader` | 读取 `[AgentContext]` 语义上下文 |
+| `AgentTypeResolver` | 跨程序集类型解析 |
 
-| 特性 | 说明 |
-|------|------|
-| `[AgentContext(lang, desc)]` | 为类型或成员标注面向 Agent 的语义描述（支持多语言、多条） |
-| `[AgentCommandParameter(type)]` | 标注命令所期望的参数 .NET 类型 |
-
-#### 使用示例
+**快速体验：**
 
 ```csharp
-// 发现对象上所有 Agent 可见的属性
+// 发现属性 → 设置属性 → 发现命令 → 执行命令
 var props = AgentPropertyAccessor.DiscoverProperties(myViewModel, AgentLanguages.Chinese);
-
-// 通过反射设置属性
 AgentPropertyAccessor.SetPropertyValue(myViewModel, "Title", "新标题");
 
-// 发现并执行命令
 var commands = AgentCommandDiscoverer.DiscoverCommands(myViewModel, AgentLanguages.Chinese);
 AgentCommandDiscoverer.Execute(myViewModel, "Delete");
-
-// 调用任意方法
-AgentMethodInvoker.Invoke(myService, "ProcessData", 42, "hello");
-
-// 读取语义上下文
-var descriptions = AgentContextReader.GetContexts(typeof(NodeViewModel), AgentLanguages.Chinese);
-// → ["派生的Node组件之一，作为任务执行者，默认大小为 200*100"]
-
-// 跨程序集类型解析
-var type = AgentTypeResolver.ResolveType("Demo.ViewModels.NodeViewModel");
 ```
 
-这些工具被 `VeloxDev.Core.Extension` 中的 Workflow Agent 体系作为底层依赖使用，但它们完全独立于工作流——任何 MVVM ViewModel、服务对象或自定义组件都可以直接使用。
+> 📖 完整 API 说明、标注特性（`[AgentContext]` / `[AgentCommandParameter]`）与 MAF 工具集包装请参阅 [`VeloxDev.Core` README](Src/Core/VeloxDev.Core/README.md) 和 [`VeloxDev.Core.Extension` README](Src/Core/VeloxDev.Core.Extension/README.md)。
 
 ---
 
@@ -373,3 +355,23 @@ public static void Init()
     _ = typeof(global::Player).GetProperties(...);
 }
 ```
+
+---
+
+## 📖 详细文档索引
+
+根据你的目标选择对应文档：
+
+| 目标 | 文档 |
+|------|------|
+| **快速上手某个功能** | 见上方各功能段落中的 Demo 链接 |
+| **了解核心库能力** | [`VeloxDev.Core` README](Src/Core/VeloxDev.Core/README.md) |
+| **了解扩展包（Agent MAF 工具 / JSON 序列化）** | [`VeloxDev.Core.Extension` README](Src/Core/VeloxDev.Core.Extension/README.md) |
+| **了解 Source Generator 覆盖范围** | [`VeloxDev.Core.Generator` README](Src/Generators/VeloxDev.Core.Generator/README.md) |
+| **深入 Workflow 架构与传播模型** | [`Workflow` README](Examples/Workflow/README.md) |
+| **深入 TransitionSystem 架构与自定义适配层** | [`Transition` README](Examples/Transition/README.md) |
+| **MVVM 属性/命令/集合通知完整 API** | [`MVVM` README](Examples/MVVM/README.md) |
+| **AOP 代理钩子完整 API** | [`AOP` README](Examples/AOP/README.md) |
+| **Theme 动态主题完整 API** | [`Theme` README](Examples/Theme/README.md) |
+| **MonoBehaviour 帧循环完整 API** | [`MonoBehaviour` README](Examples/MonoBehaviour/README.md) |
+| **AOT Reflection 完整 API** | [`AOTReflection` README](Examples/AOTReflection/README.md) |

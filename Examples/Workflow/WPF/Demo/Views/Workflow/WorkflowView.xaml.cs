@@ -181,7 +181,7 @@ public partial class WorkflowView : UserControl
 
     private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        ScrollToEnd(AgentLogScroller);
+        Dispatcher.InvokeAsync(() => ScrollToEnd(AgentLogScroller), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

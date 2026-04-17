@@ -1,12 +1,12 @@
+using Microsoft.Extensions.AI;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.AI;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace VeloxDev.AI;
 

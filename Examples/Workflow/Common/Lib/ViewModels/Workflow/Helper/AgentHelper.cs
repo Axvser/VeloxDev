@@ -2,6 +2,7 @@
 using Microsoft.Extensions.AI;
 using OpenAI;
 using System.ClientModel;
+using System.ComponentModel;
 using VeloxDev.AI;
 using VeloxDev.AI.Workflow;
 using VeloxDev.WorkflowSystem;
@@ -63,6 +64,12 @@ public class AgentHelper : TreeHelper<TreeViewModel>
     /// </summary>
     public event Action? ToolCalled;
 
+    /// <summary>
+    /// Raised when the Agent calls the <c>RefreshVisualSlotAnchors</c> tool.
+    /// Subscribe from the View layer to force all visible node views to re-sync slot anchor positions.
+    /// </summary>
+    public event Action? VisualRefreshRequested;
+
     public void Virtualize(Viewport viewport)
     {
         Component?.Virtualize(viewport); // 执行虚拟化
@@ -81,7 +88,10 @@ public class AgentHelper : TreeHelper<TreeViewModel>
                 typeof(TreeViewModel))
             .WithEnums(AgentLanguages.English, [])
             .WithInterfaces(AgentLanguages.English, [])
-            .WithToolCallCallback((_, _) => helper.ToolCalled?.Invoke());
+            .WithToolCallCallback((_, _) => helper.ToolCalled?.Invoke())
+            .WithTools(
+                "RefreshVisualSlotAnchors – Call after SetEnumSlotCollection or any operation that adds/removes slots to force the UI to re-sync all visible slot anchor positions.",
+                AIFunctionFactory.Create(helper.RefreshVisualSlotAnchors, nameof(RefreshVisualSlotAnchors)));
 
         // 工作流框架级别上下文 + 开发者自定义级别上下文
         var contextPrompt = scope.ProvideAllContexts(AgentLanguages.English);
@@ -104,5 +114,12 @@ public class AgentHelper : TreeHelper<TreeViewModel>
             tools: tools);
 
         return agent;
+    }
+
+    [Description("Forces all visible node views to re-sync their slot anchor positions with the current model state. Call after operations that change slot collections (e.g. SetEnumSlotCollection) to ensure connection lines render correctly.")]
+    public string RefreshVisualSlotAnchors()
+    {
+        VisualRefreshRequested?.Invoke();
+        return "{\"ok\":true}";
     }
 }

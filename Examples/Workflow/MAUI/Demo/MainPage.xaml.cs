@@ -1,6 +1,7 @@
 ﻿using Demo.ViewModels;
 using Demo.Workflow;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 
 namespace Demo
 {
@@ -43,11 +44,20 @@ namespace Demo
 
         private void LoadDemo(WorkflowDemoSession session)
         {
+            if (_demo is not null)
+                _demo.Tree.AgentLog.CollectionChanged -= OnAgentLogChanged;
             _demo = session;
+            _demo.Tree.AgentLog.CollectionChanged += OnAgentLogChanged;
             OnPropertyChanged(nameof(DemoSession));
             OnPropertyChanged(nameof(Controller));
             OnPropertyChanged(nameof(Tree));
             OnPropertyChanged(nameof(ExecutionLog));
+        }
+
+        private async void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            await Task.Yield();
+            await AgentLogScroller.ScrollToAsync(0, AgentLogScroller.ContentSize.Height, false);
         }
 
         private void OnSendToAgent(object? sender, EventArgs e)

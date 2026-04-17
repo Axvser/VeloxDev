@@ -65,6 +65,11 @@ public partial class NodeViewModelBase : IWorkflowNodeViewModel, IWorkflowIdenti
         await Helper.BroadcastAsync(parameter, ct);
     }
     [VeloxCommand]
+    protected virtual async Task ReverseBroadcast(object? parameter, CancellationToken ct)
+    {
+        await Helper.ReverseBroadcastAsync(parameter, ct);
+    }
+    [VeloxCommand]
     protected virtual async Task Close(object? parameter, CancellationToken ct)
     {
         await Helper.CloseAsync();

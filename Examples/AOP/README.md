@@ -1,7 +1,11 @@
 ﻿# VeloxDev AOP Framework
 
+[← 返回主页](../../README.md)
+
 零侵入、基于代理的运行时 AOP，支持属性读写拦截、方法覆写与扩展。  
 **无需修改 ViewModel 源码，自动织入横切逻辑。**
+
+> 💡 本文档覆盖 **快速上手 → 完整 API**，可直接对照 Demo 源码（`Examples/AOP/` 下各平台子目录）阅读。
 
 ---
 

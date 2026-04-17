@@ -307,7 +307,10 @@ public partial class WorkflowView : UserControl
         vm.AgentLog.CollectionChanged += OnAgentLogChanged;
         vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
+        {
             helper.ToolCalled += OnAgentToolCalled;
+            helper.VisualRefreshRequested += OnVisualRefreshRequested;
+        }
     }
 
     private void UnsubscribeAutoScroll(TreeViewModel vm)
@@ -315,7 +318,10 @@ public partial class WorkflowView : UserControl
         vm.AgentLog.CollectionChanged -= OnAgentLogChanged;
         vm.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
+        {
             helper.ToolCalled -= OnAgentToolCalled;
+            helper.VisualRefreshRequested -= OnVisualRefreshRequested;
+        }
     }
 
     private void OnAgentToolCalled()
@@ -323,9 +329,28 @@ public partial class WorkflowView : UserControl
         Dispatcher.UIThread.Post(UpdateVisibleRegion);
     }
 
+    private void OnVisualRefreshRequested()
+    {
+        // Deferred: let Avalonia finish layout for any newly created slot views,
+        // then nudge every visible node to trigger SyncSlotLayouts in each node view.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_workflowViewModel is not { } vm) return;
+            if (vm.GetHelper() is not AgentHelper helper) return;
+            foreach (var node in helper.Component?.VisibleItems ?? [])
+            {
+                if (node is IWorkflowNodeViewModel n)
+                {
+                    n.MoveCommand.Execute(new Offset(0.5, 0));
+                    n.MoveCommand.Execute(new Offset(-0.5, 0));
+                }
+            }
+        }, DispatcherPriority.Background);
+    }
+
     private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        ScrollToEnd(AgentLogScroller);
+        Dispatcher.UIThread.Post(() => ScrollToEnd(AgentLogScroller), DispatcherPriority.Background);
     }
 
     private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

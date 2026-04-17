@@ -36,6 +36,14 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerInterfaces = [];
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerComponents = [];
 
+    private readonly List<AITool> _customTools = [];
+    private readonly StringBuilder _customToolPrompt = new();
+
+    /// <summary>
+    /// Tools registered by the developer via <see cref="WithTools"/>.
+    /// </summary>
+    internal IReadOnlyList<AITool> CustomTools => _customTools;
+
     public WorkflowAgentScope WithMaxToolCalls(int maxCalls)
     {
         MaxToolCalls = maxCalls;
@@ -104,6 +112,27 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return this;
     }
 
+    /// <summary>
+    /// Registers custom <see cref="AITool"/> instances that will be merged into the
+    /// toolkit alongside the built-in workflow tools. Use this to expose
+    /// domain-specific or component-specific operations to the Agent.
+    /// </summary>
+    /// <param name="promptContext">
+    /// Optional prompt text describing the custom tools. This is appended to the
+    /// system prompt so the Agent knows when and how to use them.
+    /// Pass <c>null</c> if the tool metadata (name + description) is self-explanatory.
+    /// </param>
+    /// <param name="tools">One or more <see cref="AITool"/> instances.</param>
+    public WorkflowAgentScope WithTools(string? promptContext, params AITool[] tools)
+    {
+        _customTools.AddRange(tools);
+        if (!string.IsNullOrWhiteSpace(promptContext))
+        {
+            _customToolPrompt.AppendLine(promptContext);
+        }
+        return this;
+    }
+
     public string ProvideAllContexts(AgentLanguages language)
     {
         var result = new StringBuilder();
@@ -141,6 +170,55 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("Do NOT assign, replace, or create these slots manually — they are fully lifecycle-managed.");
         result.AppendLine("Only create slots dynamically via **CreateSlotOnNode** when the node type does NOT define them as typed properties.");
         result.AppendLine();
+        result.AppendLine("### Slot Collection Properties");
+        result.AppendLine();
+        result.AppendLine("Node types may declare **slot collection properties** (e.g. `ObservableCollection<SlotViewModel> OutputSlots`).");
+        result.AppendLine("These are backed by source-generated `INotifyCollectionChanged` lifecycle hooks:");
+        result.AppendLine("- Adding a slot to the collection triggers `OnWorkflowSlotAdded` → auto-registers with the node via `CreateSlotCommand`.");
+        result.AppendLine("- Removing a slot triggers `OnWorkflowSlotRemoved` → auto-deletes the slot and its connections.");
+        result.AppendLine("- **Use `AddSlotToCollection` / `RemoveSlotFromCollection`** to manage these collections. Do NOT use `CreateSlotOnNode` for collection-managed slots.");
+        result.AppendLine("- Use **`ListSlotProperties`** to discover which slots are single properties vs. collection properties on a node.");
+        result.AppendLine("- **`GetNodeDetail`** output includes a `prop` field on each slot showing its owning property name (e.g. `InputSlot`, `OutputSlots[2]`).");
+        result.AppendLine();
+        result.AppendLine("### Enum-Driven Slot Collections");
+        result.AppendLine();
+        result.AppendLine("Slot collection properties may be annotated with `[EnumSlotCollection]`.");
+        result.AppendLine("This means the collection's items correspond 1:1 to values of an enum type.");
+        result.AppendLine("- **Use `ListSlotProperties`** to discover enum-driven collections (shows `enumDriven`, `currentEnumType`, `enumValues`, `allowedEnumTypes`).");
+        result.AppendLine("- **Use `SetEnumSlotCollection`** to set or change the enum type. Provide the node index, property name, and enum full type name. The tool clears all existing slots and recreates one per enum value. If the `[SlotsEnumType]` attribute specifies allowed types, only those enum types are accepted.");
+        result.AppendLine("- Do NOT use `AddSlotToCollection` / `RemoveSlotFromCollection` / `PatchNodeProperties` on enum-driven collections — use `SetEnumSlotCollection` exclusively. PatchNodeProperties will reject `[SlotsEnumType]`-marked properties.");
+        result.AppendLine();
+        result.AppendLine("## ⚡ Operation Ordering Protocol (CRITICAL)");
+        result.AppendLine();
+        result.AppendLine("You MUST follow this lifecycle ordering — the same order a human developer uses. Violating it causes silent data loss, unregistered slots, or broken connections.");
+        result.AppendLine();
+        result.AppendLine("### Mandatory Sequence");
+        result.AppendLine();
+        result.AppendLine("```");
+        result.AppendLine("1. CreateNode          — node must exist in the tree before any further operation on it");
+        result.AppendLine("2. PatchNodeProperties  — configure scalar properties (Title, DelayMs…)");
+        result.AppendLine("   └─ For enum-driven slot collections, use SetEnumSlotCollection instead.");
+        result.AppendLine("3. CreateSlotOnNode /   — create or configure slots (only AFTER the node is in the tree)");
+        result.AppendLine("   AddSlotToCollection");
+        result.AppendLine("4. ConnectSlots         — connect slots (BOTH endpoints must already exist)");
+        result.AppendLine("5. ExecuteWork /        — run workflow logic (only after topology is complete)");
+        result.AppendLine("   BroadcastNode");
+        result.AppendLine("```");
+        result.AppendLine();
+        result.AppendLine("### Why Order Matters");
+        result.AppendLine();
+        result.AppendLine("| Wrong order | What breaks |");
+        result.AppendLine("|---|---|");
+        result.AppendLine("| PatchNodeProperties before CreateNode | Node has no Parent; slot lifecycle hooks do not fire because the node is not in the tree |");
+        result.AppendLine("| ConnectSlots before slots exist | Slot ID lookup fails or connects wrong slot |");
+        result.AppendLine("| SetEnumType before CreateNode | OutputSlots are created but OnWorkflowSlotAdded cannot register them with the tree |");
+        result.AppendLine("| ExecuteWork before connections | Work produces no downstream effects |");
+        result.AppendLine();
+        result.AppendLine("### BatchExecute Ordering");
+        result.AppendLine();
+        result.AppendLine("Operations inside a **BatchExecute** call are executed **sequentially in array order**.");
+        result.AppendLine("You MUST list them in the correct lifecycle order: CreateNode → Patch → Slot → Connect → Execute.");
+        result.AppendLine();
         result.AppendLine("## AgentContext Property Rule");
         result.AppendLine();
         result.AppendLine("Properties annotated with `[AgentContext]` are **explicitly intended by the developer for Agent read/write**.");
@@ -156,6 +234,15 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("## Customer Context");
         result.AppendLine();
         result.AppendLine(ProvideCustomerContext(language));
+
+        // ── Custom Tools Prompt ──
+        if (_customToolPrompt.Length > 0)
+        {
+            result.AppendLine();
+            result.AppendLine("## 🔌 Custom Tools (Developer-Registered)");
+            result.AppendLine();
+            result.AppendLine(_customToolPrompt.ToString().TrimEnd());
+        }
 
         return result.ToString();
     }
@@ -192,6 +279,10 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("| Broadcast | BroadcastNode | Node.BroadcastCommand |");
         result.AppendLine("| Any other | ExecuteCommandOnNode / ExecuteCommandById | Resolved by name |");
         result.AppendLine("| Patch custom props | PatchNodeProperties / PatchComponentById | Direct (non-command props only) |");
+        result.AppendLine("| Add slot to collection | AddSlotToCollection | Collection lifecycle (OnWorkflowSlotAdded) |");
+        result.AppendLine("| Remove slot from collection | RemoveSlotFromCollection | Collection lifecycle (OnWorkflowSlotRemoved) |");
+        result.AppendLine("| List slot properties | ListSlotProperties | Introspection (no mutation) |");
+        result.AppendLine("| Set enum on slot collection | SetEnumSlotCollection | Clears + rebuilds enum-driven collection |");
         result.AppendLine();
         result.AppendLine("## 🚫 Forbidden Operations");
         result.AppendLine();
@@ -203,6 +294,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("- **Anchor on Slot** — computed by view layout, never set manually");
         result.AppendLine("- **Typed slot properties** (e.g. InputSlot, OutputSlot on nodes) — auto-created by source generator, never assign or replace");
         result.AppendLine("- Only use **CreateSlotOnNode** for dynamically-added slots when the node type does NOT define them as typed properties");
+        result.AppendLine("- **Slot collection properties** (e.g. `ObservableCollection<SlotVM> OutputSlots`) — managed by source-generated lifecycle. Use **AddSlotToCollection** / **RemoveSlotFromCollection** instead of CreateSlotOnNode");
+        result.AppendLine("- **Enum-driven slot collections** (marked with `[EnumSlotCollection]`) — use **SetEnumSlotCollection** to set the enum type; do NOT add/remove slots manually or patch the enum type via PatchNodeProperties (it will be rejected). **ListSlotProperties** reveals `enumDriven`, `allowedEnumTypes`, and current state. The owning property is annotated with `[SlotsEnumType]` which may restrict allowed enum types.");
         result.AppendLine();
         result.AppendLine("## Token-Saving Tips");
         result.AppendLine();
@@ -219,14 +312,31 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("- **Node size**: Newly created nodes get a default size from view rendering. You can pass optional `width`/`height` to **CreateNode** to override the default, or use **ResizeNode** later.");
         result.AppendLine("- **CloneNodes**: Use CloneNodes to duplicate a set of nodes (with internal connections) to a new position. Provide node indices/IDs and an offset.");
         result.AppendLine();
+        result.AppendLine("## ⚡ Operation Ordering Protocol (CRITICAL)");
+        result.AppendLine();
+        result.AppendLine("You MUST follow this lifecycle ordering. Violating it causes silent data loss or broken connections.");
+        result.AppendLine();
+        result.AppendLine("```");
+        result.AppendLine("1. CreateNode           — node must exist in tree first");
+        result.AppendLine("2. PatchNodeProperties   — configure properties (scalar only)");
+        result.AppendLine("   SetEnumSlotCollection — set enum type on [EnumSlotCollection] properties");
+        result.AppendLine("3. CreateSlotOnNode /    — create/configure slots (AFTER node is in tree)");
+        result.AppendLine("   AddSlotToCollection");
+        result.AppendLine("4. ConnectSlots          — BOTH endpoint slots must exist");
+        result.AppendLine("5. ExecuteWork           — only after topology is complete");
+        result.AppendLine("```");
+        result.AppendLine();
+        result.AppendLine("**BatchExecute**: operations run sequentially in array order — list them in lifecycle order.");
+        result.AppendLine();
         result.AppendLine("## Discovery Flow");
         result.AppendLine();
         result.AppendLine("1. **Component descriptions are pre-loaded above** — you already know each type's [AgentContext] including default sizes and property meanings.");
         result.AppendLine("2. **GetWorkflowSummary** → orient (counts + types in the current tree)");
         result.AppendLine("3. **ListNodes** → compact list with IDs");
-        result.AppendLine("4. **GetNodeDetail(ById)** → slot details for specific node");
-        result.AppendLine("5. **ListComponentCommands** → discover commands before executing");
-        result.AppendLine("6. **GetComponentContext** → call only if you need the full property table or command parameter details beyond what is pre-loaded.");
+        result.AppendLine("4. **GetNodeDetail(ById)** → slot details for specific node (includes `prop` field mapping slots to property names)");
+        result.AppendLine("5. **ListSlotProperties** → discover single slot properties vs. slot collection properties");
+        result.AppendLine("6. **ListComponentCommands** → discover commands before executing");
+        result.AppendLine("7. **GetComponentContext** → call only if you need the full property table or command parameter details beyond what is pre-loaded.");
         result.AppendLine();
         result.AppendLine("## 📌 Default Value Resolution (CRITICAL)");
         result.AppendLine();
@@ -290,6 +400,15 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         AppendPreloadedComponentDescriptions(result, language);
         result.AppendLine();
         result.AppendLine("> Call **GetComponentContext** with any type name above to get full documentation.");
+
+        // ── Custom Tools Prompt ──
+        if (_customToolPrompt.Length > 0)
+        {
+            result.AppendLine();
+            result.AppendLine("## 🔌 Custom Tools (Developer-Registered)");
+            result.AppendLine();
+            result.AppendLine(_customToolPrompt.ToString().TrimEnd());
+        }
 
         return result.ToString();
     }
@@ -419,10 +538,22 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            var descs = AgentContextCollector.GetAgentContext(prop, language);
-            if (descs.Length == 0) continue;
             // Skip if already added from backing field
             if (entries.Any(e => e.name == prop.Name)) continue;
+
+            var descs = AgentContextCollector.GetAgentContext(prop, language);
+            if (descs.Length == 0)
+            {
+                // Auto-inject synthetic description for [EnumSlotCollection]-marked properties
+                if (prop.GetCustomAttribute<EnumSlotCollectionAttribute>() != null)
+                {
+                    var synth = language == AgentLanguages.Chinese
+                        ? "枚举驱动的 Slot 集合，由 SetEnumSlotCollection 工具管理，禁止手动增删"
+                        : "Enum-driven slot collection managed by SetEnumSlotCollection tool. Do not add/remove slots manually.";
+                    entries.Add((prop.Name, prop.PropertyType.Name, new[] { synth }));
+                }
+                continue;
+            }
             entries.Add((prop.Name, prop.PropertyType.Name, descs));
         }
 

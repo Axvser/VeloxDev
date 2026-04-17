@@ -30,6 +30,13 @@
         {
             components = new System.ComponentModel.Container();
             splitContainer = new SplitContainer();
+            logTabControl = new TabControl();
+            executionLogTab = new TabPage();
+            agentLogTab = new TabPage();
+            agentLogListBox = new ListBox();
+            agentInputPanel = new Panel();
+            agentInputTextBox = new TextBox();
+            agentSendButton = new Button();
             toolbarPanel = new Panel();
             statusValueLabel = new Label();
             statusLabel = new Label();
@@ -41,7 +48,6 @@
             seedLabel = new Label();
             titleLabel = new Label();
             executionLogListBox = new ListBox();
-            executionLogLabel = new Label();
             workflowSurfaceControl = new Controls.WorkflowSurfaceControl();
             ((System.ComponentModel.ISupportInitialize)splitContainer).BeginInit();
             splitContainer.Panel1.SuspendLayout();
@@ -56,8 +62,7 @@
             splitContainer.FixedPanel = FixedPanel.Panel1;
             splitContainer.Location = new Point(0, 0);
             splitContainer.Name = "splitContainer";
-            splitContainer.Panel1.Controls.Add(executionLogListBox);
-            splitContainer.Panel1.Controls.Add(executionLogLabel);
+            splitContainer.Panel1.Controls.Add(logTabControl);
             splitContainer.Panel1.Controls.Add(toolbarPanel);
             splitContainer.Panel1.Padding = new Padding(12);
             splitContainer.Panel2.Controls.Add(workflowSurfaceControl);
@@ -168,27 +173,73 @@
             titleLabel.TabIndex = 0;
             titleLabel.Text = "VeloxDev Workflow Demo";
             // 
+            // logTabControl
+            // 
+            logTabControl.Dock = DockStyle.Fill;
+            logTabControl.TabPages.Add(agentLogTab);
+            logTabControl.TabPages.Add(executionLogTab);
+            logTabControl.Name = "logTabControl";
+            logTabControl.TabIndex = 3;
+            // 
+            // agentLogTab
+            // 
+            agentLogTab.Text = "Agent Chat";
+            agentLogTab.Padding = new Padding(4);
+            agentLogTab.Controls.Add(agentLogListBox);
+            agentLogTab.Controls.Add(agentInputPanel);
+            // 
+            // agentLogListBox
+            // 
+            agentLogListBox.Dock = DockStyle.Fill;
+            agentLogListBox.Font = new Font("Consolas", 10F);
+            agentLogListBox.FormattingEnabled = true;
+            agentLogListBox.ItemHeight = 15;
+            agentLogListBox.Name = "agentLogListBox";
+            agentLogListBox.TabIndex = 0;
+            agentLogListBox.HorizontalScrollbar = true;
+            // 
+            // agentInputPanel
+            // 
+            agentInputPanel.Dock = DockStyle.Bottom;
+            agentInputPanel.Height = 36;
+            agentInputPanel.Padding = new Padding(0, 4, 0, 0);
+            agentInputPanel.Controls.Add(agentSendButton);
+            agentInputPanel.Controls.Add(agentInputTextBox);
+            agentInputPanel.Name = "agentInputPanel";
+            agentInputPanel.TabIndex = 1;
+            // 
+            // agentInputTextBox
+            // 
+            agentInputTextBox.Dock = DockStyle.Fill;
+            agentInputTextBox.Name = "agentInputTextBox";
+            agentInputTextBox.TabIndex = 0;
+            agentInputTextBox.PlaceholderText = "输入消息...";
+            agentInputTextBox.KeyDown += OnAgentInputKeyDown;
+            // 
+            // agentSendButton
+            // 
+            agentSendButton.Dock = DockStyle.Right;
+            agentSendButton.Width = 70;
+            agentSendButton.Text = "发送";
+            agentSendButton.Name = "agentSendButton";
+            agentSendButton.TabIndex = 1;
+            agentSendButton.UseVisualStyleBackColor = true;
+            agentSendButton.Click += OnSendToAgent;
+            // 
+            // executionLogTab
+            // 
+            executionLogTab.Text = "Execution Log";
+            executionLogTab.Padding = new Padding(4);
+            executionLogTab.Controls.Add(executionLogListBox);
+            // 
             // executionLogListBox
             // 
             executionLogListBox.Dock = DockStyle.Fill;
             executionLogListBox.Font = new Font("Consolas", 10F);
             executionLogListBox.FormattingEnabled = true;
             executionLogListBox.ItemHeight = 15;
-            executionLogListBox.Location = new Point(12, 261);
             executionLogListBox.Name = "executionLogListBox";
-            executionLogListBox.Size = new Size(376, 547);
-            executionLogListBox.TabIndex = 2;
-            // 
-            // executionLogLabel
-            // 
-            executionLogLabel.Dock = DockStyle.Top;
-            executionLogLabel.Font = new Font("Microsoft YaHei UI", 12F, FontStyle.Bold, GraphicsUnit.Point, 134);
-            executionLogLabel.Location = new Point(12, 232);
-            executionLogLabel.Name = "executionLogLabel";
-            executionLogLabel.Padding = new Padding(0, 8, 0, 8);
-            executionLogLabel.Size = new Size(376, 29);
-            executionLogLabel.TabIndex = 1;
-            executionLogLabel.Text = "Execution Log";
+            executionLogListBox.TabIndex = 0;
             // 
             // workflowSurfaceControl
             // 
@@ -231,8 +282,14 @@
         private TextBox seedTextBox;
         private Label seedLabel;
         private Label titleLabel;
+        private TabControl logTabControl;
+        private TabPage agentLogTab;
+        private TabPage executionLogTab;
+        private ListBox agentLogListBox;
+        private Panel agentInputPanel;
+        private TextBox agentInputTextBox;
+        private Button agentSendButton;
         private ListBox executionLogListBox;
-        private Label executionLogLabel;
         private Controls.WorkflowSurfaceControl workflowSurfaceControl;
     }
 }

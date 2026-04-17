@@ -1,6 +1,10 @@
 ﻿# VeloxDev Dynamic Theme System  
 
+[← 返回主页](../../README.md)
+
 **编译时生成 · 无反射开销 · 支持动画过渡 · 多主题热切换**
+
+> 💡 本文档覆盖 **快速上手 → 完整 API**，可直接对照 Demo 源码（`Examples/Theme/` 下各平台子目录）阅读。
 
 ---
 

@@ -1,5 +1,7 @@
 ﻿# VeloxDev TransitionSystem
 
+[← 返回主页](../../README.md)
+
 `VeloxDev.Core` 不是“某个平台的动画控件库”，而是一套**平台无关的状态插值执行架构**。  
 各平台适配层（`MAUI / WinUI / Avalonia / WPF / WinForms`）做的事，本质上只是把这套核心抽象接到各自的 UI 线程模型、属性系统和平台类型上。
 

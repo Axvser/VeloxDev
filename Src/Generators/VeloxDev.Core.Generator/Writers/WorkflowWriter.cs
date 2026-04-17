@@ -643,6 +643,10 @@ namespace VeloxDev.Generators.Writers
                     {
                         await Helper.BroadcastAsync(parameter,ct);
                     }
+                    protected virtual async {{TaskFullName}} ReverseBroadcast({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    {
+                        await Helper.ReverseBroadcastAsync(parameter,ct);
+                    }
                     protected virtual async {{TaskFullName}} Close({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
                         await Helper.CloseAsync();
@@ -721,6 +725,28 @@ namespace VeloxDev.Generators.Writers
                     }
                     partial void OnSlotsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
                     partial void OnSlotsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
+                    public virtual T CreateWorkflowSlot<T>() where T : class, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel
+                    {
+                        try
+                        {
+                            if (global::System.Activator.CreateInstance(typeof(T), true) is T created)
+                            {
+                                return created;
+                            }
+                        }
+                        catch
+                        {
+                        }
+                        return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotViewModelBase();
+                    }
+                    protected virtual void OnWorkflowSlotAdded({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot)
+                    {
+                        CreateSlotCommand.Execute(slot);
+                    }
+                    protected virtual void OnWorkflowSlotRemoved({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot)
+                    {
+                        slot?.DeleteCommand.Execute(null);
+                    }
                     private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_MoveCommand = null;
                     public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand MoveCommand
                     {
@@ -801,6 +827,17 @@ namespace VeloxDev.Generators.Writers
                               command: Broadcast,
                               canExecute: _ => true);
                           return _buffer_BroadcastCommand;
+                       }
+                    }
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_ReverseBroadcastCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand ReverseBroadcastCommand
+                    {
+                       get
+                       {
+                          _buffer_ReverseBroadcastCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              command: ReverseBroadcast,
+                              canExecute: _ => true);
+                          return _buffer_ReverseBroadcastCommand;
                        }
                     }
                     private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_CloseCommand = null;

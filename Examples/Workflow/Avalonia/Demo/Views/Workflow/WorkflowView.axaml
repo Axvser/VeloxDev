@@ -30,6 +30,22 @@
 								  ZIndex="{Binding Anchor.Layer}"
 								  RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
 		</DataTemplate>
+		<DataTemplate DataType="vm:BoolSelectorNodeViewModel">
+			<local:BoolSelectorNodeView Width="{Binding Size.Width}"
+										Height="{Binding Size.Height}"
+										Canvas.Left="{Binding Anchor.Horizontal}"
+										Canvas.Top="{Binding Anchor.Vertical}"
+										ZIndex="{Binding Anchor.Layer}"
+										RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+		</DataTemplate>
+		<DataTemplate DataType="vm:EnumSelectorNodeViewModel">
+			<local:EnumSelectorNodeView Width="{Binding Size.Width}"
+										Height="{Binding Size.Height}"
+										Canvas.Left="{Binding Anchor.Horizontal}"
+										Canvas.Top="{Binding Anchor.Vertical}"
+										ZIndex="{Binding Anchor.Layer}"
+										RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+		</DataTemplate>
 		<!-- 连接线模板 -->
 		<DataTemplate DataType="workflow:IWorkflowLinkViewModel">
 			<local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
@@ -94,15 +110,16 @@
 												  FontSize="11"
 												  Margin="0,-6,0,-6"/>
 								</Grid>
-								<ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" x:Name="AgentLogScroller">
-									<ItemsControl ItemsSource="{Binding AgentLog}">
-										<ItemsControl.ItemTemplate>
-											<DataTemplate>
-												<TextBlock Text="{Binding .}" Foreground="#d8d8d8" TextWrapping="Wrap" Margin="0,2"/>
-											</DataTemplate>
-										</ItemsControl.ItemTemplate>
-									</ItemsControl>
-								</ScrollViewer>
+								<ScrollViewer MaxHeight="300" x:Name="AgentLogScroller"
+													VerticalScrollBarVisibility="Auto">
+										<ItemsControl ItemsSource="{Binding AgentLog}">
+											<ItemsControl.ItemTemplate>
+												<DataTemplate>
+													<TextBlock Text="{Binding .}" Foreground="#d8d8d8" TextWrapping="Wrap" Margin="0,2"/>
+												</DataTemplate>
+											</ItemsControl.ItemTemplate>
+										</ItemsControl>
+									</ScrollViewer>
 								<Grid ColumnDefinitions="*,Auto">
 									<TextBox x:Name="AgentInput"
 											 Grid.Column="0"
@@ -124,13 +141,20 @@
 								<StackPanel Spacing="6">
 									<TextBlock Text="实际执行顺序" Foreground="#7ec8ff" FontWeight="Bold"/>
 									<TextBlock Text="{Binding ExecutionLog.Count, StringFormat=已记录: {0}}" Foreground="#bdbdbd"/>
-									<ItemsControl ItemsSource="{Binding ExecutionLog}">
-										<ItemsControl.ItemTemplate>
+									<ListBox ItemsSource="{Binding ExecutionLog}"
+											 Background="Transparent" BorderThickness="0"
+											 ScrollViewer.VerticalScrollBarVisibility="Disabled">
+										<ListBox.ItemsPanel>
+											<ItemsPanelTemplate>
+												<VirtualizingStackPanel/>
+											</ItemsPanelTemplate>
+										</ListBox.ItemsPanel>
+										<ListBox.ItemTemplate>
 											<DataTemplate>
 												<TextBlock Text="{Binding .}" Foreground="#d8d8d8" TextWrapping="Wrap"/>
 											</DataTemplate>
-										</ItemsControl.ItemTemplate>
-									</ItemsControl>
+										</ListBox.ItemTemplate>
+									</ListBox>
 								</StackPanel>
 							</ScrollViewer>
 						</Border>

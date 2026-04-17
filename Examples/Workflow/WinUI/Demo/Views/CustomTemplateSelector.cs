@@ -2,14 +2,15 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
-using System.Diagnostics;
 
 namespace Demo.Views;
 
 public partial class CustomTemplateSelector : DataTemplateSelector
 {
-    public DataTemplate? NodeTemplate { get; set; }  // 对应 NodeViewModel
-    public DataTemplate? ControllerTemplate { get; set; }  // 对应 ControllerViewModel
+    public DataTemplate? NodeTemplate { get; set; }
+    public DataTemplate? ControllerTemplate { get; set; }
+    public DataTemplate? BoolSelectorTemplate { get; set; }
+    public DataTemplate? EnumSelectorTemplate { get; set; }
 
     protected override DataTemplate SelectTemplateCore(object item)
     {
@@ -17,6 +18,10 @@ public partial class CustomTemplateSelector : DataTemplateSelector
         {
             ControllerViewModel => ControllerTemplate ??
                 throw new InvalidOperationException("ControllerTemplate is not set"),
+            BoolSelectorNodeViewModel => BoolSelectorTemplate ??
+                throw new InvalidOperationException("BoolSelectorTemplate is not set"),
+            EnumSelectorNodeViewModel => EnumSelectorTemplate ??
+                throw new InvalidOperationException("EnumSelectorTemplate is not set"),
             NodeViewModel => NodeTemplate ??
                 throw new InvalidOperationException("NodeTemplate is not set"),
             _ => throw new InvalidOperationException($"Unknown data type: {item?.GetType().Name}")
@@ -25,7 +30,6 @@ public partial class CustomTemplateSelector : DataTemplateSelector
 
     protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
     {
-        Debug.WriteLine($"SelectTemplateCore with container called: {item?.GetType().Name}, Container={container?.GetType().Name}");
         return SelectTemplateCore(item!);
     }
 }

@@ -1,5 +1,7 @@
 ﻿# VeloxDev.Core
 
+[![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=green&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/) · [← 返回主页](../../../README.md)
+
 `VeloxDev.Core` 是 VeloxDev 的基础包，负责提供整个框架共享的抽象、生成能力与可复用基础设施。
 
 它主要面向两类场景：
@@ -38,7 +40,6 @@
 ## 仓库与示例
 
 - GitHub: https://github.com/Axvser/VeloxDev
-- Wiki: https://axvser.github.io/VeloxDev.Wiki/
 - Examples: 请参考仓库中的 `Examples` 目录
 
 ---

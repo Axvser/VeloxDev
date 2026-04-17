@@ -234,7 +234,7 @@ namespace Demo.Views
 
         private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            ScrollToEnd(AgentLogScroller);
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ScrollToEnd(AgentLogScroller));
         }
 
         private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

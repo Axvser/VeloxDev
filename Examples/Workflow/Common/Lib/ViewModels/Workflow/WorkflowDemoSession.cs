@@ -20,7 +20,7 @@ public sealed class WorkflowDemoSession
     public static WorkflowDemoSession Create()
     {
         var tree = new TreeViewModel();
-        tree.Layout.OriginSize = new Size(2200, 980);
+        tree.Layout.OriginSize = new Size(2400, 1200);
 
         var helper = tree.GetHelper();
         var nodeSize = new Size(300, 260);
@@ -52,6 +52,23 @@ public sealed class WorkflowDemoSession
         var aggregate = CreateNode("Aggregate", 2600, 1360, 210);
         var finalize = CreateNode("Finalize", 700, 1720, 210);
 
+        var boolSelector = new BoolSelectorNodeViewModel
+        {
+            Title = "Bool Gate",
+            Condition = true,
+            Size = new Size(260, 200),
+            Anchor = new Anchor(640, 720, 0),
+        };
+
+        var enumSelector = new EnumSelectorNodeViewModel
+        {
+            Title = "Method Router",
+            Size = new Size(280, 380),
+            Anchor = new Anchor(1360, 500, 0),
+        };
+        enumSelector.EnumType = typeof(NetworkRequestMethod);
+        enumSelector.SelectedValue = NetworkRequestMethod.Get;
+
         foreach (var node in new IWorkflowNodeViewModel[]
         {
             controller,
@@ -64,6 +81,8 @@ public sealed class WorkflowDemoSession
             joinB,
             aggregate,
             finalize,
+            boolSelector,
+            enumSelector,
         })
         {
             helper.CreateNode(node);
@@ -88,6 +107,12 @@ public sealed class WorkflowDemoSession
         aggregate.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
         finalize.InputSlot = CreateInputSlot();
 
+        boolSelector.InputSlot = CreateInputSlot();
+        boolSelector.TrueSlot = CreateOutputSlot(SlotChannel.MultipleTargets);
+        boolSelector.FalseSlot = CreateOutputSlot(SlotChannel.MultipleTargets);
+
+        enumSelector.InputSlot = CreateInputSlot();
+
         Connect(tree, controller.OutputSlot!, loadSeed.InputSlot!);
         Connect(tree, controller.OutputSlot!, warmCache.InputSlot!);
         Connect(tree, loadSeed.OutputSlot!, branchA.InputSlot!);
@@ -101,6 +126,17 @@ public sealed class WorkflowDemoSession
         Connect(tree, joinA.OutputSlot!, aggregate.InputSlot!);
         Connect(tree, joinB.OutputSlot!, aggregate.InputSlot!);
         Connect(tree, aggregate.OutputSlot!, finalize.InputSlot!);
+
+        // Bool selector: warmCache → boolSelector, true → joinA, false → joinB
+        Connect(tree, warmCache.OutputSlot!, boolSelector.InputSlot!);
+        Connect(tree, boolSelector.TrueSlot!, joinA.InputSlot!);
+        Connect(tree, boolSelector.FalseSlot!, joinB.InputSlot!);
+
+        // Enum selector: aggregate → enumSelector, Get output → finalize
+        Connect(tree, aggregate.OutputSlot!, enumSelector.InputSlot!);
+        var getSlot = enumSelector.GetSlotForValue(NetworkRequestMethod.Get);
+        if (getSlot is not null)
+            Connect(tree, getSlot, finalize.InputSlot!);
 
         helper.ClearHistory();
         return new WorkflowDemoSession(tree, controller, [loadSeed, warmCache, branchA, branchB, branchC, joinA, joinB, aggregate, finalize]);
