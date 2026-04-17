@@ -619,10 +619,19 @@ Agent 通过 `ListSlotProperties` 发现带此标记的集合（返回 `enumDriv
 ### 11.2 `[SlotsEnumType]`
 
 标记在 **Type 属性** 上，声明该属性是哪个 `[EnumSlotCollection]` 集合的枚举类型驱动器，  
-并可选地限制允许使用的枚举类型。
+并可选地限制允许使用的枚举类型。支持两种构造方式：
+
+**Type-based（编译时安全）：**
 
 ```csharp
-[SlotsEnumType(nameof(OutputSlots), typeof(NetworkRequestMethod))]
+[SlotsEnumType(nameof(OutputSlots), typeof(NetworkRequestMethod), typeof(SlotChannel))]
+public Type? EnumType { get; set; }
+```
+
+**String-based（序列化友好）：**
+
+```csharp
+[SlotsEnumType(nameof(OutputSlots), "Demo.ViewModels.NetworkRequestMethod", "VeloxDev.WorkflowSystem.SlotChannel")]
 public Type? EnumType { get; set; }
 ```
 
@@ -630,6 +639,9 @@ public Type? EnumType { get; set; }
 | --- | --- |
 | `collectionPropertyName` | 目标 Slot 集合属性名 |
 | `allowedEnumTypes` | 可选的 `params Type[]`，限制允许的枚举类型；为空则接受任何枚举 |
+| `allowedEnumTypeNames` | 可选的 `params string[]`，使用类型全名限制允许的枚举类型，适用于序列化场景 |
+
+> **注意**：两个构造函数是独立的。Type-based 构造时会自动同步填充 `AllowedEnumTypeNames`；String-based 构造时 `AllowedEnumTypes` 为空数组，运行时由 `SetEnumSlotCollection` 通过 `TypeIntrospector` 解析。
 
 **关键行为：**
 

@@ -85,6 +85,9 @@ public sealed class WorkflowAgentToolkit
             T(AddSlotToCollection, nameof(AddSlotToCollection)),
             T(RemoveSlotFromCollection, nameof(RemoveSlotFromCollection)),
             T(SetEnumSlotCollection, nameof(SetEnumSlotCollection)),
+            // ── Search / Shortcut ──
+            T(FindNodes, nameof(FindNodes)),
+            T(ResolveSlotId, nameof(ResolveSlotId)),
         };
 
         // Merge developer-registered custom tools
@@ -683,8 +686,9 @@ public sealed class WorkflowAgentToolkit
                         if (currentEnumType != null && currentEnumType.IsEnum)
                             entry["enumValues"] = new JArray(Enum.GetNames(currentEnumType));
                         var attr = enumTypeProp.GetCustomAttribute<AI.SlotsEnumTypeAttribute>()!;
-                        if (attr.AllowedEnumTypes.Length > 0)
-                            entry["allowedEnumTypes"] = new JArray(attr.AllowedEnumTypes.Select(t => t.FullName));
+                        var allowedNames = GetAllowedEnumTypeDisplayNames(attr);
+                        if (!string.IsNullOrEmpty(allowedNames))
+                            entry["allowedEnumTypes"] = new JArray(allowedNames.Split(new[] { ", " }, StringSplitOptions.RemoveEmptyEntries));
                     }
                     entry["hint"] = "Use SetEnumSlotCollection to set or change the enum type. Do NOT add/remove slots manually.";
                 }
@@ -798,9 +802,9 @@ public sealed class WorkflowAgentToolkit
         {
             // Validate against allowed enum types if specified
             var slotsAttr = enumTypeProp.GetCustomAttribute<AI.SlotsEnumTypeAttribute>()!;
-            if (slotsAttr.AllowedEnumTypes.Length > 0 && !slotsAttr.AllowedEnumTypes.Contains(enumType))
+            if (!IsEnumTypeAllowed(slotsAttr, enumType))
             {
-                var allowed = string.Join(", ", slotsAttr.AllowedEnumTypes.Select(t => t.FullName));
+                var allowed = GetAllowedEnumTypeDisplayNames(slotsAttr);
                 return Error($"Enum type '{fullEnumTypeName}' is not allowed for '{propertyName}'. Allowed types: {allowed}");
             }
 
@@ -1111,6 +1115,8 @@ public sealed class WorkflowAgentToolkit
             ["AddSlotToCollection"] = a => AddSlotToCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "MultipleBoth"),
             ["RemoveSlotFromCollection"] = a => RemoveSlotFromCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("slotRuntimeId")!),
             ["SetEnumSlotCollection"] = a => SetEnumSlotCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullEnumTypeName")!),
+            ["FindNodes"] = a => FindNodes(a.Value<string>("typeName") ?? "", a.Value<string>("propertyName"), a.Value<string>("propertyValue")),
+            ["ResolveSlotId"] = a => ResolveSlotId(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<int?>("collectionIndex") ?? 0),
         };
     }
 
@@ -1224,6 +1230,120 @@ public sealed class WorkflowAgentToolkit
                 catch { /* skip inaccessible */ }
             }
         }
+    }
+
+    /// <summary>
+    /// Checks if a given enum type is allowed by the <see cref="AI.SlotsEnumTypeAttribute"/>.
+    /// Supports both <see cref="AI.SlotsEnumTypeAttribute.AllowedEnumTypes"/> (Type[]) and
+    /// <see cref="AI.SlotsEnumTypeAttribute.AllowedEnumTypeNames"/> (string[]).
+    /// Returns <c>true</c> if no constraints are specified (both arrays empty).
+    /// </summary>
+    private static bool IsEnumTypeAllowed(AI.SlotsEnumTypeAttribute attr, Type enumType)
+    {
+        bool hasTypeConstraints = attr.AllowedEnumTypes.Length > 0;
+        bool hasNameConstraints = attr.AllowedEnumTypeNames.Length > 0;
+
+        if (!hasTypeConstraints && !hasNameConstraints)
+            return true; // No constraints — any enum is allowed
+
+        // Check Type[] first
+        if (hasTypeConstraints && attr.AllowedEnumTypes.Contains(enumType))
+            return true;
+
+        // Check string[] (FullName match)
+        if (hasNameConstraints)
+        {
+            var fullName = enumType.FullName;
+            foreach (var name in attr.AllowedEnumTypeNames)
+            {
+                if (string.Equals(name, fullName, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns a comma-separated display string of all allowed enum type names from the attribute.
+    /// Merges both <see cref="AI.SlotsEnumTypeAttribute.AllowedEnumTypes"/> and
+    /// <see cref="AI.SlotsEnumTypeAttribute.AllowedEnumTypeNames"/>.
+    /// </summary>
+    private static string GetAllowedEnumTypeDisplayNames(AI.SlotsEnumTypeAttribute attr)
+    {
+        var names = new HashSet<string>();
+        foreach (var t in attr.AllowedEnumTypes)
+            names.Add(t.FullName);
+        foreach (var n in attr.AllowedEnumTypeNames)
+            names.Add(n);
+        return string.Join(", ", names);
+    }
+
+    [Description("Finds nodes by type name (substring match) or property value. Returns compact list like ListNodes but filtered. Saves tokens vs. ListNodes + manual filtering.")]
+    private string FindNodes(
+        [Description("Substring of the node type name to match (case-insensitive). Pass empty string to skip type filter.")] string typeName = "",
+        [Description("Optional property name to filter by.")] string? propertyName = null,
+        [Description("Optional property value (string) to match.")] string? propertyValue = null)
+    {
+        var nodes = Tree.Nodes;
+        var result = new JArray();
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            var nodeTypeName = node.GetType().Name;
+            if (!string.IsNullOrEmpty(typeName) &&
+                nodeTypeName.IndexOf(typeName, StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+
+            if (!string.IsNullOrEmpty(propertyName))
+            {
+                var prop = node.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+                if (prop == null || !prop.CanRead) continue;
+                var val = prop.GetValue(node);
+                var valStr = val?.ToString() ?? "";
+                if (propertyValue != null && !string.Equals(valStr, propertyValue, StringComparison.OrdinalIgnoreCase))
+                    continue;
+            }
+
+            var obj = new JObject
+            {
+                ["i"] = i,
+                ["id"] = GetComponentId(node),
+                ["t"] = nodeTypeName,
+            };
+            AppendScalarProperties(obj, node);
+            result.Add(obj);
+        }
+        return result.ToString(Formatting.None);
+    }
+
+    [Description("Resolves a slot's runtime ID from its owning property name on a node. For collections, specify the index. Avoids needing GetNodeDetail just to get a slot ID.")]
+    private string ResolveSlotId(
+        [Description("Node index.")] int nodeIndex,
+        [Description("Property name of the slot, e.g. 'InputSlot', 'OutputSlots'.")] string propertyName,
+        [Description("For collection properties, the zero-based index within the collection. Ignored for single-slot properties.")] int collectionIndex = 0)
+    {
+        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
+        var prop = node!.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+        if (prop == null) return Error($"Property '{propertyName}' not found on {node.GetType().Name}.");
+
+        if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
+        {
+            var slot = prop.GetValue(node) as IWorkflowSlotViewModel;
+            if (slot == null) return Error($"Slot property '{propertyName}' is null.");
+            return JsonConvert.SerializeObject(new { status = "ok", id = GetComponentId(slot), prop = propertyName }, Formatting.None);
+        }
+        else if (IsSlotCollection(prop.PropertyType, out _))
+        {
+            var col = prop.GetValue(node) as IList;
+            if (col == null) return Error($"Collection '{propertyName}' is null.");
+            if (collectionIndex < 0 || collectionIndex >= col.Count)
+                return Error($"Index {collectionIndex} out of range [0,{col.Count}) for '{propertyName}'.");
+            var slot = col[collectionIndex] as IWorkflowSlotViewModel;
+            if (slot == null) return Error($"Item at index {collectionIndex} is not a slot.");
+            return JsonConvert.SerializeObject(new { status = "ok", id = GetComponentId(slot), prop = $"{propertyName}[{collectionIndex}]" }, Formatting.None);
+        }
+        return Error($"Property '{propertyName}' is not a slot or slot collection.");
     }
 
     private static string Ok(string message) => JsonConvert.SerializeObject(new { status = "ok", message }, Formatting.None);

@@ -185,7 +185,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("Slot collection properties may be annotated with `[EnumSlotCollection]`.");
         result.AppendLine("This means the collection's items correspond 1:1 to values of an enum type.");
         result.AppendLine("- **Use `ListSlotProperties`** to discover enum-driven collections (shows `enumDriven`, `currentEnumType`, `enumValues`, `allowedEnumTypes`).");
-        result.AppendLine("- **Use `SetEnumSlotCollection`** to set or change the enum type. Provide the node index, property name, and enum full type name. The tool clears all existing slots and recreates one per enum value. If the `[SlotsEnumType]` attribute specifies allowed types, only those enum types are accepted.");
+        result.AppendLine("- **Use `SetEnumSlotCollection`** to set or change the enum type. Provide the node index, property name, and enum full type name. The tool clears all existing slots and recreates one per enum value. If the `[SlotsEnumType]` attribute specifies allowed types (via `Type[]` or serialization-friendly `string[]` type names), only those enum types are accepted.");
         result.AppendLine("- Do NOT use `AddSlotToCollection` / `RemoveSlotFromCollection` / `PatchNodeProperties` on enum-driven collections — use `SetEnumSlotCollection` exclusively. PatchNodeProperties will reject `[SlotsEnumType]`-marked properties.");
         result.AppendLine();
         result.AppendLine("## ⚡ Operation Ordering Protocol (CRITICAL)");
@@ -283,6 +283,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("| Remove slot from collection | RemoveSlotFromCollection | Collection lifecycle (OnWorkflowSlotRemoved) |");
         result.AppendLine("| List slot properties | ListSlotProperties | Introspection (no mutation) |");
         result.AppendLine("| Set enum on slot collection | SetEnumSlotCollection | Clears + rebuilds enum-driven collection |");
+        result.AppendLine("| Find nodes by filter | FindNodes | Introspection (no mutation) |");
+        result.AppendLine("| Resolve slot ID by property | ResolveSlotId | Introspection (no mutation) |");
         result.AppendLine();
         result.AppendLine("## 🚫 Forbidden Operations");
         result.AppendLine();
@@ -303,6 +305,10 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("- **TakeSnapshot** returns only version+counts. Use **GetChangesSinceSnapshot** for diffs instead of re-reading everything.");
         result.AppendLine("- **ListNodes** returns compact JSON. Use **GetNodeDetail** only when you need slot-level info.");
         result.AppendLine("- **ListComponentCommands** is separate from GetNodeDetail — call only when discovering commands.");
+        result.AppendLine("- **FindNodes**: filter nodes by type name or property value \u2014 avoids reading all nodes then filtering manually.");
+        result.AppendLine("- **ResolveSlotId**: get a slot's runtime ID directly from its property name \u2014 avoids calling GetNodeDetail just to resolve IDs.");
+        result.AppendLine("- **FindNodes**: filter nodes by type name or property value — avoids reading all nodes then filtering manually.");
+        result.AppendLine("- **ResolveSlotId**: get a slot's runtime ID directly from its property name — avoids calling GetNodeDetail just to resolve IDs.");
         result.AppendLine("- Prefer **RuntimeId** over indices for multi-step operations (stable across add/remove).");
         result.AppendLine("- Use **ConnectSlotsById** when you already have slot IDs.");
         result.AppendLine();
@@ -332,11 +338,12 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine();
         result.AppendLine("1. **Component descriptions are pre-loaded above** — you already know each type's [AgentContext] including default sizes and property meanings.");
         result.AppendLine("2. **GetWorkflowSummary** → orient (counts + types in the current tree)");
-        result.AppendLine("3. **ListNodes** → compact list with IDs");
+        result.AppendLine("3. **ListNodes** → compact list with IDs, or **FindNodes** → filtered by type/property");
         result.AppendLine("4. **GetNodeDetail(ById)** → slot details for specific node (includes `prop` field mapping slots to property names)");
-        result.AppendLine("5. **ListSlotProperties** → discover single slot properties vs. slot collection properties");
-        result.AppendLine("6. **ListComponentCommands** → discover commands before executing");
-        result.AppendLine("7. **GetComponentContext** → call only if you need the full property table or command parameter details beyond what is pre-loaded.");
+        result.AppendLine("5. **ResolveSlotId** → get slot ID by property name without full GetNodeDetail");
+        result.AppendLine("6. **ListSlotProperties** → discover single slot properties vs. slot collection properties");
+        result.AppendLine("7. **ListComponentCommands** → discover commands before executing");
+        result.AppendLine("8. **GetComponentContext** → call only if you need the full property table or command parameter details beyond what is pre-loaded.");
         result.AppendLine();
         result.AppendLine("## 📌 Default Value Resolution (CRITICAL)");
         result.AppendLine();
