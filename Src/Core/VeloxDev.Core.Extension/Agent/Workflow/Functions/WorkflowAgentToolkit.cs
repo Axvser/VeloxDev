@@ -350,7 +350,7 @@ public sealed class WorkflowAgentToolkit
         return Ok($"Slot [{nodeIndex}][{slotIndex}] deleted.");
     }
 
-    [Description("Connects two slots by node/slot indices. Uses Tree.SendConnectionCommand + ReceiveConnectionCommand.")]
+    [Description("Connects two slots by node/slot indices. Uses Tree.SendConnectionCommand + ReceiveConnectionCommand. The framework may silently reject: check 'connected' in the response. Rejection reasons: channel incompatibility, same-node connection, or developer ValidateConnection rule.")]
     private string ConnectSlots(
         [Description("Sender node index.")] int senderNodeIndex,
         [Description("Sender slot index.")] int senderSlotIndex,
@@ -362,10 +362,15 @@ public sealed class WorkflowAgentToolkit
 
         Tree.SendConnectionCommand.Execute(senderSlot!);
         Tree.ReceiveConnectionCommand.Execute(receiverSlot!);
+
+        bool connected = VerifyConnection(senderSlot!, receiverSlot!);
+        if (!connected)
+            return ConnectionRejected(senderSlot!, receiverSlot!,
+                $"[{senderNodeIndex}][{senderSlotIndex}]", $"[{receiverNodeIndex}][{receiverSlotIndex}]");
         return Ok($"Connected [{senderNodeIndex}][{senderSlotIndex}]→[{receiverNodeIndex}][{receiverSlotIndex}].");
     }
 
-    [Description("Connects two slots by their runtime IDs. Stable across add/remove.")]
+    [Description("Connects two slots by their runtime IDs. Stable across add/remove. The framework may silently reject: check 'connected' in the response.")]
     private string ConnectSlotsById(
         [Description("Runtime ID of the sender slot.")] string senderSlotId,
         [Description("Runtime ID of the receiver slot.")] string receiverSlotId)
@@ -375,6 +380,10 @@ public sealed class WorkflowAgentToolkit
 
         Tree.SendConnectionCommand.Execute(sender);
         Tree.ReceiveConnectionCommand.Execute(receiver);
+
+        bool connected = VerifyConnection(sender, receiver);
+        if (!connected)
+            return ConnectionRejected(sender, receiver, senderSlotId, receiverSlotId);
         return Ok($"Connected {senderSlotId}→{receiverSlotId}.");
     }
 
@@ -571,11 +580,11 @@ public sealed class WorkflowAgentToolkit
         return result;
     }
 
-    [Description("Creates a node and adds it to the tree via CreateNodeCommand. IMPORTANT: Nodes must NEVER have Size(0,0). Always provide width/height, or use GetComponentContext first to discover the type's documented default size. If you cannot determine the default, use width=300 height=260 as a safe fallback.")]
+    [Description("Creates a node and adds it to the tree via CreateNodeCommand. This is the ONLY correct way to add nodes — NEVER add nodes by directly modifying the Nodes collection. IMPORTANT: Nodes must NEVER have Size(0,0). Always provide width/height, or use GetComponentContext first to discover the type's documented default size. If you cannot determine the default, use width=300 height=260 as a safe fallback. The tool automatically offsets the position if it overlaps an existing node.")]
     private string CreateNode(
         [Description("Fully-qualified type name.")] string fullTypeName,
-        [Description("Left px.")] double left = 0,
-        [Description("Top px.")] double top = 0,
+        [Description("Left px. Consider existing node positions to avoid overlap.")] double left = 0,
+        [Description("Top px. Consider existing node positions to avoid overlap.")] double top = 0,
         [Description("Width px. Must be > 0. Use GetComponentContext to discover defaults.")] double width = 0,
         [Description("Height px. Must be > 0. Use GetComponentContext to discover defaults.")] double height = 0)
     {
@@ -593,20 +602,79 @@ public sealed class WorkflowAgentToolkit
             if (height <= 0) height = resolved.Height;
         }
 
+        // Auto-offset to avoid overlapping existing nodes using spatial query
+        const double padding = 30;
+        bool moved = false;
+        try
+        {
+            for (int attempt = 0; attempt < 100; attempt++)
+            {
+                // Query only nodes that intersect with the candidate region (padded)
+                var queryViewport = new Viewport(
+                    left - padding, top - padding,
+                    width + padding * 2, height + padding * 2);
+                var nearby = Tree.QueryNodes(queryViewport);
+
+                bool overlap = false;
+                foreach (var existing in nearby)
+                {
+                    double ex = existing.Anchor.Horizontal;
+                    double ew = existing.Size.Width;
+
+                    // Shift right of the overlapping node
+                    left = ex + ew + padding;
+                    moved = true;
+                    overlap = true;
+                    break;
+                }
+                if (!overlap) break;
+            }
+        }
+        catch
+        {
+            // Spatial map not enabled — fall back to linear scan
+            for (int attempt = 0; attempt < 100; attempt++)
+            {
+                bool overlap = false;
+                foreach (var existing in Tree.Nodes)
+                {
+                    double ex = existing.Anchor.Horizontal;
+                    double ey = existing.Anchor.Vertical;
+                    double ew = existing.Size.Width;
+                    double eh = existing.Size.Height;
+
+                    if (left < ex + ew + padding && left + width + padding > ex &&
+                        top < ey + eh + padding && top + height + padding > ey)
+                    {
+                        overlap = true;
+                        left = ex + ew + padding;
+                        moved = true;
+                        break;
+                    }
+                }
+                if (!overlap) break;
+            }
+        }
+
         try
         {
             var node = (IWorkflowNodeViewModel)Activator.CreateInstance(type);
             node.Anchor = new Anchor(left, top, 0);
             Tree.CreateNodeCommand.Execute(node);
             node.SetSizeCommand.Execute(new Size(width, height));
-            return JsonConvert.SerializeObject(new
+            var result = new JObject
             {
-                status = "ok",
-                id = GetComponentId(node),
-                i = IndexOfNode(node),
-                w = width,
-                h = height,
-            }, Formatting.None);
+                ["status"] = "ok",
+                ["id"] = GetComponentId(node),
+                ["i"] = IndexOfNode(node),
+                ["x"] = left,
+                ["y"] = top,
+                ["w"] = width,
+                ["h"] = height,
+            };
+            if (moved)
+                result["repositioned"] = true;
+            return result.ToString(Formatting.None);
         }
         catch (Exception ex)
         {
@@ -1062,7 +1130,8 @@ public sealed class WorkflowAgentToolkit
                         {
                             Tree.SendConnectionCommand.Execute(newSender);
                             Tree.ReceiveConnectionCommand.Execute(newReceiver);
-                            connCount++;
+                            if (VerifyConnection(newSender, newReceiver))
+                                connCount++;
                         }
                     }
                 }
@@ -1437,6 +1506,10 @@ public sealed class WorkflowAgentToolkit
 
         Tree.SendConnectionCommand.Execute(newSender);
         Tree.ReceiveConnectionCommand.Execute(newReceiver);
+
+        bool connected = VerifyConnection(newSender, newReceiver);
+        if (!connected)
+            return Error($"Old connection removed but new connection {newSenderSlotId}→{newReceiverSlotId} was rejected by framework validation. The old connection is NOT restored.");
         return Ok($"Replaced {oldSenderSlotId}→{oldReceiverSlotId} with {newSenderSlotId}→{newReceiverSlotId}.");
     }
 
@@ -2250,6 +2323,11 @@ public sealed class WorkflowAgentToolkit
 
         Tree.SendConnectionCommand.Execute(senderSlot);
         Tree.ReceiveConnectionCommand.Execute(receiverSlot);
+
+        bool connected = VerifyConnection(senderSlot, receiverSlot);
+        if (!connected)
+            return ConnectionRejected(senderSlot, receiverSlot,
+                $"[{senderNodeIndex}].{senderProperty}", $"[{receiverNodeIndex}].{receiverProperty}");
         return Ok($"Connected [{senderNodeIndex}].{senderProperty}→[{receiverNodeIndex}].{receiverProperty}.");
     }
 
@@ -2461,6 +2539,50 @@ public sealed class WorkflowAgentToolkit
     {
         if (HasEnumSlotCollection(node))
             NudgeNode(node);
+    }
+
+    /// <summary>
+    /// Checks whether a connection was actually established between two slots
+    /// by verifying the link exists in <see cref="IWorkflowTreeViewModel.LinksMap"/>.
+    /// The framework may silently reject connections due to channel incompatibility,
+    /// same-node constraint, or developer-overridden <c>ValidateConnection</c>.
+    /// </summary>
+    private bool VerifyConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    {
+        return Tree.LinksMap.TryGetValue(sender, out var dic) && dic.ContainsKey(receiver);
+    }
+
+    /// <summary>
+    /// Builds a structured error response when a connection is rejected by the framework,
+    /// including diagnostic hints about the likely rejection reason.
+    /// </summary>
+    private string ConnectionRejected(
+        IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver,
+        string senderLabel, string receiverLabel)
+    {
+        var reasons = new List<string>();
+        if (sender.Parent != null && receiver.Parent != null && sender.Parent == receiver.Parent)
+            reasons.Add("same-node connection is not allowed");
+        if (!sender.Channel.HasFlag(SlotChannel.OneTarget) &&
+            !sender.Channel.HasFlag(SlotChannel.MultipleTargets) &&
+            !sender.Channel.HasFlag(SlotChannel.OneBoth) &&
+            !sender.Channel.HasFlag(SlotChannel.MultipleBoth))
+            reasons.Add($"sender channel '{sender.Channel}' cannot send");
+        if (!receiver.Channel.HasFlag(SlotChannel.OneSource) &&
+            !receiver.Channel.HasFlag(SlotChannel.MultipleSources) &&
+            !receiver.Channel.HasFlag(SlotChannel.OneBoth) &&
+            !receiver.Channel.HasFlag(SlotChannel.MultipleBoth))
+            reasons.Add($"receiver channel '{receiver.Channel}' cannot receive");
+        if (reasons.Count == 0)
+            reasons.Add("developer ValidateConnection rule or channel capacity limit");
+
+        return JsonConvert.SerializeObject(new
+        {
+            status = "rejected",
+            message = $"Connection {senderLabel}→{receiverLabel} was rejected by the framework.",
+            reasons,
+            hint = "Do NOT retry the same connection. Check slot channels and ValidateConnection rules, or choose different slots."
+        }, Formatting.None);
     }
 
     private static string Ok(string message) => JsonConvert.SerializeObject(new { status = "ok", message }, Formatting.None);
