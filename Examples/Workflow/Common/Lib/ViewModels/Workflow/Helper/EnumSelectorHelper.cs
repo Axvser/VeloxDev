@@ -12,9 +12,9 @@ public class EnumSelectorHelper : NodeHelper<EnumSelectorNodeViewModel>
         context.Variables.TryGetValue("selector.value", out var valueKey);
 
         object? routeValue = null;
-        if (valueKey is not null && Component.EnumType is not null)
+        if (valueKey is not null && Component.EnumType is Type selectorType)
         {
-            try { routeValue = Enum.Parse(Component.EnumType, valueKey, true); } catch { }
+            try { routeValue = Enum.Parse(selectorType, valueKey, true); } catch { }
         }
         routeValue ??= Component.SelectedValue;
 

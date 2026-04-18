@@ -89,32 +89,36 @@ namespace VeloxDev.Generators.Writers
             var isWorkflowComponentOrBase = HasWorkflowAttributeInHierarchy(ownerType);
             var isWorkflowNodeOrBase = HasWorkflowNodeAttributeInHierarchy(ownerType);
 
+            // Check if this is a SlotEnumerator<TSlot> field on a Node
+            if (isWorkflowComponentOrBase && isWorkflowNodeOrBase && IsSlotEnumeratorType(typeSymbol))
+            {
+                factory.UseSlotEnumeratorLifecycle = true;
+                factory.UseWorkflowSlotLifecycle = false;
+                factory.UseWorkflowSlotAutoCreation = false;
+                factory.UseWorkflowSlotCollectionLifecycle = false;
+                return;
+            }
+
             factory.UseWorkflowSlotLifecycle = isWorkflowComponentOrBase &&
                                               isWorkflowNodeOrBase &&
                                               IsWorkflowSlotViewModelType(typeSymbol);
 
-            if (!factory.UseWorkflowSlotLifecycle || factory.IsNullable)
-            {
-                factory.UseWorkflowSlotAutoCreation = false;
-            }
-            else
-            {
-                factory.UseWorkflowSlotAutoCreation = CanAutoCreateWorkflowSlot(typeSymbol);
-            }
+            // Lazy auto-creation in getter is no longer generated; slots are created in InitializeWorkflow
+            factory.UseWorkflowSlotAutoCreation = false;
 
-            // Check if the type is a collection of Slot items (INotifyCollectionChanged + ICollection<T> where T is Slot)
+            // Collection lifecycle for slot collections is replaced by SlotEnumerator<TSlot>
             factory.UseWorkflowSlotCollectionLifecycle = false;
-            if (isWorkflowComponentOrBase && isWorkflowNodeOrBase &&
-                factory.IsNotifyCollectionChanged && !string.IsNullOrWhiteSpace(factory.CollectionItemTypeName))
-            {
-                var collectionItemTypeSymbol = GetCollectionItemTypeSymbol(typeSymbol);
-                if (collectionItemTypeSymbol != null &&
-                    IsWorkflowSlotViewModelType(collectionItemTypeSymbol) &&
-                    IsGenericCollectionType(typeSymbol))
-                {
-                    factory.UseWorkflowSlotCollectionLifecycle = true;
-                }
-            }
+        }
+
+        private bool IsSlotEnumeratorType(ITypeSymbol typeSymbol)
+        {
+            if (typeSymbol is not INamedTypeSymbol namedType) return false;
+            if (!namedType.IsGenericType) return false;
+            var original = namedType.OriginalDefinition;
+            var fullName = original.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return fullName.Contains("SlotEnumerator") &&
+                   (fullName.StartsWith("global::VeloxDev.WorkflowSystem.SlotEnumerator") ||
+                    original.Name == "SlotEnumerator");
         }
 
         private bool CanAutoCreateWorkflowSlot(ITypeSymbol typeSymbol)
@@ -560,7 +564,7 @@ namespace VeloxDev.Generators.Writers
             }
 
             if (!_hasBaseWorkflowSlotInfrastructure && !IsWorkflowComponent &&
-                MVVMProperties.Concat(AutoProperties).Any(p => p.UseWorkflowSlotLifecycle || p.UseWorkflowSlotCollectionLifecycle))
+                MVVMProperties.Concat(AutoProperties).Any(p => p.UseWorkflowSlotLifecycle))
             {
                 bool isSealed = Symbol.IsSealed;
                 string methodModifier = isSealed ? "" : "virtual ";

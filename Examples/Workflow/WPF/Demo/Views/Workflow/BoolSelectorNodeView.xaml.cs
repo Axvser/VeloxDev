@@ -88,7 +88,7 @@ public partial class BoolSelectorNodeView : UserControl
     {
         if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor)
             or nameof(IWorkflowNodeViewModel.Size)
-            or "InputSlot" or "TrueSlot" or "FalseSlot")
+            or "InputSlot" or "OutputSlots")
         {
             Dispatcher.Invoke(SyncSlots);
         }

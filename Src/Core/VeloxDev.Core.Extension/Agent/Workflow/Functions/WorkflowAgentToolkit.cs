@@ -741,7 +741,7 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Slot Collection Functions ──────────────────────────
 
-    [Description("Lists slot properties on a node type: named single slots and slot collection properties. Shows property name, whether it's a collection, current count, and slot IDs.")]
+    [Description("Lists slot properties on a node type: named single slots, slot collection properties, and SlotEnumerator properties. Shows property name, type, current count, and slot IDs.")]
     private string ListSlotProperties(
         [Description("Node index.")] int nodeIndex)
     {
@@ -751,6 +751,52 @@ public sealed class WorkflowAgentToolkit
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (!prop.CanRead) continue;
+
+            // SlotEnumerator<TSlot>
+            if (IsSlotEnumeratorProperty(prop.PropertyType, out var enumeratorSlotType))
+            {
+                try
+                {
+                    var enumerator = prop.GetValue(node);
+                    if (enumerator == null) continue;
+                    var enumPropType = enumerator.GetType();
+                    var selectorTypeName = enumPropType.GetProperty("SelectorTypeName")?.GetValue(enumerator) as string;
+                    var ids = new JArray();
+                    if (enumPropType.GetProperty("Items")?.GetValue(enumerator) is IEnumerable items)
+                    {
+                        foreach (var item in items)
+                        {
+                            var slotProp = item?.GetType().GetProperty("Slot");
+                            if (slotProp?.GetValue(item) is IWorkflowSlotViewModel s)
+                                ids.Add(GetComponentId(s));
+                        }
+                    }
+                    var entry = new JObject
+                    {
+                        ["name"] = prop.Name,
+                        ["collection"] = true,
+                        ["slotEnumerator"] = true,
+                        ["count"] = ids.Count,
+                        ["ids"] = ids,
+                        ["currentSelectorType"] = selectorTypeName,
+                        ["hint"] = "Use SetEnumSlotCollection to set or change the enum/bool type.",
+                    };
+
+                    // Expose allowed selector types from [SlotSelectors] on the enumerator property itself.
+                    var slotSelectorsAttr = prop.GetCustomAttribute<SlotSelectorsAttribute>();
+                    if (slotSelectorsAttr != null)
+                    {
+                        var allowedNames = GetAllowedEnumTypeDisplayNames(slotSelectorsAttr);
+                        if (!string.IsNullOrEmpty(allowedNames))
+                            entry["allowedSelectorTypes"] = new JArray(allowedNames.Split([", "], StringSplitOptions.RemoveEmptyEntries));
+                    }
+
+                    result.Add(entry);
+                }
+                catch { /* skip inaccessible */ }
+                continue;
+            }
+
             if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
             {
                 var slot = prop.GetValue(node) as IWorkflowSlotViewModel;
@@ -781,28 +827,6 @@ public sealed class WorkflowAgentToolkit
                     ["count"] = col?.Count ?? 0,
                     ["ids"] = ids,
                 };
-
-                // Expose EnumSlotCollection metadata if present
-                var enumAttr = prop.GetCustomAttribute<EnumSlotCollectionAttribute>();
-                if (enumAttr != null)
-                {
-                    entry["enumDriven"] = true;
-                    // Discover current enum type via [EnumSlotValue] attribute binding
-                    var enumTypeProp = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                        .FirstOrDefault(p => p.GetCustomAttribute<SlotsEnumTypeAttribute>()?.CollectionPropertyName == prop.Name);
-                    if (enumTypeProp != null)
-                    {
-                        var currentEnumType = enumTypeProp.GetValue(node) as Type;
-                        entry["currentEnumType"] = currentEnumType?.FullName;
-                        if (currentEnumType != null && currentEnumType.IsEnum)
-                            entry["enumValues"] = new JArray(Enum.GetNames(currentEnumType));
-                        var attr = enumTypeProp.GetCustomAttribute<SlotsEnumTypeAttribute>()!;
-                        var allowedNames = GetAllowedEnumTypeDisplayNames(attr);
-                        if (!string.IsNullOrEmpty(allowedNames))
-                            entry["allowedEnumTypes"] = new JArray(allowedNames.Split([", "], StringSplitOptions.RemoveEmptyEntries));
-                    }
-                    entry["hint"] = "Use SetEnumSlotCollection to set or change the enum type. Do NOT add/remove slots manually.";
-                }
 
                 result.Add(entry);
             }
@@ -887,100 +911,83 @@ public sealed class WorkflowAgentToolkit
         return Error($"Slot '{slotRuntimeId}' not found in '{propertyName}'.");
     }
 
-    [Description("Sets or changes the enum type on an [EnumSlotCollection]-marked slot collection. Resolves the enum type by full name, clears all existing slots in the collection, and recreates one slot per enum value. Returns the new slot IDs and enum labels.")]
+    [Description("Sets or changes the selector type (enum or bool) on a SlotEnumerator property of an EXISTING node. This is the correct way to change the enum type on a node that already exists — do NOT delete and recreate the node. Calls SetSelector on the enumerator to rebuild slots. Pass 'System.Boolean' for bool selection. WARNING: switching enum type destroys ALL existing connections on the old output slots; you must rewire them after calling this. The node's other slots (e.g. InputSlot) are not affected.")]
     private string SetEnumSlotCollection(
         [Description("Node index.")] int nodeIndex,
-        [Description("Name of the slot collection property marked with [EnumSlotCollection], e.g. 'OutputSlots'.")] string propertyName,
-        [Description("Fully-qualified enum type name, e.g. 'Demo.ViewModels.NetworkRequestMethod'.")] string fullEnumTypeName)
+        [Description("Name of the slot collection or SlotEnumerator property, e.g. 'OutputSlots'.")] string propertyName,
+        [Description("Fully-qualified enum or bool type name, e.g. 'Demo.ViewModels.NetworkRequestMethod' or 'System.Boolean'.")] string fullEnumTypeName)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var type = node!.GetType();
         var prop = type.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
         if (prop == null) return Error($"Property '{propertyName}' not found on {type.Name}.");
-        if (prop.GetCustomAttribute<EnumSlotCollectionAttribute>() == null)
-            return Error($"Property '{propertyName}' is not marked with [EnumSlotCollection].");
-        if (!IsSlotCollection(prop.PropertyType, out var slotItemType))
-            return Error($"Property '{propertyName}' is not a slot collection.");
 
-        var enumType = TypeIntrospector.ResolveType(fullEnumTypeName);
-        if (enumType == null) return Error($"Type '{fullEnumTypeName}' not found.");
-        if (!enumType.IsEnum) return Error($"'{fullEnumTypeName}' is not an enum type.");
-
-        // Try to set an EnumType property if the node exposes one via [SlotsEnumType] binding
-        var enumTypeProp = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .FirstOrDefault(p => p.GetCustomAttribute<SlotsEnumTypeAttribute>()?.CollectionPropertyName == propertyName);
-        if (enumTypeProp != null && enumTypeProp.CanWrite && enumTypeProp.PropertyType == typeof(Type))
+        // SlotEnumerator<TSlot> path
+        if (IsSlotEnumeratorProperty(prop.PropertyType, out _))
         {
-            // Validate against allowed enum types if specified
-            var slotsAttr = enumTypeProp.GetCustomAttribute<SlotsEnumTypeAttribute>()!;
-            if (!IsEnumTypeAllowed(slotsAttr, enumType))
+            var enumerator = prop.GetValue(node);
+            if (enumerator == null) return Error($"SlotEnumerator '{propertyName}' is null.");
+
+            var selectorType = fullEnumTypeName == "System.Boolean" || fullEnumTypeName == "bool"
+                ? typeof(bool)
+                : TypeIntrospector.ResolveType(fullEnumTypeName);
+            if (selectorType == null) return Error($"Type '{fullEnumTypeName}' not found.");
+            if (!selectorType.IsEnum && selectorType != typeof(bool))
+                return Error($"'{fullEnumTypeName}' is not an enum or bool type.");
+
+            // Validate against [SlotSelectors] allowed types if present on the enumerator property.
+            var selectorsAttr2 = prop.GetCustomAttribute<SlotSelectorsAttribute>();
+            if (selectorsAttr2 != null)
             {
-                var allowed = GetAllowedEnumTypeDisplayNames(slotsAttr);
-                return Error($"Enum type '{fullEnumTypeName}' is not allowed for '{propertyName}'. Allowed types: {allowed}");
+                if (!IsEnumTypeAllowed(selectorsAttr2, selectorType))
+                {
+                    var allowed = GetAllowedEnumTypeDisplayNames(selectorsAttr2);
+                    return Error($"Selector type '{fullEnumTypeName}' is not allowed for '{propertyName}'. Allowed types: {allowed}");
+                }
             }
 
-            // Setting EnumType triggers the node's own RebuildOutputSlots logic
-            enumTypeProp.SetValue(node, enumType);
-        }
-        else
-        {
-            // Fallback: manually clear and rebuild the collection
-            if (prop.GetValue(node) is not IList col) return Error($"Collection '{propertyName}' is null.");
+            var setSelector = enumerator.GetType().GetMethod("SetSelector", [typeof(Type)]);
+            if (setSelector == null) return Error($"SetSelector method not found on SlotEnumerator.");
+            setSelector.Invoke(enumerator, [selectorType]);
 
-            while (col.Count > 0)
-                col.RemoveAt(col.Count - 1);
+            NudgeNode(node);
 
-            var createMethod = node.GetType().GetMethod("CreateWorkflowSlot");
-            var enumValues = Enum.GetValues(enumType);
-            foreach (var _ in enumValues)
+            var enumNames = selectorType == typeof(bool)
+                ? ["False", "True"]
+                : Enum.GetNames(selectorType);
+            var slotIds = new JArray();
+            if (enumerator.GetType().GetProperty("Items")?.GetValue(enumerator) is IEnumerable items)
             {
-                IWorkflowSlotViewModel slot;
-                if (createMethod != null)
+                int i = 0;
+                foreach (var item in items)
                 {
-                    var generic = createMethod.MakeGenericMethod(slotItemType ?? typeof(IWorkflowSlotViewModel));
-                    slot = (IWorkflowSlotViewModel)generic.Invoke(node, null)!;
-                }
-                else
-                {
-                    slot = (IWorkflowSlotViewModel)Activator.CreateInstance(slotItemType ?? typeof(IWorkflowSlotViewModel))!;
-                }
-                slot.Channel = SlotChannel.MultipleTargets;
-                col.Add(slot);
-            }
-        }
-
-        // Nudge to force UI to recalculate slot anchor positions.
-        NudgeNode(node);
-
-        // Build result with slot IDs and labels
-        var names = Enum.GetNames(enumType);
-        var ids = new JArray();
-        if (prop.GetValue(node) is IList resultCol)
-        {
-            for (int i = 0; i < resultCol.Count; i++)
-            {
-                if (resultCol[i] is IWorkflowSlotViewModel s)
-                {
-                    ids.Add(new JObject
+                    var slotProp = item?.GetType().GetProperty("Slot");
+                    if (slotProp?.GetValue(item) is IWorkflowSlotViewModel s)
                     {
-                        ["id"] = GetComponentId(s),
-                        ["label"] = i < names.Length ? names[i] : "?",
-                    });
+                        slotIds.Add(new JObject
+                        {
+                            ["id"] = GetComponentId(s),
+                            ["label"] = i < enumNames.Length ? enumNames[i] : "?",
+                        });
+                    }
+                    i++;
                 }
             }
+            return new JObject
+            {
+                ["ok"] = true,
+                ["selectorType"] = selectorType.FullName,
+                ["property"] = propertyName,
+                ["count"] = slotIds.Count,
+                ["slots"] = slotIds,
+            }.ToString(Formatting.None);
         }
-        return new JObject
-        {
-            ["ok"] = true,
-            ["enumType"] = enumType.FullName,
-            ["collection"] = propertyName,
-            ["count"] = ids.Count,
-            ["slots"] = ids,
-        }.ToString(Formatting.None);
+
+        return Error($"Property '{propertyName}' is not a SlotEnumerator.");
     }
 
     /// <summary>
-    /// Builds a reverse map from slot instance → property name (e.g. "InputSlot", "OutputSlots[2]").
+    /// Builds a reverse map
     /// </summary>
     private static Dictionary<IWorkflowSlotViewModel, string> BuildSlotPropertyMap(IWorkflowNodeViewModel node)
     {
@@ -994,6 +1001,21 @@ public sealed class WorkflowAgentToolkit
                 {
                     if (prop.GetValue(node) is IWorkflowSlotViewModel slot)
                         map[slot] = prop.Name;
+                }
+                else if (IsSlotEnumeratorProperty(prop.PropertyType, out _))
+                {
+                    var enumerator = prop.GetValue(node);
+                    if (enumerator?.GetType().GetProperty("Items")?.GetValue(enumerator) is IEnumerable items)
+                    {
+                        int i = 0;
+                        foreach (var item in items)
+                        {
+                            var slotProp = item?.GetType().GetProperty("Slot");
+                            if (slotProp?.GetValue(item) is IWorkflowSlotViewModel s)
+                                map[s] = $"{prop.Name}[{i}]";
+                            i++;
+                        }
+                    }
                 }
                 else if (IsSlotCollection(prop.PropertyType, out _))
                 {
@@ -1010,6 +1032,19 @@ public sealed class WorkflowAgentToolkit
             catch { /* skip inaccessible */ }
         }
         return map;
+    }
+
+    private static bool IsSlotEnumeratorProperty(Type type, out Type? slotType)
+    {
+        slotType = null;
+        if (!type.IsGenericType) return false;
+        var def = type.GetGenericTypeDefinition();
+        if (def.Name.StartsWith("SlotEnumerator`") && def.Namespace == "VeloxDev.WorkflowSystem")
+        {
+            slotType = type.GetGenericArguments()[0];
+            return true;
+        }
+        return false;
     }
 
     private static bool IsSlotCollection(Type type, out Type? itemType)
@@ -2195,12 +2230,12 @@ public sealed class WorkflowAgentToolkit
     }
 
     /// <summary>
-    /// Checks if a given enum type is allowed by the <see cref="SlotsEnumTypeAttribute"/>.
-    /// Supports both <see cref="SlotsEnumTypeAttribute.AllowedEnumTypes"/> (Type[]) and
-    /// <see cref="SlotsEnumTypeAttribute.AllowedEnumTypeNames"/> (string[]).
+    /// Checks if a given selector type is allowed by the <see cref="SlotSelectorsAttribute"/>.
+    /// Supports both <see cref="SlotSelectorsAttribute.AllowedEnumTypes"/> (Type[]) and
+    /// <see cref="SlotSelectorsAttribute.AllowedEnumTypeNames"/> (string[]).
     /// Returns <c>true</c> if no constraints are specified (both arrays empty).
     /// </summary>
-    private static bool IsEnumTypeAllowed(SlotsEnumTypeAttribute attr, Type enumType)
+    private static bool IsEnumTypeAllowed(SlotSelectorsAttribute attr, Type enumType)
     {
         bool hasTypeConstraints = attr.AllowedEnumTypes.Length > 0;
         bool hasNameConstraints = attr.AllowedEnumTypeNames.Length > 0;
@@ -2228,10 +2263,10 @@ public sealed class WorkflowAgentToolkit
 
     /// <summary>
     /// Returns a comma-separated display string of all allowed enum type names from the attribute.
-    /// Merges both <see cref="SlotsEnumTypeAttribute.AllowedEnumTypes"/> and
-    /// <see cref="SlotsEnumTypeAttribute.AllowedEnumTypeNames"/>.
+    /// Merges both <see cref="SlotSelectorsAttribute.AllowedEnumTypes"/> and
+    /// <see cref="SlotSelectorsAttribute.AllowedEnumTypeNames"/>.
     /// </summary>
-    private static string GetAllowedEnumTypeDisplayNames(SlotsEnumTypeAttribute attr)
+    private static string GetAllowedEnumTypeDisplayNames(SlotSelectorsAttribute attr)
     {
         var names = new HashSet<string>();
         foreach (var t in attr.AllowedEnumTypes)
@@ -2299,7 +2334,7 @@ public sealed class WorkflowAgentToolkit
             if (prop.GetValue(node) is not IList col) return Error($"Collection '{propertyName}' is null.");
             if (collectionIndex < 0 || collectionIndex >= col.Count)
                 return Error($"Index {collectionIndex} out of range [0,{col.Count}) for '{propertyName}'.");
-            if (col[collectionIndex] is not IWorkflowSlotViewModel slot) return Error($"Item at index {collectionIndex} is not a slot.");
+            if (col[collectionIndex] is not IWorkflowSlotViewModel slot) return Error($"ConditionalSlot at index {collectionIndex} is not a slot.");
             return JsonConvert.SerializeObject(new { status = "ok", id = GetComponentId(slot), prop = $"{propertyName}[{collectionIndex}]" }, Formatting.None);
         }
         return Error($"Property '{propertyName}' is not a slot or slot collection.");
@@ -2339,7 +2374,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Width px. 0 = auto from AgentContext.")] double width = 0,
         [Description("Height px. 0 = auto from AgentContext.")] double height = 0,
         [Description("Optional JSON patch for properties, e.g. '{\"Title\":\"MyNode\"}'. null to skip.")] string? jsonPatch = null,
-        [Description("Optional: name of [EnumSlotCollection] property to set, e.g. 'OutputSlots'. null to skip.")] string? enumSlotProperty = null,
+        [Description("Optional: name of SlotEnumerator property to configure, e.g. 'OutputSlots'. null to skip.")] string? enumSlotProperty = null,
         [Description("Optional: fully-qualified enum type name for SetEnumSlotCollection. Required if enumSlotProperty is set.")] string? enumTypeName = null)
     {
         // Step 1: Create node
@@ -2512,7 +2547,7 @@ public sealed class WorkflowAgentToolkit
     /// <summary>
     /// Applies an imperceptible nudge (+0.5, −0.5 px) to force the UI to recalculate
     /// slot anchor positions. Required after any mutation that changes slots on a node
-    /// with <see cref="EnumSlotCollectionAttribute"/>-marked collections.
+    /// with <see cref="SlotEnumerator{TSlot}"/> properties.
     /// </summary>
     private static void NudgeNode(IWorkflowNodeViewModel node)
     {
@@ -2521,23 +2556,22 @@ public sealed class WorkflowAgentToolkit
     }
 
     /// <summary>
-    /// Returns <c>true</c> if the node type has any property marked with
-    /// <see cref="EnumSlotCollectionAttribute"/>.
+    /// Returns <c>true</c> if the node type has any <see cref="SlotEnumerator{TSlot}"/> property.
     /// </summary>
-    private static bool HasEnumSlotCollection(IWorkflowNodeViewModel node)
+    private static bool HasSlotEnumerator(IWorkflowNodeViewModel node)
     {
         return node.GetType()
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Any(p => p.GetCustomAttribute<EnumSlotCollectionAttribute>() != null);
+            .Any(p => IsSlotEnumeratorProperty(p.PropertyType, out _));
     }
 
     /// <summary>
-    /// Nudges the node only if it has any <see cref="EnumSlotCollectionAttribute"/>-marked
-    /// slot collection, ensuring the UI refreshes slot coordinates.
+    /// Nudges the node only if it has any <see cref="SlotEnumerator{TSlot}"/> property,
+    /// ensuring the UI refreshes slot coordinates.
     /// </summary>
     private static void NudgeIfEnumSlotNode(IWorkflowNodeViewModel node)
     {
-        if (HasEnumSlotCollection(node))
+        if (HasSlotEnumerator(node))
             NudgeNode(node);
     }
 

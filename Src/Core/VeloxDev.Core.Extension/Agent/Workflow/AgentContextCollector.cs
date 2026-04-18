@@ -185,14 +185,26 @@ public static class AgentContextCollector
             {
                 Property = p,
                 Contexts = GetAgentContext(p, language),
-                HasVelox = p.GetCustomAttributes<VeloxPropertyAttribute>(inherit: false).Any()
+                HasVelox = p.GetCustomAttributes<VeloxPropertyAttribute>(inherit: false).Any(),
+                IsSlotEnumerator = IsSlotEnumeratorType(p.PropertyType),
             })
-            .Where(p => p.HasVelox && p.Contexts.Length > 0) // 必须同时有 Velox 和 Agent 标记
+            .Where(p => (p.HasVelox && p.Contexts.Length > 0) || p.IsSlotEnumerator)
             .ToList();
 
         foreach (var item in veloxProps)
         {
-            string description = string.Join("; ", item.Contexts.Select((ctx, i) => $"[{i + 1}-{ctx}]"));
+            string description;
+            if (item.Contexts.Length > 0)
+            {
+                description = string.Join("; ", item.Contexts.Select((ctx, i) => $"[{i + 1}-{ctx}]"));
+            }
+            else
+            {
+                // Standard generic description for SlotEnumerator without [AgentContext]
+                description = language == AgentLanguages.Chinese
+                    ? "SlotEnumerator — 通过 SetEnumSlotCollection 工具配置选择器类型（枚举或 bool），禁止手动增删"
+                    : "SlotEnumerator — use SetEnumSlotCollection to configure the selector type (enum or bool). Do not add/remove slots manually.";
+            }
             result.AppendLine($"| {item.Property.PropertyType.FullName} | {item.Property.Name} | {description} |");
         }
 
@@ -224,5 +236,12 @@ public static class AgentContextCollector
         result.AppendLine();
 
         return result.ToString();
+    }
+
+    private static bool IsSlotEnumeratorType(Type type)
+    {
+        if (!type.IsGenericType) return false;
+        var def = type.GetGenericTypeDefinition();
+        return def.Name.StartsWith("SlotEnumerator`") && def.Namespace == "VeloxDev.WorkflowSystem";
     }
 }

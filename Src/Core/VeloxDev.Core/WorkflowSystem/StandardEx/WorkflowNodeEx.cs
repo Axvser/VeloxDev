@@ -24,8 +24,8 @@ public static class WorkflowNodeEx
         var newParent = component;
         if (component.Parent is null)
         {
-            slot.GetHelper().Delete();
             slot.Parent = newParent;
+            component.Slots.Add(slot);
             return;
         }
         component.Parent.GetHelper().Submit(new WorkflowActionPair(

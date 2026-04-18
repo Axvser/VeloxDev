@@ -73,7 +73,6 @@ public sealed class WorkflowDemoSession
             Size = new Size(280, 380),
             Anchor = new Anchor(1740, 200, 0),
         };
-        enumSelector.EnumType = typeof(NetworkRequestMethod);
         enumSelector.SelectedValue = NetworkRequestMethod.Get;
 
         // Row 6: enum selector targets — one node per method to showcase routing
@@ -117,8 +116,6 @@ public sealed class WorkflowDemoSession
         warmCache.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
 
         boolSelector.InputSlot = CreateInputSlot();
-        boolSelector.TrueSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        boolSelector.FalseSlot = CreateOutputSlot(SlotChannel.OneTarget);
 
         branchA.InputSlot = CreateInputSlot();
         branchA.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);

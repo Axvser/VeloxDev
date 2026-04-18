@@ -50,7 +50,7 @@ public partial class BoolSelectorNodeView : UserControl
     {
         if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor)
             or nameof(IWorkflowNodeViewModel.Size)
-            or "InputSlot" or "TrueSlot" or "FalseSlot")
+            or "InputSlot" or "OutputSlots")
         {
             SyncSlotLayouts();
         }
@@ -94,8 +94,18 @@ public partial class BoolSelectorNodeView : UserControl
         if (_parentCanvas == null) return;
 
         SyncSlot(PART_InputSlot, node);
-        SyncSlot(PART_TrueSlot, node);
-        SyncSlot(PART_FalseSlot, node);
+
+        if (PART_OutputSlotsList?.ItemCount > 0)
+        {
+            for (int i = 0; i < PART_OutputSlotsList.ItemCount; i++)
+            {
+                var container = PART_OutputSlotsList.ContainerFromIndex(i);
+                if (container is null) continue;
+                var slotView = container.GetVisualDescendants().OfType<SlotView>().FirstOrDefault();
+                if (slotView is not null)
+                    SyncSlot(slotView, node);
+            }
+        }
     }
 
     private void SyncSlot(Control? control, IWorkflowNodeViewModel node)

@@ -58,7 +58,7 @@
                           SelectedItem="{Binding SelectedValue, Mode=TwoWay}"
                           HorizontalAlignment="Stretch"/>
                 <TextBlock Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,8,0,0"/>
-                <ItemsControl ItemsSource="{Binding OutputSlots}" x:Name="PART_OutputSlotsList" ClipToBounds="False">
+                <ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList" ClipToBounds="False">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Grid Margin="0,2" ClipToBounds="False">
@@ -66,13 +66,14 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Foreground="#d6a0ff" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{Binding Name}" Foreground="#d6a0ff" FontWeight="SemiBold"
                                            VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"/>
                                 <local:SlotView Grid.Column="1" Width="16" Height="16"
                                                 HorizontalAlignment="Right"
                                                 VerticalAlignment="Center"
                                                 Margin="0,0,-8,0"
-                                                SlotState="{Binding State}"/>
+                                                DataContext="{Binding Slot}"
+                                                SlotState="{Binding Slot.State}"/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

@@ -83,7 +83,7 @@ public partial class MainWindowViewModel : ObservableViewModelBase
     private Task AddItem(object? sender, CancellationToken ct)
     {
         Index++;
-        var item = $"Item {Index:00}";
+        var item = $"ConditionalSlot {Index:00}";
         Items.Add(item);
         SelectedItem = item;
         Greeting = $"current index: {Index}";

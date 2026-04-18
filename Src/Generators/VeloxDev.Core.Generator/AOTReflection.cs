@@ -128,6 +128,7 @@ namespace VeloxDev.Generators
 
             foreach (var type in types.Distinct(SymbolEqualityComparer.Default))
             {
+                if (type is null) continue;
                 var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 sb.AppendLine($"            // [{type.ContainingNamespace?.ToDisplayString()}] {type.Name}");
                 sb.AppendLine($"            _ = typeof({fullName}).GetTypeInfo();");
@@ -150,7 +151,7 @@ namespace VeloxDev.Generators
                 }
 
                 // 支持命名参数覆盖
-                foreach (var kv in attr?.NamedArguments ?? [])
+                foreach (var kv in attr != null ? attr.NamedArguments : System.Collections.Immutable.ImmutableArray<System.Collections.Generic.KeyValuePair<string, Microsoft.CodeAnalysis.TypedConstant>>.Empty)
                 {
                     switch (kv.Key)
                     {

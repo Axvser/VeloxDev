@@ -31,20 +31,6 @@
 							DataContext="{Binding InputSlot}"
 							IsVisible="{Binding $parent[local:BoolSelectorNodeView].DataContext.HasInputSlot}"
 							SlotState="{Binding State}"/>
-			<local:SlotView x:Name="PART_TrueSlot"
-							Width="20" Height="20"
-							HorizontalAlignment="Right"
-							VerticalAlignment="Top"
-							Margin="0,50,-10,0"
-							DataContext="{Binding TrueSlot}"
-							SlotState="{Binding State}"/>
-			<local:SlotView x:Name="PART_FalseSlot"
-							Width="20" Height="20"
-							HorizontalAlignment="Right"
-							VerticalAlignment="Bottom"
-							Margin="0,0,-10,30"
-							DataContext="{Binding FalseSlot}"
-							SlotState="{Binding State}"/>
 		</Grid>
 		<Border Grid.Row="0"
 				Background="#253545"
@@ -65,16 +51,28 @@
 		<Border Grid.Row="1" Background="#1e2a35" CornerRadius="0,0,4,4">
 			<StackPanel Margin="14" Spacing="10">
 				<CheckBox IsChecked="{Binding Condition, Mode=TwoWay}" Content="Condition = True" Foreground="#dcdcdc"/>
-				<Grid ColumnDefinitions="Auto,*,Auto">
-					<TextBlock Text="True ●" Foreground="#7bd97b" VerticalAlignment="Center" FontWeight="Bold"/>
-					<Border Grid.Column="1" Height="1" Background="#3a3a3a" Margin="8,0"/>
-					<TextBlock Grid.Column="2" Text="→" Foreground="#7bd97b" VerticalAlignment="Center"/>
-				</Grid>
-				<Grid ColumnDefinitions="Auto,*,Auto">
-					<TextBlock Text="False ●" Foreground="#ff9b9b" VerticalAlignment="Center" FontWeight="Bold"/>
-					<Border Grid.Column="1" Height="1" Background="#3a3a3a" Margin="8,0"/>
-					<TextBlock Grid.Column="2" Text="→" Foreground="#ff9b9b" VerticalAlignment="Center"/>
-				</Grid>
+				<TextBlock Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,4,0,0"/>
+				<ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList" ClipToBounds="False">
+					<ItemsControl.ItemTemplate>
+						<DataTemplate>
+							<Grid ColumnDefinitions="*,Auto" Margin="0,4" ClipToBounds="False">
+								<TextBlock Grid.Column="0"
+										   Text="{Binding Name}"
+										   Foreground="#6ec6ff"
+										   FontWeight="SemiBold"
+										   VerticalAlignment="Center"
+										   HorizontalAlignment="Right"
+										   Margin="0,0,8,0"/>
+								<local:SlotView Grid.Column="1" Width="16" Height="16"
+												HorizontalAlignment="Right"
+												VerticalAlignment="Center"
+												Margin="0,0,-8,0"
+												DataContext="{Binding Slot}"
+												SlotState="{Binding State}"/>
+							</Grid>
+						</DataTemplate>
+					</ItemsControl.ItemTemplate>
+				</ItemsControl>
 			</StackPanel>
 		</Border>
 	</Grid>

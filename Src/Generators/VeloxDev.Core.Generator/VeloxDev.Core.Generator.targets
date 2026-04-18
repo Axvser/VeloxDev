@@ -1,0 +1,21 @@
+<Project>
+  <!--
+    Checks whether the host Roslyn version satisfies the minimum requirement for
+    VeloxDev.Core.Generator source generators (Roslyn 4.0 / VS 2022 17.0+).
+    Emits a warning and disables generators gracefully on older toolchains instead
+    of silently producing no output.
+  -->
+  <Target Name="VeloxDevCheckRoslynVersion" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_VeloxRoslynVersion>$(RoslynVersion)</_VeloxRoslynVersion>
+    </PropertyGroup>
+
+    <!-- Only warn when RoslynVersion is actually known and too old.
+         When the SDK does not inject RoslynVersion (e.g. netframework TFMs on a modern host)
+         the property is empty and we skip the check to avoid false positives. -->
+    <Warning
+      Condition="'$(_VeloxRoslynVersion)' != '' And $([System.Version]::Parse('$(_VeloxRoslynVersion)').Major) &lt; 4"
+      Code="VELOXCFG0001"
+      Text="Roslyn $(_VeloxRoslynVersion) is too old for VeloxDev.Core.Generator (requires Roslyn 4.0+ / VS 2022 17.0+ / .NET SDK 6+). Source generators are disabled. Upgrade Visual Studio or the .NET SDK to enable code generation." />
+  </Target>
+</Project>

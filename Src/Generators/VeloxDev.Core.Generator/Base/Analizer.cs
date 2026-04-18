@@ -266,6 +266,7 @@ namespace VeloxDev.Generators.Base
             public bool UseWorkflowSlotLifecycle { get; set; }
             public bool UseWorkflowSlotAutoCreation { get; set; }
             public bool UseWorkflowSlotCollectionLifecycle { get; set; }
+            public bool UseSlotEnumeratorLifecycle { get; set; }
 
             public List<string> SetteringBody { get; set; } = [];
             public List<string> SetteredBody { get; set; } = [];
@@ -365,19 +366,7 @@ namespace VeloxDev.Generators.Base
             private string GenerateGetter()
             {
                 var getterAccessModifier = !string.IsNullOrEmpty(GetterAccessModifier) ? GetterAccessModifier + " " : string.Empty;
-
-                if (!UseWorkflowSlotLifecycle || IsNullable || !UseWorkflowSlotAutoCreation)
-                {
-                    return $"{RETRACT}    {getterAccessModifier}get => {SourceName};";
-                }
-
-                var getterBody = BuildMethodBody(GetWorkflowSlotGetterLines());
-                return $$"""
-                    {{RETRACT}}    {{getterAccessModifier}}get
-                    {{RETRACT}}    {
-                    {{getterBody}}
-                    {{RETRACT}}    }
-                    """;
+                return $"{RETRACT}    {getterAccessModifier}get => {SourceName};";
             }
 
             private string BuildMethodBody(IEnumerable<string> lines)
@@ -450,10 +439,18 @@ namespace VeloxDev.Generators.Base
 
             private IEnumerable<string> GetWorkflowSlotBeforeAssignmentLines()
             {
-                if (!HasSetter || !UseWorkflowSlotLifecycle)
+                if (!HasSetter) yield break;
+
+                if (UseSlotEnumeratorLifecycle)
                 {
+                    yield return "if (old is not null)";
+                    yield return "{";
+                    yield return "    old.Uninstall();";
+                    yield return "}";
                     yield break;
                 }
+
+                if (!UseWorkflowSlotLifecycle) yield break;
 
                 yield return "if (old is not null)";
                 yield return "{";
@@ -463,25 +460,23 @@ namespace VeloxDev.Generators.Base
 
             private IEnumerable<string> GetWorkflowSlotAfterAssignmentLines()
             {
-                if (!HasSetter || !UseWorkflowSlotLifecycle)
+                if (!HasSetter) yield break;
+
+                if (UseSlotEnumeratorLifecycle)
                 {
+                    yield return "if (value is not null)";
+                    yield return "{";
+                    yield return "    value.Install(this);";
+                    yield return "}";
                     yield break;
                 }
+
+                if (!UseWorkflowSlotLifecycle) yield break;
 
                 yield return "if (value is not null)";
                 yield return "{";
                 yield return "    OnWorkflowSlotAdded(value);";
                 yield return "}";
-            }
-
-            private IEnumerable<string> GetWorkflowSlotGetterLines()
-            {
-                yield return $"if ({SourceName} is null)";
-                yield return "{";
-                yield return $"    {SourceName} = CreateWorkflowSlot<{NonNullableFullTypeName}>();";
-                yield return $"    OnWorkflowSlotAdded({SourceName});";
-                yield return "}";
-                yield return $"return {SourceName};";
             }
 
             private string GenerateWorkflowSlotMembers()

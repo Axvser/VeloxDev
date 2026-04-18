@@ -29,7 +29,7 @@ namespace Demo.Views
             {
                 Loaded += OnLoaded;
                 Unloaded += OnUnloaded;
-                // 也监听 Content 变化（ItemsControl 里 DataContext 或 Item 被替换时）
+                // 也监听 Content 变化（ItemsControl 里 DataContext 或 ConditionalSlot 被替换时）
                 RegisterPropertyChangedCallback(ContentProperty, (_, __) => OnContentChanged());
             }
 

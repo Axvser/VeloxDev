@@ -50,7 +50,7 @@ public partial class EnumSelectorNodeView : UserControl
     {
         if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor)
             or nameof(IWorkflowNodeViewModel.Size)
-            or "InputSlot" or "OutputSlots" or "EnumType")
+            or "InputSlot" or "OutputSlots")
         {
             SyncSlotLayouts();
         }
@@ -97,7 +97,6 @@ public partial class EnumSelectorNodeView : UserControl
 
         if (PART_OutputSlotsList?.ItemCount > 0)
         {
-            var enumNode = node as EnumSelectorNodeViewModel;
             for (int i = 0; i < PART_OutputSlotsList.ItemCount; i++)
             {
                 var container = PART_OutputSlotsList.ContainerFromIndex(i);
@@ -105,14 +104,6 @@ public partial class EnumSelectorNodeView : UserControl
                 var slotView = container.GetVisualDescendants().OfType<SlotView>().FirstOrDefault();
                 if (slotView is not null)
                     SyncSlot(slotView, node);
-
-                // Set the enum label text
-                if (enumNode is not null)
-                {
-                    var label = container.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault();
-                    if (label is not null)
-                        label.Text = enumNode.GetSlotLabel(i);
-                }
             }
         }
     }

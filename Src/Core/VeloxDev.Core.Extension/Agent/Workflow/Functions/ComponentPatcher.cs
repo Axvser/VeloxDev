@@ -109,14 +109,14 @@ public static class ComponentPatcher
                 continue;
             }
 
-            // Reject [SlotsEnumType]-marked properties — must use SetEnumSlotCollection tool
-            if (prop.GetCustomAttribute<SlotsEnumTypeAttribute>() != null)
+            // Reject [SlotSelectors]-marked properties — must use SetEnumSlotCollection tool
+            if (prop.GetCustomAttribute<SlotSelectorsAttribute>() != null)
             {
                 results.Add(new JObject
                 {
                     ["property"] = propName,
                     ["status"] = "rejected",
-                    ["reason"] = $"'{propName}' is an enum-type driver marked with [SlotsEnumType]. Use the 'SetEnumSlotCollection' tool instead of direct patching.",
+                    ["reason"] = $"'{propName}' is a selector-type driver marked with [SlotSelectors]. Use the 'SetEnumSlotCollection' tool instead of direct patching.",
                 });
                 continue;
             }

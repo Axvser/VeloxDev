@@ -129,14 +129,14 @@ namespace VeloxDev.Generators.Writers
             }
             else
             {
-                model.HelperType = GetDefaultHelperType("Tree");
+                model.HelperType = GetDefaultHelperType("Tree") ?? throw new InvalidOperationException("Cannot resolve default Tree helper type.");
             }
 
             var virtualLinkType = GetConstructorArgumentAsType(attribute, "virtualLinkType", 0);
-            model.VirtualLinkType = virtualLinkType ?? GetConcreteDefaultVirtualLinkType();
+            model.VirtualLinkType = virtualLinkType ?? GetConcreteDefaultVirtualLinkType() ?? throw new InvalidOperationException("Cannot resolve default VirtualLink type.");
 
             var virtualSlotType = GetConstructorArgumentAsType(attribute, "virtualSlotType", 1);
-            model.VirtualSlotType = virtualSlotType ?? GetConcreteDefaultVirtualSlotType();
+            model.VirtualSlotType = virtualSlotType ?? GetConcreteDefaultVirtualSlotType() ?? throw new InvalidOperationException("Cannot resolve default VirtualSlot type.");
 
             return model;
         }
@@ -156,7 +156,7 @@ namespace VeloxDev.Generators.Writers
             }
             else
             {
-                model.HelperType = GetDefaultHelperType("Node");
+                model.HelperType = GetDefaultHelperType("Node") ?? throw new InvalidOperationException("Cannot resolve default Node helper type.");
             }
 
             model.WorkSemaphore = GetConstructorArgumentAsInt(attribute, "workSemaphore", 0) ?? 1;
@@ -179,7 +179,7 @@ namespace VeloxDev.Generators.Writers
             }
             else
             {
-                model.HelperType = GetDefaultHelperType("Slot");
+                model.HelperType = GetDefaultHelperType("Slot") ?? throw new InvalidOperationException("Cannot resolve default Slot helper type.");
             }
 
             return model;
@@ -200,11 +200,11 @@ namespace VeloxDev.Generators.Writers
             }
             else
             {
-                model.HelperType = GetDefaultHelperType("Link");
+                model.HelperType = GetDefaultHelperType("Link") ?? throw new InvalidOperationException("Cannot resolve default Link helper type.");
             }
 
             var slotType = GetConstructorArgumentAsType(attribute, "slotType", 0);
-            model.SlotType = slotType ?? GetConcreteDefaultSlotType();
+            model.SlotType = slotType ?? GetConcreteDefaultSlotType() ?? throw new InvalidOperationException("Cannot resolve default Slot type.");
 
             return model;
         }
@@ -257,7 +257,7 @@ namespace VeloxDev.Generators.Writers
             return null;
         }
 
-        private ITypeSymbol GetDefaultHelperType(string workflowType)
+        private ITypeSymbol? GetDefaultHelperType(string workflowType)
         {
             var defaultHelperName = $"WorkflowHelper.ViewModel.{workflowType}";
             return GetTypeSymbolFromReferencedAssemblies(defaultHelperName) ??
@@ -286,10 +286,13 @@ namespace VeloxDev.Generators.Writers
         {
             if (Symbol == null) return null;
 
-            var typeSymbol = Symbol.ContainingAssembly?.GetTypeByMetadataName(fullyQualifiedName);
+            var containingAssembly = Symbol.ContainingAssembly;
+            if (containingAssembly == null) return null;
+
+            var typeSymbol = containingAssembly.GetTypeByMetadataName(fullyQualifiedName);
             if (typeSymbol != null) return typeSymbol;
 
-            foreach (var reference in Symbol.ContainingAssembly.Modules.SelectMany(m => m.ReferencedAssemblySymbols))
+            foreach (var reference in containingAssembly.Modules.SelectMany(m => m.ReferencedAssemblySymbols))
             {
                 typeSymbol = reference.GetTypeByMetadataName(fullyQualifiedName);
                 if (typeSymbol != null) return typeSymbol;
@@ -359,6 +362,18 @@ namespace VeloxDev.Generators.Writers
             sb.AppendLine($$"""
                     public override {{GetWorkflowHelperInterfaceName(model.WorkflowType)}} Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
                 """);
+
+            // For Node subclasses, also override InitializeWorkflow to create subclass slots/enumerators
+            if (model.WorkflowType == 2)
+            {
+                var initBody = GenerateInitializeWorkflowBody(model.TargetClassSymbol, isOverride: true);
+                sb.AppendLine($$"""
+                    public override void InitializeWorkflow()
+                    {
+                        {{initBody}}
+                    }
+                    """);
+            }
         }
 
         private void GenerateTreeBody(StringBuilder sb, TreeAttributeModel model)
@@ -653,7 +668,11 @@ namespace VeloxDev.Generators.Writers
                     }
 
                     public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper GetHelper() => Helper;
-                    public virtual void InitializeWorkflow() => Helper.Install(this);
+                    public virtual void InitializeWorkflow()
+                    {
+                        Helper.Install(this);
+                        {{GenerateInitializeWorkflowBody(model.TargetClassSymbol, isOverride: false)}}
+                    }
                     public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper helper)
                     {
                         Helper.Uninstall(this);
@@ -1156,21 +1175,172 @@ namespace VeloxDev.Generators.Writers
     """);
         }
 
+        #region InitializeWorkflow 辅助方法
+
+        private static bool IsPartialProperty(IPropertySymbol propertySymbol)
+        {
+            foreach (var syntaxRef in propertySymbol.DeclaringSyntaxReferences)
+            {
+                var syntax = syntaxRef.GetSyntax();
+                if (syntax is Microsoft.CodeAnalysis.CSharp.Syntax.PropertyDeclarationSyntax propSyntax)
+                {
+                    return propSyntax.Modifiers.Any(m =>
+                        m.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword));
+                }
+            }
+            return false;
+        }
+
+        private bool IsSlotEnumeratorType(ITypeSymbol typeSymbol)
+        {
+            if (typeSymbol is not INamedTypeSymbol namedType || !namedType.IsGenericType) return false;
+            var original = namedType.OriginalDefinition;
+            var name = original.Name;
+            if (name.Contains('`')) name = name.Substring(0, name.IndexOf('`'));
+            return name == "SlotEnumerator";
+        }
+
+        private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
+        {
+            INamedTypeSymbol? slotInterface = Symbol != null
+                ? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.IWorkflowSlotViewModel")
+                : null;
+
+            if (slotInterface != null)
+            {
+                var comparer = SymbolEqualityComparer.Default;
+                if (comparer.Equals(typeSymbol, slotInterface)) return true;
+                if (typeSymbol.AllInterfaces.Any(i => comparer.Equals(i, slotInterface))) return true;
+            }
+            else
+            {
+                if (typeSymbol.AllInterfaces.Any(i =>
+                    i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).EndsWith("IWorkflowSlotViewModel")))
+                    return true;
+            }
+            return false;
+        }
+
+        private struct NodeInitMember
+        {
+            public string FieldName;
+            public string PropertyName;
+            public string FullTypeName;
+            public bool IsSlotEnumerator;
+            public bool IsWorkflowSlot;
+        }
+
+        private static string GetPropertyNameFromFieldName(string fieldName)
+        {
+            if (fieldName.StartsWith("_"))
+                return char.ToUpper(fieldName[1]) + fieldName.Substring(2);
+            return char.ToUpper(fieldName[0]) + fieldName.Substring(1);
+        }
+
+        private System.Collections.Generic.IReadOnlyList<NodeInitMember> GetNodeInitMembers(INamedTypeSymbol symbol)
+        {
+            const string veloxPropertyAttrSuffix = "VeloxPropertyAttribute";
+            var result = new System.Collections.Generic.List<NodeInitMember>();
+
+            foreach (var member in symbol.GetMembers())
+            {
+                bool hasVeloxProp = member.GetAttributes().Any(a =>
+                    a.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                     .EndsWith(veloxPropertyAttrSuffix) == true);
+                if (!hasVeloxProp) continue;
+
+                ITypeSymbol? typeSymbol = null;
+                string fieldName = string.Empty;
+
+                if (member is IFieldSymbol field)
+                {
+                    typeSymbol = field.Type;
+                    fieldName = field.Name;
+                }
+                else if (member is IPropertySymbol prop && IsPartialProperty(prop))
+                {
+                    typeSymbol = prop.Type;
+                    fieldName = prop.Name.Length > 0 && char.IsUpper(prop.Name[0])
+                        ? "_" + char.ToLower(prop.Name[0]) + prop.Name.Substring(1)
+                        : "_" + prop.Name;
+                }
+
+                if (typeSymbol == null) continue;
+
+                var isEnumerator = IsSlotEnumeratorType(typeSymbol);
+                var isSlot = !isEnumerator && IsWorkflowSlotViewModelType(typeSymbol);
+
+                if (!isEnumerator && !isSlot) continue;
+
+                var displayFormat = new SymbolDisplayFormat(
+                    typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+                    genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+                    miscellaneousOptions: SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+                result.Add(new NodeInitMember
+                {
+                    FieldName = fieldName,
+                    PropertyName = GetPropertyNameFromFieldName(fieldName),
+                    FullTypeName = typeSymbol.ToDisplayString(displayFormat),
+                    IsSlotEnumerator = isEnumerator,
+                    IsWorkflowSlot = isSlot,
+                });
+            }
+
+            return result;
+        }
+
+        private string GenerateInitializeWorkflowBody(INamedTypeSymbol symbol, bool isOverride)
+        {
+            var members = GetNodeInitMembers(symbol);
+            var sb = new StringBuilder();
+
+            if (isOverride)
+                sb.AppendLine("base.InitializeWorkflow();");
+
+            foreach (var m in members)
+            {
+                if (m.IsSlotEnumerator)
+                {
+                    // If the user already assigned a SlotEnumerator in the constructor, just Install it.
+                    // Otherwise create a new instance first, then Install.
+                    var nonNullableType = m.FullTypeName.TrimEnd('?');
+                    sb.AppendLine($"if ({m.FieldName} is null) {m.FieldName} = new {nonNullableType}();");
+                    sb.AppendLine($"{m.FieldName}.Install(this);");
+                }
+                else if (m.IsWorkflowSlot)
+                {
+                    // Mirror the SlotEnumerator.Install pattern: directly set Parent and add to Slots.
+                    // Never route through CreateSlotCommand/OnWorkflowSlotAdded here — those paths
+                    // require node.Parent != null (i.e. the node already added to a tree), which is
+                    // never the case when InitializeWorkflow is called from the constructor.
+                    var nonNullableType = m.FullTypeName.TrimEnd('?');
+                    sb.AppendLine($"if ({m.FieldName} is null) {m.FieldName} = CreateWorkflowSlot<{nonNullableType}>();");
+                    sb.AppendLine($"{m.FieldName}.Parent = this;");
+                    sb.AppendLine($"if (!Slots.Contains({m.FieldName})) Slots.Add({m.FieldName});");
+                }
+            }
+
+            return sb.ToString().TrimEnd();
+        }
+
+        #endregion
+
         #region 内部模型定义
 
         private abstract class WorkflowAttributeModel
         {
-            public INamedTypeSymbol AttributeSymbol { get; set; }
-            public INamedTypeSymbol TargetClassSymbol { get; set; }
-            public ITypeSymbol HelperType { get; set; }
-            public AttributeData AttributeData { get; set; }
+            public INamedTypeSymbol? AttributeSymbol { get; set; }
+            public INamedTypeSymbol TargetClassSymbol { get; set; } = null!;
+            public ITypeSymbol HelperType { get; set; } = null!;
+            public AttributeData AttributeData { get; set; } = null!;
             public abstract int WorkflowType { get; }
         }
 
         private class TreeAttributeModel : WorkflowAttributeModel
         {
-            public INamedTypeSymbol VirtualLinkType { get; set; }
-            public INamedTypeSymbol VirtualSlotType { get; set; }
+            public INamedTypeSymbol VirtualLinkType { get; set; } = null!;
+            public INamedTypeSymbol VirtualSlotType { get; set; } = null!;
             public override int WorkflowType => 1;
         }
 
@@ -1187,7 +1357,7 @@ namespace VeloxDev.Generators.Writers
 
         private class LinkAttributeModel : WorkflowAttributeModel
         {
-            public INamedTypeSymbol SlotType { get; set; }
+            public INamedTypeSymbol SlotType { get; set; } = null!;
             public override int WorkflowType => 4;
         }
 

@@ -220,13 +220,29 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("- Use **`ListSlotProperties`** to discover which slots are single properties vs. collection properties on a node.");
         result.AppendLine("- **`GetNodeDetail`** output includes a `prop` field on each slot showing its owning property name (e.g. `InputSlot`, `OutputSlots[2]`).");
         result.AppendLine();
-        result.AppendLine("### Enum-Driven Slot Collections");
+        result.AppendLine("### SlotEnumerator Properties");
         result.AppendLine();
-        result.AppendLine("Slot collection properties may be annotated with `[EnumSlotCollection]`.");
-        result.AppendLine("This means the collection's items correspond 1:1 to values of an enum type.");
-        result.AppendLine("- **Use `ListSlotProperties`** to discover enum-driven collections (shows `enumDriven`, `currentEnumType`, `enumValues`, `allowedEnumTypes`).");
-        result.AppendLine("- **Use `SetEnumSlotCollection`** to set or change the enum type. Provide the node index, property name, and enum full type name. The tool clears all existing slots and recreates one per enum value. If the `[SlotsEnumType]` attribute specifies allowed types (via `Type[]` or serialization-friendly `string[]` type names), only those enum types are accepted.");
-        result.AppendLine("- Do NOT use `AddSlotToCollection` / `RemoveSlotFromCollection` / `PatchNodeProperties` on enum-driven collections — use `SetEnumSlotCollection` exclusively. PatchNodeProperties will reject `[SlotsEnumType]`-marked properties.");
+        result.AppendLine("Node types may declare **SlotEnumerator properties** (e.g. `SlotEnumerator<SlotViewModel> OutputSlots`).");
+        result.AppendLine("These auto-generate one output slot per value of the configured selector type (enum or bool).");
+        result.AppendLine();
+        result.AppendLine("**Primary path — use `CreateAndConfigureNode` with `enumSlotProperty` + `enumTypeName`:**");
+        result.AppendLine("- This is the single correct call for creation + selector setup. No follow-up tool needed.");
+        result.AppendLine("- Example: `CreateAndConfigureNode(fullTypeName, ..., enumSlotProperty=\"OutputSlots\", enumTypeName=\"Demo.ViewModels.NetworkRequestMethod\")`");
+        result.AppendLine("- The node's [AgentContext] description lists the `enumSlotProperty` name and the allowed type names — read it before calling.");
+        result.AppendLine();
+        result.AppendLine("**Changing the selector on an existing node — use `SetEnumSlotCollection`:**");
+        result.AppendLine("- Provide node index, property name, and the full type name. Clears and rebuilds slots automatically.");
+        result.AppendLine("- The allowed types are shown in the node's [AgentContext] and in `ListSlotProperties` → `allowedSelectorTypes`.");
+        result.AppendLine();
+        result.AppendLine("**Discovery only — `ListSlotProperties`:**");
+        result.AppendLine("- Shows `slotEnumerator: true`, `currentSelectorType`, and `allowedSelectorTypes` for each enumerator property.");
+        result.AppendLine("- Only call this when you need to inspect an existing node's current state, not as a prerequisite for configuration.");
+        result.AppendLine();
+        result.AppendLine("Rules:");
+        result.AppendLine("- Do NOT add/remove slots manually on SlotEnumerator properties.");
+        result.AppendLine("- Do NOT use `PatchNodeProperties` to set the selector type — it is rejected.");
+        result.AppendLine("- Do NOT call `ListSlotProperties` before `CreateAndConfigureNode` — the allowed types are already in the [AgentContext] description.");
+        result.AppendLine("- **`[SlotSelectors]` is the AUTHORITATIVE whitelist** — if a type appears in `allowedSelectorTypes`, it IS a valid selector for this node, regardless of what the type's own description says (e.g. a framework enum like `SlotChannel` is perfectly valid when the developer explicitly listed it). Never second-guess or override this list based on semantic reasoning about the type's primary purpose.");
         result.AppendLine();
         result.AppendLine("## ⚡ Operation Ordering Protocol (CRITICAL)");
         result.AppendLine();
@@ -237,7 +253,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("```");
         result.AppendLine("1. CreateNode          — node must exist in the tree before any further operation on it");
         result.AppendLine("2. PatchNodeProperties  — configure scalar properties (Title, DelayMs…)");
-        result.AppendLine("   └─ For enum-driven slot collections, use SetEnumSlotCollection instead.");
+        result.AppendLine("   └─ For SlotEnumerator properties, use SetEnumSlotCollection instead.");
         result.AppendLine("3. CreateSlotOnNode /   — create or configure slots (only AFTER the node is in the tree)");
         result.AppendLine("   AddSlotToCollection");
         result.AppendLine("4. ConnectSlots         — connect slots (BOTH endpoints must already exist)");
@@ -377,12 +393,12 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("- **Typed slot properties** (e.g. InputSlot, OutputSlot on nodes) — auto-created by source generator, never assign or replace");
         result.AppendLine("- Only use **CreateSlotOnNode** for dynamically-added slots when the node type does NOT define them as typed properties");
         result.AppendLine("- **Slot collection properties** (e.g. `ObservableCollection<SlotVM> OutputSlots`) — managed by source-generated lifecycle. Use **AddSlotToCollection** / **RemoveSlotFromCollection** instead of CreateSlotOnNode");
-        result.AppendLine("- **Enum-driven slot collections** (marked with `[EnumSlotCollection]`) — use **SetEnumSlotCollection** to set the enum type; do NOT add/remove slots manually or patch the enum type via PatchNodeProperties (it will be rejected). **ListSlotProperties** reveals `enumDriven`, `allowedEnumTypes`, and current state. The owning property is annotated with `[SlotsEnumType]` which may restrict allowed enum types.");
+        result.AppendLine("- **SlotEnumerator properties** (e.g. `SlotEnumerator<SlotVM> OutputSlots`) — use **CreateAndConfigureNode** (preferred, one call) or **SetEnumSlotCollection** (on existing nodes) to set the selector type. Do NOT add/remove slots manually or use PatchNodeProperties. The node's [AgentContext] lists the property name (`enumSlotProperty`) and allowed type names (`enumTypeName`). `ListSlotProperties` shows `allowedSelectorTypes` for discovery only — do not call it as a prerequisite. **`allowedSelectorTypes` is authoritative**: any type listed there is valid by developer declaration — do NOT reject or warn about it based on the type's own description or its primary purpose in the framework.");
         result.AppendLine();
         result.AppendLine("## Token-Saving Tips");
         result.AppendLine();
         result.AppendLine("- **Prefer composite tools over multi-step sequences:**");
-        result.AppendLine("  - **CreateAndConfigureNode** = CreateNode + PatchNodeProperties + SetEnumSlotCollection → 1 call instead of 3. Returns full node detail with slot IDs.");
+        result.AppendLine("  - **CreateAndConfigureNode** = CreateNode + PatchNodeProperties + SetEnumSlotCollection → 1 call instead of 3. Pass `enumSlotProperty` (e.g. \"OutputSlots\") + `enumTypeName` (e.g. \"Demo.ViewModels.NetworkRequestMethod\") to configure SlotEnumerator in the same call. Returns full node detail with slot IDs.");
         result.AppendLine("  - **ConnectByProperty** = ResolveSlotId×2 + ConnectSlots → 1 call. No need to resolve slot IDs first.");
         result.AppendLine("  - **DeleteNodes** = DeleteNode×N → 1 call for bulk deletion.");
         result.AppendLine("  - **ArrangeNodes** = SetNodePosition×N → 1 call for bulk positioning.");
@@ -433,7 +449,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("1. CreateNode           — node must exist in tree first");
         result.AppendLine("   (or CreateAndConfigureNode — combines steps 1-2 into one call)");
         result.AppendLine("2. PatchNodeProperties   — configure properties (scalar only)");
-        result.AppendLine("   SetEnumSlotCollection — set enum type on [EnumSlotCollection] properties");
+        result.AppendLine("   SetEnumSlotCollection — set selector type on SlotEnumerator properties");
         result.AppendLine("3. CreateSlotOnNode /    — create/configure slots (AFTER node is in tree)");
         result.AppendLine("   AddSlotToCollection");
         result.AppendLine("4. ConnectSlots /        — BOTH endpoint slots must exist");
@@ -661,12 +677,12 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             var descs = AgentContextCollector.GetAgentContext(prop, language);
             if (descs.Length == 0)
             {
-                // Auto-inject synthetic description for [EnumSlotCollection]-marked properties
-                if (prop.GetCustomAttribute<EnumSlotCollectionAttribute>() != null)
+                // Auto-inject synthetic description for SlotEnumerator<TSlot> properties
+                if (IsSlotEnumeratorType(prop.PropertyType))
                 {
                     var synth = language == AgentLanguages.Chinese
-                        ? "枚举驱动的 Slot 集合，由 SetEnumSlotCollection 工具管理，禁止手动增删"
-                        : "Enum-driven slot collection managed by SetEnumSlotCollection tool. Do not add/remove slots manually.";
+                        ? "SlotEnumerator — 通过 SetEnumSlotCollection 工具配置选择器类型（枚举或 bool），禁止手动增删"
+                        : "SlotEnumerator — use SetEnumSlotCollection tool to configure the selector type (enum or bool). Do not add/remove slots manually.";
                     entries.Add((prop.Name, prop.PropertyType.Name, new[] { synth }));
                 }
                 continue;
@@ -685,5 +701,12 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             }
             result.AppendLine();
         }
+    }
+
+    private static bool IsSlotEnumeratorType(Type type)
+    {
+        if (!type.IsGenericType) return false;
+        var def = type.GetGenericTypeDefinition();
+        return def.Name.StartsWith("SlotEnumerator`") && def.Namespace == "VeloxDev.WorkflowSystem";
     }
 }
