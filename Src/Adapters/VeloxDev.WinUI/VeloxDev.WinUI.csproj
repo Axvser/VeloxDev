@@ -12,7 +12,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WinUI</Title>
-		<Version>4.3.0</Version>
+		<Version>4.6.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinUI</Description>
 	</PropertyGroup>

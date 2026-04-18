@@ -7,7 +7,7 @@
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Avalonia</Title>
-		<Version>4.3.0</Version>
+		<Version>4.6.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + Avalonia</Description>
 		<AvaloniaVersion>11.1.0</AvaloniaVersion>
