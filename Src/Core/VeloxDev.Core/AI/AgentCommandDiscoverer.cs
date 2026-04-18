@@ -26,7 +26,7 @@ public static class AgentCommandDiscoverer
         /// <summary>
         /// Agent context descriptions (from <see cref="AgentContextAttribute"/>) for the command.
         /// </summary>
-        public IReadOnlyList<string> AgentDescriptions { get; set; } = Array.Empty<string>();
+        public IReadOnlyList<string> AgentDescriptions { get; set; } = [];
 
         /// <summary>
         /// Whether CanExecute currently returns true (checked with null parameter if no ParameterType).
@@ -55,7 +55,7 @@ public static class AgentCommandDiscoverer
         object target,
         AgentLanguages language = AgentLanguages.English)
     {
-        if (target == null) return Array.Empty<CommandDescriptor>();
+        if (target == null) return [];
 
         var type = target.GetType();
         var seen = new HashSet<string>(StringComparer.Ordinal);

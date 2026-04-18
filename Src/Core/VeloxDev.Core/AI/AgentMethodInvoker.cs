@@ -15,9 +15,9 @@ public static class AgentMethodInvoker
     {
         public string Name { get; set; } = string.Empty;
         public Type ReturnType { get; set; } = typeof(void);
-        public IReadOnlyList<ParameterDescriptor> Parameters { get; set; } = Array.Empty<ParameterDescriptor>();
+        public IReadOnlyList<ParameterDescriptor> Parameters { get; set; } = [];
         public bool IsStatic { get; set; }
-        public IReadOnlyList<string> AgentDescriptions { get; set; } = Array.Empty<string>();
+        public IReadOnlyList<string> AgentDescriptions { get; set; } = [];
     }
 
     /// <summary>
@@ -55,7 +55,7 @@ public static class AgentMethodInvoker
         bool includeStatic = false,
         Func<MethodInfo, bool>? filter = null)
     {
-        if (target == null) return Array.Empty<MethodDescriptor>();
+        if (target == null) return [];
 
         var type = target.GetType();
         var flags = BindingFlags.Public | BindingFlags.Instance;
@@ -75,17 +75,16 @@ public static class AgentMethodInvoker
                 Name = method.Name,
                 ReturnType = method.ReturnType,
                 IsStatic = method.IsStatic,
-                AgentDescriptions = method.GetCustomAttributes<AgentContextAttribute>(inherit: false)
+                AgentDescriptions = [.. method.GetCustomAttributes<AgentContextAttribute>(inherit: false)
                     .Where(a => a.Language == language)
-                    .Select(a => a.Context)
-                    .ToArray(),
-                Parameters = method.GetParameters().Select(p => new ParameterDescriptor
+                    .Select(a => a.Context)],
+                Parameters = [.. method.GetParameters().Select(p => new ParameterDescriptor
                 {
                     Name = p.Name ?? string.Empty,
                     ParameterType = p.ParameterType,
                     IsOptional = p.IsOptional,
                     DefaultValue = p.HasDefaultValue ? p.DefaultValue : null,
-                }).ToArray(),
+                })],
             };
 
             result.Add(desc);
@@ -107,7 +106,7 @@ public static class AgentMethodInvoker
             return new InvokeResult { Error = "Target is null." };
 
         var type = target.GetType();
-        args = args ?? Array.Empty<object?>();
+        args ??= [];
 
         // Find best matching method by name and parameter count
         var candidates = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
@@ -168,7 +167,7 @@ public static class AgentMethodInvoker
         if (type == null)
             return new InvokeResult { Error = "Type is null." };
 
-        args = args ?? Array.Empty<object?>();
+        args ??= [];
 
         var candidates = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Where(m => m.Name == methodName && !m.IsSpecialName)

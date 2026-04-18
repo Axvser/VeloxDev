@@ -74,6 +74,11 @@ public interface IWorkflowTreeViewModelHelper : IWorkflowHelper
     public event EventHandler<IWorkflowNodeViewModel>? NodeRemoved;
     public event EventHandler<IWorkflowLinkViewModel>? LinkAdded;
     public event EventHandler<IWorkflowLinkViewModel>? LinkRemoved;
+    public event EventHandler<IWorkflowViewModel>? VisibleItemAdded;
+    public event EventHandler<IWorkflowViewModel>? VisibleItemRemoved;
+
+    public ObservableCollection<IWorkflowViewModel> VisibleItems { get; set; }
+    public Viewport Viewport { get; set; }
 
     public void Install(IWorkflowTreeViewModel tree);
     public void Uninstall(IWorkflowTreeViewModel tree);
@@ -86,6 +91,7 @@ public interface IWorkflowTreeViewModelHelper : IWorkflowHelper
     public void SendConnection(IWorkflowSlotViewModel slot);
     public void ReceiveConnection(IWorkflowSlotViewModel slot);
     public void ResetVirtualLink();
+    public void Virtualize(Viewport viewport);
 
     public void Submit(IWorkflowActionPair actionPair);
     public void Redo();

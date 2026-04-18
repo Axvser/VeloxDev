@@ -66,6 +66,7 @@ public partial class WorkflowView : UserControl
                 _workflowViewModel = result;
                 DataContext = _workflowViewModel;
                 SubscribeAutoScroll(_workflowViewModel);
+                UpdateVisibleRegion();
 
                 MessageBox.Show($"工作流已从 {dialog.FileName} 加载成功。", "加载成功",
                     MessageBoxButton.OK, MessageBoxImage.Information);
@@ -139,6 +140,7 @@ public partial class WorkflowView : UserControl
         DataContext = _workflowViewModel;
         SubscribeAutoScroll(_workflowViewModel);
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
+        UpdateVisibleRegion();
     }
 
     private void OnSendToAgent(object sender, RoutedEventArgs e)
@@ -176,12 +178,33 @@ public partial class WorkflowView : UserControl
 
     private void OnAgentToolCalled()
     {
-        // Refresh on UI thread if needed
+        Dispatcher.InvokeAsync(UpdateVisibleRegion, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        UpdateVisibleRegion();
+    }
+
+    private void UpdateVisibleRegion()
+    {
+        if (RootScrollViewer is not { } viewer || _workflowViewModel is not { } vm) return;
+
+        var helper = vm.GetHelper();
+        helper.Virtualize(new Viewport(
+            viewer.HorizontalOffset - vm.Layout.ActualOffset.Horizontal,
+            viewer.VerticalOffset - vm.Layout.ActualOffset.Vertical,
+            viewer.ViewportWidth,
+            viewer.ViewportHeight));
     }
 
     private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        Dispatcher.InvokeAsync(() => ScrollToEnd(AgentLogScroller), System.Windows.Threading.DispatcherPriority.Background);
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (AgentLogScroller is not { Items.Count: > 0 } lb) return;
+            lb.ScrollIntoView(lb.Items[lb.Items.Count - 1]);
+        }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

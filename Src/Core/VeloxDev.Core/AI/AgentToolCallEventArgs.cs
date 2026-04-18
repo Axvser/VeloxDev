@@ -4,29 +4,22 @@ namespace VeloxDev.AI;
 /// Provides data for the <see cref="IAgentToolCallNotifier.ToolCalled"/> event,
 /// raised after each Agent tool invocation.
 /// </summary>
-public class AgentToolCallEventArgs : EventArgs
+public class AgentToolCallEventArgs(string toolName, string result, int callCount) : EventArgs
 {
     /// <summary>
     /// Name of the tool that was invoked.
     /// </summary>
-    public string ToolName { get; }
+    public string ToolName { get; } = toolName ?? throw new ArgumentNullException(nameof(toolName));
 
     /// <summary>
     /// JSON result returned by the tool.
     /// </summary>
-    public string Result { get; }
+    public string Result { get; } = result ?? string.Empty;
 
     /// <summary>
     /// Cumulative number of tool calls in the current session.
     /// </summary>
-    public int CallCount { get; }
-
-    public AgentToolCallEventArgs(string toolName, string result, int callCount)
-    {
-        ToolName = toolName ?? throw new ArgumentNullException(nameof(toolName));
-        Result = result ?? string.Empty;
-        CallCount = callCount;
-    }
+    public int CallCount { get; } = callCount;
 }
 
 /// <summary>

@@ -1,5 +1,3 @@
-using System;
-
 namespace VeloxDev.AI;
 
 /// <summary>
@@ -65,10 +63,13 @@ public sealed class SlotsEnumTypeAttribute : Attribute
     public SlotsEnumTypeAttribute(string collectionPropertyName, params Type[] allowedEnumTypes)
     {
         CollectionPropertyName = collectionPropertyName;
-        AllowedEnumTypes = allowedEnumTypes ?? Array.Empty<Type>();
+        AllowedEnumTypes = allowedEnumTypes ?? [];
         AllowedEnumTypeNames = new string[AllowedEnumTypes.Length];
         for (int i = 0; i < AllowedEnumTypes.Length; i++)
-            AllowedEnumTypeNames[i] = AllowedEnumTypes[i].FullName;
+        {
+            // Type.FullName can be null for some types; fall back to Name and ensure non-null.
+            AllowedEnumTypeNames[i] = AllowedEnumTypes[i]?.FullName ?? AllowedEnumTypes[i]?.Name ?? string.Empty;
+        }
     }
 
     /// <summary>
@@ -79,7 +80,7 @@ public sealed class SlotsEnumTypeAttribute : Attribute
     public SlotsEnumTypeAttribute(string collectionPropertyName, params string[] allowedEnumTypeNames)
     {
         CollectionPropertyName = collectionPropertyName;
-        AllowedEnumTypes = Array.Empty<Type>();
-        AllowedEnumTypeNames = allowedEnumTypeNames ?? Array.Empty<string>();
+        AllowedEnumTypes = [];
+        AllowedEnumTypeNames = allowedEnumTypeNames ?? [];
     }
 }

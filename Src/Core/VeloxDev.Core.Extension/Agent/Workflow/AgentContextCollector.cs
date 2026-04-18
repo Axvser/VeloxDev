@@ -173,7 +173,7 @@ public static class AgentContextCollector
             if (string.IsNullOrEmpty(propertyName))
             {
                 var value = item.Field.Name.TrimStart('_');
-                propertyName = char.ToUpper(value[0]) + value.Substring(1);
+                propertyName = char.ToUpper(value[0]) + value[1..];
             }
 
             string description = string.Join("; ", item.Contexts.Select((ctx, i) => $"[{i + 1}-{ctx}]"));

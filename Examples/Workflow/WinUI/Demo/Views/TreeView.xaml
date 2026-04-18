@@ -131,16 +131,17 @@
                                               FontSize="11"
                                               Margin="0,-6,0,-6" />
                             </Grid>
-                            <ScrollViewer MaxHeight="300" x:Name="AgentLogScroller"
-                                          VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding AgentLog}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding}" Foreground="#D8D8D8" TextWrapping="WrapWholeWords" Margin="0,2" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+                            <ListView MaxHeight="300" x:Name="AgentLogScroller"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                      ItemsSource="{Binding AgentLog}"
+                                      Background="Transparent" BorderThickness="0"
+                                      SelectionMode="None">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Foreground="#D8D8D8" TextWrapping="WrapWholeWords" Margin="0,2" />
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBox x:Name="AgentInput"
                                          Grid.Column="0"

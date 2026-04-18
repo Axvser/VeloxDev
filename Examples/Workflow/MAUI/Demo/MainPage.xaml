@@ -87,21 +87,20 @@
                             <Switch IsToggled="{Binding Tree.UseStreamingAgentResponse}" />
                         </HorizontalStackLayout>
                     </Grid>
-                    <ScrollView Grid.Row="1"
+                    <CollectionView Grid.Row="1"
                                     x:Name="AgentLogScroller"
                                     HeightRequest="180"
-                                    VerticalScrollBarVisibility="Always">
-                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Tree.AgentLog}">
-                            <BindableLayout.ItemTemplate>
-                                <DataTemplate>
-                                    <Label Text="{Binding .}"
-                                           FontFamily="OpenSansRegular"
-                                           TextColor="#D8D8D8"
-                                           Margin="0,2" />
-                                </DataTemplate>
-                            </BindableLayout.ItemTemplate>
-                        </VerticalStackLayout>
-                    </ScrollView>
+                                    VerticalScrollBarVisibility="Always"
+                                    ItemsSource="{Binding Tree.AgentLog}">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate>
+                                <Label Text="{Binding .}"
+                                       FontFamily="OpenSansRegular"
+                                       TextColor="#D8D8D8"
+                                       Margin="0,2" />
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
                     <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                         <Entry x:Name="AgentInput"
                                Placeholder="输入消息..."

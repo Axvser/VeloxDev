@@ -13,10 +13,9 @@ public static class AgentContextReader
     /// </summary>
     public static string[] GetContexts(Type type, AgentLanguages language)
     {
-        return type.GetCustomAttributes<AgentContextAttribute>(inherit: false)
+        return [.. type.GetCustomAttributes<AgentContextAttribute>(inherit: false)
             .Where(c => c.Language == language)
-            .Select(c => c.Context)
-            .ToArray();
+            .Select(c => c.Context)];
     }
 
     /// <summary>
@@ -24,10 +23,9 @@ public static class AgentContextReader
     /// </summary>
     public static string[] GetContexts(MemberInfo member, AgentLanguages language)
     {
-        return member.GetCustomAttributes<AgentContextAttribute>(inherit: false)
+        return [.. member.GetCustomAttributes<AgentContextAttribute>(inherit: false)
             .Where(c => c.Language == language)
-            .Select(c => c.Context)
-            .ToArray();
+            .Select(c => c.Context)];
     }
 
     /// <summary>

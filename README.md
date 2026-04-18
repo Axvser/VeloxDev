@@ -162,8 +162,8 @@ VeloxDev 的 Workflow 体系原生支持 AI Agent 接管，构建在核心层的
 - `AgentContextReader` / `AgentPropertyAccessor` / `AgentMethodInvoker` / `AgentCommandDiscoverer` / `AgentTypeResolver` — 通用反射能力（详见 [Agent Infrastructure](#-agent-infrastructure)）
 
 扩展层（`VeloxDev.Core.Extension`）提供完整的运行时接管能力：
-- 基于 **Microsoft Agent Framework (MAF)** 的 30+ 个 Function Calling 工具
-- 覆盖查询、变更、连接、执行、撤销重做、类型自省、状态快照、批量操作、克隆等全部场景
+- 基于 **Microsoft Agent Framework (MAF)** 的 59+ 个 Function Calling 工具
+- 覆盖查询、变更、连接、执行、撤销重做、类型自省、状态快照、批量操作、克隆、图遍历、自动布局、Slot 集合管理、连线管理、分析验证、复合操作等全部场景
 - 三层安全机制保护框架内部属性不被误修改
 - **预加载上下文**：注册的组件类型的 `[AgentContext]` 描述（含默认值）直接嵌入 Prompt，Agent 无需额外工具调用即可获知默认尺寸、属性语义等
 

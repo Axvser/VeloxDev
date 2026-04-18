@@ -234,7 +234,11 @@ namespace Demo.Views
 
         private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ScrollToEnd(AgentLogScroller));
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (AgentLogScroller is { Items.Count: > 0 } lv)
+                    lv.ScrollIntoView(lv.Items[lv.Items.Count - 1]);
+            });
         }
 
         private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

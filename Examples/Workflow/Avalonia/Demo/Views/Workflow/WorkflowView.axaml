@@ -75,7 +75,7 @@
 								Height="{Binding Layout.ActualSize.Height}"
 								HorizontalAlignment="Left"
 								VerticalAlignment="Top"
-								local:ViewPool.ItemsSource="{Binding VisibleItems}">
+								local:ViewPool.ItemsSource="{Binding Helper.VisibleItems}">
 							<Canvas.DataTemplates>
 								<!-- 依照优先级寻找数据模板 >> Self > Parent > App -->
 							</Canvas.DataTemplates>
@@ -97,7 +97,7 @@
 						<TextBlock Text="节点总数：" />
 						<TextBlock Text="{Binding Nodes.Count}"/>
 						<TextBlock Text="可见组件数：( Node / Link )" />
-						<TextBlock Text="{Binding VisibleItems.Count}" />
+						<TextBlock Text="{Binding Helper.VisibleItems.Count}" />
 						<!-- Agent 对话 -->
 						<Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
 							<StackPanel Spacing="6">
@@ -110,16 +110,22 @@
 												  FontSize="11"
 												  Margin="0,-6,0,-6"/>
 								</Grid>
-								<ScrollViewer MaxHeight="300" x:Name="AgentLogScroller"
-													VerticalScrollBarVisibility="Auto">
-										<ItemsControl ItemsSource="{Binding AgentLog}">
-											<ItemsControl.ItemTemplate>
-												<DataTemplate>
-													<TextBlock Text="{Binding .}" Foreground="#d8d8d8" TextWrapping="Wrap" Margin="0,2"/>
-												</DataTemplate>
-											</ItemsControl.ItemTemplate>
-										</ItemsControl>
-									</ScrollViewer>
+								<ListBox MaxHeight="300" x:Name="AgentLogScroller"
+										 VerticalAlignment="Stretch"
+										 ScrollViewer.VerticalScrollBarVisibility="Auto"
+										 ItemsSource="{Binding AgentLog}"
+										 Background="Transparent" BorderThickness="0">
+										<ListBox.ItemsPanel>
+											<ItemsPanelTemplate>
+												<VirtualizingStackPanel/>
+											</ItemsPanelTemplate>
+										</ListBox.ItemsPanel>
+										<ListBox.ItemTemplate>
+											<DataTemplate>
+												<TextBlock Text="{Binding .}" Foreground="#d8d8d8" TextWrapping="Wrap" Margin="0,2"/>
+											</DataTemplate>
+										</ListBox.ItemTemplate>
+									</ListBox>
 								<Grid ColumnDefinitions="*,Auto">
 									<TextBox x:Name="AgentInput"
 											 Grid.Column="0"

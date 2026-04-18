@@ -6,8 +6,8 @@ VeloxDev.Core.Extension 为 `VeloxDev.Core` 提供以下扩展能力：
 
 - **通用 Agent 工具集（AgentObjectToolkit）**：将任意 .NET 对象包装为 10 个 MAF `AITool`（属性读写、命令执行、方法调用），不限于工作流——适用于所有 .NET 项目。
 - **ViewModel JSON 序列化**：基于 `Newtonsoft.Json` 的序列化/反序列化，保留运行时类型、处理对象引用并支持复杂字典。
-- **Workflow Agent 语义上下文**：面向 Agent 的 Workflow 结构化文档（枚举、接口、组件），含预加载上下文机制。
-- **Workflow Agent 运行时接管（MAF Functions）**：基于 Microsoft Agent Framework 的完整工具集（30+ 个 AITool），让 Agent 在单个 Tree 内自由查询、修改、连接、执行、克隆工作流组件；包含类型自省、JSON Patch、状态快照、批量操作等。
+- **Workflow Agent 语义上下文**：面向 Agent 的 Workflow 结构化文档（枚举、接口、组件），含预加载上下文机制与坐标系说明。
+- **Workflow Agent 运行时接管（MAF Functions）**：基于 Microsoft Agent Framework 的完整工具集（**59+ 个 AITool**），让 Agent 在单个 Tree 内自由查询、修改、连接、执行、克隆、布局、遍历、分析工作流组件；包含类型自省、JSON Patch、状态快照、批量操作、图遍历、拓扑排序布局、Slot 集合管理、连线管理、复合工具等。
 
 > **与 Core 的关系**：Extension 中的反射操作（属性读写、命令发现执行、类型解析、上下文读取）委托给 `VeloxDev.Core.AI` 中的通用工具类。Extension 负责添加 JSON 序列化和 MAF `AITool` 封装。
 
@@ -18,12 +18,13 @@ VeloxDev.Core.Extension 为 `VeloxDev.Core` 提供以下扩展能力：
 - [0) 通用 Agent 工具集（AgentObjectToolkit）](#0-通用-agent-工具集agentobjecttoolkit)
 - [1) ViewModel JSON 序列化](#1-viewmodel-json-序列化)
 - [2) Workflow Agent 架构与原理](#2-workflow-agent-架构与原理)
-- [3) 快速上手](#3-快速上手)
-- [4) Scope 配置 API](#4-scope-配置-api)
-- [5) Prompt 系统](#5-prompt-系统)
-- [6) 完整 AITool 列表](#6-完整-aitool-列表)
-- [7) 安全机制](#7-安全机制)
-- [8) 协议对象](#8-协议对象)
+- [3) 坐标系](#3-坐标系)
+- [4) 快速上手](#4-快速上手)
+- [5) Scope 配置 API](#5-scope-配置-api)
+- [6) Prompt 系统](#6-prompt-系统)
+- [7) 完整 AITool 列表（59+ 工具）](#7-完整-aitool-列表59-工具)
+- [8) 安全机制](#8-安全机制)
+- [9) 协议对象](#9-协议对象)
 
 ---
 
@@ -67,7 +68,7 @@ var agent = client.AsAIAgent(
 | | `AgentObjectToolkit` | `WorkflowAgentToolkit` |
 |---|---|---|
 | 适用范围 | 任意 .NET 对象 | 绑定到 `IWorkflowTreeViewModel` |
-| 工具数量 | 10 个通用工具 | 30+ 个领域专属工具 |
+| 工具数量 | 10 个通用工具 | 59+ 个领域专属工具 |
 | 安全机制 | 可选属性黑名单 | 三层属性保护 |
 | 上下文系统 | 无（用户自定义 Prompt） | 内建完整 Prompt 系统 |
 | 状态追踪 | 无 | 快照 + 增量 Diff |
@@ -113,7 +114,7 @@ IWorkflowTreeViewModel (业务层工作流)
         │
         └─► ProvideTools() ──► WorkflowAgentToolkit
                                      │
-                                     └─► 30+ 个 AITool（MAF Function Calling）
+                                     └─► 59+ 个 AITool（MAF Function Calling）
                                               │
                                               ▼
                                      ChatClientAgent / IChatClient
@@ -124,16 +125,17 @@ IWorkflowTreeViewModel (业务层工作流)
 1. **Scope 隔离**：每个 `WorkflowAgentScope` 绑定一棵 `IWorkflowTreeViewModel`，Agent 只能操作该 Tree 内的组件。
 2. **命令优先（Command-First）**：所有对工作流的变更必须通过 `IVeloxCommand` 管道执行，不可直接修改属性。命令负责 UI 线程调度、撤销/重做追踪与视图同步。
 3. **渐进式上下文与预加载**：支持两种 Prompt 策略——完整上下文（`ProvideAllContexts`）适合短任务，渐进上下文（`ProvideProgressiveContextPrompt`）将所有注册组件的 `[AgentContext]` 类级描述（含默认尺寸、属性语义等）直接嵌入 Prompt，Agent 从第一轮对话就拥有完整的组件知识，无需额外工具调用。对于详细属性表和命令参数，Agent 按需调用 `GetComponentContext`。
-4. **Token 压缩**：所有 JSON 输出使用 `Formatting.None`，键名缩写（`i`/`t`/`x`/`y`/`w`/`h`），列表与详情分离。
+4. **Token 压缩**：所有 JSON 输出使用 `Formatting.None`，键名缩写（`i`/`t`/`x`/`y`/`w`/`h`），列表与详情分离。复合工具（`CreateAndConfigureNode`、`ConnectByProperty`、`ArrangeNodes` 等）可大幅减少工具调用轮次。
 5. **ID 稳定性**：通过 `IWorkflowIdentifiable.RuntimeId` 提供稳定标识，不因节点增删导致索引漂移。支持按索引和按 ID 两种寻址方式。
 6. **三层安全保护**：`ComponentPatcher` 拒绝修改框架管理属性、命令支撑属性和 Source Generator 管理的 Slot 属性。
+7. **坐标系一致性**：所有坐标工具（`MoveNode`、`SetNodePosition`、`AutoLayout`、`ArrangeNodes`）统一使用屏幕坐标系——原点左上角，X+ 向右，Y+ 向下。
 
 ### 核心组件
 
 | 组件 | 职责 |
 |------|------|
 | `WorkflowAgentScope` | 域配置：绑定 Tree、注册类型、生成 Prompt（含预加载上下文）与工具集 |
-| `WorkflowAgentToolkit` | 基于 `AIFunctionFactory.Create` 生成 30+ 个 `AITool`，覆盖全部操作 |
+| `WorkflowAgentToolkit` | 基于 `AIFunctionFactory.Create` 生成 59+ 个 `AITool`，覆盖全部操作 |
 | `AgentContextCollector` | 利用反射 + `[AgentContext]` 特性收集枚举/接口/类的结构化文档（基础读取委托至 Core `AgentContextReader`） |
 | `TypeIntrospector` | 按 FullTypeName 解析类型（委托至 Core `AgentTypeResolver`）、生成 JSON Schema |
 | `CommandInvoker` | 发现并调用组件上的命令，支持 JSON 参数反序列化 |
@@ -152,7 +154,34 @@ IWorkflowTreeViewModel (业务层工作流)
 
 ---
 
-## 3) 快速上手
+## 3) 坐标系
+
+工作流画布使用**屏幕坐标系**（与 WPF/MAUI Canvas 一致）：
+
+```
+原点 (0,0)
+  ┌──────────────────► X+（向右）
+  │
+  │    ┌────────┐
+  │    │  Node  │  (x=200, y=150)
+  │    └────────┘
+  │
+  ▼
+  Y+（向下）
+```
+
+| 自然语言 | 坐标操作 |
+|---------|----------|
+| 向右移动 | X 增大 |
+| 向左移动 | X 减小 |
+| 向下移动 | Y 增大 |
+| 向上移动 | Y 减小 |
+
+> ⚠️ 常见陷阱：Y 轴**向下为正**，与数学坐标系相反。"向上移动" = Y 值减小。
+
+---
+
+## 4) 快速上手
 
 ```csharp
 // 1. 创建 Scope：以一棵 Tree 作为 Agent 的操作域
@@ -184,7 +213,7 @@ var session = await agent.CreateSessionAsync();
 
 ---
 
-## 4) Scope 配置 API
+## 5) Scope 配置 API
 
 | 方法 | 说明 |
 |------|------|
@@ -196,12 +225,13 @@ var session = await agent.CreateSessionAsync();
 | `.WithToolCallCallback(cb)` | 注册每次工具调用后的回调 `(toolName, result, callCount)` |
 | `.ProvideAllContexts(lang)` | 生成完整语义 Prompt（框架文档 + 用户组件文档 + 安全规则） |
 | `.ProvideProgressiveContextPrompt(lang)` | 生成渐进式 Prompt（概览 + 发现流程，Agent 按需查询） |
-| `.ProvideTools()` | 返回 `IList<AITool>`，包含全部 30 个 MAF Functions |
+| `.WithTools(tools, prompt)` | 注册自定义 `AITool` 并附带 Prompt 描述，嵌入系统 Prompt |
+| `.ProvideTools()` | 返回 `IList<AITool>`，包含全部 59+ 个 MAF Functions（含自定义工具） |
 | `.CreateToolkit()` | 返回 `WorkflowAgentToolkit` 实例（高级用法） |
 
 ---
 
-## 5) Prompt 系统
+## 6) Prompt 系统
 
 ### ProvideAllContexts（完整上下文）
 
@@ -228,7 +258,7 @@ var session = await agent.CreateSessionAsync();
 
 ---
 
-## 6) 完整 AITool 列表
+## 7) 完整 AITool 列表（59+ 工具）
 
 ### 📖 查询（Query）
 
@@ -295,9 +325,95 @@ var session = await agent.CreateSessionAsync();
 |------|------|
 | `CloneNodes` | 克隆一组节点（含内部连线）到新位置，返回旧→新 ID 映射 |
 
+### 🎰 Slot 集合管理（EnumSlotCollection）
+
+| 工具 | 说明 |
+|------|------|
+| `ListSlotProperties` | 列出节点上所有 Slot 属性及 `EnumSlotCollection` 详情 |
+| `AddSlotToCollection` | 向 `EnumSlotCollection` 添加枚举值对应的 Slot |
+| `RemoveSlotFromCollection` | 从 `EnumSlotCollection` 移除指定枚举值的 Slot |
+| `SetEnumSlotCollection` | 一次性设置 `EnumSlotCollection` 的完整枚举值列表 |
+
+### 🔎 搜索（Search）
+
+| 工具 | 说明 |
+|------|------|
+| `FindNodes` | 按类型名、属性值等条件模糊搜索节点 |
+| `ResolveSlotId` | 按节点 ID + Slot 属性名解析 Slot 的 RuntimeId |
+
+### 🌐 图遍历（Graph Traversal）
+
+| 工具 | 说明 |
+|------|------|
+| `SearchForward` | 从指定节点沿正向连接搜索可达节点（BFS，可限深度） |
+| `SearchReverse` | 从指定节点沿反向连接搜索上游节点 |
+| `SearchAllRelative` | 双向搜索，返回所有与指定节点相关的节点 |
+| `IsConnected` | 判断两个节点之间是否存在路径 |
+| `FindPath` | 查找两个节点之间的最短路径 |
+
+### 📡 反向广播（Reverse Broadcast）
+
+| 工具 | 说明 |
+|------|------|
+| `ReverseBroadcastNode` | 执行节点的 ReverseBroadcastCommand（沿反向连线回传数据） |
+
+### 🔗 连线管理（Connection Management）
+
+| 工具 | 说明 |
+|------|------|
+| `DisconnectSlotsById` | 按 RuntimeId 断开连接 |
+| `DisconnectAllFromSlot` | 断开指定 Slot 的所有连线 |
+| `DisconnectAllFromNode` | 断开指定节点的所有连线 |
+| `ReplaceConnection` | 替换现有连线的一端 |
+
+### 📢 Slot Channel
+
+| 工具 | 说明 |
+|------|------|
+| `SetSlotChannel` | 设置 Slot 的通道（Channel）属性 |
+
+### 🔍 连线详情（Link Inspection）
+
+| 工具 | 说明 |
+|------|------|
+| `GetLinkDetail` | 获取连线详情（源 Slot、目标 Slot、Channel 等） |
+
+### ⚡ 批量执行（Bulk Operations）
+
+| 工具 | 说明 |
+|------|------|
+| `ExecuteWorkOnNodes` | 对多个节点批量执行 WorkCommand |
+| `BulkPatchNodes` | 对多个节点批量应用 JSON Patch |
+
+### 📐 布局（Layout）
+
+| 工具 | 说明 |
+|------|------|
+| `AlignNodes` | 将一组节点按指定方向对齐（左/右/上/下/居中） |
+| `DistributeNodes` | 将一组节点等间距分布 |
+| `AutoLayout` | 基于 Sugiyama 分层算法的自动布局（拓扑排序 → 层次分配 → 交叉最小化 → 坐标计算），坐标系：原点左上，X+ 向右，Y+ 向下 |
+
+### 📊 分析（Analytics）
+
+| 工具 | 说明 |
+|------|------|
+| `GetNodeStatistics` | 获取工作流统计信息（节点数、连线数、类型分布、连接度等） |
+| `ListCreatableTypes` | 列出所有已注册的可创建节点类型 |
+| `ValidateWorkflow` | 验证工作流完整性（孤立节点、断开连线、循环检测等） |
+
+### 🧩 复合工具（Composite — 减少工具调用轮次）
+
+| 工具 | 说明 |
+|------|------|
+| `ConnectByProperty` | 按节点 ID + 属性名连接 Slot（无需先解析 Slot 索引） |
+| `CreateAndConfigureNode` | 创建节点 + 设置位置 + 批量 Patch 属性，一步完成 |
+| `DeleteNodes` | 批量删除多个节点 |
+| `ArrangeNodes` | 批量移动/定位多个节点（坐标系：原点左上，X+ 向右，Y+ 向下） |
+| `GetFullTopology` | 一次返回完整工作流拓扑（所有节点 + 所有连线 + 统计信息） |
+
 ---
 
-## 7) 安全机制
+## 8) 安全机制
 
 `ComponentPatcher` 实现三层防护，确保 Agent 不会破坏框架内部状态：
 
@@ -326,7 +442,7 @@ var session = await agent.CreateSessionAsync();
 
 ---
 
-## 8) 协议对象
+## 9) 协议对象
 
 每个操作都有对应的可观察协议对象（`INotifyPropertyChanged`），可用于 UI 绑定或序列化：
 

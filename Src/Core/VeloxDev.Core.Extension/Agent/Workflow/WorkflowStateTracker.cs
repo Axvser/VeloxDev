@@ -12,16 +12,11 @@ namespace VeloxDev.AI.Workflow;
 /// diffs between snapshots, enabling the Agent to track changes with
 /// minimal context instead of re-reading the full state each turn.
 /// </summary>
-public sealed class WorkflowStateTracker
+public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
 {
-    private readonly IWorkflowTreeViewModel _tree;
+    private readonly IWorkflowTreeViewModel _tree = tree ?? throw new ArgumentNullException(nameof(tree));
     private JObject? _lastSnapshot;
     private long _version;
-
-    public WorkflowStateTracker(IWorkflowTreeViewModel tree)
-    {
-        _tree = tree ?? throw new ArgumentNullException(nameof(tree));
-    }
 
     /// <summary>
     /// Current snapshot version number (monotonically increasing).

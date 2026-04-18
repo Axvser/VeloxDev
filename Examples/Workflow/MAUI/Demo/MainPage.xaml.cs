@@ -57,7 +57,8 @@ namespace Demo
         private async void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             await Task.Yield();
-            await AgentLogScroller.ScrollToAsync(0, AgentLogScroller.ContentSize.Height, false);
+            if (_demo.Tree.AgentLog is { Count: > 0 } log)
+                AgentLogScroller.ScrollTo(log.Count - 1, position: ScrollToPosition.End, animate: false);
         }
 
         private void OnSendToAgent(object? sender, EventArgs e)

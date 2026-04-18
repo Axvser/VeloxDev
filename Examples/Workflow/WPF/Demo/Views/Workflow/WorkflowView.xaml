@@ -27,11 +27,20 @@
                                         Height="{Binding Size.Height}"
                                         IsEnabled="{Binding IsEnabled}"/>
         </DataTemplate>
+        <DataTemplate x:Key="LinkTemplate">
+            <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                   StartTop="{Binding Sender.Anchor.Vertical}"
+                                   EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                   EndTop="{Binding Receiver.Anchor.Vertical}"
+                                   CanRender="{Binding IsVisible}"
+                                   FlowColor="White"/>
+        </DataTemplate>
         <local:CustomTemplateSelector x:Key="NodeSelector"
                                       Controller="{StaticResource ControllerTemplate}"
                                       Simulator="{StaticResource NodeTemplate}"
                                       BoolSelector="{StaticResource BoolSelectorTemplate}"
-                                      EnumSelector="{StaticResource EnumSelectorTemplate}"/>
+                                      EnumSelector="{StaticResource EnumSelectorTemplate}"
+                                      Link="{StaticResource LinkTemplate}"/>
     </UserControl.Resources>
 
     <Grid>
@@ -53,13 +62,13 @@
                               PreviewMouseDown="OnCanvasPointerPressed"
                               MouseLeftButtonUp="OnPointerReleased"
                               PreviewMouseMove="OnPointerMoved"
-                              PreviewMouseUp="OnPointerReleased">
+                              PreviewMouseUp="OnPointerReleased"
+                              ScrollChanged="OnScrollChanged">
                     <Canvas x:Name="WorkflowCanvas"
                             Width="{Binding Layout.ActualSize.Width}"
                             Height="{Binding Layout.ActualSize.Height}"
                             Background="#0F172A">
-                    <ItemsControl ItemsSource="{Binding Nodes}"
-                                  Canvas.ZIndex="1"
+                    <ItemsControl ItemsSource="{Binding Helper.VisibleItems}"
                                   ItemTemplateSelector="{StaticResource NodeSelector}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -68,39 +77,12 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemContainerStyle>
                             <Style TargetType="ContentPresenter">
-                                <Setter Property="Canvas.Left" Value="{Binding Anchor.Horizontal}" />
-                                <Setter Property="Canvas.Top" Value="{Binding Anchor.Vertical}" />
-                                <Setter Property="Canvas.ZIndex" Value="{Binding Anchor.Layer}" />
+                                <Setter Property="Canvas.Left" Value="{Binding Anchor.Horizontal, FallbackValue=0}" />
+                                <Setter Property="Canvas.Top" Value="{Binding Anchor.Vertical, FallbackValue=0}" />
+                                <Setter Property="Canvas.ZIndex" Value="{Binding Anchor.Layer, FallbackValue=-1}" />
                             </Style>
                         </ItemsControl.ItemContainerStyle>
                     </ItemsControl>
-
-                    <ItemsControl ItemsSource="{Binding Links}" Canvas.ZIndex="-1">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <Canvas />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                                       StartTop="{Binding Sender.Anchor.Vertical}"
-                                                       EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                                       EndTop="{Binding Receiver.Anchor.Vertical}"
-                                                       CanRender="{Binding IsVisible}"
-                                                       FlowColor="White"/>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <local:BezierCurveView DataContext="{Binding VirtualLink}"
-                                           StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                           StartTop="{Binding Sender.Anchor.Vertical}"
-                                           EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                           EndTop="{Binding Receiver.Anchor.Vertical}"
-                                           CanRender="{Binding IsVisible}"
-                                           FlowColor="White"
-                                           IsVirtual="True"/>
                     </Canvas>
                 </ScrollViewer>
             </Border>
@@ -118,7 +100,7 @@
                     <TextBlock Margin="0,12,0,0" Text="节点总数：" Foreground="White" />
                     <TextBlock Text="{Binding Nodes.Count}" Foreground="White" />
                     <TextBlock Margin="0,8,0,0" Text="可见组件数：( Node / Link )" Foreground="White" />
-                    <TextBlock Text="{Binding VisibleItems.Count}" Foreground="White" />
+                    <TextBlock Text="{Binding Helper.VisibleItems.Count}" Foreground="White" />
 
                     <!-- Agent 对话 -->
                     <Border Margin="0,12,0,0"
@@ -140,16 +122,18 @@
                                           Foreground="White"
                                           VerticalAlignment="Center" />
                             </Grid>
-                            <ScrollViewer MaxHeight="300" x:Name="AgentLogScroller"
-                                          VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding AgentLog}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding .}" Foreground="#D8D8D8" TextWrapping="Wrap" Margin="0,2" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+                            <ListBox MaxHeight="300" x:Name="AgentLogScroller"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                     ItemsSource="{Binding AgentLog}"
+                                     Background="Transparent" BorderThickness="0"
+                                     VirtualizingStackPanel.IsVirtualizing="True"
+                                     VirtualizingStackPanel.VirtualizationMode="Recycling">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding .}" Foreground="#D8D8D8" TextWrapping="Wrap" Margin="0,2" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                             <Grid Margin="0,6,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />

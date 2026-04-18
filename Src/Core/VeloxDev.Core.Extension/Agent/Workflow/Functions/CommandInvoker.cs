@@ -20,7 +20,7 @@ public static class CommandInvoker
     /// </summary>
     public static IReadOnlyList<CommandDescriptor> DiscoverCommands(object component)
     {
-        if (component == null) return Array.Empty<CommandDescriptor>();
+        if (component == null) return [];
 
         var result = new List<CommandDescriptor>();
         var type = component.GetType();
@@ -67,7 +67,7 @@ public static class CommandInvoker
             {
                 Name = prop.Name,
                 ParameterType = paramAttr?.ParameterType,
-                Descriptions = contexts.Select(c => new KeyValuePair<AgentLanguages, string>(AgentLanguages.English, c)).ToList(),
+                Descriptions = [.. contexts.Select(c => new KeyValuePair<AgentLanguages, string>(AgentLanguages.English, c))],
             });
         }
 
@@ -92,8 +92,7 @@ public static class CommandInvoker
         if (prop == null)
             return JsonConvert.SerializeObject(new { status = "error", message = $"Command '{commandName}' not found on type '{type.FullName}'." });
 
-        var command = prop.GetValue(component) as ICommand;
-        if (command == null)
+        if (prop.GetValue(component) is not ICommand command)
             return JsonConvert.SerializeObject(new { status = "error", message = $"Command '{commandName}' is null." });
 
         // Resolve parameter
@@ -173,5 +172,5 @@ public class CommandDescriptor
 {
     public string Name { get; set; } = string.Empty;
     public Type? ParameterType { get; set; }
-    public IReadOnlyList<KeyValuePair<AgentLanguages, string>> Descriptions { get; set; } = Array.Empty<KeyValuePair<AgentLanguages, string>>();
+    public IReadOnlyList<KeyValuePair<AgentLanguages, string>> Descriptions { get; set; } = [];
 }

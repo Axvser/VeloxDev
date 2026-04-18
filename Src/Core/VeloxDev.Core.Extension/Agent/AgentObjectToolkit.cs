@@ -19,11 +19,17 @@ namespace VeloxDev.AI;
 /// <c>WorkflowAgentToolkit</c> instead.
 /// </para>
 /// </summary>
-public sealed class AgentObjectToolkit : IAgentToolCallNotifier
+/// <remarks>
+/// Creates a toolkit that wraps the given target object.
+/// </remarks>
+/// <param name="target">The object to expose to the Agent.</param>
+/// <param name="language">Language for <see cref="AgentContextAttribute"/> descriptions.</param>
+/// <param name="rejectedProperties">Property names that should be rejected when patching.</param>
+public sealed class AgentObjectToolkit(object target, AgentLanguages language = AgentLanguages.English, ISet<string>? rejectedProperties = null) : IAgentToolCallNotifier
 {
-    private readonly object _target;
-    private readonly AgentLanguages _language;
-    private readonly ISet<string>? _rejectedProperties;
+    private readonly object _target = target ?? throw new ArgumentNullException(nameof(target));
+    private readonly AgentLanguages _language = language;
+    private readonly ISet<string>? _rejectedProperties = rejectedProperties;
     private int _toolCallCount;
 
     /// <inheritdoc />
@@ -35,19 +41,6 @@ public sealed class AgentObjectToolkit : IAgentToolCallNotifier
     public int? MaxToolCalls { get; set; }
 
     /// <summary>
-    /// Creates a toolkit that wraps the given target object.
-    /// </summary>
-    /// <param name="target">The object to expose to the Agent.</param>
-    /// <param name="language">Language for <see cref="AgentContextAttribute"/> descriptions.</param>
-    /// <param name="rejectedProperties">Property names that should be rejected when patching.</param>
-    public AgentObjectToolkit(object target, AgentLanguages language = AgentLanguages.English, ISet<string>? rejectedProperties = null)
-    {
-        _target = target ?? throw new ArgumentNullException(nameof(target));
-        _language = language;
-        _rejectedProperties = rejectedProperties;
-    }
-
-    /// <summary>
     /// Creates all generic AI tools for the target object.
     /// Every tool is wrapped with <see cref="TrackedAIFunction"/> so that
     /// <see cref="IAgentToolCallNotifier.ToolCalled"/> is raised after each call.
@@ -57,8 +50,8 @@ public sealed class AgentObjectToolkit : IAgentToolCallNotifier
         AITool T(Delegate method, string name)
             => new TrackedAIFunction(AIFunctionFactory.Create(method, name), this);
 
-        return new List<AITool>
-        {
+        return
+        [
             T(GetComponentInfo, nameof(GetComponentInfo)),
             T(ListProperties, nameof(ListProperties)),
             T(GetProperty, nameof(GetProperty)),
@@ -69,19 +62,14 @@ public sealed class AgentObjectToolkit : IAgentToolCallNotifier
             T(ListMethods, nameof(ListMethods)),
             T(InvokeMethod, nameof(InvokeMethod)),
             T(ResolveType, nameof(ResolveType)),
-        };
+        ];
     }
 
     // ────────────────────────── Tracking ──────────────────────────
 
-    private sealed class TrackedAIFunction : DelegatingAIFunction
+    private sealed class TrackedAIFunction(AIFunction inner, AgentObjectToolkit toolkit) : DelegatingAIFunction(inner)
     {
-        private readonly AgentObjectToolkit _toolkit;
-
-        public TrackedAIFunction(AIFunction inner, AgentObjectToolkit toolkit) : base(inner)
-        {
-            _toolkit = toolkit;
-        }
+        private readonly AgentObjectToolkit _toolkit = toolkit;
 
         protected override async ValueTask<object?> InvokeCoreAsync(
             AIFunctionArguments arguments, CancellationToken cancellationToken)
@@ -253,7 +241,7 @@ public sealed class AgentObjectToolkit : IAgentToolCallNotifier
         try
         {
             var arr = JArray.Parse(jsonArgs);
-            args = arr.Select(t => t.Type == JTokenType.Null ? null : t.ToObject<object>()).ToArray();
+            args = [.. arr.Select(t => t.Type == JTokenType.Null ? null : t.ToObject<object>())];
         }
         catch (Exception ex)
         {

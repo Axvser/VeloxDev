@@ -258,14 +258,13 @@ public partial class WorkflowView : UserControl
 
         UpdateGridDecorator();
 
-        if (vm.GetHelper() is AgentHelper helper)
-        {
-            helper.Virtualize(new Viewport(
+        var viewport = new Viewport(
                 viewer.Offset.X - vm.Layout.ActualOffset.Horizontal,
                 viewer.Offset.Y - vm.Layout.ActualOffset.Vertical,
                 viewer.Viewport.Width,
-                viewer.Viewport.Height));
-        }
+                viewer.Viewport.Height);
+
+        vm.GetHelper().Viewport = viewport;
     }
 
     private void LoadNetworkDemo(object? sender, RoutedEventArgs e)
@@ -337,7 +336,7 @@ public partial class WorkflowView : UserControl
         {
             if (_workflowViewModel is not { } vm) return;
             if (vm.GetHelper() is not AgentHelper helper) return;
-            foreach (var node in helper.Component?.VisibleItems ?? [])
+            foreach (var node in helper.VisibleItems ?? [])
             {
                 if (node is IWorkflowNodeViewModel n)
                 {
@@ -350,12 +349,18 @@ public partial class WorkflowView : UserControl
 
     private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        Dispatcher.UIThread.Post(() => ScrollToEnd(AgentLogScroller), DispatcherPriority.Background);
+        Dispatcher.UIThread.Post(() => ScrollListToEnd(AgentLogScroller), DispatcherPriority.Background);
     }
 
     private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         ScrollToEnd(ExecutionLogScroller);
+    }
+
+    private static void ScrollListToEnd(ListBox? listBox)
+    {
+        if (listBox is null || listBox.ItemCount == 0) return;
+        listBox.ScrollIntoView(listBox.ItemCount - 1);
     }
 
     private static void ScrollToEnd(ScrollViewer? scroller)

@@ -19,7 +19,6 @@ public partial class TreeViewModel
     [AgentContext(AgentLanguages.Chinese, "画布布局上下文")]
     [VeloxProperty] private CanvasLayout layout = new();
 
-    [VeloxProperty] private ObservableCollection<IWorkflowViewModel> _visibleItems = [];
     [VeloxProperty] private ObservableCollection<string> executionLog = [];
     [VeloxProperty] private ObservableCollection<string> agentLog = [];
     [VeloxProperty] private bool isWorkflowRunning = false;
@@ -69,19 +68,54 @@ public partial class TreeViewModel
     /// prevent <see cref="AskAsync"/> from executing at all when the
     /// required runtime type cannot be resolved.
     /// </summary>
+    private static readonly char[] s_sentenceBreaks = ['\n', '\r', '。', '！', '？', '.', '!', '?', '；', ';'];
+
     private async Task AskStreamingCoreAsync(AgentHelper helper, string message)
     {
-        AgentLog.Add("🤖 ");
-        var lastIndex = AgentLog.Count - 1;
+        var buffer = new System.Text.StringBuilder();
+        var isFirstLine = true;
 
         await foreach (var response in helper.Agent!.RunStreamingAsync(
             message, helper.Session!))
         {
             var text = response.Text;
-            if (!string.IsNullOrEmpty(text))
+            if (string.IsNullOrEmpty(text))
+                continue;
+
+            foreach (var ch in text)
             {
-                AgentLog[lastIndex] += text;
+                buffer.Append(ch);
+
+                if (Array.IndexOf(s_sentenceBreaks, ch) >= 0)
+                {
+                    FlushStreamingBuffer(buffer, ref isFirstLine);
+                }
             }
+        }
+
+        // flush remaining text
+        if (buffer.Length > 0)
+        {
+            FlushStreamingBuffer(buffer, ref isFirstLine);
+        }
+    }
+
+    private void FlushStreamingBuffer(System.Text.StringBuilder buffer, ref bool isFirstLine)
+    {
+        var line = buffer.ToString().TrimEnd('\r', '\n');
+        buffer.Clear();
+
+        if (string.IsNullOrWhiteSpace(line))
+            return;
+
+        if (isFirstLine)
+        {
+            AgentLog.Add($"🤖 {line}");
+            isFirstLine = false;
+        }
+        else
+        {
+            AgentLog.Add($"    {line}");
         }
     }
 

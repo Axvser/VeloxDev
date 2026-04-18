@@ -18,7 +18,7 @@ public static class AgentPropertyAccessor
         public bool CanRead { get; set; }
         public bool CanWrite { get; set; }
         public object? CurrentValue { get; set; }
-        public IReadOnlyList<string> AgentDescriptions { get; set; } = Array.Empty<string>();
+        public IReadOnlyList<string> AgentDescriptions { get; set; } = [];
     }
 
     /// <summary>
@@ -45,7 +45,7 @@ public static class AgentPropertyAccessor
         Func<PropertyInfo, bool>? filter = null,
         bool includeValues = false)
     {
-        if (target == null) return Array.Empty<PropertyDescriptor>();
+        if (target == null) return [];
 
         var type = target.GetType();
         var result = new List<PropertyDescriptor>();
@@ -60,10 +60,9 @@ public static class AgentPropertyAccessor
                 PropertyType = prop.PropertyType,
                 CanRead = prop.CanRead,
                 CanWrite = prop.CanWrite,
-                AgentDescriptions = prop.GetCustomAttributes<AgentContextAttribute>(inherit: false)
+                AgentDescriptions = [.. prop.GetCustomAttributes<AgentContextAttribute>(inherit: false)
                     .Where(a => a.Language == language)
-                    .Select(a => a.Context)
-                    .ToArray(),
+                    .Select(a => a.Context)],
             };
 
             if (includeValues && prop.CanRead)
@@ -141,7 +140,7 @@ public static class AgentPropertyAccessor
         IReadOnlyDictionary<string, object?> properties,
         ISet<string>? rejected = null)
     {
-        if (target == null) return Array.Empty<SetResult>();
+        if (target == null) return [];
 
         var results = new List<SetResult>();
 
