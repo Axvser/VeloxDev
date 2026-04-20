@@ -10,7 +10,7 @@
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core</Title>
-		<Version>4.6.0</Version>
+		<Version>4.7.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core provides the shared abstractions, source generators, and reusable infrastructure behind VeloxDev, including MVVM, Workflow, Transition, Theme, MonoBehaviour, AOT Reflection, and AOP support for modern .NET applications.</Description>
 		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
@@ -23,7 +23,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" PrivateAssets="all" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="4.7.0-alpha7" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="4.7.0" />
 	</ItemGroup>
 
 	<ItemGroup>
