@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+
+		<!-- Roslyn 项目配置 -->
+		<IsRoslynComponent>true</IsRoslynComponent>
+		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+		<IncludeBuildOutput>false</IncludeBuildOutput>
+		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+		<AnalyzerLanguage>cs</AnalyzerLanguage>
+	</PropertyGroup>
+
+	<!-- 打包到 analyzers 文件夹 -->
+	<ItemGroup>
+		<None Include="bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\..\..\Src\Generators\PartialCraft.CSharp\PartialCraft.CSharp.csproj"/>
+	</ItemGroup>
+
+</Project>

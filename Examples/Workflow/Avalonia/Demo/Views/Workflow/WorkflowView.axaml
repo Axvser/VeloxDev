@@ -47,6 +47,30 @@
 										RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
 		</DataTemplate>
 		<!-- 连接线模板 -->
+		<DataTemplate DataType="vm:LinkViewModel">
+			<Panel>
+				<local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+									   StartTop="{Binding Sender.Anchor.Vertical}"
+									   EndLeft="{Binding Receiver.Anchor.Horizontal}"
+									   EndTop="{Binding Receiver.Anchor.Vertical}"
+									   CanRender="{Binding IsVisible}"
+									   IsVisible="{Binding !UsePolyline}"
+									   Width="{Binding $parent[Canvas].Bounds.Width}"
+									   Height="{Binding $parent[Canvas].Bounds.Height}"
+									   RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"
+									   ZIndex="-1"/>
+				<local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+										 StartTop="{Binding Sender.Anchor.Vertical}"
+										 EndLeft="{Binding Receiver.Anchor.Horizontal}"
+										 EndTop="{Binding Receiver.Anchor.Vertical}"
+										 CanRender="{Binding IsVisible}"
+										 IsVisible="{Binding UsePolyline}"
+										 Width="{Binding $parent[Canvas].Bounds.Width}"
+										 Height="{Binding $parent[Canvas].Bounds.Height}"
+										 RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"
+										 ZIndex="-1"/>
+			</Panel>
+		</DataTemplate>
 		<DataTemplate DataType="workflow:IWorkflowLinkViewModel">
 			<local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
 								   StartTop="{Binding Sender.Anchor.Vertical}"

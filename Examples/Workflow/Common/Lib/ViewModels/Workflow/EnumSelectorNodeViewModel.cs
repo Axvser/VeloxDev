@@ -14,7 +14,6 @@ public partial class EnumSelectorNodeViewModel
     public EnumSelectorNodeViewModel()
     {
         InitializeWorkflow();
-        InputSlot = new();
         OutputSlots.SetSelector(typeof(NetworkRequestMethod));
     }
 
@@ -22,7 +21,6 @@ public partial class EnumSelectorNodeViewModel
     [AgentContext(AgentLanguages.English, "Input slot (receiver). After creating the node you MUST connect an upstream output slot to this slot; routing only fires when data arrives here. Reference it with prop='InputSlot'.")]
     [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese, "枚举驱动的输出口集合，通过 enumTypeName 配置选择器类型以生成输出口。允许类型：NetworkRequestMethod、SlotChannel")]
     [VeloxProperty]
     [SlotSelectors(typeof(NetworkRequestMethod), typeof(SlotChannel))]
     public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }

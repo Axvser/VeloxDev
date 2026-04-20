@@ -72,7 +72,6 @@ public partial class NodeView : UserControl
         }
 
         _lastPosition = currentPosition;
-        SyncSlots();
         e.Handled = true;
     }
 
@@ -102,7 +101,7 @@ public partial class NodeView : UserControl
     {
         if (e.PropertyName is nameof(NodeViewModel.Anchor) or nameof(NodeViewModel.Size) or nameof(NodeViewModel.InputSlot) or nameof(NodeViewModel.OutputSlot) or nameof(NodeViewModel.HasInputSlot) or nameof(NodeViewModel.HasOutputSlot))
         {
-            Dispatcher.Invoke(SyncSlots);
+            Dispatcher.InvokeAsync(SyncSlots, System.Windows.Threading.DispatcherPriority.Render);
         }
     }
 

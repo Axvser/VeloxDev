@@ -72,7 +72,6 @@ namespace Demo.Views.Workflow
             }
 
             _lastPosition = currentPosition;
-            SyncOutputSlot();
             e.Handled = true;
         }
 
@@ -102,7 +101,7 @@ namespace Demo.Views.Workflow
         {
             if (e.PropertyName is nameof(ControllerViewModel.Anchor) or nameof(ControllerViewModel.Size) or nameof(ControllerViewModel.OutputSlot))
             {
-                Dispatcher.Invoke(SyncOutputSlot);
+                Dispatcher.InvokeAsync(SyncOutputSlot, System.Windows.Threading.DispatcherPriority.Render);
             }
         }
 

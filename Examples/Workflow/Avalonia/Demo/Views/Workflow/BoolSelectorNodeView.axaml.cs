@@ -1,6 +1,7 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Demo.ViewModels;
 using System;
@@ -20,10 +21,11 @@ public partial class BoolSelectorNodeView : UserControl
     public BoolSelectorNodeView()
     {
         InitializeComponent();
+        PART_OutputSlotsList.LayoutUpdated += (_, _) => SyncSlotLayouts();
         AttachedToVisualTree += (_, _) =>
         {
             _parentCanvas = this.GetVisualAncestors().OfType<Canvas>().FirstOrDefault();
-            SyncSlotLayouts();
+            Dispatcher.UIThread.Post(SyncSlotLayouts, DispatcherPriority.Render);
         };
         DataContextChanged += OnDataContextChanged;
         PropertyChanged += (_, e) =>
@@ -52,7 +54,7 @@ public partial class BoolSelectorNodeView : UserControl
             or nameof(IWorkflowNodeViewModel.Size)
             or "InputSlot" or "OutputSlots")
         {
-            SyncSlotLayouts();
+            Dispatcher.UIThread.Post(SyncSlotLayouts, DispatcherPriority.Render);
         }
     }
 
@@ -79,7 +81,6 @@ public partial class BoolSelectorNodeView : UserControl
         var offset = new Offset(current.X - _lastPoint.X, current.Y - _lastPoint.Y);
         _lastPoint = current;
         vm.MoveCommand.Execute(offset);
-        SyncSlotLayouts();
         e.Handled = true;
     }
 

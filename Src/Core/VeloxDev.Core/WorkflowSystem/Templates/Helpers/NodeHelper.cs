@@ -65,9 +65,21 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper
         CancellationToken ct)
         => Task.FromResult(true);
 
-    public virtual void SetAnchor(Anchor anchor) => Component?.StandardSetAnchor(anchor);
-    public virtual void SetSize(Size size) => Component?.StandardSetSize(size);
-    public virtual void Move(Offset offset) => Component?.StandardMove(offset);
+    public virtual void SetAnchor(Anchor anchor)
+    {
+        Component?.StandardSetAnchor(anchor);
+        Component?.Parent?.GetHelper().MarkDirty();
+    }
+    public virtual void SetSize(Size size)
+    {
+        Component?.StandardSetSize(size);
+        Component?.Parent?.GetHelper().MarkDirty();
+    }
+    public virtual void Move(Offset offset)
+    {
+        Component?.StandardMove(offset);
+        Component?.Parent?.GetHelper().MarkDirty();
+    }
 
     public virtual void Delete() => Component?.StandardDelete();
 

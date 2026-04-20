@@ -1,4 +1,5 @@
 using VeloxDev.AI;
+using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
@@ -9,5 +10,6 @@ public partial class LinkViewModel
 {
     public LinkViewModel() => InitializeWorkflow();
 
-    // …… 自由扩展您的连接线视图模型
+    [AgentContext(AgentLanguages.Chinese,"True表示使用折线连接两个节点")]
+    [VeloxProperty] private bool usePolyline = true;
 }

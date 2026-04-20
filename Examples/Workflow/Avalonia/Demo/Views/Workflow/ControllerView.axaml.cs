@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Demo.ViewModels;
 using System;
@@ -20,7 +21,7 @@ public partial class ControllerView : UserControl
     public ControllerView()
     {
         InitializeComponent();
-        AttachedToVisualTree += (_, _) => SyncOutputSlot();
+        AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(SyncOutputSlot, DispatcherPriority.Render);
         DataContextChanged += OnDataContextChanged;
         PropertyChanged += (_, e) =>
         {
@@ -71,9 +72,8 @@ public partial class ControllerView : UserControl
         if (DataContext is ControllerViewModel nodeContext)
         {
             nodeContext.MoveCommand.Execute(new Offset(delta.X, delta.Y));
-        }
-        _lastPosition = currentPosition;
-        SyncOutputSlot();
+            }
+            _lastPosition = currentPosition;
     }
 
     private void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
@@ -102,7 +102,7 @@ public partial class ControllerView : UserControl
     {
         if (e.PropertyName is "Anchor" or "Size" or nameof(ControllerViewModel.OutputSlot))
         {
-            SyncOutputSlot();
+            Dispatcher.UIThread.Post(SyncOutputSlot, DispatcherPriority.Render);
         }
     }
 

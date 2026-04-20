@@ -78,11 +78,27 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                                    StartTop="{Binding Sender.Anchor.Vertical}"
-                                                    EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                                    EndTop="{Binding Receiver.Anchor.Vertical}"
-                                                    CanRender="{Binding IsVisible}" />
+                                    <Grid>
+                                        <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                                        StartTop="{Binding Sender.Anchor.Vertical}"
+                                                        EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                                        EndTop="{Binding Receiver.Anchor.Vertical}"
+                                                        CanRender="{Binding IsVisible}">
+                                            <local:LinkView.Style>
+                                                <Style TargetType="local:LinkView">
+                                                    <Style.Setters>
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </Style.Setters>
+                                                </Style>
+                                            </local:LinkView.Style>
+                                        </local:LinkView>
+                                        <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                                                  StartTop="{Binding Sender.Anchor.Vertical}"
+                                                                  EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                                                  EndTop="{Binding Receiver.Anchor.Vertical}"
+                                                                  CanRender="{Binding IsVisible}"
+                                                                  Visibility="Collapsed"/>
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

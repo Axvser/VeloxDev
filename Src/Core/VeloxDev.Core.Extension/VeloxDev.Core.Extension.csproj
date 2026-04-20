@@ -32,9 +32,19 @@
 
 	<ItemGroup>
 	  <None Update="README.md">
-	    <Pack>True</Pack>
-	    <PackagePath>\</PackagePath>
+		<Pack>True</Pack>
+		<PackagePath>\</PackagePath>
 	  </None>
+	</ItemGroup>
+
+	<!-- Embedded prompt resources: Resources/{System}/{LangCode}/Skills|References/{Name}.md
+		 and Resources/{System}/Scripts/{Name}.*
+		 WithCulture=false prevents MSBuild from treating "en" / "zh" directory segments
+		 as satellite culture codes, which would corrupt logical resource names. -->
+	<ItemGroup>
+	  <EmbeddedResource Include="Resources\**\*">
+		<WithCulture>false</WithCulture>
+	  </EmbeddedResource>
 	</ItemGroup>
 
 </Project>

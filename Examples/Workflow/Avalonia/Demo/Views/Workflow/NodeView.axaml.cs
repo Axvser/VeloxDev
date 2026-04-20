@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using System;
 using System.ComponentModel;
@@ -22,7 +23,7 @@ public partial class NodeView : UserControl
         AttachedToVisualTree += (_, _) =>
         {
             _parentCanvas = this.GetVisualAncestors().OfType<Canvas>().FirstOrDefault();
-            SyncSlotLayouts();
+            Dispatcher.UIThread.Post(SyncSlotLayouts, DispatcherPriority.Render);
         };
         DataContextChanged += OnDataContextChanged;
         PropertyChanged += (_, e) =>
@@ -91,7 +92,7 @@ public partial class NodeView : UserControl
     {
         if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size) or "InputSlot" or "OutputSlot")
         {
-            SyncSlotLayouts();
+            Dispatcher.UIThread.Post(SyncSlotLayouts, DispatcherPriority.Render);
         }
     }
 

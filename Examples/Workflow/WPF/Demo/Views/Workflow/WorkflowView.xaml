@@ -7,6 +7,7 @@
              mc:Ignorable="d"
              d:DesignHeight="720" d:DesignWidth="1280">
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView Width="{Binding Size.Width}"
                             Height="{Binding Size.Height}"
@@ -28,12 +29,31 @@
                                         IsEnabled="{Binding IsEnabled}"/>
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
-            <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                   StartTop="{Binding Sender.Anchor.Vertical}"
-                                   EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                   EndTop="{Binding Receiver.Anchor.Vertical}"
-                                   CanRender="{Binding IsVisible}"
-                                   FlowColor="White"/>
+            <Grid>
+                <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                       StartTop="{Binding Sender.Anchor.Vertical}"
+                                       EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                       EndTop="{Binding Receiver.Anchor.Vertical}"
+                                       CanRender="{Binding IsVisible}"
+                                       FlowColor="White">
+                    <local:BezierCurveView.Style>
+                        <Style TargetType="local:BezierCurveView">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding UsePolyline}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </local:BezierCurveView.Style>
+                </local:BezierCurveView>
+                <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                         StartTop="{Binding Sender.Anchor.Vertical}"
+                                         EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                         EndTop="{Binding Receiver.Anchor.Vertical}"
+                                         CanRender="{Binding IsVisible}"
+                                         LineColor="White"
+                                         Visibility="{Binding UsePolyline, Converter={StaticResource BoolToVisibility}}"/>
+            </Grid>
         </DataTemplate>
         <local:CustomTemplateSelector x:Key="NodeSelector"
                                       Controller="{StaticResource ControllerTemplate}"

@@ -70,7 +70,6 @@ namespace Demo.Views
             var delta = new Offset(currentPosition.X - _lastPosition.X, currentPosition.Y - _lastPosition.Y);
             controller.MoveCommand.Execute(delta);
             _lastPosition = currentPosition;
-            SyncOutputSlot();
         }
 
         private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
@@ -99,7 +98,7 @@ namespace Demo.Views
         {
             if (e.PropertyName is nameof(ControllerViewModel.Anchor) or nameof(ControllerViewModel.Size) or nameof(ControllerViewModel.OutputSlot))
             {
-                DispatcherQueue.TryEnqueue(SyncOutputSlot);
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, SyncOutputSlot);
             }
         }
 

@@ -76,8 +76,8 @@ public class AgentHelper : TreeHelper<TreeViewModel>
                 "RefreshVisualSlotAnchors – Call after SetEnumSlotCollection or any operation that adds/removes slots to force the UI to re-sync all visible slot anchor positions.",
                 AIFunctionFactory.Create(helper.RefreshVisualSlotAnchors, nameof(RefreshVisualSlotAnchors)));
 
-        // 工作流框架级别上下文 + 开发者自定义级别上下文
-        var contextPrompt = scope.ProvideAllContexts(AgentLanguages.English);
+        // 渐进式上下文
+        var contextPrompt = scope.ProvideProgressiveContextPrompt(AgentLanguages.English);
 
         // 创建MAF工具集：Agent可通过这些Functions自由操作Tree内部的所有组件
         var tools = scope.ProvideTools();
@@ -104,5 +104,10 @@ public class AgentHelper : TreeHelper<TreeViewModel>
     {
         VisualRefreshRequested?.Invoke();
         return "{\"ok\":true}";
+    }
+
+    public override IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    {
+        return new LinkViewModel() { Sender = sender, Receiver = receiver };
     }
 }

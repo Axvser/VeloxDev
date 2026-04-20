@@ -97,4 +97,6 @@ public interface IWorkflowTreeViewModelHelper : IWorkflowHelper
     public void Redo();
     public void Undo();
     public void ClearHistory();
+
+    public void MarkDirty();
 }

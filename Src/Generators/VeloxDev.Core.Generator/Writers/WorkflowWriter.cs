@@ -363,16 +363,22 @@ namespace VeloxDev.Generators.Writers
                     public override {{GetWorkflowHelperInterfaceName(model.WorkflowType)}} Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
                 """);
 
-            // For Node subclasses, also override InitializeWorkflow to create subclass slots/enumerators
+            // For Node subclasses, also override InitializeWorkflow to create subclass slots/enumerators.
+            // Only emit the override when this subclass actually declares slot/enumerator members;
+            // an empty override would call base.InitializeWorkflow() redundantly.
             if (model.WorkflowType == 2)
             {
-                var initBody = GenerateInitializeWorkflowBody(model.TargetClassSymbol, isOverride: true);
-                sb.AppendLine($$"""
-                    public override void InitializeWorkflow()
-                    {
-                        {{initBody}}
-                    }
-                    """);
+                var members = GetNodeInitMembers(model.TargetClassSymbol);
+                if (members.Count > 0)
+                {
+                    var initBody = GenerateInitializeWorkflowBody(model.TargetClassSymbol, isOverride: true);
+                    sb.AppendLine($$"""
+                        public override void InitializeWorkflow()
+                        {
+                            {{initBody}}
+                        }
+                        """);
+                }
             }
         }
 
@@ -1202,6 +1208,7 @@ namespace VeloxDev.Generators.Writers
 
         private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
         {
+            // 1. Direct interface-symbol comparison (works when the interface is already visible).
             INamedTypeSymbol? slotInterface = Symbol != null
                 ? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.IWorkflowSlotViewModel")
                 : null;
@@ -1218,6 +1225,21 @@ namespace VeloxDev.Generators.Writers
                     i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).EndsWith("IWorkflowSlotViewModel")))
                     return true;
             }
+
+            // 2. Name-based fallback: walk the type hierarchy looking for a [WorkflowBuilder.SlotAttribute].
+            //    This handles user-defined SlotViewModel subclasses whose IWorkflowSlotViewModel
+            //    implementation is injected by the generator in the same compilation pass and
+            //    therefore not yet visible via AllInterfaces at scan time.
+            var current = typeSymbol as INamedTypeSymbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                if (current.GetAttributes().Any(a =>
+                    a.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                     .Contains("WorkflowBuilder.SlotAttribute") == true))
+                    return true;
+                current = current.BaseType;
+            }
+
             return false;
         }
 
@@ -1302,20 +1324,21 @@ namespace VeloxDev.Generators.Writers
             {
                 if (m.IsSlotEnumerator)
                 {
-                    // If the user already assigned a SlotEnumerator in the constructor, just Install it.
-                    // Otherwise create a new instance first, then Install.
+                    // Assign through the property so that OnXxxChanging/Changed notifications fire.
+                    // If the user pre-assigned the enumerator in their constructor the equality guard
+                    // in the property setter will short-circuit, so this is always safe.
                     var nonNullableType = m.FullTypeName.TrimEnd('?');
-                    sb.AppendLine($"if ({m.FieldName} is null) {m.FieldName} = new {nonNullableType}();");
+                    sb.AppendLine($"if ({m.FieldName} is null) {m.PropertyName} = new {nonNullableType}();");
                     sb.AppendLine($"{m.FieldName}.Install(this);");
                 }
                 else if (m.IsWorkflowSlot)
                 {
-                    // Mirror the SlotEnumerator.Install pattern: directly set Parent and add to Slots.
-                    // Never route through CreateSlotCommand/OnWorkflowSlotAdded here — those paths
-                    // require node.Parent != null (i.e. the node already added to a tree), which is
-                    // never the case when InitializeWorkflow is called from the constructor.
+                    // Assign through the property so that OnXxxChanging/Changed notifications fire.
+                    // Parent assignment and Slots registration still use the backing field directly
+                    // because at this point node.Parent == null — we must NOT go through
+                    // CreateSlotCommand/OnWorkflowSlotAdded (those require the node to be in a tree).
                     var nonNullableType = m.FullTypeName.TrimEnd('?');
-                    sb.AppendLine($"if ({m.FieldName} is null) {m.FieldName} = CreateWorkflowSlot<{nonNullableType}>();");
+                    sb.AppendLine($"if ({m.FieldName} is null) {m.PropertyName} = CreateWorkflowSlot<{nonNullableType}>();");
                     sb.AppendLine($"{m.FieldName}.Parent = this;");
                     sb.AppendLine($"if (!Slots.Contains({m.FieldName})) Slots.Add({m.FieldName});");
                 }

@@ -2,6 +2,7 @@
 using System.Collections.Specialized;
 using System.Diagnostics;
 using VeloxDev.MVVM;
+using VeloxDev.TimeLine;
 using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem;
@@ -18,11 +19,31 @@ public class TreeHelper : TreeHelper<IWorkflowTreeViewModel>
 /// [ Component Helper ] Provide standard supports for Tree Component
 /// </summary>
 /// <typeparam name="T">The type of the Tree ViewModel that this helper is designed for.</typeparam>
+[MonoBehaviour]
 public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
     where T : class, IWorkflowTreeViewModel
 {
+    public TreeHelper()
+    {
+        if (!MonoBehaviourManager.IsRunning)
+        {
+            MonoBehaviourManager.Start();
+        }
+    }
+
     public T? Component { get; protected set; }
     private IReadOnlyCollection<IVeloxCommand> commands = [];
+
+    private bool isDirty = false;
+
+    partial void Update(FrameEventArgs e)
+    {
+        if (isDirty)
+        {
+            Component?.Virtualize(Viewport);
+            isDirty = false;
+        }
+    }
 
     [VeloxProperty] private ObservableCollection<IWorkflowViewModel> visibleItems = [];
     partial void OnItemAddedToVisibleItems(IEnumerable<IWorkflowViewModel> items)
@@ -66,6 +87,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
         {
             Debug.Fail("EnableMap did not return a non-negative value as expected. Please check the implementation of EnableMap in the IWorkflowTreeViewModel.");
         }
+        InitializeMonoBehaviour();
     }
 
     public virtual void Uninstall(IWorkflowTreeViewModel tree)
@@ -79,6 +101,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
             Debug.WriteLine("ClearMap did not return 5 as expected. Please check the implementation of ClearMap in the IWorkflowTreeViewModel.");
         }
         VisibleItems.Clear();
+        CloseMonoBehaviour();
     }
 
     public virtual void Closing() => commands.StandardClosing();
@@ -118,6 +141,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
                     if (item is IWorkflowNodeViewModel node)
                     {
                         OnNodeAdded(node);
+                        isDirty = true;
                     }
                 }
                 break;
@@ -128,6 +152,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
                     if (item is IWorkflowNodeViewModel node)
                     {
                         OnNodeRemoved(node);
+                        isDirty = true;
                     }
                 }
                 break;
@@ -148,6 +173,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
                     if (item is IWorkflowLinkViewModel link)
                     {
                         OnLinkAdded(link);
+                        isDirty = true;
                     }
                 }
                 break;
@@ -158,6 +184,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
                     if (item is IWorkflowLinkViewModel link)
                     {
                         OnLinkRemoved(link);
+                        isDirty = true;
                     }
                 }
                 break;
@@ -196,5 +223,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
 
     public virtual void ClearHistory()
         => Component?.StandardClearHistory();
+
+    public virtual void MarkDirty() => isDirty = true;
     #endregion
 }

@@ -1,10 +1,12 @@
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
 using Windows.Foundation;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views;
 
@@ -13,7 +15,7 @@ public sealed partial class LinkView : UserControl
     public LinkView()
     {
         InitializeComponent();
-        IsHitTestVisible = false;
+        IsHitTestVisible = true;
         Canvas.SetZIndex(this, -100);
 
         // 创建主容器
@@ -37,6 +39,10 @@ public sealed partial class LinkView : UserControl
         container.Children.Add(_path);
         container.Children.Add(_arrowPath);
         this.Content = container;
+
+        PointerEntered += (_, _) => { IsHighlighted = true; Focus(FocusState.Pointer); };
+        PointerExited += (_, _) => IsHighlighted = false;
+        PointerMoved += OnHoverPointerMoved;
     }
 
     private readonly Path _path;
@@ -121,6 +127,15 @@ public sealed partial class LinkView : UserControl
         set => SetValue(IsVirtualProperty, value);
     }
 
+    public static readonly DependencyProperty IsHighlightedProperty =
+        DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnPositionChanged));
+
+    public bool IsHighlighted
+    {
+        get => (bool)GetValue(IsHighlightedProperty);
+        set => SetValue(IsHighlightedProperty, value);
+    }
+
     private static void OnPositionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var control = (LinkView)d;
@@ -185,8 +200,11 @@ public sealed partial class LinkView : UserControl
         pathGeometry.Figures.Add(pathFigure);
 
         // 设置线条样式
-        _path.Stroke = new SolidColorBrush(Colors.Cyan);
-        _path.StrokeThickness = 2;
+        var lineColor = IsHighlighted ? Microsoft.UI.Colors.OrangeRed : Colors.Cyan;
+        var strokeThickness = IsHighlighted ? 3.5 : 2.0;
+        _path.Stroke = new SolidColorBrush(lineColor);
+        _path.StrokeThickness = strokeThickness;
+        _arrowPath.Fill = new SolidColorBrush(lineColor);
 
         if (IsVirtual)
         {
@@ -256,5 +274,58 @@ public sealed partial class LinkView : UserControl
         arrowGeometry.Figures.Add(arrowFigure);
         _arrowPath.Data = arrowGeometry;
         _arrowPath.Fill = new SolidColorBrush(Colors.Violet);
+    }
+
+    private void OnHoverPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        var pt = e.GetCurrentPoint(this).Position;
+        bool over = HitTestCurve(pt);
+        if (over && !IsHighlighted) { IsHighlighted = true; Focus(FocusState.Pointer); }
+        else if (!over && IsHighlighted) IsHighlighted = false;
+    }
+
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key == Windows.System.VirtualKey.Delete && IsHighlighted)
+        {
+            if (DataContext is IWorkflowLinkViewModel vm)
+                vm.DeleteCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private bool HitTestCurve(Point pt)
+    {
+        const double hitRadius = 6.0;
+        const int segs = 40;
+        double diffx = EndLeft - StartLeft, diffy = EndTop - StartTop;
+        var cp1 = new Point(StartLeft + diffx * 0.618, StartTop + diffy * 0.1);
+        var cp2 = new Point(EndLeft - diffx * 0.618, EndTop - diffy * 0.1);
+        var p0 = new Point(StartLeft, StartTop);
+        var p3 = new Point(EndLeft, EndTop);
+        Point Eval(double t) {
+            double mt = 1 - t;
+            return new Point(
+                mt*mt*mt*p0.X + 3*mt*mt*t*cp1.X + 3*mt*t*t*cp2.X + t*t*t*p3.X,
+                mt*mt*mt*p0.Y + 3*mt*mt*t*cp1.Y + 3*mt*t*t*cp2.Y + t*t*t*p3.Y);
+        }
+        var prev = Eval(0);
+        for (int i = 1; i <= segs; i++) {
+            var next = Eval((double)i / segs);
+            if (DistSeg(pt, prev, next) <= hitRadius) return true;
+            prev = next;
+        }
+        return false;
+    }
+
+    private static double DistSeg(Point p, Point a, Point b)
+    {
+        double abx = b.X - a.X, aby = b.Y - a.Y;
+        double len2 = abx * abx + aby * aby;
+        if (len2 < 0.0001) return Math.Sqrt((p.X-a.X)*(p.X-a.X)+(p.Y-a.Y)*(p.Y-a.Y));
+        double t = Math.Clamp(((p.X-a.X)*abx + (p.Y-a.Y)*aby) / len2, 0, 1);
+        double px = a.X + t*abx - p.X, py = a.Y + t*aby - p.Y;
+        return Math.Sqrt(px*px + py*py);
     }
 }

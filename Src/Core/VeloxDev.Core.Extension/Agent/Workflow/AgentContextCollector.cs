@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Windows.Input;
+using VeloxDev.AI;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.AI.Workflow;
@@ -205,6 +206,27 @@ public static class AgentContextCollector
                     ? "SlotEnumerator — 通过 SetEnumSlotCollection 工具配置选择器类型（枚举或 bool），禁止手动增删"
                     : "SlotEnumerator — use SetEnumSlotCollection to configure the selector type (enum or bool). Do not add/remove slots manually.";
             }
+
+            // If the property has [SlotSelectors], append allowed types to the description
+            // at prompt-generation time so the Agent knows before any tool call.
+            if (item.IsSlotEnumerator)
+            {
+                var selectorsAttr = item.Property.GetCustomAttribute<SlotSelectorsAttribute>();
+                if (selectorsAttr != null)
+                {
+                    var names = new System.Collections.Generic.HashSet<string>();
+                    foreach (var t in selectorsAttr.AllowedEnumTypes) names.Add(t.FullName ?? t.Name);
+                    foreach (var n in selectorsAttr.AllowedEnumTypeNames) names.Add(n);
+                    if (names.Count > 0)
+                    {
+                        var allowedList = string.Join(", ", names);
+                        description += language == AgentLanguages.Chinese
+                            ? $"; [允许的选择器类型 (allowedSelectorTypes): {allowedList}]"
+                            : $"; [allowedSelectorTypes: {allowedList}]";
+                    }
+                }
+            }
+
             result.AppendLine($"| {item.Property.PropertyType.FullName} | {item.Property.Name} | {description} |");
         }
 

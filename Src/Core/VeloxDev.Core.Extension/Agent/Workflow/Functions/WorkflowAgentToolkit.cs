@@ -458,7 +458,7 @@ public sealed class WorkflowAgentToolkit
         [Description("JSON patch object, e.g. '{\"Title\":\"New\"}'.")] string jsonPatch)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var result = ComponentPatcher.ApplyPatch(node!, jsonPatch);
+        var result = ComponentPatcher.ApplyPatchWithUndo(node!, jsonPatch, Tree);
         NudgeIfEnumSlotNode(node!);
         return result;
     }
@@ -470,7 +470,7 @@ public sealed class WorkflowAgentToolkit
     {
         var component = FindComponentById(runtimeId);
         if (component == null) return Error($"Component '{runtimeId}' not found.");
-        var result = ComponentPatcher.ApplyPatch(component, jsonPatch);
+        var result = ComponentPatcher.ApplyPatchWithUndo(component, jsonPatch, Tree);
         if (component is IWorkflowNodeViewModel patchedNode)
             NudgeIfEnumSlotNode(patchedNode);
         return result;
@@ -870,8 +870,12 @@ public sealed class WorkflowAgentToolkit
             }
             if (Enum.TryParse<SlotChannel>(channel, true, out var ch))
                 slot.Channel = ch;
-            col.Add(slot);
-            NudgeIfEnumSlotNode(node!);
+
+            var capturedNode = node!;
+            Tree.GetHelper().Submit(new WorkflowActionPair(
+                () => { col.Add(slot); NudgeIfEnumSlotNode(capturedNode); },
+                () => { col.Remove(slot); NudgeIfEnumSlotNode(capturedNode); }));
+
             return JsonConvert.SerializeObject(new
             {
                 status = "ok",
@@ -903,8 +907,12 @@ public sealed class WorkflowAgentToolkit
         {
             if (col[i] is IWorkflowSlotViewModel slot && GetComponentId(slot) == slotRuntimeId)
             {
-                col.RemoveAt(i);
-                NudgeIfEnumSlotNode(node!);
+                var capturedIndex = i;
+                var capturedSlot = slot;
+                var capturedNode = node!;
+                Tree.GetHelper().Submit(new WorkflowActionPair(
+                    () => { col.Remove(capturedSlot); NudgeIfEnumSlotNode(capturedNode); },
+                    () => { col.Insert(capturedIndex, capturedSlot); NudgeIfEnumSlotNode(capturedNode); }));
                 return Ok($"Removed slot '{slotRuntimeId}' from '{propertyName}'. Count={col.Count}.");
             }
         }
@@ -936,8 +944,10 @@ public sealed class WorkflowAgentToolkit
                 return Error($"'{fullEnumTypeName}' is not an enum or bool type.");
 
             // Validate against [SlotSelectors] allowed types if present on the enumerator property.
+            // Framework-owned enum types (SlotChannel, SlotState, …) are always valid regardless of
+            // any developer-specified whitelist — they must never be blocked by [SlotSelectors].
             var selectorsAttr2 = prop.GetCustomAttribute<SlotSelectorsAttribute>();
-            if (selectorsAttr2 != null)
+            if (selectorsAttr2 != null && !WorkflowAgentScope.IsFrameworkEnum(selectorType))
             {
                 if (!IsEnumTypeAllowed(selectorsAttr2, selectorType))
                 {
@@ -948,9 +958,14 @@ public sealed class WorkflowAgentToolkit
 
             var setSelector = enumerator.GetType().GetMethod("SetSelector", [typeof(Type)]);
             if (setSelector == null) return Error($"SetSelector method not found on SlotEnumerator.");
-            setSelector.Invoke(enumerator, [selectorType]);
 
-            NudgeNode(node);
+            // Capture old selector type for undo — read SelectorType property if available
+            var oldSelectorType = enumerator.GetType().GetProperty("SelectorType")?.GetValue(enumerator) as Type;
+            var capturedEnumerator = enumerator;
+            var capturedNode = node!;
+            Tree.GetHelper().Submit(new WorkflowActionPair(
+                () => { setSelector.Invoke(capturedEnumerator, [selectorType]); NudgeNode(capturedNode); },
+                () => { if (oldSelectorType != null) setSelector.Invoke(capturedEnumerator, [oldSelectorType]); NudgeNode(capturedNode); }));
 
             var enumNames = selectorType == typeof(bool)
                 ? ["False", "True"]
@@ -1647,7 +1662,7 @@ public sealed class WorkflowAgentToolkit
                 errors.Add($"Index {idx} out of range.");
                 continue;
             }
-            var r = ComponentPatcher.ApplyPatch(Tree.Nodes[idx], jsonPatch);
+            var r = ComponentPatcher.ApplyPatchWithUndo(Tree.Nodes[idx], jsonPatch, Tree);
             if (r.Contains("error"))
                 errors.Add($"Node {idx}: {r}");
             else

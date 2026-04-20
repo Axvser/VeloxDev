@@ -1,6 +1,10 @@
+using Demo.ViewModels;
+using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
@@ -12,11 +16,16 @@ public partial class BezierCurveView : UserControl
     public BezierCurveView()
     {
         InitializeComponent();
-        IsHitTestVisible = false;
+        IsHitTestVisible = true;
+        Focusable = true;
         Panel.SetZIndex(this, -100);
         _lastRenderTime = DateTime.Now;
 
         RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.HighQuality);
+
+        MouseEnter += (_, _) => { IsHighlighted = true; Focus(); };
+        MouseLeave += (_, _) => IsHighlighted = false;
+        MouseMove += OnHoverMouseMove;
     }
 
     #region 原有的依赖属性
@@ -97,6 +106,19 @@ public partial class BezierCurveView : UserControl
     {
         get => (bool)GetValue(IsVirtualProperty);
         set => SetValue(IsVirtualProperty, value);
+    }
+
+    public static readonly DependencyProperty IsHighlightedProperty =
+        DependencyProperty.Register(
+            nameof(IsHighlighted),
+            typeof(bool),
+            typeof(BezierCurveView),
+            new PropertyMetadata(false, OnRenderPropertyChanged));
+
+    public bool IsHighlighted
+    {
+        get => (bool)GetValue(IsHighlightedProperty);
+        set => SetValue(IsHighlightedProperty, value);
     }
 
     #endregion
@@ -383,11 +405,19 @@ public partial class BezierCurveView : UserControl
     /// </summary>
     private void DrawNormalLine(DrawingContext context, PathGeometry pathGeometry)
     {
-        var brush = new SolidColorBrush(FlowColor);
-        var pen = new Pen(brush, 2);
-        context.DrawGeometry(null, pen, pathGeometry);
+        var color = IsHighlighted ? Colors.OrangeRed : FlowColor;
+        var thickness = IsHighlighted ? 3.5 : 2.0;
+        var brush = new SolidColorBrush(color);
+        var pen = new Pen(brush, thickness);
 
-        DrawArrowhead(context, pathGeometry, new Pen(Brushes.Red, 2));
+        if (IsHighlighted)
+        {
+            var glowPen = new Pen(new SolidColorBrush(Color.FromArgb(60, color.R, color.G, color.B)), thickness + 6);
+            context.DrawGeometry(null, glowPen, pathGeometry);
+        }
+
+        context.DrawGeometry(null, pen, pathGeometry);
+        DrawArrowhead(context, pathGeometry, pen);
     }
 
     private PathGeometry CreateBezierGeometry()
@@ -481,6 +511,67 @@ public partial class BezierCurveView : UserControl
         {
             StopAnimationLoop();
         }
+    }
+
+    #endregion
+
+    #region Interaction
+
+    private void OnHoverMouseMove(object sender, MouseEventArgs e)
+    {
+        var pt = e.GetPosition(this);
+        bool over = HitTestCurve(pt);
+        if (over && !IsHighlighted) { IsHighlighted = true; Focus(); }
+        else if (!over && IsHighlighted) IsHighlighted = false;
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key == Key.Delete && IsHighlighted)
+        {
+            if (DataContext is IWorkflowLinkViewModel vm)
+                vm.DeleteCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private bool HitTestCurve(Point pt)
+    {
+        const double hitRadius = 6.0;
+        const int segments = 40;
+        var geo = CreateBezierGeometry();
+        if (geo == null) return false;
+        var diffx = EndLeft - StartLeft;
+        var diffy = EndTop - StartTop;
+        var cp1 = new Point(StartLeft + diffx * 0.618, StartTop + diffy * 0.1);
+        var cp2 = new Point(EndLeft - diffx * 0.618, EndTop - diffy * 0.1);
+        var p0 = new Point(StartLeft, StartTop);
+        var p3 = new Point(EndLeft, EndTop);
+        Point Eval(double t)
+        {
+            double mt = 1 - t;
+            return new Point(
+                mt * mt * mt * p0.X + 3 * mt * mt * t * cp1.X + 3 * mt * t * t * cp2.X + t * t * t * p3.X,
+                mt * mt * mt * p0.Y + 3 * mt * mt * t * cp1.Y + 3 * mt * t * t * cp2.Y + t * t * t * p3.Y);
+        }
+        var prev = Eval(0);
+        for (int i = 1; i <= segments; i++)
+        {
+            var next = Eval((double)i / segments);
+            if (DistSeg(pt, prev, next) <= hitRadius) return true;
+            prev = next;
+        }
+        return false;
+    }
+
+    private static double DistSeg(Point p, Point a, Point b)
+    {
+        var abx = b.X - a.X; var aby = b.Y - a.Y;
+        double len2 = abx * abx + aby * aby;
+        if (len2 < 0.0001) return (p - a).Length;
+        double t = Math.Clamp(((p.X - a.X) * abx + (p.Y - a.Y) * aby) / len2, 0, 1);
+        return (p - new Point(a.X + t * abx, a.Y + t * aby)).Length;
     }
 
     #endregion

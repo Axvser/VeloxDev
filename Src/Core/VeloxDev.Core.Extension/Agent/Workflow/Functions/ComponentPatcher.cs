@@ -165,6 +165,140 @@ public static class ComponentPatcher
     }
 
     /// <summary>
+    /// Applies a JSON patch to a target object, recording the operation in the
+    /// workflow tree's undo/redo history via <see cref="IWorkflowTreeViewModelHelper.Submit"/>.
+    /// Each successfully patched property is captured as an undo-able action pair.
+    /// </summary>
+    /// <param name="target">The object to patch.</param>
+    /// <param name="jsonPatch">A JSON object string, e.g. {"Title":"New","Delay":500}.</param>
+    /// <param name="tree">The tree whose undo stack should receive the action.</param>
+    /// <returns>A JSON result string describing successes and failures.</returns>
+    public static string ApplyPatchWithUndo(object target, string jsonPatch, IWorkflowTreeViewModel tree)
+    {
+        if (target == null)
+            return JsonConvert.SerializeObject(new { status = "error", message = "Target is null." });
+        if (tree == null)
+            return ApplyPatch(target, jsonPatch);
+
+        JObject patch;
+        try
+        {
+            patch = JObject.Parse(jsonPatch);
+        }
+        catch (Exception ex)
+        {
+            return JsonConvert.SerializeObject(new { status = "error", message = $"Invalid JSON: {ex.Message}" });
+        }
+
+        var type = target.GetType();
+        var results = new JArray();
+        int successCount = 0;
+
+        foreach (var kv in patch)
+        {
+            var propName = kv.Key;
+            var prop = type.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance);
+            if (prop == null || !prop.CanWrite)
+            {
+                results.Add(new JObject { ["property"] = propName, ["status"] = "skipped", ["reason"] = prop == null ? "not found" : "read-only" });
+                continue;
+            }
+
+            if (FrameworkManagedProperties.Contains(propName))
+            {
+                results.Add(new JObject
+                {
+                    ["property"] = propName,
+                    ["status"] = "rejected",
+                    ["reason"] = $"'{propName}' is framework-managed.",
+                });
+                continue;
+            }
+
+            var commandName = FindBackingCommand(type, propName);
+            if (commandName != null)
+            {
+                results.Add(new JObject
+                {
+                    ["property"] = propName,
+                    ["status"] = "rejected",
+                    ["reason"] = $"Property '{propName}' has a backing command '{commandName}'. Use that command instead.",
+                });
+                continue;
+            }
+
+            if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
+            {
+                results.Add(new JObject
+                {
+                    ["property"] = propName,
+                    ["status"] = "rejected",
+                    ["reason"] = $"'{propName}' is a slot property managed by the source generator.",
+                });
+                continue;
+            }
+
+            if (prop.GetCustomAttribute<SlotSelectorsAttribute>() != null)
+            {
+                results.Add(new JObject
+                {
+                    ["property"] = propName,
+                    ["status"] = "rejected",
+                    ["reason"] = $"'{propName}' is marked with [SlotSelectors]. Use the 'SetEnumSlotCollection' tool instead.",
+                });
+                continue;
+            }
+
+            try
+            {
+                object? newValue;
+                if (prop.PropertyType == typeof(Type))
+                {
+                    var typeName = kv.Value?.ToString();
+                    if (string.IsNullOrEmpty(typeName))
+                        newValue = null;
+                    else
+                    {
+                        newValue = TypeIntrospector.ResolveType(typeName!);
+                        if (newValue == null)
+                        {
+                            results.Add(new JObject { ["property"] = propName, ["status"] = "error", ["reason"] = $"Type '{typeName}' not found." });
+                            continue;
+                        }
+                    }
+                }
+                else
+                {
+                    newValue = kv.Value?.DeserializeToType(prop.PropertyType);
+                }
+
+                // Capture old value for undo before submitting
+                var oldValue = prop.GetValue(target);
+                var capturedProp = prop;
+                var capturedTarget = target;
+
+                tree.GetHelper().Submit(new WorkflowActionPair(
+                    () => capturedProp.SetValue(capturedTarget, newValue),
+                    () => capturedProp.SetValue(capturedTarget, oldValue)));
+
+                successCount++;
+                results.Add(new JObject { ["property"] = propName, ["status"] = "ok" });
+            }
+            catch (Exception ex)
+            {
+                results.Add(new JObject { ["property"] = propName, ["status"] = "error", ["reason"] = ex.Message });
+            }
+        }
+
+        return JsonConvert.SerializeObject(new
+        {
+            status = successCount > 0 ? "ok" : "error",
+            message = $"{successCount}/{patch.Count} properties patched.",
+            details = results,
+        }, Formatting.Indented);
+    }
+
+    /// <summary>
     /// Delegates to <see cref="AgentCommandDiscoverer.FindBackingCommand"/> in Core.
     /// </summary>
     private static string? FindBackingCommand(Type type, string propertyName)

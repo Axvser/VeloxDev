@@ -58,7 +58,6 @@ public partial class BoolSelectorNodeView : UserControl
         var delta = current - _lastPosition;
         vm.MoveCommand.Execute(new Offset(delta.X, delta.Y));
         _lastPosition = current;
-        SyncSlots();
         e.Handled = true;
     }
 
@@ -90,7 +89,7 @@ public partial class BoolSelectorNodeView : UserControl
             or nameof(IWorkflowNodeViewModel.Size)
             or "InputSlot" or "OutputSlots")
         {
-            Dispatcher.Invoke(SyncSlots);
+            Dispatcher.InvokeAsync(SyncSlots, System.Windows.Threading.DispatcherPriority.Render);
         }
     }
 

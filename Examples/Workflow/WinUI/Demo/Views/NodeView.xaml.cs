@@ -70,7 +70,6 @@ namespace Demo.Views
             var delta = new Offset(currentPosition.X - _lastPosition.X, currentPosition.Y - _lastPosition.Y);
             node.MoveCommand.Execute(delta);
             _lastPosition = currentPosition;
-            SyncSlots();
         }
 
         private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
@@ -106,7 +105,7 @@ namespace Demo.Views
                 or nameof(NodeViewModel.HasExecutionOrder)
                 or nameof(NodeViewModel.HasWorkLoad))
             {
-                DispatcherQueue.TryEnqueue(SyncSlots);
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, SyncSlots);
             }
         }
 

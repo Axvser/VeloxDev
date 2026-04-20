@@ -51,7 +51,6 @@ public sealed partial class BoolSelectorNodeView : UserControl
         var delta = new Offset(current.X - _lastPosition.X, current.Y - _lastPosition.Y);
         vm.MoveCommand.Execute(delta);
         _lastPosition = current;
-        SyncSlots();
     }
 
     private void OnPointerCaptureLost(object sender, PointerRoutedEventArgs e)
@@ -82,7 +81,7 @@ public sealed partial class BoolSelectorNodeView : UserControl
             or nameof(IWorkflowNodeViewModel.Size)
             or "InputSlot" or "OutputSlots")
         {
-            DispatcherQueue.TryEnqueue(SyncSlots);
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, SyncSlots);
         }
     }
 
