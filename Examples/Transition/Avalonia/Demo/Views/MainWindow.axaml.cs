@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using System;
 using System.Threading.Tasks;
+using VeloxDev.Avalonia.NativeInterpolators;
 using VeloxDev.TransitionSystem;
 
 namespace Demo.Views;

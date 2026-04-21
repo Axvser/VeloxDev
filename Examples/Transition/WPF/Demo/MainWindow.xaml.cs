@@ -2,6 +2,7 @@
 using System.Windows.Media;
 using System.Windows.Shapes;
 using VeloxDev.TransitionSystem;
+using VeloxDev.WPF.NativeInterpolators;
 
 namespace Demo;
 
