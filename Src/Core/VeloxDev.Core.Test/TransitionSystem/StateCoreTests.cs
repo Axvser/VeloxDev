@@ -1,4 +1,3 @@
-using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 using VeloxDev.TransitionSystem.NativeInterpolators;
 

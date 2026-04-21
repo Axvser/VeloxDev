@@ -1,4 +1,3 @@
-using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.NativeInterpolators;
 
 namespace VeloxDev.Core.Test.TransitionSystem;

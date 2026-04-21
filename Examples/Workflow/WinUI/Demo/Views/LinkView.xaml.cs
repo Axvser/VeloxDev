@@ -5,8 +5,8 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
-using Windows.Foundation;
 using VeloxDev.WorkflowSystem;
+using Windows.Foundation;
 
 namespace Demo.Views;
 
@@ -304,14 +304,16 @@ public sealed partial class LinkView : UserControl
         var cp2 = new Point(EndLeft - diffx * 0.618, EndTop - diffy * 0.1);
         var p0 = new Point(StartLeft, StartTop);
         var p3 = new Point(EndLeft, EndTop);
-        Point Eval(double t) {
+        Point Eval(double t)
+        {
             double mt = 1 - t;
             return new Point(
-                mt*mt*mt*p0.X + 3*mt*mt*t*cp1.X + 3*mt*t*t*cp2.X + t*t*t*p3.X,
-                mt*mt*mt*p0.Y + 3*mt*mt*t*cp1.Y + 3*mt*t*t*cp2.Y + t*t*t*p3.Y);
+                mt * mt * mt * p0.X + 3 * mt * mt * t * cp1.X + 3 * mt * t * t * cp2.X + t * t * t * p3.X,
+                mt * mt * mt * p0.Y + 3 * mt * mt * t * cp1.Y + 3 * mt * t * t * cp2.Y + t * t * t * p3.Y);
         }
         var prev = Eval(0);
-        for (int i = 1; i <= segs; i++) {
+        for (int i = 1; i <= segs; i++)
+        {
             var next = Eval((double)i / segs);
             if (DistSeg(pt, prev, next) <= hitRadius) return true;
             prev = next;
@@ -323,9 +325,9 @@ public sealed partial class LinkView : UserControl
     {
         double abx = b.X - a.X, aby = b.Y - a.Y;
         double len2 = abx * abx + aby * aby;
-        if (len2 < 0.0001) return Math.Sqrt((p.X-a.X)*(p.X-a.X)+(p.Y-a.Y)*(p.Y-a.Y));
-        double t = Math.Clamp(((p.X-a.X)*abx + (p.Y-a.Y)*aby) / len2, 0, 1);
-        double px = a.X + t*abx - p.X, py = a.Y + t*aby - p.Y;
-        return Math.Sqrt(px*px + py*py);
+        if (len2 < 0.0001) return Math.Sqrt((p.X - a.X) * (p.X - a.X) + (p.Y - a.Y) * (p.Y - a.Y));
+        double t = Math.Clamp(((p.X - a.X) * abx + (p.Y - a.Y) * aby) / len2, 0, 1);
+        double px = a.X + t * abx - p.X, py = a.Y + t * aby - p.Y;
+        return Math.Sqrt(px * px + py * py);
     }
 }

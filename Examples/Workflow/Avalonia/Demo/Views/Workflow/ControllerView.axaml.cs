@@ -72,8 +72,8 @@ public partial class ControllerView : UserControl
         if (DataContext is ControllerViewModel nodeContext)
         {
             nodeContext.MoveCommand.Execute(new Offset(delta.X, delta.Y));
-            }
-            _lastPosition = currentPosition;
+        }
+        _lastPosition = currentPosition;
     }
 
     private void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)

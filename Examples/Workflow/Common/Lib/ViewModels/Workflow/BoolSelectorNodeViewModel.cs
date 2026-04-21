@@ -42,6 +42,6 @@ public partial class BoolSelectorNodeViewModel
 
     public bool HasInputSlot => _inputSlot is not null;
 
-    public SlotViewModel? TrueSlot  => OutputSlots?.TrySelect(true,  out var s) == true ? s : null;
+    public SlotViewModel? TrueSlot => OutputSlots?.TrySelect(true, out var s) == true ? s : null;
     public SlotViewModel? FalseSlot => OutputSlots?.TrySelect(false, out var s) == true ? s : null;
 }

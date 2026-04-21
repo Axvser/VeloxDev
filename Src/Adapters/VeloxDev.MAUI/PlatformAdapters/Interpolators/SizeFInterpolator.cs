@@ -1,4 +1,6 @@
-﻿namespace VeloxDev.TransitionSystem.Interpolators
+﻿using VeloxDev.TransitionSystem;
+
+namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class SizeFInterpolator : IValueInterpolator
     {

@@ -10,6 +10,6 @@ public partial class LinkViewModel
 {
     public LinkViewModel() => InitializeWorkflow();
 
-    [AgentContext(AgentLanguages.Chinese,"True表示使用折线连接两个节点")]
+    [AgentContext(AgentLanguages.Chinese, "True表示使用折线连接两个节点")]
     [VeloxProperty] private bool usePolyline = true;
 }

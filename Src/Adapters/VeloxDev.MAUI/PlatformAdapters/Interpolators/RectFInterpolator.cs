@@ -1,6 +1,7 @@
 ﻿using System.Drawing;
+using VeloxDev.TransitionSystem;
 
-namespace VeloxDev.TransitionSystem.Interpolators
+namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class RectFInterpolator : IValueInterpolator
     {

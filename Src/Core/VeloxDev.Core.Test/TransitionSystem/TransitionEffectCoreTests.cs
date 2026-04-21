@@ -1,6 +1,6 @@
+using VeloxDev.TimeLine;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
-using VeloxDev.TimeLine;
 
 namespace VeloxDev.Core.Test.TransitionSystem;
 

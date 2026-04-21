@@ -1,6 +1,7 @@
 ﻿using System.Windows;
+using VeloxDev.TransitionSystem;
 
-namespace VeloxDev.TransitionSystem.Interpolators
+namespace VeloxDev.WPF.NativeInterpolators
 {
     public class CornerRadiusInterpolator : IValueInterpolator
     {

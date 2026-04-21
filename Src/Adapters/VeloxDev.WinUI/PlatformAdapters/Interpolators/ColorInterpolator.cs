@@ -1,8 +1,9 @@
 ﻿using Microsoft.UI;
 using System.Collections.Generic;
+using VeloxDev.TransitionSystem;
 using Windows.UI;
 
-namespace VeloxDev.TransitionSystem.Interpolators
+namespace VeloxDev.WinUI.NativeInterpolators
 {
     public class ColorInterpolator : IValueInterpolator
     {

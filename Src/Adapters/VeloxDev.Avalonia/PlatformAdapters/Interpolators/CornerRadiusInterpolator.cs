@@ -1,7 +1,8 @@
 ﻿using Avalonia;
 using System.Collections.Generic;
+using VeloxDev.TransitionSystem;
 
-namespace VeloxDev.TransitionSystem.NativeInterpolators
+namespace VeloxDev.Avalonia.NativeInterpolators
 {
     public class CornerRadiusInterpolator : IValueInterpolator
     {

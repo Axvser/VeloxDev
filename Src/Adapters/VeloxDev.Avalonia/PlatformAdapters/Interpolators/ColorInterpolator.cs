@@ -1,8 +1,9 @@
 ﻿using Avalonia.Media;
 using System;
 using System.Collections.Generic;
+using VeloxDev.TransitionSystem;
 
-namespace VeloxDev.TransitionSystem.NativeInterpolators
+namespace VeloxDev.Avalonia.NativeInterpolators
 {
     public class ColorInterpolator : IValueInterpolator
     {

@@ -6,7 +6,6 @@ using Avalonia.Media;
 using System;
 using System.Threading.Tasks;
 using VeloxDev.TransitionSystem;
-using VeloxDev.TransitionSystem.NativeInterpolators;
 
 namespace Demo.Views;
 

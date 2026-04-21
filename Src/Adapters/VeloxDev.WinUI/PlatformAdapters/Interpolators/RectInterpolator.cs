@@ -1,7 +1,8 @@
 ﻿using System.Collections.Generic;
+using VeloxDev.TransitionSystem;
 using Windows.Foundation;
 
-namespace VeloxDev.TransitionSystem.Interpolators
+namespace VeloxDev.WinUI.NativeInterpolators
 {
     public class RectInterpolator : IValueInterpolator
     {

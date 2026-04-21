@@ -1,6 +1,7 @@
 ﻿using System.Windows.Media;
+using VeloxDev.TransitionSystem;
 
-namespace VeloxDev.TransitionSystem.Interpolators
+namespace VeloxDev.WPF.NativeInterpolators
 {
     public class ColorInterpolator : IValueInterpolator
     {
