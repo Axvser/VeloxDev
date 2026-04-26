@@ -3,11 +3,33 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:VeloxDev.Docs.ViewModels"
+             xmlns:views="using:VeloxDev.Docs"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="VeloxDev.Docs.Views.MainView"
              x:DataType="vm:MainViewModel">
   <Design.DataContext>
     <vm:MainViewModel />
   </Design.DataContext>
+
+  <TabControl>
+    <TabItem Header="C#">
+      <views:CodeView DataContext="{Binding CSharpDemo}" />
+    </TabItem>
+    <TabItem Header="Python">
+      <views:CodeView DataContext="{Binding PythonDemo}" />
+    </TabItem>
+    <TabItem Header="Rust">
+      <views:CodeView DataContext="{Binding RustDemo}" />
+    </TabItem>
+    <TabItem Header="TypeScript">
+      <views:CodeView DataContext="{Binding TypeScriptDemo}" />
+    </TabItem>
+    <TabItem Header="SQL">
+      <views:CodeView DataContext="{Binding SqlDemo}" />
+    </TabItem>
+    <TabItem Header="YAML">
+      <views:CodeView DataContext="{Binding YamlDemo}" />
+    </TabItem>
+  </TabControl>
 
 </UserControl>
