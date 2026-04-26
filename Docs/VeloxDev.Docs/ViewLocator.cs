@@ -1,8 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using System;
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using VeloxDev.Docs.ViewModels;
 
 namespace VeloxDev.Docs
 {
@@ -32,7 +32,7 @@ namespace VeloxDev.Docs
 
         public bool Match(object? data)
         {
-            return data is ViewModelBase;
+            return data is INotifyPropertyChanged;
         }
     }
 }

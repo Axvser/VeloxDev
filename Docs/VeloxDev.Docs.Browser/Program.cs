@@ -7,11 +7,16 @@ using VeloxDev.Docs;
 internal sealed partial class Program
 {
     private static Task Main(string[] args) => BuildAvaloniaApp()
-            .WithSystemFontSource(new Uri("avares://VeloxDev.Docs/Assets/Fonts/msyh.ttf#Microsoft YaHei"))
+            .WithSystemFontSource(new Uri("avares://VeloxDev.Docs/Assets/Fonts/msyh.ttf"))
+            .WithSystemFontSource(new Uri("avares://VeloxDev.Docs/Assets/Fonts/NotoColorEmoji.ttf"))
+            .WithInterFont()
 #if DEBUG
             .WithDeveloperTools()
 #endif
-            .StartBrowserAppAsync("out");
+            .StartBrowserAppAsync("out", new()
+            {
+                RenderingMode = [BrowserRenderingMode.WebGL2]
+            });
 
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>();
