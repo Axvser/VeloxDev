@@ -1,34 +1,56 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<views:WikiElementViewBase xmlns="https://github.com/avaloniaui"
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+           xmlns:views="using:VeloxDev.Docs"
 			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
 			 x:Class="VeloxDev.Docs.CodeView"
 			 xmlns:vm="using:VeloxDev.Docs.ViewModels"
 			 x:DataType="vm:CodeProvider">
-	<Grid RowDefinitions="26,8,*">
-		<Grid Grid.Row="0" ColumnDefinitions="*,*">
-			<Grid Grid.Column="0">
-				<Viewbox HorizontalAlignment="Left">
-					<TextBlock Text="{Binding Language}"/>
-				</Viewbox>
-			</Grid>
-			<Grid Grid.Column="1">
-				<Viewbox HorizontalAlignment="Right">
-					<Button Content="Copy"
+   <Border x:Name="ChromeBorder"
+			Margin="0,0,0,8"
+			Padding="8"
+			CornerRadius="6"
+			BorderBrush="{DynamicResource SystemAccentColor}">
+      <Grid MaxHeight="360">
+          <Grid x:Name="DisplayPanel" RowDefinitions="Auto,4,*" MaxHeight="330">
+				<Grid ColumnDefinitions="*,Auto">
+					<TextBlock Text="{Binding Language}" Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
+					<Button Grid.Column="1" Content="Copy"
 							Command="{Binding CopyCommand}"
-							CommandParameter="{Binding $self}"/>
-				</Viewbox>
-			</Grid>
-		</Grid>
-
-		<Grid Grid.Row="2">
-			<ScrollViewer>
-				<SelectableTextBlock Inlines="{Binding Inlines}"
+							CommandParameter="{Binding $self}"
+							Padding="8,2" />
+				</Grid>
+             <ScrollViewer Grid.Row="2" MaxHeight="300" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+					<SelectableTextBlock Inlines="{Binding Inlines}"
 									 LineHeight="18"
 									 FontFamily="Cascadia Code,Consolas,Menlo,monospace"
 									 FontSize="13" />
-			</ScrollViewer>
+				</ScrollViewer>
+			</Grid>
+
+           <Grid x:Name="EditPanel" IsVisible="False" RowDefinitions="Auto,8,*" MaxHeight="330">
+				<Grid ColumnDefinitions="Auto,8,*,Auto">
+					<TextBlock Text="Language" VerticalAlignment="Center" Opacity="0.6" FontSize="12" />
+                 <ComboBox Grid.Column="2"
+							  ItemsSource="{Binding Languages}"
+							  SelectedItem="{Binding Language}"
+							  MinWidth="140" />
+					<Button Grid.Column="3" Content="Copy"
+							Command="{Binding CopyCommand}"
+							CommandParameter="{Binding $self}"
+							Margin="8,0,0,0" />
+				</Grid>
+               <ScrollViewer Grid.Row="2" MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+					<TextBox Text="{Binding Code}"
+							 AcceptsReturn="True"
+							 TextWrapping="NoWrap"
+							 FontFamily="Cascadia Code,Consolas,Menlo,monospace"
+							 FontSize="13"
+							 MinHeight="96"
+							 Watermark="Code" />
+				</ScrollViewer>
+			</Grid>
 		</Grid>
-	</Grid>
-</UserControl>
+	</Border>
+</views:WikiElementViewBase>

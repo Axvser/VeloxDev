@@ -20,7 +20,12 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Markdig" />
+    <PackageReference Include="Svg.Skia" />
     <PackageReference Include="TextMateSharp.Grammars" />
     <PackageReference Include="VeloxDev.Avalonia" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\Core\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
   </ItemGroup>
 </Project>

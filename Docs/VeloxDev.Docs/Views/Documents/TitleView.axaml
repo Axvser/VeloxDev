@@ -1,0 +1,31 @@
+﻿<views:WikiElementViewBase xmlns="https://github.com/avaloniaui"
+                           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                           xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                           xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                           xmlns:views="using:VeloxDev.Docs"
+                           xmlns:vm="using:VeloxDev.Docs.ViewModels"
+                           mc:Ignorable="d"
+                           d:DesignWidth="800"
+                           d:DesignHeight="80"
+                           x:Class="VeloxDev.Docs.TitleView"
+                           x:DataType="vm:TitleProvider">
+    <Border x:Name="ChromeBorder"
+            Margin="0,0,0,8"
+            Padding="8"
+            CornerRadius="6"
+            BorderBrush="{DynamicResource SystemAccentColor}">
+        <Grid>
+            <TextBlock x:Name="DisplayPanel"
+                       Text="{Binding Text}"
+                       FontSize="24"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+            <TextBox x:Name="EditPanel"
+                     IsVisible="False"
+                     Text="{Binding Text}"
+                     Watermark="Title text"
+                     FontSize="18"
+                     FontWeight="SemiBold" />
+        </Grid>
+    </Border>
+</views:WikiElementViewBase>

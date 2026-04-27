@@ -1,0 +1,94 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 xmlns:vm="using:VeloxDev.Docs.ViewModels"
+			 xmlns:views="using:VeloxDev.Docs"
+			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+			 x:Class="VeloxDev.Docs.DocumentView"
+			 x:DataType="vm:DocumentProvider">
+
+   <!-- 所有模板统一归于此处，Avalonia可自动匹配 -->
+	<UserControl.DataTemplates>
+		<!-- 目录节点 -->
+		<DataTemplate x:DataType="vm:NodeProvider">
+            <views:NodeView />
+		</DataTemplate>
+        <!-- 标题 -->
+		<DataTemplate x:DataType="vm:TitleProvider">
+          <views:TitleView />
+		</DataTemplate>
+		<!-- 正文 -->
+		<DataTemplate x:DataType="vm:ParagraphProvider">
+          <views:ParagraphView />
+		</DataTemplate>
+		<!-- 副标题 / 引用 -->
+		<DataTemplate x:DataType="vm:SubtitleProvider">
+          <views:SubtitleView />
+		</DataTemplate>
+		<!-- 链接 -->
+		<DataTemplate x:DataType="vm:LinkProvider">
+         <views:LinkView />
+		</DataTemplate>
+		<!-- 代码块 -->
+		<DataTemplate x:DataType="vm:CodeProvider">
+         <views:CodeView />
+		</DataTemplate>
+        <!-- 表格 -->
+		<DataTemplate x:DataType="vm:TableProvider">
+		 <views:TableView />
+		</DataTemplate>
+        <!-- 图片 -->
+		<DataTemplate x:DataType="vm:ImageProvider">
+		 <views:ImageView />
+		</DataTemplate>
+        <!-- 万能空元素 -->
+		<DataTemplate x:DataType="vm:EmptyProvider">
+		 <views:EmptyView />
+		</DataTemplate>
+	</UserControl.DataTemplates>
+
+	<!-- 内容渲染 -->
+    <Grid ColumnDefinitions="240,4,*">
+		<!-- 目录 -->
+      <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
+         <TextBlock Grid.Row="0" Text="Navigation" Margin="8,8,8,4" FontWeight="SemiBold" Opacity="0.7" />
+			<TreeView Grid.Row="1"
+					  ItemsSource="{Binding Nodes}"
+					  SelectedItem="{Binding SelectedNode}">
+				<TreeView.ItemTemplate>
+					<TreeDataTemplate x:DataType="vm:NodeProvider" ItemsSource="{Binding Nodes}">
+                      <views:NodeView />
+					</TreeDataTemplate>
+				</TreeView.ItemTemplate>
+			</TreeView>
+			<WrapPanel Grid.Row="2" Margin="6">
+              <Button Content="Add Root" Command="{Binding AddRootCommand}" Margin="0,0,4,4" />
+              <Button Content="Save" Command="{Binding SaveCommand}" CommandParameter="{Binding $self}" Margin="0,0,4,4" />
+				<Button Content="Load" Command="{Binding LoadCommand}" CommandParameter="{Binding $self}" Margin="0,0,4,4" />
+			</WrapPanel>
+		</Grid>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Width="4" />
+      <Grid Grid.Column="2">
+            <Grid RowDefinitions="Auto,*">
+				<!-- 头栏 -->
+             <WrapPanel Grid.Row="0" Margin="8">
+					<Button Content="Title 1" Command="{Binding AddTitleCommand}" CommandParameter="1" Margin="0,0,4,4" />
+					<Button Content="Title 2" Command="{Binding AddTitleCommand}" CommandParameter="2" Margin="0,0,4,4" />
+					<Button Content="Title 3" Command="{Binding AddTitleCommand}" CommandParameter="3" Margin="0,0,4,4" />
+					<Button Content="Title 4" Command="{Binding AddTitleCommand}" CommandParameter="4" Margin="0,0,4,4" />
+					<Button Content="Body" Command="{Binding AddParagraphCommand}" Margin="0,0,4,4" />
+					<Button Content="Subtitle" Command="{Binding AddSubtitleCommand}" Margin="0,0,4,4" />
+					<Button Content="Link" Command="{Binding AddLinkCommand}" Margin="0,0,4,4" />
+					<Button Content="Code" Command="{Binding AddCodeCommand}" Margin="0,0,4,4" />
+                    <Button Content="Table" Command="{Binding AddTableCommand}" Margin="0,0,4,4" />
+                    <Button Content="Image" Command="{Binding AddImageCommand}" Margin="0,0,4,4" />
+				</WrapPanel>
+				<!-- 内容区 -->
+                <ScrollViewer Grid.Row="1" Padding="8">
+					<ItemsControl ItemsSource="{Binding Children}" />
+				</ScrollViewer>
+			</Grid>
+		</Grid>
+	</Grid>
+</UserControl>

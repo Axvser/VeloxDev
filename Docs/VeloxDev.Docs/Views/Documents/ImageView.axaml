@@ -1,0 +1,49 @@
+﻿<views:WikiElementViewBase xmlns="https://github.com/avaloniaui"
+                           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                           xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                           xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                           xmlns:views="using:VeloxDev.Docs"
+                           xmlns:vm="using:VeloxDev.Docs.ViewModels"
+                           mc:Ignorable="d"
+                           d:DesignWidth="800"
+                           d:DesignHeight="320"
+                           x:Class="VeloxDev.Docs.ImageView"
+                           x:DataType="vm:ImageProvider">
+    <Border x:Name="ChromeBorder"
+            Margin="0,0,0,8"
+            Padding="8"
+            CornerRadius="6">
+        <Grid>
+            <Grid x:Name="DisplayPanel">
+                <Image x:Name="DisplayImage"
+                       Source="{Binding Source}"
+                       Stretch="Uniform" />
+            </Grid>
+            <Grid x:Name="EditPanel"
+                  IsVisible="False"
+                  RowDefinitions="Auto,8,*">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Text="{Binding Source}"
+                             Watermark="Image path" />
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Margin="8,0,0,0">
+                        <Button Content="Browse"
+                                Command="{Binding BrowseCommand}"
+                                CommandParameter="{Binding $self}" />
+                    </StackPanel>
+                </Grid>
+                <Grid Grid.Row="2">
+                    <Image x:Name="EditImage"
+                           Source="{Binding Source}"
+                           Stretch="Uniform" />
+                    <Thumb x:Name="ResizeThumb"
+                           Width="18"
+                           Height="18"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Bottom" />
+                </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</views:WikiElementViewBase>

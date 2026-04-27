@@ -1,8 +1,8 @@
 namespace VeloxDev.Docs;
 
-public partial class CodeView : WikiElementViewBase
+public partial class ParagraphView : WikiElementViewBase
 {
-    public CodeView()
+    public ParagraphView()
     {
         InitializeComponent();
         InitializeEditChrome(ChromeBorder, DisplayPanel, EditPanel);

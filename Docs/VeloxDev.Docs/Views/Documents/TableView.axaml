@@ -1,0 +1,12 @@
+﻿<views:WikiElementViewBase xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:views="using:VeloxDev.Docs" xmlns:vm="using:VeloxDev.Docs.ViewModels" mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="240" x:Class="VeloxDev.Docs.TableView" x:DataType="vm:TableProvider">
+    <Border x:Name="ChromeBorder" Margin="0,0,0,8" Padding="8" CornerRadius="6" BorderBrush="{DynamicResource SystemAccentColor}">
+        <Grid>
+            <ScrollViewer x:Name="DisplayPanel" HorizontalScrollBarVisibility="Auto">
+                <StackPanel x:Name="DisplayHost" />
+            </ScrollViewer>
+            <ScrollViewer x:Name="EditPanel" IsVisible="False" HorizontalScrollBarVisibility="Auto">
+                <StackPanel x:Name="EditHost" Spacing="8" />
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</views:WikiElementViewBase>

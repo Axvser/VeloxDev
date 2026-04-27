@@ -1,8 +1,8 @@
 ﻿using Avalonia.Controls.Documents;
 using Avalonia.Input.Platform;
 using Avalonia.Media;
-using Avalonia.VisualTree;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using TextMateSharp.Grammars;
 using TextMateSharp.Registry;
@@ -10,8 +10,32 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.Docs.ViewModels;
 
-public partial class CodeProvider : ICodeProvider
+public partial class CodeProvider : IWikiElement
 {
+    public IReadOnlyList<string> Languages { get; } =
+    [
+        "csharp",
+        "xml",
+        "json",
+        "xaml",
+        "markdown",
+        "javascript",
+        "typescript",
+        "python",
+        "java",
+        "cpp",
+        "c",
+        "rust",
+        "go",
+        "sql",
+        "yaml",
+        "powershell",
+        "shellscript",
+        "html",
+        "css"
+    ];
+
+    [VeloxProperty] public partial IWikiElement? Parent { get; set; }
     [VeloxProperty] public partial string Code { get; set; }
     [VeloxProperty] public partial string Language { get; set; }
     public InlineCollection Inlines { get; } = [];
