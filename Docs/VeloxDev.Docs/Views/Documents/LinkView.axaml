@@ -1,11 +1,41 @@
-﻿<views:WikiElementViewBase xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:views="using:VeloxDev.Docs" xmlns:vm="using:VeloxDev.Docs.ViewModels" mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="90" x:Class="VeloxDev.Docs.LinkView" x:DataType="vm:LinkProvider">
-    <Border x:Name="ChromeBorder" Margin="0,0,0,8" Padding="8" CornerRadius="6" BorderBrush="{DynamicResource SystemAccentColor}">
+﻿<views:WikiElementViewBase xmlns="https://github.com/avaloniaui"
+                           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                           xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                           xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                           xmlns:views="using:VeloxDev.Docs"
+                           xmlns:vm="using:VeloxDev.Docs.ViewModels"
+                           mc:Ignorable="d"
+                           d:DesignWidth="800"
+                           d:DesignHeight="90"
+                           x:Class="VeloxDev.Docs.LinkView"
+                           x:DataType="vm:LinkProvider">
+    <Border x:Name="ChromeBorder"
+            Margin="0,0,0,8"
+            Padding="8"
+            CornerRadius="6"
+            BorderBrush="{DynamicResource SystemAccentColor}">
         <Grid>
-            <Button x:Name="DisplayPanel" Content="{Binding Text}" Command="{Binding OpenCommand}" CommandParameter="{Binding $self}" Foreground="{DynamicResource SystemAccentColor}" Background="Transparent" BorderThickness="0" Padding="0" HorizontalAlignment="Left" />
-            <Grid x:Name="EditPanel" IsVisible="False" RowDefinitions="Auto,4,Auto">
-                <TextBox Text="{Binding Text}" Watermark="Highlighted link text" FontWeight="SemiBold" />
-                <TextBox Grid.Row="2" Text="{Binding Url}" Watermark="https://..." Foreground="{DynamicResource SystemAccentColor}" />
+            <Button x:Name="DisplayPanel"
+                    Content="{Binding Text}"
+                    Command="{Binding OpenCommand}"
+                    CommandParameter="{Binding $self}"
+                    Foreground="{DynamicResource SystemAccentColor}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="0"
+                    HorizontalAlignment="Left" />
+            <Grid x:Name="EditPanel"
+                  IsVisible="False"
+                  RowDefinitions="Auto,4,Auto">
+                <TextBox Text="{Binding Text}"
+                         Watermark="Highlighted link text"
+                         FontWeight="SemiBold" />
+                <TextBox Grid.Row="2"
+                         Text="{Binding Url}"
+                         Watermark="https://..."
+                         Foreground="{DynamicResource SystemAccentColor}" />
             </Grid>
         </Grid>
     </Border>
 </views:WikiElementViewBase>
+

@@ -1,10 +1,38 @@
-﻿<views:WikiElementViewBase xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:views="using:VeloxDev.Docs" xmlns:vm="using:VeloxDev.Docs.ViewModels" mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="100" x:Class="VeloxDev.Docs.SubtitleView" x:DataType="vm:SubtitleProvider">
-    <Border x:Name="ChromeBorder" Margin="0,0,0,8" Padding="8" CornerRadius="6" BorderBrush="{DynamicResource SystemAccentColor}">
+﻿<views:WikiElementViewBase xmlns="https://github.com/avaloniaui"
+                           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                           xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                           xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                           xmlns:views="using:VeloxDev.Docs"
+                           xmlns:vm="using:VeloxDev.Docs.ViewModels"
+                           mc:Ignorable="d"
+                           d:DesignWidth="800"
+                           d:DesignHeight="100"
+                           x:Class="VeloxDev.Docs.SubtitleView"
+                           x:DataType="vm:SubtitleProvider">
+    <Border x:Name="ChromeBorder"
+            Margin="0,0,0,8"
+            Padding="8"
+            CornerRadius="6"
+            BorderBrush="{DynamicResource SystemAccentColor}">
         <Grid>
-            <Border x:Name="DisplayPanel" BorderBrush="{DynamicResource SystemAccentColor}" BorderThickness="4,0,0,0" Padding="10,4">
-                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontStyle="Italic" Opacity="0.8" />
+            <Border x:Name="DisplayPanel"
+                    BorderBrush="{DynamicResource SystemAccentColor}"
+                    BorderThickness="4,0,0,0"
+                    Padding="10,4">
+                <TextBlock Text="{Binding Text}"
+                           TextWrapping="Wrap"
+                           FontStyle="Italic"
+                           Opacity="0.8" />
             </Border>
-            <TextBox x:Name="EditPanel" IsVisible="False" Text="{Binding Text}" Watermark="Subtitle / quote" AcceptsReturn="True" TextWrapping="Wrap" FontStyle="Italic" MinHeight="64" />
+            <TextBox x:Name="EditPanel"
+                     IsVisible="False"
+                     Text="{Binding Text}"
+                     Watermark="Subtitle / quote"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     FontStyle="Italic"
+                     MinHeight="64" />
         </Grid>
     </Border>
 </views:WikiElementViewBase>
+

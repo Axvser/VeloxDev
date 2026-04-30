@@ -20,7 +20,6 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Markdig" />
-    <PackageReference Include="Svg.Skia" />
     <PackageReference Include="TextMateSharp.Grammars" />
     <PackageReference Include="VeloxDev.Avalonia" />
   </ItemGroup>

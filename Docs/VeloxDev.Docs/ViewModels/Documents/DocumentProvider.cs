@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System;
+using System.Text;
 using System.Threading.Tasks;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.MVVM;
@@ -18,12 +19,24 @@ public partial class DocumentProvider : IWikiElement
     [VeloxProperty] public partial ObservableCollection<IWikiElement> Children { get; set; }
     [VeloxProperty] public partial ObservableCollection<IWikiElement> Nodes { get; set; }
     [VeloxProperty] public partial NodeProvider? SelectedNode { get; set; }
+    [VeloxProperty] public partial bool IsEditMode { get; set; }
+
+    public string EditModeLabel => IsEditMode ? "📝 Edit" : "👁 Browse";
+
+    partial void OnIsEditModeChanged(bool oldValue, bool newValue)
+    {
+        OnPropertyChanged(nameof(EditModeLabel));
+    }
 
     public DocumentProvider()
     {
         Children = [];
         Nodes = [];
+        IsEditMode = false;
     }
+
+    [VeloxCommand]
+    private void ToggleEditMode() => IsEditMode = !IsEditMode;
 
     partial void OnSelectedNodeChanged(NodeProvider? oldValue, NodeProvider? newValue)
     {
@@ -88,6 +101,14 @@ public partial class DocumentProvider : IWikiElement
     [VeloxCommand]
     private void AddCode() =>
         AddElement(new CodeProvider { Parent = this, Language = "csharp", Code = "Console.WriteLine(\"Hello VeloxDev\");" });
+
+    [VeloxCommand]
+    private void AddMarkdown() =>
+        AddElement(new MarkdownProvider
+        {
+            Parent = this,
+            Text = "# Markdown\n\nWrite **Markdown** here.\n\n```csharp\nConsole.WriteLine(\"Hello VeloxDev\");\n```"
+        });
 
     [VeloxCommand]
     private void AddTable() =>
@@ -158,7 +179,7 @@ public partial class DocumentProvider : IWikiElement
             stream.Position = 0;
         }
 
-        await using var writer = new StreamWriter(stream);
+        await using var writer = new StreamWriter(stream, new UTF8Encoding(false), 1024, leaveOpen: true);
         await writer.WriteAsync(json).ConfigureAwait(true);
         await writer.FlushAsync().ConfigureAwait(true);
     }
@@ -181,7 +202,7 @@ public partial class DocumentProvider : IWikiElement
             return;
 
         await using var stream = await files[0].OpenReadAsync().ConfigureAwait(true);
-        using var reader = new StreamReader(stream);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
         var json = await reader.ReadToEndAsync().ConfigureAwait(true);
         if (json.TryDeserialize<DocumentProvider>(out var document) && document is not null)
         {

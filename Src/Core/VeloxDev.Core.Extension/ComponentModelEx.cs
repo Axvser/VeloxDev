@@ -29,6 +29,39 @@ public static class ComponentModelEx
     internal static JsonSerializer CreateJsonSerializer()
         => JsonSerializer.Create(settings);
 
+    private static string SerializeCore<T>(T workflow)
+        where T : INotifyPropertyChanged
+    {
+        if (workflow == null)
+            throw new ArgumentNullException(nameof(workflow), "Workflow object cannot be null for serialization");
+
+        return JsonConvert.SerializeObject(workflow, settings);
+    }
+
+    private static bool TryDeserializeCore<T>(string json, out T? workflow)
+        where T : INotifyPropertyChanged
+    {
+        try
+        {
+            workflow = JsonConvert.DeserializeObject<T>(json, settings);
+            return workflow != null;
+        }
+        catch
+        {
+            workflow = default;
+            return false;
+        }
+    }
+
+    private static T DeserializeCore<T>(string json)
+        where T : INotifyPropertyChanged
+    {
+        if (!TryDeserializeCore<T>(json, out var workflow) || workflow == null)
+            throw new JsonSerializationException($"Deserialization of JSON to type {typeof(T).Name} resulted in null. The JSON may be invalid or incompatible with the target type.");
+
+        return workflow;
+    }
+
     internal static object? DeserializeToType(this JToken token, Type targetType)
     {
         if (token == null)
@@ -45,21 +78,25 @@ public static class ComponentModelEx
     public static string Serialize<T>(this T workflow)
         where T : INotifyPropertyChanged
     {
-        return JsonConvert.SerializeObject(workflow, settings);
+        return SerializeCore(workflow);
     }
 
     public static bool TryDeserialize<T>(this string json, out T? workflow)
         where T : INotifyPropertyChanged
     {
-        try
-        {
-            workflow = JsonConvert.DeserializeObject<T>(json, settings);
-            return workflow != null;
-        }
-        catch (Exception ex)
-        {
-            throw new JsonSerializationException($"Failed to deserialize JSON to type {typeof(T).Name}. Error: {ex.Message}", ex);
-        }
+        if (string.IsNullOrWhiteSpace(json))
+            throw new ArgumentException("JSON string cannot be null or empty", nameof(json));
+
+        return TryDeserializeCore(json, out workflow);
+    }
+
+    public static T Deserialize<T>(this string json)
+        where T : INotifyPropertyChanged
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            throw new ArgumentException("JSON string cannot be null or empty", nameof(json));
+
+        return DeserializeCore<T>(json);
     }
     #endregion
 
@@ -67,72 +104,112 @@ public static class ComponentModelEx
     /// <summary>
     /// Asynchronously serializes a workflow object to JSON string
     /// </summary>
-    public static async Task<string> SerializeAsync<T>(this T workflow, CancellationToken cancellationToken = default)
+    public static Task<string> SerializeAsync<T>(this T workflow, CancellationToken cancellationToken = default)
         where T : INotifyPropertyChanged
     {
-        if (workflow == null)
-            throw new ArgumentNullException(nameof(workflow), "Workflow object cannot be null for serialization");
-
-        return await Task.Run(() => JsonConvert.SerializeObject(workflow, settings), cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(SerializeCore(workflow));
     }
 
     /// <summary>
     /// Asynchronously attempts to deserialize a JSON string to workflow object
     /// </summary>
-    public static async Task<(bool Success, T? Result)> TryDeserializeAsync<T>(this string json, CancellationToken cancellationToken = default)
+    public static Task<(bool Success, T? Result)> TryDeserializeAsync<T>(this string json, CancellationToken cancellationToken = default)
         where T : INotifyPropertyChanged
     {
         if (string.IsNullOrWhiteSpace(json))
             throw new ArgumentException("JSON string cannot be null or empty", nameof(json));
 
-        try
-        {
-            var result = await Task.Run(() => JsonConvert.DeserializeObject<T>(json, settings), cancellationToken).ConfigureAwait(false);
-            return (result != null, result);
-        }
-        catch
-        {
-            return (false, default(T));
-        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var success = TryDeserializeCore<T>(json, out var result);
+        return Task.FromResult((success, result));
     }
 
     /// <summary>
     /// Asynchronously deserializes a JSON string to workflow object with exception handling
     /// </summary>
-    public static async Task<T> DeserializeAsync<T>(this string json, CancellationToken cancellationToken = default)
+    public static Task<T> DeserializeAsync<T>(this string json, CancellationToken cancellationToken = default)
         where T : INotifyPropertyChanged
     {
         if (string.IsNullOrWhiteSpace(json))
             throw new ArgumentException("JSON string cannot be null or empty", nameof(json));
 
-        var result = await Task.Run(() => JsonConvert.DeserializeObject<T>(json, settings), cancellationToken).ConfigureAwait(false) ?? throw new JsonSerializationException($"Deserialization of JSON to type {typeof(T).Name} resulted in null. The JSON may be invalid or incompatible with the target type.");
-        return result;
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(DeserializeCore<T>(json));
     }
     #endregion
 
     #region Streaming Asynchronous Methods (netstandard2.0 compatible)
+    public static byte[] SerializeToUtf8Bytes<T>(this T workflow)
+        where T : INotifyPropertyChanged
+    {
+        return Encoding.UTF8.GetBytes(SerializeCore(workflow));
+    }
+
+    public static Task<byte[]> SerializeToUtf8BytesAsync<T>(this T workflow, CancellationToken cancellationToken = default)
+        where T : INotifyPropertyChanged
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(workflow.SerializeToUtf8Bytes());
+    }
+
+    public static T DeserializeFromUtf8Bytes<T>(this byte[] utf8Json)
+        where T : INotifyPropertyChanged
+    {
+        if (utf8Json == null)
+            throw new ArgumentNullException(nameof(utf8Json), "UTF-8 JSON payload cannot be null");
+        if (utf8Json.Length == 0)
+            throw new ArgumentException("UTF-8 JSON payload cannot be empty", nameof(utf8Json));
+
+        return DeserializeCore<T>(Encoding.UTF8.GetString(utf8Json));
+    }
+
+    public static Task<T> DeserializeFromUtf8BytesAsync<T>(this byte[] utf8Json, CancellationToken cancellationToken = default)
+        where T : INotifyPropertyChanged
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(utf8Json.DeserializeFromUtf8Bytes<T>());
+    }
+
+    public static async Task SerializeToTextWriterAsync<T>(this T workflow, TextWriter writer, CancellationToken cancellationToken = default)
+        where T : INotifyPropertyChanged
+    {
+        if (writer == null)
+            throw new ArgumentNullException(nameof(writer), "Target writer cannot be null");
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var json = SerializeCore(workflow);
+        await writer.WriteAsync(json).ConfigureAwait(false);
+        await writer.FlushAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    public static async Task<T> DeserializeFromTextReaderAsync<T>(this TextReader reader, CancellationToken cancellationToken = default)
+        where T : INotifyPropertyChanged
+    {
+        if (reader == null)
+            throw new ArgumentNullException(nameof(reader), "Source reader cannot be null");
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var json = await reader.ReadToEndAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return DeserializeCore<T>(json);
+    }
+
     /// <summary>
     /// Asynchronously serializes a workflow object to a stream
     /// </summary>
     public static async Task SerializeToStreamAsync<T>(this T workflow, Stream stream, CancellationToken cancellationToken = default)
         where T : INotifyPropertyChanged
     {
-        if (workflow == null)
-            throw new ArgumentNullException(nameof(workflow), "Workflow object cannot be null for serialization");
-
         if (stream == null)
             throw new ArgumentNullException(nameof(stream), "Target stream cannot be null");
 
         if (!stream.CanWrite)
             throw new InvalidOperationException("Target stream is not writable");
 
-        // Use proper StreamWriter constructor for netstandard2.0
-        using var streamWriter = new StreamWriter(stream, Encoding.UTF8, 1024, true);
-        using var jsonWriter = new JsonTextWriter(streamWriter);
-        var serializer = JsonSerializer.Create(settings);
-
-        await Task.Run(() => serializer.Serialize(jsonWriter, workflow), cancellationToken).ConfigureAwait(false);
-        await streamWriter.FlushAsync().ConfigureAwait(false);
+        using var streamWriter = new StreamWriter(stream, new UTF8Encoding(false), 1024, true);
+        await workflow.SerializeToTextWriterAsync(streamWriter, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -147,13 +224,8 @@ public static class ComponentModelEx
         if (!stream.CanRead)
             throw new InvalidOperationException("Source stream is not readable");
 
-        // Use proper StreamReader constructor for netstandard2.0
         using var streamReader = new StreamReader(stream, Encoding.UTF8, true, 1024, true);
-        using var jsonReader = new JsonTextReader(streamReader);
-        var serializer = JsonSerializer.Create(settings);
-
-        var result = await Task.Run(() => serializer.Deserialize<T>(jsonReader), cancellationToken).ConfigureAwait(false) ?? throw new JsonSerializationException($"Deserialization from stream to type {typeof(T).Name} resulted in null. The stream content may be invalid or incompatible with the target type.");
-        return result;
+        return await streamReader.DeserializeFromTextReaderAsync<T>(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -182,15 +254,7 @@ public static class ComponentModelEx
     public static async Task StreamSerializeAsync<T>(this T workflow, Stream outputStream, CancellationToken cancellationToken = default)
         where T : INotifyPropertyChanged
     {
-        if (workflow == null)
-            throw new ArgumentNullException(nameof(workflow));
-        if (outputStream == null)
-            throw new ArgumentNullException(nameof(outputStream));
-
-        var json = await SerializeAsync(workflow, cancellationToken).ConfigureAwait(false);
-        var jsonBytes = Encoding.UTF8.GetBytes(json);
-
-        await outputStream.WriteAsync(jsonBytes, 0, jsonBytes.Length, cancellationToken).ConfigureAwait(false);
+        await workflow.SerializeToStreamAsync(outputStream, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -199,13 +263,7 @@ public static class ComponentModelEx
     public static async Task<T> StreamDeserializeAsync<T>(this Stream inputStream, CancellationToken cancellationToken = default)
         where T : INotifyPropertyChanged
     {
-        if (inputStream == null)
-            throw new ArgumentNullException(nameof(inputStream));
-
-        using var memoryStream = new MemoryStream();
-        await inputStream.CopyToAsync(memoryStream, 81920, cancellationToken).ConfigureAwait(false);
-        var json = Encoding.UTF8.GetString(memoryStream.ToArray());
-        return await DeserializeAsync<T>(json, cancellationToken).ConfigureAwait(false);
+        return await inputStream.DeserializeFromStreamAsync<T>(cancellationToken).ConfigureAwait(false);
     }
     #endregion
 }

@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -13,18 +14,13 @@ public partial class TableView : WikiElementViewBase
     private const double BodyRowHeight = 34;
 
     private bool _isRendering;
+    private TableProvider? _attachedTable;
 
     public TableView()
     {
         InitializeComponent();
         InitializeEditChrome(ChromeBorder, DisplayPanel, EditPanel);
         DataContextChanged += (_, _) => AttachAndRender();
-    }
-
-    protected override void EnterEdit()
-    {
-        RenderEdit();
-        base.EnterEdit();
     }
 
     protected override void ExitEdit()
@@ -35,8 +31,19 @@ public partial class TableView : WikiElementViewBase
 
     private void AttachAndRender()
     {
+        if (_attachedTable is not null)
+        {
+            _attachedTable.Headers.CollectionChanged -= TableChanged;
+            _attachedTable.Alignments.CollectionChanged -= AlignmentChanged;
+            _attachedTable.Rows.CollectionChanged -= RowsChanged;
+            foreach (var row in _attachedTable.Rows)
+                row.Cells.CollectionChanged -= TableChanged;
+            _attachedTable = null;
+        }
+
         if (DataContext is TableProvider table)
         {
+            _attachedTable = table;
             table.Headers.CollectionChanged += TableChanged;
             table.Alignments.CollectionChanged += AlignmentChanged;
             table.Rows.CollectionChanged += RowsChanged;
@@ -62,6 +69,12 @@ public partial class TableView : WikiElementViewBase
         if (_isRendering)
             return;
 
+        if (e.OldItems is not null)
+        {
+            foreach (TableRowProvider row in e.OldItems)
+                row.Cells.CollectionChanged -= TableChanged;
+        }
+
         if (e.NewItems is not null)
         {
             foreach (TableRowProvider row in e.NewItems)
@@ -77,14 +90,10 @@ public partial class TableView : WikiElementViewBase
         if (_isRendering)
             return;
 
-        if (e.Action == NotifyCollectionChangedAction.Replace)
-        {
-            RenderDisplay();
-            return;
-        }
-
         RenderDisplay();
-        RenderEdit();
+
+        if (e.Action != NotifyCollectionChangedAction.Replace)
+            RenderEdit();
     }
 
     private void RenderDisplay()
@@ -141,7 +150,7 @@ public partial class TableView : WikiElementViewBase
                 Text = "Right-click the top column zones or right row zones to insert/remove rows and columns.",
                 Opacity = 0.6,
                 FontSize = 12,
-                Margin = new Avalonia.Thickness(0, 0, 0, 4)
+                Margin = new Thickness(0, 0, 0, 4)
             });
 
             var editor = new Grid
@@ -244,7 +253,7 @@ public partial class TableView : WikiElementViewBase
         Height = height,
         MinWidth = 88,
         BorderBrush = Brushes.Gray,
-        BorderThickness = new Avalonia.Thickness(0, 0, 1, 1),
+        BorderThickness = new Thickness(0, 0, 1, 1),
         Background = new SolidColorBrush(Color.FromArgb(24, 128, 128, 128)),
         ContextMenu = menu,
         Child = new TextBlock
@@ -265,8 +274,8 @@ public partial class TableView : WikiElementViewBase
     private static Border WrapTableFrame(Control content) => new()
     {
         BorderBrush = Brushes.Gray,
-        BorderThickness = new Avalonia.Thickness(1),
-        CornerRadius = new Avalonia.CornerRadius(6),
+        BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(6),
         ClipToBounds = true,
         Child = content
     };
@@ -277,9 +286,9 @@ public partial class TableView : WikiElementViewBase
         {
             Height = isHeader ? HeaderRowHeight : BodyRowHeight,
             BorderBrush = Brushes.Gray,
-            BorderThickness = new Avalonia.Thickness(0, 0, 1, 1),
+            BorderThickness = new Thickness(0, 0, 1, 1),
             Background = CreateCellBackground(isHeader),
-            Padding = new Avalonia.Thickness(6),
+            Padding = new Thickness(6),
             Child = new TextBlock
             {
                 Text = text,
@@ -301,9 +310,9 @@ public partial class TableView : WikiElementViewBase
             Text = text,
             Height = height,
             MinWidth = 120,
-            BorderThickness = new Avalonia.Thickness(0),
-            Margin = new Avalonia.Thickness(0),
-            Padding = new Avalonia.Thickness(6),
+            BorderThickness = new Thickness(0),
+            Margin = new Thickness(0),
+            Padding = new Thickness(6),
             Background = Brushes.Transparent,
             TextAlignment = alignment,
             VerticalContentAlignment = VerticalAlignment.Center
@@ -317,10 +326,9 @@ public partial class TableView : WikiElementViewBase
     {
         var host = new Grid
         {
-            Background = CreateCellBackground(true)
+            Background = CreateCellBackground(true),
+            Height = HeaderRowHeight
         };
-
-        host.Height = HeaderRowHeight;
         host.Children.Add(CreateEditorCell(table.Headers[index], 0, GetAlignment(table, index), HeaderRowHeight, value =>
         {
             if (table.Headers[index] != value)
@@ -382,19 +390,12 @@ public partial class TableView : WikiElementViewBase
         }
     };
 
-    private static MenuItem CreateMenuItem(string text, System.Action action)
-    {
-        var item = new MenuItem { Header = text };
-        item.Click += (_, _) => action();
-        return item;
-    }
-
     private static Button CreateButton(string text, System.Action action)
     {
         var button = new Button
         {
             Content = text,
-            Margin = new Avalonia.Thickness(0, 0, 4, 4)
+            Margin = new Thickness(0, 0, 4, 4)
         };
         button.Click += (_, _) => action();
         return button;

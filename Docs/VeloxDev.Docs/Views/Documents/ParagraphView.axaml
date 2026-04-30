@@ -1,8 +1,33 @@
-﻿<views:WikiElementViewBase xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:views="using:VeloxDev.Docs" xmlns:vm="using:VeloxDev.Docs.ViewModels" mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="120" x:Class="VeloxDev.Docs.ParagraphView" x:DataType="vm:ParagraphProvider">
-    <Border x:Name="ChromeBorder" Margin="0,0,0,8" Padding="8" CornerRadius="6" BorderBrush="{DynamicResource SystemAccentColor}">
+﻿<views:WikiElementViewBase xmlns="https://github.com/avaloniaui"
+                           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                           xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                           xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                           xmlns:views="using:VeloxDev.Docs"
+                           xmlns:vm="using:VeloxDev.Docs.ViewModels"
+                           mc:Ignorable="d"
+                           d:DesignWidth="800"
+                           d:DesignHeight="120"
+                           x:Class="VeloxDev.Docs.ParagraphView"
+                           x:DataType="vm:ParagraphProvider">
+    <Border x:Name="ChromeBorder"
+            Margin="0,0,0,8"
+            Padding="8"
+            CornerRadius="6"
+            BorderBrush="{DynamicResource SystemAccentColor}">
         <Grid>
-            <TextBlock x:Name="DisplayPanel" Text="{Binding Text}" TextWrapping="Wrap" FontSize="14" LineHeight="22" />
-            <TextBox x:Name="EditPanel" IsVisible="False" Text="{Binding Text}" Watermark="Body text" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" />
+            <TextBlock x:Name="DisplayPanel"
+                       Text="{Binding Text}"
+                       TextWrapping="Wrap"
+                       FontSize="14"
+                       LineHeight="22" />
+            <TextBox x:Name="EditPanel"
+                     IsVisible="False"
+                     Text="{Binding Text}"
+                     Watermark="Body text"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     MinHeight="72" />
         </Grid>
     </Border>
 </views:WikiElementViewBase>
+

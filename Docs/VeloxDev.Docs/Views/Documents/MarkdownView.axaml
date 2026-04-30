@@ -1,0 +1,50 @@
+<views:WikiElementViewBase xmlns="https://github.com/avaloniaui"
+                           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                           xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                           xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                           xmlns:views="using:VeloxDev.Docs"
+                           xmlns:vm="using:VeloxDev.Docs.ViewModels"
+                           mc:Ignorable="d"
+                           d:DesignWidth="800"
+                           d:DesignHeight="300"
+                           x:Class="VeloxDev.Docs.MarkdownView"
+                           x:DataType="vm:MarkdownProvider">
+    <Border x:Name="ChromeBorder"
+            Margin="0,0,0,8"
+            Padding="8"
+            CornerRadius="6"
+            BorderBrush="{DynamicResource SystemAccentColor}">
+        <Grid RowDefinitions="Auto,8,*">
+            <TextBlock Text="Markdown"
+                       Opacity="0.6"
+                       FontSize="12" />
+            <ScrollViewer x:Name="DisplayPanel"
+                          Grid.Row="2"
+                          MaxHeight="420"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="DisplayItems">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel Orientation="Vertical" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </ScrollViewer>
+            <ScrollViewer x:Name="EditPanel"
+                          Grid.Row="2"
+                          IsVisible="False"
+                          MaxHeight="420"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Auto">
+                <TextBox Text="{Binding Text}"
+                         AcceptsReturn="True"
+                         TextWrapping="NoWrap"
+                         MinHeight="160"
+                         FontFamily="Cascadia Code,Consolas,Menlo,monospace"
+                         FontSize="13"
+                         Watermark="Markdown content" />
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</views:WikiElementViewBase>

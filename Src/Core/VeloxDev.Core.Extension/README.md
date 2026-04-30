@@ -82,14 +82,36 @@ var agent = client.AsAIAgent(
 var json = workflow.Serialize();
 if (json.TryDeserialize<MyWorkflowTree>(out var tree)) { /* use */ }
 
+var treeSync = json.Deserialize<MyWorkflowTree>();
+
 // 异步
 var jsonAsync = await workflow.SerializeAsync();
 var (ok, tree2) = await jsonAsync.TryDeserializeAsync<MyWorkflowTree>();
 
-// 流式
-await using var ws = File.Create("wf.json");
-await workflow.SerializeToStreamAsync(ws);
+// UTF-8 字节（适合 Web / Wasm / 内存缓存 / 网络传输）
+var utf8 = workflow.SerializeToUtf8Bytes();
+var tree3 = utf8.DeserializeFromUtf8Bytes<MyWorkflowTree>();
+
+// TextReader / TextWriter（适合 StringWriter、浏览器存储桥接、日志或自定义宿主）
+using var sw = new StringWriter();
+await workflow.SerializeToTextWriterAsync(sw);
+using var sr = new StringReader(sw.ToString());
+var tree4 = await sr.DeserializeFromTextReaderAsync<MyWorkflowTree>();
+
+// 流式（适合 MemoryStream、网络流、文件流）
+using var ms = new MemoryStream();
+await workflow.SerializeToStreamAsync(ms);
+ms.Position = 0;
+var tree5 = await ms.DeserializeFromStreamAsync<MyWorkflowTree>();
 ```
+
+### 设计说明
+
+- 序列化核心基于 `Newtonsoft.Json`
+- API 同时支持 `string`、`byte[]`、`Stream`、`TextReader`、`TextWriter`
+- 异步 API 不依赖 `Task.Run` 包装同步序列化，因此更适合 `Avalonia.Browser` / Wasm 等受限运行时
+- `TryDeserialize` / `TryDeserializeAsync` 在输入无效时返回 `false`，不抛出格式异常
+- `Stream` API 负责序列化到流，不抽象具体持久化介质；浏览器环境建议配合内存流、JS Bridge、IndexedDB 或宿主侧存储接口使用
 
 ---
 

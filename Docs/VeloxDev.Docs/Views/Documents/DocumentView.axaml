@@ -34,6 +34,10 @@
 		<DataTemplate x:DataType="vm:CodeProvider">
          <views:CodeView />
 		</DataTemplate>
+     <!-- Markdown -->
+		<DataTemplate x:DataType="vm:MarkdownProvider">
+		 <views:MarkdownView />
+		</DataTemplate>
         <!-- 表格 -->
 		<DataTemplate x:DataType="vm:TableProvider">
 		 <views:TableView />
@@ -48,47 +52,82 @@
 		</DataTemplate>
 	</UserControl.DataTemplates>
 
-	<!-- 内容渲染 -->
-    <Grid ColumnDefinitions="240,4,*">
-		<!-- 目录 -->
-      <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
-         <TextBlock Grid.Row="0" Text="Navigation" Margin="8,8,8,4" FontWeight="SemiBold" Opacity="0.7" />
-			<TreeView Grid.Row="1"
-					  ItemsSource="{Binding Nodes}"
-					  SelectedItem="{Binding SelectedNode}">
-				<TreeView.ItemTemplate>
-					<TreeDataTemplate x:DataType="vm:NodeProvider" ItemsSource="{Binding Nodes}">
-                      <views:NodeView />
-					</TreeDataTemplate>
-				</TreeView.ItemTemplate>
-			</TreeView>
-			<WrapPanel Grid.Row="2" Margin="6">
-              <Button Content="Add Root" Command="{Binding AddRootCommand}" Margin="0,0,4,4" />
-              <Button Content="Save" Command="{Binding SaveCommand}" CommandParameter="{Binding $self}" Margin="0,0,4,4" />
-				<Button Content="Load" Command="{Binding LoadCommand}" CommandParameter="{Binding $self}" Margin="0,0,4,4" />
-			</WrapPanel>
-		</Grid>
-      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Width="4" />
-      <Grid Grid.Column="2">
-            <Grid RowDefinitions="Auto,*">
-				<!-- 头栏 -->
-             <WrapPanel Grid.Row="0" Margin="8">
-					<Button Content="Title 1" Command="{Binding AddTitleCommand}" CommandParameter="1" Margin="0,0,4,4" />
-					<Button Content="Title 2" Command="{Binding AddTitleCommand}" CommandParameter="2" Margin="0,0,4,4" />
-					<Button Content="Title 3" Command="{Binding AddTitleCommand}" CommandParameter="3" Margin="0,0,4,4" />
-					<Button Content="Title 4" Command="{Binding AddTitleCommand}" CommandParameter="4" Margin="0,0,4,4" />
-					<Button Content="Body" Command="{Binding AddParagraphCommand}" Margin="0,0,4,4" />
-					<Button Content="Subtitle" Command="{Binding AddSubtitleCommand}" Margin="0,0,4,4" />
-					<Button Content="Link" Command="{Binding AddLinkCommand}" Margin="0,0,4,4" />
-					<Button Content="Code" Command="{Binding AddCodeCommand}" Margin="0,0,4,4" />
-                    <Button Content="Table" Command="{Binding AddTableCommand}" Margin="0,0,4,4" />
-                    <Button Content="Image" Command="{Binding AddImageCommand}" Margin="0,0,4,4" />
-				</WrapPanel>
-				<!-- 内容区 -->
-                <ScrollViewer Grid.Row="1" Padding="8">
-					<ItemsControl ItemsSource="{Binding Children}" />
-				</ScrollViewer>
+	<!-- 全局布局 -->
+	<Grid RowDefinitions="Auto,*">
+
+		<!-- 顶部工具栏 -->
+		<Border Grid.Row="0"
+				BorderThickness="0,0,0,1"
+				BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+				Padding="8,6">
+			<Grid ColumnDefinitions="*,Auto">
+				<!-- 模式切换 -->
+				<StackPanel Orientation="Horizontal" Spacing="4">
+					<Button Content="{Binding EditModeLabel}"
+							Command="{Binding ToggleEditModeCommand}"
+							MinWidth="100" />
+					<Separator Width="1" Height="18" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="4,0" />
+					<!-- 编辑模式下的内容插入工具 -->
+					<WrapPanel IsVisible="{Binding IsEditMode}">
+						<Button Content="H1" Command="{Binding AddTitleCommand}" CommandParameter="1" Margin="0,0,4,0" ToolTip.Tip="Add Heading 1" />
+						<Button Content="H2" Command="{Binding AddTitleCommand}" CommandParameter="2" Margin="0,0,4,0" ToolTip.Tip="Add Heading 2" />
+						<Button Content="H3" Command="{Binding AddTitleCommand}" CommandParameter="3" Margin="0,0,4,0" ToolTip.Tip="Add Heading 3" />
+						<Button Content="H4" Command="{Binding AddTitleCommand}" CommandParameter="4" Margin="0,0,4,0" ToolTip.Tip="Add Heading 4" />
+						<Button Content="¶" Command="{Binding AddParagraphCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Paragraph" />
+						<Button Content="❝" Command="{Binding AddSubtitleCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Quote / Subtitle" />
+						<Button Content="🔗" Command="{Binding AddLinkCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Link" />
+						<Button Content="&lt;/&gt;" Command="{Binding AddCodeCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Code Block" />
+                     <Button Content="MD" Command="{Binding AddMarkdownCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Markdown Block" />
+						<Button Content="⊞" Command="{Binding AddTableCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Table" />
+						<Button Content="🖼" Command="{Binding AddImageCommand}" ToolTip.Tip="Add Image" />
+					</WrapPanel>
+				</StackPanel>
+				<!-- 文件操作 -->
+				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+					<Button Content="💾 Save" Command="{Binding SaveCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="Save to JSON" />
+					<Button Content="📂 Open" Command="{Binding LoadCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="Open JSON" />
+				</StackPanel>
 			</Grid>
+		</Border>
+
+		<!-- 主体区域 -->
+		<Grid Grid.Row="1" ColumnDefinitions="220,4,*">
+
+			<!-- 目录侧边栏 -->
+			<Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
+				<TextBlock Grid.Row="0"
+						   Text="Navigation"
+						   Margin="10,8,8,4"
+						   FontWeight="SemiBold"
+						   Opacity="0.6"
+						   FontSize="11" />
+				<TreeView Grid.Row="1"
+						  ItemsSource="{Binding Nodes}"
+						  SelectedItem="{Binding SelectedNode}"
+						  Margin="4,0">
+					<TreeView.ItemTemplate>
+						<TreeDataTemplate x:DataType="vm:NodeProvider" ItemsSource="{Binding Nodes}">
+							<views:NodeView />
+						</TreeDataTemplate>
+					</TreeView.ItemTemplate>
+				</TreeView>
+				<!-- 目录操作 (仅编辑模式) -->
+				<WrapPanel Grid.Row="2"
+						   IsVisible="{Binding IsEditMode}"
+						   Margin="6,4,6,6"
+						   Orientation="Horizontal">
+					<Button Content="+ Page" Command="{Binding AddRootCommand}" Margin="0,0,4,4" ToolTip.Tip="Add root page" />
+					<Button Content="+ Child" Command="{Binding AddChildCommand}" Margin="0,0,4,4" ToolTip.Tip="Add child page" />
+					<Button Content="✕" Command="{Binding RemoveNodeCommand}" Margin="0,0,0,4" ToolTip.Tip="Remove selected page" />
+				</WrapPanel>
+			</Grid>
+
+			<GridSplitter Grid.Column="1" ResizeDirection="Columns" Width="4" />
+
+			<!-- 内容区 -->
+			<ScrollViewer Grid.Column="2" Padding="16,12">
+				<ItemsControl ItemsSource="{Binding Children}" />
+			</ScrollViewer>
 		</Grid>
 	</Grid>
 </UserControl>

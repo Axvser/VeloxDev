@@ -26,6 +26,8 @@ public partial class EmptyProvider : IWikiElement
             return new LinkProvider { Parent = parent, Text = "VeloxDev", Url = "https://github.com/Axvser/VeloxDev" };
         if (type == typeof(CodeProvider))
             return new CodeProvider { Parent = parent, Language = "csharp", Code = "Console.WriteLine(\"Hello VeloxDev\");" };
+        if (type == typeof(MarkdownProvider))
+            return new MarkdownProvider { Parent = parent, Text = "# Markdown\n\nWrite **Markdown** here." };
         if (type == typeof(TableProvider))
             return TableProvider.CreateDefault(parent);
         if (type == typeof(ImageProvider))
