@@ -38,10 +38,15 @@ public partial class CodeProvider : IWikiElement
     [VeloxProperty] public partial IWikiElement? Parent { get; set; }
     [VeloxProperty] public partial string Code { get; set; }
     [VeloxProperty] public partial string Language { get; set; }
+    [VeloxProperty] public partial bool AutoHeight { get; set; }
+    [VeloxProperty] public partial double MaxHeightValue { get; set; }
     public InlineCollection Inlines { get; } = [];
+
+    public bool HasFixedHeight => !AutoHeight;
 
     partial void OnCodeChanged(string oldValue, string newValue) => UpdateInlines();
     partial void OnLanguageChanged(string oldValue, string newValue) => UpdateInlines();
+    partial void OnAutoHeightChanged(bool oldValue, bool newValue) => OnPropertyChanged(nameof(HasFixedHeight));
 
     private void UpdateInlines()
     {
@@ -135,5 +140,13 @@ public partial class CodeProvider : IWikiElement
         };
         if (clipboard != null)
             await clipboard.SetTextAsync(Code).ConfigureAwait(false);
+    } // Added missing closing brace for Copy method
+
+    public CodeProvider()
+    {
+        Code = string.Empty;
+        Language = "markdown";
+        AutoHeight = false;
+        MaxHeightValue = 300;
     }
 }

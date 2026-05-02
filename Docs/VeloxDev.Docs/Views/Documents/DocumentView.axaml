@@ -131,13 +131,14 @@
                     HorizontalScrollBarVisibility="Disabled"
 					  VerticalScrollBarVisibility="Auto"
 					  IsScrollChainingEnabled="False">
-             <Grid Width="{Binding #ContentScrollViewer.Viewport.Width}"
-                      MinHeight="{Binding #ContentScrollViewer.Viewport.Height}"
-					  Margin="0,0,8,8"
-					  HorizontalAlignment="Stretch">
+               <Border Width="{Binding #ContentScrollViewer.Viewport.Width}"
+						Padding="0,0,8,8"
+						HorizontalAlignment="Stretch"
+						VerticalAlignment="Top">
 					<ItemsControl ItemsSource="{Binding Children}"
-							  HorizontalAlignment="Stretch" />
-				</Grid>
+							  HorizontalAlignment="Stretch"
+							  VerticalAlignment="Top" />
+				</Border>
 			</ScrollViewer>
 		</Grid>
 	</Grid>

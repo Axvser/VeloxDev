@@ -155,6 +155,7 @@ public abstract class WikiElementViewBase : UserControl
         if (Editor is not null)
             Editor.IsVisible = true;
         UpdateChrome();
+        RefreshLayout();
     }
 
     protected virtual void ExitEdit()
@@ -164,6 +165,7 @@ public abstract class WikiElementViewBase : UserControl
         if (Editor is not null) Editor.IsVisible = false;
         ContextMenu = CreateContextMenu();
         UpdateChrome();
+        RefreshLayout();
     }
 
     protected virtual void UpdateChrome()
@@ -256,6 +258,30 @@ public abstract class WikiElementViewBase : UserControl
             .OfType<DocumentView>()
             .FirstOrDefault()
             ?.DataContext as DocumentProvider;
+
+    private void RefreshLayout()
+    {
+        InvalidateMeasure();
+        InvalidateArrange();
+
+        foreach (var ancestor in this.GetVisualAncestors().OfType<Control>())
+        {
+            ancestor.InvalidateMeasure();
+            ancestor.InvalidateArrange();
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            InvalidateMeasure();
+            InvalidateArrange();
+
+            foreach (var ancestor in this.GetVisualAncestors().OfType<Control>())
+            {
+                ancestor.InvalidateMeasure();
+                ancestor.InvalidateArrange();
+            }
+        }, DispatcherPriority.Background);
+    }
 
     private void RemoveFromDocument()
     {

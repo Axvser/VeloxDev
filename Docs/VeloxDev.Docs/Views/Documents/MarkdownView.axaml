@@ -14,13 +14,12 @@
             Padding="8"
             CornerRadius="6"
             BorderBrush="{DynamicResource SystemAccentColor}">
-        <Grid RowDefinitions="Auto,8,*">
+        <Grid RowDefinitions="Auto,8,Auto">
             <TextBlock Text="Markdown"
                        Opacity="0.6"
                        FontSize="12" />
             <ScrollViewer x:Name="DisplayPanel"
                           Grid.Row="2"
-                          MaxHeight="420"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
                           IsScrollChainingEnabled="False">
@@ -36,20 +35,65 @@
                     </ItemsControl>
                 </Grid>
             </ScrollViewer>
-            <ScrollViewer x:Name="EditPanel"
-                          Grid.Row="2"
-                          IsVisible="False"
-                          MaxHeight="420"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Auto"
-                          IsScrollChainingEnabled="False">
-                <TextBox Text="{Binding Text}"
-                         AcceptsReturn="True"
-                         TextWrapping="NoWrap"
-                         MinHeight="160"
-                         FontFamily="Cascadia Code,Consolas,Menlo,monospace"
-                         FontSize="13" />
-            </ScrollViewer>
+            <Grid x:Name="EditPanel"
+                  Grid.Row="2"
+                  IsVisible="False"
+                  RowDefinitions="Auto,8,Auto">
+                <StackPanel Spacing="4">
+                    <WrapPanel Orientation="Horizontal">
+                        <CheckBox Content="Auto height"
+                                  IsChecked="{Binding AutoHeight}"
+                                  Margin="0,0,12,4"
+                                  VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="6"
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding !AutoHeight}">
+                            <TextBlock Text="Max"
+                                       Opacity="0.7"
+                                       VerticalAlignment="Center" />
+                            <NumericUpDown Minimum="120"
+                                           Maximum="5000"
+                                           Increment="20"
+                                           FormatString="0"
+                                           Value="{Binding MaxHeightValue}"
+                                           MinWidth="120" />
+                        </StackPanel>
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal">
+                        <CheckBox Content="Code auto height"
+                                  IsChecked="{Binding EmbeddedCodeAutoHeight}"
+                                  Margin="0,0,12,8"
+                                  VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="6"
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding !EmbeddedCodeAutoHeight}">
+                            <TextBlock Text="Code max"
+                                       Opacity="0.7"
+                                       VerticalAlignment="Center" />
+                            <NumericUpDown Minimum="120"
+                                           Maximum="5000"
+                                           Increment="20"
+                                           FormatString="0"
+                                           Value="{Binding EmbeddedCodeMaxHeightValue}"
+                                           MinWidth="120" />
+                        </StackPanel>
+                    </WrapPanel>
+                </StackPanel>
+                <ScrollViewer x:Name="EditScrollViewer"
+                              Grid.Row="2"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Auto"
+                              IsScrollChainingEnabled="False">
+                    <TextBox Text="{Binding Text}"
+                             AcceptsReturn="True"
+                             TextWrapping="NoWrap"
+                             MinHeight="160"
+                             FontFamily="Cascadia Code,Consolas,Menlo,monospace"
+                             FontSize="13" />
+                </ScrollViewer>
+            </Grid>
         </Grid>
     </Border>
 </views:WikiElementViewBase>

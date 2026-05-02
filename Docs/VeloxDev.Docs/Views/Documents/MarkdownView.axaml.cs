@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Markdig;
 using Markdig.Extensions.Tables;
 using Markdig.Syntax;
@@ -42,7 +43,7 @@ public partial class MarkdownView : WikiElementViewBase
         InitializeEditChrome(ChromeBorder, DisplayPanel, EditPanel);
         DisplayItems.ItemsSource = _displayBlocks;
         PreferOwnScrolling(DisplayPanel);
-        PreferOwnScrolling(EditPanel);
+        PreferOwnScrolling(EditScrollViewer);
         DataContextChanged += (_, _) => AttachProvider();
         AttachProvider();
     }
@@ -56,13 +57,41 @@ public partial class MarkdownView : WikiElementViewBase
         if (_provider is not null)
             _provider.PropertyChanged += ProviderPropertyChanged;
 
+        ApplyHeightMode();
         RebuildDisplay();
     }
 
     private void ProviderPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MarkdownProvider.Text))
+        if (e.PropertyName == nameof(MarkdownProvider.Text) ||
+            e.PropertyName == nameof(MarkdownProvider.EmbeddedCodeAutoHeight) ||
+            e.PropertyName == nameof(MarkdownProvider.EmbeddedCodeMaxHeightValue))
             RebuildDisplay();
+        else if (e.PropertyName == nameof(MarkdownProvider.AutoHeight) ||
+                 e.PropertyName == nameof(MarkdownProvider.MaxHeightValue))
+            ApplyHeightMode();
+    }
+
+    private void ApplyHeightMode()
+    {
+        var autoHeight = _provider?.AutoHeight ?? false;
+        var maxHeight = Math.Max(120, _provider?.MaxHeightValue ?? 420);
+
+        DisplayPanel.MaxHeight = autoHeight ? double.PositiveInfinity : maxHeight;
+        DisplayPanel.VerticalScrollBarVisibility = autoHeight
+            ? Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+            : Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
+        EditScrollViewer.MaxHeight = autoHeight ? double.PositiveInfinity : maxHeight;
+        EditScrollViewer.VerticalScrollBarVisibility = autoHeight
+            ? Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+            : Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
+
+        DisplayPanel.InvalidateMeasure();
+        DisplayPanel.InvalidateArrange();
+        EditScrollViewer.InvalidateMeasure();
+        EditScrollViewer.InvalidateArrange();
+        InvalidateMeasure();
+        InvalidateArrange();
     }
 
     private void RebuildDisplay()
@@ -243,12 +272,14 @@ public partial class MarkdownView : WikiElementViewBase
         };
     }
 
-    private static Control CreateCodeBlock(CodeBlock codeBlock, string? info)
+    private Control CreateCodeBlock(CodeBlock codeBlock, string? info)
     {
         var provider = new CodeProvider
         {
             Language = NormalizeLanguage(info),
-            Code = ExtractCode(codeBlock)
+            Code = ExtractCode(codeBlock),
+            AutoHeight = _provider?.EmbeddedCodeAutoHeight ?? false,
+            MaxHeightValue = Math.Max(120, _provider?.EmbeddedCodeMaxHeightValue ?? 300)
         };
 
         return new CodeView
@@ -501,12 +532,20 @@ public partial class MarkdownView : WikiElementViewBase
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            var point = target.TransformToVisual(DisplayPanel)?.Transform(new Point());
+            var autoHeight = _provider?.AutoHeight ?? false;
+            var scrollHost = autoHeight
+                ? FindAncestorScrollViewer()
+                : DisplayPanel;
+
+            if (scrollHost is null)
+                return;
+
+            var point = target.TransformToVisual(scrollHost)?.Transform(new Point());
             if (point is { } anchorTop)
             {
-                var maxY = Math.Max(0, DisplayPanel.Extent.Height - DisplayPanel.Viewport.Height);
-                var targetOffsetY = Math.Clamp(DisplayPanel.Offset.Y + anchorTop.Y - 4, 0, maxY);
-                DisplayPanel.Offset = new Vector(DisplayPanel.Offset.X, targetOffsetY);
+                var maxY = Math.Max(0, scrollHost.Extent.Height - scrollHost.Viewport.Height);
+                var targetOffsetY = Math.Clamp(scrollHost.Offset.Y + anchorTop.Y - 4, 0, maxY);
+                scrollHost.Offset = new Vector(scrollHost.Offset.X, targetOffsetY);
             }
         }, DispatcherPriority.Background);
     }
@@ -630,6 +669,20 @@ public partial class MarkdownView : WikiElementViewBase
     {
         foreach (var key in GetAnchorAliases(text))
             _anchors[key] = control;
+    }
+
+    private ScrollViewer? FindAncestorScrollViewer()
+    {
+        Visual? current = this;
+        while (current is not null)
+        {
+            if (current is ScrollViewer scrollViewer && !ReferenceEquals(scrollViewer, DisplayPanel))
+                return scrollViewer;
+
+            current = current.GetVisualParent();
+        }
+
+        return null;
     }
 
     private static string NormalizeAnchor(string? text)
@@ -799,6 +852,7 @@ public partial class MarkdownView : WikiElementViewBase
     private Control CreateStandaloneLinkControl(LinkInline link, InlineRenderStyle style, double fontSize)
     {
         var url = link.Url;
+        var isPressed = false;
         var host = new Border
         {
             Background = Brushes.Transparent,
@@ -813,11 +867,30 @@ public partial class MarkdownView : WikiElementViewBase
 
         if (!string.IsNullOrWhiteSpace(url))
         {
-            host.PointerPressed += async (_, e) =>
+            host.PointerPressed += (_, e) =>
             {
                 if (e.GetCurrentPoint(host).Properties.IsLeftButtonPressed)
-                    await OpenInlineLinkAsync(url).ConfigureAwait(true);
+                {
+                    isPressed = true;
+                    e.Handled = true;
+                }
             };
+
+            host.PointerReleased += async (_, e) =>
+            {
+                if (!isPressed)
+                    return;
+
+                isPressed = false;
+                if (host.IsPointerOver)
+                {
+                    e.Handled = true;
+                    await OpenInlineLinkAsync(url).ConfigureAwait(true);
+                }
+            };
+
+            host.PointerCaptureLost += (_, _) => isPressed = false;
+            host.PointerExited += (_, _) => isPressed = false;
             ToolTip.SetTip(host, url);
         }
         else
