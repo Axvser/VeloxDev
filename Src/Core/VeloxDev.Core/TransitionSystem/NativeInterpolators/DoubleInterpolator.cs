@@ -1,5 +1,7 @@
 ﻿namespace VeloxDev.TransitionSystem.NativeInterpolators
 {
+    using VeloxDev.TransitionSystem;
+
     public class DoubleInterpolator : IValueInterpolator
     {
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
@@ -14,17 +16,33 @@
                 return [d2];
 
             List<object?> result = new(steps);
-            var delta = d2 - d1;
 
-            for (int i = 0; i < steps; i++)
+            if (options is RotationDirection direction && direction != RotationDirection.Auto)
             {
-                var t = (double)i / (steps - 1);
-                var value = d1 + t * delta;
-                result.Add(value);
+                var delta = (d2 - d1) % 360d;
+                if (direction.HasFlag(RotationDirection.CounterClockWise) && delta > 0d)
+                    delta -= 360d;
+                else if (direction.HasFlag(RotationDirection.ClockWise) && delta < 0d)
+                    delta += 360d;
+
+                for (int i = 0; i < steps; i++)
+                {
+                    var t = (double)i / (steps - 1);
+                    result.Add(d1 + delta * t);
+                }
+            }
+            else
+            {
+                var delta = d2 - d1;
+                for (int i = 0; i < steps; i++)
+                {
+                    var t = (double)i / (steps - 1);
+                    result.Add(d1 + t * delta);
+                }
             }
 
-            // 保证最后一帧为接收到的end参数
-            result[steps - 1] = end;
+            result[0] = d1;
+            result[steps - 1] = d2;
 
             return result;
         }

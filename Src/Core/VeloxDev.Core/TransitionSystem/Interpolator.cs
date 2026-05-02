@@ -132,6 +132,7 @@ public abstract class InterpolatorCore : IFrameInterpolatorCore
     {
         RegisterInterpolator(typeof(double), new DoubleInterpolator());
         RegisterInterpolator(typeof(float), new FloatInterpolator());
+        RegisterInterpolator(typeof(int), new IntInterpolator());
         RegisterInterpolator(typeof(long), new LongInterpolator());
         RegisterInterpolator(typeof(Point), new PointInterpolator());
         RegisterInterpolator(typeof(PointF), new PointFInterpolator());

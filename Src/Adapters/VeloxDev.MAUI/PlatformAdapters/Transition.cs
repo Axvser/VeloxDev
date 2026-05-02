@@ -136,6 +136,12 @@ namespace VeloxDev.TransitionSystem
                 return this;
             }
 
+            public StateSnapshot Property(Expression<Func<T, int>> propertyLambda, int newValue, object? interpolationOptions = null)
+            {
+                state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
+                return this;
+            }
             public StateSnapshot Property(Expression<Func<T, double>> propertyLambda, double newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);

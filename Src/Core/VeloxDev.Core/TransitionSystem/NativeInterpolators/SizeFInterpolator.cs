@@ -6,6 +6,8 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
     {
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
+            if (steps <= 0) return [];
+
             var s1 = (SizeF)(start ?? default(SizeF));
             var s2 = (SizeF)(end ?? s1);
             if (steps == 1) return [s2];
@@ -16,7 +18,7 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
 
             for (int i = 0; i < steps; i++)
             {
-                var t = (float)(i + 1) / steps;
+                var t = (float)i / (steps - 1);
                 result.Add(new SizeF(
                     s1.Width + deltaWidth * t,
                     s1.Height + deltaHeight * t

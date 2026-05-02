@@ -6,6 +6,8 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
     {
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
+            if (steps <= 0) return [];
+
             var r1 = (Rectangle)(start ?? default(Rectangle));
             var r2 = (Rectangle)(end ?? r1);
             if (steps == 1) return [r2];
@@ -18,12 +20,12 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
 
             for (int i = 0; i < steps; i++)
             {
-                var t = (double)(i + 1) / steps;
+                var t = (double)i / (steps - 1);
                 result.Add(new Rectangle(
-                    r1.X + (int)(deltaX * t),
-                    r1.Y + (int)(deltaY * t),
-                    r1.Width + (int)(deltaWidth * t),
-                    r1.Height + (int)(deltaHeight * t)
+                    r1.X + (int)Math.Round(deltaX * t),
+                    r1.Y + (int)Math.Round(deltaY * t),
+                    r1.Width + (int)Math.Round(deltaWidth * t),
+                    r1.Height + (int)Math.Round(deltaHeight * t)
                 ));
             }
             result[0] = start;

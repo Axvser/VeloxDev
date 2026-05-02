@@ -6,6 +6,8 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
     {
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
+            if (steps <= 0) return [];
+
             var p1 = (PointF)(start ?? default(PointF));
             var p2 = (PointF)(end ?? p1);
             if (steps == 1) return [p2];
@@ -16,7 +18,7 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
 
             for (int i = 0; i < steps; i++)
             {
-                var t = (float)(i + 1) / steps;
+                var t = (float)i / (steps - 1);
                 result.Add(new PointF(
                     p1.X + deltaX * t,
                     p1.Y + deltaY * t

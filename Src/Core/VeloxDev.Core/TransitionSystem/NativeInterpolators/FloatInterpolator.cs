@@ -23,8 +23,8 @@
                 result.Add(value);
             }
 
-            // 保证最后一帧为接收到的end参数
-            result[steps - 1] = end;
+            result[0] = f1;
+            result[steps - 1] = f2;
 
             return result;
         }

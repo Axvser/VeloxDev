@@ -6,6 +6,8 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
     {
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
+            if (steps <= 0) return [];
+
             var c1 = (Color)(start ?? default(Color));
             var c2 = (Color)(end ?? c1);
             if (steps == 1) return [c2];
@@ -18,7 +20,7 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
 
             for (int i = 0; i < steps; i++)
             {
-                var t = (float)(i + 1) / steps;
+                var t = (float)i / (steps - 1);
                 result.Add(Color.FromArgb(
                     (byte)(c1.A + deltaA * t),
                     (byte)(c1.R + deltaR * t),

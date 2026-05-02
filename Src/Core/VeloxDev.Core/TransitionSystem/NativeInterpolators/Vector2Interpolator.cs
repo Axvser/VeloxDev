@@ -7,6 +7,8 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
     {
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
+            if (steps <= 0) return [];
+
             var v1 = (Vector2)(start ?? default(Vector2));
             var v2 = (Vector2)(end ?? v1);
             if (steps == 1) return [v2];
@@ -16,7 +18,7 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
 
             for (int i = 0; i < steps; i++)
             {
-                var t = (float)(i + 1) / steps;
+                var t = (float)i / (steps - 1);
                 result.Add(v1 + delta * t);
             }
             result[0] = start;
