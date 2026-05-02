@@ -118,7 +118,7 @@
 						   Orientation="Horizontal">
 					<Button Content="+ Page" Command="{Binding AddRootCommand}" Margin="0,0,4,4" ToolTip.Tip="Add root page" />
 					<Button Content="+ Child" Command="{Binding AddChildCommand}" Margin="0,0,4,4" ToolTip.Tip="Add child page" />
-					<Button Content="✕" Command="{Binding RemoveNodeCommand}" Margin="0,0,0,4" ToolTip.Tip="Remove selected page" />
+                   <Button Content="🗑" Command="{Binding RemoveNodeCommand}" Margin="0,0,0,4" ToolTip.Tip="Remove selected page" />
 				</WrapPanel>
 			</Grid>
 

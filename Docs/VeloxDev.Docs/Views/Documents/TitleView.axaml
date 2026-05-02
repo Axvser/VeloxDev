@@ -19,12 +19,30 @@
                        Text="{Binding Text}"
                        FontSize="24"
                        TextWrapping="Wrap" />
-            <TextBox x:Name="EditPanel"
-                     IsVisible="False"
-                     Text="{Binding Text}"
-                     FontSize="18"
-                     AcceptsReturn="True"
-                     TextWrapping="Wrap" />
+            <Grid x:Name="EditPanel"
+                  IsVisible="False"
+                  RowDefinitions="Auto,8,Auto">
+                <StackPanel Orientation="Horizontal"
+                            Spacing="6"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="Level"
+                               Opacity="0.7"
+                               VerticalAlignment="Center" />
+                    <ComboBox SelectedItem="{Binding Level}"
+                              MinWidth="96">
+                        <x:String>1</x:String>
+                        <x:String>2</x:String>
+                        <x:String>3</x:String>
+                        <x:String>4</x:String>
+                    </ComboBox>
+                </StackPanel>
+                <TextBox x:Name="EditTextBox"
+                         Grid.Row="2"
+                         Text="{Binding Text}"
+                         FontSize="18"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap" />
+            </Grid>
         </Grid>
     </Border>
 </views:WikiElementViewBase>

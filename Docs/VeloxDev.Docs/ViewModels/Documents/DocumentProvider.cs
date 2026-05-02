@@ -152,6 +152,20 @@ public partial class DocumentProvider : IWikiElement
         owner[index] = EmptyProvider.CreateDefault(targetType, source.Parent);
     }
 
+    public void ReplaceElement(IWikiElement source, IWikiElement replacement)
+    {
+        var owner = FindOwnerCollection(source);
+        if (owner is null)
+            return;
+
+        var index = owner.IndexOf(source);
+        if (index < 0)
+            return;
+
+        replacement.Parent = source.Parent;
+        owner[index] = replacement;
+    }
+
     [VeloxCommand]
     private async Task Save(object? parameter)
     {

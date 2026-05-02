@@ -94,7 +94,7 @@ public abstract class WikiElementViewBase : UserControl
             items.AddRange(CreateAdditionalContextMenuItems());
 
             items.Add(new Separator());
-            var remove = new MenuItem { Header = "🗑 Remove" };
+            var remove = new MenuItem { Header = "Remove" };
             remove.Click += (_, _) => RemoveFromDocument();
             items.Add(remove);
         }
@@ -115,6 +115,9 @@ public abstract class WikiElementViewBase : UserControl
         item.Click += (_, _) => action();
         return item;
     }
+
+    protected static MenuItem CreateSubMenu(string header, IEnumerable<object> items)
+        => new() { Header = header, ItemsSource = items.ToList() };
 
     protected static void PreferOwnScrolling(ScrollViewer scrollViewer)
     {
