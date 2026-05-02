@@ -22,28 +22,33 @@
                           Grid.Row="2"
                           MaxHeight="420"
                           VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="DisplayItems">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <VirtualizingStackPanel Orientation="Vertical" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
+                          HorizontalScrollBarVisibility="Disabled"
+                          IsScrollChainingEnabled="False">
+                <Grid Width="{Binding #DisplayPanel.Viewport.Width}"
+                      HorizontalAlignment="Stretch">
+                    <ItemsControl x:Name="DisplayItems"
+                                  HorizontalAlignment="Stretch">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Vertical" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </Grid>
             </ScrollViewer>
             <ScrollViewer x:Name="EditPanel"
                           Grid.Row="2"
                           IsVisible="False"
                           MaxHeight="420"
                           VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Auto">
+                          HorizontalScrollBarVisibility="Auto"
+                          IsScrollChainingEnabled="False">
                 <TextBox Text="{Binding Text}"
                          AcceptsReturn="True"
                          TextWrapping="NoWrap"
                          MinHeight="160"
                          FontFamily="Cascadia Code,Consolas,Menlo,monospace"
-                         FontSize="13"
-                         Watermark="Markdown content" />
+                         FontSize="13" />
             </ScrollViewer>
         </Grid>
     </Border>

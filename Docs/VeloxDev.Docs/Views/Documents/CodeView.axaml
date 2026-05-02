@@ -11,9 +11,10 @@
 			Margin="0,0,0,8"
 			Padding="8"
 			CornerRadius="6"
+          HorizontalAlignment="Stretch"
 			BorderBrush="{DynamicResource SystemAccentColor}">
-      <Grid MaxHeight="360">
-          <Grid x:Name="DisplayPanel" RowDefinitions="Auto,4,*" MaxHeight="330">
+      <Grid MaxHeight="360" HorizontalAlignment="Stretch">
+		  <Grid x:Name="DisplayPanel" RowDefinitions="Auto,4,*" MaxHeight="330" HorizontalAlignment="Stretch">
 				<Grid ColumnDefinitions="*,Auto">
 					<TextBlock Text="{Binding Language}" Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
 					<Button Grid.Column="1" Content="Copy"
@@ -21,7 +22,7 @@
 							CommandParameter="{Binding $self}"
 							Padding="8,2" />
 				</Grid>
-             <ScrollViewer Grid.Row="2" MaxHeight="300" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+             <ScrollViewer x:Name="DisplayScrollViewer" Grid.Row="2" MaxHeight="300" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" IsScrollChainingEnabled="False" HorizontalAlignment="Stretch">
 					<SelectableTextBlock Inlines="{Binding Inlines}"
 									 LineHeight="18"
                                  FontFamily="Cascadia Code,Cascadia Mono,Sarasa Mono SC,Microsoft YaHei UI,Segoe UI,monospace"
@@ -29,7 +30,7 @@
 				</ScrollViewer>
 			</Grid>
 
-           <Grid x:Name="EditPanel" IsVisible="False" RowDefinitions="Auto,8,*" MaxHeight="330">
+           <Grid x:Name="EditPanel" IsVisible="False" RowDefinitions="Auto,8,*" MaxHeight="330" HorizontalAlignment="Stretch">
 				<Grid ColumnDefinitions="Auto,8,*,Auto">
 					<TextBlock Text="Language" VerticalAlignment="Center" Opacity="0.6" FontSize="12" />
                  <ComboBox Grid.Column="2"
@@ -41,7 +42,7 @@
 							CommandParameter="{Binding $self}"
 							Margin="8,0,0,0" />
 				</Grid>
-               <ScrollViewer Grid.Row="2" MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+             <ScrollViewer x:Name="EditScrollViewer" Grid.Row="2" MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" IsScrollChainingEnabled="False" HorizontalAlignment="Stretch">
 					<TextBox Text="{Binding Code}"
 							 AcceptsReturn="True"
 							 TextWrapping="NoWrap"

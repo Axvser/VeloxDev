@@ -16,12 +16,16 @@
             BorderBrush="{DynamicResource SystemAccentColor}">
         <Grid>
             <ScrollViewer x:Name="DisplayPanel"
-                          HorizontalScrollBarVisibility="Auto">
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          IsScrollChainingEnabled="False">
                 <StackPanel x:Name="DisplayHost" />
             </ScrollViewer>
             <ScrollViewer x:Name="EditPanel"
                           IsVisible="False"
-                          HorizontalScrollBarVisibility="Auto">
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          IsScrollChainingEnabled="False">
                 <StackPanel x:Name="EditHost" Spacing="8" />
             </ScrollViewer>
         </Grid>

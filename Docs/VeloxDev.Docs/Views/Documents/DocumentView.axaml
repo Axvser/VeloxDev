@@ -73,12 +73,12 @@
 						<Button Content="H2" Command="{Binding AddTitleCommand}" CommandParameter="2" Margin="0,0,4,0" ToolTip.Tip="Add Heading 2" />
 						<Button Content="H3" Command="{Binding AddTitleCommand}" CommandParameter="3" Margin="0,0,4,0" ToolTip.Tip="Add Heading 3" />
 						<Button Content="H4" Command="{Binding AddTitleCommand}" CommandParameter="4" Margin="0,0,4,0" ToolTip.Tip="Add Heading 4" />
-						<Button Content="¶" Command="{Binding AddParagraphCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Paragraph" />
-						<Button Content="❝" Command="{Binding AddSubtitleCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Quote / Subtitle" />
+						<Button Content="P" Command="{Binding AddParagraphCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Paragraph" />
+						<Button Content="🗨" Command="{Binding AddSubtitleCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Quote / Subtitle" />
 						<Button Content="🔗" Command="{Binding AddLinkCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Link" />
 						<Button Content="&lt;/&gt;" Command="{Binding AddCodeCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Code Block" />
-                     <Button Content="MD" Command="{Binding AddMarkdownCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Markdown Block" />
-						<Button Content="⊞" Command="{Binding AddTableCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Table" />
+                        <Button Content="MD" Command="{Binding AddMarkdownCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Markdown Block" />
+						<Button Content="📊" Command="{Binding AddTableCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Table" />
 						<Button Content="🖼" Command="{Binding AddImageCommand}" ToolTip.Tip="Add Image" />
 					</WrapPanel>
 				</StackPanel>
@@ -125,8 +125,19 @@
 			<GridSplitter Grid.Column="1" ResizeDirection="Columns" Width="4" />
 
 			<!-- 内容区 -->
-			<ScrollViewer Grid.Column="2" Padding="16,12">
-				<ItemsControl ItemsSource="{Binding Children}" />
+            <ScrollViewer x:Name="ContentScrollViewer"
+					  Grid.Column="2"
+					  Padding="16,12"
+                    HorizontalScrollBarVisibility="Disabled"
+					  VerticalScrollBarVisibility="Auto"
+					  IsScrollChainingEnabled="False">
+             <Grid Width="{Binding #ContentScrollViewer.Viewport.Width}"
+                      MinHeight="{Binding #ContentScrollViewer.Viewport.Height}"
+					  Margin="0,0,8,8"
+					  HorizontalAlignment="Stretch">
+					<ItemsControl ItemsSource="{Binding Children}"
+							  HorizontalAlignment="Stretch" />
+				</Grid>
 			</ScrollViewer>
 		</Grid>
 	</Grid>

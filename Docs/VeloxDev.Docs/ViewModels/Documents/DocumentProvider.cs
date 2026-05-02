@@ -202,7 +202,7 @@ public partial class DocumentProvider : IWikiElement
             return;
 
         await using var stream = await files[0].OpenReadAsync().ConfigureAwait(true);
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
+        using var reader = new StreamReader(stream, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
         var json = await reader.ReadToEndAsync().ConfigureAwait(true);
         if (json.TryDeserialize<DocumentProvider>(out var document) && document is not null)
         {

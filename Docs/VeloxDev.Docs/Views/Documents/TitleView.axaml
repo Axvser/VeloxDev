@@ -18,16 +18,13 @@
             <TextBlock x:Name="DisplayPanel"
                        Text="{Binding Text}"
                        FontSize="24"
-                       FontWeight="Bold"
-                       FontFamily="Microsoft YaHei UI,Microsoft JhengHei UI,PingFang SC,Hiragino Sans GB,Noto Sans CJK SC,Segoe UI,Inter,sans-serif"
                        TextWrapping="Wrap" />
             <TextBox x:Name="EditPanel"
                      IsVisible="False"
                      Text="{Binding Text}"
-                     Watermark="Title text"
                      FontSize="18"
-                     FontFamily="Microsoft YaHei UI,Microsoft JhengHei UI,PingFang SC,Hiragino Sans GB,Noto Sans CJK SC,Segoe UI,Inter,sans-serif"
-                     FontWeight="Bold" />
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap" />
         </Grid>
     </Border>
 </views:WikiElementViewBase>

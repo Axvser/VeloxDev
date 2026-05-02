@@ -6,5 +6,7 @@ public partial class CodeView : WikiElementViewBase
     {
         InitializeComponent();
         InitializeEditChrome(ChromeBorder, DisplayPanel, EditPanel);
+        PreferOwnScrolling(DisplayScrollViewer);
+        PreferOwnScrolling(EditScrollViewer);
     }
 }

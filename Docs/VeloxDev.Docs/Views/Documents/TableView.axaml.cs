@@ -9,6 +9,8 @@ namespace VeloxDev.Docs;
 
 public partial class TableView : WikiElementViewBase
 {
+    private static readonly FontFamily ContentFontFamily = new("Microsoft YaHei UI,Microsoft JhengHei UI,PingFang SC,Hiragino Sans GB,Noto Sans CJK SC,Segoe UI,Inter,sans-serif");
+
     private const double ColumnZoneHeight = 28;
     private const double HeaderRowHeight = 36;
     private const double BodyRowHeight = 34;
@@ -295,7 +297,8 @@ public partial class TableView : WikiElementViewBase
                 FontWeight = isHeader ? FontWeight.SemiBold : FontWeight.Normal,
                 TextWrapping = TextWrapping.Wrap,
                 TextAlignment = alignment,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                FontFamily = ContentFontFamily
             }
         };
 

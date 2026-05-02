@@ -1,15 +1,24 @@
+using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Interactivity;
+using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Markdig;
 using Markdig.Extensions.Tables;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using Avalonia.Svg.Skia;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Text;
 using System.Threading.Tasks;
 using VeloxDev.Docs.ViewModels;
@@ -20,10 +29,11 @@ namespace VeloxDev.Docs;
 
 public partial class MarkdownView : WikiElementViewBase
 {
-    private static readonly FontFamily ContentFontFamily = new("Microsoft YaHei UI,Microsoft JhengHei UI,PingFang SC,Hiragino Sans GB,Noto Sans CJK SC,Segoe UI,Inter,sans-serif");
+    private static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
     private static readonly FontFamily MonospaceFontFamily = new("Cascadia Code,Cascadia Mono,Sarasa Mono SC,Microsoft YaHei UI,Segoe UI,monospace");
 
     private readonly AvaloniaList<Control> _displayBlocks = [];
+    private readonly Dictionary<string, Control> _anchors = new(StringComparer.OrdinalIgnoreCase);
     private MarkdownProvider? _provider;
 
     public MarkdownView()
@@ -31,6 +41,8 @@ public partial class MarkdownView : WikiElementViewBase
         InitializeComponent();
         InitializeEditChrome(ChromeBorder, DisplayPanel, EditPanel);
         DisplayItems.ItemsSource = _displayBlocks;
+        PreferOwnScrolling(DisplayPanel);
+        PreferOwnScrolling(EditPanel);
         DataContextChanged += (_, _) => AttachProvider();
         AttachProvider();
     }
@@ -56,6 +68,7 @@ public partial class MarkdownView : WikiElementViewBase
     private void RebuildDisplay()
     {
         _displayBlocks.Clear();
+        _anchors.Clear();
 
         var markdown = _provider?.Text;
         if (string.IsNullOrWhiteSpace(markdown))
@@ -65,8 +78,7 @@ public partial class MarkdownView : WikiElementViewBase
                 Text = "No markdown",
                 FontStyle = FontStyle.Italic,
                 Opacity = 0.45,
-                FontSize = 13,
-                FontFamily = ContentFontFamily
+                FontSize = 13
             });
             return;
         }
@@ -83,10 +95,9 @@ public partial class MarkdownView : WikiElementViewBase
             _displayBlocks.Add(new TextBlock
             {
                 Text = markdown,
-                TextWrapping = TextWrapping.NoWrap,
+                TextWrapping = TextWrapping.Wrap,
                 FontSize = 14,
-                LineHeight = 22,
-                FontFamily = ContentFontFamily
+                LineHeight = 22
             });
         }
     }
@@ -112,60 +123,96 @@ public partial class MarkdownView : WikiElementViewBase
         };
     }
 
-    private static Control CreateTable(Table table)
+    private Control CreateTable(Table table)
     {
-        var provider = new TableProvider();
-
         var headerRow = table.OfType<TableRow>().FirstOrDefault(r => r.IsHeader);
         var bodyRows = table.OfType<TableRow>().Where(r => !r.IsHeader).ToList();
+        var rowCount = bodyRows.Count + (headerRow is null ? 0 : 1);
+        var columnCount = new[]
+        {
+            table.ColumnDefinitions.Count,
+            headerRow?.OfType<TableCell>().Count() ?? 0,
+            bodyRows.Select(row => row.OfType<TableCell>().Count()).DefaultIfEmpty(0).Max()
+        }.Max();
 
+        var grid = new Grid
+        {
+            ColumnSpacing = 0,
+            RowSpacing = 0
+        };
+
+        for (var col = 0; col < columnCount; col++)
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+        for (var row = 0; row < rowCount; row++)
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+        var rowIndex = 0;
         if (headerRow is not null)
         {
-            foreach (var cell in headerRow.OfType<TableCell>())
-                provider.Headers.Add(ExtractBlockText(cell));
-        }
-
-        for (var col = 0; col < table.ColumnDefinitions.Count; col++)
-        {
-            provider.Alignments.Add(table.ColumnDefinitions[col].Alignment switch
+            var cells = headerRow.OfType<TableCell>().ToList();
+            for (var col = 0; col < columnCount; col++)
             {
-                TableColumnAlign.Center => "Center",
-                TableColumnAlign.Right => "Right",
-                _ => "Left"
-            });
+                var cell = col < cells.Count ? cells[col] : null;
+                var control = CreateTableCell(cell, isHeader: true, GetTableAlignment(table, col));
+                Grid.SetRow(control, rowIndex);
+                Grid.SetColumn(control, col);
+                grid.Children.Add(control);
+            }
+
+            rowIndex++;
         }
 
         foreach (var row in bodyRows)
         {
-            var rowProvider = new TableRowProvider();
-            foreach (var cell in row.OfType<TableCell>())
-                rowProvider.Cells.Add(ExtractBlockText(cell));
-            provider.Rows.Add(rowProvider);
+            var cells = row.OfType<TableCell>().ToList();
+            for (var col = 0; col < columnCount; col++)
+            {
+                var cell = col < cells.Count ? cells[col] : null;
+                var control = CreateTableCell(cell, isHeader: false, GetTableAlignment(table, col));
+                Grid.SetRow(control, rowIndex);
+                Grid.SetColumn(control, col);
+                grid.Children.Add(control);
+            }
+
+            rowIndex++;
         }
 
-        return new TableView
+        return new Border
         {
-            DataContext = provider,
             Margin = new Avalonia.Thickness(0, 0, 0, 8),
-            IsHitTestVisible = false
+            BorderBrush = Brushes.Gray,
+            BorderThickness = new Avalonia.Thickness(1),
+            CornerRadius = new Avalonia.CornerRadius(6),
+            ClipToBounds = true,
+            Child = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+                IsScrollChainingEnabled = false,
+                Content = grid
+            }
         };
     }
 
     private Control CreateHeading(HeadingBlock heading)
     {
         var level = Math.Clamp(heading.Level, 1, 6);
-        return CreateInlineTextControl(
+        double fontSize = level switch
+        {
+            1 => 24,
+            2 => 20,
+            3 => 18,
+            4 => 16,
+            5 => 14,
+            _ => 13
+        };
+        var control = CreateInlineTextControl(
             heading.Inline,
-            level switch
-            {
-                1 => 24,
-                2 => 20,
-                3 => 18,
-                4 => 16,
-                5 => 14,
-                _ => 13
-            },
-            fontWeight: FontWeight.Bold);
+            fontSize,
+            fallbackText: ExtractInlineText(heading.Inline));
+        control.Margin = new Avalonia.Thickness(0, 0, 0, 4);
+        RegisterAnchor(ExtractInlineText(heading.Inline), control);
+        return control;
     }
 
     private Control CreateParagraph(ParagraphBlock paragraph)
@@ -206,8 +253,7 @@ public partial class MarkdownView : WikiElementViewBase
 
         return new CodeView
         {
-            DataContext = provider,
-            IsHitTestVisible = false
+            DataContext = provider
         };
     }
 
@@ -237,8 +283,7 @@ public partial class MarkdownView : WikiElementViewBase
                 Margin = new Avalonia.Thickness(0, 0, 8, 0),
                 FontSize = 14,
                 LineHeight = 22,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
-                FontFamily = ContentFontFamily
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top
             });
 
             var content = CreateInlineTextControl(FindInline(item), 14, 22, fallbackText: ExtractBlockText(item));
@@ -264,8 +309,7 @@ public partial class MarkdownView : WikiElementViewBase
             Text = text,
             TextWrapping = TextWrapping.Wrap,
             FontSize = 14,
-            LineHeight = 22,
-            FontFamily = ContentFontFamily
+            LineHeight = 22
         };
     }
 
@@ -280,8 +324,7 @@ public partial class MarkdownView : WikiElementViewBase
         var textBlock = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            FontSize = fontSize,
-            FontFamily = ContentFontFamily
+            FontSize = fontSize
         };
 
         if (lineHeight > 0)
@@ -297,14 +340,87 @@ public partial class MarkdownView : WikiElementViewBase
             return textBlock;
         }
 
+        if (ContainsInteractiveInline(inline.FirstChild))
+            return CreateInteractiveInlineTextControl(inline.FirstChild, fontSize, lineHeight, fontWeight ?? textBlock.FontWeight, fontStyle ?? textBlock.FontStyle, fallbackText);
+
         var inlines = textBlock.Inlines;
         if (inlines is not null)
-            AppendInlines(inlines, inline.FirstChild, new InlineRenderStyle(fontWeight ?? textBlock.FontWeight, fontStyle ?? textBlock.FontStyle, false));
+            AppendInlines(inlines, inline.FirstChild, new InlineRenderStyle(fontWeight ?? textBlock.FontWeight, fontStyle ?? textBlock.FontStyle, false, textBlock.LineHeight));
 
         if (inlines is null || inlines.Count == 0)
             textBlock.Text = fallbackText ?? ExtractInlineText(inline);
 
         return textBlock;
+    }
+
+    private Control CreateInteractiveInlineTextControl(
+        MdInline? inline,
+        double fontSize,
+        double lineHeight,
+        FontWeight fontWeight,
+        FontStyle fontStyle,
+        string? fallbackText)
+    {
+        var root = new StackPanel
+        {
+            Spacing = 0
+        };
+
+        var currentLine = CreateInteractiveLineHost();
+        root.Children.Add(currentLine);
+
+        AppendInteractiveInlineControls(root, ref currentLine, inline, new InlineRenderStyle(fontWeight, fontStyle, false, lineHeight), fontSize);
+
+        if (currentLine.Children.Count == 0 && root.Children.Count == 1)
+        {
+            currentLine.Children.Add(CreateFlowTextBlock(fallbackText ?? string.Empty, new InlineRenderStyle(fontWeight, fontStyle, false, lineHeight), fontSize));
+        }
+
+        return root;
+    }
+
+    private static WrapPanel CreateInteractiveLineHost() => new()
+    {
+        Orientation = Avalonia.Layout.Orientation.Horizontal,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top
+    };
+
+    private void AppendInteractiveInlineControls(
+        StackPanel root,
+        ref WrapPanel currentLine,
+        MdInline? inline,
+        InlineRenderStyle style,
+        double fontSize)
+    {
+        for (var current = inline; current is not null; current = current.NextSibling)
+        {
+            switch (current)
+            {
+                case LiteralInline literal:
+                    foreach (var token in TokenizeInlineText(GetLiteralText(literal)))
+                        currentLine.Children.Add(CreateFlowTextBlock(token, style, fontSize));
+                    break;
+                case CodeInline code:
+                    currentLine.Children.Add(CreateFlowTextBlock(code.Content, style with { IsCode = true }, fontSize));
+                    break;
+                case LineBreakInline:
+                    currentLine = CreateInteractiveLineHost();
+                    root.Children.Add(currentLine);
+                    break;
+                case LinkInline image when image.IsImage:
+                    currentLine.Children.Add(CreateInlineImageControl(image, style));
+                    break;
+                case LinkInline link when !link.IsImage:
+                    currentLine.Children.Add(CreateStandaloneLinkControl(link, style, fontSize));
+                    break;
+                case EmphasisInline emphasis:
+                    AppendInteractiveInlineControls(root, ref currentLine, emphasis.FirstChild, style.Merge(emphasis), fontSize);
+                    break;
+                case ContainerInline container:
+                    AppendInteractiveInlineControls(root, ref currentLine, container.FirstChild, style, fontSize);
+                    break;
+            }
+        }
     }
 
     private void AppendInlines(InlineCollection inlines, MdInline? inline, InlineRenderStyle style)
@@ -314,7 +430,7 @@ public partial class MarkdownView : WikiElementViewBase
             switch (current)
             {
                 case LiteralInline literal:
-                    var literalText = literal.Content.ToString();
+                    var literalText = GetLiteralText(literal);
                     if (!string.IsNullOrEmpty(literalText))
                         inlines.Add(CreateRun(literalText, style));
                     break;
@@ -323,6 +439,9 @@ public partial class MarkdownView : WikiElementViewBase
                     break;
                 case LineBreakInline:
                     inlines.Add(new LineBreak());
+                    break;
+                case LinkInline image when image.IsImage:
+                    inlines.Add(new InlineUIContainer { Child = CreateInlineImageControl(image, style) });
                     break;
                 case LinkInline link when !link.IsImage:
                     inlines.Add(CreateLinkInline(link, style));
@@ -353,46 +472,43 @@ public partial class MarkdownView : WikiElementViewBase
 
     private InlineUIContainer CreateLinkInline(LinkInline link, InlineRenderStyle style)
     {
-        var label = ExtractInlineText(link);
-        var url = link.Url;
-        var button = new Button
-        {
-            Content = string.IsNullOrWhiteSpace(label) ? url : label,
-            Background = Brushes.Transparent,
-            BorderBrush = Brushes.Transparent,
-            BorderThickness = new Avalonia.Thickness(0),
-            Padding = new Avalonia.Thickness(0),
-            Margin = new Avalonia.Thickness(0),
-            Foreground = new SolidColorBrush(Color.Parse("#4D9EF5")),
-            FontWeight = style.FontWeight,
-            FontStyle = style.FontStyle,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
-        };
-
-        if (style.IsCode)
-            button.FontFamily = MonospaceFontFamily;
-
-        if (!string.IsNullOrWhiteSpace(url))
-        {
-            button.Click += async (_, _) => await OpenInlineLinkAsync(url).ConfigureAwait(true);
-            ToolTip.SetTip(button, url);
-        }
-        else
-        {
-            button.IsEnabled = false;
-        }
-
-        return new InlineUIContainer { Child = button };
+        return new InlineUIContainer { Child = CreateStandaloneLinkControl(link, style, 14) };
     }
 
     private async Task OpenInlineLinkAsync(string url)
     {
-        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        if (string.IsNullOrWhiteSpace(url))
+            return;
+
+        if (url.StartsWith("#", StringComparison.Ordinal))
+        {
+            await ScrollToAnchorAsync(url).ConfigureAwait(true);
+            return;
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
             return;
 
         if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher)
             await launcher.LaunchUriAsync(uri).ConfigureAwait(true);
+    }
+
+    private async Task ScrollToAnchorAsync(string fragment)
+    {
+        var key = NormalizeAnchor(fragment);
+        if (string.IsNullOrWhiteSpace(key) || !_anchors.TryGetValue(key, out var target))
+            return;
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var point = target.TransformToVisual(DisplayPanel)?.Transform(new Point());
+            if (point is { } anchorTop)
+            {
+                var maxY = Math.Max(0, DisplayPanel.Extent.Height - DisplayPanel.Viewport.Height);
+                var targetOffsetY = Math.Clamp(DisplayPanel.Offset.Y + anchorTop.Y - 4, 0, maxY);
+                DisplayPanel.Offset = new Vector(DisplayPanel.Offset.X, targetOffsetY);
+            }
+        }, DispatcherPriority.Background);
     }
 
     private static ContainerInline? FindInline(ContainerBlock block)
@@ -469,7 +585,7 @@ public partial class MarkdownView : WikiElementViewBase
             switch (current)
             {
                 case LiteralInline literal:
-                    builder.Append(literal.Content.ToString());
+                    builder.Append(GetLiteralText(literal));
                     break;
                 case CodeInline code:
                     builder.Append(code.Content);
@@ -497,16 +613,480 @@ public partial class MarkdownView : WikiElementViewBase
         }
     }
 
-    private readonly record struct InlineRenderStyle(FontWeight FontWeight, FontStyle FontStyle, bool IsCode)
+    private static string GetLiteralText(LiteralInline literal)
+    {
+        var content = literal.Content;
+        if (string.IsNullOrEmpty(content.Text) || content.Start < 0 || content.End < content.Start)
+            return string.Empty;
+
+        var length = content.End - content.Start + 1;
+        if (content.Start + length > content.Text.Length)
+            return content.ToString();
+
+        return content.Text.Substring(content.Start, length);
+    }
+
+    private void RegisterAnchor(string? text, Control control)
+    {
+        foreach (var key in GetAnchorAliases(text))
+            _anchors[key] = control;
+    }
+
+    private static string NormalizeAnchor(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        return GetAnchorAliases(text).FirstOrDefault() ?? string.Empty;
+    }
+
+    private static IEnumerable<string> GetAnchorAliases(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            yield break;
+
+        var input = Uri.UnescapeDataString(text.Trim().TrimStart('#'));
+
+        var slug = BuildAnchorSlug(input, trimEdgeHyphens: false);
+        if (!string.IsNullOrWhiteSpace(slug))
+            yield return slug;
+
+        var trimmedSlug = BuildAnchorSlug(input, trimEdgeHyphens: true);
+        if (!string.IsNullOrWhiteSpace(trimmedSlug) && !string.Equals(trimmedSlug, slug, StringComparison.Ordinal))
+            yield return trimmedSlug;
+
+        var compact = new string(input
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray());
+        if (!string.IsNullOrWhiteSpace(compact) &&
+            !string.Equals(compact, slug, StringComparison.Ordinal) &&
+            !string.Equals(compact, trimmedSlug, StringComparison.Ordinal))
+        {
+            yield return compact;
+        }
+    }
+
+    private static string BuildAnchorSlug(string input, bool trimEdgeHyphens)
+    {
+        var builder = new StringBuilder(input.Length);
+        var lastWasHyphen = false;
+
+        foreach (var c in input)
+        {
+            if (char.IsLetterOrDigit(c))
+            {
+                builder.Append(char.ToLowerInvariant(c));
+                lastWasHyphen = false;
+            }
+            else if ((char.IsWhiteSpace(c) || c == '-') && !lastWasHyphen)
+            {
+                builder.Append('-');
+                lastWasHyphen = true;
+            }
+        }
+
+        var result = builder.ToString();
+        return trimEdgeHyphens ? result.Trim('-') : result;
+    }
+
+    private static TextAlignment GetTableAlignment(Table table, int index)
+    {
+        if (index < 0 || index >= table.ColumnDefinitions.Count)
+            return TextAlignment.Left;
+
+        return table.ColumnDefinitions[index].Alignment switch
+        {
+            TableColumnAlign.Center => TextAlignment.Center,
+            TableColumnAlign.Right => TextAlignment.Right,
+            _ => TextAlignment.Left
+        };
+    }
+
+    private Control CreateTableCell(TableCell? cell, bool isHeader, TextAlignment alignment)
+    {
+        var content = CreateTableCellContent(cell, alignment);
+        return new Border
+        {
+            BorderBrush = Brushes.Gray,
+            BorderThickness = new Avalonia.Thickness(0, 0, 1, 1),
+            Background = isHeader
+                ? new SolidColorBrush(Color.FromArgb(48, 128, 128, 128))
+                : new SolidColorBrush(Color.FromArgb(12, 128, 128, 128)),
+            Padding = new Avalonia.Thickness(6),
+            MinWidth = 120,
+            Child = content
+        };
+    }
+
+    private Control CreateTableCellContent(TableCell? cell, TextAlignment alignment)
+    {
+        if (cell is null)
+            return new TextBlock();
+
+        var host = new StackPanel
+        {
+            Spacing = 4,
+            HorizontalAlignment = alignment switch
+            {
+                TextAlignment.Center => Avalonia.Layout.HorizontalAlignment.Center,
+                TextAlignment.Right => Avalonia.Layout.HorizontalAlignment.Right,
+                _ => Avalonia.Layout.HorizontalAlignment.Stretch
+            }
+        };
+
+        foreach (var block in cell)
+        {
+            var control = CreateControl(block);
+            if (control is null)
+                continue;
+
+            ApplyAlignment(control, alignment);
+            host.Children.Add(control);
+        }
+
+        if (host.Children.Count == 0)
+        {
+            var text = new TextBlock();
+            ApplyAlignment(text, alignment);
+            host.Children.Add(text);
+        }
+
+        return host;
+    }
+
+    private static void ApplyAlignment(Control control, TextAlignment alignment)
+    {
+        if (control is TextBlock textBlock)
+            textBlock.TextAlignment = alignment;
+
+        control.HorizontalAlignment = alignment switch
+        {
+            TextAlignment.Center => Avalonia.Layout.HorizontalAlignment.Center,
+            TextAlignment.Right => Avalonia.Layout.HorizontalAlignment.Right,
+            _ => Avalonia.Layout.HorizontalAlignment.Left
+        };
+    }
+
+    private Control CreateLinkContent(LinkInline link, InlineRenderStyle style)
+    {
+        var controls = CreateInlineContentControls(link.FirstChild, style);
+        if (controls.Count == 0)
+        {
+            var label = ExtractInlineText(link);
+            return CreateLinkTextBlock(string.IsNullOrWhiteSpace(label) ? link.Url : label, style);
+        }
+
+        if (controls.Count == 1)
+            return controls[0];
+
+        var panel = new WrapPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+        };
+
+        foreach (var control in controls)
+        {
+            if (control is Control child)
+                child.Margin = new Avalonia.Thickness(0, 0, 4, 0);
+            panel.Children.Add(control);
+        }
+
+        return panel;
+    }
+
+    private Control CreateStandaloneLinkControl(LinkInline link, InlineRenderStyle style, double fontSize)
+    {
+        var url = link.Url;
+        var host = new Border
+        {
+            Background = Brushes.Transparent,
+            Padding = new Avalonia.Thickness(0),
+            Margin = new Avalonia.Thickness(0),
+            MinHeight = style.LineHeight > 0 ? style.LineHeight : 0,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Child = CreateLinkContent(link, style with { LineHeight = style.LineHeight > 0 ? style.LineHeight : fontSize + 6 }),
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            host.PointerPressed += async (_, e) =>
+            {
+                if (e.GetCurrentPoint(host).Properties.IsLeftButtonPressed)
+                    await OpenInlineLinkAsync(url).ConfigureAwait(true);
+            };
+            ToolTip.SetTip(host, url);
+        }
+        else
+        {
+            host.IsHitTestVisible = false;
+            host.Cursor = Cursor.Default;
+        }
+
+        return host;
+    }
+
+    private static TextBlock CreateFlowTextBlock(string? text, InlineRenderStyle style, double fontSize)
+    {
+        return new TextBlock
+        {
+            Text = text ?? string.Empty,
+            FontSize = fontSize,
+            TextWrapping = TextWrapping.NoWrap,
+            TextDecorations = null,
+            LineHeight = style.LineHeight > 0 ? style.LineHeight : 0,
+            FontWeight = style.FontWeight,
+            FontStyle = style.FontStyle,
+            FontFamily = style.IsCode ? MonospaceFontFamily : null,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top
+        };
+    }
+
+    private static TextBlock CreateLinkTextBlock(string? text, InlineRenderStyle style)
+    {
+        return new TextBlock
+        {
+            Text = text ?? string.Empty,
+            TextWrapping = TextWrapping.Wrap,
+            TextDecorations = null,
+            Foreground = new SolidColorBrush(Color.Parse("#4D9EF5")),
+            LineHeight = style.LineHeight > 0 ? style.LineHeight : 0,
+            FontWeight = style.FontWeight,
+            FontStyle = style.FontStyle,
+            FontFamily = style.IsCode ? MonospaceFontFamily : null,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top
+        };
+    }
+
+    private List<Control> CreateInlineContentControls(MdInline? inline, InlineRenderStyle style)
+    {
+        var controls = new List<Control>();
+        for (var current = inline; current is not null; current = current.NextSibling)
+        {
+            switch (current)
+            {
+                case LiteralInline literal:
+                    var literalText = GetLiteralText(literal);
+                    if (!string.IsNullOrWhiteSpace(literalText))
+                    {
+                        controls.Add(CreateLinkTextBlock(literalText, style));
+                    }
+                    break;
+                case CodeInline code:
+                    controls.Add(CreateLinkTextBlock(code.Content, style with { IsCode = true }));
+                    break;
+                case LinkInline image when image.IsImage:
+                    controls.Add(CreateInlineImageControl(image, style));
+                    break;
+                case EmphasisInline emphasis:
+                    controls.AddRange(CreateInlineContentControls(emphasis.FirstChild, style.Merge(emphasis)));
+                    break;
+                case ContainerInline container:
+                    controls.AddRange(CreateInlineContentControls(container.FirstChild, style));
+                    break;
+            }
+        }
+
+        return controls;
+    }
+
+    private Control CreateInlineImageControl(LinkInline image, InlineRenderStyle style)
+    {
+        var altText = ExtractInlineText(image);
+        if (string.IsNullOrWhiteSpace(image.Url))
+            return new TextBlock { Text = altText };
+
+        var imageControl = new Image
+        {
+            MaxHeight = style.LineHeight > 0 ? Math.Max(12, style.LineHeight - 4) : 18,
+            Stretch = Stretch.Uniform,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+        };
+
+        var host = new ContentControl
+        {
+            Content = new Viewbox
+            {
+                Stretch = Stretch.Uniform,
+                StretchDirection = StretchDirection.DownOnly,
+                Child = imageControl,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+            },
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+        };
+
+        _ = LoadInlineImageAsync(host, imageControl, image.Url, altText);
+        return host;
+    }
+
+    private static async Task LoadInlineImageAsync(ContentControl host, Image image, string source, string fallbackText)
+    {
+        try
+        {
+            var rendered = await LoadImageSourceAsync(source).ConfigureAwait(false);
+            await Dispatcher.UIThread.InvokeAsync(() => image.Source = rendered);
+        }
+        catch
+        {
+            if (!string.IsNullOrWhiteSpace(fallbackText))
+            {
+                await Dispatcher.UIThread.InvokeAsync(() => host.Content = new TextBlock
+                {
+                    Text = fallbackText,
+                    TextWrapping = TextWrapping.Wrap,
+                    TextDecorations = null,
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+                });
+            }
+        }
+    }
+
+    private static async Task<IImage?> LoadImageSourceAsync(string source)
+    {
+        await using var stream = await OpenImageStreamAsync(source).ConfigureAwait(false);
+        if (stream is null)
+            return null;
+
+        if (IsSvgFile(stream))
+            return new SvgImage
+            {
+                Source = SvgSource.LoadFromStream(stream)
+            };
+
+        return new Bitmap(stream);
+    }
+
+    private static async Task<Stream?> OpenImageStreamAsync(string source)
+    {
+        if (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            source.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            var bytes = await HttpClient.GetByteArrayAsync(source).ConfigureAwait(false);
+            return new MemoryStream(bytes, writable: false);
+        }
+
+        var path = source.StartsWith("file://", StringComparison.OrdinalIgnoreCase)
+            ? new Uri(source).LocalPath
+            : source;
+
+        if (!File.Exists(path))
+            return null;
+
+        await using var fileStream = File.OpenRead(path);
+        var memoryStream = new MemoryStream();
+        await fileStream.CopyToAsync(memoryStream).ConfigureAwait(false);
+        memoryStream.Position = 0;
+        return memoryStream;
+    }
+
+    private static bool IsSvgFile(Stream stream)
+    {
+        if (stream.Length == 0)
+            return false;
+
+        try
+        {
+            const int bufferSize = 512;
+            var length = (int)Math.Min(bufferSize, stream.Length);
+            var buffer = new byte[length];
+            var bytesRead = stream.Read(buffer, 0, buffer.Length);
+            var header = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+            return header.Contains("<svg", StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            stream.Position = 0;
+        }
+    }
+
+    private static bool LooksLikeSvg(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return false;
+
+        return source.Contains(".svg", StringComparison.OrdinalIgnoreCase)
+            || source.Contains("image/svg", StringComparison.OrdinalIgnoreCase)
+            || source.Contains("logo=", StringComparison.OrdinalIgnoreCase) && source.Contains("img.shields.io", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ContainsInteractiveInline(MdInline? inline)
+    {
+        for (var current = inline; current is not null; current = current.NextSibling)
+        {
+            switch (current)
+            {
+                case LinkInline:
+                    return true;
+                case ContainerInline container when ContainsInteractiveInline(container.FirstChild):
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<string> TokenizeInlineText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            yield break;
+
+        var builder = new StringBuilder();
+        foreach (var c in text)
+        {
+            if (char.IsWhiteSpace(c))
+            {
+                if (builder.Length > 0)
+                {
+                    yield return builder.ToString();
+                    builder.Clear();
+                }
+
+                yield return c.ToString();
+                continue;
+            }
+
+            if (IsIndependentWrapToken(c))
+            {
+                if (builder.Length > 0)
+                {
+                    yield return builder.ToString();
+                    builder.Clear();
+                }
+
+                yield return c.ToString();
+                continue;
+            }
+
+            builder.Append(c);
+        }
+
+        if (builder.Length > 0)
+            yield return builder.ToString();
+    }
+
+    private static bool IsIndependentWrapToken(char c)
+    {
+        var category = char.GetUnicodeCategory(c);
+        return c >= 0x2E80
+            || category == System.Globalization.UnicodeCategory.OtherPunctuation
+            || category == System.Globalization.UnicodeCategory.DashPunctuation
+            || category == System.Globalization.UnicodeCategory.OpenPunctuation
+            || category == System.Globalization.UnicodeCategory.ClosePunctuation
+            || category == System.Globalization.UnicodeCategory.InitialQuotePunctuation
+            || category == System.Globalization.UnicodeCategory.FinalQuotePunctuation;
+    }
+
+    private readonly record struct InlineRenderStyle(FontWeight FontWeight, FontStyle FontStyle, bool IsCode, double LineHeight)
     {
         public InlineRenderStyle Merge(EmphasisInline emphasis)
         {
             var weight = FontWeight;
             var style = FontStyle;
 
-            if (emphasis.DelimiterCount >= 2)
-                weight = FontWeight.Bold;
-            else
+            if (emphasis.DelimiterCount < 2)
                 style = FontStyle.Italic;
 
             return this with { FontWeight = weight, FontStyle = style };

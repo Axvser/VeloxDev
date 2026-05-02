@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -34,13 +35,6 @@ public abstract class WikiElementViewBase : UserControl
 
         AddEditorHandlers(editor);
 
-        // 双击进入编辑
-        chrome.PointerPressed += (_, e) =>
-        {
-            if (e.ClickCount == 2 && IsGlobalEditMode)
-                EnterEdit();
-        };
-
         AttachedToVisualTree += (_, _) => AttachDocument();
         DetachedFromVisualTree += (_, _) => DetachDocument();
 
@@ -55,7 +49,10 @@ public abstract class WikiElementViewBase : UserControl
             _attachedDocument.PropertyChanged += OnDocumentPropertyChanged;
 
         ContextMenu = CreateContextMenu();
-        UpdateChrome();
+        if (IsGlobalEditMode)
+            EnterEdit();
+        else
+            UpdateChrome();
     }
 
     private void DetachDocument()
@@ -71,7 +68,9 @@ public abstract class WikiElementViewBase : UserControl
     {
         if (e.PropertyName == nameof(DocumentProvider.IsEditMode))
         {
-            if (!IsGlobalEditMode && IsEditing)
+            if (IsGlobalEditMode)
+                EnterEdit();
+            else
                 ExitEdit();
 
             ContextMenu = CreateContextMenu();
@@ -85,17 +84,6 @@ public abstract class WikiElementViewBase : UserControl
 
         if (IsGlobalEditMode)
         {
-            var edit = new MenuItem { Header = "✏ Edit" };
-            edit.Click += (_, _) => EnterEdit();
-            items.Add(edit);
-
-            if (IsEditing)
-            {
-                var browse = new MenuItem { Header = "✔ Done Editing" };
-                browse.Click += (_, _) => ExitEdit();
-                items.Add(browse);
-            }
-
             if (DataContext is IWikiElement and not NodeProvider)
             {
                 items.Add(new Separator());
@@ -128,6 +116,35 @@ public abstract class WikiElementViewBase : UserControl
         return item;
     }
 
+    protected static void PreferOwnScrolling(ScrollViewer scrollViewer)
+    {
+        scrollViewer.PointerWheelChanged += (_, e) => HandlePreferredScrolling(scrollViewer, e);
+    }
+
+    private static void HandlePreferredScrolling(ScrollViewer scrollViewer, PointerWheelEventArgs e)
+    {
+        var offset = scrollViewer.Offset;
+        var maxX = Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+        var maxY = Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+        var newOffset = offset;
+        const double wheelStep = 48;
+
+        if (Math.Abs(e.Delta.Y) >= Math.Abs(e.Delta.X) && maxY > 0)
+        {
+            newOffset = new Vector(offset.X, Math.Clamp(offset.Y - (e.Delta.Y * wheelStep), 0, maxY));
+        }
+        else if (Math.Abs(e.Delta.X) > 0 && maxX > 0)
+        {
+            newOffset = new Vector(Math.Clamp(offset.X - (e.Delta.X * wheelStep), 0, maxX), offset.Y);
+        }
+
+        if (newOffset == offset)
+            return;
+
+        scrollViewer.Offset = newOffset;
+        e.Handled = true;
+    }
+
     protected virtual void EnterEdit()
     {
         if (!IsGlobalEditMode)
@@ -136,10 +153,7 @@ public abstract class WikiElementViewBase : UserControl
         IsEditing = true;
         if (Display is not null) Display.IsVisible = false;
         if (Editor is not null)
-        {
             Editor.IsVisible = true;
-            FocusEditor();
-        }
         UpdateChrome();
     }
 
@@ -190,6 +204,9 @@ public abstract class WikiElementViewBase : UserControl
         Dispatcher.UIThread.Post(() =>
         {
             if (!IsEditing || Editor is null)
+                return;
+
+            if (IsGlobalEditMode)
                 return;
 
             if (Editor.GetVisualDescendants().OfType<ComboBox>().Any(comboBox => comboBox.IsDropDownOpen))
