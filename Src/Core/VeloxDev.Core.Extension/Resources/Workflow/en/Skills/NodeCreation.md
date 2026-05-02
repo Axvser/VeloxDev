@@ -6,6 +6,8 @@ When the user asks to create a node, follow these steps **in order**:
 2. **Read the pre-loaded `[AgentContext]` description** for that type (already in your context above). Extract the default size and any other defaults. **Do NOT call `GetComponentContext`** — the description is already present.
 3. **Apply defaults from `[AgentContext]`**: If the description says "default size: 200×100", use `width=200, height=100` in `CreateNode`. User-specified values override defaults.
 4. **Choose a non-overlapping position**: Check existing node positions (via `ListNodes` or cached knowledge) and pick a position with at least 30 px gap. The tool auto-offsets on overlap, but proactively choosing good positions produces better layouts.
+   - **Empty canvas**: Start the first node near the origin (e.g. `(20, 20)`) unless the user specifies a different region.
+   - **Non-empty canvas**: Default to placing new nodes to the right of or below the existing bounding box. If the user requests a specific quadrant or region, translate that intent using the **Coordinate System** reference.
 5. **Call `CreateNode` or `CreateAndConfigureNode`** with the resolved type, position, and size. If the response includes `repositioned=true`, the node was auto-moved — note the actual `x`/`y`.
 6. **Set `[AgentContext]`-described properties** via `PatchNodeProperties` if the user wants values different from defaults.
 

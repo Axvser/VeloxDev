@@ -1,7 +1,6 @@
 using Microsoft.UI.Xaml.Media;
 using System.Collections.Generic;
 using System.Linq;
-using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.WinUI.NativeInterpolators
 {

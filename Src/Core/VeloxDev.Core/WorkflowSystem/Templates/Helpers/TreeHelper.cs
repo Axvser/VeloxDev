@@ -10,7 +10,7 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>
 /// [ Component Helper ] Provide standard supports for Tree Component
 /// </summary>
-public class TreeHelper : TreeHelper<IWorkflowTreeViewModel>
+public class TreeHelper(double cellSize = 200) : TreeHelper<IWorkflowTreeViewModel>(cellSize)
 {
 
 }
@@ -19,20 +19,22 @@ public class TreeHelper : TreeHelper<IWorkflowTreeViewModel>
 /// [ Component Helper ] Provide standard supports for Tree Component
 /// </summary>
 /// <typeparam name="T">The type of the Tree ViewModel that this helper is designed for.</typeparam>
-[MonoBehaviour]
+[MonoBehaviour(channel: nameof(TreeHelper), fps: 10)]
 public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
     where T : class, IWorkflowTreeViewModel
 {
-    public TreeHelper()
+    public TreeHelper(double cellSize = 200)
     {
-        if (!MonoBehaviourManager.IsRunning)
+        CellSize = cellSize;
+        if (!MonoBehaviourManager.IsRunning(nameof(TreeHelper)))
         {
-            MonoBehaviourManager.Start();
+            MonoBehaviourManager.Start(nameof(TreeHelper));
         }
     }
 
     public T? Component { get; protected set; }
     private IReadOnlyCollection<IVeloxCommand> commands = [];
+    private double CellSize { get; } = 200;
 
     private bool isDirty = false;
 
@@ -83,7 +85,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
         VisibleItems = [];
         tree.Nodes.CollectionChanged += OnNodesChanged;
         tree.Links.CollectionChanged += OnLinksChanged;
-        if (Component is null || tree.EnableMap(200, VisibleItems) < 0)
+        if (Component is null || tree.EnableMap(CellSize, VisibleItems) < 0)
         {
             Debug.Fail("EnableMap did not return a non-negative value as expected. Please check the implementation of EnableMap in the IWorkflowTreeViewModel.");
         }

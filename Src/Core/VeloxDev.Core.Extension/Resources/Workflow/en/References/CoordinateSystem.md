@@ -35,3 +35,18 @@ The workflow canvas uses **standard computer graphics coordinates** (screen coor
 | "move right" | **Increase** X (positive offsetX) |
 
 > ⚠️ **Common pitfall**: "up" means **smaller Y** (toward 0), not larger. "Down" means **larger Y** (away from 0).
+
+### Quadrant Frame of Reference
+
+Quadrant identity is determined by the **sign of X and Y** — the same rule as standard mathematics:
+
+| Quadrant | X | Y | Position on canvas |
+|---|---|---|---|
+| **Q4 (default working region)** | + | + | Right of and below origin — the normal visible area |
+| **Q1** | + | − | Right of origin, **above** it (negative Y, off standard canvas top) |
+| **Q2** | − | − | Left of and above origin (both negative) |
+| **Q3** | − | + | **Left** of origin, below it (negative X) |
+
+> Because the canvas Y-axis points **downward**, "above the origin" means **Y < 0**.
+
+When the user says "move to Q1 / Q3 / …", translate that into a coordinate shift so the layout bounding box lands in the correct sign region. See the **SmartLayout** skill for the exact delta calculation.

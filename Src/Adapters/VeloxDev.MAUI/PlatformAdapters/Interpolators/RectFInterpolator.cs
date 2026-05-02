@@ -1,5 +1,4 @@
 using System.Drawing;
-using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.MAUI.NativeInterpolators
 {

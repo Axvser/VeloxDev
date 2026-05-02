@@ -8,13 +8,18 @@
 		<LangVersion>latest</LangVersion>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WinForms</Title>
-		<Version>4.7.0</Version>
+		<Version>5.0.2</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinForms</Description>
+        <PackageIcon>veloxdev-logo.png</PackageIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<None Include="..\..\..\Assets\veloxdev-logo.png" Pack="true" PackagePath="\" Visible="false" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="VeloxDev.Core" Version="5.0.2" />
 	</ItemGroup>
 
 </Project>

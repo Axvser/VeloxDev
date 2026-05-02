@@ -1,7 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using VeloxDev.TimeLine;
 
 namespace Demo
 {
@@ -178,13 +177,13 @@ namespace Demo
                 if (txtInputStats != null) txtInputStats.Text = _input?.GetStats() ?? "Input: Not loaded";
                 if (txtRenderStats != null) txtRenderStats.Text = _render?.GetStats() ?? "Render: Not loaded";
                 if (txtActiveComponents != null)
-                    txtActiveComponents.Text = $"Active Components: {MonoBehaviourManager.ActiveBehaviorCount}";
+                    txtActiveComponents.Text = $"Active Components: {MonoBehaviourManager.ActiveBehaviorCount()}";
                 if (txtTotalUpdates != null)
-                    txtTotalUpdates.Text = $"Total Updates: {MonoBehaviourManager.TotalFrames}";
+                    txtTotalUpdates.Text = $"Total Updates: {MonoBehaviourManager.TotalFrames()}";
                 if (txtThreadStatus != null)
-                    txtThreadStatus.Text = $"Update Thread: {(MonoBehaviourManager.IsUpdateThreadAlive ? "Running" : "Stopped")} | Physics Thread: {(MonoBehaviourManager.IsFixedUpdateThreadAlive ? "Running" : "Stopped")}";
+                    txtThreadStatus.Text = $"Update Thread: {(MonoBehaviourManager.IsUpdateThreadAlive() ? "Running" : "Stopped")} | Physics Thread: {(MonoBehaviourManager.IsFixedUpdateThreadAlive() ? "Running" : "Stopped")}";
                 if (txtSystemStatus != null)
-                    txtSystemStatus.Text = MonoBehaviourManager.IsRunning ? (MonoBehaviourManager.IsPaused ? "🟡 System Paused" : "🟢 System Running") : "🔴 System Stopped";
+                    txtSystemStatus.Text = MonoBehaviourManager.IsRunning() ? (MonoBehaviourManager.IsPaused() ? "🟡 System Paused" : "🟢 System Running") : "🔴 System Stopped";
             });
         }
 

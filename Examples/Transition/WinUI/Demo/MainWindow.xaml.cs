@@ -5,7 +5,6 @@ using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Threading.Tasks;
 using VeloxDev.TransitionSystem;
-using VeloxDev.WinUI.NativeInterpolators;
 using Windows.Foundation;
 
 namespace Demo

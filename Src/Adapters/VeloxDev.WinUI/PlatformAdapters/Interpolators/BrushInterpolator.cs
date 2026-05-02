@@ -2,7 +2,6 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
-using VeloxDev.TransitionSystem;
 using Windows.Foundation;
 using Windows.UI;
 

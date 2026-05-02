@@ -37,13 +37,21 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         [typeof(IWorkflowTreeViewModel), typeof(IWorkflowNodeViewModel), typeof(IWorkflowSlotViewModel), typeof(IWorkflowLinkViewModel), typeof(IWorkflowViewModel)];
 
     private static readonly Type[] FrameworkComponents =
-        [typeof(TreeViewModelBase), typeof(NodeViewModelBase), typeof(SlotViewModelBase), typeof(LinkViewModelBase),
-         typeof(Anchor),typeof(Offset),typeof(Size)
-        ];
+        [typeof(TreeViewModelBase), typeof(NodeViewModelBase), typeof(SlotViewModelBase), typeof(LinkViewModelBase)];
+
+    /// <summary>
+    /// Value-object / data types built into the framework (e.g. Anchor, Offset, Size).
+    /// Kept separate from ViewModel base classes so the Agent knows they are plain data structures.
+    /// </summary>
+    internal static readonly Type[] FrameworkData =
+        [typeof(Anchor), typeof(Offset), typeof(Size)];
 
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerEnums = [];
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerInterfaces = [];
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerComponents = [];
+
+    /// <summary>Value-object / data types registered by the developer (e.g. custom point/rect structs).</summary>
+    private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerData = [];
 
     private readonly List<AITool> _customTools = [];
     private readonly StringBuilder _customToolPrompt = new();
@@ -127,8 +135,26 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     }
 
     /// <summary>
+    /// Registers value-object / data types (e.g. custom Anchor-like structs, size records)
+    /// so the Agent understands their structure as plain data, not as interactive components.
+    /// </summary>
+    public WorkflowAgentScope WithData(AgentLanguages language, params Type[] dataTypes)
+    {
+        if (CustomerData.TryGetValue(language, out var set))
+        {
+            foreach (var item in dataTypes)
+                set.Add(item);
+        }
+        else
+        {
+            CustomerData[language] = [.. dataTypes];
+        }
+        return this;
+    }
+
+    /// <summary>
     /// Registers custom <see cref="AITool"/> instances that will be merged into the
-    /// toolkit alongside the built-in workflow tools. Use this to expose
+    /// toolkit alongside the built-in workflow tools.
     /// domain-specific or component-specific operations to the Agent.
     /// </summary>
     /// <param name="promptContext">
@@ -201,9 +227,17 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine();
         result.AppendLine(ProvideFrameworkContext(language));
         result.AppendLine();
+        result.AppendLine("## Framework Data Types");
+        result.AppendLine();
+        result.AppendLine(ProvideFrameworkDataContext(language));
+        result.AppendLine();
         result.AppendLine("## Customer Context");
         result.AppendLine();
         result.AppendLine(ProvideCustomerContext(language));
+        result.AppendLine();
+        result.AppendLine("## Customer Data Types");
+        result.AppendLine();
+        result.AppendLine(ProvideCustomerDataContext(language));
         result.AppendLine();
 
         // ── Built-in Skills ──
@@ -256,22 +290,29 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             result.AppendLine($"- `{t.FullName}` (framework interface)");
         foreach (var t in FrameworkComponents)
             result.AppendLine($"- `{t.FullName}` (framework base class)");
+        foreach (var t in FrameworkData)
+            result.AppendLine($"- `{t.FullName}` (framework data)");
         foreach (var kvp in CustomerComponents)
         {
             foreach (var t in kvp.Value)
                 result.AppendLine($"- `{t.FullName}` (customer component)");
+        }
+        foreach (var kvp in CustomerData)
+        {
+            foreach (var t in kvp.Value)
+                result.AppendLine($"- `{t.FullName}` (customer data)");
         }
 
         result.AppendLine();
         result.AppendLine("## 📋 Pre-loaded Component Descriptions (from [AgentContext])");
         result.AppendLine();
         result.AppendLine("The following developer instructions are **AUTHORITATIVE** for each customer component type.");
-        result.AppendLine("They define default sizes, property semantics, and intended usage. Treat them as ground truth.");
-        result.AppendLine("You already have this information — do NOT call GetComponentContext again for these types unless specifically needing full property tables.");
+        result.AppendLine("They define intended usage and semantics. Treat them as ground truth.");
+        result.AppendLine("Call **GetComponentContext** with any type name to retrieve the full property/command table on demand.");
         result.AppendLine();
-        AppendPreloadedComponentDescriptions(result, language);
+        AppendPreloadedComponentSummaries(result, language);
         result.AppendLine();
-        result.AppendLine("> Call **GetComponentContext** with any type name above to get full documentation.");
+        result.AppendLine("> Call **GetComponentContext** with any type name above to get full documentation including all properties and commands.");
         result.AppendLine();
 
         // ── Built-in Skills ──
@@ -396,6 +437,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return result.ToString();
     }
 
+    // ProvideCustomerDataContext is defined further below (near ProvideFrameworkDataContext).
+
     /// <summary>
     /// Creates a <see cref="WorkflowAgentToolkit"/> that provides MAF-compatible
     /// <see cref="AITool"/> instances for full operational control over the scoped tree.
@@ -409,10 +452,67 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public IList<AITool> ProvideTools() => CreateToolkit().CreateTools();
 
     /// <summary>
-    /// Appends a condensed description block for each registered customer component,
+    /// Progressive mode: appends only the class-level [AgentContext] developer instructions
+    /// for each registered customer type. Property/command tables are intentionally omitted
+    /// so the Agent fetches them on demand via GetComponentContext.
+    /// </summary>
+    private void AppendPreloadedComponentSummaries(StringBuilder result, AgentLanguages language)
+    {
+        void AppendSummary(Type t, AgentLanguages lang)
+        {
+            var classContexts = AgentContextCollector.GetAgentContext(t, lang);
+            result.AppendLine($"### `{t.FullName}`");
+            result.AppendLine();
+            if (classContexts.Length > 0)
+            {
+                result.AppendLine("**Developer Instructions:**");
+                foreach (var ctx in classContexts)
+                    result.AppendLine($"- {ctx}");
+            }
+            else
+            {
+                result.AppendLine("*(no developer instructions)*");
+            }
+            result.AppendLine();
+        }
+
+        foreach (var kvp in CustomerEnums)
+            foreach (var t in kvp.Value) AppendSummary(t, kvp.Key);
+        foreach (var kvp in CustomerInterfaces)
+            foreach (var t in kvp.Value) AppendSummary(t, kvp.Key);
+        foreach (var kvp in CustomerComponents)
+            foreach (var t in kvp.Value) AppendSummary(t, kvp.Key);
+        foreach (var kvp in CustomerData)
+            foreach (var t in kvp.Value) AppendSummary(t, kvp.Key);
+    }
+
+    /// <summary>
+    /// All mode: full context for framework-built-in data types (Anchor, Offset, Size).
+    /// </summary>
+    public string ProvideFrameworkDataContext(AgentLanguages language = AgentLanguages.English)
+    {
+        var result = new StringBuilder();
+        foreach (var t in FrameworkData)
+            result.AppendLine(AgentContextCollector.GetDataContext(t, language));
+        return result.ToString();
+    }
+
+    /// <summary>
+    /// All mode: full context for developer-registered data types.
+    /// </summary>
+    public string ProvideCustomerDataContext(AgentLanguages language = AgentLanguages.English)
+    {
+        var result = new StringBuilder();
+        foreach (var kvp in CustomerData)
+            foreach (var t in kvp.Value)
+                result.AppendLine(AgentContextCollector.GetDataContext(t, kvp.Key));
+        return result.ToString();
+    }
+
+    /// <summary>
+    /// Appends a full description block for each registered customer component,
     /// including class-level [AgentContext] instructions and per-property [AgentContext]
-    /// annotations. This gives the Agent immediate knowledge of defaults and semantics
-    /// without needing a tool call.
+    /// annotations. Used only by <see cref="ProvideAllContexts"/>.
     /// </summary>
     private void AppendPreloadedComponentDescriptions(StringBuilder result, AgentLanguages language)
     {
@@ -430,6 +530,12 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         }
         // Customer components (most important — these carry default sizes, property descriptions)
         foreach (var kvp in CustomerComponents)
+        {
+            foreach (var t in kvp.Value)
+                AppendTypeQuickRef(result, t, kvp.Key);
+        }
+        // Customer data types
+        foreach (var kvp in CustomerData)
         {
             foreach (var t in kvp.Value)
                 AppendTypeQuickRef(result, t, kvp.Key);

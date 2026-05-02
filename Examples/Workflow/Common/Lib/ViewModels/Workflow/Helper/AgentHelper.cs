@@ -9,7 +9,7 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels.Workflow.Helper;
 
-public class AgentHelper : TreeHelper<TreeViewModel>
+public class AgentHelper() : TreeHelper<TreeViewModel>(200)
 {
     // ── Qwen (DashScope) 配置 ──
     // Agent 功能需要阿里云百炼平台的 Qwen API Key。

@@ -1,5 +1,4 @@
 using System.Windows;
-using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.WPF.NativeInterpolators
 {

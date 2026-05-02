@@ -6,35 +6,25 @@
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core.Extension</Title>
-		<Version>4.7.0</Version>
+		<Version>5.0.2</Version>
 		<Authors>Axvser</Authors>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageReadmeFile></PackageReadmeFile>
 		<Description>VeloxDev.Core tries not to rely on any third-party libraries, while Extension, as an optional extension package, contains a set of advanced functions implemented based on third-party libraries, which can further optimize the user experience</Description>
-		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+        <PackageIcon>veloxdev-logo.png</PackageIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Agents.AI" Version="1.1.0" />
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.5.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="VeloxDev.Core" Version="5.0.2" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<None Include="..\..\..\LICENSE.txt">
+       <None Include="..\..\..\Assets\veloxdev-logo.png">
 			<Pack>True</Pack>
 			<PackagePath>\</PackagePath>
 		</None>
-	</ItemGroup>
-
-	<ItemGroup>
-	  <None Update="README.md">
-		<Pack>True</Pack>
-		<PackagePath>\</PackagePath>
-	  </None>
 	</ItemGroup>
 
 	<!-- Embedded prompt resources: Resources/{System}/{LangCode}/Skills|References/{Name}.md

@@ -10,24 +10,24 @@
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core</Title>
-		<Version>4.7.0</Version>
+		<Version>5.0.2</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core provides the shared abstractions, source generators, and reusable infrastructure behind VeloxDev, including MVVM, Workflow, Transition, Theme, MonoBehaviour, AOT Reflection, and AOP support for modern .NET applications.</Description>
+        <PackageIcon>veloxdev-logo.png</PackageIcon>
 		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/Axvser/VeloxDev</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageProjectUrl>https://www.nuget.org/packages/VeloxDev.Core/</PackageProjectUrl>
 	</PropertyGroup>
-
+	
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" PrivateAssets="all" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="4.7.0" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="5.0.4" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Include="README.md">
+       <None Include="..\..\..\Assets\veloxdev-logo.png">
 			<Pack>True</Pack>
 			<PackagePath>\</PackagePath>
 		</None>

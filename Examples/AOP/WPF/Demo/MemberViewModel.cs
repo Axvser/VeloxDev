@@ -1,5 +1,3 @@
-using VeloxDev.MVVM;
-
 namespace Demo;
 
 public partial class MemberViewModel

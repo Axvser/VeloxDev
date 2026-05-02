@@ -7,6 +7,8 @@ namespace VeloxDev.Generators.Writers
     public class MonoWriter : WriterBase
     {
         private bool IsMono { get; set; } = false;
+        private string Channel { get; set; } = "default";
+        private int TargetFPS { get; set; } = -1;
 
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
@@ -24,6 +26,27 @@ namespace VeloxDev.Generators.Writers
                     attrSyntax.Parent?.Parent is ClassDeclarationSyntax
                 );
             IsMono = attributeData != null;
+
+            if (IsMono && attributeData != null)
+            {
+                // Read positional constructor arguments: (string channel, int fps)
+                var ctorArgs = attributeData.ConstructorArguments;
+                if (ctorArgs.Length >= 1 && ctorArgs[0].Value is string ctorChannel && !string.IsNullOrEmpty(ctorChannel))
+                    Channel = ctorChannel;
+                if (ctorArgs.Length >= 2 && ctorArgs[1].Value is int ctorFps)
+                    TargetFPS = ctorFps;
+
+                // Named arguments override positional ones
+                var channelArg = attributeData.NamedArguments
+                    .FirstOrDefault(kv => kv.Key == "Channel");
+                if (channelArg.Value.Value is string channelValue && !string.IsNullOrEmpty(channelValue))
+                    Channel = channelValue;
+
+                var fpsArg = attributeData.NamedArguments
+                    .FirstOrDefault(kv => kv.Key == "TargetFPS");
+                if (fpsArg.Value.Value is int fpsValue)
+                    TargetFPS = fpsValue;
+            }
         }
 
         public override bool CanWrite() => IsMono;
@@ -50,15 +73,19 @@ namespace VeloxDev.Generators.Writers
                 return string.Empty;
             }
 
+            var setFpsLine = TargetFPS >= 1
+                ? $"{NAMESPACE_VELOX_TIMELINE}.MonoBehaviourManager.SetTargetFPS({TargetFPS}, \"{Channel}\");\n                    "
+                : string.Empty;
+
             return $$"""
                 public void InitializeMonoBehaviour()
                 {
-                    {{NAMESPACE_VELOX_TIMELINE}}.MonoBehaviourManager.RegisterBehaviour(this);
+                    {{setFpsLine}}{{NAMESPACE_VELOX_TIMELINE}}.MonoBehaviourManager.RegisterBehaviour(this, "{{Channel}}");
                 }
 
                 public void CloseMonoBehaviour()
                 {
-                    {{NAMESPACE_VELOX_TIMELINE}}.MonoBehaviourManager.UnregisterBehaviour(this);
+                    {{NAMESPACE_VELOX_TIMELINE}}.MonoBehaviourManager.UnregisterBehaviour(this, "{{Channel}}");
                 }
 
                 public void InvokeAwake()

@@ -1,15 +1,15 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System;
 using System.Text;
 using System.Threading.Tasks;
-using VeloxDev.MVVM.Serialization;
 using VeloxDev.MVVM;
+using VeloxDev.MVVM.Serialization;
 
 namespace VeloxDev.Docs.ViewModels;
 

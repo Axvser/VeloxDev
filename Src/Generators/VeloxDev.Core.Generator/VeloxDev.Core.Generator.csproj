@@ -8,11 +8,11 @@
 		<LangVersion>latest</LangVersion>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core.Generator</Title>
-		<Version>4.7.0</Version>
+		<Version>5.0.4</Version>
 		<Authors>Axvser</Authors>
+        <PackageIcon>veloxdev-logo.png</PackageIcon>
 		<!-- 不要把 Roslyn 的 DLL 放进 lib -->
 		<IncludeBuildOutput>false</IncludeBuildOutput>
-		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
 		<AnalyzerLanguage>cs</AnalyzerLanguage>
 		<!-- NU5128: analyzer-only packages intentionally have no lib folder -->
 		<NoWarn>$(NoWarn);NU5128</NoWarn>
@@ -21,6 +21,10 @@
 	<!-- Roslyn 依赖不导出；最低要求 4.3.0（ForAttributeWithMetadataName），兼容 VS 2022 17.3+ -->
 	<ItemGroup>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" PrivateAssets="all" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\..\..\Assets\veloxdev-logo.png" Pack="true" PackagePath="\" Visible="false" />
 	</ItemGroup>
 
 	<!-- 打包到 analyzers 文件夹 -->
@@ -32,13 +36,6 @@
 	<ItemGroup>
 		<None Include="VeloxDev.Core.Generator.targets" Pack="true" PackagePath="build/VeloxDev.Core.Generator.targets" Visible="false" />
 		<None Include="VeloxDev.Core.Generator.targets" Pack="true" PackagePath="buildMultiTargeting/VeloxDev.Core.Generator.targets" Visible="false" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<None Include="..\..\..\LICENSE.txt">
-			<Pack>True</Pack>
-			<PackagePath>\</PackagePath>
-		</None>
 	</ItemGroup>
 
 </Project>

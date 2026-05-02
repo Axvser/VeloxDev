@@ -5,6 +5,7 @@ namespace VeloxDev.MonoBehaviour;
 public interface IMonoBehaviour​
 {
     void InitializeMonoBehaviour​();
+    void CloseMonoBehaviour();
     void InvokeAwake();
     void InvokeStart();
     void InvokeUpdate(FrameEventArgs e);

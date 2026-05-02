@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using System.Collections.Generic;
-using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.Avalonia.NativeInterpolators
 {

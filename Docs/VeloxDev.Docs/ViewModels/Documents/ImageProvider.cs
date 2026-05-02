@@ -7,11 +7,11 @@ using Avalonia.Platform.Storage;
 using Avalonia.Svg.Skia;
 using Avalonia.Threading;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Collections.Generic;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Docs.ViewModels;

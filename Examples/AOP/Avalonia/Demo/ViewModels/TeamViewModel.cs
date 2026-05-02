@@ -1,7 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using VeloxDev.AspectOriented;
-using VeloxDev.MVVM;
 
 namespace Demo.ViewModels;
 

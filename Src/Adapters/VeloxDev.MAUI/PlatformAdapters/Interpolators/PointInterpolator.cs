@@ -1,5 +1,3 @@
-using VeloxDev.TransitionSystem;
-
 namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class PointInterpolator : IValueInterpolator

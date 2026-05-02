@@ -1773,10 +1773,10 @@ public sealed class WorkflowAgentToolkit
         return Ok($"Distributed {nodes.Count} nodes along '{axis}'.");
     }
 
-    [Description("Auto-layouts all nodes using topology-aware layered layout (Sugiyama-style). Coordinate system: origin (0,0) = top-left, X+ = rightward, Y+ = downward. Nodes are arranged in layers following the propagation chain from source nodes (in-degree=0). Within each layer, nodes are ordered to minimize edge crossings. Node sizes are respected to avoid overlap. Disconnected subgraphs are laid out separately. Direction: left-to-right (horizontal) or top-to-bottom (vertical).")]
+    [Description("Auto-layouts all nodes using topology-aware layered layout (Sugiyama-style). Coordinate system: origin (0,0) = top-left corner of the canvas (equivalent to mathematical Q4: X+ rightward, Y+ downward). Nodes are arranged in layers following the propagation chain from source nodes (in-degree=0). Within each layer, nodes are ordered by barycenter heuristic to minimize edge crossings. Node sizes are respected to avoid overlap. Disconnected subgraphs are laid out independently. Direction: left-to-right (horizontal) or top-to-bottom (vertical).")]
     private string AutoLayout(
-        [Description("Start X position.")] double startX = 0,
-        [Description("Start Y position.")] double startY = 0,
+        [Description("Start X position of the layout bounding box. Default 20.")] double startX = 20,
+        [Description("Start Y position of the layout bounding box. Default 20.")] double startY = 20,
         [Description("Horizontal gap between layers (horizontal) or nodes within a layer (vertical).")] double gapX = 80,
         [Description("Vertical gap between nodes within a layer (horizontal) or between layers (vertical).")] double gapY = 40,
         [Description("Direction: 'horizontal' (left-to-right) or 'vertical' (top-to-bottom).")] string direction = "horizontal")

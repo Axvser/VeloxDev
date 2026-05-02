@@ -1,6 +1,5 @@
 using Microsoft.UI.Xaml;
 using System.Collections.Generic;
-using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.WinUI.NativeInterpolators
 {

@@ -259,6 +259,61 @@ public static class AgentContextCollector
         return result.ToString();
     }
 
+    /// <summary>
+    /// Builds a compact context block for a value-object / data type (e.g. Anchor, Size, Offset).
+    /// Unlike <see cref="GetClassContext"/>, this method does not look for commands or slot
+    /// enumerators — it only surfaces public properties and [AgentContext]-annotated fields so
+    /// the Agent understands the data structure without any operational noise.
+    /// </summary>
+    public static string GetDataContext(Type type, AgentLanguages language)
+    {
+        var result = new StringBuilder();
+
+        result.AppendLine("---");
+        result.AppendLine();
+        result.AppendLine("Data Type");
+        result.AppendLine();
+        result.AppendLine($"Type: {type.FullName}");
+        result.AppendLine();
+
+        var classContexts = GetAgentContext(type, language);
+        if (classContexts.Length > 0)
+        {
+            result.AppendLine("Descriptions:");
+            foreach (var ctx in classContexts)
+                result.AppendLine($"- {ctx}");
+            result.AppendLine();
+        }
+
+        result.AppendLine("Fields / Properties:");
+        result.AppendLine();
+        result.AppendLine("| Type | Name | Description |");
+        result.AppendLine("| ---- | ---- | ----------- |");
+
+        // [AgentContext]-annotated backing fields
+        foreach (var field in type.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance))
+        {
+            var descs = GetAgentContext(field, language);
+            if (descs.Length == 0) continue;
+            var name = field.Name.TrimStart('_');
+            if (name.Length > 0) name = char.ToUpper(name[0]) + name.Substring(1);
+            var desc = string.Join("; ", descs.Select((ctx, i) => $"[{i + 1}-{ctx}]"));
+            result.AppendLine($"| {field.FieldType.FullName} | {name} | {desc} |");
+        }
+
+        // Public properties (struct/class value members)
+        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var descs = GetAgentContext(prop, language);
+            if (descs.Length == 0) continue;
+            var desc = string.Join("; ", descs.Select((ctx, i) => $"[{i + 1}-{ctx}]"));
+            result.AppendLine($"| {prop.PropertyType.FullName} | {prop.Name} | {desc} |");
+        }
+
+        result.AppendLine();
+        return result.ToString();
+    }
+
     private static bool IsSlotEnumeratorType(Type type)
     {
         if (!type.IsGenericType) return false;

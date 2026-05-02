@@ -1,5 +1,4 @@
 using System.Windows.Media.Media3D;
-using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.WPF.NativeInterpolators
 {
