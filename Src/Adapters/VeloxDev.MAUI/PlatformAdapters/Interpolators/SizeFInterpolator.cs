@@ -1,12 +1,12 @@
-ï»¿using VeloxDev.TransitionSystem;
+using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class SizeFInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
-            // å¤„ç†ç©ºå€¼ï¼Œæä¾›é»˜è®¤å€¼
+            // ´¦Àí¿ÕÖµ£¬Ìá¹©Ä¬ÈÏÖµ
             var s1 = (SizeF)(start ?? new SizeF());
             var s2 = (SizeF)(end ?? new SizeF());
 

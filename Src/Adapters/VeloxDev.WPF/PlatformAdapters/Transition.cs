@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
@@ -58,147 +58,174 @@ namespace VeloxDev.TransitionSystem
             {
                 return CoreEffect<StateSnapshot, TransitionEffect>(effect);
             }
-            public StateSnapshot Property(Expression<Func<T, IInterpolable?>> propertyLambda, IInterpolable? newValue)
+            public StateSnapshot Property(Expression<Func<T, IInterpolable?>> propertyLambda, IInterpolable? newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
 
-            public StateSnapshot Property(Expression<Func<T, Brush?>> propertyLambda, Brush? newValue)
+            public StateSnapshot Property(Expression<Func<T, Brush?>> propertyLambda, Brush? newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Transform?>> propertyLambda, ICollection<Transform> newValue)
+            public StateSnapshot Property(Expression<Func<T, Transform?>> propertyLambda, ICollection<Transform> newValue, object? interpolationOptions = null)
             {
                 var transformGroup = new TransformGroup()
                 {
                     Children = [.. newValue]
                 };
                 state.SetValue(propertyLambda, transformGroup);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Point>> propertyLambda, Point newValue)
+            public StateSnapshot Property(Expression<Func<T, Point>> propertyLambda, Point newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, CornerRadius>> propertyLambda, CornerRadius newValue)
+            public StateSnapshot Property(Expression<Func<T, CornerRadius>> propertyLambda, CornerRadius newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Thickness>> propertyLambda, Thickness newValue)
+            public StateSnapshot Property(Expression<Func<T, Thickness>> propertyLambda, Thickness newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Size>> propertyLambda, Size newValue)
+            public StateSnapshot Property(Expression<Func<T, Size>> propertyLambda, Size newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Rect>> propertyLambda, Rect newValue)
+            public StateSnapshot Property(Expression<Func<T, Rect>> propertyLambda, Rect newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Vector>> propertyLambda, Vector newValue)
+            public StateSnapshot Property(Expression<Func<T, Vector>> propertyLambda, Vector newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Color>> propertyLambda, Color newValue)
+            public StateSnapshot Property(Expression<Func<T, Color>> propertyLambda, Color newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, DropShadowEffect?>> propertyLambda, DropShadowEffect? newValue)
+            public StateSnapshot Property(Expression<Func<T, DropShadowEffect?>> propertyLambda, DropShadowEffect? newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Point3D>> propertyLambda, Point3D newValue)
+            public StateSnapshot Property(Expression<Func<T, Point3D>> propertyLambda, Point3D newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, Vector3D>> propertyLambda, Vector3D newValue)
+            public StateSnapshot Property(Expression<Func<T, Vector3D>> propertyLambda, Vector3D newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
 
-            public StateSnapshot Property(Expression<Func<T, double>> propertyLambda, double newValue)
+            public StateSnapshot Property(Expression<Func<T, double>> propertyLambda, double newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, float>> propertyLambda, float newValue)
+            public StateSnapshot Property(Expression<Func<T, float>> propertyLambda, float newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, decimal>> propertyLambda, decimal newValue)
+            public StateSnapshot Property(Expression<Func<T, decimal>> propertyLambda, decimal newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Drawing.Point>> propertyLambda, System.Drawing.Point newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.Point>> propertyLambda, System.Drawing.Point newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Drawing.PointF>> propertyLambda, System.Drawing.PointF newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.PointF>> propertyLambda, System.Drawing.PointF newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Drawing.Size>> propertyLambda, System.Drawing.Size newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.Size>> propertyLambda, System.Drawing.Size newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Drawing.SizeF>> propertyLambda, System.Drawing.SizeF newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.SizeF>> propertyLambda, System.Drawing.SizeF newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Drawing.Color>> propertyLambda, System.Drawing.Color newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.Color>> propertyLambda, System.Drawing.Color newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Drawing.Rectangle>> propertyLambda, System.Drawing.Rectangle newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.Rectangle>> propertyLambda, System.Drawing.Rectangle newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Drawing.RectangleF>> propertyLambda, System.Drawing.RectangleF newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Drawing.RectangleF>> propertyLambda, System.Drawing.RectangleF newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
 
 #if NETCOREAPP || NETFRAMEWORK || NET
-            public StateSnapshot Property(Expression<Func<T, System.Numerics.Vector2>> propertyLambda, System.Numerics.Vector2 newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Numerics.Vector2>> propertyLambda, System.Numerics.Vector2 newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Numerics.Vector3>> propertyLambda, System.Numerics.Vector3 newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Numerics.Vector3>> propertyLambda, System.Numerics.Vector3 newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Numerics.Vector4>> propertyLambda, System.Numerics.Vector4 newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Numerics.Vector4>> propertyLambda, System.Numerics.Vector4 newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
-            public StateSnapshot Property(Expression<Func<T, System.Numerics.Quaternion>> propertyLambda, System.Numerics.Quaternion newValue)
+            public StateSnapshot Property(Expression<Func<T, System.Numerics.Quaternion>> propertyLambda, System.Numerics.Quaternion newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
+                if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }
 #endif

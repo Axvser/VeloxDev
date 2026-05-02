@@ -1,4 +1,4 @@
-﻿using Avalonia.Media;
+using Avalonia.Media;
 using System;
 using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
@@ -7,7 +7,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
 {
     public class BoxShadowsInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var shadows1 = start as BoxShadows? ?? default;
             var shadows2 = end as BoxShadows? ?? shadows1;

@@ -1,10 +1,10 @@
-ï»¿using VeloxDev.TransitionSystem;
+using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class BrushInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             if (steps <= 0)
                 return [];
@@ -15,7 +15,7 @@ namespace VeloxDev.MAUI.NativeInterpolators
             if (steps <= 1)
                 return [e];
 
-            // å¯¹é½ç”»åˆ·ç±»å‹
+            // ¶ÔÆë»­Ë¢ÀàĞÍ
             (var alignedS, var alignedE) = AlignBrushTypes(s, e);
 
             var result = new List<object?>(steps);
@@ -28,7 +28,7 @@ namespace VeloxDev.MAUI.NativeInterpolators
             return result;
         }
 
-        #region æ ‡å‡†åŒ–å’Œå¯¹é½
+        #region ±ê×¼»¯ºÍ¶ÔÆë
 
         private static Brush Normalize(object? obj)
         {
@@ -89,7 +89,7 @@ namespace VeloxDev.MAUI.NativeInterpolators
 
         #endregion
 
-        #region æ ¸å¿ƒæ’å€¼é€»è¾‘
+        #region ºËĞÄ²åÖµÂß¼­
 
         private static Brush InterpolateAligned(Brush s, Brush e, double t)
         {
@@ -98,7 +98,7 @@ namespace VeloxDev.MAUI.NativeInterpolators
                 if (t <= 0.0) return CloneBrush(s);
                 if (t >= 1.0) return CloneBrush(e);
 
-                // ä¿®å¤ï¼šä½¿ç”¨isæ¨¡å¼åŒ¹é…è€Œä¸æ˜¯switchè¡¨è¾¾å¼
+                // ĞŞ¸´£ºÊ¹ÓÃisÄ£Ê½Æ¥Åä¶ø²»ÊÇswitch±í´ïÊ½
                 if (s is SolidColorBrush startSolid && e is SolidColorBrush endSolid)
                     return InterpolateSolidColors(startSolid, endSolid, t);
 
@@ -266,7 +266,7 @@ namespace VeloxDev.MAUI.NativeInterpolators
 
         #endregion
 
-        #region æ•°å­¦è¾…åŠ©æ–¹æ³•
+        #region ÊıÑ§¸¨Öú·½·¨
 
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 

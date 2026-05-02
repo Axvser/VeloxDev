@@ -1,4 +1,4 @@
-﻿using Avalonia.Media;
+using Avalonia.Media;
 using System;
 using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
@@ -7,7 +7,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
 {
     public class ColorInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var c1 = (Color)(start ?? Colors.Transparent);
             var c2 = (Color)(end ?? c1);

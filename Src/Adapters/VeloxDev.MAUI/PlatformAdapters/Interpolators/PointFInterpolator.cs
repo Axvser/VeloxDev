@@ -1,12 +1,12 @@
-ï»¿using VeloxDev.TransitionSystem;
+using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class PointFInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
-            // å¤„ç†ç©ºå€¼ï¼Œæä¾›é»˜è®¤å€¼
+            // ´¦Àí¿ÕÖµ£¬Ìá¹©Ä¬ÈÏÖµ
             var p1 = (PointF)(start ?? new PointF());
             var p2 = (PointF)(end ?? new PointF());
 

@@ -8,6 +8,7 @@ public class StateCore : IFrameState
 {
     protected ConcurrentDictionary<ITransitionProperty, object?> _values = [];
     protected ConcurrentDictionary<ITransitionProperty, IValueInterpolator> _interpolators = [];
+    protected ConcurrentDictionary<ITransitionProperty, object?> _options = [];
 
     public virtual ConcurrentDictionary<ITransitionProperty, object?> Values
     {
@@ -18,6 +19,11 @@ public class StateCore : IFrameState
     {
         get => _interpolators;
         protected set => _interpolators = value;
+    }
+    public virtual ConcurrentDictionary<ITransitionProperty, object?> Options
+    {
+        get => _options;
+        protected set => _options = value;
     }
 
     public virtual void SetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, IValueInterpolator interpolator)
@@ -136,6 +142,42 @@ public class StateCore : IFrameState
         return TryGetValue(TransitionProperty.FromProperty(propertyInfo), out value);
     }
 
+    public virtual void SetOptions<TSource, TValue>(Expression<Func<TSource, TValue>> expression, object? options)
+    {
+        if (TransitionProperty.TryCreate(expression, out var property)
+            && property is not null
+            && property.CanRead
+            && property.CanWrite)
+        {
+            SetOptions(property, options);
+        }
+    }
+    public virtual void SetOptions(ITransitionProperty property, object? options)
+    {
+        if (_options.TryGetValue(property, out _))
+        {
+            _options[property] = options;
+        }
+        else
+        {
+            _options.TryAdd(property, options);
+        }
+    }
+    public virtual void SetOptions(PropertyInfo propertyInfo, object? options)
+    {
+        SetOptions(TransitionProperty.FromProperty(propertyInfo), options);
+    }
+    public virtual bool TryGetOptions(ITransitionProperty property, out object? options)
+    {
+        if (_options.TryGetValue(property, out var item))
+        {
+            options = item;
+            return true;
+        }
+        options = null;
+        return false;
+    }
+
     public virtual IFrameState Clone()
     {
         var value = new StateCore();
@@ -148,6 +190,11 @@ public class StateCore : IFrameState
         foreach (var kvp in _interpolators)
         {
             value.Interpolators.TryAdd(kvp.Key, kvp.Value);
+        }
+
+        foreach (var kvp in _options)
+        {
+            value.Options.TryAdd(kvp.Key, kvp.Value);
         }
 
         return value;

@@ -1,11 +1,11 @@
-﻿using System.Windows.Media.Media3D;
+using System.Windows.Media.Media3D;
 using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.WPF.NativeInterpolators
 {
     public class Vector3DInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var vector1 = (Vector3D)(start ?? new Vector3D(0, 0, 0));
             var vector2 = (Vector3D)(end ?? vector1);

@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
@@ -116,6 +116,16 @@ public class StateSnapshotCore<
             throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
         }
         state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
+        return result;
+    }
+    internal override T1 CoreProperty<T1, TInterpolable>(Expression<Func<T1, TInterpolable>> propertyLambda, TInterpolable newValue, object? interpolationOptions)
+    {
+        if (this is not T1 result)
+        {
+            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+        }
+        state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
+        state.SetOptions(propertyLambda, interpolationOptions);
         return result;
     }
     internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, IValueInterpolator interpolator)
@@ -274,6 +284,16 @@ public class StateSnapshotCore<
         state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
         return result;
     }
+    internal override T1 CoreProperty<T1, TInterpolable>(Expression<Func<T1, TInterpolable>> propertyLambda, TInterpolable newValue, object? interpolationOptions)
+    {
+        if (this is not T1 result)
+        {
+            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+        }
+        state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
+        state.SetOptions(propertyLambda, interpolationOptions);
+        return result;
+    }
     internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, IValueInterpolator interpolator)
     {
         if (this is not T1 result)
@@ -332,6 +352,9 @@ public abstract class StateSnapshotCore
 {
     internal abstract void AsRoot();
     internal abstract T CoreProperty<T, TInterpolable>(Expression<Func<T, TInterpolable>> propertyLambda, TInterpolable newValue)
+        where T : class
+        where TInterpolable : IInterpolable;
+    internal abstract T CoreProperty<T, TInterpolable>(Expression<Func<T, TInterpolable>> propertyLambda, TInterpolable newValue, object? interpolationOptions)
         where T : class
         where TInterpolable : IInterpolable;
     internal abstract T1 CoreInterpolator<T1, TTarget, TValue>(Expression<Func<TTarget, TValue>> propertyLambda, IValueInterpolator interpolator)

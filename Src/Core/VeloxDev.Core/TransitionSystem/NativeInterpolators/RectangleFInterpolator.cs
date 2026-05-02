@@ -4,7 +4,7 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
 {
     public class RectangleFInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var r1 = (RectangleF)(start ?? default(RectangleF));
             var r2 = (RectangleF)(end ?? r1);

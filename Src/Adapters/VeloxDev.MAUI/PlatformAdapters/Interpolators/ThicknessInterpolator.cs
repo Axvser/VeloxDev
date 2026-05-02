@@ -1,10 +1,10 @@
-﻿using VeloxDev.TransitionSystem;
+using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class ThicknessInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var thickness1 = (Thickness)(start ?? new Thickness(0));
             var thickness2 = (Thickness)(end ?? thickness1);

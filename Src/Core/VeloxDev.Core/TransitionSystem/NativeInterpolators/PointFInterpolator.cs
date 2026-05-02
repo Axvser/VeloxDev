@@ -4,7 +4,7 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
 {
     public class PointFInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var p1 = (PointF)(start ?? default(PointF));
             var p2 = (PointF)(end ?? p1);

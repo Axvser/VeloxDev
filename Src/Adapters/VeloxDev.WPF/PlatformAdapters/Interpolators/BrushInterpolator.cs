@@ -1,4 +1,4 @@
-ï»¿using System.Windows;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using VeloxDev.TransitionSystem;
@@ -9,7 +9,7 @@ namespace VeloxDev.WPF.NativeInterpolators
     {
         private const int RenderSize = 100;
 
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             if (steps <= 0)
                 return [];
@@ -68,12 +68,12 @@ namespace VeloxDev.WPF.NativeInterpolators
             var drawingVisual = new DrawingVisual();
             using (var drawingContext = drawingVisual.RenderOpen())
             {
-                // ç»˜åˆ¶startç”»åˆ·(å¸¦é€æ˜Žåº¦)
+                // »æÖÆstart»­Ë¢(´øÍ¸Ã÷¶È)
                 drawingContext.PushOpacity(1 - t);
                 drawingContext.DrawRectangle(start, null, new Rect(0, 0, RenderSize, RenderSize));
                 drawingContext.Pop();
 
-                // ç»˜åˆ¶endç”»åˆ·(å¸¦é€æ˜Žåº¦)
+                // »æÖÆend»­Ë¢(´øÍ¸Ã÷¶È)
                 drawingContext.PushOpacity(t);
                 drawingContext.DrawRectangle(end, null, new Rect(0, 0, RenderSize, RenderSize));
                 drawingContext.Pop();

@@ -1,4 +1,4 @@
-﻿using System.Windows.Media;
+using System.Windows.Media;
 using System.Windows.Media.Effects;
 using VeloxDev.TransitionSystem;
 
@@ -6,7 +6,7 @@ namespace VeloxDev.WPF.NativeInterpolators
 {
     public class DropShadowEffectInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var effect1 = start as DropShadowEffect ?? new DropShadowEffect();
             var effect2 = end as DropShadowEffect ?? new DropShadowEffect();

@@ -417,33 +417,60 @@ Transition.Exit(
     IncludeNoMutual: true);
 ```
 
-### 5.6 为特殊方向语义指定反转插值器
+### 5.6 旋转方向控制：`RotationDirection`
 
-某些平台的旋转属性是直接暴露的标量值，例如 MAUI 的 `Rotation`、`RotationX`、`RotationY`。  
-这种场景通常不需要改动整套 `Transform` 插值策略，而是直接给该属性指定一个反转版本的标量插值器：
+对于以 `Transform` / `Projection` 为主的平台（WPF、Avalonia、WinUI），旋转插值默认取"最短路径"。  
+如果你需要强制顺时针或逆时针方向，可以通过 `Property(...)` 的 `interpolationOptions` 参数传入 `RotationDirection` 枚举值。
 
 ```csharp
-using VeloxDev.Core.TransitionSystem.NativeInterpolators;
-
+// 强制逆时针旋转（适用于二维 RotateTransform）
 Transition<Rectangle>.Create()
-    .Interpolator((Rectangle x) => x.RotationX, new ReverseDoubleInterpolator())
-    .Property(x => x.RotationX, 180)
+    .Property(x => x.RenderTransform, [new RotateTransform(180)], RotationDirection.CounterClockWise)
+    .Effect(e => e.Duration = TimeSpan.FromSeconds(1))
+    .Execute(myRect);
+
+// 组合三维旋转并指定逆时针方向
+Transition<Rectangle>.Create()
+    .Property(x => x.RenderTransform,
+    [
+        new TranslateTransform(200, 0),
+        new Rotate3DTransform(180, 180, 0, 0, 0, 0, 0),
+        new ScaleTransform(1.3, 1.3)
+    ], RotationDirection.CounterClockWise)
+    .Effect(e => e.Duration = TimeSpan.FromSeconds(1))
+    .Execute(myRect);
+
+// WinUI：Projection 旋转方向控制
+Transition<Rectangle>.Create()
+    .Property(x => x.Projection, new PlaneProjection { RotationX = 180, RotationY = 180 },
+        RotationDirection.CounterClockWise)
     .Effect(e => e.Duration = TimeSpan.FromSeconds(1))
     .Execute(myRect);
 ```
 
-而像 WPF / Avalonia / WinUI 这类以 `Transform` / `Projection` 为主的复合变换平台，则更适合直接使用适配层提供的 `ReverseTransformInterpolator` 或 `ReverseProjectionInterpolator`。
+`RotationDirection` 是一个 `[Flags]` 枚举，各成员可按位组合：
+
+| 成员 | 值 | 含义 |
+|---|---|---|
+| `Auto` | `0` | 自动选择最短路径（默认行为） |
+| `ClockWise` | `1 << 0` | 强制顺时针（适用于二维旋转或不区分轴的三维旋转） |
+| `CounterClockWise` | `1 << 1` | 强制逆时针（适用于二维旋转或不区分轴的三维旋转） |
+| `ClockWiseX` | `1 << 2` | 强制 X 轴顺时针 |
+| `CounterClockWiseX` | `1 << 3` | 强制 X 轴逆时针 |
+| `ClockWiseY` | `1 << 4` | 强制 Y 轴顺时针 |
+| `CounterClockWiseY` | `1 << 5` | 强制 Y 轴逆时针 |
+| `ClockWiseZ` | `1 << 6` | 强制 Z 轴顺时针 |
+| `CounterClockWiseZ` | `1 << 7` | 强制 Z 轴逆时针 |
+
+多轴独立控制示例：
 
 ```csharp
-// WPF / Avalonia / WinUI
-Transition<Rectangle>.Create()
-    .Interpolator((Rectangle x) => x.RenderTransform, new ReverseTransformInterpolator())
-    .Property(x => x.RenderTransform, [new RotateTransform(180)])
-    .Effect(e => e.Duration = TimeSpan.FromSeconds(1))
-    .Execute(myRect);
+// X 轴逆时针 + Y 轴顺时针
+RotationDirection.CounterClockWiseX | RotationDirection.ClockWiseY
 ```
 
-当前各平台 Demo 也都包含了对应的反转旋转示例；WinForms 示例由于控件本身未提供原生旋转属性，因此没有单独加入旋转方向例子。
+> **注意**：`RotationDirection` 只对平台适配层中实现了方向感知的插值器生效（如 `TransformInterpolator`、`ProjectionInterpolator`）。  
+> 对 MAUI 等直接暴露标量旋转属性（`Rotation`、`RotationX`、`RotationY`）的平台，方向控制请直接调整目标值的正负号，无需使用此枚举。
 
 ---
 

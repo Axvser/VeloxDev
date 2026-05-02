@@ -1,4 +1,4 @@
-ï»¿using Avalonia;
+using Avalonia;
 using System;
 using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
@@ -7,7 +7,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
 {
     public class RelativeRectInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var r1 = (RelativeRect)(start ?? new RelativeRect());
             var r2 = (RelativeRect)(end ?? r1);
@@ -15,7 +15,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
 
             List<object?> result = new(steps);
 
-            // å¦‚æœå•ä½ä¸åŒï¼Œæ— æ³•æ’å€¼
+            // Èç¹ûµ¥Î»²»Í¬£¬ÎŞ·¨²åÖµ
             if (r1.Unit != r2.Unit)
             {
                 for (int i = 0; i < steps; i++)

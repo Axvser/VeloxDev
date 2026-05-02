@@ -1,12 +1,12 @@
-ï»¿using VeloxDev.TransitionSystem;
+using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class RectInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
-            // å¤„ç†ç©ºå€¼ï¼Œæä¾›é»˜è®¤å€¼
+            // ´¦Àí¿ÕÖµ£¬Ìá¹©Ä¬ÈÏÖµ
             var r1 = (Rect)(start ?? new Rect(0, 0, 0, 0));
             var r2 = (Rect)(end ?? new Rect(0, 0, 0, 0));
 

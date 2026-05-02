@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
 
@@ -6,7 +6,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
 {
     public class CornerRadiusInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var radius1 = (CornerRadius)(start ?? new CornerRadius(0));
             var radius2 = (CornerRadius)(end ?? radius1);

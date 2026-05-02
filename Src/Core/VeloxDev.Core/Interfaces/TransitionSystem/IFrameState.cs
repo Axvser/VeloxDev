@@ -8,6 +8,7 @@ namespace VeloxDev.TransitionSystem
     {
         public ConcurrentDictionary<ITransitionProperty, object?> Values { get; }
         public ConcurrentDictionary<ITransitionProperty, IValueInterpolator> Interpolators { get; }
+        public ConcurrentDictionary<ITransitionProperty, object?> Options { get; }
 
         public void SetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, IValueInterpolator interpolator);
         public void SetValue<TSource, TValue>(Expression<Func<TSource, TValue>> expression, TValue? value);
@@ -21,6 +22,11 @@ namespace VeloxDev.TransitionSystem
         public void SetValue(PropertyInfo propertyInfo, object? value);
         public bool TryGetInterpolator(PropertyInfo propertyInfo, out IValueInterpolator? interpolator);
         public bool TryGetValue(PropertyInfo propertyInfo, out object? value);
+
+        public void SetOptions<TSource, TValue>(Expression<Func<TSource, TValue>> expression, object? options);
+        public void SetOptions(ITransitionProperty property, object? options);
+        public void SetOptions(PropertyInfo propertyInfo, object? options);
+        public bool TryGetOptions(ITransitionProperty property, out object? options);
 
         public IFrameState Clone();
     }

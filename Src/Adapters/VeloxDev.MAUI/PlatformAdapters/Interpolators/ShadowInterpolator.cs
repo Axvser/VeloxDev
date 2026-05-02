@@ -1,12 +1,12 @@
-ï»¿using VeloxDev.TransitionSystem;
+using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class ShadowInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
-            // åˆ›å»ºé»˜è®¤é˜´å½±å€¼
+            // ´´½¨Ä¬ÈÏÒõÓ°Öµ
             var defaultShadow = new Shadow
             {
                 Offset = new Point(0, 0),
@@ -23,7 +23,7 @@ namespace VeloxDev.MAUI.NativeInterpolators
 
             List<object?> result = new(steps);
 
-            // å¤„ç†Brushä¸ºnullçš„æƒ…å†µ
+            // ´¦ÀíBrushÎªnullµÄÇé¿ö
             var brush1 = s1.Brush ?? new SolidColorBrush(Colors.Transparent);
             var brush2 = s2.Brush ?? new SolidColorBrush(Colors.Transparent);
 
@@ -44,7 +44,7 @@ namespace VeloxDev.MAUI.NativeInterpolators
                     ),
                     Radius = s1.Radius + deltaRadius * t,
                     Opacity = Math.Max(0, Math.Min(1, s1.Opacity + deltaOpacity * t)),
-                    Brush = t >= 0.5 ? brush2 : brush1 // ç®€å•å¤„ç†Brushè¿‡æ¸¡
+                    Brush = t >= 0.5 ? brush2 : brush1 // ¼òµ¥´¦ÀíBrush¹ý¶É
                 };
 
                 result.Add(shadow);

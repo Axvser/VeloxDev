@@ -2,7 +2,7 @@
 {
     public class FloatInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             if (steps <= 0)
                 return [];

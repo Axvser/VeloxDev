@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using System;
 using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
@@ -7,7 +7,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
 {
     public class PixelRectInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var r1 = (PixelRect)(start ?? default(PixelRect));
             var r2 = (PixelRect)(end ?? r1);

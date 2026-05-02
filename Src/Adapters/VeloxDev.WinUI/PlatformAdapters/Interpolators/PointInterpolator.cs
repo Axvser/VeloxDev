@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
 using Windows.Foundation;
 
@@ -8,7 +8,7 @@ namespace VeloxDev.WinUI.NativeInterpolators
     {
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var p1 = start is Point s ? s : new(0, 0);
             var p2 = end is Point e ? e : p1;

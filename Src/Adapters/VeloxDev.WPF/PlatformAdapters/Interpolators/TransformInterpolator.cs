@@ -5,8 +5,9 @@ namespace VeloxDev.WPF.NativeInterpolators
 {
     public class TransformInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
+            var direction = options is RotationDirection d ? d : RotationDirection.Auto;
             // 1. 统一预处理
             var startTransform = NormalizeInput(start);
             var endTransform = NormalizeInput(end);
@@ -25,7 +26,7 @@ namespace VeloxDev.WPF.NativeInterpolators
             for (int i = 0; i < steps; i++)
             {
                 double t = (double)i / (steps - 1);
-                result.Add(InterpolateTransformPairs(transformPairs, t));
+                result.Add(InterpolateTransformPairs(transformPairs, t, direction));
             }
 
             // 5. 确保首尾精确匹配
@@ -84,12 +85,12 @@ namespace VeloxDev.WPF.NativeInterpolators
         }
 
         protected virtual Transform InterpolateTransformPairs(
-            List<(Transform? start, Transform? end)> pairs, double t)
+            List<(Transform? start, Transform? end)> pairs, double t, RotationDirection direction)
         {
             var interpolatedTransforms = new List<Transform>();
             foreach (var (start, end) in pairs)
             {
-                var interpolated = InterpolateSingleTransformPair(start, end, t);
+                var interpolated = InterpolateSingleTransformPair(start, end, t, direction);
                 if (interpolated != null)
                     interpolatedTransforms.Add(interpolated);
             }
@@ -102,7 +103,7 @@ namespace VeloxDev.WPF.NativeInterpolators
             };
         }
 
-        protected virtual Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t)
+        protected virtual Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t, RotationDirection direction)
         {
             // 获取默认变换（确保从无到有的过渡平滑）
             static Transform GetDefaultTransform(Transform? transform) => transform switch
@@ -134,7 +135,7 @@ namespace VeloxDev.WPF.NativeInterpolators
 
                 RotateTransform st when end is RotateTransform et =>
                     new RotateTransform(
-                        LerpAngle(st.Angle, et.Angle, t),
+                        LerpAngle(st.Angle, et.Angle, t, direction),
                         Lerp(st.CenterX, et.CenterX, t),
                         Lerp(st.CenterY, et.CenterY, t)),
 
@@ -159,7 +160,18 @@ namespace VeloxDev.WPF.NativeInterpolators
             };
         }
 
-        protected virtual double LerpAngle(double start, double end, double t) => Lerp(start, end, t);
+        protected virtual double LerpAngle(double start, double end, double t, RotationDirection direction)
+        {
+            bool reverse = direction.HasFlag(RotationDirection.CounterClockWise)
+                        || direction.HasFlag(RotationDirection.CounterClockWiseZ);
+            bool forceClockWise = direction.HasFlag(RotationDirection.ClockWise)
+                               || direction.HasFlag(RotationDirection.ClockWiseZ);
+            if (reverse)
+                return LerpDirectionalAngle(start, end, t, reverse: true);
+            if (forceClockWise)
+                return LerpDirectionalAngle(start, end, t, reverse: false);
+            return Lerp(start, end, t);
+        }
 
         private static double Lerp(double a, double b, double t) => a + t * (b - a);
         private static Matrix LerpMatrix(Matrix m1, Matrix m2, double t)
@@ -189,14 +201,6 @@ namespace VeloxDev.WPF.NativeInterpolators
             }
 
             return start + delta * t;
-        }
-    }
-
-    public class ReverseTransformInterpolator : TransformInterpolator
-    {
-        protected override double LerpAngle(double start, double end, double t)
-        {
-            return LerpDirectionalAngle(start, end, t, reverse: true);
         }
     }
 }

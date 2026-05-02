@@ -4,7 +4,7 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
 {
     public class SizeFInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var s1 = (SizeF)(start ?? default(SizeF));
             var s2 = (SizeF)(end ?? s1);

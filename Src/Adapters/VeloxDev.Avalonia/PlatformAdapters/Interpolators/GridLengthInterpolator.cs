@@ -1,4 +1,4 @@
-ï»¿using Avalonia.Controls;
+using Avalonia.Controls;
 using System;
 using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
@@ -7,7 +7,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
 {
     public class GridLengthInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var g1 = (GridLength)(start ?? new GridLength(0));
             var g2 = (GridLength)(end ?? g1);
@@ -15,7 +15,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
 
             List<object?> result = new(steps);
 
-            // å¦‚æœç½‘æ ¼å•ä½ä¸åŒï¼Œæ— æ³•æ’å€¼
+            // Èç¹ûÍø¸ñµ¥Î»²»Í¬£¬ÎŞ·¨²åÖµ
             if (g1.GridUnitType != g2.GridUnitType)
             {
                 for (int i = 0; i < steps; i++)

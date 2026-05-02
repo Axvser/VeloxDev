@@ -108,8 +108,7 @@ public partial class MainWindow
     private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(5))
-            .Interpolator((Rectangle r) => r.RenderTransform, new ReverseTransformInterpolator())
-            .Property(r => r.RenderTransform, [new TranslateTransform(-200, 0), new RotateTransform(180)])
+            .Property(r => r.RenderTransform, [new TranslateTransform(-200, 0), new RotateTransform(180)], RotationDirection.ClockWise)
             .Property(r => r.Fill,
                 new LinearGradientBrush
                 {
@@ -132,13 +131,12 @@ public partial class MainWindow
     // 拼接动画：反转三维旋转 + 放缩 + 再切换渐变背景
     private static readonly Transition<Rectangle>.StateSnapshot Animation2 =
         Transition<Rectangle>.Create()
-            .Interpolator((Rectangle r) => r.RenderTransform, new ReverseTransformInterpolator())
             .Property(r => r.RenderTransform,
             [
                 new TranslateTransform(200, 0),
                 new Rotate3DTransform(180, 180, 0, 0, 0, 0, 0),
                 new ScaleTransform(1.3, 1.3)
-            ])
+            ], RotationDirection.CounterClockWise)
             .Property(r => r.Fill,
                 new LinearGradientBrush
                 {

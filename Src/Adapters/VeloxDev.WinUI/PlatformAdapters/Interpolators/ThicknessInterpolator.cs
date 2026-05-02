@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
 
@@ -8,7 +8,7 @@ namespace VeloxDev.WinUI.NativeInterpolators
     {
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var t1 = start is Thickness s ? s : new(0);
             var t2 = end is Thickness e ? e : t1;

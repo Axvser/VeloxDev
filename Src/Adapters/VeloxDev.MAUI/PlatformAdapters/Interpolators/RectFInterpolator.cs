@@ -1,13 +1,13 @@
-ï»¿using System.Drawing;
+using System.Drawing;
 using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class RectFInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
-            // å¤„ç†ç©ºå€¼ï¼Œæä¾›é»˜è®¤å€¼
+            // ´¦Àí¿ÕÖµ£¬Ìá¹©Ä¬ÈÏÖµ
             var r1 = (RectangleF)(start ?? RectangleF.Empty);
             var r2 = (RectangleF)(end ?? RectangleF.Empty);
 

@@ -1,11 +1,11 @@
-﻿using System.Windows;
+using System.Windows;
 using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.WPF.NativeInterpolators
 {
     public class SizeInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var size1 = (Size)(start ?? new Size(0, 0));
             var size2 = (Size)(end ?? size1);

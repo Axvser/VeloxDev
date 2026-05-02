@@ -8,8 +8,9 @@ namespace VeloxDev.WinUI.NativeInterpolators
     {
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
+            var direction = options is RotationDirection d ? d : RotationDirection.Auto;
             var s = Normalize(start);
             var e = Normalize(end);
 
@@ -22,9 +23,9 @@ namespace VeloxDev.WinUI.NativeInterpolators
 
                 result.Add(new PlaneProjection
                 {
-                    RotationX = LerpAngle(s.RotationX, e.RotationX, t),
-                    RotationY = LerpAngle(s.RotationY, e.RotationY, t),
-                    RotationZ = LerpAngle(s.RotationZ, e.RotationZ, t),
+                    RotationX = LerpAngle(s.RotationX, e.RotationX, t, direction, axis: 'X'),
+                    RotationY = LerpAngle(s.RotationY, e.RotationY, t, direction, axis: 'Y'),
+                    RotationZ = LerpAngle(s.RotationZ, e.RotationZ, t, direction, axis: 'Z'),
 
                     CenterOfRotationX = Lerp(s.CenterOfRotationX, e.CenterOfRotationX, t),
                     CenterOfRotationY = Lerp(s.CenterOfRotationY, e.CenterOfRotationY, t),
@@ -41,7 +42,30 @@ namespace VeloxDev.WinUI.NativeInterpolators
             return result;
         }
 
-        protected virtual double LerpAngle(double start, double end, double t) => Lerp(start, end, t);
+        protected virtual double LerpAngle(double start, double end, double t, RotationDirection direction, char axis)
+        {
+            bool reverse = axis switch
+            {
+                'X' => direction.HasFlag(RotationDirection.CounterClockWiseX),
+                'Y' => direction.HasFlag(RotationDirection.CounterClockWiseY),
+                'Z' => direction.HasFlag(RotationDirection.CounterClockWiseZ),
+                _ => false
+            } || direction.HasFlag(RotationDirection.CounterClockWise);
+
+            bool forceClockWise = axis switch
+            {
+                'X' => direction.HasFlag(RotationDirection.ClockWiseX),
+                'Y' => direction.HasFlag(RotationDirection.ClockWiseY),
+                'Z' => direction.HasFlag(RotationDirection.ClockWiseZ),
+                _ => false
+            } || direction.HasFlag(RotationDirection.ClockWise);
+
+            if (reverse)
+                return LerpDirectionalAngle(start, end, t, reverse: true);
+            if (forceClockWise)
+                return LerpDirectionalAngle(start, end, t, reverse: false);
+            return Lerp(start, end, t);
+        }
 
         private static PlaneProjection Normalize(object? obj)
         {
@@ -79,14 +103,6 @@ namespace VeloxDev.WinUI.NativeInterpolators
             }
 
             return start + delta * t;
-        }
-    }
-
-    public class ReverseProjectionInterpolator : ProjectionInterpolator
-    {
-        protected override double LerpAngle(double start, double end, double t)
-        {
-            return LerpDirectionalAngle(start, end, t, reverse: true);
         }
     }
 }

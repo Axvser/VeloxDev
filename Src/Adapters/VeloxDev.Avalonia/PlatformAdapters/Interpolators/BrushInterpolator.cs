@@ -1,4 +1,4 @@
-ï»¿using Avalonia;
+using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using System.Collections.Generic;
@@ -8,7 +8,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
 {
     public class BrushInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var endBrush = end as IBrush ?? Brushes.Transparent;
             var startBrush = AdaptStartBrush(start);
@@ -21,7 +21,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
                 return result;
             }
 
-            // ç¡®ä¿ç²¾ç¡®çš„èµ·å§‹å’Œç»“æŸå€¼
+            // È·±£¾«È·µÄÆğÊ¼ºÍ½áÊøÖµ
             result.Add(startBrush);
 
             if (steps > 2)
@@ -78,7 +78,7 @@ namespace VeloxDev.Avalonia.NativeInterpolators
             if (t <= 0.0) return start;
             if (t >= 1.0) return end;
 
-            // ä½¿ç”¨RenderTargetBitmapå®ç°ç²¾ç¡®æ··åˆ
+            // Ê¹ÓÃRenderTargetBitmapÊµÏÖ¾«È·»ìºÏ
             return CreateBlendedBrush(start, end, t);
         }
 
@@ -89,11 +89,11 @@ namespace VeloxDev.Avalonia.NativeInterpolators
 
             using (var ctx = bmp.CreateDrawingContext())
             {
-                // ç»˜åˆ¶åº•å±‚ç”»åˆ·
+                // »æÖÆµ×²ã»­Ë¢
                 using (ctx.PushOpacity(1 - t))
                     ctx.DrawRectangle(start, null, new Rect(0, 0, renderSize, renderSize));
 
-                // ç»˜åˆ¶ä¸Šå±‚ç”»åˆ·
+                // »æÖÆÉÏ²ã»­Ë¢
                 using (ctx.PushOpacity(t))
                     ctx.DrawRectangle(end, null, new Rect(0, 0, renderSize, renderSize));
             }

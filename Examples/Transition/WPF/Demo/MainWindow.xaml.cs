@@ -94,8 +94,7 @@ public partial class MainWindow
     private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(5))
-            .Interpolator((Rectangle r) => r.RenderTransform, new ReverseTransformInterpolator())
-            .Property(r => r.RenderTransform, [new RotateTransform(180)])
+            .Property(r => r.RenderTransform, [new RotateTransform(180)], RotationDirection.CounterClockWise)
             .Effect(new TransitionEffect()
             {
                 Duration = TimeSpan.FromSeconds(2),

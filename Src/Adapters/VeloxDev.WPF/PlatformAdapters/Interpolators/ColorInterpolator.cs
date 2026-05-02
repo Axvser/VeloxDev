@@ -1,11 +1,11 @@
-﻿using System.Windows.Media;
+using System.Windows.Media;
 using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.WPF.NativeInterpolators
 {
     public class ColorInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var color1 = (Color)(start ?? Colors.Transparent);
             var color2 = (Color)(end ?? color1);

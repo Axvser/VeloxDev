@@ -2,6 +2,6 @@
 {
     public interface IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps);
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null);
     }
 }

@@ -1,11 +1,11 @@
-﻿using System.Windows;
+using System.Windows;
 using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.WPF.NativeInterpolators
 {
     public class VectorInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var vector1 = (Vector)(start ?? new Vector(0, 0));
             var vector2 = (Vector)(end ?? vector1);

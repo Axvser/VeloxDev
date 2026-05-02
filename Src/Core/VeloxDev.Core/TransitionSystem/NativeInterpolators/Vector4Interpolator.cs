@@ -5,7 +5,7 @@ namespace VeloxDev.TransitionSystem.NativeInterpolators
 #if NETCOREAPP || NETFRAMEWORK || NET
     public class Vector4Interpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var v1 = (Vector4)(start ?? default(Vector4));
             var v2 = (Vector4)(end ?? v1);

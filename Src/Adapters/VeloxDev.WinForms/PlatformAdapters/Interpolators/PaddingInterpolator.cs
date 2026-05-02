@@ -1,10 +1,10 @@
-﻿using VeloxDev.TransitionSystem;
+using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.WinForms.NativeInterpolators
 {
     public class PaddingInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var padding1 = (Padding)(start ?? new Padding(0));
             var padding2 = (Padding)(end ?? padding1);

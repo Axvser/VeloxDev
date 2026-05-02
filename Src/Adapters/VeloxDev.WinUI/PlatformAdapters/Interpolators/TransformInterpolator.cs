@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media;
 using System.Collections.Generic;
 using System.Linq;
 using VeloxDev.TransitionSystem;
@@ -10,7 +10,7 @@ namespace VeloxDev.WinUI.NativeInterpolators
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
         private static readonly TransformGroup Identity = new();
 
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var s = Normalize(start);
             var e = Normalize(end);
@@ -142,14 +142,6 @@ namespace VeloxDev.WinUI.NativeInterpolators
             }
 
             return start + delta * t;
-        }
-    }
-
-    public class ReverseTransformInterpolator : TransformInterpolator
-    {
-        protected override double LerpAngle(double start, double end, double t)
-        {
-            return LerpDirectionalAngle(start, end, t, reverse: true);
         }
     }
 }

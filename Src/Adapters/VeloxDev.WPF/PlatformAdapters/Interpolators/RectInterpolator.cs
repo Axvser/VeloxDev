@@ -1,11 +1,11 @@
-﻿using System.Windows;
+using System.Windows;
 using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.WPF.NativeInterpolators
 {
     public class RectInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var rect1 = (Rect)(start ?? new Rect(0, 0, 0, 0));
             var rect2 = (Rect)(end ?? rect1);

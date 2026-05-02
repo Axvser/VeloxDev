@@ -134,8 +134,7 @@ namespace Demo
         private readonly Transition<Rectangle>.StateSnapshot Animation1 =
             Transition<Rectangle>.Create()
                 .Await(TimeSpan.FromSeconds(3))
-                .Interpolator((Rectangle r) => r.RenderTransform, new ReverseTransformInterpolator())
-                .Property(r => r.RenderTransform, [new RotateTransform() { Angle = 180 }])
+                .Property(r => r.RenderTransform, [new RotateTransform() { Angle = 180 }], RotationDirection.CounterClockWise)
                 .Property(r => r.Fill, new LinearGradientBrush()
                 {
                     GradientStops =
@@ -154,7 +153,6 @@ namespace Demo
         // 拼接动画：反转投影旋转 + 颜色变化
         private readonly Transition<Rectangle>.StateSnapshot Animation2 =
             Transition<Rectangle>.Create()
-                .Interpolator((Rectangle r) => r.Projection, new ReverseProjectionInterpolator())
                 .Property(r => r.Projection,
                     new PlaneProjection()
                     {
@@ -162,7 +160,7 @@ namespace Demo
                         RotationY = 180,
                         CenterOfRotationX = 0.5,
                         CenterOfRotationY = 0.5
-                    })
+                    }, RotationDirection.CounterClockWise)
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(2),

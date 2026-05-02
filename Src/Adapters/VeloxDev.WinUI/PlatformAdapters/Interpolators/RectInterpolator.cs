@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
 using Windows.Foundation;
 
@@ -6,7 +6,7 @@ namespace VeloxDev.WinUI.NativeInterpolators
 {
     public class RectInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var r1 = (Rect)(start ?? default(Rect));
             var r2 = (Rect)(end ?? r1);

@@ -1,11 +1,11 @@
-ï»¿using Microsoft.Maui.Controls.Shapes;
+using Microsoft.Maui.Controls.Shapes;
 using VeloxDev.TransitionSystem;
 
 namespace VeloxDev.MAUI.NativeInterpolators
 {
     public class TransformInterpolator : IValueInterpolator
     {
-        public List<object?> Interpolate(object? start, object? end, int steps)
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var m1 = start as Transform ?? new Transform() { Value = Matrix.Identity };
             var m2 = end as Transform ?? m1;
@@ -16,12 +16,12 @@ namespace VeloxDev.MAUI.NativeInterpolators
             var matrix1 = m1.Value;
             var matrix2 = m2.Value;
 
-            // ç¡®ä¿åˆå§‹å’Œç»“æŸçŠ¶æ€å‡†ç¡®
+            // È·±£³õÊ¼ºÍ½áÊø×´Ì¬×¼È·
             if (steps > 1)
             {
-                result.Add(m1); // ç¬¬ä¸€æ­¥ä½¿ç”¨åŽŸå§‹å€¼
+                result.Add(m1); // µÚÒ»²½Ê¹ÓÃÔ­Ê¼Öµ
 
-                // ä¸­é—´æ­¥éª¤
+                // ÖÐ¼ä²½Öè
                 for (var i = 1; i < steps - 1; i++)
                 {
                     var t = (double)i / (steps - 1);
@@ -38,7 +38,7 @@ namespace VeloxDev.MAUI.NativeInterpolators
                     result.Add(transform);
                 }
 
-                result.Add(m2); // æœ€åŽä¸€æ­¥ä½¿ç”¨ç›®æ ‡å€¼
+                result.Add(m2); // ×îºóÒ»²½Ê¹ÓÃÄ¿±êÖµ
             }
 
             return result;

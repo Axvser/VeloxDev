@@ -38,26 +38,27 @@ public abstract class InterpolatorCore<
         {
             var currentValue = inspector.ProtectedGetValue(isUIAccess, target, kvp.Key);
             var newValue = kvp.Value;
+            state.TryGetOptions(kvp.Key, out var options);
             if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
             {
-                var frames = inspector.ProtectedInterpolate(isUIAccess, () => customInterpolator.Interpolate(currentValue, newValue, count));
+                var frames = inspector.ProtectedInterpolate(isUIAccess, () => customInterpolator.Interpolate(currentValue, newValue, count, options));
                 output.AddPropertyInterpolations(kvp.Key, frames);
             }
             else if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator) && interpolator != null)
             {
-                var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
+                var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count, options));
                 output.AddPropertyInterpolations(kvp.Key, frames);
             }
             else
             {
                 if (currentValue is IInterpolable v1)
                 {
-                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v1.Interpolate(currentValue, newValue, count));
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v1.Interpolate(currentValue, newValue, count, options));
                     output.AddPropertyInterpolations(kvp.Key, frames);
                 }
                 else if (newValue is IInterpolable v2)
                 {
-                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v2.Interpolate(currentValue, newValue, count));
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v2.Interpolate(currentValue, newValue, count, options));
                     output.AddPropertyInterpolations(kvp.Key, frames);
                 }
             }
@@ -96,26 +97,27 @@ public abstract class InterpolatorCore<TOutputCore> : InterpolatorCore, IFrameIn
         {
             var currentValue = isUIAccess ? kvp.Key.GetValue(target) : inspector.ProtectedGetValue(isUIAccess, target, kvp.Key);
             var newValue = kvp.Value;
+            state.TryGetOptions(kvp.Key, out var options);
             if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
             {
-                var frames = inspector.ProtectedInterpolate(isUIAccess, () => customInterpolator.Interpolate(currentValue, newValue, count));
+                var frames = inspector.ProtectedInterpolate(isUIAccess, () => customInterpolator.Interpolate(currentValue, newValue, count, options));
                 output.AddPropertyInterpolations(kvp.Key, frames);
             }
             else if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator) && interpolator != null)
             {
-                var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count));
+                var frames = inspector.ProtectedInterpolate(isUIAccess, () => interpolator.Interpolate(currentValue, newValue, count, options));
                 output.AddPropertyInterpolations(kvp.Key, frames);
             }
             else
             {
                 if (currentValue is IInterpolable v1)
                 {
-                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v1.Interpolate(currentValue, newValue, count));
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v1.Interpolate(currentValue, newValue, count, options));
                     output.AddPropertyInterpolations(kvp.Key, frames);
                 }
                 else if (newValue is IInterpolable v2)
                 {
-                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v2.Interpolate(currentValue, newValue, count));
+                    var frames = inspector.ProtectedInterpolate(isUIAccess, () => v2.Interpolate(currentValue, newValue, count, options));
                     output.AddPropertyInterpolations(kvp.Key, frames);
                 }
             }
