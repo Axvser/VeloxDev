@@ -17,7 +17,7 @@
             <!-- 浏览模式 -->
             <Grid x:Name="DisplayPanel">
                 <Image x:Name="DisplayImage"
-                       Source="{Binding Bitmap}"
+                       Source="{Binding ImageSource}"
                        Stretch="Uniform" />
                 <!-- 加载中提示 -->
                 <Border IsVisible="{Binding IsLoading}"
@@ -31,7 +31,7 @@
                                FontSize="13" />
                 </Border>
                 <!-- 无图提示 -->
-                <Border IsVisible="{Binding !Bitmap}"
+                <Border IsVisible="{Binding HasNoImage}"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Opacity="0.35">
@@ -44,7 +44,7 @@
             <!-- 编辑模式 -->
             <Grid x:Name="EditPanel"
                   IsVisible="False"
-                  RowDefinitions="Auto,8,*">
+                  RowDefinitions="Auto,8,Auto,8,*">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBox Text="{Binding Source}"
                              Watermark="Raster image path or https://…" />
@@ -56,9 +56,87 @@
                                 CommandParameter="{Binding $self}" />
                     </StackPanel>
                 </Grid>
-                <Grid Grid.Row="2">
+                <WrapPanel Grid.Row="2"
+                           Orientation="Horizontal"
+                           VerticalAlignment="Center">
+                    <CheckBox Content="Keep ratio"
+                              Margin="0,0,12,8"
+                              VerticalAlignment="Center"
+                              IsChecked="{Binding KeepAspectRatio}" />
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="6"
+                                Margin="0,0,12,8"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="Align"
+                                   VerticalAlignment="Center"
+                                   Opacity="0.7" />
+                        <ComboBox ItemsSource="{Binding Alignments}"
+                                  SelectedItem="{Binding Alignment}"
+                                  MinWidth="104" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="6"
+                                Margin="0,0,12,8"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="Mode"
+                                   VerticalAlignment="Center"
+                                   Opacity="0.7" />
+                        <ComboBox ItemsSource="{Binding SizeModes}"
+                                  SelectedItem="{Binding SizeMode}"
+                                  MinWidth="104" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="6"
+                                Margin="0,0,12,8"
+                                VerticalAlignment="Center"
+                                IsVisible="{Binding IsScaleMode}">
+                        <TextBlock Text="SX"
+                                   VerticalAlignment="Center"
+                                   Opacity="0.7" />
+                        <NumericUpDown Minimum="0.1"
+                                       Maximum="5"
+                                       Increment="0.05"
+                                       FormatString="P0"
+                                       Value="{Binding ScaleX}"
+                                       MinWidth="120" />
+                        <TextBlock Text="SY"
+                                   VerticalAlignment="Center"
+                                   Opacity="0.7" />
+                        <NumericUpDown Minimum="0.1"
+                                       Maximum="5"
+                                       Increment="0.05"
+                                       FormatString="P0"
+                                       Value="{Binding ScaleY}"
+                                       MinWidth="120" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8"
+                                Margin="0,0,12,8"
+                                VerticalAlignment="Center"
+                                IsVisible="{Binding IsPixelMode}">
+                        <TextBlock Text="W"
+                                   VerticalAlignment="Center"
+                                   Opacity="0.7" />
+                        <NumericUpDown Minimum="16"
+                                       Maximum="5000"
+                                       Increment="10"
+                                       FormatString="0"
+                                       Value="{Binding PixelWidth}"
+                                       MinWidth="120" />
+                        <TextBlock Text="H"
+                                   VerticalAlignment="Center"
+                                   Opacity="0.7" />
+                        <NumericUpDown Minimum="16"
+                                       Maximum="5000"
+                                       Increment="10"
+                                       FormatString="0"
+                                       Value="{Binding PixelHeight}"
+                                       MinWidth="120" />
+                    </StackPanel>
+                </WrapPanel>
+                <Grid Grid.Row="4">
                     <Image x:Name="EditImage"
-                           Source="{Binding Bitmap}"
+                           Source="{Binding ImageSource}"
                            Stretch="Uniform" />
                     <Border IsVisible="{Binding IsLoading}"
                             HorizontalAlignment="Center"
@@ -68,6 +146,14 @@
                             Padding="12,6">
                         <TextBlock Text="Loading…"
                                    Foreground="White"
+                                   FontSize="13" />
+                    </Border>
+                    <Border IsVisible="{Binding HasNoImage}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Opacity="0.35">
+                        <TextBlock Text="No image"
+                                   FontStyle="Italic"
                                    FontSize="13" />
                     </Border>
                     <Thumb x:Name="ResizeThumb"

@@ -1,4 +1,5 @@
 ﻿using Avalonia.Controls.Primitives;
+using Avalonia.Media;
 using System.ComponentModel;
 using VeloxDev.Docs.ViewModels;
 
@@ -18,10 +19,9 @@ public partial class ImageView : WikiElementViewBase
             if (DataContext is not ImageProvider image)
                 return;
 
-            if (e.Vector.X + e.Vector.Y >= 0)
-                image.IncreaseScale();
-            else
-                image.DecreaseScale();
+            var delta = e.Vector.X + e.Vector.Y;
+            var factor = 1 + (delta / 240.0);
+            image.ResizeByFactor(factor);
 
             ApplyScale(image);
         };
@@ -47,14 +47,28 @@ public partial class ImageView : WikiElementViewBase
         if (_provider is null)
             return;
 
-        if (e.PropertyName == nameof(ImageProvider.Scale))
+        if (e.PropertyName == nameof(ImageProvider.ScaleX) ||
+            e.PropertyName == nameof(ImageProvider.ScaleY) ||
+            e.PropertyName == nameof(ImageProvider.PixelWidth) ||
+            e.PropertyName == nameof(ImageProvider.PixelHeight) ||
+            e.PropertyName == nameof(ImageProvider.ImageSource) ||
+            e.PropertyName == nameof(ImageProvider.SizeMode) ||
+            e.PropertyName == nameof(ImageProvider.Alignment) ||
+            e.PropertyName == nameof(ImageProvider.KeepAspectRatio))
             ApplyScale(_provider);
     }
 
     private void ApplyScale(ImageProvider image)
     {
-        var width = 640.0 * image.Scale;
-        DisplayImage.Width = width;
-        EditImage.Width = width;
+        var alignment = image.GetHorizontalAlignment();
+        var stretch = image.KeepAspectRatio ? Stretch.Uniform : Stretch.Fill;
+        DisplayImage.HorizontalAlignment = alignment;
+        EditImage.HorizontalAlignment = alignment;
+        DisplayImage.Stretch = stretch;
+        EditImage.Stretch = stretch;
+        DisplayImage.Width = image.GetScaledWidth();
+        DisplayImage.Height = image.GetScaledHeight();
+        EditImage.Width = image.GetScaledWidth();
+        EditImage.Height = image.GetScaledHeight();
     }
 }
