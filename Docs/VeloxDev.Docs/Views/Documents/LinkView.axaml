@@ -28,11 +28,9 @@
                   IsVisible="False"
                   RowDefinitions="Auto,4,Auto">
                 <TextBox Text="{Binding Text}"
-                         Watermark="Highlighted link text"
                          FontWeight="SemiBold" />
                 <TextBox Grid.Row="2"
                          Text="{Binding Url}"
-                         Watermark="https://..."
                          Foreground="{DynamicResource SystemAccentColor}" />
             </Grid>
         </Grid>

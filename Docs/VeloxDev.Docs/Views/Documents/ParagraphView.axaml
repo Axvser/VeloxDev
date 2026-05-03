@@ -23,7 +23,6 @@
             <TextBox x:Name="EditPanel"
                      IsVisible="False"
                      Text="{Binding Text}"
-                     Watermark="Body text"
                      AcceptsReturn="True"
                      TextWrapping="Wrap"
                      MinHeight="72" />

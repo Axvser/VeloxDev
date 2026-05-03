@@ -27,7 +27,6 @@
             <TextBox x:Name="EditPanel"
                      IsVisible="False"
                      Text="{Binding Text}"
-                     Watermark="Subtitle / quote"
                      AcceptsReturn="True"
                      TextWrapping="Wrap"
                      FontStyle="Italic"

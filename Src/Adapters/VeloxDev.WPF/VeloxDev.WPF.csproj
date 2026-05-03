@@ -11,7 +11,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WPF</Title>
-		<Version>5.0.2</Version>
+		<Version>5.0.4</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WPF</Description>
      <PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -29,7 +29,7 @@
 		</PackageReference>
 		<PackageReference Include="System.ValueTuple" Version="4.6.1" PrivateAssets="all" />
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" PrivateAssets="all" />
-		<PackageReference Include="VeloxDev.Core" Version="5.0.2" />
+		<PackageReference Include="VeloxDev.Core" Version="5.0.4" />
 	</ItemGroup>
 
 </Project>

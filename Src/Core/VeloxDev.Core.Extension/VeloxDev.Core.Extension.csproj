@@ -6,7 +6,7 @@
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core.Extension</Title>
-		<Version>5.0.2</Version>
+		<Version>5.0.4</Version>
 		<Authors>Axvser</Authors>
 		<PackageReadmeFile></PackageReadmeFile>
 		<Description>VeloxDev.Core tries not to rely on any third-party libraries, while Extension, as an optional extension package, contains a set of advanced functions implemented based on third-party libraries, which can further optimize the user experience</Description>
@@ -17,7 +17,7 @@
 		<PackageReference Include="Microsoft.Agents.AI" Version="1.1.0" />
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.5.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-		<PackageReference Include="VeloxDev.Core" Version="5.0.2" />
+		<PackageReference Include="VeloxDev.Core" Version="5.0.4" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -27,10 +27,6 @@
 		</None>
 	</ItemGroup>
 
-	<!-- Embedded prompt resources: Resources/{System}/{LangCode}/Skills|References/{Name}.md
-		 and Resources/{System}/Scripts/{Name}.*
-		 WithCulture=false prevents MSBuild from treating "en" / "zh" directory segments
-		 as satellite culture codes, which would corrupt logical resource names. -->
 	<ItemGroup>
 	  <EmbeddedResource Include="Resources\**\*">
 		<WithCulture>false</WithCulture>

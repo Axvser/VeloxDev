@@ -48,8 +48,7 @@
 							 TextWrapping="NoWrap"
                              FontFamily="Cascadia Code,Cascadia Mono,Sarasa Mono SC,Microsoft YaHei UI,Segoe UI,monospace"
 							 FontSize="13"
-							 MinHeight="96"
-							 Watermark="Code" />
+							 MinHeight="96" />
 				</ScrollViewer>
 			</Grid>
 		</Grid>

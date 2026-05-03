@@ -13,6 +13,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WPF\VeloxDev.WPF.csproj" />
 		<ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
 	</ItemGroup>
 

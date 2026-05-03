@@ -46,8 +46,7 @@
                   IsVisible="False"
                   RowDefinitions="Auto,8,Auto,8,*">
                 <Grid ColumnDefinitions="*,Auto">
-                    <TextBox Text="{Binding Source}"
-                             Watermark="Raster image path or https://…" />
+                    <TextBox Text="{Binding Source}" />
                     <StackPanel Grid.Column="1"
                                 Orientation="Horizontal"
                                 Margin="8,0,0,0">

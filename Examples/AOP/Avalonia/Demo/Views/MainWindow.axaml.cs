@@ -4,6 +4,8 @@ using Avalonia.Interactivity;
 using Demo.ViewModels;
 using System;
 using System.Collections.Specialized;
+using VeloxDev.AopInterfaces;
+using VeloxDev.AspectOriented;
 
 namespace Demo.Views;
 
