@@ -1,5 +1,6 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using System;
 using System.Collections.Generic;
@@ -33,6 +34,29 @@ public partial class DocumentProvider : IWikiElement
         Children = [];
         Nodes = [];
         IsEditMode = false;
+    }
+
+    public static async Task<DocumentProvider> LoadDefault()
+    {
+        await using var stream = AssetLoader.Open(new Uri("avares://VeloxDev.Docs/Assets/Docs/wiki.json"));
+        using var reader = new StreamReader(stream, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: false);
+
+        return Deserialize(reader.ReadToEnd());
+    }
+
+    private static DocumentProvider Deserialize(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            throw new InvalidDataException("Wiki JSON content is empty.");
+
+        if (!json.TryDeserialize<DocumentProvider>(out var document) || document is null)
+            throw new InvalidDataException("Wiki JSON content could not be deserialized.");
+
+        RepairParents(document);
+        document.SelectedNode ??= document.Nodes.OfType<NodeProvider>().FirstOrDefault();
+        document.Children = document.SelectedNode?.Children ?? [];
+
+        return document;
     }
 
     [VeloxCommand]
@@ -222,7 +246,7 @@ public partial class DocumentProvider : IWikiElement
         {
             RepairParents(document);
             Nodes = document.Nodes;
-            SelectedNode = Nodes.OfType<NodeProvider>().FirstOrDefault();
+            SelectedNode = document.SelectedNode ?? Nodes.OfType<NodeProvider>().FirstOrDefault();
             Children = SelectedNode?.Children ?? [];
         }
     }

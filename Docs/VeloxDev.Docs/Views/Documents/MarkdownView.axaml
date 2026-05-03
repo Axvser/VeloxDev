@@ -90,7 +90,6 @@
                              AcceptsReturn="True"
                              TextWrapping="NoWrap"
                              MinHeight="160"
-                             FontFamily="Cascadia Code,Consolas,Menlo,monospace"
                              FontSize="13" />
                 </ScrollViewer>
             </Grid>

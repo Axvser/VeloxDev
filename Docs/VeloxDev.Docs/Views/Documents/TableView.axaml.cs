@@ -284,6 +284,21 @@ public partial class TableView : WikiElementViewBase
 
     private static Border CreateDisplayCell(string text, int column, bool isHeader, TextAlignment alignment)
     {
+        // Don't set FontWeight on header cells: Skia's CJK fallback fails to find a
+        // SemiBold CJK face on many systems and renders .notdef glyphs (mojibake).
+        // Match MarkdownView headings — distinguish headers via background only.
+        var textBlock = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = alignment,
+            VerticalAlignment = VerticalAlignment.Center,
+            FontFamily = ContentFontFamily
+        };
+
+        // Use Inlines+Run for per-glyph font fallback (same path as MarkdownView)
+        textBlock.Inlines ??= [];
+        textBlock.Inlines.Add(new Avalonia.Controls.Documents.Run(text));
+
         var cell = new Border
         {
             Height = isHeader ? HeaderRowHeight : BodyRowHeight,
@@ -291,15 +306,7 @@ public partial class TableView : WikiElementViewBase
             BorderThickness = new Thickness(0, 0, 1, 1),
             Background = CreateCellBackground(isHeader),
             Padding = new Thickness(6),
-            Child = new TextBlock
-            {
-                Text = text,
-                FontWeight = isHeader ? FontWeight.SemiBold : FontWeight.Normal,
-                TextWrapping = TextWrapping.Wrap,
-                TextAlignment = alignment,
-                VerticalAlignment = VerticalAlignment.Center,
-                FontFamily = ContentFontFamily
-            }
+            Child = textBlock
         };
 
         Grid.SetColumn(cell, column);
@@ -318,7 +325,8 @@ public partial class TableView : WikiElementViewBase
             Padding = new Thickness(6),
             Background = Brushes.Transparent,
             TextAlignment = alignment,
-            VerticalContentAlignment = VerticalAlignment.Center
+            VerticalContentAlignment = VerticalAlignment.Center,
+            FontFamily = ContentFontFamily
         };
         editor.TextChanged += (_, _) => update(editor.Text ?? string.Empty);
         Grid.SetColumn(editor, column);

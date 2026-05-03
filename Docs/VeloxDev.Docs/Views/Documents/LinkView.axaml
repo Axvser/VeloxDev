@@ -15,23 +15,23 @@
             CornerRadius="6"
             BorderBrush="{DynamicResource SystemAccentColor}">
         <Grid>
-            <Button x:Name="DisplayPanel"
-                    Content="{Binding Text}"
-                    Command="{Binding OpenCommand}"
-                    CommandParameter="{Binding $self}"
-                    Foreground="{DynamicResource SystemAccentColor}"
+            <Border x:Name="DisplayPanel"
                     Background="Transparent"
-                    BorderThickness="0"
                     Padding="0"
-                    HorizontalAlignment="Left" />
+                    HorizontalAlignment="Left"
+                    Cursor="Hand">
+                <TextBlock x:Name="LinkDisplayText"
+                           Foreground="{DynamicResource SystemAccentColor}"
+                           TextWrapping="Wrap" />
+            </Border>
             <Grid x:Name="EditPanel"
                   IsVisible="False"
                   RowDefinitions="Auto,4,Auto">
                 <TextBox Text="{Binding Text}"
-                         FontWeight="SemiBold" />
+                         PlaceholderText="Highlighted link text" />
                 <TextBox Grid.Row="2"
                          Text="{Binding Url}"
-                         Foreground="{DynamicResource SystemAccentColor}" />
+                         PlaceholderText="https://..." />
             </Grid>
         </Grid>
     </Border>

@@ -16,13 +16,13 @@
             BorderBrush="{DynamicResource SystemAccentColor}">
         <Grid>
             <TextBlock x:Name="DisplayPanel"
-                       Text="{Binding Text}"
                        TextWrapping="Wrap"
                        FontSize="14"
                        LineHeight="22" />
             <TextBox x:Name="EditPanel"
                      IsVisible="False"
                      Text="{Binding Text}"
+                     PlaceholderText="Body text"
                      AcceptsReturn="True"
                      TextWrapping="Wrap"
                      MinHeight="72" />

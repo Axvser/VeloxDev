@@ -8,7 +8,6 @@ public partial class MainViewModel
 
     public MainViewModel()
     {
-        Document = new DocumentProvider();
-        Document.AddRootCommand.Execute(null);
+        Document = DocumentProvider.LoadDefault().GetAwaiter().GetResult();
     }
 }

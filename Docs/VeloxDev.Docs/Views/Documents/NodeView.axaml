@@ -15,7 +15,6 @@
             BorderBrush="{DynamicResource SystemAccentColor}">
         <Grid>
             <TextBlock x:Name="DisplayPanel"
-                       Text="{Binding Title}"
                        VerticalAlignment="Center" />
             <TextBox x:Name="EditPanel"
                      IsVisible="False"

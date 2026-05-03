@@ -16,7 +16,6 @@
             BorderBrush="{DynamicResource SystemAccentColor}">
         <Grid>
             <TextBlock x:Name="DisplayPanel"
-                       Text="{Binding Text}"
                        FontSize="24"
                        TextWrapping="Wrap" />
             <Grid x:Name="EditPanel"

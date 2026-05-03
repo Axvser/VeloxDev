@@ -125,14 +125,13 @@
 			<GridSplitter Grid.Column="1" ResizeDirection="Columns" Width="4" />
 
 			<!-- 内容区 -->
-            <ScrollViewer x:Name="ContentScrollViewer"
+			<ScrollViewer x:Name="ContentScrollViewer"
 					  Grid.Column="2"
-					  Padding="16,12"
-                    HorizontalScrollBarVisibility="Disabled"
+					HorizontalScrollBarVisibility="Disabled"
 					  VerticalScrollBarVisibility="Auto"
 					  IsScrollChainingEnabled="False">
-               <Border Width="{Binding #ContentScrollViewer.Viewport.Width}"
-						Padding="0,0,8,8"
+			   <Border Width="{Binding #ContentScrollViewer.Viewport.Width}"
+						Padding="16,12,16,12"
 						HorizontalAlignment="Stretch"
 						VerticalAlignment="Top">
 					<ItemsControl ItemsSource="{Binding Children}"

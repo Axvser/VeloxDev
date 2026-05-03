@@ -19,17 +19,16 @@
                     BorderBrush="{DynamicResource SystemAccentColor}"
                     BorderThickness="4,0,0,0"
                     Padding="10,4">
-                <TextBlock Text="{Binding Text}"
+                <TextBlock x:Name="DisplayText"
                            TextWrapping="Wrap"
-                           FontStyle="Italic"
                            Opacity="0.8" />
             </Border>
             <TextBox x:Name="EditPanel"
                      IsVisible="False"
                      Text="{Binding Text}"
+                     PlaceholderText="Subtitle / quote"
                      AcceptsReturn="True"
                      TextWrapping="Wrap"
-                     FontStyle="Italic"
                      MinHeight="64" />
         </Grid>
     </Border>

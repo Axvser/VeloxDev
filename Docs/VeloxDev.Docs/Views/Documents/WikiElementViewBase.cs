@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -45,8 +46,7 @@ public abstract class WikiElementViewBase : UserControl
     {
         DetachDocument();
         _attachedDocument = GetOwnerDocument();
-        if (_attachedDocument is not null)
-            _attachedDocument.PropertyChanged += OnDocumentPropertyChanged;
+        _attachedDocument?.PropertyChanged += OnDocumentPropertyChanged;
 
         ContextMenu = CreateContextMenu();
         if (IsGlobalEditMode)
@@ -57,11 +57,8 @@ public abstract class WikiElementViewBase : UserControl
 
     private void DetachDocument()
     {
-        if (_attachedDocument is not null)
-        {
-            _attachedDocument.PropertyChanged -= OnDocumentPropertyChanged;
-            _attachedDocument = null;
-        }
+        _attachedDocument?.PropertyChanged -= OnDocumentPropertyChanged;
+        _attachedDocument = null;
     }
 
     private void OnDocumentPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -154,9 +151,8 @@ public abstract class WikiElementViewBase : UserControl
             return;
 
         IsEditing = true;
-        if (Display is not null) Display.IsVisible = false;
-        if (Editor is not null)
-            Editor.IsVisible = true;
+        Display?.IsVisible = false;
+        Editor?.IsVisible = true;
         UpdateChrome();
         RefreshLayout();
     }
@@ -164,8 +160,8 @@ public abstract class WikiElementViewBase : UserControl
     protected virtual void ExitEdit()
     {
         IsEditing = false;
-        if (Display is not null) Display.IsVisible = true;
-        if (Editor is not null) Editor.IsVisible = false;
+        Display?.IsVisible = true;
+        Editor?.IsVisible = false;
         ContextMenu = CreateContextMenu();
         UpdateChrome();
         RefreshLayout();
@@ -217,8 +213,7 @@ public abstract class WikiElementViewBase : UserControl
             if (Editor.GetVisualDescendants().OfType<ComboBox>().Any(comboBox => comboBox.IsDropDownOpen))
                 return;
 
-            var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as Visual;
-            if (focused is null)
+            if (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is not Visual focused)
             {
                 ExitEdit();
                 return;
@@ -305,5 +300,18 @@ public abstract class WikiElementViewBase : UserControl
     {
         if (GetOwnerDocument() is { } document && DataContext is IWikiElement element)
             document.InsertEmptyAround(element, below);
+    }
+
+    /// <summary>
+    /// Applies text to a TextBlock via Inlines+Run so Avalonia performs
+    /// per-glyph font fallback (same path as MarkdownView), preventing
+    /// CJK characters from rendering as mojibake when the primary font
+    /// lacks CJK coverage.
+    /// </summary>
+    protected static void SetTextViaRun(TextBlock textBlock, string? text)
+    {
+        textBlock.Inlines ??= [];
+        textBlock.Inlines.Clear();
+        textBlock.Inlines.Add(new Run(text ?? string.Empty));
     }
 }
