@@ -1,0 +1,1208 @@
+{
+  "$id": "1",
+  "Parent": null,
+  "Children": { "$id": "2", "$values": [] },
+  "Nodes": {
+    "$id": "3",
+    "$values": [
+
+      {
+        "$id": "10",
+        "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+        "Parent": null,
+        "Title": "Welcome",
+        "Nodes": { "$id": "11", "$values": [] },
+        "Children": {
+          "$id": "12",
+          "$values": [
+            { "$id": "13", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "🚀 VeloxDev" },
+            { "$id": "14", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "VeloxDev is a set of development tools for modern .NET. Built on Source Generators, it consolidates MVVM, animation, theming, frame loops, AOP, Workflow, and Agent capabilities into a single unified abstraction." },
+            { "$id": "15", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Start with \"Quick Start\" to learn each module step by step. \"APIs\" gives you a per-module type and attribute reference. \"Agent\" shows how to expose any .NET object or workflow to an LLM." },
+
+            { "$id": "16", "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs", "Parent": null, "Text": "Adapter Packages" },
+            {
+              "$id": "17",
+              "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs",
+              "Parent": null,
+              "Headers": { "$id": "18", "$values": [ "Framework", "NuGet Package", "3rd-party Deps", "Description" ] },
+              "Alignments": { "$id": "19", "$values": [ "Left", "Left", "Center", "Left" ] },
+              "Rows": {
+                "$id": "20",
+                "$values": [
+                  { "$id": "21", "Cells": { "$id": "22", "$values": [ "WPF", "VeloxDev.WPF", "❌", "WPF adapter package" ] } },
+                  { "$id": "23", "Cells": { "$id": "24", "$values": [ "Avalonia", "VeloxDev.Avalonia", "❌", "Avalonia adapter package" ] } },
+                  { "$id": "25", "Cells": { "$id": "26", "$values": [ "WinUI", "VeloxDev.WinUI", "❌", "WinUI adapter package" ] } },
+                  { "$id": "27", "Cells": { "$id": "28", "$values": [ "MAUI", "VeloxDev.MAUI", "❌", "MAUI adapter package" ] } },
+                  { "$id": "29", "Cells": { "$id": "30", "$values": [ "WinForms", "VeloxDev.WinForms", "❌", "WinForms adapter package" ] } },
+                  { "$id": "31", "Cells": { "$id": "32", "$values": [ ".NET", "VeloxDev.Core.Extension", "✔", "Agent toolkit / serialization" ] } },
+                  { "$id": "33", "Cells": { "$id": "34", "$values": [ ".NET", "VeloxDev.Core", "❌", "Core abstractions and generators" ] } }
+                ]
+              }
+            },
+
+            { "$id": "35", "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs", "Parent": null, "Text": "Feature Overview" },
+            {
+              "$id": "36",
+              "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs",
+              "Parent": null,
+              "Headers": { "$id": "37", "$values": [ "Module", "One-line summary" ] },
+              "Alignments": { "$id": "38", "$values": [ "Left", "Left" ] },
+              "Rows": {
+                "$id": "39",
+                "$values": [
+                  { "$id": "40", "Cells": { "$id": "41", "$values": [ "🪶 MVVM", "Add [VeloxProperty] to fields and [VeloxCommand] to methods to auto-generate properties and async commands" ] } },
+                  { "$id": "42", "Cells": { "$id": "43", "$values": [ "🎞️ Transition", "State-interpolation animation: snapshots, fluent composition, cross-platform dispatch" ] } },
+                  { "$id": "44", "Cells": { "$id": "45", "$values": [ "🎨 Theme", "[ThemeConfig] declares multiple themes with gradient transitions and runtime overrides" ] } },
+                  { "$id": "46", "Cells": { "$id": "47", "$values": [ "⚙️ MonoBehaviour", "Update / FixedUpdate frame loops with global throttling and pause" ] } },
+                  { "$id": "48", "Cells": { "$id": "49", "$values": [ "🌀 AOP", "Runtime proxies: pre / override / post hooks for properties and methods" ] } },
+                  { "$id": "50", "Cells": { "$id": "51", "$values": [ "📦 AOT Reflection", "Generate reflection-preserving code for trimming and NativeAOT scenarios" ] } },
+                  { "$id": "52", "Cells": { "$id": "53", "$values": [ "⛓️ Workflow", "Tree / Node / Slot / Link + Helper graph-based workflow kernel" ] } },
+                  { "$id": "54", "Cells": { "$id": "55", "$values": [ "🤖 Agent", "Zero-dependency reflection toolkit + MAF Function Calling tools" ] } }
+                ]
+              }
+            },
+
+            { "$id": "60", "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs", "Parent": null, "Text": "Links" },
+            { "$id": "61", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "GitHub Repository", "Url": "https://github.com/Axvser/VeloxDev" },
+            { "$id": "62", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "Examples Folder", "Url": "https://github.com/Axvser/VeloxDev/tree/master/Examples" },
+            { "$id": "63", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "NuGet · VeloxDev.Core", "Url": "https://www.nuget.org/packages/VeloxDev.Core/" }
+          ]
+        }
+      },
+
+      {
+        "$id": "100",
+        "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+        "Parent": null,
+        "Title": "Quick Start",
+        "Children": {
+          "$id": "101",
+          "$values": [
+            { "$id": "102", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "🧭 Quick Start" },
+            { "$id": "103", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "The sub-pages below are organized by module. Each page follows the order \"concept → minimal example → advanced\". All snippets come from real demos in the Examples folder and can be copied and run as-is." }
+          ]
+        },
+        "Nodes": {
+          "$id": "110",
+          "$values": [
+
+            {
+              "$id": "120",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null,
+              "Title": "MVVM",
+              "Children": {
+                "$id": "121",
+                "$values": [
+                  { "$id": "122", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "🪶 MVVM" },
+                  { "$id": "123", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "VeloxDev's MVVM toolkit replaces hand-written boilerplate with a Source Generator: field + attribute → automatic properties, async commands, and collection notifications. No base class required." },
+                  { "$id": "124", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "Full MVVM Demo (GitHub)", "Url": "https://github.com/Axvser/VeloxDev/tree/master/Examples/MVVM" }
+                ]
+              },
+              "Nodes": {
+                "$id": "125",
+                "$values": [
+                  {
+                    "$id": "126",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null,
+                    "Title": "Auto Properties",
+                    "Nodes": { "$id": "127", "$values": [] },
+                    "Children": {
+                      "$id": "128",
+                      "$values": [
+                        { "$id": "129", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Auto Properties" },
+                        { "$id": "130", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Add [VeloxProperty] to a private field, and the corresponding public property and INotifyPropertyChanged notification are generated at compile time." },
+                        {
+                          "$id": "131", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 300.0,
+                          "Code": "public partial class MyViewModel\n{\n    [VeloxProperty] private string _name = \"Default\";\n    [VeloxProperty] private int _count;\n}"
+                        },
+                        { "$id": "132", "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs", "Parent": null, "Text": "Change Hooks" },
+                        { "$id": "133", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "The generator also emits OnXxxChanging / OnXxxChanged partial methods for each property; implement them as needed." },
+                        {
+                          "$id": "134", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 250.0,
+                          "Code": "[VeloxProperty] private int _index;\n\npartial void OnIndexChanged(int oldValue, int newValue)\n{\n    MinusCommand.Notify();\n}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "140",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null,
+                    "Title": "Async Commands",
+                    "Nodes": { "$id": "141", "$values": [] },
+                    "Children": {
+                      "$id": "142",
+                      "$values": [
+                        { "$id": "143", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Async Commands" },
+                        { "$id": "144", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Add [VeloxCommand] to a Task method to auto-generate an ICommand with validation, concurrency, and lifecycle support." },
+                        {
+                          "$id": "145", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 320.0,
+                          "Code": "[VeloxCommand]\nprivate async Task SaveAsync(object? p, CancellationToken ct)\n{\n    await File.WriteAllTextAsync(\"data.txt\", _name, ct);\n}\n\n[VeloxCommand(canValidate: true, semaphore: 3)]\nprivate Task Submit(object? p, CancellationToken ct) => Task.CompletedTask;\n\nprivate partial bool CanExecuteSubmitCommand(object? parameter)\n    => !string.IsNullOrEmpty(_name);"
+                        },
+                        { "$id": "146", "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs", "Parent": null, "Text": "Runtime Control" },
+                        {
+                          "$id": "147", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 250.0,
+                          "Code": "SubmitCommand.Lock();\nawait SubmitCommand.InterruptAsync();\nawait SubmitCommand.ClearAsync();\nSubmitCommand.UnLock();\nSubmitCommand.Notify();"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "150",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null,
+                    "Title": "Collection Notifications",
+                    "Nodes": { "$id": "151", "$values": [] },
+                    "Children": {
+                      "$id": "152",
+                      "$values": [
+                        { "$id": "153", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Collection Notifications" },
+                        { "$id": "154", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "If a [VeloxProperty] field type implements INotifyCollectionChanged, the generator automatically subscribes to collection events and dispatches them to fine-grained hooks." },
+                        {
+                          "$id": "155", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 320.0,
+                          "Code": "[VeloxProperty] private ObservableCollection<User> _users = [];\n\npartial void OnItemAddedToUsers(IEnumerable<User> items) { }\npartial void OnItemRemovedFromUsers(IEnumerable<User> items) { }\npartial void OnItemMovedInUsers(IEnumerable<User> items) { }\npartial void OnItemsResetInUsers() { }"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "200",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null,
+              "Title": "Workflow",
+              "Children": {
+                "$id": "201",
+                "$values": [
+                  { "$id": "202", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "⛓️ Workflow" },
+                  { "$id": "203", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "A workflow is a graph composed of Tree, Node, Slot, and Link. Components only hold state and commands; behavior is injected via Helpers." },
+                  { "$id": "204", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "Full Workflow Demo (GitHub)", "Url": "https://github.com/Axvser/VeloxDev/tree/master/Examples/Workflow" }
+                ]
+              },
+              "Nodes": {
+                "$id": "205",
+                "$values": [
+                  {
+                    "$id": "210",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Core Concepts",
+                    "Nodes": { "$id": "211", "$values": [] },
+                    "Children": {
+                      "$id": "212",
+                      "$values": [
+                        { "$id": "213", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Core Concepts" },
+                        { "$id": "214", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "A workflow is not a procedural script but a graph of components:" },
+                        {
+                          "$id": "215", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "216", "$values": [ "Component", "Responsibility" ] },
+                          "Alignments": { "$id": "217", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "218",
+                            "$values": [
+                              { "$id": "219", "Cells": { "$id": "220", "$values": [ "Tree", "Workflow container that holds all Nodes / Links and provides Undo / Redo / Submit" ] } },
+                              { "$id": "221", "Cells": { "$id": "222", "$values": [ "Node", "Node with Anchor / Size / Slots that carries business logic" ] } },
+                              { "$id": "223", "Cells": { "$id": "224", "$values": [ "Slot", "Input/output connection point on a node, tracks Targets / Sources" ] } },
+                              { "$id": "225", "Cells": { "$id": "226", "$values": [ "Link", "Edge between a Sender and Receiver" ] } }
+                            ]
+                          }
+                        },
+                        { "$id": "227", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Component = ViewModel (state + commands) + Helper (behavior) + StandardEx (default implementations)." }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "230",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Declaring Components",
+                    "Nodes": { "$id": "231", "$values": [] },
+                    "Children": {
+                      "$id": "232",
+                      "$values": [
+                        { "$id": "233", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Declaring Components" },
+                        { "$id": "234", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Use WorkflowBuilder.ViewModel.* attributes to specify the component type and its Helper. The generator fills in properties, commands, and bridge code." },
+                        {
+                          "$id": "235", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 320.0,
+                          "Code": "[WorkflowBuilder.ViewModel.Tree<TreeHelper>]\npublic partial class MyTree { }\n\n[WorkflowBuilder.ViewModel.Node<NodeHelper>]\npublic partial class BaseNode { }\n\n[WorkflowBuilder.ViewModel.Slot<SlotHelper>]\npublic partial class MySlot { }\n\n[WorkflowBuilder.ViewModel.Link<LinkHelper>]\npublic partial class MyLink { }"
+                        },
+                        { "$id": "236", "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs", "Parent": null, "Text": "Swap only the Helper when inheriting" },
+                        {
+                          "$id": "237", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 200.0,
+                          "Code": "[WorkflowBuilder.ViewModel.Node<SpecialNodeHelper>]\npublic partial class SpecialNode : BaseNode { }"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "240",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Helper Injection",
+                    "Nodes": { "$id": "241", "$values": [] },
+                    "Children": {
+                      "$id": "242",
+                      "$values": [
+                        { "$id": "243", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Helper Injection" },
+                        { "$id": "244", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "A Helper is the behavior object of a component. Inherit a standard Helper and override as needed to replace business logic." },
+                        {
+                          "$id": "245", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 320.0,
+                          "Code": "public class SpecialNodeHelper : NodeHelper\n{\n    public override Task WorkAsync(IWorkflowNodeViewModel node,\n        object? data, CancellationToken ct)\n    {\n        // Custom node work logic\n        return base.WorkAsync(node, data, ct);\n    }\n}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "250",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Propagation & Validation",
+                    "Nodes": { "$id": "251", "$values": [] },
+                    "Children": {
+                      "$id": "252",
+                      "$values": [
+                        { "$id": "253", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Propagation & Validation" },
+                        { "$id": "254", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Forward propagation flows along Slot.Targets, reverse propagation flows along Slot.Sources, and every edge first goes through ValidateBroadcastAsync." },
+                        {
+                          "$id": "255", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 280.0,
+                          "Code": "// Forward\nawait node.StandardBroadcastAsync(parameter, ct);\n\n// Reverse\nawait node.StandardReverseBroadcastAsync(parameter, ct);\n\n// Validation: permission / type / throttling / state\npublic override Task<bool> ValidateBroadcastAsync(\n    IWorkflowNodeViewModel sender,\n    IWorkflowNodeViewModel receiver,\n    object? parameter, CancellationToken ct)\n    => Task.FromResult(receiver.IsEnabled);"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "300",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "Transition",
+              "Children": {
+                "$id": "301",
+                "$values": [
+                  { "$id": "302", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "🎞️ Transition" },
+                  { "$id": "303", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Animation as a \"state stream\": a Snapshot records the current state and a Transition interpolates between states." },
+                  { "$id": "304", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "Full Transition Demo (GitHub)", "Url": "https://github.com/Axvser/VeloxDev/tree/master/Examples/Transition" }
+                ]
+              },
+              "Nodes": {
+                "$id": "305",
+                "$values": [
+                  {
+                    "$id": "310",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "State Snapshots",
+                    "Nodes": { "$id": "311", "$values": [] },
+                    "Children": {
+                      "$id": "312",
+                      "$values": [
+                        { "$id": "313", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "State Snapshots" },
+                        { "$id": "314", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Three granularities of property snapshots, used for rollback or as the starting point of an animation." },
+                        {
+                          "$id": "315", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 260.0,
+                          "Code": "var s1 = rec.Snapshot(\n    x => x.Opacity,\n    x => x.Fill);\n\nvar s2 = rec.SnapshotAll();\nvar s3 = rec.SnapshotExcept(x => x.Visibility);\n\ns1.Effect(TransitionEffects.Empty).Execute(rec);"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "320",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Fluent Animation",
+                    "Nodes": { "$id": "321", "$values": [] },
+                    "Children": {
+                      "$id": "322",
+                      "$values": [
+                        { "$id": "323", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Fluent Animation" },
+                        { "$id": "324", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Compose multi-segment animations with Property / Effect / AwaitThen." },
+                        {
+                          "$id": "325", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 380.0,
+                          "Code": "var anim = Transition<Rectangle>.Create()\n    .Property(r => r.RenderTransform,\n        new TranslateTransform(200, 0))\n    .Effect(new TransitionEffect\n    {\n        Duration = TimeSpan.FromSeconds(2),\n        Ease = Eases.Circ.InOut,\n        IsAutoReverse = true\n    })\n    .AwaitThen(TimeSpan.FromSeconds(1))\n    .Property(r => r.Fill, Brushes.Yellow)\n    .Effect(new TransitionEffect { Duration = TimeSpan.FromSeconds(1) });\n\nanim.Execute(rec);"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "330",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Stop Animation",
+                    "Nodes": { "$id": "331", "$values": [] },
+                    "Children": {
+                      "$id": "332",
+                      "$values": [
+                        { "$id": "333", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Stop Animation" },
+                        {
+                          "$id": "334", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 200.0,
+                          "Code": "Transition.Exit(rec, IncludeMutual: true, IncludeNoMutual: false);"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "400",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "Theme",
+              "Children": {
+                "$id": "401",
+                "$values": [
+                  { "$id": "402", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "🎨 Theme" },
+                  { "$id": "403", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Use [ThemeConfig] to declare multiple theme mappings on a class in one line, and combine with ThemeManager for switching and gradients." },
+                  { "$id": "404", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "Full Theme Demo (GitHub)", "Url": "https://github.com/Axvser/VeloxDev/tree/master/Examples/Theme" }
+                ]
+              },
+              "Nodes": {
+                "$id": "405",
+                "$values": [
+                  {
+                    "$id": "410",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Declaring Themes",
+                    "Nodes": { "$id": "411", "$values": [] },
+                    "Children": {
+                      "$id": "412",
+                      "$values": [
+                        { "$id": "413", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Declaring Themes" },
+                        { "$id": "414", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "[ThemeConfig] binds a property to multiple values across themes; a Converter handles construction." },
+                        {
+                          "$id": "415", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 320.0,
+                          "Code": "[ThemeConfig<BrushConverter, Light, Dark>(\n    nameof(Background), [\"#ffffff\"], [\"#1e1e1e\"])]\n[ThemeConfig<BrushConverter, Light, Dark>(\n    nameof(Foreground), [\"#1e1e1e\"], [\"#ffffff\"])]\npublic partial class MainWindow : Window\n{\n    public MainWindow()\n    {\n        InitializeComponent();\n        InitializeTheme();\n        ThemeManager.SetPlatformInterpolator(new Interpolator());\n    }\n}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "420",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Switching & Overrides",
+                    "Nodes": { "$id": "421", "$values": [] },
+                    "Children": {
+                      "$id": "422",
+                      "$values": [
+                        { "$id": "423", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Switching & Overrides" },
+                        {
+                          "$id": "424", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 280.0,
+                          "Code": "ThemeManager.Transition<Dark>(TransitionEffects.Theme);\nThemeManager.Jump<Light>();\n\nSetThemeValue<Light>(nameof(Background), [\"#ff0000\"]);\nRestoreThemeValue<Light>(nameof(Background));"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "500",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "MonoBehaviour",
+              "Children": {
+                "$id": "501",
+                "$values": [
+                  { "$id": "502", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "⚙️ MonoBehaviour" },
+                  { "$id": "503", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Unity-like frame loop: mark a class with [MonoBehaviour] and implement Awake / Start / Update / FixedUpdate." },
+                  { "$id": "504", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "Full MonoBehaviour Demo (GitHub)", "Url": "https://github.com/Axvser/VeloxDev/tree/master/Examples/MonoBehaviour" }
+                ]
+              },
+              "Nodes": {
+                "$id": "505",
+                "$values": [
+                  {
+                    "$id": "510",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Lifecycle",
+                    "Nodes": { "$id": "511", "$values": [] },
+                    "Children": {
+                      "$id": "512",
+                      "$values": [
+                        { "$id": "513", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Lifecycle" },
+                        { "$id": "514", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Call InitializeMonoBehaviour() in the constructor to register; partial methods are dispatched per frame automatically." },
+                        {
+                          "$id": "515", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 320.0,
+                          "Code": "[MonoBehaviour]\npublic partial class PhysicsComponent\n{\n    public PhysicsComponent() => InitializeMonoBehaviour();\n\n    partial void Awake() { }\n    partial void Start() { }\n    partial void Update(FrameEventArgs e) { }\n    partial void FixedUpdate(FrameEventArgs e) { }\n}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "520",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Global Control",
+                    "Nodes": { "$id": "521", "$values": [] },
+                    "Children": {
+                      "$id": "522",
+                      "$values": [
+                        { "$id": "523", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Global Control" },
+                        {
+                          "$id": "524", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 280.0,
+                          "Code": "MonoBehaviourManager.Start();\nMonoBehaviourManager.SetTargetFPS(120);\nMonoBehaviourManager.SetTimeScale(0.5f);\nMonoBehaviourManager.Pause();\nMonoBehaviourManager.Resume();\nawait MonoBehaviourManager.StopAsync();"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "600",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "AOP",
+              "Children": {
+                "$id": "601",
+                "$values": [
+                  { "$id": "602", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "🌀 AOP" },
+                  { "$id": "603", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "[AspectOriented] marks a member as proxy-able; pre / override / post hooks fire through the proxy object." },
+                  { "$id": "604", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "Full AOP Demo (GitHub)", "Url": "https://github.com/Axvser/VeloxDev/tree/master/Examples/AOP" }
+                ]
+              },
+              "Nodes": {
+                "$id": "605",
+                "$values": [
+                  {
+                    "$id": "610",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Marking Members",
+                    "Nodes": { "$id": "611", "$values": [] },
+                    "Children": {
+                      "$id": "612",
+                      "$values": [
+                        { "$id": "613", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Marking Members" },
+                        {
+                          "$id": "614", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 280.0,
+                          "Code": "public partial class TeamViewModel\n{\n    [VeloxProperty][AspectOriented]\n    private string _name = string.Empty;\n\n    [AspectOriented]\n    public void Reset() { Name = string.Empty; }\n}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "620",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Registering Hooks",
+                    "Nodes": { "$id": "621", "$values": [] },
+                    "Children": {
+                      "$id": "622",
+                      "$values": [
+                        { "$id": "623", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Registering Hooks" },
+                        { "$id": "624", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "The three slots are (start, coverage, end). The return value of one hook is passed as the previous parameter of the next." },
+                        {
+                          "$id": "625", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 320.0,
+                          "Code": "data.Proxy.SetProxy(\n    ProxyMembers.Setter, nameof(TeamViewModel.Name),\n    start: null,\n    coverage: null,\n    end: (args, _) => { Console.WriteLine(args[0]); return null; });\n\nteamProxy.Name = \"New Team\"; // must use the proxy object"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "700",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "AOT Reflection",
+              "Nodes": { "$id": "701", "$values": [] },
+              "Children": {
+                "$id": "702",
+                "$values": [
+                  { "$id": "703", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "📦 AOT Reflection" },
+                  { "$id": "704", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "In trimming / NativeAOT scenarios, mark a type with [AOTReflection] and the generator preserves the required reflection metadata at compile time." },
+                  {
+                    "$id": "705", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                    "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 280.0,
+                    "Code": "[AOTReflection(\n    Namespace = \"MyApp.Models\",\n    Constructors = true,\n    Properties = true,\n    Methods = false,\n    Fields = false)]\npublic class MyViewModel { }\n\n// Call once at startup\nMyApp.Models.AOTReflection.Init();"
+                  },
+                  { "$id": "706", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "Full AOTReflection docs (GitHub)", "Url": "https://github.com/Axvser/VeloxDev/tree/master/Examples/AOTReflection" }
+                ]
+              }
+            }
+
+          ]
+        }
+      },
+
+      {
+        "$id": "1000",
+        "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+        "Parent": null, "Title": "APIs",
+        "Children": {
+          "$id": "1001",
+          "$values": [
+            { "$id": "1002", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "📚 API Reference" },
+            { "$id": "1003", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "A per-module cheat sheet: read \"Quick Start\" first to learn the usage, then come back here for parameters and signatures." }
+          ]
+        },
+        "Nodes": {
+          "$id": "1010",
+          "$values": [
+
+            {
+              "$id": "1100",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "MVVM",
+              "Children": {
+                "$id": "1101",
+                "$values": [
+                  { "$id": "1102", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "MVVM API" }
+                ]
+              },
+              "Nodes": {
+                "$id": "1103",
+                "$values": [
+                  {
+                    "$id": "1110",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "VeloxProperty",
+                    "Nodes": { "$id": "1111", "$values": [] },
+                    "Children": {
+                      "$id": "1112",
+                      "$values": [
+                        { "$id": "1113", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "[VeloxProperty]" },
+                        {
+                          "$id": "1114", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1115", "$values": [ "Item", "Description" ] },
+                          "Alignments": { "$id": "1116", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1117",
+                            "$values": [
+                              { "$id": "1118", "Cells": { "$id": "1119", "$values": [ "Target", "Private fields (including ObservableCollection<T>)" ] } },
+                              { "$id": "1120", "Cells": { "$id": "1121", "$values": [ "Generates", "Public property + INotifyPropertyChanged notifications" ] } },
+                              { "$id": "1122", "Cells": { "$id": "1123", "$values": [ "Hooks", "OnXxxChanging / OnXxxChanged partial methods" ] } },
+                              { "$id": "1124", "Cells": { "$id": "1125", "$values": [ "Collections", "OnItemAddedTo / OnItemRemovedFrom / OnItemMovedIn / OnItemsResetIn" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "1130",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "VeloxCommand",
+                    "Nodes": { "$id": "1131", "$values": [] },
+                    "Children": {
+                      "$id": "1132",
+                      "$values": [
+                        { "$id": "1133", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "[VeloxCommand]" },
+                        { "$id": "1134", "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs", "Parent": null, "Text": "Parameters" },
+                        {
+                          "$id": "1135", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1136", "$values": [ "Parameter", "Default", "Description" ] },
+                          "Alignments": { "$id": "1137", "$values": [ "Left", "Center", "Left" ] },
+                          "Rows": {
+                            "$id": "1138",
+                            "$values": [
+                              { "$id": "1139", "Cells": { "$id": "1140", "$values": [ "name", "\"Auto\"", "Suffix of the command property name; Auto derives it from the method name" ] } },
+                              { "$id": "1141", "Cells": { "$id": "1142", "$values": [ "canValidate", "false", "When true, generates a CanExecuteXxxCommand partial method" ] } },
+                              { "$id": "1143", "Cells": { "$id": "1144", "$values": [ "semaphore", "1", "Maximum concurrent tasks" ] } }
+                            ]
+                          }
+                        },
+                        { "$id": "1145", "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs", "Parent": null, "Text": "Command Runtime" },
+                        {
+                          "$id": "1146", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1147", "$values": [ "Member", "Description" ] },
+                          "Alignments": { "$id": "1148", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1149",
+                            "$values": [
+                              { "$id": "1150", "Cells": { "$id": "1151", "$values": [ "Execute / ExecuteAsync", "Trigger the command" ] } },
+                              { "$id": "1152", "Cells": { "$id": "1153", "$values": [ "Notify", "Refresh CanExecute" ] } },
+                              { "$id": "1154", "Cells": { "$id": "1155", "$values": [ "Interrupt / InterruptAsync", "Interrupt the current task" ] } },
+                              { "$id": "1156", "Cells": { "$id": "1157", "$values": [ "Clear / ClearAsync", "Interrupt and clear the queue" ] } },
+                              { "$id": "1158", "Cells": { "$id": "1159", "$values": [ "Lock / UnLock", "Lock / unlock" ] } },
+                              { "$id": "1160", "Cells": { "$id": "1161", "$values": [ "ChangeSemaphore", "Dynamically adjust the concurrency limit" ] } },
+                              { "$id": "1162", "Cells": { "$id": "1163", "$values": [ "TaskStarted / Completed / Failed", "Lifecycle events" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "1200",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "Workflow",
+              "Children": {
+                "$id": "1201",
+                "$values": [
+                  { "$id": "1202", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Workflow API" }
+                ]
+              },
+              "Nodes": {
+                "$id": "1203",
+                "$values": [
+                  {
+                    "$id": "1210",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Component Interfaces",
+                    "Nodes": { "$id": "1211", "$values": [] },
+                    "Children": {
+                      "$id": "1212",
+                      "$values": [
+                        { "$id": "1213", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Component Interfaces" },
+                        {
+                          "$id": "1214", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1215", "$values": [ "Interface", "Key Commands" ] },
+                          "Alignments": { "$id": "1216", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1217",
+                            "$values": [
+                              { "$id": "1218", "Cells": { "$id": "1219", "$values": [ "IWorkflowTreeViewModel", "CreateNode / Submit / Undo / Redo / SendConnection" ] } },
+                              { "$id": "1220", "Cells": { "$id": "1221", "$values": [ "IWorkflowNodeViewModel", "Move / SetSize / CreateSlot / Work / Broadcast" ] } },
+                              { "$id": "1222", "Cells": { "$id": "1223", "$values": [ "IWorkflowSlotViewModel", "SetChannel / SendConnection / ReceiveConnection" ] } },
+                              { "$id": "1224", "Cells": { "$id": "1225", "$values": [ "IWorkflowLinkViewModel", "Delete / IsVisible" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "1230",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Helper Extension Points",
+                    "Nodes": { "$id": "1231", "$values": [] },
+                    "Children": {
+                      "$id": "1232",
+                      "$values": [
+                        { "$id": "1233", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Helper Extension Points" },
+                        {
+                          "$id": "1234", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1235", "$values": [ "Method", "Description" ] },
+                          "Alignments": { "$id": "1236", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1237",
+                            "$values": [
+                              { "$id": "1238", "Cells": { "$id": "1239", "$values": [ "Install / Uninstall", "Component mount and unmount hooks" ] } },
+                              { "$id": "1240", "Cells": { "$id": "1241", "$values": [ "Move / SetAnchor / SetSize / SetLayer", "Geometry and layering operations" ] } },
+                              { "$id": "1242", "Cells": { "$id": "1243", "$values": [ "CreateSlot", "Create a slot on a node" ] } },
+                              { "$id": "1244", "Cells": { "$id": "1245", "$values": [ "WorkAsync", "Node business logic" ] } },
+                              { "$id": "1246", "Cells": { "$id": "1247", "$values": [ "BroadcastAsync / ReverseBroadcastAsync", "Forward / reverse propagation" ] } },
+                              { "$id": "1248", "Cells": { "$id": "1249", "$values": [ "ValidateBroadcastAsync", "Edge validation: permission / type / throttling" ] } },
+                              { "$id": "1250", "Cells": { "$id": "1251", "$values": [ "Delete", "Component deletion" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "1260",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Propagation Model",
+                    "Nodes": { "$id": "1261", "$values": [] },
+                    "Children": {
+                      "$id": "1262",
+                      "$values": [
+                        { "$id": "1263", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Propagation Model" },
+                        {
+                          "$id": "1264", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1265", "$values": [ "Direction", "Entry", "Path" ] },
+                          "Alignments": { "$id": "1266", "$values": [ "Center", "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1267",
+                            "$values": [
+                              { "$id": "1268", "Cells": { "$id": "1269", "$values": [ "Forward", "node.StandardBroadcastAsync(...)", "Slots[*].Targets[*]" ] } },
+                              { "$id": "1270", "Cells": { "$id": "1271", "$values": [ "Reverse", "node.StandardReverseBroadcastAsync(...)", "Slots[*].Sources[*]" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "1280",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "ViewModel Serialization",
+                    "Nodes": { "$id": "1281", "$values": [] },
+                    "Children": {
+                      "$id": "1282",
+                      "$values": [
+                        { "$id": "1283", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "ViewModel Serialization (Extension)" },
+                        {
+                          "$id": "1284", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 320.0,
+                          "Code": "var json = workflow.Serialize();\nif (json.TryDeserialize<MyTree>(out var tree)) { }\n\nvar bytes = workflow.SerializeToUtf8Bytes();\nawait workflow.SerializeToStreamAsync(stream);\n\nvar jsonAsync = await workflow.SerializeAsync();\nvar (ok, t) = await jsonAsync.TryDeserializeAsync<MyTree>();"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "1300",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "Transition",
+              "Children": {
+                "$id": "1301",
+                "$values": [
+                  { "$id": "1302", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Transition API" }
+                ]
+              },
+              "Nodes": {
+                "$id": "1303",
+                "$values": [
+                  {
+                    "$id": "1310",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Snapshot",
+                    "Nodes": { "$id": "1311", "$values": [] },
+                    "Children": {
+                      "$id": "1312",
+                      "$values": [
+                        { "$id": "1313", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Snapshot" },
+                        {
+                          "$id": "1314", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1315", "$values": [ "Method", "Description" ] },
+                          "Alignments": { "$id": "1316", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1317",
+                            "$values": [
+                              { "$id": "1318", "Cells": { "$id": "1319", "$values": [ "Snapshot(params)", "Record snapshots of the specified properties" ] } },
+                              { "$id": "1320", "Cells": { "$id": "1321", "$values": [ "SnapshotAll()", "Record all animatable properties" ] } },
+                              { "$id": "1322", "Cells": { "$id": "1323", "$values": [ "SnapshotExcept(params)", "Record all properties except the specified ones" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "1330",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Fluent API",
+                    "Nodes": { "$id": "1331", "$values": [] },
+                    "Children": {
+                      "$id": "1332",
+                      "$values": [
+                        { "$id": "1333", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Fluent API" },
+                        {
+                          "$id": "1334", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1335", "$values": [ "Method", "Description" ] },
+                          "Alignments": { "$id": "1336", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1337",
+                            "$values": [
+                              { "$id": "1338", "Cells": { "$id": "1339", "$values": [ "Property(selector, value)", "Declare the final state of a target property" ] } },
+                              { "$id": "1340", "Cells": { "$id": "1341", "$values": [ "Effect(TransitionEffect)", "Bind ease / duration / loop / FPS to the current segment" ] } },
+                              { "$id": "1342", "Cells": { "$id": "1343", "$values": [ "Then() / AwaitThen(TimeSpan)", "Chain the next animation segment (with optional delay)" ] } },
+                              { "$id": "1344", "Cells": { "$id": "1345", "$values": [ "Await(TimeSpan)", "Insert a delay" ] } },
+                              { "$id": "1346", "Cells": { "$id": "1347", "$values": [ "Execute(target)", "Start the animation on target" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "1350",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "TransitionEffect",
+                    "Nodes": { "$id": "1351", "$values": [] },
+                    "Children": {
+                      "$id": "1352",
+                      "$values": [
+                        { "$id": "1353", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "TransitionEffect" },
+                        {
+                          "$id": "1354", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1355", "$values": [ "Field", "Description" ] },
+                          "Alignments": { "$id": "1356", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1357",
+                            "$values": [
+                              { "$id": "1358", "Cells": { "$id": "1359", "$values": [ "Duration", "Total duration" ] } },
+                              { "$id": "1360", "Cells": { "$id": "1361", "$values": [ "FPS", "Frame rate" ] } },
+                              { "$id": "1362", "Cells": { "$id": "1363", "$values": [ "LoopTime", "Loop count" ] } },
+                              { "$id": "1364", "Cells": { "$id": "1365", "$values": [ "IsAutoReverse", "Whether to auto-reverse" ] } },
+                              { "$id": "1366", "Cells": { "$id": "1367", "$values": [ "Ease", "Easing function (Eases.Cubic.InOut, etc.)" ] } },
+                              { "$id": "1368", "Cells": { "$id": "1369", "$values": [ "Completed", "Animation completion event" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "1400",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "Theme",
+              "Children": {
+                "$id": "1401",
+                "$values": [
+                  { "$id": "1402", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Theme API" }
+                ]
+              },
+              "Nodes": {
+                "$id": "1403",
+                "$values": [
+                  {
+                    "$id": "1410",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "ThemeManager",
+                    "Nodes": { "$id": "1411", "$values": [] },
+                    "Children": {
+                      "$id": "1412",
+                      "$values": [
+                        { "$id": "1413", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "ThemeManager" },
+                        {
+                          "$id": "1414", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1415", "$values": [ "Member", "Description" ] },
+                          "Alignments": { "$id": "1416", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1417",
+                            "$values": [
+                              { "$id": "1418", "Cells": { "$id": "1419", "$values": [ "Current", "Current theme type" ] } },
+                              { "$id": "1420", "Cells": { "$id": "1421", "$values": [ "Jump<T>()", "Switch theme immediately (no animation)" ] } },
+                              { "$id": "1422", "Cells": { "$id": "1423", "$values": [ "Transition<T>(effect)", "Switch with a gradient animation" ] } },
+                              { "$id": "1424", "Cells": { "$id": "1425", "$values": [ "SetPlatformInterpolator(...)", "Inject the platform interpolator (required for animation)" ] } },
+                              { "$id": "1426", "Cells": { "$id": "1427", "$values": [ "StartModel", "Animation start point: Cache or Reflect" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "1430",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Instance Methods",
+                    "Nodes": { "$id": "1431", "$values": [] },
+                    "Children": {
+                      "$id": "1432",
+                      "$values": [
+                        { "$id": "1433", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Instance Methods (generated)" },
+                        {
+                          "$id": "1434", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1435", "$values": [ "Method", "Description" ] },
+                          "Alignments": { "$id": "1436", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1437",
+                            "$values": [
+                              { "$id": "1438", "Cells": { "$id": "1439", "$values": [ "InitializeTheme()", "Initialize the theme; must run after InitializeComponent" ] } },
+                              { "$id": "1440", "Cells": { "$id": "1441", "$values": [ "OnThemeChanging / OnThemeChanged", "Callbacks before and after the switch" ] } },
+                              { "$id": "1442", "Cells": { "$id": "1443", "$values": [ "SetThemeValue<T>(name, values)", "Dynamically modify a theme resource" ] } },
+                              { "$id": "1444", "Cells": { "$id": "1445", "$values": [ "RestoreThemeValue<T>(name)", "Restore the original resource value" ] } },
+                              { "$id": "1446", "Cells": { "$id": "1447", "$values": [ "GetStaticThemeCache / GetActiveThemeCache", "Get static / active resources" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "1500",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "MonoBehaviour",
+              "Children": {
+                "$id": "1501",
+                "$values": [
+                  { "$id": "1502", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "MonoBehaviour API" }
+                ]
+              },
+              "Nodes": {
+                "$id": "1503",
+                "$values": [
+                  {
+                    "$id": "1510",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Partial Methods",
+                    "Nodes": { "$id": "1511", "$values": [] },
+                    "Children": {
+                      "$id": "1512",
+                      "$values": [
+                        { "$id": "1513", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Generated Partial Methods" },
+                        {
+                          "$id": "1514", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1515", "$values": [ "Method", "When" ] },
+                          "Alignments": { "$id": "1516", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1517",
+                            "$values": [
+                              { "$id": "1518", "Cells": { "$id": "1519", "$values": [ "Awake()", "After InitializeMonoBehaviour" ] } },
+                              { "$id": "1520", "Cells": { "$id": "1521", "$values": [ "Start()", "On the first frame" ] } },
+                              { "$id": "1522", "Cells": { "$id": "1523", "$values": [ "Update(FrameEventArgs)", "Each frame (variable step)" ] } },
+                              { "$id": "1524", "Cells": { "$id": "1525", "$values": [ "LateUpdate(FrameEventArgs)", "After Update" ] } },
+                              { "$id": "1526", "Cells": { "$id": "1527", "$values": [ "FixedUpdate(FrameEventArgs)", "Fixed step" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "1530",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "Manager",
+                    "Nodes": { "$id": "1531", "$values": [] },
+                    "Children": {
+                      "$id": "1532",
+                      "$values": [
+                        { "$id": "1533", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "MonoBehaviourManager" },
+                        {
+                          "$id": "1534", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1535", "$values": [ "Member", "Description" ] },
+                          "Alignments": { "$id": "1536", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1537",
+                            "$values": [
+                              { "$id": "1538", "Cells": { "$id": "1539", "$values": [ "Start / Stop / StopAsync", "Start / stop" ] } },
+                              { "$id": "1540", "Cells": { "$id": "1541", "$values": [ "Pause / Resume", "Pause / resume" ] } },
+                              { "$id": "1542", "Cells": { "$id": "1543", "$values": [ "SetTargetFPS / SetFixedUpdateInterval / SetTimeScale", "Pacing controls" ] } },
+                              { "$id": "1544", "Cells": { "$id": "1545", "$values": [ "IsRunning / IsPaused / CurrentFPS / TotalFrames", "Runtime state" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "1550",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "FrameEventArgs",
+                    "Nodes": { "$id": "1551", "$values": [] },
+                    "Children": {
+                      "$id": "1552",
+                      "$values": [
+                        { "$id": "1553", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "FrameEventArgs" },
+                        {
+                          "$id": "1554", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1555", "$values": [ "Field", "Description" ] },
+                          "Alignments": { "$id": "1556", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1557",
+                            "$values": [
+                              { "$id": "1558", "Cells": { "$id": "1559", "$values": [ "DeltaTime", "Time of the previous frame (ms, with TimeScale applied)" ] } },
+                              { "$id": "1560", "Cells": { "$id": "1561", "$values": [ "TotalTime", "Total runtime (ms)" ] } },
+                              { "$id": "1562", "Cells": { "$id": "1563", "$values": [ "CurrentFPS / TargetFPS", "Current / target frame rate" ] } },
+                              { "$id": "1564", "Cells": { "$id": "1565", "$values": [ "Handled", "Whether the frame has been handled" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "1600",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "AOP",
+              "Children": {
+                "$id": "1601",
+                "$values": [
+                  { "$id": "1602", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "AOP API" }
+                ]
+              },
+              "Nodes": {
+                "$id": "1603",
+                "$values": [
+                  {
+                    "$id": "1610",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "ProxyMembers",
+                    "Nodes": { "$id": "1611", "$values": [] },
+                    "Children": {
+                      "$id": "1612",
+                      "$values": [
+                        { "$id": "1613", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "ProxyMembers" },
+                        {
+                          "$id": "1614", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                          "Headers": { "$id": "1615", "$values": [ "Value", "Purpose" ] },
+                          "Alignments": { "$id": "1616", "$values": [ "Left", "Left" ] },
+                          "Rows": {
+                            "$id": "1617",
+                            "$values": [
+                              { "$id": "1618", "Cells": { "$id": "1619", "$values": [ "Getter", "Intercept property reads" ] } },
+                              { "$id": "1620", "Cells": { "$id": "1621", "$values": [ "Setter", "Intercept property writes (args[0] is the new value)" ] } },
+                              { "$id": "1622", "Cells": { "$id": "1623", "$values": [ "Method", "Intercept method calls" ] } }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "1630",
+                    "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+                    "Parent": null, "Title": "SetProxy Signature",
+                    "Nodes": { "$id": "1631", "$values": [] },
+                    "Children": {
+                      "$id": "1632",
+                      "$values": [
+                        { "$id": "1633", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "SetProxy Signature" },
+                        {
+                          "$id": "1634", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                          "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 280.0,
+                          "Code": "void SetProxy(\n    T target,\n    ProxyMembers memberType,\n    string memberName,\n    ProxyHandler? start,\n    ProxyHandler? coverage,\n    ProxyHandler? end);\n\ndelegate object? ProxyHandler(\n    object?[]? parameters,\n    object? previous);"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+
+            {
+              "$id": "1700",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "AOT Reflection",
+              "Nodes": { "$id": "1701", "$values": [] },
+              "Children": {
+                "$id": "1702",
+                "$values": [
+                  { "$id": "1703", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "AOT Reflection API" },
+                  { "$id": "1704", "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs", "Parent": null, "Text": "[AOTReflection] Parameters" },
+                  {
+                    "$id": "1705", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                    "Headers": { "$id": "1706", "$values": [ "Parameter", "Type", "Default", "Description" ] },
+                    "Alignments": { "$id": "1707", "$values": [ "Left", "Center", "Center", "Left" ] },
+                    "Rows": {
+                      "$id": "1708",
+                      "$values": [
+                        { "$id": "1709", "Cells": { "$id": "1710", "$values": [ "Namespace", "string", "\"Auto\"", "Namespace of the generated class; Auto derives the longest common prefix" ] } },
+                        { "$id": "1711", "Cells": { "$id": "1712", "$values": [ "Constructors", "bool", "true", "Preserve constructors" ] } },
+                        { "$id": "1713", "Cells": { "$id": "1714", "$values": [ "Methods", "bool", "true", "Preserve methods" ] } },
+                        { "$id": "1715", "Cells": { "$id": "1716", "$values": [ "Properties", "bool", "true", "Preserve properties" ] } },
+                        { "$id": "1717", "Cells": { "$id": "1718", "$values": [ "Fields", "bool", "true", "Preserve fields" ] } }
+                      ]
+                    }
+                  },
+                  { "$id": "1719", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "The generator emits public static class AOTReflection with an Init() method into {Namespace}.AOTReflection.g.cs; call it once at startup to ensure the metadata is preserved." }
+                ]
+              }
+            }
+
+          ]
+        }
+      },
+
+      {
+        "$id": "2000",
+        "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+        "Parent": null, "Title": "Agent",
+        "Children": {
+          "$id": "2001",
+          "$values": [
+            { "$id": "2002", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "🤖 Agent" },
+            { "$id": "2003", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "VeloxDev.Core.AI provides a zero-dependency reflection toolkit; VeloxDev.Core.Extension wraps any .NET object or an entire Workflow Tree as a Microsoft.Agents.Framework Function Calling toolset." },
+            { "$id": "2004", "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs", "Parent": null, "Text": "VeloxDev.Core.Extension README", "Url": "https://github.com/Axvser/VeloxDev/blob/master/Src/Core/VeloxDev.Core.Extension/README.md" }
+          ]
+        },
+        "Nodes": {
+          "$id": "2010",
+          "$values": [
+            {
+              "$id": "2020",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "Reflection Toolkit",
+              "Nodes": { "$id": "2021", "$values": [] },
+              "Children": {
+                "$id": "2022",
+                "$values": [
+                  { "$id": "2023", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "Core Reflection Toolkit" },
+                  {
+                    "$id": "2024", "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs", "Parent": null,
+                    "Headers": { "$id": "2025", "$values": [ "Class", "Description" ] },
+                    "Alignments": { "$id": "2026", "$values": [ "Left", "Left" ] },
+                    "Rows": {
+                      "$id": "2027",
+                      "$values": [
+                        { "$id": "2028", "Cells": { "$id": "2029", "$values": [ "AgentPropertyAccessor", "Property read/write, batch Patch, type conversion, blacklist" ] } },
+                        { "$id": "2030", "Cells": { "$id": "2031", "$values": [ "AgentMethodInvoker", "Method invocation, overload resolution, default parameters" ] } },
+                        { "$id": "2032", "Cells": { "$id": "2033", "$values": [ "AgentCommandDiscoverer", "ICommand discovery and execution" ] } },
+                        { "$id": "2034", "Cells": { "$id": "2035", "$values": [ "AgentContextReader", "Read [AgentContext] semantic context" ] } },
+                        { "$id": "2036", "Cells": { "$id": "2037", "$values": [ "AgentTypeResolver", "Cross-assembly type resolution" ] } }
+                      ]
+                    }
+                  },
+                  {
+                    "$id": "2040", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                    "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 220.0,
+                    "Code": "var props = AgentPropertyAccessor.DiscoverProperties(vm, AgentLanguages.English);\nAgentPropertyAccessor.SetPropertyValue(vm, \"Title\", \"New Title\");\n\nvar cmds = AgentCommandDiscoverer.DiscoverCommands(vm);\nAgentCommandDiscoverer.Execute(vm, \"Delete\");"
+                  }
+                ]
+              }
+            },
+            {
+              "$id": "2050",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "AgentObjectToolkit",
+              "Nodes": { "$id": "2051", "$values": [] },
+              "Children": {
+                "$id": "2052",
+                "$values": [
+                  { "$id": "2053", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "AgentObjectToolkit" },
+                  { "$id": "2054", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "Wrap any .NET object as 10 MAF AITools (property read/write, command execution, method invocation) in one line, not limited to workflow scenarios." },
+                  {
+                    "$id": "2055", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                    "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 280.0,
+                    "Code": "var tools = vm.AsAgentTools(AgentLanguages.English);\n\nvar rejected = new HashSet<string> { \"Parent\", \"InternalState\" };\nvar tools2 = vm.AsAgentTools(AgentLanguages.English, rejected);\n\nvar agent = client.AsAIAgent(\n    instructions: \"You are an assistant that operates components.\",\n    tools: tools);"
+                  }
+                ]
+              }
+            },
+            {
+              "$id": "2060",
+              "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+              "Parent": null, "Title": "WorkflowAgentScope",
+              "Nodes": { "$id": "2061", "$values": [] },
+              "Children": {
+                "$id": "2062",
+                "$values": [
+                  { "$id": "2063", "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs", "Parent": null, "Level": "1", "Text": "WorkflowAgentScope" },
+                  { "$id": "2064", "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs", "Parent": null, "Text": "After binding a Tree, it provides 59+ Function Calling tools that cover query, mutation, connection, execution, undo/redo, state snapshots, batch operations, cloning, graph traversal, auto layout, and more." },
+                  {
+                    "$id": "2065", "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs", "Parent": null,
+                    "Language": "csharp", "AutoHeight": true, "MaxHeightValue": 320.0,
+                    "Code": "var scope = new WorkflowAgentScope(tree);\nscope.RegisterComponent<MyNode>();\nscope.RegisterComponent<MySlot>();\n\n// Short tasks: full context\nstring fullPrompt = scope.ProvideAllContexts();\n\n// Long tasks: progressive context\nstring progressivePrompt = scope.ProvideProgressiveContextPrompt();\n\nvar tools = scope.ProvideTools();\nvar agent = client.AsAIAgent(progressivePrompt, tools);"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+
+    ]
+  },
+  "SelectedNode": null,
+  "IsEditMode": false
+}

@@ -1,4 +1,8 @@
-﻿namespace Demo
+﻿#if DEBUG
+using Microsoft.Extensions.Logging;
+#endif
+
+namespace Demo
 {
     public static class MauiProgram
     {

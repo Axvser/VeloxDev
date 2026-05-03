@@ -19,7 +19,7 @@ public static class ComponentModelEx
     {
         Formatting = Formatting.Indented,
         TypeNameHandling = TypeNameHandling.Auto,
-        PreserveReferencesHandling = PreserveReferencesHandling.Objects,
+        ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
         NullValueHandling = NullValueHandling.Include,
         DefaultValueHandling = DefaultValueHandling.Include,
         ContractResolver = new WritablePropertiesOnlyResolver(),

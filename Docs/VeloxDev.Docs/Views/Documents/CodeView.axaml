@@ -25,7 +25,7 @@
              <ScrollViewer x:Name="DisplayScrollViewer" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" IsScrollChainingEnabled="False" HorizontalAlignment="Stretch">
 					<SelectableTextBlock Inlines="{Binding Inlines}"
 									 LineHeight="18"
-                                 FontFamily="Cascadia Code,Cascadia Mono,Sarasa Mono SC,Microsoft YaHei UI,Segoe UI,monospace"
+                                     FontFamily="Cascadia Code,Cascadia Mono,Sarasa Mono SC,Microsoft YaHei UI,Segoe UI,monospace"
 									 FontSize="13" />
 				</ScrollViewer>
 			</Grid>

@@ -66,6 +66,16 @@
 					<Button Content="{Binding EditModeLabel}"
 							Command="{Binding ToggleEditModeCommand}"
 							MinWidth="100" />
+					<ComboBox ItemsSource="{Binding Languages}"
+							  SelectedItem="{Binding SelectedLanguage}"
+							  ToolTip.Tip="{Binding LanguageTooltip}"
+							  MinWidth="110">
+						<ComboBox.ItemTemplate>
+							<DataTemplate x:DataType="vm:LanguageOption">
+								<TextBlock Text="{Binding DisplayName}" />
+							</DataTemplate>
+						</ComboBox.ItemTemplate>
+					</ComboBox>
 					<Separator Width="1" Height="18" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="4,0" />
 					<!-- 编辑模式下的内容插入工具 -->
 					<WrapPanel IsVisible="{Binding IsEditMode}">
@@ -84,8 +94,8 @@
 				</StackPanel>
 				<!-- 文件操作 -->
 				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-					<Button Content="💾 Save" Command="{Binding SaveCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="Save to JSON" />
-					<Button Content="📂 Open" Command="{Binding LoadCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="Open JSON" />
+					<Button Content="{Binding SaveLabel}" Command="{Binding SaveCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding SaveTooltip}" />
+					<Button Content="{Binding OpenLabel}" Command="{Binding LoadCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding OpenTooltip}" />
 				</StackPanel>
 			</Grid>
 		</Border>
@@ -96,11 +106,11 @@
 			<!-- 目录侧边栏 -->
 			<Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
 				<TextBlock Grid.Row="0"
-						   Text="Navigation"
+						   Text="{Binding NavigationLabel}"
 						   Margin="10,8,8,4"
-						   FontWeight="SemiBold"
 						   Opacity="0.6"
-						   FontSize="11" />
+						   FontSize="11"
+						   FontFamily="Cascadia Code,Cascadia Mono,Sarasa Mono SC,Microsoft YaHei UI,Segoe UI,monospace" />
 				<TreeView Grid.Row="1"
 						  ItemsSource="{Binding Nodes}"
 						  SelectedItem="{Binding SelectedNode}"
@@ -116,9 +126,9 @@
 						   IsVisible="{Binding IsEditMode}"
 						   Margin="6,4,6,6"
 						   Orientation="Horizontal">
-					<Button Content="+ Page" Command="{Binding AddRootCommand}" Margin="0,0,4,4" ToolTip.Tip="Add root page" />
-					<Button Content="+ Child" Command="{Binding AddChildCommand}" Margin="0,0,4,4" ToolTip.Tip="Add child page" />
-                   <Button Content="🗑" Command="{Binding RemoveNodeCommand}" Margin="0,0,0,4" ToolTip.Tip="Remove selected page" />
+					<Button Content="{Binding AddPageLabel}" Command="{Binding AddRootCommand}" Margin="0,0,4,4" ToolTip.Tip="{Binding AddPageTooltip}" />
+					<Button Content="{Binding AddChildLabel}" Command="{Binding AddChildCommand}" Margin="0,0,4,4" ToolTip.Tip="{Binding AddChildTooltip}" />
+				   <Button Content="🗑" Command="{Binding RemoveNodeCommand}" Margin="0,0,0,4" ToolTip.Tip="{Binding RemovePageTooltip}" />
 				</WrapPanel>
 			</Grid>
 
