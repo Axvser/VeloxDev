@@ -26,6 +26,7 @@ public partial class ImageProvider : IWikiElement
     private CancellationTokenSource? _loadCts;
     private double _baseWidth = DefaultMaxWidth;
     private double _baseHeight = DefaultMaxHeight;
+    private bool _loadPending;
 
     [VeloxProperty] public partial IWikiElement? Parent { get; set; }
     [VeloxProperty] public partial string Source { get; set; }
@@ -58,7 +59,31 @@ public partial class ImageProvider : IWikiElement
         Alignment = "Center";
     }
 
-    partial void OnSourceChanged(string oldValue, string newValue) => _ = LoadBitmapAsync(newValue);
+    partial void OnSourceChanged(string oldValue, string newValue)
+    {
+        // Avoid kicking off HTTP/file IO while a JSON document is being
+        // deserialized; the view (or document) will request a load once
+        // hydration completes via EnsureLoadedAsync.
+        if (HydrationScope.IsActive)
+        {
+            _loadPending = true;
+            return;
+        }
+
+        _ = LoadBitmapAsync(newValue);
+    }
+
+    /// <summary>
+    /// Triggers a deferred bitmap load if one was skipped during hydration.
+    /// </summary>
+    public Task EnsureLoadedAsync()
+    {
+        if (!_loadPending)
+            return Task.CompletedTask;
+
+        _loadPending = false;
+        return LoadBitmapAsync(Source);
+    }
 
     partial void OnImageSourceChanged(IImage? oldValue, IImage? newValue)
     {

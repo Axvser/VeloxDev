@@ -2,6 +2,7 @@
 using Avalonia.Input.Platform;
 using Avalonia.Media;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using TextMateSharp.Grammars;
@@ -12,6 +13,17 @@ namespace VeloxDev.Docs.ViewModels;
 
 public partial class CodeProvider : IWikiElement
 {
+    // TextMate setup is expensive: building RegistryOptions scans embedded
+    // theme/grammar manifests, and LoadGrammar parses a sizeable JSON document.
+    // Cache them once per process and per language, so reloading documents with
+    // many code blocks does not pay this cost N times.
+    private static readonly RegistryOptions _registryOptions = new(ThemeName.DarkPlus);
+    private static readonly Registry _registry = new(_registryOptions);
+    private static readonly object _registryGate = new();
+    private static readonly ConcurrentDictionary<string, IGrammar?> _grammarCache = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool _highlightPending;
+
     public IReadOnlyList<string> Languages { get; } =
     [
         "csharp",
@@ -44,9 +56,36 @@ public partial class CodeProvider : IWikiElement
 
     public bool HasFixedHeight => !AutoHeight;
 
-    partial void OnCodeChanged(string oldValue, string newValue) => UpdateInlines();
-    partial void OnLanguageChanged(string oldValue, string newValue) => UpdateInlines();
+    partial void OnCodeChanged(string oldValue, string newValue) => RequestUpdateInlines();
+    partial void OnLanguageChanged(string oldValue, string newValue) => RequestUpdateInlines();
     partial void OnAutoHeightChanged(bool oldValue, bool newValue) => OnPropertyChanged(nameof(HasFixedHeight));
+
+    private void RequestUpdateInlines()
+    {
+        // During JSON hydration both Code and Language are assigned in sequence.
+        // Skip the work and let the document trigger a single refresh once
+        // hydration completes.
+        if (HydrationScope.IsActive)
+        {
+            _highlightPending = true;
+            return;
+        }
+
+        UpdateInlines();
+    }
+
+    /// <summary>
+    /// Re-runs syntax highlighting if a previous update was deferred during
+    /// hydration. Safe to call repeatedly; it is a no-op when nothing is pending.
+    /// </summary>
+    public void EnsureHighlighted()
+    {
+        if (!_highlightPending)
+            return;
+
+        _highlightPending = false;
+        UpdateInlines();
+    }
 
     private void UpdateInlines()
     {
@@ -61,9 +100,7 @@ public partial class CodeProvider : IWikiElement
 
         try
         {
-            var options = new RegistryOptions(ThemeName.DarkPlus);
-            var registry = new Registry(options);
-            var scopeName = options.GetScopeByLanguageId(language);
+            var scopeName = _registryOptions.GetScopeByLanguageId(language);
             if (scopeName == null)
             {
                 inlines.Clear();
@@ -71,7 +108,13 @@ public partial class CodeProvider : IWikiElement
                 return;
             }
 
-            var grammar = registry.LoadGrammar(scopeName);
+            var grammar = _grammarCache.GetOrAdd(scopeName, static name =>
+            {
+                lock (_registryGate)
+                {
+                    return _registry.LoadGrammar(name);
+                }
+            });
             if (grammar == null)
             {
                 inlines.Clear();
@@ -81,7 +124,7 @@ public partial class CodeProvider : IWikiElement
 
             inlines.Clear();
 
-            var theme = registry.GetTheme();
+            var theme = _registry.GetTheme();
             var lines = code.Split('\n');
             IStateStack? ruleStack = null;
 

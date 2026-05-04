@@ -259,26 +259,13 @@ public abstract class WikiElementViewBase : UserControl
 
     private void RefreshLayout()
     {
+        // Avalonia automatically propagates measure invalidation up the visual
+        // tree, so invalidating self is sufficient. The previous implementation
+        // walked every ancestor twice (once synchronously, once on the
+        // Background dispatcher tick), which produced an O(N * H) layout storm
+        // when a document with many elements was loaded.
         InvalidateMeasure();
         InvalidateArrange();
-
-        foreach (var ancestor in this.GetVisualAncestors().OfType<Control>())
-        {
-            ancestor.InvalidateMeasure();
-            ancestor.InvalidateArrange();
-        }
-
-        Dispatcher.UIThread.Post(() =>
-        {
-            InvalidateMeasure();
-            InvalidateArrange();
-
-            foreach (var ancestor in this.GetVisualAncestors().OfType<Control>())
-            {
-                ancestor.InvalidateMeasure();
-                ancestor.InvalidateArrange();
-            }
-        }, DispatcherPriority.Background);
     }
 
     private void RemoveFromDocument()

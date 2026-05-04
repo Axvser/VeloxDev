@@ -30,9 +30,17 @@ public partial class MarkdownView : WikiElementViewBase
     private static readonly HttpClient HttpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
     private static readonly FontFamily MonospaceFontFamily = new("Cascadia Code,Cascadia Mono,Sarasa Mono SC,Microsoft YaHei UI,Segoe UI,monospace");
 
+    // Build the Markdig pipeline once: UseAdvancedExtensions wires up many
+    // extensions and is not cheap to repeat on every keystroke or document reload.
+    private static readonly MarkdownPipeline MarkdownPipeline =
+        new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+
+    private const int InitialBlockBatchSize = 6;
+
     private readonly AvaloniaList<Control> _displayBlocks = [];
     private readonly Dictionary<string, Control> _anchors = new(StringComparer.OrdinalIgnoreCase);
     private MarkdownProvider? _provider;
+    private int _rebuildToken;
 
     public MarkdownView()
     {
@@ -93,6 +101,10 @@ public partial class MarkdownView : WikiElementViewBase
 
     private void RebuildDisplay()
     {
+        // Bump the token so any in-flight chunked rebuild from a previous call
+        // stops appending stale content.
+        var token = ++_rebuildToken;
+
         _displayBlocks.Clear();
         _anchors.Clear();
 
@@ -109,23 +121,63 @@ public partial class MarkdownView : WikiElementViewBase
             return;
         }
 
-        var document = Markdown.Parse(markdown, new MarkdownPipelineBuilder().UseAdvancedExtensions().Build());
+        // Markdig parsing itself is fast; the cost is in materializing
+        // controls (especially fenced code blocks). We render the first batch
+        // synchronously so the user sees content immediately, then yield to
+        // the dispatcher to render the rest. This keeps document loading
+        // responsive when many MarkdownView instances rebuild at once.
+        var document = Markdown.Parse(markdown, MarkdownPipeline);
+        var blocks = new List<Block>(document.Count);
         foreach (var block in document)
+            blocks.Add(block);
+
+        var index = RenderBlocks(blocks, 0, InitialBlockBatchSize, token);
+
+        if (index < blocks.Count)
+            ScheduleRenderRemainder(blocks, index, token);
+        else if (_displayBlocks.Count == 0)
+            AppendFallback(markdown);
+    }
+
+    private int RenderBlocks(List<Block> blocks, int start, int count, int token)
+    {
+        var end = Math.Min(blocks.Count, start + count);
+        for (int i = start; i < end; i++)
         {
-            if (CreateControl(block) is { } control)
+            if (token != _rebuildToken)
+                return blocks.Count;
+
+            if (CreateControl(blocks[i]) is { } control)
                 _displayBlocks.Add(control);
         }
+        return end;
+    }
 
-        if (_displayBlocks.Count == 0)
+    private void ScheduleRenderRemainder(List<Block> blocks, int start, int token)
+    {
+        Dispatcher.UIThread.Post(() =>
         {
-            _displayBlocks.Add(new TextBlock
-            {
-                Text = markdown,
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 14,
-                LineHeight = 22
-            });
-        }
+            if (token != _rebuildToken)
+                return;
+
+            var next = RenderBlocks(blocks, start, InitialBlockBatchSize, token);
+
+            if (next < blocks.Count)
+                ScheduleRenderRemainder(blocks, next, token);
+            else if (_displayBlocks.Count == 0)
+                AppendFallback(_provider?.Text ?? string.Empty);
+        }, DispatcherPriority.Background);
+    }
+
+    private void AppendFallback(string markdown)
+    {
+        _displayBlocks.Add(new TextBlock
+        {
+            Text = markdown,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 14,
+            LineHeight = 22
+        });
     }
 
     private Control? CreateControl(Block block)

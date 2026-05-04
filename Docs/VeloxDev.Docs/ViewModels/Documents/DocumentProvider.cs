@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.MVVM;
 using VeloxDev.MVVM.Serialization;
@@ -62,6 +63,7 @@ public partial class DocumentProvider : IWikiElement
     public string LanguageTooltip => IsEnglish ? "Document language" : "文档语言";
 
     private bool _suppressReload;
+    private static readonly AsyncLocal<int> _reloadSuppressionDepth = new();
 
     partial void OnIsEditModeChanged(bool oldValue, bool newValue)
     {
@@ -97,7 +99,7 @@ public partial class DocumentProvider : IWikiElement
         // Avoid synchronous recursion: deserialization constructs new DocumentProvider
         // instances whose ctor sets Language, which would otherwise re-enter LoadDefault
         // synchronously (LoadDefault has no await before Deserialize) and overflow the stack.
-        if (_suppressReload)
+        if (_suppressReload || _reloadSuppressionDepth.Value > 0)
             return;
 
         if (string.IsNullOrEmpty(oldValue))
@@ -140,14 +142,17 @@ public partial class DocumentProvider : IWikiElement
         }
     }
 
-    public static async Task<DocumentProvider> LoadDefault(string language = DefaultLanguage)
+    public static Task<DocumentProvider> LoadDefault(string language = DefaultLanguage)
+        => Task.FromResult(LoadDefaultCore(language));
+
+    private static DocumentProvider LoadDefaultCore(string language)
     {
         var code = string.IsNullOrWhiteSpace(language) ? DefaultLanguage : language.ToLowerInvariant();
         var uri = new Uri($"avares://VeloxDev.Docs/Assets/Docs/wiki.{code}.json");
 
         try
         {
-            await using var stream = AssetLoader.Open(uri);
+            using var stream = AssetLoader.Open(uri);
             using var reader = new StreamReader(stream, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: false);
             return Deserialize(reader.ReadToEnd());
         }
@@ -155,7 +160,7 @@ public partial class DocumentProvider : IWikiElement
         {
             // Fall back to the default language asset if the requested locale is missing.
             var fallback = new Uri($"avares://VeloxDev.Docs/Assets/Docs/wiki.{DefaultLanguage}.json");
-            await using var stream = AssetLoader.Open(fallback);
+            using var stream = AssetLoader.Open(fallback);
             using var reader = new StreamReader(stream, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: false);
             return Deserialize(reader.ReadToEnd());
         }
@@ -166,14 +171,83 @@ public partial class DocumentProvider : IWikiElement
         if (string.IsNullOrWhiteSpace(json))
             throw new InvalidDataException("Wiki JSON content is empty.");
 
-        if (!json.TryDeserialize<DocumentProvider>(out var document) || document is null)
-            throw new InvalidDataException("Wiki JSON content could not be deserialized.");
+        DocumentProvider? document;
+        // EnterReloadSuppression: prevents OnLanguageChanged in newly constructed
+        //   DocumentProvider instances from re-entering LoadDefault.
+        // HydrationScope: tells side-effecting setters (CodeProvider syntax
+        //   highlighting, ImageProvider HTTP loads) to defer until hydration
+        //   completes, removing the dominant cost of large document loads.
+        using (EnterReloadSuppression())
+        using (HydrationScope.Enter())
+        {
+            if (!json.TryDeserialize<DocumentProvider>(out document) || document is null)
+                throw new InvalidDataException("Wiki JSON content could not be deserialized.");
 
-        RepairParents(document);
-        document.SelectedNode ??= document.Nodes.OfType<NodeProvider>().FirstOrDefault();
-        document.Children = document.SelectedNode?.Children ?? [];
+            RepairParents(document);
+            document.SelectedNode ??= document.Nodes.OfType<NodeProvider>().FirstOrDefault();
+            document.Children = document.SelectedNode?.Children ?? [];
+        }
+
+        // Now that hydration is complete, run the deferred work outside the
+        // hydration scope so syntax highlighting actually executes. Image loads
+        // remain lazy and are triggered by the view when it attaches.
+        FlushDeferredHighlighting(document);
 
         return document;
+    }
+
+    private static void FlushDeferredHighlighting(DocumentProvider document)
+    {
+        foreach (var element in EnumerateElements(document))
+        {
+            if (element is CodeProvider code)
+                code.EnsureHighlighted();
+        }
+    }
+
+    private static IEnumerable<IWikiElement> EnumerateElements(DocumentProvider document)
+    {
+        foreach (var element in document.Children)
+            yield return element;
+
+        foreach (var node in document.Nodes.OfType<NodeProvider>())
+        {
+            foreach (var element in EnumerateNode(node))
+                yield return element;
+        }
+    }
+
+    private static IEnumerable<IWikiElement> EnumerateNode(NodeProvider node)
+    {
+        foreach (var element in node.Children)
+            yield return element;
+
+        foreach (var child in node.Nodes.OfType<NodeProvider>())
+        {
+            foreach (var element in EnumerateNode(child))
+                yield return element;
+        }
+    }
+
+    private static IDisposable EnterReloadSuppression()
+    {
+        _reloadSuppressionDepth.Value++;
+        return new ReloadSuppressionScope();
+    }
+
+    private sealed class ReloadSuppressionScope : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            if (_reloadSuppressionDepth.Value > 0)
+                _reloadSuppressionDepth.Value--;
+        }
     }
 
     [VeloxCommand]
@@ -378,16 +452,57 @@ public partial class DocumentProvider : IWikiElement
         if (files.Count == 0)
             return;
 
-        await using var stream = await files[0].OpenReadAsync().ConfigureAwait(true);
-        using var reader = new StreamReader(stream, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
-        var json = await reader.ReadToEndAsync().ConfigureAwait(true);
-        if (json.TryDeserialize<DocumentProvider>(out var document) && document is not null)
+        // In Avalonia.Browser the file picker stream is a JS ReadableStream wrapper.
+        // StreamReader.ReadToEndAsync may fall back to synchronous reads on that stream,
+        // blocking the UI thread. CopyToAsync pumps data asynchronously into a
+        // MemoryStream, after which all reads are in-memory and never block.
+        string json;
+        await using (var fileStream = await files[0].OpenReadAsync().ConfigureAwait(true))
         {
-            RepairParents(document);
-            Nodes = document.Nodes;
-            SelectedNode = document.SelectedNode ?? Nodes.OfType<NodeProvider>().FirstOrDefault();
-            Children = SelectedNode?.Children ?? [];
+            using var ms = new MemoryStream();
+            await fileStream.CopyToAsync(ms).ConfigureAwait(true);
+            ms.Position = 0;
+            using var reader = new StreamReader(ms, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: true);
+            json = reader.ReadToEnd();
         }
+
+        if (string.IsNullOrWhiteSpace(json))
+            return;
+
+        // Deserialization (Newtonsoft + reflection over many polymorphic
+        // elements) is CPU-bound. Move it off the UI thread on platforms that
+        // support real threads. On WASM Task.Run executes inline on the UI
+        // thread; the explicit Task.Yield above still gives the file picker
+        // dialog a chance to dismiss before the parse begins.
+        await Task.Yield();
+
+        DocumentProvider document;
+        try
+        {
+            document = await Task.Run(() => Deserialize(json)).ConfigureAwait(true);
+        }
+        catch (InvalidDataException)
+        {
+            return;
+        }
+
+        // Apply the loaded document atomically to minimize UI churn. Suppress
+        // the language-change reload so that adopting the document's persisted
+        // language does not race a fresh asset load on top of the user's file.
+        _suppressReload = true;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(document.Language))
+                Language = document.Language;
+        }
+        finally
+        {
+            _suppressReload = false;
+        }
+
+        Nodes = document.Nodes;
+        SelectedNode = document.SelectedNode ?? Nodes.OfType<NodeProvider>().FirstOrDefault();
+        Children = SelectedNode?.Children ?? [];
     }
 
     private static IStorageProvider? GetStorageProvider(object? parameter) => parameter switch

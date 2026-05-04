@@ -38,6 +38,7 @@ public partial class ImageView : WikiElementViewBase
         {
             _provider.PropertyChanged += ProviderPropertyChanged;
             ApplyScale(_provider);
+            _ = _provider.EnsureLoadedAsync();
         }
     }
 

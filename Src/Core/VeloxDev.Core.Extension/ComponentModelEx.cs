@@ -108,7 +108,7 @@ public static class ComponentModelEx
         where T : INotifyPropertyChanged
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(SerializeCore(workflow));
+        return Task.Run(() => SerializeCore(workflow), cancellationToken);
     }
 
     /// <summary>
@@ -121,8 +121,11 @@ public static class ComponentModelEx
             throw new ArgumentException("JSON string cannot be null or empty", nameof(json));
 
         cancellationToken.ThrowIfCancellationRequested();
-        var success = TryDeserializeCore<T>(json, out var result);
-        return Task.FromResult((success, result));
+        return Task.Run(() =>
+        {
+            var success = TryDeserializeCore<T>(json, out var result);
+            return (success, result);
+        }, cancellationToken);
     }
 
     /// <summary>
@@ -135,7 +138,7 @@ public static class ComponentModelEx
             throw new ArgumentException("JSON string cannot be null or empty", nameof(json));
 
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(DeserializeCore<T>(json));
+        return Task.Run(() => DeserializeCore<T>(json), cancellationToken);
     }
     #endregion
 
@@ -150,7 +153,7 @@ public static class ComponentModelEx
         where T : INotifyPropertyChanged
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(workflow.SerializeToUtf8Bytes());
+        return Task.Run(() => workflow.SerializeToUtf8Bytes(), cancellationToken);
     }
 
     public static T DeserializeFromUtf8Bytes<T>(this byte[] utf8Json)
@@ -168,7 +171,7 @@ public static class ComponentModelEx
         where T : INotifyPropertyChanged
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(utf8Json.DeserializeFromUtf8Bytes<T>());
+        return Task.Run(() => utf8Json.DeserializeFromUtf8Bytes<T>(), cancellationToken);
     }
 
     public static async Task SerializeToTextWriterAsync<T>(this T workflow, TextWriter writer, CancellationToken cancellationToken = default)
@@ -178,7 +181,7 @@ public static class ComponentModelEx
             throw new ArgumentNullException(nameof(writer), "Target writer cannot be null");
 
         cancellationToken.ThrowIfCancellationRequested();
-        var json = SerializeCore(workflow);
+        var json = await Task.Run(() => SerializeCore(workflow), cancellationToken).ConfigureAwait(false);
         await writer.WriteAsync(json).ConfigureAwait(false);
         await writer.FlushAsync().ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
@@ -193,7 +196,7 @@ public static class ComponentModelEx
         cancellationToken.ThrowIfCancellationRequested();
         var json = await reader.ReadToEndAsync().ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        return DeserializeCore<T>(json);
+        return await Task.Run(() => DeserializeCore<T>(json), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
