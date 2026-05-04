@@ -160,8 +160,13 @@ public partial class WorkflowView : UserControl
            });
         if (file.Count < 1) return;
         var path = file[0].TryGetLocalPath();
-        var value = await file[0].OpenReadAsync();
-        var (success, result) = await ComponentModelEx.TryDeserializeFromStreamAsync<TreeViewModel>(value);
+        await using var value = await file[0].OpenReadAsync();
+        using var ms = new MemoryStream();
+        await value.CopyToAsync(ms);
+        ms.Position = 0;
+        using var reader = new StreamReader(ms);
+        var json = await reader.ReadToEndAsync();
+        var success = json.TryDeserialize<TreeViewModel>(out var result);
         if (success && result is not null)
         {
             UnsubscribeAutoScroll(_workflowViewModel);

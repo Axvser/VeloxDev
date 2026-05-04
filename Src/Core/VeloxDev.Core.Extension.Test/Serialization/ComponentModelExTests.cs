@@ -52,25 +52,6 @@ public class ComponentModelExTests
     }
 
     [TestMethod]
-    public async Task TryDeserializeAsync_ValidJson_Succeeds()
-    {
-        var original = new TestModel { Name = "Try", Count = 7 };
-        var json = await original.SerializeAsync();
-
-        var (success, result) = await json.TryDeserializeAsync<TestModel>();
-        Assert.IsTrue(success);
-        Assert.IsNotNull(result);
-        Assert.AreEqual("Try", result!.Name);
-    }
-
-    [TestMethod]
-    public async Task TryDeserializeAsync_InvalidJson_ReturnsFalse()
-    {
-        var (success, _) = await "not valid json {{{".TryDeserializeAsync<TestModel>();
-        Assert.IsFalse(success);
-    }
-
-    [TestMethod]
     public void TryDeserialize_InvalidJson_ReturnsFalse()
     {
         var success = "not valid json {{{".TryDeserialize<TestModel>(out var restored);
@@ -104,20 +85,6 @@ public class ComponentModelExTests
     }
 
     [TestMethod]
-    public async Task TryDeserializeFromStreamAsync_ValidStream_Succeeds()
-    {
-        var original = new TestModel { Name = "TryStream", Count = 456 };
-
-        using var stream = new MemoryStream();
-        await original.SerializeToStreamAsync(stream);
-        stream.Position = 0;
-
-        var (success, result) = await stream.TryDeserializeFromStreamAsync<TestModel>();
-        Assert.IsTrue(success);
-        Assert.AreEqual("TryStream", result!.Name);
-    }
-
-    [TestMethod]
     public async Task SerializeToUtf8Bytes_And_DeserializeFromUtf8Bytes_RoundTrips()
     {
         var original = new TestModel { Name = "Bytes", Count = 314 };
@@ -142,21 +109,6 @@ public class ComponentModelExTests
 
         Assert.AreEqual("Text", restored.Name);
         Assert.AreEqual(2718, restored.Count);
-    }
-
-    [TestMethod]
-    public async Task StreamSerializeAsync_And_StreamDeserializeAsync_RoundTrips()
-    {
-        var original = new TestModel { Name = "AltStream", Count = 8080 };
-
-        using var stream = new MemoryStream();
-        await original.StreamSerializeAsync(stream);
-
-        stream.Position = 0;
-        var restored = await stream.StreamDeserializeAsync<TestModel>();
-
-        Assert.AreEqual("AltStream", restored.Name);
-        Assert.AreEqual(8080, restored.Count);
     }
 
     [TestMethod]

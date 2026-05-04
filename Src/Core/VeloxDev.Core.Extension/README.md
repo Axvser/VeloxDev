@@ -84,11 +84,15 @@ if (json.TryDeserialize<MyWorkflowTree>(out var tree)) { /* use */ }
 
 var treeSync = json.Deserialize<MyWorkflowTree>();
 
-// 异步
+// 异步（CPU 密集；桌面运行在线程池，浏览器为单线程退化为同步）
 var jsonAsync = await workflow.SerializeAsync();
-var (ok, tree2) = await jsonAsync.TryDeserializeAsync<MyWorkflowTree>();
+var treeAsync = await jsonAsync.DeserializeAsync<MyWorkflowTree>();
 
-// UTF-8 字节（适合 Web / Wasm / 内存缓存 / 网络传输）
+// 异步 + Try：先 await 出 JSON，再用同步 TryDeserialize(out ...)
+var json2 = await workflow.SerializeAsync();
+if (json2.TryDeserialize<MyWorkflowTree>(out var tree2)) { /* use */ }
+
+// UTF-8 字节（紧凑 JSON，适合 Web / Wasm / 内存缓存 / 网络传输）
 var utf8 = workflow.SerializeToUtf8Bytes();
 var tree3 = utf8.DeserializeFromUtf8Bytes<MyWorkflowTree>();
 
@@ -105,13 +109,38 @@ ms.Position = 0;
 var tree5 = await ms.DeserializeFromStreamAsync<MyWorkflowTree>();
 ```
 
+### API 形状速览
+
+| 类别 | 同步 | 异步 |
+|---|---|---|
+| String | `Serialize` / `Deserialize` / `TryDeserialize(out)` | `SerializeAsync` / `DeserializeAsync` |
+| UTF-8 | `SerializeToUtf8Bytes` / `DeserializeFromUtf8Bytes` | `SerializeToUtf8BytesAsync` / `DeserializeFromUtf8BytesAsync` |
+| TextWriter / TextReader | — | `SerializeToTextWriterAsync` / `DeserializeFromTextReaderAsync` |
+| Stream | — | `SerializeToStreamAsync` / `DeserializeFromStreamAsync` |
+
+> **Try-pattern 仅同步形态**：`bool TryDeserialize<T>(this string, out T?)`。  
+> 异步场景下不提供 `Task<(bool, T?)>` 之类的元组返回，由调用方自行 `await` 出字符串/流后再用同步 `TryDeserialize`，避免 `out` 与 `async` 的语言冲突，也更贴近 .NET 习惯。
+
 ### 设计说明
 
-- 序列化核心基于 `Newtonsoft.Json`
-- API 同时支持 `string`、`byte[]`、`Stream`、`TextReader`、`TextWriter`
-- 异步 API 不依赖 `Task.Run` 包装同步序列化，因此更适合 `Avalonia.Browser` / Wasm 等受限运行时
-- `TryDeserialize` / `TryDeserializeAsync` 在输入无效时返回 `false`，不抛出格式异常
-- `Stream` API 负责序列化到流，不抽象具体持久化介质；浏览器环境建议配合内存流、JS Bridge、IndexedDB 或宿主侧存储接口使用
+- 序列化核心基于 `Newtonsoft.Json`。
+- API 同时支持 `string`、`byte[]`、`Stream`、`TextReader`、`TextWriter`。
+- **字符串 API 使用缩进格式**（人读 / diff 友好）；**字节 / 流 API 使用紧凑格式**（体积约减半，解析更快），适合文件、网络、Wasm 下载流。
+- `SerializeToStreamAsync` 在后台线程构建 UTF-8 字节，再在调用线程上以单次 `WriteAsync` 写入：避免跨线程 `Dispose/Flush` 引发的 0 字节文件问题，并满足浏览器写流"不可 Seek/SetLength、单次写"的约束。
+- `DeserializeFromStreamAsync` 在 Avalonia.Browser (WASM) 上对 JS 包装的 `ReadableStream` 可能退化为同步读，**浏览器侧建议**：先 `CopyToAsync(MemoryStream)`，再传入。
+- 默认启用 `AllowListSerializationBinder`：对 `TypeNameHandling.Auto` 的多态反序列化做程序集白名单（`VeloxDev.*` + 常见 BCL 集合程序集），阻断已知的反序列化攻击面。可通过 `ComponentModelEx.ConfigureSerializationBinder(...)` 替换为更严格的策略。
+- `JsonSerializerSettings` 与 `ContractResolver` **进程级缓存**，仅在替换 binder 时失效重建，避免 Newtonsoft 类型契约缓存被反复推翻。
+- `TryDeserialize(out)` 在输入无效时返回 `false`，不抛出格式异常；内部仅捕获 `JsonException` / `IOException`，不会吞掉 `OperationCanceledException`、`OutOfMemoryException` 等致命异常。
+
+### 安全：自定义 Binder
+
+```csharp
+// 仅允许 VeloxDev.Docs 与核心库被多态反序列化
+ComponentModelEx.ConfigureSerializationBinder(
+    new AllowListSerializationBinder(["VeloxDev.Docs", "VeloxDev.Core", "VeloxDev.MVVM"]));
+```
+
+
 
 ---
 

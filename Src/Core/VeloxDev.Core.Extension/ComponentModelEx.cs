@@ -15,27 +15,97 @@ namespace VeloxDev.MVVM.Serialization;
 
 public static class ComponentModelEx
 {
-    private static readonly JsonSerializerSettings settings = new()
+    // Default binder restricts polymorphic deserialization to types coming from
+    // assemblies whose name starts with "VeloxDev" or core BCL prefixes. This
+    // mitigates the well-known TypeNameHandling.Auto attack surface where a
+    // crafted JSON file could otherwise instantiate arbitrary types.
+    // Consumers can opt in to a stricter (or different) policy via
+    // ConfigureSerializationBinder.
+    private static ISerializationBinder _serializationBinder = new AllowListSerializationBinder();
+
+    // Settings (and their ContractResolver) are cached: Newtonsoft.Json caches
+    // JsonContract objects on the resolver instance, so re-creating the resolver
+    // per call defeats the cache and causes the type system to be re-reflected
+    // on every (de)serialization. We invalidate the cache only when the binder
+    // is replaced via ConfigureSerializationBinder.
+    private static readonly object _settingsGate = new();
+    private static JsonSerializerSettings? _indentedSettingsCache;
+    private static JsonSerializerSettings? _compactSettingsCache;
+
+    /// <summary>
+    /// Replace the default <see cref="ISerializationBinder"/> used for all
+    /// (de)serialization. Provide a stricter binder for security-sensitive
+    /// scenarios (loading user files, network payloads, etc.).
+    /// </summary>
+    public static void ConfigureSerializationBinder(ISerializationBinder binder)
     {
-        Formatting = Formatting.Indented,
+        if (binder == null)
+            throw new ArgumentNullException(nameof(binder));
+
+        lock (_settingsGate)
+        {
+            _serializationBinder = binder;
+            _indentedSettingsCache = null;
+            _compactSettingsCache = null;
+        }
+    }
+
+    private static JsonSerializerSettings BuildSettings(Formatting formatting) => new()
+    {
+        Formatting = formatting,
         TypeNameHandling = TypeNameHandling.Auto,
         ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
         NullValueHandling = NullValueHandling.Include,
         DefaultValueHandling = DefaultValueHandling.Include,
         ContractResolver = new WritablePropertiesOnlyResolver(),
+        SerializationBinder = _serializationBinder,
         Converters = [new DictionaryKeyConverter()]
     };
 
-    internal static JsonSerializer CreateJsonSerializer()
-        => JsonSerializer.Create(settings);
+    // Indented for string-facing APIs (human-readable / diff-friendly), compact
+    // for stream/byte APIs (file IO, network, browser downloads) where size and
+    // parse time matter. Both are cached so the resolver's contract cache is
+    // reused across calls.
+    private static JsonSerializerSettings IndentedSettings
+    {
+        get
+        {
+            var cached = _indentedSettingsCache;
+            if (cached is not null)
+                return cached;
 
-    private static string SerializeCore<T>(T workflow)
+            lock (_settingsGate)
+            {
+                return _indentedSettingsCache ??= BuildSettings(Formatting.Indented);
+            }
+        }
+    }
+
+    private static JsonSerializerSettings CompactSettings
+    {
+        get
+        {
+            var cached = _compactSettingsCache;
+            if (cached is not null)
+                return cached;
+
+            lock (_settingsGate)
+            {
+                return _compactSettingsCache ??= BuildSettings(Formatting.None);
+            }
+        }
+    }
+
+    internal static JsonSerializer CreateJsonSerializer()
+        => JsonSerializer.Create(IndentedSettings);
+
+    private static string SerializeCore<T>(T workflow, Formatting formatting = Formatting.Indented)
         where T : INotifyPropertyChanged
     {
         if (workflow == null)
             throw new ArgumentNullException(nameof(workflow), "Workflow object cannot be null for serialization");
 
-        return JsonConvert.SerializeObject(workflow, settings);
+        return JsonConvert.SerializeObject(workflow, formatting == Formatting.None ? CompactSettings : IndentedSettings);
     }
 
     private static bool TryDeserializeCore<T>(string json, out T? workflow)
@@ -43,10 +113,17 @@ public static class ComponentModelEx
     {
         try
         {
-            workflow = JsonConvert.DeserializeObject<T>(json, settings);
+            workflow = JsonConvert.DeserializeObject<T>(json, IndentedSettings);
             return workflow != null;
         }
-        catch
+        // Only swallow JSON-shape failures. Real faults (OOM, cancellation,
+        // stack overflow) must propagate.
+        catch (JsonException)
+        {
+            workflow = default;
+            return false;
+        }
+        catch (IOException)
         {
             workflow = default;
             return false;
@@ -84,8 +161,13 @@ public static class ComponentModelEx
     public static bool TryDeserialize<T>(this string json, out T? workflow)
         where T : INotifyPropertyChanged
     {
+        // Try-pattern contract: never throw on bad input. Caller is expected
+        // to branch on the boolean result.
         if (string.IsNullOrWhiteSpace(json))
-            throw new ArgumentException("JSON string cannot be null or empty", nameof(json));
+        {
+            workflow = default;
+            return false;
+        }
 
         return TryDeserializeCore(json, out workflow);
     }
@@ -112,23 +194,6 @@ public static class ComponentModelEx
     }
 
     /// <summary>
-    /// Asynchronously attempts to deserialize a JSON string to workflow object
-    /// </summary>
-    public static Task<(bool Success, T? Result)> TryDeserializeAsync<T>(this string json, CancellationToken cancellationToken = default)
-        where T : INotifyPropertyChanged
-    {
-        if (string.IsNullOrWhiteSpace(json))
-            throw new ArgumentException("JSON string cannot be null or empty", nameof(json));
-
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.Run(() =>
-        {
-            var success = TryDeserializeCore<T>(json, out var result);
-            return (success, result);
-        }, cancellationToken);
-    }
-
-    /// <summary>
     /// Asynchronously deserializes a JSON string to workflow object with exception handling
     /// </summary>
     public static Task<T> DeserializeAsync<T>(this string json, CancellationToken cancellationToken = default)
@@ -146,7 +211,9 @@ public static class ComponentModelEx
     public static byte[] SerializeToUtf8Bytes<T>(this T workflow)
         where T : INotifyPropertyChanged
     {
-        return Encoding.UTF8.GetBytes(SerializeCore(workflow));
+        // Compact formatting for byte/file payloads: ~2x smaller than indented
+        // and proportionally faster to parse on reload.
+        return Encoding.UTF8.GetBytes(SerializeCore(workflow, Formatting.None));
     }
 
     public static Task<byte[]> SerializeToUtf8BytesAsync<T>(this T workflow, CancellationToken cancellationToken = default)
@@ -179,12 +246,23 @@ public static class ComponentModelEx
     {
         if (writer == null)
             throw new ArgumentNullException(nameof(writer), "Target writer cannot be null");
+        if (workflow == null)
+            throw new ArgumentNullException(nameof(workflow));
 
         cancellationToken.ThrowIfCancellationRequested();
-        var json = await Task.Run(() => SerializeCore(workflow), cancellationToken).ConfigureAwait(false);
+
+        // Serialize on a worker thread when available, but write to the
+        // caller-owned TextWriter on the calling thread. JsonTextWriter is
+        // not safe to dispose on a different thread than the underlying writer
+        // (especially when the writer wraps a FileStream opened with
+        // useAsync:true), so we fully build the JSON first and then push it
+        // through the writer with a single asynchronous write.
+        var json = await Task.Run(() => SerializeCore(workflow, Formatting.None), cancellationToken)
+            .ConfigureAwait(false);
+
+        cancellationToken.ThrowIfCancellationRequested();
         await writer.WriteAsync(json).ConfigureAwait(false);
         await writer.FlushAsync().ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
     }
 
     public static async Task<T> DeserializeFromTextReaderAsync<T>(this TextReader reader, CancellationToken cancellationToken = default)
@@ -210,14 +288,36 @@ public static class ComponentModelEx
 
         if (!stream.CanWrite)
             throw new InvalidOperationException("Target stream is not writable");
+        if (workflow == null)
+            throw new ArgumentNullException(nameof(workflow));
 
-        using var streamWriter = new StreamWriter(stream, new UTF8Encoding(false), 1024, true);
-        await workflow.SerializeToTextWriterAsync(streamWriter, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Build the UTF-8 payload off the UI thread, then write it in one
+        // async call. This avoids two prior failure modes:
+        //   1. StreamWriter wrapping a FileStream(useAsync:true) being flushed
+        //      on a worker thread caused 0-byte files when the underlying
+        //      stream had already been truncated by FileMode.Create.
+        //   2. Browser write streams (Avalonia.Browser) reject Seek/SetLength
+        //      and any second-pass writes; a single WriteAsync is the only
+        //      portable shape.
+        var payload = await Task.Run(() => workflow.SerializeToUtf8Bytes(), cancellationToken)
+            .ConfigureAwait(false);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        await stream.WriteAsync(payload, 0, payload.Length, cancellationToken).ConfigureAwait(false);
+        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Asynchronously deserializes a workflow object from a stream
+    /// Asynchronously deserializes a workflow object from a stream.
     /// </summary>
+    /// <remarks>
+    /// On Avalonia.Browser (WASM), the underlying <see cref="StreamReader.ReadToEndAsync()"/>
+    /// path may fall back to synchronous reads on JS-backed streams and block the UI thread.
+    /// Callers on browser targets should buffer the source stream into a
+    /// <see cref="MemoryStream"/> via <c>CopyToAsync</c> first, then pass that buffer here.
+    /// </remarks>
     public static async Task<T> DeserializeFromStreamAsync<T>(this Stream stream, CancellationToken cancellationToken = default)
         where T : INotifyPropertyChanged
     {
@@ -231,43 +331,6 @@ public static class ComponentModelEx
         return await streamReader.DeserializeFromTextReaderAsync<T>(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Asynchronously attempts to deserialize a workflow object from a stream
-    /// </summary>
-    public static async Task<(bool Success, T? Result)> TryDeserializeFromStreamAsync<T>(this Stream stream, CancellationToken cancellationToken = default)
-        where T : INotifyPropertyChanged
-    {
-        if (stream == null)
-            throw new ArgumentNullException(nameof(stream), "Source stream cannot be null");
-
-        try
-        {
-            var result = await DeserializeFromStreamAsync<T>(stream, cancellationToken).ConfigureAwait(false);
-            return (true, result);
-        }
-        catch
-        {
-            return (false, default(T));
-        }
-    }
-
-    /// <summary>
-    /// Alternative streaming method using Task-based approach (compatible with netstandard2.0)
-    /// </summary>
-    public static async Task StreamSerializeAsync<T>(this T workflow, Stream outputStream, CancellationToken cancellationToken = default)
-        where T : INotifyPropertyChanged
-    {
-        await workflow.SerializeToStreamAsync(outputStream, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Alternative streaming deserialization method (compatible with netstandard2.0)
-    /// </summary>
-    public static async Task<T> StreamDeserializeAsync<T>(this Stream inputStream, CancellationToken cancellationToken = default)
-        where T : INotifyPropertyChanged
-    {
-        return await inputStream.DeserializeFromStreamAsync<T>(cancellationToken).ConfigureAwait(false);
-    }
     #endregion
 }
 
@@ -336,5 +399,68 @@ internal class WritablePropertiesOnlyResolver : DefaultContractResolver
     {
         IList<JsonProperty> props = base.CreateProperties(type, memberSerialization);
         return [.. props.Where(p => p.Writable)];
+    }
+}
+
+/// <summary>
+/// Default <see cref="ISerializationBinder"/> that limits TypeNameHandling.Auto
+/// deserialization to a safe set of assemblies. By default it accepts types
+/// whose assembly simple name starts with <c>VeloxDev</c> plus common BCL
+/// collection assemblies. This blocks the well-known polymorphic-deserialization
+/// gadget surface where untrusted JSON could otherwise instantiate arbitrary
+/// types from the loaded process.
+/// </summary>
+public sealed class AllowListSerializationBinder : ISerializationBinder
+{
+    private static readonly string[] DefaultAllowedAssemblyPrefixes =
+    [
+        "VeloxDev",
+        "System.Private.CoreLib",
+        "mscorlib",
+        "System.Collections",
+        "System.ObjectModel",
+    ];
+
+    private readonly string[] _allowedAssemblyPrefixes;
+
+    public AllowListSerializationBinder()
+        : this(DefaultAllowedAssemblyPrefixes) { }
+
+    public AllowListSerializationBinder(IEnumerable<string> allowedAssemblyPrefixes)
+    {
+        if (allowedAssemblyPrefixes == null)
+            throw new ArgumentNullException(nameof(allowedAssemblyPrefixes));
+
+        _allowedAssemblyPrefixes = allowedAssemblyPrefixes.ToArray();
+    }
+
+    public Type BindToType(string? assemblyName, string typeName)
+    {
+        if (string.IsNullOrEmpty(typeName))
+            throw new JsonSerializationException("Empty type name in JSON $type metadata.");
+
+        var assemblySimpleName = assemblyName?.Split(',')[0]?.Trim() ?? string.Empty;
+        var allowed = _allowedAssemblyPrefixes.Any(prefix =>
+            assemblySimpleName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+        if (!allowed)
+            throw new JsonSerializationException(
+                $"Type '{typeName}' from assembly '{assemblySimpleName}' is not in the deserialization allow-list.");
+
+        var qualifiedName = string.IsNullOrEmpty(assemblyName)
+            ? typeName
+            : $"{typeName}, {assemblyName}";
+
+        var type = Type.GetType(qualifiedName, throwOnError: false);
+        if (type == null)
+            throw new JsonSerializationException($"Could not resolve type '{qualifiedName}'.");
+
+        return type;
+    }
+
+    public void BindToName(Type serializedType, out string? assemblyName, out string? typeName)
+    {
+        assemblyName = serializedType.Assembly.GetName().Name;
+        typeName = serializedType.FullName;
     }
 }

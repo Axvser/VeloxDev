@@ -90,7 +90,9 @@ namespace Demo.Views
             try
             {
                 using var stream = await file.OpenStreamForReadAsync();
-                var (success, result) = await ComponentModelEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
+                using var reader = new StreamReader(stream);
+                var json = await reader.ReadToEndAsync();
+                var success = json.TryDeserialize<TreeViewModel>(out var result);
 
                 if (!success || result is null)
                 {

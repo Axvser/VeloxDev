@@ -53,7 +53,9 @@ public partial class WorkflowView : UserControl
             try
             {
                 using var stream = File.OpenRead(dialog.FileName);
-                var (success, result) = await ComponentModelEx.TryDeserializeFromStreamAsync<TreeViewModel>(stream);
+                using var reader = new StreamReader(stream);
+                var json = await reader.ReadToEndAsync();
+                var success = json.TryDeserialize<TreeViewModel>(out var result);
 
                 if (!success || result is null)
                 {
