@@ -154,7 +154,7 @@ public class ComponentModelExTests
         using var reader = new StringReader("{\"Name\":\"Value\",\"Count\":1}");
         cts.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () => await reader.DeserializeFromTextReaderAsync<TestModel>(cts.Token));
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await reader.DeserializeFromTextReaderAsync<TestModel>(cancellationToken: cts.Token));
     }
 
     [TestMethod]

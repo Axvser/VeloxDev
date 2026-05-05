@@ -65,6 +65,7 @@
 				<StackPanel Orientation="Horizontal" Spacing="4">
 					<Button Content="{Binding EditModeLabel}"
 							Command="{Binding ToggleEditModeCommand}"
+							IsVisible="{Binding IsEditorSupported}"
 							MinWidth="100" />
 					<ComboBox ItemsSource="{Binding Languages}"
 							  SelectedItem="{Binding SelectedLanguage}"
@@ -76,8 +77,9 @@
 							</DataTemplate>
 						</ComboBox.ItemTemplate>
 					</ComboBox>
-					<Separator Width="1" Height="18" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="4,0" />
-					<!-- 编辑模式下的内容插入工具 -->
+					<Separator Width="1" Height="18" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="4,0"
+							   IsVisible="{Binding IsEditorSupported}" />
+					<!-- 编辑模式下的内容插入工具 (仅 Desktop) -->
 					<WrapPanel IsVisible="{Binding IsEditMode}">
 						<Button Content="H1" Command="{Binding AddTitleCommand}" CommandParameter="1" Margin="0,0,4,0" ToolTip.Tip="Add Heading 1" />
 						<Button Content="H2" Command="{Binding AddTitleCommand}" CommandParameter="2" Margin="0,0,4,0" ToolTip.Tip="Add Heading 2" />
@@ -87,13 +89,14 @@
 						<Button Content="🗨" Command="{Binding AddSubtitleCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Quote / Subtitle" />
 						<Button Content="🔗" Command="{Binding AddLinkCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Link" />
 						<Button Content="&lt;/&gt;" Command="{Binding AddCodeCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Code Block" />
-                        <Button Content="MD" Command="{Binding AddMarkdownCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Markdown Block" />
+						<Button Content="MD" Command="{Binding AddMarkdownCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Markdown Block" />
 						<Button Content="📊" Command="{Binding AddTableCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Table" />
 						<Button Content="🖼" Command="{Binding AddImageCommand}" ToolTip.Tip="Add Image" />
 					</WrapPanel>
 				</StackPanel>
-				<!-- 文件操作 -->
-				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+				<!-- 文件操作 (仅 Desktop) -->
+				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4"
+							IsVisible="{Binding IsEditorSupported}">
 					<Button Content="{Binding SaveLabel}" Command="{Binding SaveCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding SaveTooltip}" />
 					<Button Content="{Binding OpenLabel}" Command="{Binding LoadCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding OpenTooltip}" />
 				</StackPanel>
@@ -121,7 +124,7 @@
 						</TreeDataTemplate>
 					</TreeView.ItemTemplate>
 				</TreeView>
-				<!-- 目录操作 (仅编辑模式) -->
+				<!-- 目录操作 (仅编辑模式 + Desktop) -->
 				<WrapPanel Grid.Row="2"
 						   IsVisible="{Binding IsEditMode}"
 						   Margin="6,4,6,6"

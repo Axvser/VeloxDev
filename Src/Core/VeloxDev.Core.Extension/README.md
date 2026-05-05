@@ -84,7 +84,7 @@ if (json.TryDeserialize<MyWorkflowTree>(out var tree)) { /* use */ }
 
 var treeSync = json.Deserialize<MyWorkflowTree>();
 
-// 异步（CPU 密集；桌面运行在线程池，浏览器为单线程退化为同步）
+// 异步（内部使用 Task.FromResult，序列化本身同步完成，await 为惯用形式保持 API 对称）
 var jsonAsync = await workflow.SerializeAsync();
 var treeAsync = await jsonAsync.DeserializeAsync<MyWorkflowTree>();
 
@@ -126,18 +126,62 @@ var tree5 = await ms.DeserializeFromStreamAsync<MyWorkflowTree>();
 - 序列化核心基于 `Newtonsoft.Json`。
 - API 同时支持 `string`、`byte[]`、`Stream`、`TextReader`、`TextWriter`。
 - **字符串 API 使用缩进格式**（人读 / diff 友好）；**字节 / 流 API 使用紧凑格式**（体积约减半，解析更快），适合文件、网络、Wasm 下载流。
-- `SerializeToStreamAsync` 在后台线程构建 UTF-8 字节，再在调用线程上以单次 `WriteAsync` 写入：避免跨线程 `Dispose/Flush` 引发的 0 字节文件问题，并满足浏览器写流"不可 Seek/SetLength、单次写"的约束。
+- `SerializeToStreamAsync` 内部委托给 `SerializeToTextWriterAsync`：同步构建 JSON 字符串后通过 `StreamWriter` 异步写入，对写流只产生一次 `WriteAsync`。
 - `DeserializeFromStreamAsync` 在 Avalonia.Browser (WASM) 上对 JS 包装的 `ReadableStream` 可能退化为同步读，**浏览器侧建议**：先 `CopyToAsync(MemoryStream)`，再传入。
-- 默认启用 `AllowListSerializationBinder`：对 `TypeNameHandling.Auto` 的多态反序列化做程序集白名单（`VeloxDev.*` + 常见 BCL 集合程序集），阻断已知的反序列化攻击面。可通过 `ComponentModelEx.ConfigureSerializationBinder(...)` 替换为更严格的策略。
-- `JsonSerializerSettings` 与 `ContractResolver` **进程级缓存**，仅在替换 binder 时失效重建，避免 Newtonsoft 类型契约缓存被反复推翻。
-- `TryDeserialize(out)` 在输入无效时返回 `false`，不抛出格式异常；内部仅捕获 `JsonException` / `IOException`，不会吞掉 `OperationCanceledException`、`OutOfMemoryException` 等致命异常。
+- `JsonSerializerSettings` 与 `ContractResolver` **进程级缓存**，复用 Newtonsoft 的类型契约缓存，避免每次调用重新反射类型系统。
+- `TryDeserialize(out)` 在输入无效时返回 `false`，不抛出异常；内部捕获所有异常并静默返回 `false`，致命异常（`StackOverflowException`、`ThreadAbortException`）由运行时在 catch 前终止进程，行为与 `catch { }` 语义一致。
 
-### 安全：自定义 Binder
+### Fluent 配置 API（SerializationOptions）
+
+所有序列化/反序列化重载都接受一个可选的 `SerializationOptions`，用于在**本次调用**内覆盖全局默认值。
+
+#### 全局默认配置
+
+| 设置 | 默认值 | 说明 |
+|---|---|---|
+| `Formatting` | `Indented`（String API）/ `None`（字节/流 API） | JSON 格式化方式 |
+| `TypeNameHandling` | `Auto` | 仅在运行时类型与声明类型不同时写入 `$type` 字段 |
+| `NullValueHandling` | `Include` | null 属性会被写入 JSON |
+| `DefaultValueHandling` | `Include` | 默认值属性会被写入 JSON |
+| `PreserveReferencesHandling` | `Objects` | 通过 `$id`/`$ref` 追踪对象引用，同时处理循环引用并支持接口/抽象属性的多态往返 |
+| `ContractResolver` | `WritablePropertiesOnlyResolver` | 只序列化可写公共属性；对实现 `IEnumerable` 但本质为对象的类型（如 `SlotEnumerator<T>`）强制使用对象协议 |
+
+#### Fluent 方法速览
+
+| 方法 | 说明 |
+|---|---|
+| `SerializationOptions.Create()` | 创建一个空的选项构建器（所有字段均为"未覆盖"） |
+| `.WithIndented()` | 本次调用输出缩进（人读）JSON |
+| `.WithCompact()` | 本次调用输出紧凑 JSON |
+| `.WithTypeNameHandling(value)` | 覆盖 `TypeNameHandling`（如 `None` / `All` / `Auto` / `Objects` / `Arrays`） |
+| `.WithNullValueHandling(value)` | 覆盖 null 值处理（`Include` / `Ignore`） |
+| `.WithDefaultValueHandling(value)` | 覆盖默认值处理（`Include` / `Ignore` / `Populate` / `IgnoreAndPopulate`） |
+
+> 未调用的方法对应字段保持 `null`，`ResolveSettings` 会直接沿用当前全局缓存值；**每次调用都从全局基线开始叠加覆盖**，不会互相干扰。
+
+#### 使用示例
 
 ```csharp
-// 仅允许 VeloxDev.Docs 与核心库被多态反序列化
-ComponentModelEx.ConfigureSerializationBinder(
-    new AllowListSerializationBinder(["VeloxDev.Docs", "VeloxDev.Core", "VeloxDev.MVVM"]));
+// 1. 默认行为（无需传 options）
+var json = workflow.Serialize();
+if (json.TryDeserialize<MyWorkflowTree>(out var tree)) { }
+
+// 2. 本次调用输出紧凑 JSON
+var compact = workflow.Serialize(
+    SerializationOptions.Create().WithCompact());
+
+// 3. 本次调用完全不写 $type（适合只有单一类型的场景）
+var noTypeName = workflow.Serialize(
+    SerializationOptions.Create().WithTypeNameHandling(TypeNameHandling.None));
+
+// 4. 本次调用跳过 null 属性
+var skipNulls = workflow.Serialize(
+    SerializationOptions.Create().WithNullValueHandling(NullValueHandling.Ignore));
+
+// 5. 反序列化也可传入相同 options
+if (skipNulls.TryDeserialize<MyWorkflowTree>(
+        out var tree5,
+        SerializationOptions.Create().WithNullValueHandling(NullValueHandling.Ignore))) { }
 ```
 
 

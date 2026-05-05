@@ -5,7 +5,7 @@ namespace VeloxDev.Docs.ViewModels;
 
 public partial class TableProvider : IWikiElement
 {
-    [VeloxProperty] public partial IWikiElement? Parent { get; set; }
+    [VeloxProperty] private IWikiElement? parent = null;
     [VeloxProperty] public partial ObservableCollection<string> Headers { get; set; }
     [VeloxProperty] public partial ObservableCollection<string> Alignments { get; set; }
     [VeloxProperty] public partial ObservableCollection<TableRowProvider> Rows { get; set; }

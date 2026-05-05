@@ -4,7 +4,7 @@ namespace VeloxDev.Docs.ViewModels;
 
 public partial class SubtitleProvider : IWikiElement
 {
-    [VeloxProperty] public partial IWikiElement? Parent { get; set; }
+    [VeloxProperty] private IWikiElement? parent = null;
     [VeloxProperty] public partial string Text { get; set; }
 
     public SubtitleProvider()

@@ -1,8 +1,9 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Svg.Skia;
 using Avalonia.Threading;
@@ -12,6 +13,7 @@ using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Docs.ViewModels;
@@ -28,7 +30,7 @@ public partial class ImageProvider : IWikiElement
     private double _baseHeight = DefaultMaxHeight;
     private bool _loadPending;
 
-    [VeloxProperty] public partial IWikiElement? Parent { get; set; }
+    [VeloxProperty] private IWikiElement? parent = null;
     [VeloxProperty] public partial string Source { get; set; }
     [VeloxProperty] public partial double ScaleX { get; set; }
     [VeloxProperty] public partial double ScaleY { get; set; }
@@ -37,8 +39,8 @@ public partial class ImageProvider : IWikiElement
     [VeloxProperty] public partial bool KeepAspectRatio { get; set; }
     [VeloxProperty] public partial string SizeMode { get; set; }
     [VeloxProperty] public partial string Alignment { get; set; }
-    [VeloxProperty] public partial IImage? ImageSource { get; set; }
-    [VeloxProperty] public partial bool IsLoading { get; set; }
+    [VeloxProperty] public partial IImage? ImageSource { get; internal set; }
+    [VeloxProperty] public partial bool IsLoading { get; internal set; }
 
     public IReadOnlyList<string> SizeModes { get; } = ["Scale", "Pixels"];
     public IReadOnlyList<string> Alignments { get; } = ["Left", "Center", "Right"];
@@ -212,6 +214,16 @@ public partial class ImageProvider : IWikiElement
                 {
                     return;
                 }
+            }
+            else if (source.StartsWith("avares://", StringComparison.OrdinalIgnoreCase) ||
+                     source.StartsWith("resm:", StringComparison.OrdinalIgnoreCase))
+            {
+                var uri = new Uri(source, UriKind.Absolute);
+                if (!AssetLoader.Exists(uri))
+                    return;
+
+                using var assetStream = AssetLoader.Open(uri);
+                image = LoadImage(assetStream);
             }
             else
             {

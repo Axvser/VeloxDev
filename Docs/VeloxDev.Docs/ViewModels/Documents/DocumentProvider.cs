@@ -2,6 +2,7 @@
 using Avalonia.Controls;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -34,7 +35,7 @@ public partial class DocumentProvider : IWikiElement
         new("ru", "🌐 Русский"),
     ];
 
-    [VeloxProperty] public partial IWikiElement? Parent { get; set; }
+    [VeloxProperty] private IWikiElement? parent = null;
     [VeloxProperty] public partial ObservableCollection<IWikiElement> Children { get; set; }
     [VeloxProperty] public partial ObservableCollection<IWikiElement> Nodes { get; set; }
     [VeloxProperty] public partial NodeProvider? SelectedNode { get; set; }
@@ -43,6 +44,9 @@ public partial class DocumentProvider : IWikiElement
     [VeloxProperty] public partial LanguageOption? SelectedLanguage { get; set; }
 
     public IReadOnlyList<LanguageOption> Languages => AvailableLanguages;
+
+    /// <summary>True on Desktop; false on Browser (WASM). Controls whether editing features are exposed.</summary>
+    public bool IsEditorSupported => !OperatingSystem.IsBrowser();
 
     private bool IsEnglish => !string.Equals(Language, "zh", StringComparison.OrdinalIgnoreCase);
 
@@ -184,7 +188,11 @@ public partial class DocumentProvider : IWikiElement
                 throw new InvalidDataException("Wiki JSON content could not be deserialized.");
 
             RepairParents(document);
-            document.SelectedNode ??= document.Nodes.OfType<NodeProvider>().FirstOrDefault();
+            // SelectedNode is deserialized as a separate copy and is NOT the same
+            // reference as any node inside Nodes. Always resolve it to the actual
+            // instance in the tree so the view's selection binding works correctly.
+            document.SelectedNode = FindNodeByTitle(document.Nodes, document.SelectedNode?.Title)
+                ?? document.Nodes.OfType<NodeProvider>().FirstOrDefault();
             document.Children = document.SelectedNode?.Children ?? [];
         }
 
@@ -388,8 +396,6 @@ public partial class DocumentProvider : IWikiElement
         if (storage is null)
             return;
 
-        // Show the picker first so the user-gesture is consumed immediately.
-        // Doing serialization before the picker can throw and silently swallow the dialog.
         var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Save Wiki",
@@ -401,35 +407,58 @@ public partial class DocumentProvider : IWikiElement
         if (file is null)
             return;
 
-        // Use SerializeToStreamAsync which handles StreamWriter + Flush internally.
-        // On desktop: resolve the local path and use FileMode.Create to truncate any
-        // existing content before writing. On browser: OpenWriteAsync always returns a
-        // fresh download stream, so write directly without calling SetLength (browser
-        // streams are write-only and do not support seeking or resizing).
+        var logPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+            "veloxdev-save-debug.log");
+
         var path = file.TryGetLocalPath();
         if (path is not null)
         {
-            await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
             try
             {
-                await this.SerializeToStreamAsync(fs).ConfigureAwait(true);
+                // Step 1: serialize to string first so we can verify content before touching the file.
+                var json = this.Serialize();
+                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] JSON length={json.Length}, path={path}\n").ConfigureAwait(true);
+
+                // Step 2: write only after confirming json is non-empty.
+                if (string.IsNullOrEmpty(json))
+                    throw new InvalidOperationException("Serialize() returned empty string.");
+
+                await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                var bytes = Encoding.UTF8.GetBytes(json);
+                await fs.WriteAsync(bytes).ConfigureAwait(true);
+                await fs.FlushAsync().ConfigureAwait(true);
+
+                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] Write OK, bytes={bytes.Length}\n").ConfigureAwait(true);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Save] SerializeToStreamAsync failed: {ex}");
+                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] FAILED: {ex}\n").ConfigureAwait(true);
+                System.Diagnostics.Debug.WriteLine($"[Save] failed: {ex}");
                 throw;
             }
         }
         else
         {
-            await using var stream = await file.OpenWriteAsync().ConfigureAwait(true);
             try
             {
-                await this.SerializeToStreamAsync(stream).ConfigureAwait(true);
+                var json = this.Serialize();
+                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] JSON length={json.Length}, browser stream\n").ConfigureAwait(true);
+
+                if (string.IsNullOrEmpty(json))
+                    throw new InvalidOperationException("Serialize() returned empty string.");
+
+                await using var stream = await file.OpenWriteAsync().ConfigureAwait(true);
+                var bytes = Encoding.UTF8.GetBytes(json);
+                await stream.WriteAsync(bytes).ConfigureAwait(true);
+                await stream.FlushAsync().ConfigureAwait(true);
+
+                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] Write OK, bytes={bytes.Length}\n").ConfigureAwait(true);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Save] SerializeToStreamAsync (browser) failed: {ex}");
+                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] FAILED (browser): {ex}\n").ConfigureAwait(true);
+                System.Diagnostics.Debug.WriteLine($"[Save] browser failed: {ex}");
                 throw;
             }
         }
@@ -452,13 +481,15 @@ public partial class DocumentProvider : IWikiElement
         if (files.Count == 0)
             return;
 
-        // In Avalonia.Browser the file picker stream is a JS ReadableStream wrapper.
-        // StreamReader.ReadToEndAsync may fall back to synchronous reads on that stream,
-        // blocking the UI thread. CopyToAsync pumps data asynchronously into a
-        // MemoryStream, after which all reads are in-memory and never block.
         string json;
-        await using (var fileStream = await files[0].OpenReadAsync().ConfigureAwait(true))
+        var localPath = files[0].TryGetLocalPath();
+        if (localPath is not null)
         {
+            json = await File.ReadAllTextAsync(localPath, new UTF8Encoding(false)).ConfigureAwait(true);
+        }
+        else
+        {
+            await using var fileStream = await files[0].OpenReadAsync().ConfigureAwait(true);
             using var ms = new MemoryStream();
             await fileStream.CopyToAsync(ms).ConfigureAwait(true);
             ms.Position = 0;
@@ -469,26 +500,16 @@ public partial class DocumentProvider : IWikiElement
         if (string.IsNullOrWhiteSpace(json))
             return;
 
-        // Deserialization (Newtonsoft + reflection over many polymorphic
-        // elements) is CPU-bound. Move it off the UI thread on platforms that
-        // support real threads. On WASM Task.Run executes inline on the UI
-        // thread; the explicit Task.Yield above still gives the file picker
-        // dialog a chance to dismiss before the parse begins.
-        await Task.Yield();
-
         DocumentProvider document;
         try
         {
-            document = await Task.Run(() => Deserialize(json)).ConfigureAwait(true);
+            document = Deserialize(json);
         }
         catch (InvalidDataException)
         {
             return;
         }
 
-        // Apply the loaded document atomically to minimize UI churn. Suppress
-        // the language-change reload so that adopting the document's persisted
-        // language does not race a fresh asset load on top of the user's file.
         _suppressReload = true;
         try
         {
@@ -501,7 +522,8 @@ public partial class DocumentProvider : IWikiElement
         }
 
         Nodes = document.Nodes;
-        SelectedNode = document.SelectedNode ?? Nodes.OfType<NodeProvider>().FirstOrDefault();
+        SelectedNode = FindNodeByTitle(document.Nodes, document.SelectedNode?.Title)
+            ?? document.Nodes.OfType<NodeProvider>().FirstOrDefault();
         Children = SelectedNode?.Children ?? [];
     }
 
@@ -537,6 +559,24 @@ public partial class DocumentProvider : IWikiElement
                 return node.Children;
 
             var nested = FindOwnerCollection(node.Nodes.OfType<NodeProvider>(), element);
+            if (nested is not null)
+                return nested;
+        }
+
+        return null;
+    }
+
+    private static NodeProvider? FindNodeByTitle(IEnumerable<IWikiElement> nodes, string? title)
+    {
+        if (title is null)
+            return null;
+
+        foreach (var node in nodes.OfType<NodeProvider>())
+        {
+            if (string.Equals(node.Title, title, StringComparison.Ordinal))
+                return node;
+
+            var nested = FindNodeByTitle(node.Nodes, title);
             if (nested is not null)
                 return nested;
         }

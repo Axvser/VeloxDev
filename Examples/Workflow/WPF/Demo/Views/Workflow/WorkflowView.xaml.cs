@@ -55,14 +55,7 @@ public partial class WorkflowView : UserControl
                 using var stream = File.OpenRead(dialog.FileName);
                 using var reader = new StreamReader(stream);
                 var json = await reader.ReadToEndAsync();
-                var success = json.TryDeserialize<TreeViewModel>(out var result);
-
-                if (!success || result is null)
-                {
-                    MessageBox.Show("文件格式不正确或解析失败。", "加载失败",
-                        MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
+                var result = json.Deserialize<TreeViewModel>();
 
                 UnsubscribeAutoScroll(_workflowViewModel);
                 _workflowViewModel = result;
@@ -75,7 +68,7 @@ public partial class WorkflowView : UserControl
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"加载文件失败：{ex.Message}", "错误",
+                MessageBox.Show($"加载文件失败：{ex.GetType().Name}\n{ex.Message}", "错误",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }

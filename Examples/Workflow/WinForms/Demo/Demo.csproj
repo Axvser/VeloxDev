@@ -9,7 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj" />
     <ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
   </ItemGroup>
 

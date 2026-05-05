@@ -9,7 +9,7 @@ public partial class EmptyProvider : IWikiElement
 {
     private static readonly Lazy<IReadOnlyList<Type>> _convertibleTypes = new(FindConvertibleTypes);
 
-    [VeloxProperty] public partial IWikiElement? Parent { get; set; }
+    [VeloxProperty] private IWikiElement? parent = null;
 
     public IReadOnlyList<Type> ConvertibleTypes => _convertibleTypes.Value;
 

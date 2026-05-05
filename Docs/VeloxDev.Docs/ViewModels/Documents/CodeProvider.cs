@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls.Documents;
+using Avalonia.Controls.Documents;
 using Avalonia.Input.Platform;
 using Avalonia.Media;
 using System;
@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using TextMateSharp.Grammars;
 using TextMateSharp.Registry;
+using Newtonsoft.Json;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Docs.ViewModels;
@@ -47,12 +48,12 @@ public partial class CodeProvider : IWikiElement
         "css"
     ];
 
-    [VeloxProperty] public partial IWikiElement? Parent { get; set; }
+    [VeloxProperty] private IWikiElement? parent = null;
     [VeloxProperty] public partial string Code { get; set; }
     [VeloxProperty] public partial string Language { get; set; }
     [VeloxProperty] public partial bool AutoHeight { get; set; }
     [VeloxProperty] public partial double MaxHeightValue { get; set; }
-    public InlineCollection Inlines { get; } = [];
+    [JsonIgnore] public InlineCollection Inlines { get; } = [];
 
     public bool HasFixedHeight => !AutoHeight;
 

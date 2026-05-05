@@ -120,6 +120,7 @@
   <Folder Name="/Repository/Web/">
     <File Path="Docs/Directory.Packages.props" />
     <Project Path="Docs/VeloxDev.Docs.Browser/VeloxDev.Docs.Browser.csproj" />
+    <Project Path="Docs/VeloxDev.Docs.Desktop/VeloxDev.Docs..Desktop.csproj" />
     <Project Path="Docs/VeloxDev.Docs/VeloxDev.Docs.csproj" />
   </Folder>
 </Solution>

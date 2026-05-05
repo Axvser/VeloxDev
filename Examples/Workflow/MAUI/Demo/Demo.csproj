@@ -71,7 +71,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.MAUI\VeloxDev.MAUI.csproj" />
 		<ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
 	</ItemGroup>
 

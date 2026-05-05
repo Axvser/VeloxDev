@@ -7,7 +7,7 @@ namespace VeloxDev.Docs.ViewModels;
 
 public partial class LinkProvider : IWikiElement
 {
-    [VeloxProperty] public partial IWikiElement? Parent { get; set; }
+    [VeloxProperty] private IWikiElement? parent = null;
     [VeloxProperty] public partial string Text { get; set; }
     [VeloxProperty] public partial string Url { get; set; }
 
