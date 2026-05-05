@@ -19,6 +19,18 @@ Call `SetEnumSlotCollection(nodeIndex, propertyName, fullEnumTypeName)`. Do **NO
 
 > ⚠️ Switching enum type destroys ALL existing connections on old output slots — you must rewire them after calling.
 
+### Accessing Internal Slots by Condition Value
+
+SlotEnumerator slots can now be accessed directly by their **condition value** (enum name or `True`/`False`):
+
+- **`GetEnumSlotByValue(nodeIndex, propertyName, conditionValue)`** – Returns runtime ID and detail of a slot inside the enumerator.
+- **`SetEnumSlotChannel(nodeIndex, propertyName, conditionValue, channel)`** – Changes the `SlotChannel` of a specific slot.
+- **`ConnectEnumSlot(senderNodeIndex, senderProperty, senderCondition, receiverNodeIndex, receiverSlot)`** – Connects an enumerator slot (by value) to another slot. Auto-verifies success.
+
+**Example workflow:**
+1. Call `GetEnumSlotByValue(2, "OutputSlots", "GET")` to locate the `GET` output slot.
+2. Call `ConnectEnumSlot(2, "OutputSlots", "GET", 5, "InputSlot")` to connect it to node 5's input.
+
 ### Rules
 
 - Do NOT add/remove slots manually on `SlotEnumerator` properties.

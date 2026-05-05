@@ -6,7 +6,7 @@
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core.Extension</Title>
-		<Version>5.0.12</Version>
+		<Version>5.0.14</Version>
 		<Authors>Axvser</Authors>
 		<PackageReadmeFile></PackageReadmeFile>
 		<Description>VeloxDev.Core tries not to rely on any third-party libraries, while Extension, as an optional extension package, contains a set of advanced functions implemented based on third-party libraries, which can further optimize the user experience</Description>
@@ -17,7 +17,7 @@
 		<PackageReference Include="Microsoft.Agents.AI" Version="1.1.0" />
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.5.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-		<PackageReference Include="VeloxDev.Core" Version="5.0.4" />
+		<PackageReference Include="VeloxDev.Core" Version="5.0.14" />
 	</ItemGroup>
 
 	<ItemGroup>

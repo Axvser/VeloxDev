@@ -1,4 +1,4 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -19,18 +19,12 @@ namespace VeloxDev.AI.Workflow.Functions;
 /// full operational control over a single <see cref="IWorkflowTreeViewModel"/>.
 /// All JSON output uses <see cref="Formatting.None"/> to minimize token consumption.
 /// </summary>
-public sealed class WorkflowAgentToolkit
+public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 {
-    private readonly WorkflowAgentScope _scope;
-    private readonly WorkflowStateTracker _tracker;
+    private readonly WorkflowAgentScope _scope = scope ?? throw new ArgumentNullException(nameof(scope));
+    private readonly WorkflowStateTracker _tracker = new(scope.Tree);
     private int _toolCallCount;
     private IWorkflowTreeViewModel Tree => _scope.Tree;
-
-    public WorkflowAgentToolkit(WorkflowAgentScope scope)
-    {
-        _scope = scope ?? throw new ArgumentNullException(nameof(scope));
-        _tracker = new WorkflowStateTracker(scope.Tree);
-    }
 
     /// <summary>
     /// Creates all AI tools for workflow operations within the scoped tree.
@@ -86,6 +80,9 @@ public sealed class WorkflowAgentToolkit
             T(AddSlotToCollection, nameof(AddSlotToCollection)),
             T(RemoveSlotFromCollection, nameof(RemoveSlotFromCollection)),
             T(SetEnumSlotCollection, nameof(SetEnumSlotCollection)),
+            T(GetEnumSlotByValue, nameof(GetEnumSlotByValue)),
+            T(SetEnumSlotChannel, nameof(SetEnumSlotChannel)),
+            T(ConnectEnumSlot, nameof(ConnectEnumSlot)),
             // ── Search / Shortcut ──
             T(FindNodes, nameof(FindNodes)),
             T(ResolveSlotId, nameof(ResolveSlotId)),
@@ -136,14 +133,9 @@ public sealed class WorkflowAgentToolkit
     /// Wraps an <see cref="AIFunction"/> so that <see cref="Track"/> is called
     /// after every invocation, ensuring call counting and callback dispatch.
     /// </summary>
-    private sealed class TrackedAIFunction : DelegatingAIFunction
+    private sealed class TrackedAIFunction(AIFunction inner, WorkflowAgentToolkit toolkit) : DelegatingAIFunction(inner)
     {
-        private readonly WorkflowAgentToolkit _toolkit;
-
-        public TrackedAIFunction(AIFunction inner, WorkflowAgentToolkit toolkit) : base(inner)
-        {
-            _toolkit = toolkit;
-        }
+        private readonly WorkflowAgentToolkit _toolkit = toolkit;
 
         protected override async ValueTask<object?> InvokeCoreAsync(
             AIFunctionArguments arguments, CancellationToken cancellationToken)
@@ -753,7 +745,7 @@ public sealed class WorkflowAgentToolkit
             if (!prop.CanRead) continue;
 
             // SlotEnumerator<TSlot>
-            if (IsSlotEnumeratorProperty(prop.PropertyType, out var enumeratorSlotType))
+            if (IsSlotEnumeratorProperty(prop.PropertyType, out _))
             {
                 try
                 {
@@ -1272,6 +1264,9 @@ public sealed class WorkflowAgentToolkit
             ["AddSlotToCollection"] = a => AddSlotToCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "MultipleBoth"),
             ["RemoveSlotFromCollection"] = a => RemoveSlotFromCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("slotRuntimeId")!),
             ["SetEnumSlotCollection"] = a => SetEnumSlotCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullEnumTypeName")!),
+            ["GetEnumSlotByValue"] = a => GetEnumSlotByValue(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("conditionValue")!),
+            ["SetEnumSlotChannel"] = a => SetEnumSlotChannel(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("conditionValue")!, a.Value<string>("channel")!),
+            ["ConnectEnumSlot"] = a => ConnectEnumSlot(a.Value<int>("senderNodeIndex"), a.Value<string>("senderProperty")!, a.Value<string>("senderCondition")!, a.Value<int>("receiverNodeIndex"), a.Value<string>("receiverSlot")!),
             ["FindNodes"] = a => FindNodes(a.Value<string>("typeName") ?? "", a.Value<string>("propertyName"), a.Value<string>("propertyValue")),
             ["ResolveSlotId"] = a => ResolveSlotId(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<int?>("collectionIndex") ?? 0),
             ["ConnectByProperty"] = a => ConnectByProperty(a.Value<int>("senderNodeIndex"), a.Value<string>("senderProperty")!, a.Value<int>("receiverNodeIndex"), a.Value<string>("receiverProperty")!, a.Value<int?>("senderCollectionIndex") ?? 0, a.Value<int?>("receiverCollectionIndex") ?? 0),
@@ -1578,8 +1573,122 @@ public sealed class WorkflowAgentToolkit
         return Ok($"Slot [{nodeIndex}][{slotIndex}] channel → {ch}.");
     }
 
-    // ────────────────────────── Link Inspection ──────────────────────────
+    [Description("Gets runtime ID of a slot inside SlotEnumerator by condition value")]
+    private string GetEnumSlotByValue(
+        [Description("Node index")] int nodeIndex,
+        [Description("SlotEnumerator property name")] string propertyName,
+        [Description("Condition value: enum name or True/False")] string conditionValue)
+    {
+        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
+        var prop = node!.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+        if (prop == null || !IsSlotEnumeratorProperty(prop.PropertyType, out _))
+            return Error($"'{propertyName}' is not SlotEnumerator on node [{nodeIndex}]");
 
+        var enumerator = prop.GetValue(node);
+        if (enumerator == null) return Error($"SlotEnumerator '{propertyName}' is null");
+
+        var selectorType = enumerator.GetType().GetProperty("SelectorType")?.GetValue(enumerator) as Type;
+        if (selectorType == null)
+            return Error($"No SelectorType set. Call SetEnumSlotCollection first");
+
+        object? value;
+        if (selectorType == typeof(bool))
+        {
+            if (conditionValue.Equals("True", StringComparison.OrdinalIgnoreCase)) value = true;
+            else if (conditionValue.Equals("False", StringComparison.OrdinalIgnoreCase)) value = false;
+            else return Error($"Invalid bool: '{conditionValue}'. Use True/False");
+        }
+        else if (selectorType.IsEnum)
+        {
+            try { value = Enum.Parse(selectorType, conditionValue, true); }
+            catch { return Error($"'{conditionValue}' not valid for {selectorType.Name}"); }
+        }
+        else return Error($"Selector type {selectorType.Name} neither bool nor enum");
+
+        var trySelect = enumerator.GetType().GetMethod("TrySelect");
+        if (trySelect == null) return Error("TrySelect not found");
+        var args = new object?[] { value, null };
+        if (!(bool)trySelect.Invoke(enumerator, args)!)
+            return Error($"'{conditionValue}' not found in SlotEnumerator");
+        if (args[1] is not IWorkflowSlotViewModel slot) return Error("TrySelect returned null slot");
+
+        return new JObject
+        {
+            ["ok"] = true,
+            ["nodeIndex"] = nodeIndex,
+            ["property"] = propertyName,
+            ["condition"] = conditionValue,
+            ["slotId"] = GetComponentId(slot),
+            ["channel"] = slot.Channel.ToString()
+        }.ToString(Formatting.None);
+    }
+
+    [Description("Sets SlotChannel of slot inside SlotEnumerator by condition value")]
+    private string SetEnumSlotChannel(
+        [Description("Node index")] int nodeIndex,
+        [Description("SlotEnumerator property")] string propertyName,
+        [Description("Condition value")] string conditionValue,
+        [Description("New channel")] string channel)
+    {
+        var getResult = GetEnumSlotByValue(nodeIndex, propertyName, conditionValue);
+        var parsed = JObject.Parse(getResult);
+        if (parsed["ok"]?.Value<bool>() != true) return getResult;
+
+        var slotId = parsed["slotId"]?.ToString();
+        if (string.IsNullOrEmpty(slotId)) return Error("No slotId returned");
+        if (slotId is null || FindComponentById(slotId) is not IWorkflowSlotViewModel slot) return Error($"Slot '{slotId}' not found");
+        if (!Enum.TryParse<SlotChannel>(channel, true, out var ch))
+            return Error($"Invalid channel '{channel}'");
+
+        slot.SetChannelCommand.Execute(ch);
+        NudgeIfEnumSlotNode((IWorkflowNodeViewModel)Tree.Nodes[nodeIndex]);
+        return Ok($"Slot '{conditionValue}' in {propertyName}[{nodeIndex}] channel set to {ch}");
+    }
+
+    [Description("Connects SlotEnumerator slot (by condition) to another slot")]
+    private string ConnectEnumSlot(
+        [Description("Sender node index")] int senderNodeIndex,
+        [Description("Sender SlotEnumerator property")] string senderProperty,
+        [Description("Sender condition value")] string senderCondition,
+        [Description("Receiver node index")] int receiverNodeIndex,
+        [Description("Receiver slot property or index")] string receiverSlot)
+    {
+        var senderResult = GetEnumSlotByValue(senderNodeIndex, senderProperty, senderCondition);
+        var senderParsed = JObject.Parse(senderResult);
+        if (senderParsed["ok"]?.Value<bool>() != true) return senderResult;
+
+        var senderSlotId = senderParsed["slotId"]?.ToString();
+        if (string.IsNullOrEmpty(senderSlotId)) return Error("No sender slotId");
+        if (senderSlotId is null || FindComponentById(senderSlotId) is not IWorkflowSlotViewModel sender) return Error($"Sender '{senderSlotId}' not found");
+
+        if (!TryGetNode(receiverNodeIndex, out var receiverNode, out var error)) return error;
+        IWorkflowSlotViewModel? receiver;
+        if (int.TryParse(receiverSlot, out var receiverIndex))
+        {
+            if (!TryGetSlot(receiverNodeIndex, receiverIndex, out receiver, out error)) return error;
+        }
+        else
+        {
+            var prop = receiverNode!.GetType().GetProperty(receiverSlot, BindingFlags.Public | BindingFlags.Instance);
+            if (prop == null || !typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
+                return Error($"'{receiverSlot}' not a slot on node [{receiverNodeIndex}]");
+            receiver = prop.GetValue(receiverNode) as IWorkflowSlotViewModel;
+            if (receiver == null) return Error($"Slot '{receiverSlot}' is null");
+        }
+
+        Tree.SendConnectionCommand.Execute(sender);
+        Tree.ReceiveConnectionCommand.Execute(receiver);
+
+        bool connected = receiver is not null && VerifyConnection(sender, receiver);
+        var senderLabel = $"[{senderNodeIndex}].{senderProperty}[{senderCondition}]";
+        var receiverLabel = $"[{receiverNodeIndex}].{receiverSlot}";
+        if (!connected && receiver is not null)
+            return ConnectionRejected(sender, receiver, senderLabel, receiverLabel);
+        return Ok($"Connected {senderLabel} to {receiverLabel}");
+    }
+
+    // ────────────────────────── Link Inspection ──────────────────────────
+    
     [Description("Gets full detail of a link by runtime ID: sender/receiver slots, parent nodes, properties.")]
     private string GetLinkDetail(
         [Description("Runtime ID of the link.")] string linkId)
@@ -1992,13 +2101,13 @@ public sealed class WorkflowAgentToolkit
     private string GetNodeStatistics(
         [Description("Node index.")] int nodeIndex)
     {
-        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
+        if (!TryGetNode(nodeIndex, out var node, out var error) || node is null) return error;
 
         int inDegree = 0;
         int outDegree = 0;
         var connectedNodeIds = new HashSet<string>();
 
-        foreach (var slot in node!.Slots)
+        foreach (var slot in node.Slots)
         {
             foreach (var target in slot.Targets)
             {
@@ -2346,11 +2455,11 @@ public sealed class WorkflowAgentToolkit
         }
         else if (IsSlotCollection(prop.PropertyType, out _))
         {
-            if (prop.GetValue(node) is not IList col) return Error($"Collection '{propertyName}' is null.");
-            if (collectionIndex < 0 || collectionIndex >= col.Count)
-                return Error($"Index {collectionIndex} out of range [0,{col.Count}) for '{propertyName}'.");
-            if (col[collectionIndex] is not IWorkflowSlotViewModel slot) return Error($"ConditionalSlot at index {collectionIndex} is not a slot.");
-            return JsonConvert.SerializeObject(new { status = "ok", id = GetComponentId(slot), prop = $"{propertyName}[{collectionIndex}]" }, Formatting.None);
+            if (prop.GetValue(node) is not IList col || collectionIndex < 0 || collectionIndex >= col.Count)
+                return Error($"Collection property '{propertyName}' index {collectionIndex} out of range or null.");
+            if (col[collectionIndex] is not IWorkflowSlotViewModel slot2)
+                return Error($"Element at [{collectionIndex}] is not a slot.");
+            return JsonConvert.SerializeObject(new { status = "ok", id = GetComponentId(slot2), prop = propertyName, index = collectionIndex }, Formatting.None);
         }
         return Error($"Property '{propertyName}' is not a slot or slot collection.");
     }
@@ -2551,10 +2660,8 @@ public sealed class WorkflowAgentToolkit
         if (IsSlotCollection(prop.PropertyType, out _))
         {
             if (prop.GetValue(node) is not IList col || collectionIndex < 0 || collectionIndex >= col.Count)
-            {
-            }
-            else
-                return col[collectionIndex] as IWorkflowSlotViewModel;
+                return null;
+            return col[collectionIndex] as IWorkflowSlotViewModel;
         }
         return null;
     }
@@ -2570,9 +2677,6 @@ public sealed class WorkflowAgentToolkit
         node.MoveCommand.Execute(new Offset(-0.5, 0));
     }
 
-    /// <summary>
-    /// Returns <c>true</c> if the node type has any <see cref="SlotEnumerator{TSlot}"/> property.
-    /// </summary>
     private static bool HasSlotEnumerator(IWorkflowNodeViewModel node)
     {
         return node.GetType()
@@ -2580,10 +2684,6 @@ public sealed class WorkflowAgentToolkit
             .Any(p => IsSlotEnumeratorProperty(p.PropertyType, out _));
     }
 
-    /// <summary>
-    /// Nudges the node only if it has any <see cref="SlotEnumerator{TSlot}"/> property,
-    /// ensuring the UI refreshes slot coordinates.
-    /// </summary>
     private static void NudgeIfEnumSlotNode(IWorkflowNodeViewModel node)
     {
         if (HasSlotEnumerator(node))

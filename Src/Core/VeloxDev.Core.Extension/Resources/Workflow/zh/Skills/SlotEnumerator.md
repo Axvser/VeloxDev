@@ -19,6 +19,18 @@ CreateAndConfigureNode(fullTypeName, ..., enumSlotProperty="OutputSlots", enumTy
 
 > ⚠️ 切换枚举类型会销毁旧输出插槽上的所有连接，完成后必须重新连线。
 
+### 通过条件值直接访问内部插槽
+
+现在可以直接通过 **条件值**（枚举名称或 `True`/`False`）访问 SlotEnumerator 内部插槽：
+
+- **`GetEnumSlotByValue(nodeIndex, propertyName, conditionValue)`** – 返回枚举器内指定插槽的运行时 ID 和详情。
+- **`SetEnumSlotChannel(nodeIndex, propertyName, conditionValue, channel)`** – 修改指定插槽的 `SlotChannel`。
+- **`ConnectEnumSlot(senderNodeIndex, senderProperty, senderCondition, receiverNodeIndex, receiverSlot)`** – 通过条件值连接枚举器插槽到另一个插槽。自动验证连接成功。
+
+**典型工作流程:**
+1. 调用 `GetEnumSlotByValue(2, "OutputSlots", "GET")` 定位 `GET` 输出插槽。
+2. 调用 `ConnectEnumSlot(2, "OutputSlots", "GET", 5, "InputSlot")` 将其连接到节点 5 的输入插槽。
+
 ### 规则
 
 - 禁止手动增删 SlotEnumerator 属性上的插槽。
