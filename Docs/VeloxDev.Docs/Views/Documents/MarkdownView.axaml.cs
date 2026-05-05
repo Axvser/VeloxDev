@@ -19,6 +19,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.Docs.ViewModels;
 using MdInline = Markdig.Syntax.Inlines.Inline;
@@ -41,6 +42,7 @@ public partial class MarkdownView : WikiElementViewBase
     private readonly Dictionary<string, Control> _anchors = new(StringComparer.OrdinalIgnoreCase);
     private MarkdownProvider? _provider;
     private int _rebuildToken;
+    private CancellationTokenSource _imageCts = new();
 
     public MarkdownView()
     {
@@ -71,10 +73,20 @@ public partial class MarkdownView : WikiElementViewBase
         if (e.PropertyName == nameof(MarkdownProvider.Text) ||
             e.PropertyName == nameof(MarkdownProvider.EmbeddedCodeAutoHeight) ||
             e.PropertyName == nameof(MarkdownProvider.EmbeddedCodeMaxHeightValue))
-            RebuildDisplay();
+        {
+            if (Dispatcher.UIThread.CheckAccess())
+                RebuildDisplay();
+            else
+                Dispatcher.UIThread.Post(RebuildDisplay);
+        }
         else if (e.PropertyName == nameof(MarkdownProvider.AutoHeight) ||
                  e.PropertyName == nameof(MarkdownProvider.MaxHeightValue))
-            ApplyHeightMode();
+        {
+            if (Dispatcher.UIThread.CheckAccess())
+                ApplyHeightMode();
+            else
+                Dispatcher.UIThread.Post(ApplyHeightMode);
+        }
     }
 
     private void ApplyHeightMode()
@@ -104,6 +116,12 @@ public partial class MarkdownView : WikiElementViewBase
         // Bump the token so any in-flight chunked rebuild from a previous call
         // stops appending stale content.
         var token = ++_rebuildToken;
+
+        // Cancel any in-flight image loads from the previous render.
+        var cts = new CancellationTokenSource();
+        var oldCts = Interlocked.Exchange(ref _imageCts, cts);
+        oldCts.Cancel();
+        oldCts.Dispose();
 
         _displayBlocks.Clear();
         _anchors.Clear();
@@ -1040,19 +1058,29 @@ public partial class MarkdownView : WikiElementViewBase
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
         };
 
-        _ = LoadInlineImageAsync(host, imageControl, image.Url, altText);
+        _ = LoadInlineImageAsync(host, imageControl, image.Url, altText, _imageCts.Token);
         return host;
     }
 
-    private static async Task LoadInlineImageAsync(ContentControl host, Image image, string source, string fallbackText)
+    private static async Task LoadInlineImageAsync(ContentControl host, Image image, string source, string fallbackText, CancellationToken cancellationToken)
     {
         try
         {
-            var rendered = await LoadImageSourceAsync(source).ConfigureAwait(false);
-            await Dispatcher.UIThread.InvokeAsync(() => image.Source = rendered);
+            // Decode image data on the background thread, then materialise the
+            // IImage on the UI thread to satisfy AvaloniaObject thread affinity.
+            var imageFactory = await DecodeImageAsync(source, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            await Dispatcher.UIThread.InvokeAsync(() => image.Source = imageFactory?.Invoke());
+        }
+        catch (OperationCanceledException)
+        {
+            // Render was superseded by a newer RebuildDisplay call; discard silently.
         }
         catch
         {
+            if (cancellationToken.IsCancellationRequested)
+                return;
+
             if (!string.IsNullOrWhiteSpace(fallbackText))
             {
                 await Dispatcher.UIThread.InvokeAsync(() => host.Content = new TextBlock
@@ -1066,27 +1094,42 @@ public partial class MarkdownView : WikiElementViewBase
         }
     }
 
-    private static async Task<IImage?> LoadImageSourceAsync(string source)
+    /// <summary>
+    /// Performs all I/O and decoding on the calling (background) thread and returns a
+    /// factory that creates the final <see cref="IImage"/> on the UI thread.
+    /// <para>
+    /// <see cref="Bitmap"/> can be constructed on any thread, but <see cref="SvgImage"/>
+    /// derives from <see cref="Avalonia.AvaloniaObject"/> and therefore requires UI-thread
+    /// affinity.  Separating decode from construction avoids the
+    /// <see cref="System.InvalidOperationException"/> thrown when a background thread
+    /// tries to access a UI-owned object.
+    /// </para>
+    /// </summary>
+    private static async Task<Func<IImage?>?> DecodeImageAsync(string source, CancellationToken cancellationToken = default)
     {
-        await using var stream = await OpenImageStreamAsync(source).ConfigureAwait(false);
+        await using var stream = await OpenImageStreamAsync(source, cancellationToken).ConfigureAwait(false);
         if (stream is null)
             return null;
 
         if (IsSvgFile(stream))
-            return new SvgImage
-            {
-                Source = SvgSource.LoadFromStream(stream)
-            };
+        {
+            // SvgSource.LoadFromStream is pure decoding — safe on any thread.
+            // new SvgImage { ... } requires the UI thread, so defer it via the factory.
+            var svgSource = SvgSource.LoadFromStream(stream);
+            return () => new SvgImage { Source = svgSource };
+        }
 
-        return new Bitmap(stream);
+        // Bitmap decodes synchronously in its constructor and is thread-safe.
+        var bitmap = new Bitmap(stream);
+        return () => bitmap;
     }
 
-    private static async Task<Stream?> OpenImageStreamAsync(string source)
+    private static async Task<Stream?> OpenImageStreamAsync(string source, CancellationToken cancellationToken = default)
     {
         if (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             source.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            var bytes = await HttpClient.GetByteArrayAsync(source).ConfigureAwait(false);
+            var bytes = await HttpClient.GetByteArrayAsync(source, cancellationToken).ConfigureAwait(false);
             return new MemoryStream(bytes, writable: false);
         }
 
@@ -1099,7 +1142,7 @@ public partial class MarkdownView : WikiElementViewBase
 
         await using var fileStream = File.OpenRead(path);
         var memoryStream = new MemoryStream();
-        await fileStream.CopyToAsync(memoryStream).ConfigureAwait(false);
+        await fileStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
         memoryStream.Position = 0;
         return memoryStream;
     }
