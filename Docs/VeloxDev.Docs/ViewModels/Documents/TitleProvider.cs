@@ -1,11 +1,13 @@
+using VeloxDev.Docs.Translation;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Docs.ViewModels;
 
-public partial class TitleProvider : IWikiElement
+public partial class TitleProvider : ITranslatableElement
 {
     [VeloxProperty] private IWikiElement? parent = null;
     [VeloxProperty] public partial string Level { get; set; }
+    [TranslateTarget("heading text")]
     [VeloxProperty] public partial string Text { get; set; }
 
     public TitleProvider()

@@ -23,6 +23,8 @@
     <PackageReference Include="Markdig" />
     <PackageReference Include="TextMateSharp.Grammars" />
     <PackageReference Include="VeloxDev.Avalonia" />
+    <PackageReference Include="OpenAI" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,10 +1,12 @@
+using VeloxDev.Docs.Translation;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Docs.ViewModels;
 
-public partial class MarkdownProvider : IWikiElement
+public partial class MarkdownProvider : ITranslatableElement
 {
     [VeloxProperty] private IWikiElement? parent = null;
+    [TranslateTarget("Markdown document body")]
     [VeloxProperty] public partial string Text { get; set; }
     [VeloxProperty] public partial bool AutoHeight { get; set; }
     [VeloxProperty] public partial double MaxHeightValue { get; set; }

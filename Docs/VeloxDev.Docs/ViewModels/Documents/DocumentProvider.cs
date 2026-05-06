@@ -11,6 +11,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.Docs.Translation;
 using VeloxDev.MVVM;
 using VeloxDev.MVVM.Serialization;
 
@@ -24,16 +25,42 @@ public partial class DocumentProvider : IWikiElement
 
     public static IReadOnlyList<LanguageOption> AvailableLanguages { get; } =
     [
+        // ── Top-5 by global speaker count / web usage (also shown in the left ComboBox) ──
         new("en", "🌐 English"),
         new("zh", "🌐 中文"),
-        new("ja", "🌐 日本語"),
+        new("es", "🌐 Español"),
         new("fr", "🌐 Français"),
         new("de", "🌐 Deutsch"),
-        new("es", "🌐 Español"),
-        new("it", "🌐 Italiano"),
+        // ── Additional mainstream languages ──────────────────────────────────
+        new("ar", "🌐 العربية"),
         new("pt", "🌐 Português"),
         new("ru", "🌐 Русский"),
+        new("ja", "🌐 日本語"),
+        new("ko", "🌐 한국어"),
+        new("it", "🌐 Italiano"),
+        new("nl", "🌐 Nederlands"),
+        new("pl", "🌐 Polski"),
+        new("tr", "🌐 Türkçe"),
+        new("vi", "🌐 Tiếng Việt"),
+        new("id", "🌐 Bahasa Indonesia"),
+        new("th", "🌐 ภาษาไทย"),
+        new("hi", "🌐 हिन्दी"),
+        new("sv", "🌐 Svenska"),
+        new("cs", "🌐 Čeština"),
+        new("ro", "🌐 Română"),
+        new("hu", "🌐 Magyar"),
+        new("uk", "🌐 Українська"),
+        new("da", "🌐 Dansk"),
+        new("fi", "🌐 Suomi"),
+        new("no", "🌐 Norsk"),
+        new("el", "🌐 Ελληνικά"),
+        new("he", "🌐 עברית"),
+        new("fa", "🌐 فارسی"),
     ];
+
+    /// <summary>Top 5 languages shown in the document-language selector on the left toolbar.</summary>
+    public static IReadOnlyList<LanguageOption> TopLanguages { get; } =
+        [.. AvailableLanguages.Take(5)];
 
     [VeloxProperty] private IWikiElement? parent = null;
     [VeloxProperty] public partial ObservableCollection<IWikiElement> Children { get; set; }
@@ -43,10 +70,25 @@ public partial class DocumentProvider : IWikiElement
     [VeloxProperty] public partial string Language { get; set; }
     [VeloxProperty] public partial LanguageOption? SelectedLanguage { get; set; }
 
-    public IReadOnlyList<LanguageOption> Languages => AvailableLanguages;
+    public IReadOnlyList<LanguageOption> Languages => TopLanguages;
+
+    /// <summary>Full language list for the translation target selector.</summary>
+    public IReadOnlyList<LanguageOption> AllLanguages => AvailableLanguages;
 
     /// <summary>True on Desktop; false on Browser (WASM). Controls whether editing features are exposed.</summary>
     public bool IsEditorSupported => !OperatingSystem.IsBrowser();
+
+    // ── Translation support ──────────────────────────────────────────────────
+
+    /// <summary>True when a translation API key is configured and the platform is not Browser.</summary>
+    public bool IsTranslationSupported => IsEditorSupported && !string.IsNullOrWhiteSpace(WikiTranslatorSettings.ApiKey);
+
+    [VeloxProperty][Newtonsoft.Json.JsonIgnore] public partial bool IsTranslating { get; set; }
+    [VeloxProperty][Newtonsoft.Json.JsonIgnore] public partial double TranslationProgress { get; set; }
+    [VeloxProperty][Newtonsoft.Json.JsonIgnore] public partial string TranslationStatus { get; set; }
+    [VeloxProperty][Newtonsoft.Json.JsonIgnore] public partial LanguageOption? TranslationTargetLanguage { get; set; }
+
+    private CancellationTokenSource? _translationCts;
 
     private bool IsEnglish => !string.Equals(Language, "zh", StringComparison.OrdinalIgnoreCase);
 
@@ -139,6 +181,9 @@ public partial class DocumentProvider : IWikiElement
             Language = DefaultLanguage;
             SelectedLanguage = AvailableLanguages.FirstOrDefault(l => string.Equals(l.Code, DefaultLanguage, StringComparison.OrdinalIgnoreCase))
                                ?? AvailableLanguages[0];
+            TranslationStatus = string.Empty;
+            TranslationTargetLanguage = AvailableLanguages.FirstOrDefault(l => string.Equals(l.Code, "en", StringComparison.OrdinalIgnoreCase))
+                                        ?? AvailableLanguages[0];
         }
         finally
         {
@@ -196,16 +241,7 @@ public partial class DocumentProvider : IWikiElement
             }
 
             if (document is null)
-            {
-                var logPath = System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                    "veloxdev-deserialize-debug.log");
-                var msg = deserializeException is not null
-                    ? $"[{DateTime.Now:HH:mm:ss}] Deserialize EXCEPTION: {deserializeException}\n"
-                    : $"[{DateTime.Now:HH:mm:ss}] Deserialize returned null (no exception)\n";
-                System.IO.File.AppendAllText(logPath, msg);
                 throw new InvalidDataException("Wiki JSON content could not be deserialized.", deserializeException);
-            }
 
             RepairParents(document);
             // SelectedNode is deserialized as a separate copy and is NOT the same
@@ -214,21 +250,6 @@ public partial class DocumentProvider : IWikiElement
             document.SelectedNode = FindNodeByTitle(document.Nodes, document.SelectedNode?.Title)
                 ?? document.Nodes.OfType<NodeProvider>().FirstOrDefault();
             document.Children = document.SelectedNode?.Children ?? [];
-
-            // Diagnostic log: capture state after deserialization
-            {
-                var logPath2 = System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                    "veloxdev-deserialize-debug.log");
-                var nodeCount = document.Nodes.Count;
-                var childCount = document.Children.Count;
-                var selectedTitle = document.SelectedNode?.Title ?? "(null)";
-                var childTypes = string.Join(", ", document.Children.Select(c => c.GetType().Name));
-                var allNodeChildren = string.Join(" | ", document.Nodes.OfType<NodeProvider>().Select(n =>
-                    $"{n.Title}:[{string.Join(",", n.Children.Select(c => c.GetType().Name))}]"));
-                System.IO.File.AppendAllText(logPath2,
-                    $"[{DateTime.Now:HH:mm:ss}] After deserialize: nodes={nodeCount}, children={childCount}, selected='{selectedTitle}', childTypes=[{childTypes}], allNodeChildren=[{allNodeChildren}]\n");
-            }
         }
 
         // Now that hydration is complete, run the deferred work outside the
@@ -295,6 +316,95 @@ public partial class DocumentProvider : IWikiElement
 
     [VeloxCommand]
     private void ToggleEditMode() => IsEditMode = !IsEditMode;
+
+    [VeloxCommand]
+    private async Task TranslateCurrentPage()
+    {
+        await RunTranslationAsync().ConfigureAwait(false);
+    }
+
+    [VeloxCommand]
+    private async Task TranslateDocument()
+    {
+        await RunTranslationAsync().ConfigureAwait(false);
+    }
+
+    [VeloxCommand]
+    private void CancelTranslation()
+    {
+        _translationCts?.Cancel();
+    }
+
+    private async Task RunTranslationAsync()
+    {
+        if (IsTranslating)
+            return;
+
+        WikiTranslator translator;
+        try
+        {
+            translator = WikiTranslatorSettings.CreateTranslator();
+        }
+        catch (InvalidOperationException ex)
+        {
+            TranslationStatus = ex.Message;
+            return;
+        }
+
+        var mode = WikiTranslatorSettings.TranslationMode;
+        _translationCts = new CancellationTokenSource();
+        IsTranslating = true;
+        TranslationProgress = 0;
+        TranslationStatus = IsEnglish ? "Translating…" : "翻译中…";
+
+        try
+        {
+            var progress = new Progress<WikiTranslationProgress>(p =>
+            {
+                TranslationProgress = p.Fraction;
+                TranslationStatus = IsEnglish
+                    ? $"[{p.Completed}/{p.Total}] {p.LastJob.PropertyName} on '{p.LastJob.Element.GetType().Name}'"
+                    : $"[{p.Completed}/{p.Total}] 正在翻译 {p.LastJob.Element.GetType().Name}.{p.LastJob.PropertyName}";
+            });
+
+            var target = TranslationTargetLanguage?.Code ?? Language;
+
+            switch (mode)
+            {
+                case WikiTranslationMode.CurrentPage:
+                    if (SelectedNode is { } currentNode)
+                        await translator.TranslateNodeAsync(currentNode, target, progress, _translationCts.Token).ConfigureAwait(true);
+                    break;
+
+                case WikiTranslationMode.FullDocument:
+                    await translator.TranslateDocumentAsync(this, target, progress, _translationCts.Token).ConfigureAwait(true);
+                    break;
+
+                case WikiTranslationMode.FullDocumentAndUpdateLanguage:
+                    await translator.TranslateDocumentAsync(this, target, progress, _translationCts.Token).ConfigureAwait(true);
+                    // Switch the document language metadata so UI labels follow the new locale.
+                    Language = target;
+                    break;
+            }
+
+            TranslationStatus = IsEnglish ? "Translation complete ✓" : "翻译完成 ✓";
+            TranslationProgress = 1;
+        }
+        catch (OperationCanceledException)
+        {
+            TranslationStatus = IsEnglish ? "Translation cancelled." : "翻译已取消。";
+        }
+        catch (Exception ex)
+        {
+            TranslationStatus = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            IsTranslating = false;
+            _translationCts?.Dispose();
+            _translationCts = null;
+        }
+    }
 
     partial void OnSelectedNodeChanged(NodeProvider? oldValue, NodeProvider? newValue)
     {
@@ -431,10 +541,11 @@ public partial class DocumentProvider : IWikiElement
         if (storage is null)
             return;
 
+        var lang = string.IsNullOrWhiteSpace(Language) ? DefaultLanguage : Language.ToLowerInvariant();
         var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Save Wiki",
-            SuggestedFileName = "wiki.json",
+            SuggestedFileName = $"wiki.{lang}.json",
             DefaultExtension = "json",
             FileTypeChoices = [new FilePickerFileType("JSON") { Patterns = ["*.json"] }]
         }).ConfigureAwait(true);
@@ -442,60 +553,28 @@ public partial class DocumentProvider : IWikiElement
         if (file is null)
             return;
 
-        var logPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-            "veloxdev-save-debug.log");
-
         var path = file.TryGetLocalPath();
         if (path is not null)
         {
-            try
-            {
-                // Step 1: serialize to string first so we can verify content before touching the file.
-                var json = this.Serialize();
-                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] JSON length={json.Length}, path={path}\n").ConfigureAwait(true);
+            var json = this.Serialize();
+            if (string.IsNullOrEmpty(json))
+                throw new InvalidOperationException("Serialize() returned empty string.");
 
-                // Step 2: write only after confirming json is non-empty.
-                if (string.IsNullOrEmpty(json))
-                    throw new InvalidOperationException("Serialize() returned empty string.");
-
-                await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-                var bytes = Encoding.UTF8.GetBytes(json);
-                await fs.WriteAsync(bytes).ConfigureAwait(true);
-                await fs.FlushAsync().ConfigureAwait(true);
-
-                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] Write OK, bytes={bytes.Length}\n").ConfigureAwait(true);
-            }
-            catch (Exception ex)
-            {
-                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] FAILED: {ex}\n").ConfigureAwait(true);
-                System.Diagnostics.Debug.WriteLine($"[Save] failed: {ex}");
-                throw;
-            }
+            await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+            var bytes = Encoding.UTF8.GetBytes(json);
+            await fs.WriteAsync(bytes).ConfigureAwait(true);
+            await fs.FlushAsync().ConfigureAwait(true);
         }
         else
         {
-            try
-            {
-                var json = this.Serialize();
-                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] JSON length={json.Length}, browser stream\n").ConfigureAwait(true);
+            var json = this.Serialize();
+            if (string.IsNullOrEmpty(json))
+                throw new InvalidOperationException("Serialize() returned empty string.");
 
-                if (string.IsNullOrEmpty(json))
-                    throw new InvalidOperationException("Serialize() returned empty string.");
-
-                await using var stream = await file.OpenWriteAsync().ConfigureAwait(true);
-                var bytes = Encoding.UTF8.GetBytes(json);
-                await stream.WriteAsync(bytes).ConfigureAwait(true);
-                await stream.FlushAsync().ConfigureAwait(true);
-
-                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] Write OK, bytes={bytes.Length}\n").ConfigureAwait(true);
-            }
-            catch (Exception ex)
-            {
-                await File.AppendAllTextAsync(logPath, $"[{DateTime.Now:HH:mm:ss}] FAILED (browser): {ex}\n").ConfigureAwait(true);
-                System.Diagnostics.Debug.WriteLine($"[Save] browser failed: {ex}");
-                throw;
-            }
+            await using var stream = await file.OpenWriteAsync().ConfigureAwait(true);
+            var bytes = Encoding.UTF8.GetBytes(json);
+            await stream.WriteAsync(bytes).ConfigureAwait(true);
+            await stream.FlushAsync().ConfigureAwait(true);
         }
     }
 
@@ -540,10 +619,8 @@ public partial class DocumentProvider : IWikiElement
         {
             document = Deserialize(json);
         }
-        catch (InvalidDataException ex)
+        catch (InvalidDataException)
         {
-            var diagPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "veloxdev-deserialize-debug.log");
-            File.AppendAllText(diagPath, $"[{DateTime.Now:HH:mm:ss}] Load caught InvalidDataException: {ex}\n");
             return;
         }
 
@@ -562,15 +639,6 @@ public partial class DocumentProvider : IWikiElement
         SelectedNode = FindNodeByTitle(document.Nodes, document.SelectedNode?.Title)
             ?? document.Nodes.OfType<NodeProvider>().FirstOrDefault();
         Children = SelectedNode?.Children ?? [];
-
-        // Diagnostic: log final state after Load
-        {
-            var diagPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "veloxdev-deserialize-debug.log");
-            var childTypes = string.Join(", ", Children.Select(c => c.GetType().Name));
-            var allNodeChildren = string.Join(" | ", Nodes.OfType<NodeProvider>().Select(n =>
-                $"{n.Title}:[{string.Join(",", n.Children.Select(c => c.GetType().Name))}]"));
-            File.AppendAllText(diagPath, $"[{DateTime.Now:HH:mm:ss}] After Load: nodes={Nodes.Count}, children={Children.Count}, selected='{SelectedNode?.Title}', childTypes=[{childTypes}], allNodeChildren=[{allNodeChildren}]\n");
-        }
     }
 
     private static IStorageProvider? GetStorageProvider(object? parameter) => parameter switch
@@ -629,6 +697,10 @@ public partial class DocumentProvider : IWikiElement
 
         return null;
     }
+
+    /// <summary>Raises PropertyChanged for <see cref="IsTranslationSupported"/> so the toolbar can refresh after key changes.</summary>
+    internal void NotifyTranslationSupportedChanged()
+        => OnPropertyChanged(nameof(IsTranslationSupported));
 
     private static void RepairParents(DocumentProvider document)
     {

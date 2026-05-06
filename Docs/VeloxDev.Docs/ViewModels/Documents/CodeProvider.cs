@@ -9,6 +9,7 @@ using TextMateSharp.Grammars;
 using TextMateSharp.Registry;
 using Newtonsoft.Json;
 using VeloxDev.MVVM;
+using VeloxDev.Docs.Translation;
 
 namespace VeloxDev.Docs.ViewModels;
 
@@ -49,6 +50,7 @@ public partial class CodeProvider : IWikiElement
     ];
 
     [VeloxProperty] private IWikiElement? parent = null;
+    [TranslateTarget("Source code block. Translate ONLY inline comments (e.g. // ... or /* ... */ or # ...) into the target language. Do NOT translate identifiers, keywords, strings, or any non-comment tokens. Return the full code with only the comment text changed.")]
     [VeloxProperty] public partial string Code { get; set; }
     [VeloxProperty] public partial string Language { get; set; }
     [VeloxProperty] public partial bool AutoHeight { get; set; }

@@ -1,9 +1,10 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 			 xmlns:vm="using:VeloxDev.Docs.ViewModels"
 			 xmlns:views="using:VeloxDev.Docs"
+			 xmlns:settingsViews="using:VeloxDev.Docs.Views"
 			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
 			 x:Class="VeloxDev.Docs.DocumentView"
 			 x:DataType="vm:DocumentProvider">
@@ -53,7 +54,7 @@
 	</UserControl.DataTemplates>
 
 	<!-- 全局布局 -->
-	<Grid RowDefinitions="Auto,*">
+	<Grid RowDefinitions="Auto,Auto,*">
 
 		<!-- 顶部工具栏 -->
 		<Border Grid.Row="0"
@@ -95,16 +96,84 @@
 					</WrapPanel>
 				</StackPanel>
 				<!-- 文件操作 (仅 Desktop) -->
-				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4"
-							IsVisible="{Binding IsEditorSupported}">
-					<Button Content="{Binding SaveLabel}" Command="{Binding SaveCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding SaveTooltip}" />
-					<Button Content="{Binding OpenLabel}" Command="{Binding LoadCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding OpenTooltip}" />
-				</StackPanel>
+					<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4"
+								IsVisible="{Binding IsEditorSupported}">
+						<Button Content="{Binding SaveLabel}" Command="{Binding SaveCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding SaveTooltip}" />
+						<Button Content="{Binding OpenLabel}" Command="{Binding LoadCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding OpenTooltip}" />
+
+						<!-- 翻译目标语言选择 -->
+							<ComboBox ItemsSource="{Binding AllLanguages}"
+									  SelectedItem="{Binding TranslationTargetLanguage}"
+									  IsVisible="{Binding IsEditorSupported}"
+									  IsEnabled="{Binding !IsTranslating}"
+									  MinWidth="110"
+									  ToolTip.Tip="Target language for translation">
+								<ComboBox.ItemTemplate>
+									<DataTemplate x:DataType="vm:LanguageOption">
+										<TextBlock Text="{Binding DisplayName}" />
+									</DataTemplate>
+								</ComboBox.ItemTemplate>
+							</ComboBox>
+
+							<!-- 翻译当前页 -->
+							<Button Content="🌐 Translate"
+								Command="{Binding TranslateCurrentPageCommand}"
+								IsEnabled="{Binding !IsTranslating}"
+								IsVisible="{Binding IsEditorSupported}"
+								ToolTip.Tip="Translate current page via LLM" />
+
+						<!-- 取消翻译 (仅翻译中时显示) -->
+						<Button Content="✕"
+								Command="{Binding CancelTranslationCommand}"
+								IsVisible="{Binding IsTranslating}"
+								ToolTip.Tip="Cancel translation" />
+
+						<!-- AI 配置按钮 + 下拉面板 -->
+						<Button x:Name="TranslationSettingsButton"
+								Content="⚙"
+								IsVisible="{Binding IsEditorSupported}"
+								ToolTip.Tip="Translation settings (API key, model, endpoint)"
+								Click="OnTranslationSettingsClicked" />
+					</StackPanel>
 			</Grid>
 		</Border>
 
+		<!-- 翻译进度条 (仅翻译进行时显示) -->
+		<Border Grid.Row="1"
+				IsVisible="{Binding IsTranslating}"
+				Padding="8,4"
+				BorderThickness="0,0,0,1"
+				BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+			<Grid ColumnDefinitions="*,Auto">
+				<ProgressBar Grid.Column="0"
+							 Value="{Binding TranslationProgress}"
+							 Minimum="0" Maximum="1"
+							 Height="4"
+							 VerticalAlignment="Center" />
+				<TextBlock Grid.Column="1"
+						   Text="{Binding TranslationStatus}"
+						   FontSize="10"
+						   Opacity="0.7"
+						   Margin="8,0,0,0"
+						   VerticalAlignment="Center"
+						   MaxWidth="300"
+						   TextTrimming="CharacterEllipsis" />
+			</Grid>
+		</Border>
+
+		<!-- 翻译状态文字 (完成/错误，仅非翻译中时显示) -->
+		<Border Grid.Row="1"
+				IsVisible="{Binding !IsTranslating}"
+				Padding="8,2"
+				IsHitTestVisible="False">
+			<TextBlock Text="{Binding TranslationStatus}"
+					   FontSize="10"
+					   Opacity="0.6"
+					   HorizontalAlignment="Right" />
+		</Border>
+
 		<!-- 主体区域 -->
-		<Grid Grid.Row="1" ColumnDefinitions="220,4,*">
+		<Grid Grid.Row="2" ColumnDefinitions="220,4,*">
 
 			<!-- 目录侧边栏 -->
 			<Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">

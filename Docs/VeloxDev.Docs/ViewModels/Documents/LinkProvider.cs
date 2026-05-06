@@ -1,13 +1,15 @@
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using System;
+using VeloxDev.Docs.Translation;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Docs.ViewModels;
 
-public partial class LinkProvider : IWikiElement
+public partial class LinkProvider : ITranslatableElement
 {
     [VeloxProperty] private IWikiElement? parent = null;
+    [TranslateTarget("link display text")]
     [VeloxProperty] public partial string Text { get; set; }
     [VeloxProperty] public partial string Url { get; set; }
 
