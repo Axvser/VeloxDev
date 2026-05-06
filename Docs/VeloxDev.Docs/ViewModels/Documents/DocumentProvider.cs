@@ -184,8 +184,28 @@ public partial class DocumentProvider : IWikiElement
         using (EnterReloadSuppression())
         using (HydrationScope.Enter())
         {
-            if (!json.TryDeserialize<DocumentProvider>(out document) || document is null)
-                throw new InvalidDataException("Wiki JSON content could not be deserialized.");
+            Exception? deserializeException = null;
+            try
+            {
+                document = json.Deserialize<DocumentProvider>();
+            }
+            catch (Exception ex)
+            {
+                deserializeException = ex;
+                document = null;
+            }
+
+            if (document is null)
+            {
+                var logPath = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    "veloxdev-deserialize-debug.log");
+                var msg = deserializeException is not null
+                    ? $"[{DateTime.Now:HH:mm:ss}] Deserialize EXCEPTION: {deserializeException}\n"
+                    : $"[{DateTime.Now:HH:mm:ss}] Deserialize returned null (no exception)\n";
+                System.IO.File.AppendAllText(logPath, msg);
+                throw new InvalidDataException("Wiki JSON content could not be deserialized.", deserializeException);
+            }
 
             RepairParents(document);
             // SelectedNode is deserialized as a separate copy and is NOT the same
@@ -194,6 +214,21 @@ public partial class DocumentProvider : IWikiElement
             document.SelectedNode = FindNodeByTitle(document.Nodes, document.SelectedNode?.Title)
                 ?? document.Nodes.OfType<NodeProvider>().FirstOrDefault();
             document.Children = document.SelectedNode?.Children ?? [];
+
+            // Diagnostic log: capture state after deserialization
+            {
+                var logPath2 = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    "veloxdev-deserialize-debug.log");
+                var nodeCount = document.Nodes.Count;
+                var childCount = document.Children.Count;
+                var selectedTitle = document.SelectedNode?.Title ?? "(null)";
+                var childTypes = string.Join(", ", document.Children.Select(c => c.GetType().Name));
+                var allNodeChildren = string.Join(" | ", document.Nodes.OfType<NodeProvider>().Select(n =>
+                    $"{n.Title}:[{string.Join(",", n.Children.Select(c => c.GetType().Name))}]"));
+                System.IO.File.AppendAllText(logPath2,
+                    $"[{DateTime.Now:HH:mm:ss}] After deserialize: nodes={nodeCount}, children={childCount}, selected='{selectedTitle}', childTypes=[{childTypes}], allNodeChildren=[{allNodeChildren}]\n");
+            }
         }
 
         // Now that hydration is complete, run the deferred work outside the
@@ -505,8 +540,10 @@ public partial class DocumentProvider : IWikiElement
         {
             document = Deserialize(json);
         }
-        catch (InvalidDataException)
+        catch (InvalidDataException ex)
         {
+            var diagPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "veloxdev-deserialize-debug.log");
+            File.AppendAllText(diagPath, $"[{DateTime.Now:HH:mm:ss}] Load caught InvalidDataException: {ex}\n");
             return;
         }
 
@@ -525,6 +562,15 @@ public partial class DocumentProvider : IWikiElement
         SelectedNode = FindNodeByTitle(document.Nodes, document.SelectedNode?.Title)
             ?? document.Nodes.OfType<NodeProvider>().FirstOrDefault();
         Children = SelectedNode?.Children ?? [];
+
+        // Diagnostic: log final state after Load
+        {
+            var diagPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "veloxdev-deserialize-debug.log");
+            var childTypes = string.Join(", ", Children.Select(c => c.GetType().Name));
+            var allNodeChildren = string.Join(" | ", Nodes.OfType<NodeProvider>().Select(n =>
+                $"{n.Title}:[{string.Join(",", n.Children.Select(c => c.GetType().Name))}]"));
+            File.AppendAllText(diagPath, $"[{DateTime.Now:HH:mm:ss}] After Load: nodes={Nodes.Count}, children={Children.Count}, selected='{SelectedNode?.Title}', childTypes=[{childTypes}], allNodeChildren=[{allNodeChildren}]\n");
+        }
     }
 
     private static IStorageProvider? GetStorageProvider(object? parameter) => parameter switch
