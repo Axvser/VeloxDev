@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -13,8 +13,8 @@ using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using VeloxDev.MVVM;
+using AvaloniaImage = Avalonia.Media.IImage;
 
 namespace VeloxDev.Docs.ViewModels;
 
@@ -39,7 +39,7 @@ public partial class ImageProvider : IWikiElement
     [VeloxProperty] public partial bool KeepAspectRatio { get; set; }
     [VeloxProperty] public partial string SizeMode { get; set; }
     [VeloxProperty] public partial string Alignment { get; set; }
-    [VeloxProperty] public partial IImage? ImageSource { get; internal set; }
+    [VeloxProperty] public partial AvaloniaImage? ImageSource { get; internal set; }
     [VeloxProperty] public partial bool IsLoading { get; internal set; }
 
     public IReadOnlyList<string> SizeModes { get; } = ["Scale", "Pixels"];
@@ -87,7 +87,7 @@ public partial class ImageProvider : IWikiElement
         return LoadBitmapAsync(Source);
     }
 
-    partial void OnImageSourceChanged(IImage? oldValue, IImage? newValue)
+    partial void OnImageSourceChanged(AvaloniaImage? oldValue, AvaloniaImage? newValue)
     {
         OnPropertyChanged(nameof(HasImage));
         OnPropertyChanged(nameof(HasNoImage));
@@ -195,7 +195,7 @@ public partial class ImageProvider : IWikiElement
         IsLoading = true;
         try
         {
-            IImage? image;
+            AvaloniaImage? image;
 
             if (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                 source.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
@@ -337,7 +337,7 @@ public partial class ImageProvider : IWikiElement
         SetPixelSizeCore(newWidth, newHeight);
     }
 
-    private static IImage LoadImage(Stream stream)
+    private static AvaloniaImage LoadImage(Stream stream)
     {
         if (IsSvgFile(stream))
         {

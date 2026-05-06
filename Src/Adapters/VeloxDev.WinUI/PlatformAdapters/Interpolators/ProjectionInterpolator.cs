@@ -1,7 +1,7 @@
 ﻿using Microsoft.UI.Xaml.Media;
 using System.Collections.Generic;
 
-namespace VeloxDev.WinUI.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class ProjectionInterpolator : IValueInterpolator
     {

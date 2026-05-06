@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Controls.Primitives;
@@ -84,8 +84,8 @@ public abstract class WikiElementViewBase : UserControl
             if (DataContext is IWikiElement and not NodeProvider)
             {
                 items.Add(new Separator());
-                items.Add(CreateMenuItem("↑ Insert Empty Above", () => InsertEmpty(below: false)));
-                items.Add(CreateMenuItem("↓ Insert Empty Below", () => InsertEmpty(below: true)));
+                items.Add(CreateMenuItem("�?Insert Empty Above", () => InsertEmpty(below: false)));
+                items.Add(CreateMenuItem("�?Insert Empty Below", () => InsertEmpty(below: true)));
             }
 
             items.AddRange(CreateAdditionalContextMenuItems());

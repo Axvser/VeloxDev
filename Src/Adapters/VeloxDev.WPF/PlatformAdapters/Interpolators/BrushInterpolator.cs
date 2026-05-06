@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace VeloxDev.WPF.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class BrushInterpolator : IValueInterpolator
     {

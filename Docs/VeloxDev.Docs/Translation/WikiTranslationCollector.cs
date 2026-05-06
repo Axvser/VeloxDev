@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -11,7 +11,7 @@ namespace VeloxDev.Docs.Translation;
 /// <summary>
 /// Walks the document tree and harvests <see cref="WikiTranslationJob"/> instances for every
 /// property marked with <see cref="TranslateTargetAttribute"/>.
-/// The collector is stateless — call <see cref="Collect(DocumentProvider)"/> once per translation run.
+/// The collector is stateless �?call <see cref="Collect(DocumentProvider)"/> once per translation run.
 /// </summary>
 public static class WikiTranslationCollector
 {
@@ -85,9 +85,9 @@ public static class WikiTranslationCollector
         // ── Table: headers as one job, each row's cells as one job ────────
         if (element is TableProvider table)
         {
-            CollectStringCollectionAsBatch(table, table.Headers, "table column headers — a JSON array of header strings", "Headers", jobs);
+            CollectStringCollectionAsBatch(table, table.Headers, "table column headers �?a JSON array of header strings", "Headers", jobs);
             foreach (var row in table.Rows)
-                CollectStringCollectionAsBatch(row, row.Cells, "table row cells — a JSON array of cell strings in the same column order as the headers", "Cells", jobs);
+                CollectStringCollectionAsBatch(row, row.Cells, "table row cells �?a JSON array of cell strings in the same column order as the headers", "Cells", jobs);
         }
     }
 

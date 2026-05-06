@@ -1,4 +1,4 @@
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
 using OpenAI;
 using System;
 using System.ClientModel;
@@ -13,7 +13,7 @@ namespace VeloxDev.Docs.Translation;
 /// Translates an entire wiki document or a single page element-by-element using an LLM.
 /// <para>
 /// Each translatable property (marked with <see cref="TranslateTargetAttribute"/>) becomes one
-/// stateless LLM call — no conversation history is preserved between jobs.
+/// stateless LLM call �?no conversation history is preserved between jobs.
 /// This keeps context clean and avoids session-length limits.
 /// </para>
 /// <para>
@@ -73,7 +73,7 @@ public sealed class WikiTranslator
     /// </summary>
     /// <param name="document">Root document to translate.</param>
     /// <param name="targetLanguage">IETF language tag, e.g. "zh", "ja", "fr".</param>
-    /// <param name="progress">Optional progress callback — receives (completedCount, totalCount, currentJob).</param>
+    /// <param name="progress">Optional progress callback �?receives (completedCount, totalCount, currentJob).</param>
     /// <param name="cancellationToken">Allows cancellation mid-run.</param>
     public async Task TranslateDocumentAsync(
         DocumentProvider document,
@@ -176,7 +176,7 @@ public sealed class WikiTranslator
             - Preserve all Markdown syntax, code fences, HTML tags, and special characters exactly.
             - For plain text or Markdown, do NOT translate URLs, file paths, identifiers, or type names.
             - For code blocks: translate ONLY comments (// ... , /* ... */, # ..., <!-- ... -->); leave all identifiers, keywords, and string literals unchanged.
-            - For table headers and cells: the input is a JSON string array. Translate natural-language text in each element; do NOT translate identifiers or technical keywords. Return a JSON string array of exactly the same length — no extra keys, no wrapping object, no markdown fences.
+            - For table headers and cells: the input is a JSON string array. Translate natural-language text in each element; do NOT translate identifiers or technical keywords. Return a JSON string array of exactly the same length �?no extra keys, no wrapping object, no markdown fences.
             - Do NOT add explanations, notes, or any surrounding text.
             - Return ONLY the translated result, nothing else.
             """;

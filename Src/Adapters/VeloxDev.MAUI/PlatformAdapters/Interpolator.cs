@@ -1,5 +1,5 @@
 ﻿using Microsoft.Maui.Controls.Shapes;
-using VeloxDev.MAUI.NativeInterpolators;
+using VeloxDev.Adapters.NativeInterpolators;
 
 namespace VeloxDev.TransitionSystem
 {

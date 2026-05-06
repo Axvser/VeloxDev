@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using Windows.Foundation;
 using Windows.UI;
 
-namespace VeloxDev.WinUI.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class BrushInterpolator : IValueInterpolator
     {

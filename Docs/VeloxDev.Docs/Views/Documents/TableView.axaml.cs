@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -286,7 +286,7 @@ public partial class TableView : WikiElementViewBase
     {
         // Don't set FontWeight on header cells: Skia's CJK fallback fails to find a
         // SemiBold CJK face on many systems and renders .notdef glyphs (mojibake).
-        // Match MarkdownView headings — distinguish headers via background only.
+        // Match MarkdownView headings �?distinguish headers via background only.
         var textBlock = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,

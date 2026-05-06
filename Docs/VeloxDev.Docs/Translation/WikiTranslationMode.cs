@@ -1,4 +1,4 @@
-namespace VeloxDev.Docs.Translation;
+﻿namespace VeloxDev.Docs.Translation;
 
 /// <summary>
 /// Controls what scope is translated when the user clicks the Translate button

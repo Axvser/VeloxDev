@@ -1,4 +1,4 @@
-namespace VeloxDev.MAUI.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class BrushInterpolator : IValueInterpolator
     {

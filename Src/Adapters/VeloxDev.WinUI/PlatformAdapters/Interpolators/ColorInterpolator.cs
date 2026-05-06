@@ -2,7 +2,7 @@ using Microsoft.UI;
 using System.Collections.Generic;
 using Windows.UI;
 
-namespace VeloxDev.WinUI.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class ColorInterpolator : IValueInterpolator
     {

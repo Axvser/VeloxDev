@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Docs.ViewModels;

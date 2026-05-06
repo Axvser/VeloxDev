@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection;
 
 namespace VeloxDev.Docs.Translation;
@@ -6,7 +6,7 @@ namespace VeloxDev.Docs.Translation;
 /// <summary>
 /// Represents a single translatable string value that needs one LLM call.
 /// The <see cref="Apply"/> callback writes the result back to wherever the
-/// original value came from — a property, a collection slot, or anything else.
+/// original value came from �?a property, a collection slot, or anything else.
 /// </summary>
 public sealed class WikiTranslationJob
 {

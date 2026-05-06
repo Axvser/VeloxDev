@@ -1,4 +1,4 @@
-using Avalonia.Media;
+﻿using Avalonia.Media;
 using System.ComponentModel;
 using VeloxDev.Docs.ViewModels;
 

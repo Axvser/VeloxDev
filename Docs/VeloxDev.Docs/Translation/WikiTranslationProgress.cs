@@ -1,4 +1,4 @@
-namespace VeloxDev.Docs.Translation;
+﻿namespace VeloxDev.Docs.Translation;
 
 /// <summary>
 /// Snapshot of translation progress reported after each completed <see cref="WikiTranslationJob"/>.

@@ -1,6 +1,6 @@
 using Microsoft.Maui.Controls.Shapes;
 
-namespace VeloxDev.MAUI.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class TransformInterpolator : IValueInterpolator
     {

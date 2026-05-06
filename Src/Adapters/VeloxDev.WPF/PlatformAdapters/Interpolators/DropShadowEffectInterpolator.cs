@@ -1,7 +1,7 @@
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 
-namespace VeloxDev.WPF.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class DropShadowEffectInterpolator : IValueInterpolator
     {

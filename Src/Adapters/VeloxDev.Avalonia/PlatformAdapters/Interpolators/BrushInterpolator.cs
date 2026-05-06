@@ -3,7 +3,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using System.Collections.Generic;
 
-namespace VeloxDev.Avalonia.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class BrushInterpolator : IValueInterpolator
     {

@@ -1,4 +1,4 @@
-namespace VeloxDev.WinForms.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class PaddingInterpolator : IValueInterpolator
     {

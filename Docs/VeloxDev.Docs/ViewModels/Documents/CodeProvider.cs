@@ -1,4 +1,4 @@
-using Avalonia.Controls.Documents;
+﻿using Avalonia.Controls.Documents;
 using Avalonia.Input.Platform;
 using Avalonia.Media;
 using System;

@@ -46,18 +46,14 @@
   <Folder Name="/Examples/MVVM/WPF/">
     <Project Path="Examples/MVVM/WPF/Demo/Demo.csproj" />
   </Folder>
-  <Folder Name="/Examples/Theme/">
-    <File Path="Examples/Theme/README.md" />
-  </Folder>
+  <Folder Name="/Examples/Theme/" />
   <Folder Name="/Examples/Theme/Avalonia/">
     <Project Path="Examples/Theme/Avalonia/Demo/Demo.csproj" />
   </Folder>
   <Folder Name="/Examples/Theme/WPF/">
     <Project Path="Examples/Theme/WPF/Demo/Demo.csproj" />
   </Folder>
-  <Folder Name="/Examples/Transition/">
-    <File Path="Examples/Transition/README.md" />
-  </Folder>
+  <Folder Name="/Examples/Transition/" />
   <Folder Name="/Examples/Transition/Avalonia/">
     <Project Path="Examples/Transition/Avalonia/Demo/Demo.csproj" />
   </Folder>

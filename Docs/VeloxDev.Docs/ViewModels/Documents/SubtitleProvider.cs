@@ -1,4 +1,4 @@
-using VeloxDev.Docs.Translation;
+﻿using VeloxDev.Docs.Translation;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Docs.ViewModels;

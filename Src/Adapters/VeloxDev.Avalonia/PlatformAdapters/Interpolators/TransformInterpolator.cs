@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace VeloxDev.Avalonia.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class TransformInterpolator : IValueInterpolator
     {

@@ -1,7 +1,7 @@
 ﻿using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using VeloxDev.WinUI.NativeInterpolators;
+using VeloxDev.Adapters.NativeInterpolators;
 using Windows.Foundation;
 using Windows.UI;
 

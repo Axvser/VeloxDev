@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace VeloxDev.WPF.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class PointInterpolator : IValueInterpolator
     {

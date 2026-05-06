@@ -1,7 +1,7 @@
 using Avalonia;
 using System.Collections.Generic;
 
-namespace VeloxDev.Avalonia.NativeInterpolators
+namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class RelativePointInterpolator : IValueInterpolator
     {
