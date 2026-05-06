@@ -63,9 +63,17 @@ public partial class DocumentProvider : IWikiElement
         [.. AvailableLanguages.Take(5)];
 
     [VeloxProperty] private IWikiElement? parent = null;
-    [VeloxProperty] public partial ObservableCollection<IWikiElement> Children { get; set; }
+    [VeloxProperty][Newtonsoft.Json.JsonIgnore] public partial ObservableCollection<IWikiElement> Children { get; set; }
     [VeloxProperty] public partial ObservableCollection<IWikiElement> Nodes { get; set; }
-    [VeloxProperty] public partial NodeProvider? SelectedNode { get; set; }
+    [VeloxProperty][Newtonsoft.Json.JsonIgnore] public partial NodeProvider? SelectedNode { get; set; }
+
+    /// <summary>Serialization helper: persists the selected node's title so it can be restored after deserialization.</summary>
+    [Newtonsoft.Json.JsonProperty("SelectedNodeTitle")]
+    public string? SelectedNodeTitle
+    {
+        get => SelectedNode?.Title;
+        set { /* resolved in Deserialize via FindNodeByTitle */ }
+    }
     [VeloxProperty] public partial bool IsEditMode { get; set; }
     [VeloxProperty] public partial string Language { get; set; }
     [VeloxProperty] public partial LanguageOption? SelectedLanguage { get; set; }
@@ -80,8 +88,8 @@ public partial class DocumentProvider : IWikiElement
 
     // ── Translation support ──────────────────────────────────────────────────
 
-    /// <summary>True when a translation API key is configured and the platform is not Browser.</summary>
-    public bool IsTranslationSupported => IsEditorSupported && !string.IsNullOrWhiteSpace(WikiTranslatorSettings.ApiKey);
+    /// <summary>True when a translation API key is configured. Works on all platforms including Browser (WASM).</summary>
+    public bool IsTranslationSupported => !string.IsNullOrWhiteSpace(WikiTranslatorSettings.ApiKey);
 
     [VeloxProperty][Newtonsoft.Json.JsonIgnore] public partial bool IsTranslating { get; set; }
     [VeloxProperty][Newtonsoft.Json.JsonIgnore] public partial double TranslationProgress { get; set; }
@@ -244,11 +252,11 @@ public partial class DocumentProvider : IWikiElement
                 throw new InvalidDataException("Wiki JSON content could not be deserialized.", deserializeException);
 
             RepairParents(document);
-            // SelectedNode is deserialized as a separate copy and is NOT the same
-            // reference as any node inside Nodes. Always resolve it to the actual
-            // instance in the tree so the view's selection binding works correctly.
-            document.SelectedNode = FindNodeByTitle(document.Nodes, document.SelectedNode?.Title)
+            // Resolve SelectedNode from the title persisted in SelectedNodeTitle so we get
+            // the actual instance in the Nodes tree (SelectedNode itself is [JsonIgnore]).
+            document.SelectedNode = FindNodeByTitle(document.Nodes, document.SelectedNodeTitle)
                 ?? document.Nodes.OfType<NodeProvider>().FirstOrDefault();
+            // Children is [JsonIgnore]; always derive it from the resolved node.
             document.Children = document.SelectedNode?.Children ?? [];
         }
 
@@ -382,8 +390,11 @@ public partial class DocumentProvider : IWikiElement
 
                 case WikiTranslationMode.FullDocumentAndUpdateLanguage:
                     await translator.TranslateDocumentAsync(this, target, progress, _translationCts.Token).ConfigureAwait(true);
-                    // Switch the document language metadata so UI labels follow the new locale.
-                    Language = target;
+                    // Switch the document language metadata so UI labels follow the new locale,
+                    // but suppress the default-document reload so the translated content is kept.
+                    _suppressReload = true;
+                    try { Language = target; }
+                    finally { _suppressReload = false; }
                     break;
             }
 

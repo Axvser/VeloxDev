@@ -9,6 +9,22 @@
 			 x:Class="VeloxDev.Docs.DocumentView"
 			 x:DataType="vm:DocumentProvider">
 
+	<!-- 固定含 Emoji 按钮的前景色，防止 PointerOver / Pressed 状态切换字体渲染模式导致彩色 Emoji 变灰 -->
+	<UserControl.Styles>
+		<Style Selector="Button.emoji /template/ ContentPresenter">
+			<Setter Property="Foreground" Value="{DynamicResource ButtonForeground}" />
+		</Style>
+		<Style Selector="Button.emoji:pointerover /template/ ContentPresenter">
+			<Setter Property="Foreground" Value="{DynamicResource ButtonForeground}" />
+		</Style>
+		<Style Selector="Button.emoji:pressed /template/ ContentPresenter">
+			<Setter Property="Foreground" Value="{DynamicResource ButtonForeground}" />
+		</Style>
+		<Style Selector="Button.emoji:disabled /template/ ContentPresenter">
+			<Setter Property="Foreground" Value="{DynamicResource ButtonForegroundDisabled}" />
+		</Style>
+	</UserControl.Styles>
+
    <!-- 所有模板统一归于此处，Avalonia可自动匹配 -->
 	<UserControl.DataTemplates>
 		<!-- 目录节点 -->
@@ -87,51 +103,48 @@
 						<Button Content="H3" Command="{Binding AddTitleCommand}" CommandParameter="3" Margin="0,0,4,0" ToolTip.Tip="Add Heading 3" />
 						<Button Content="H4" Command="{Binding AddTitleCommand}" CommandParameter="4" Margin="0,0,4,0" ToolTip.Tip="Add Heading 4" />
 						<Button Content="P" Command="{Binding AddParagraphCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Paragraph" />
-						<Button Content="🗨" Command="{Binding AddSubtitleCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Quote / Subtitle" />
-						<Button Content="🔗" Command="{Binding AddLinkCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Link" />
+						<Button Classes="emoji" Content="🗨" Command="{Binding AddSubtitleCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Quote / Subtitle" />
+						<Button Classes="emoji" Content="🔗" Command="{Binding AddLinkCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Link" />
 						<Button Content="&lt;/&gt;" Command="{Binding AddCodeCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Code Block" />
 						<Button Content="MD" Command="{Binding AddMarkdownCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Markdown Block" />
-						<Button Content="📊" Command="{Binding AddTableCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Table" />
-						<Button Content="🖼" Command="{Binding AddImageCommand}" ToolTip.Tip="Add Image" />
+						<Button Classes="emoji" Content="📊" Command="{Binding AddTableCommand}" Margin="0,0,4,0" ToolTip.Tip="Add Table" />
+						<Button Classes="emoji" Content="🖼" Command="{Binding AddImageCommand}" ToolTip.Tip="Add Image" />
 					</WrapPanel>
 				</StackPanel>
-				<!-- 文件操作 (仅 Desktop) -->
-					<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4"
-								IsVisible="{Binding IsEditorSupported}">
-						<Button Content="{Binding SaveLabel}" Command="{Binding SaveCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding SaveTooltip}" />
-						<Button Content="{Binding OpenLabel}" Command="{Binding LoadCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding OpenTooltip}" />
+				<!-- 右侧工具栏 -->
+					<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+						<!-- 文件操作 (仅 Desktop) -->
+						<Button Content="{Binding SaveLabel}" Command="{Binding SaveCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding SaveTooltip}" IsVisible="{Binding IsEditorSupported}" />
+						<Button Content="{Binding OpenLabel}" Command="{Binding LoadCommand}" CommandParameter="{Binding $self}" ToolTip.Tip="{Binding OpenTooltip}" IsVisible="{Binding IsEditorSupported}" />
 
 						<!-- 翻译目标语言选择 -->
-							<ComboBox ItemsSource="{Binding AllLanguages}"
-									  SelectedItem="{Binding TranslationTargetLanguage}"
-									  IsVisible="{Binding IsEditorSupported}"
-									  IsEnabled="{Binding !IsTranslating}"
-									  MinWidth="110"
-									  ToolTip.Tip="Target language for translation">
-								<ComboBox.ItemTemplate>
-									<DataTemplate x:DataType="vm:LanguageOption">
-										<TextBlock Text="{Binding DisplayName}" />
-									</DataTemplate>
-								</ComboBox.ItemTemplate>
-							</ComboBox>
+						<ComboBox ItemsSource="{Binding AllLanguages}"
+								  SelectedItem="{Binding TranslationTargetLanguage}"
+								  IsEnabled="{Binding !IsTranslating}"
+								  MinWidth="110"
+								  ToolTip.Tip="Target language for translation">
+							<ComboBox.ItemTemplate>
+								<DataTemplate x:DataType="vm:LanguageOption">
+									<TextBlock Text="{Binding DisplayName}" />
+								</DataTemplate>
+							</ComboBox.ItemTemplate>
+						</ComboBox>
 
-							<!-- 翻译当前页 -->
-							<Button Content="🌐 Translate"
+						<!-- 翻译当前页 -->
+						<Button Classes="emoji" Content="🌐 Translate"
 								Command="{Binding TranslateCurrentPageCommand}"
 								IsEnabled="{Binding !IsTranslating}"
-								IsVisible="{Binding IsEditorSupported}"
 								ToolTip.Tip="Translate current page via LLM" />
 
 						<!-- 取消翻译 (仅翻译中时显示) -->
-						<Button Content="✕"
+						<Button Content="🛑"
 								Command="{Binding CancelTranslationCommand}"
 								IsVisible="{Binding IsTranslating}"
 								ToolTip.Tip="Cancel translation" />
 
-						<!-- AI 配置按钮 + 下拉面板 -->
-						<Button x:Name="TranslationSettingsButton"
+						<!-- 翻译设置按钮：始终可见，用户需先在此配置 API Key -->
+						<Button Classes="emoji" x:Name="TranslationSettingsButton"
 								Content="⚙"
-								IsVisible="{Binding IsEditorSupported}"
 								ToolTip.Tip="Translation settings (API key, model, endpoint)"
 								Click="OnTranslationSettingsClicked" />
 					</StackPanel>
@@ -182,7 +195,7 @@
 						   Margin="10,8,8,4"
 						   Opacity="0.6"
 						   FontSize="11"
-						   FontFamily="Cascadia Code,Cascadia Mono,Sarasa Mono SC,Microsoft YaHei UI,Segoe UI,monospace" />
+						   FontFamily="{StaticResource MonoFont}" />
 				<TreeView Grid.Row="1"
 						  ItemsSource="{Binding Nodes}"
 						  SelectedItem="{Binding SelectedNode}"
@@ -200,7 +213,7 @@
 						   Orientation="Horizontal">
 					<Button Content="{Binding AddPageLabel}" Command="{Binding AddRootCommand}" Margin="0,0,4,4" ToolTip.Tip="{Binding AddPageTooltip}" />
 					<Button Content="{Binding AddChildLabel}" Command="{Binding AddChildCommand}" Margin="0,0,4,4" ToolTip.Tip="{Binding AddChildTooltip}" />
-				   <Button Content="🗑" Command="{Binding RemoveNodeCommand}" Margin="0,0,0,4" ToolTip.Tip="{Binding RemovePageTooltip}" />
+				   <Button Classes="emoji" Content="🗑" Command="{Binding RemoveNodeCommand}" Margin="0,0,0,4" ToolTip.Tip="{Binding RemovePageTooltip}" />
 				</WrapPanel>
 			</Grid>
 

@@ -8,7 +8,30 @@
         <local:ViewLocator/>
     </Application.DataTemplates>
 
+    <Application.Resources>
+        <!-- 等宽字体级联，用于代码块、目录节点、导航标签等 -->
+        <FontFamily x:Key="MonoFont">Cascadia Code, Cascadia Mono, Sarasa Mono SC, Microsoft YaHei UI, Segoe UI, avares://VeloxDev.Docs/Assets/Fonts/NotoSans-Italic-VariableFont_wdth,wght.ttf#Noto Sans, monospace</FontFamily>
+        <!-- 正文字体级联，优先使用内置 Inter + 微软雅黑 + Noto Sans 覆盖多语言 -->
+        <FontFamily x:Key="UIFont">Inter, Microsoft YaHei UI, Segoe UI, avares://VeloxDev.Docs/Assets/Fonts/msyh.ttf#Microsoft YaHei, avares://VeloxDev.Docs/Assets/Fonts/NotoSans-Italic-VariableFont_wdth,wght.ttf#Noto Sans, sans-serif</FontFamily>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
+        <!-- 全局正文字体，TextBlock / TextBox / Button 统一走 UIFont -->
+        <Style Selector="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource UIFont}" />
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="FontFamily" Value="{StaticResource UIFont}" />
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="FontFamily" Value="{StaticResource UIFont}" />
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="FontFamily" Value="{StaticResource UIFont}" />
+        </Style>
+        <Style Selector="ComboBoxItem">
+            <Setter Property="FontFamily" Value="{StaticResource UIFont}" />
+        </Style>
     </Application.Styles>
 </Application>

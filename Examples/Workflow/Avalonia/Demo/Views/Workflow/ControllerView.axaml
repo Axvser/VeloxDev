@@ -33,7 +33,7 @@
         <Border Grid.Row="1" Background="#252525" Padding="16">
 			<StackPanel Spacing="10">
                <TextBlock Text="种子负载" Foreground="#dcdcdc"/>
-				<TextBox Text="{Binding SeedPayload, Mode=TwoWay}" Watermark="用于初始化链路的上下文种子"/>
+				<TextBox Text="{Binding SeedPayload, Mode=TwoWay}" PlaceholderText="用于初始化链路的上下文种子"/>
              <TextBlock Text="控制器节点只负责把初始上下文送入工作流。后续节点是否继续广播，仅由节点自身决定。"
 						   Foreground="#bdbdbd"
 						   TextWrapping="Wrap"/>

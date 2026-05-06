@@ -8,8 +8,10 @@ using VeloxDev.Docs.ViewModels;
 
 namespace VeloxDev.Docs.Translation;
 
+internal sealed record TablePayload(string[] headers, string[][] rows);
+
 /// <summary>
-/// Walks the document tree and harvests <see cref="WikiTranslationJob"/> instances for every
+/// Walks the document tree
 /// property marked with <see cref="TranslateTargetAttribute"/>.
 /// The collector is stateless �?call <see cref="Collect(DocumentProvider)"/> once per translation run.
 /// </summary>
@@ -82,13 +84,64 @@ public static class WikiTranslationCollector
             jobs.Add(new WikiTranslationJob(element, property, attr.Hint));
         }
 
-        // ── Table: headers as one job, each row's cells as one job ────────
+        // ── Table: submit the whole table (headers + all rows) as ONE job ──
         if (element is TableProvider table)
-        {
-            CollectStringCollectionAsBatch(table, table.Headers, "table column headers �?a JSON array of header strings", "Headers", jobs);
-            foreach (var row in table.Rows)
-                CollectStringCollectionAsBatch(row, row.Cells, "table row cells �?a JSON array of cell strings in the same column order as the headers", "Cells", jobs);
-        }
+            CollectTableAsSingleJob(table, jobs);
+    }
+
+    /// <summary>
+    /// Submits an entire <see cref="TableProvider"/> (headers + all rows) as a single LLM job.
+    /// The payload is a JSON object: <c>{"headers":[...],"rows":[[...],[...]]}</c>.
+    /// The LLM decides cell-by-cell what is natural language (translate) vs technical term / emoji (keep).
+    /// On apply the result is deserialized and written back in one pass.
+    /// </summary>
+    private static void CollectTableAsSingleJob(TableProvider table, List<WikiTranslationJob> jobs)
+    {
+        if (table.Headers.Count == 0 && table.Rows.Count == 0)
+            return;
+
+        // Build payload: { "headers": [...], "rows": [[...], ...] }
+        var payload = new TablePayload(
+            table.Headers.ToArray(),
+            table.Rows.Select(r => r.Cells.ToArray()).ToArray());
+
+        var originalJson = JsonSerializer.Serialize(payload);
+
+        var hint = "complete Markdown table — headers and all rows in one JSON object with keys \"headers\" (string[]) and \"rows\" (string[][])";
+
+        jobs.Add(new WikiTranslationJob(
+            table,
+            "Table",
+            hint,
+            originalJson,
+            translatedJson =>
+            {
+                TablePayload? result = null;
+                try { result = JsonSerializer.Deserialize<TablePayload>(translatedJson); }
+                catch { /* LLM returned malformed JSON — skip */ }
+
+                if (result is null)
+                    return;
+
+                // Write headers back (guard against length mismatch)
+                if (result.headers is { Length: > 0 } h && h.Length == table.Headers.Count)
+                {
+                    for (int i = 0; i < h.Length; i++)
+                        table.Headers[i] = h[i];
+                }
+
+                // Write rows back
+                if (result.rows is { } rows)
+                {
+                    for (int r = 0; r < Math.Min(rows.Length, table.Rows.Count); r++)
+                    {
+                        var cells = rows[r];
+                        if (cells is null) continue;
+                        for (int c = 0; c < Math.Min(cells.Length, table.Rows[r].Cells.Count); c++)
+                            table.Rows[r].Cells[c] = cells[c];
+                    }
+                }
+            }));
     }
 
     /// <summary>

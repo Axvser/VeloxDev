@@ -167,17 +167,54 @@ public sealed class WikiTranslator
     }
 
     private static string BuildSystemPrompt(string targetLanguage, string hint)
-        => $"""
-            You are a professional technical documentation translator.
-            Your task is described by the following content hint: {hint}
-            Target language: {targetLanguage}
+    {
+        var isTable = hint.Contains("headers") && hint.Contains("rows");
 
-            General rules (the content hint above takes precedence if it is more specific):
+        // Table addendum is appended only when the payload is a table JSON object
+        var tableRules = isTable ? """
+
+            TABLE-SPECIFIC RULES (only when input is a JSON object with "headers" and "rows" keys):
+            - Input shape: {"headers": [...], "rows": [[...], ...]}. Return EXACTLY the same shape and lengths — no extra keys, no wrapper, no markdown fences.
+            - Classify every string value with the THREE CATEGORIES below and act accordingly.
+            - Mixed values (prose + identifiers in same cell): translate only the prose; keep CATEGORY 2/3 tokens verbatim in place.
+            - Empty strings must remain empty strings.
+            """ : string.Empty;
+
+        return $"""
+            You are a professional technical documentation translator.
+            Target language: {targetLanguage}
+            Content hint: {hint}
+
+            Classify every piece of text using the THREE CATEGORIES below, then act accordingly.
+
+            CATEGORY 1 — DESCRIPTIVE TEXT
+              What it is: Human-readable prose intended for end users: descriptions, explanations,
+                          UI labels in natural language, notes, remarks.
+              Action    : TRANSLATE into {targetLanguage}.
+                          Inline programming identifiers inside the prose (type/method/property names)
+                          must be kept verbatim; only the surrounding natural language is translated.
+
+            CATEGORY 2 — TECHNICAL / PARAMETER TEXT
+              What it is: Any formal identifier in a programming or technical context:
+                          API/type/method/property/field names, namespaces, enum values, config keys,
+                          CLI flags, file paths, URLs, version strings, code snippets, or any token
+                          written in camelCase, PascalCase, snake_case, kebab-case, SCREAMING_SNAKE,
+                          dotted.notation, or prefixed with -- / - / /.
+              Action    : Copy EXACTLY as-is. Do NOT translate, paraphrase, reformat, or modify.
+
+            CATEGORY 3 — NON-LINGUISTIC SYMBOLS
+              What it is: Unicode emoji and symbolic characters with visual/iconic meaning, not
+                          linguistic meaning. Includes all emoji, dingbats, checkmarks, crosses,
+                          arrows, bullets, stars, etc. (e.g. ✅ ❌ ✔ ✗ ➡   ⚠ → •).
+              Action    : Copy EXACTLY as-is. Do NOT translate, replace, remove, or alter.
+
+            Additional rules:
             - Preserve all Markdown syntax, code fences, HTML tags, and special characters exactly.
-            - For plain text or Markdown, do NOT translate URLs, file paths, identifiers, or type names.
-            - For code blocks: translate ONLY comments (// ... , /* ... */, # ..., <!-- ... -->); leave all identifiers, keywords, and string literals unchanged.
-            - For table headers and cells: the input is a JSON string array. Translate natural-language text in each element; do NOT translate identifiers or technical keywords. Return a JSON string array of exactly the same length �?no extra keys, no wrapping object, no markdown fences.
+            - Inside code blocks: translate ONLY inline comments (// ..., /* ... */, # ..., <!-- ... -->).
+              All other code tokens are CATEGORY 2.
             - Do NOT add explanations, notes, or any surrounding text.
             - Return ONLY the translated result, nothing else.
+            {tableRules}
             """;
+    }
 }

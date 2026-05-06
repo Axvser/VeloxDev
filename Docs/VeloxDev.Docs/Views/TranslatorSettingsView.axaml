@@ -6,19 +6,19 @@
              Width="420">
     <Border Padding="16" CornerRadius="6">
         <StackPanel Spacing="10">
-            <TextBlock Text="?? Translation Settings" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,4" />
+            <TextBlock Text="Translation Settings" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,4" />
             <StackPanel Spacing="4">
                 <TextBlock Text="DashScope API Key" Opacity="0.7" FontSize="11" />
-                <TextBox Text="{Binding ApiKey}" PasswordChar="?" Watermark="sk-xxxxxxxxxxxxxxxxxxxxxxxx" FontFamily="Cascadia Code,Cascadia Mono,Consolas,monospace" />
+                <TextBox Text="{Binding ApiKey}" PasswordChar="*" PlaceholderText="sk-xxxxxxxxxxxxxxxxxxxxxxxx" FontFamily="{StaticResource MonoFont}" />
                 <TextBlock FontSize="10" Opacity="0.5" TextWrapping="Wrap" Text="Obtain from https://bailian.console.aliyun.com or set DASHSCOPE_API_KEY env var." />
             </StackPanel>
             <StackPanel Spacing="4">
                 <TextBlock Text="Model" Opacity="0.7" FontSize="11" />
-                <TextBox Text="{Binding Model}" Watermark="qwen-plus" />
+                <TextBox Text="{Binding Model}" PlaceholderText="qwen-plus" />
             </StackPanel>
             <StackPanel Spacing="4">
                 <TextBlock Text="Endpoint" Opacity="0.7" FontSize="11" />
-                <TextBox Text="{Binding Endpoint}" Watermark="https://dashscope.aliyuncs.com/compatible-mode/v1" />
+                <TextBox Text="{Binding Endpoint}" PlaceholderText="https://dashscope.aliyuncs.com/compatible-mode/v1" />
             </StackPanel>
             <StackPanel Spacing="4">
                 <TextBlock Text="Translation Mode" Opacity="0.7" FontSize="11" />

@@ -16,13 +16,13 @@
         <Grid>
             <TextBlock x:Name="DisplayPanel"
                        VerticalAlignment="Center"
-                       FontFamily="Cascadia Code,Cascadia Mono,Sarasa Mono SC,Microsoft YaHei UI,Segoe UI,monospace" />
+                       FontFamily="{StaticResource MonoFont}" />
             <TextBox x:Name="EditPanel"
                      IsVisible="False"
                      Text="{Binding Title}"
                      VerticalAlignment="Center"
                      Padding="4,1"
-                     FontFamily="Cascadia Code,Cascadia Mono,Sarasa Mono SC,Microsoft YaHei UI,Segoe UI,monospace" />
+                     FontFamily="{StaticResource MonoFont}" />
         </Grid>
     </Border>
 </views:WikiElementViewBase>
