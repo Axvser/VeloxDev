@@ -1,4 +1,7 @@
-﻿using System;
+﻿using Markdig;
+using Markdig.Extensions.Tables;
+using Markdig.Syntax;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -17,6 +20,9 @@ internal sealed record TablePayload(string[] headers, string[][] rows);
 /// </summary>
 public static class WikiTranslationCollector
 {
+    private static readonly MarkdownPipeline MarkdownPipeline =
+        new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+
     /// <summary>
     /// Traverses the full document tree rooted at <paramref name="document"/> and
     /// returns one <see cref="WikiTranslationJob"/> per translatable property found.
@@ -81,6 +87,13 @@ public static class WikiTranslationCollector
             if (string.IsNullOrWhiteSpace(value))
                 continue;
 
+            if (element is MarkdownProvider markdownProvider
+                && string.Equals(property.Name, nameof(MarkdownProvider.Text), StringComparison.Ordinal))
+            {
+                CollectMarkdownJobs(markdownProvider, property, attr.Hint, jobs);
+                continue;
+            }
+
             jobs.Add(new WikiTranslationJob(element, property, attr.Hint));
         }
 
@@ -88,6 +101,151 @@ public static class WikiTranslationCollector
         if (element is TableProvider table)
             CollectTableAsSingleJob(table, jobs);
     }
+
+    private static void CollectMarkdownJobs(MarkdownProvider markdownProvider, PropertyInfo property, string hint, List<WikiTranslationJob> jobs)
+    {
+        var markdown = (string?)property.GetValue(markdownProvider) ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(markdown))
+            return;
+
+        var segments = SplitMarkdownIntoViewSegments(markdown);
+        if (segments.Count <= 1)
+        {
+            jobs.Add(new WikiTranslationJob(markdownProvider, property, hint));
+            return;
+        }
+
+        // Each slot starts with the original text. Apply writes the fully-reassembled
+        // Markdown back immediately after each individual job so the view refreshes
+        // progressively: already-translated blocks + remaining original text.
+        var mutableSegments = segments.Select(static s => s.Text).ToArray();
+
+        var emitted = 0;
+        for (int i = 0; i < segments.Count; i++)
+        {
+            var segment = segments[i];
+            if (string.IsNullOrWhiteSpace(segment.Text))
+                continue;
+
+            emitted++;
+            var idx = i;
+            var jobName = $"{property.Name}[{emitted}/{segments.Count(static s => !string.IsNullOrWhiteSpace(s.Text))}]";
+
+            // Separate content from trailing block-separator whitespace so the LLM
+            // never sees or drops the newlines that Markdig needs between blocks.
+            var trimmedText = segment.Text.TrimEnd();
+            var trailingSuffix = segment.Text[trimmedText.Length..];
+
+            jobs.Add(new WikiTranslationJob(
+                markdownProvider,
+                jobName,
+                GetMarkdownBlockHint(segment.Block, hint),
+                trimmedText,
+                translated =>
+                {
+                    mutableSegments[idx] = translated.TrimEnd() + trailingSuffix;
+                    property.SetValue(markdownProvider, string.Concat(mutableSegments));
+                }));
+        }
+
+        if (emitted == 0)
+            jobs.Add(new WikiTranslationJob(markdownProvider, property, hint));
+    }
+
+    private static IReadOnlyList<MarkdownSegment> SplitMarkdownIntoViewSegments(string markdown)
+    {
+        var document = Markdown.Parse(markdown, MarkdownPipeline);
+        if (document.Count == 0)
+            return [new MarkdownSegment(markdown, null)];
+
+        var units = new List<Block>(document.Count);
+        CollectViewUnits(document, units);
+
+        if (units.Count == 0)
+            return [new MarkdownSegment(markdown, null)];
+
+        var segments = new List<MarkdownSegment>(units.Count);
+        var prevEnd = 0;
+        for (int i = 0; i < units.Count; i++)
+        {
+            // start must never go backwards: if a unit's span begins before the previous
+            // segment's end (e.g. a ListItemBlock whose span overlaps with its parent's
+            // span after QuoteBlock expansion), clamp it forward so segments are always
+            // contiguous and non-overlapping.
+            var rawStart = i == 0 ? 0 : Math.Clamp(units[i].Span.Start, 0, markdown.Length);
+            var start = Math.Max(rawStart, prevEnd);
+            var end = i + 1 < units.Count
+                ? Math.Clamp(units[i + 1].Span.Start, start, markdown.Length)
+                : markdown.Length;
+
+            if (end <= start)
+                continue;
+
+            segments.Add(new MarkdownSegment(markdown.Substring(start, end - start), units[i]));
+            prevEnd = end;
+        }
+
+        return segments.Count == 0
+            ? [new MarkdownSegment(markdown, null)]
+            : segments;
+    }
+
+    private static void CollectViewUnits(ContainerBlock container, List<Block> units)
+    {
+        foreach (var child in container)
+            CollectViewUnits(child, units);
+    }
+
+    private static void CollectViewUnits(Block block, List<Block> units)
+    {
+        switch (block)
+        {
+            case QuoteBlock quote:
+                if (quote.Count == 0)
+                {
+                    units.Add(quote);
+                    return;
+                }
+
+                CollectViewUnits(quote, units);
+                return;
+
+            case ListBlock list:
+                var items = list.OfType<ListItemBlock>().ToArray();
+                if (items.Length == 0)
+                {
+                    units.Add(list);
+                    return;
+                }
+
+                foreach (var item in items)
+                    units.Add(item);
+                return;
+
+            default:
+                units.Add(block);
+                return;
+        }
+    }
+
+    private static string GetMarkdownBlockHint(Block? block, string fallbackHint)
+    {
+        return block switch
+        {
+            HeadingBlock heading => $"Markdown heading level {Math.Clamp(heading.Level, 1, 6)}",
+            ParagraphBlock => "Markdown paragraph",
+            QuoteBlock => "Markdown quote block",
+            FencedCodeBlock => "Markdown fenced code block — preserve fences and translate only inline comments",
+            CodeBlock => "Markdown code block — preserve indentation and translate only inline comments",
+            ListBlock list => list.IsOrdered ? "Markdown ordered list" : "Markdown unordered list",
+            ListItemBlock => "Markdown list item",
+            Table => "Markdown table block — preserve table syntax, separators, and column counts",
+            ThematicBreakBlock => "Markdown thematic break",
+            _ => string.IsNullOrWhiteSpace(fallbackHint) ? "Markdown block" : fallbackHint
+        };
+    }
+
+    private sealed record MarkdownSegment(string Text, Block? Block);
 
     /// <summary>
     /// Submits an entire <see cref="TableProvider"/> (headers + all rows) as a single LLM job.

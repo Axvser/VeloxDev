@@ -126,6 +126,11 @@ namespace VeloxDev.Generators
             var symbol = model.GetTypeInfo(typeSyntax).Type;
             if (symbol != null)
             {
+                if (symbol.SpecialType == SpecialType.System_Void)
+                {
+                    return SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.VoidKeyword));
+                }
+
                 return SyntaxFactory.ParseTypeName(symbol.ToDisplayString());
             }
             return typeSyntax;

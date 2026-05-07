@@ -367,12 +367,23 @@ public partial class DocumentProvider : IWikiElement
 
         try
         {
+            var failedCount = 0;
             var progress = new Progress<WikiTranslationProgress>(p =>
             {
+                failedCount = p.FailedCount;
                 TranslationProgress = p.Fraction;
-                TranslationStatus = IsEnglish
-                    ? $"[{p.Completed}/{p.Total}] {p.LastJob.PropertyName} on '{p.LastJob.Element.GetType().Name}'"
-                    : $"[{p.Completed}/{p.Total}] 正在翻译 {p.LastJob.Element.GetType().Name}.{p.LastJob.PropertyName}";
+                if (p.Succeeded)
+                {
+                    TranslationStatus = IsEnglish
+                        ? $"[{p.Completed}/{p.Total}] {p.LastJob.PropertyName} on '{p.LastJob.Element.GetType().Name}'"
+                        : $"[{p.Completed}/{p.Total}] 正在翻译 {p.LastJob.Element.GetType().Name}.{p.LastJob.PropertyName}";
+                }
+                else
+                {
+                    TranslationStatus = IsEnglish
+                        ? $"[{p.Completed}/{p.Total}] Skipped {p.LastJob.PropertyName} on '{p.LastJob.Element.GetType().Name}': {p.LastErrorMessage}"
+                        : $"[{p.Completed}/{p.Total}] 已跳过 {p.LastJob.Element.GetType().Name}.{p.LastJob.PropertyName}：{p.LastErrorMessage}";
+                }
             });
 
             var target = TranslationTargetLanguage?.Code ?? Language;
@@ -398,7 +409,9 @@ public partial class DocumentProvider : IWikiElement
                     break;
             }
 
-            TranslationStatus = IsEnglish ? "Translation complete ✓" : "翻译完成 ✓";
+            TranslationStatus = failedCount == 0
+                ? (IsEnglish ? "Translation complete ✓" : "翻译完成 ✓")
+                : (IsEnglish ? $"Translation complete ✓ ({failedCount} skipped)" : $"翻译完成 ✓（跳过 {failedCount} 项）");
             TranslationProgress = 1;
         }
         catch (OperationCanceledException)

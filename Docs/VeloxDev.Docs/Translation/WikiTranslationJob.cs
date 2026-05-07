@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Reflection;
-
 namespace VeloxDev.Docs.Translation;
 
 /// <summary>
@@ -11,6 +10,7 @@ namespace VeloxDev.Docs.Translation;
 public sealed class WikiTranslationJob
 {
     private readonly Action<string> _apply;
+    private readonly Action<bool>? _complete;
 
     /// <summary>The element instance that owns this text (for display in progress reports).</summary>
     public object Element { get; }
@@ -24,6 +24,9 @@ public sealed class WikiTranslationJob
     /// <summary>The text value to be translated.</summary>
     public string OriginalText { get; }
 
+    /// <summary>Total number of executable translation work items represented by this job.</summary>
+    public int WorkItemCount { get; }
+
     /// <summary>Creates a job backed by a reflected property setter.</summary>
     internal WikiTranslationJob(object element, PropertyInfo property, string hint)
         : this(element, property.Name, hint, (string?)property.GetValue(element) ?? string.Empty,
@@ -31,15 +34,28 @@ public sealed class WikiTranslationJob
     { }
 
     /// <summary>Creates a job with an arbitrary write-back delegate (e.g. a collection slot).</summary>
-    internal WikiTranslationJob(object element, string propertyName, string hint, string originalText, Action<string> apply)
+    internal WikiTranslationJob(
+        object element,
+        string propertyName,
+        string hint,
+        string originalText,
+        Action<string> apply,
+        Action<bool>? complete = null)
     {
         Element = element;
         PropertyName = propertyName;
         Hint = string.IsNullOrWhiteSpace(hint) ? propertyName : hint;
         OriginalText = originalText;
         _apply = apply;
+        _complete = complete;
+        WorkItemCount = GetWorkItemCount(element, originalText);
     }
 
     /// <summary>Writes the translated string back. Must be called on the UI thread.</summary>
     public void Apply(string translated) => _apply(translated);
+
+    internal void Complete(bool succeeded) => _complete?.Invoke(succeeded);
+
+    private static int GetWorkItemCount(object element, string originalText)
+        => 1;
 }

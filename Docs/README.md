@@ -158,6 +158,10 @@ Properties marked this way on the built-in providers:
 
 `TableProvider.Headers` and every `TableRowProvider.Cells` are `ObservableCollection<string>` and cannot be annotated with `[TranslateTarget]`. `WikiTranslationCollector` handles them explicitly: it iterates each non-empty slot and emits a `WikiTranslationJob` whose write-back delegate updates `collection[index]` directly. Header slots receive hint `"table column header"`; cell slots receive `"table cell text"`.
 
+#### Large Markdown translation
+
+`MarkdownProvider.Text` is still translated as Markdown, but oversized documents are no longer sent in one request. `WikiTranslator` now parses the Markdown into blocks and translates it in smaller chunks, preferring block, paragraph, and line boundaries. This reduces model/context-limit failures on very large pages while preserving Markdown structure.
+
 #### Code comment translation
 
 `CodeProvider.Code` is marked with a detailed `[TranslateTarget]` hint that instructs the LLM to **translate only inline comments** (`// …`, `/* … */`, `# …`, `<!-- … -->`) and leave all identifiers, keywords, and string literals unchanged. The entire code string (including syntax) is sent; the model is expected to return it with only the comment text changed.

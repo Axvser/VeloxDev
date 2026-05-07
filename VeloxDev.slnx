@@ -28,12 +28,8 @@
   <Folder Name="/Examples/AOP/WPF/">
     <Project Path="Examples/AOP/WPF/Demo/Demo.csproj" />
   </Folder>
-  <Folder Name="/Examples/AOTReflection/">
-    <File Path="Examples/AOTReflection/README.md" />
-  </Folder>
-  <Folder Name="/Examples/MonoBehaviour/">
-    <File Path="Examples/MonoBehaviour/README.md" />
-  </Folder>
+  <Folder Name="/Examples/AOTReflection/" />
+  <Folder Name="/Examples/MonoBehaviour/" />
   <Folder Name="/Examples/MonoBehaviour/WPF/">
     <Project Path="Examples/MonoBehaviour/WPF/Demo/Demo.csproj" />
   </Folder>

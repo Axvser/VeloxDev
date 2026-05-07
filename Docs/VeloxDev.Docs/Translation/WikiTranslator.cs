@@ -114,7 +114,7 @@ public sealed class WikiTranslator
             cancellationToken.ThrowIfCancellationRequested();
             var result = await TranslateJobAsync(job, targetLanguage, cancellationToken).ConfigureAwait(true);
             job.Apply(result);
-            translated++;
+            translated += job.WorkItemCount;
         }
         return translated;
     }
@@ -127,6 +127,10 @@ public sealed class WikiTranslator
         IProgress<WikiTranslationProgress>? progress,
         CancellationToken cancellationToken)
     {
+        var totalWorkItems = GetTotalWorkItems(jobs);
+        var completedWorkItems = 0;
+        var failedCount = 0;
+
         for (int i = 0; i < jobs.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -135,10 +139,26 @@ public sealed class WikiTranslator
             // ConfigureAwait(true): HTTP work runs off-thread inside TranslateJobAsync,
             // but the continuation (Apply) is marshalled back to the calling sync context
             // (UI thread) so that property setters can safely mutate Avalonia objects.
-            var translated = await TranslateJobAsync(job, targetLanguage, cancellationToken).ConfigureAwait(true);
-            job.Apply(translated);
-
-            progress?.Report(new WikiTranslationProgress(i + 1, jobs.Count, job));
+            try
+            {
+                var translated = await TranslateJobAsync(job, targetLanguage, cancellationToken).ConfigureAwait(true);
+                job.Apply(translated);
+                job.Complete(true);
+                completedWorkItems += job.WorkItemCount;
+                progress?.Report(new WikiTranslationProgress(completedWorkItems, totalWorkItems, job, true, failedCount, null));
+            }
+            catch (OperationCanceledException)
+            {
+                job.Complete(false);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                job.Complete(false);
+                failedCount++;
+                completedWorkItems += job.WorkItemCount;
+                progress?.Report(new WikiTranslationProgress(completedWorkItems, totalWorkItems, job, false, failedCount, ex.Message));
+            }
         }
     }
 
@@ -154,16 +174,34 @@ public sealed class WikiTranslator
         if (string.IsNullOrWhiteSpace(job.OriginalText))
             return job.OriginalText;
 
+        return await TranslateTextAsync(job.OriginalText, targetLanguage, job.Hint, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string> TranslateTextAsync(
+        string text,
+        string targetLanguage,
+        string hint,
+        CancellationToken cancellationToken)
+    {
         var messages = new List<ChatMessage>
         {
-            new(ChatRole.System, BuildSystemPrompt(targetLanguage, job.Hint)),
-            new(ChatRole.User, job.OriginalText)
+            new(ChatRole.System, BuildSystemPrompt(targetLanguage, hint)),
+            new(ChatRole.User, text)
         };
 
         var response = await _chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
-        return response.Text?.Trim() ?? job.OriginalText;
+        return response.Text?.Trim() ?? text;
+    }
+
+    private static int GetTotalWorkItems(IReadOnlyList<WikiTranslationJob> jobs)
+    {
+        var total = 0;
+        for (int i = 0; i < jobs.Count; i++)
+            total += Math.Max(1, jobs[i].WorkItemCount);
+
+        return Math.Max(1, total);
     }
 
     private static string BuildSystemPrompt(string targetLanguage, string hint)
