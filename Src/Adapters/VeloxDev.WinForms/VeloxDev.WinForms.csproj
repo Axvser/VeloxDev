@@ -19,7 +19,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="VeloxDev.Core" Version="5.0.4" />
+	  <PackageReference Include="VeloxDev.Core" Version="5.0.16" />
 	</ItemGroup>
 
 </Project>

@@ -1,16 +1,18 @@
-﻿namespace VeloxDev.TimeLine;
+﻿using System;
+
+namespace VeloxDev.TimeLine;
 
 public class FrameEventArgs : TimeLineEventArgs
 {
     /// <summary>
-    /// the delta time from last frame in milliseconds
+    /// the delta time from last frame
     /// </summary>
-    public int DeltaTime { get; internal set; } = 0;
+    public TimeSpan DeltaTime { get; internal set; } = TimeSpan.Zero;
 
     /// <summary>
-    /// the total time since the TimeLine started in milliseconds
+    /// the total time since the TimeLine started
     /// </summary>
-    public int TotalTime { get; internal set; } = 0;
+    public TimeSpan TotalTime { get; internal set; } = TimeSpan.Zero;
 
     /// <summary>
     /// the current frames per second

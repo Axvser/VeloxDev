@@ -21,7 +21,7 @@ namespace Demo
             partial void Update(FrameEventArgs e)
             {
                 _updateCount++;
-                _velocity += Gravity * (e.DeltaTime / 1000.0);
+                _velocity += Gravity * e.DeltaTime.TotalSeconds;
             }
 
             partial void FixedUpdate(FrameEventArgs e)
@@ -47,6 +47,7 @@ namespace Demo
                 if (_currentKeys.Count > 0)
                 {
                     _keyPressCount += _currentKeys.Count;
+                    MonoBehaviourManager.SetTargetFPS(30,"game");
                 }
             }
 
@@ -150,11 +151,11 @@ namespace Demo
                 var txtTotalFrames = FindName("txtTotalFrames") as TextBlock;
                 var txtHandled = FindName("txtHandled") as TextBlock;
 
-                if (txtDeltaTime != null) txtDeltaTime.Text = $"Delta Time: {e.DeltaTime} ms";
-                if (txtTotalTime != null) txtTotalTime.Text = $"Total Time: {e.TotalTime / 1000.0:F1} s";
+                if (txtDeltaTime != null) txtDeltaTime.Text = $"Delta Time: {e.DeltaTime.TotalMilliseconds:F3} ms";
+                if (txtTotalTime != null) txtTotalTime.Text = $"Total Time: {e.TotalTime.TotalSeconds:F3} s";
                 if (txtCurrentFPS != null) txtCurrentFPS.Text = $"Current FPS: {e.CurrentFPS}";
                 if (txtTargetFPS != null) txtTargetFPS.Text = $"Target FPS: {e.TargetFPS}";
-                if (txtTotalFrames != null) txtTotalFrames.Text = $"Total Frames: {MonoBehaviourManager.TotalFrames}";
+                if (txtTotalFrames != null) txtTotalFrames.Text = $"Total Frames: {MonoBehaviourManager.TotalFrames()}";
                 if (txtHandled != null) txtHandled.Text = $"Handled: {(e.Handled ? "Yes" : "No")}";
             });
         }

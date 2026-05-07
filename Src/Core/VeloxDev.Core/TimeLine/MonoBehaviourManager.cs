@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using VeloxDev.MonoBehaviour;
@@ -121,11 +122,11 @@ namespace VeloxDev.TimeLine
             private long _timeScaleBits = BitConverter.DoubleToInt64Bits(DEFAULT_TIME_SCALE);
             private int _targetFPS = DEFAULT_TARGET_FPS;
             private int _fixedUpdateInterval = DEFAULT_FIXED_UPDATE_INTERVAL_MS;
-            private long _totalTimeMs;
-            private long _lastFrameTime;
+            private long _totalTimeTicks;
+            private long _lastFrameTimestamp;
             private int _currentFPS;
             private int _fpsCounter;
-            private long _fpsLastUpdateTime;
+            private long _fpsLastUpdateTimestamp;
             private long _totalFrames;
             private int _instanceCounter;
 
@@ -134,19 +135,18 @@ namespace VeloxDev.TimeLine
             private Thread? _fixedUpdateThread;
             private volatile bool _isUpdateThreadActive;
             private volatile bool _isFixedUpdateThreadActive;
-            private long _updateThreadLastActivity;
-            private long _fixedUpdateThreadLastActivity;
+            private long _updateThreadLastActivityTimestamp;
+            private long _fixedUpdateThreadLastActivityTimestamp;
 
             private readonly ObjectPool<FrameEventArgs> _frameEventArgsPool = new(DEFAULT_OBJECT_POOL_SIZE);
             private readonly ObjectPool<ConfigChangeRequest> _configRequestPool = new(DEFAULT_OBJECT_POOL_SIZE);
             private readonly ObjectPool<BehaviorWrapper> _wrapperPool = new(DEFAULT_OBJECT_POOL_SIZE);
-            private double _cachedTargetFrameTime = 1000.0 / DEFAULT_TARGET_FPS;
-            private long _lastConfigCheckTime;
+            private double _cachedTargetFrameDurationTicks = (double)Stopwatch.Frequency / DEFAULT_TARGET_FPS;
+            private long _lastConfigCheckTimestamp;
             private volatile BehaviorWrapper[] _cachedWrappers = [];
             private volatile bool _wrappersNeedSort;
 
             private readonly Stopwatch _frameTimer = new();
-            private static readonly long _ticksPerMs = Stopwatch.Frequency / 1000;
 
             public event EventHandler? Started;
             public event EventHandler? Paused;
@@ -161,17 +161,18 @@ namespace VeloxDev.TimeLine
             public bool IsPaused => _isPaused;
             public int CurrentFPS => _currentFPS;
             public int TargetFPS => Volatile.Read(ref _targetFPS);
-            public long TotalTimeMs => Interlocked.Read(ref _totalTimeMs);
+            public TimeSpan TotalTime => TimeSpan.FromTicks(Interlocked.Read(ref _totalTimeTicks));
+            public long TotalTimeMs => (long)TotalTime.TotalMilliseconds;
             public long TotalFrames => Interlocked.Read(ref _totalFrames);
             public int ActiveBehaviorCount => _behaviors.Count;
             public float TimeScale => (float)BitConverter.Int64BitsToDouble(Interlocked.Read(ref _timeScaleBits));
             public string SystemStatus => !_isRunning ? "Stopped" : _isPaused ? "Paused" : "Running";
 
             public bool IsUpdateThreadAlive => _isRunning && _isUpdateThreadActive &&
-                (GetTimestamp() - Interlocked.Read(ref _updateThreadLastActivity)) < THREAD_INACTIVITY_TIMEOUT_MS;
+                IsRecentActivity(Interlocked.Read(ref _updateThreadLastActivityTimestamp));
 
             public bool IsFixedUpdateThreadAlive => _isRunning && _isFixedUpdateThreadActive &&
-                (GetTimestamp() - Interlocked.Read(ref _fixedUpdateThreadLastActivity)) < THREAD_INACTIVITY_TIMEOUT_MS;
+                IsRecentActivity(Interlocked.Read(ref _fixedUpdateThreadLastActivityTimestamp));
 
             #endregion
 
@@ -219,12 +220,12 @@ namespace VeloxDev.TimeLine
                 _isPaused = false;
                 _isUpdateThreadActive = false;
                 _isFixedUpdateThreadActive = false;
-                Interlocked.Exchange(ref _updateThreadLastActivity, 0);
-                Interlocked.Exchange(ref _fixedUpdateThreadLastActivity, 0);
+                Interlocked.Exchange(ref _updateThreadLastActivityTimestamp, 0);
+                Interlocked.Exchange(ref _fixedUpdateThreadLastActivityTimestamp, 0);
 
                 _cts = new CancellationTokenSource();
-                _lastFrameTime = GetTimestamp();
-                _fpsLastUpdateTime = _lastFrameTime;
+                _lastFrameTimestamp = GetTimestamp();
+                _fpsLastUpdateTimestamp = _lastFrameTimestamp;
                 _frameTimer.Restart();
 
                 RebuildCachedWrappers();
@@ -342,7 +343,7 @@ namespace VeloxDev.TimeLine
             private void FixedUpdateLoop(CancellationToken token)
             {
                 _isFixedUpdateThreadActive = true;
-                Interlocked.Exchange(ref _fixedUpdateThreadLastActivity, GetTimestamp());
+                Interlocked.Exchange(ref _fixedUpdateThreadLastActivityTimestamp, GetTimestamp());
 
                 long lastFixedUpdateTime = GetTimestamp();
 
@@ -350,11 +351,11 @@ namespace VeloxDev.TimeLine
                 {
                     while (_isRunning && !token.IsCancellationRequested)
                     {
-                        Interlocked.Exchange(ref _fixedUpdateThreadLastActivity, GetTimestamp());
+                        Interlocked.Exchange(ref _fixedUpdateThreadLastActivityTimestamp, GetTimestamp());
 
                         if (_isPaused)
                         {
-                            PrecisionSleep(DEFAULT_PAUSE_DELAY_MS, token);
+                            PrecisionSleep(TimeSpan.FromMilliseconds(DEFAULT_PAUSE_DELAY_MS), token);
                             continue;
                         }
 
@@ -362,7 +363,7 @@ namespace VeloxDev.TimeLine
                         var interval = Volatile.Read(ref _fixedUpdateInterval);
                         var elapsed = currentTime - lastFixedUpdateTime;
 
-                        if (elapsed >= interval)
+                        if (elapsed >= MillisecondsToStopwatchTicks(interval))
                         {
                             var fixedFrameArgs = CreateFrameEventArgs((int)elapsed);
                             ExecuteBehaviorsFixedUpdateSync(fixedFrameArgs, token);
@@ -375,10 +376,10 @@ namespace VeloxDev.TimeLine
                             lastFixedUpdateTime = currentTime;
                         }
 
-                        var nextUpdateTime = lastFixedUpdateTime + interval;
-                        var waitTime = (int)(nextUpdateTime - GetTimestamp());
+                        var nextUpdateTime = lastFixedUpdateTime + MillisecondsToStopwatchTicks(interval);
+                        var waitTime = nextUpdateTime - GetTimestamp();
                         if (waitTime > 0)
-                            PrecisionSleep(waitTime, token);
+                            PrecisionSleep(ConvertStopwatchTicksToTimeSpan(waitTime), token);
                     }
                 }
                 catch (OperationCanceledException) { }
@@ -391,17 +392,17 @@ namespace VeloxDev.TimeLine
             private void UpdateLoop(CancellationToken token)
             {
                 _isUpdateThreadActive = true;
-                Interlocked.Exchange(ref _updateThreadLastActivity, GetTimestamp());
+                Interlocked.Exchange(ref _updateThreadLastActivityTimestamp, GetTimestamp());
 
                 try
                 {
                     while (_isRunning && !token.IsCancellationRequested)
                     {
-                        Interlocked.Exchange(ref _updateThreadLastActivity, GetTimestamp());
+                        Interlocked.Exchange(ref _updateThreadLastActivityTimestamp, GetTimestamp());
 
                         if (_isPaused)
                         {
-                            PrecisionSleep(DEFAULT_PAUSE_DELAY_MS, token);
+                            PrecisionSleep(TimeSpan.FromMilliseconds(DEFAULT_PAUSE_DELAY_MS), token);
                             continue;
                         }
 
@@ -411,7 +412,7 @@ namespace VeloxDev.TimeLine
                         var deltaTime = CalculateDeltaTime(frameStartTime);
                         if (deltaTime <= 0)
                         {
-                            PrecisionSleep(MIN_SLEEP_MS, token);
+                            PrecisionSleep(TimeSpan.FromMilliseconds(MIN_SLEEP_MS), token);
                             continue;
                         }
 
@@ -495,10 +496,10 @@ namespace VeloxDev.TimeLine
             private BehaviorWrapper[] GetCachedWrappers()
             {
                 var currentTime = GetTimestamp();
-                if (_wrappersNeedSort || Interlocked.Read(ref _lastConfigCheckTime) + MAX_CONFIG_CACHE_DURATION_MS < currentTime)
+                if (_wrappersNeedSort || currentTime - Interlocked.Read(ref _lastConfigCheckTimestamp) > MillisecondsToStopwatchTicks(MAX_CONFIG_CACHE_DURATION_MS))
                 {
                     RebuildCachedWrappers();
-                    Interlocked.Exchange(ref _lastConfigCheckTime, currentTime);
+                    Interlocked.Exchange(ref _lastConfigCheckTimestamp, currentTime);
                 }
                 return _cachedWrappers;
             }
@@ -525,7 +526,7 @@ namespace VeloxDev.TimeLine
                     if (config.TargetFPS.HasValue)
                     {
                         Volatile.Write(ref _targetFPS, config.TargetFPS.Value);
-                        _cachedTargetFrameTime = 1000.0 / config.TargetFPS.Value;
+                        _cachedTargetFrameDurationTicks = (double)Stopwatch.Frequency / config.TargetFPS.Value;
                     }
                     if (config.FixedUpdateInterval.HasValue)
                         Volatile.Write(ref _fixedUpdateInterval, config.FixedUpdateInterval.Value);
@@ -573,12 +574,12 @@ namespace VeloxDev.TimeLine
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private FrameEventArgs CreateFrameEventArgs(int deltaTime)
+            private FrameEventArgs CreateFrameEventArgs(long deltaTime)
             {
                 var ts = (float)BitConverter.Int64BitsToDouble(Interlocked.Read(ref _timeScaleBits));
                 var frameArgs = _frameEventArgsPool.Get();
-                frameArgs.DeltaTime = (int)(deltaTime * ts);
-                frameArgs.TotalTime = (int)Interlocked.Read(ref _totalTimeMs);
+                frameArgs.DeltaTime = ScaleDuration(ConvertStopwatchTicksToTimeSpan(deltaTime), ts);
+                frameArgs.TotalTime = TimeSpan.FromTicks(Interlocked.Read(ref _totalTimeTicks));
                 frameArgs.CurrentFPS = _currentFPS;
                 frameArgs.TargetFPS = Volatile.Read(ref _targetFPS);
                 frameArgs.Handled = false;
@@ -595,11 +596,11 @@ namespace VeloxDev.TimeLine
             private void FrameRateControlSync(long frameStartTime, CancellationToken token)
             {
                 var elapsed = GetTimestamp() - frameStartTime;
-                var target = _cachedTargetFrameTime;
+                var target = _cachedTargetFrameDurationTicks;
                 if (elapsed < target)
                 {
-                    var sleepTime = (int)(target - elapsed);
-                    if (sleepTime > 0) PrecisionSleep(sleepTime, token);
+                    var sleepTime = (long)(target - elapsed);
+                    if (sleepTime > 0) PrecisionSleep(ConvertStopwatchTicksToTimeSpan(sleepTime), token);
                 }
             }
 
@@ -607,16 +608,16 @@ namespace VeloxDev.TimeLine
             /// 高精度睡眠：长等待用 Thread.Sleep(1) 节省 CPU，尾部自旋保精度
             /// </summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private void PrecisionSleep(int milliseconds, CancellationToken token)
+            private void PrecisionSleep(TimeSpan duration, CancellationToken token)
             {
-                if (milliseconds <= 0) return;
+                if (duration <= TimeSpan.Zero) return;
 
-                var targetTicks = _frameTimer.ElapsedTicks + (long)milliseconds * _ticksPerMs;
+                var targetTicks = _frameTimer.ElapsedTicks + ConvertTimeSpanToStopwatchTicks(duration);
 
                 // 长等待阶段：Thread.Sleep(1) 实际精度约 1-2ms，节约 CPU
-                if (milliseconds > SPIN_ONLY_THRESHOLD_MS)
+                if (duration > TimeSpan.FromMilliseconds(SPIN_ONLY_THRESHOLD_MS))
                 {
-                    var sleepUntilTicks = targetTicks - SPIN_ONLY_THRESHOLD_MS * _ticksPerMs;
+                    var sleepUntilTicks = targetTicks - MillisecondsToStopwatchTicks(SPIN_ONLY_THRESHOLD_MS);
                     while (_frameTimer.ElapsedTicks < sleepUntilTicks)
                     {
                         if (token.IsCancellationRequested) return;
@@ -665,30 +666,67 @@ namespace VeloxDev.TimeLine
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static long GetTimestamp() => Stopwatch.GetTimestamp() * 1000 / Stopwatch.Frequency;
+            private static long GetTimestamp() => Stopwatch.GetTimestamp();
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private int CalculateDeltaTime(long currentTime)
+            private long CalculateDeltaTime(long currentTime)
             {
-                var last = Volatile.Read(ref _lastFrameTime);
-                if (last <= 0) return 1;
-                return Math.Max(1, (int)(currentTime - last));
+                var last = Volatile.Read(ref _lastFrameTimestamp);
+                if (last <= 0) return MillisecondsToStopwatchTicks(1);
+                return Math.Max(1L, currentTime - last);
             }
 
-            private void UpdatePerformanceStats(long frameStartTime, int deltaTime)
+            private void UpdatePerformanceStats(long frameStartTime, long deltaTime)
             {
-                Interlocked.Add(ref _totalTimeMs, deltaTime);
-                Volatile.Write(ref _lastFrameTime, frameStartTime);
+                Interlocked.Add(ref _totalTimeTicks, ConvertStopwatchTicksToTimeSpanTicks(deltaTime));
+                Volatile.Write(ref _lastFrameTimestamp, frameStartTime);
                 _fpsCounter++;
 
-                var currentTime = GetTimestamp();
-                if (currentTime - _fpsLastUpdateTime >= 1000)
+                if (frameStartTime - _fpsLastUpdateTimestamp >= Stopwatch.Frequency)
                 {
                     _currentFPS = _fpsCounter;
                     _fpsCounter = 0;
-                    _fpsLastUpdateTime = currentTime;
+                    _fpsLastUpdateTimestamp = frameStartTime;
                 }
             }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static TimeSpan ScaleDuration(TimeSpan duration, float scale)
+            {
+                if (scale <= 0f || duration <= TimeSpan.Zero)
+                    return TimeSpan.Zero;
+
+                return TimeSpan.FromTicks((long)(duration.Ticks * scale));
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static bool IsRecentActivity(long lastActivityTimestamp)
+            {
+                if (lastActivityTimestamp <= 0)
+                    return false;
+
+                return StopwatchTicksToMilliseconds(GetTimestamp() - lastActivityTimestamp) < THREAD_INACTIVITY_TIMEOUT_MS;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static long MillisecondsToStopwatchTicks(int milliseconds)
+                => (long)(milliseconds * (double)Stopwatch.Frequency / 1000d);
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static long ConvertTimeSpanToStopwatchTicks(TimeSpan duration)
+                => (long)(duration.Ticks * (double)Stopwatch.Frequency / TimeSpan.TicksPerSecond);
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static TimeSpan ConvertStopwatchTicksToTimeSpan(long stopwatchTicks)
+                => TimeSpan.FromTicks(ConvertStopwatchTicksToTimeSpanTicks(stopwatchTicks));
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static long ConvertStopwatchTicksToTimeSpanTicks(long stopwatchTicks)
+                => (long)(stopwatchTicks * (double)TimeSpan.TicksPerSecond / Stopwatch.Frequency);
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static double StopwatchTicksToMilliseconds(long stopwatchTicks)
+                => stopwatchTicks * 1000d / Stopwatch.Frequency;
 
             private static void SafeExecute(Action action)
             {
@@ -697,13 +735,13 @@ namespace VeloxDev.TimeLine
 
             private void ResetStatistics()
             {
-                Interlocked.Exchange(ref _totalTimeMs, 0);
+                Interlocked.Exchange(ref _totalTimeTicks, 0);
                 _currentFPS = 0;
                 _fpsCounter = 0;
-                _fpsLastUpdateTime = 0;
+                _fpsLastUpdateTimestamp = 0;
                 Interlocked.Exchange(ref _totalFrames, 0);
-                Volatile.Write(ref _lastFrameTime, 0);
-                Interlocked.Exchange(ref _lastConfigCheckTime, 0);
+                Volatile.Write(ref _lastFrameTimestamp, 0);
+                Interlocked.Exchange(ref _lastConfigCheckTimestamp, 0);
             }
 
             private void ClearQueues()
@@ -841,6 +879,9 @@ namespace VeloxDev.TimeLine
 
         public static int TargetFPS(string channel = DEFAULT_CHANNEL)
             => _channels.TryGetValue(channel, out var c) ? c.TargetFPS : DEFAULT_TARGET_FPS;
+
+        public static TimeSpan TotalTime(string channel = DEFAULT_CHANNEL)
+            => _channels.TryGetValue(channel, out var c) ? c.TotalTime : TimeSpan.Zero;
 
         public static long TotalTimeMs(string channel = DEFAULT_CHANNEL)
             => _channels.TryGetValue(channel, out var c) ? c.TotalTimeMs : 0;

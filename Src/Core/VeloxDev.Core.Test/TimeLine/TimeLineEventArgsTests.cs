@@ -1,3 +1,4 @@
+using System;
 using VeloxDev.TimeLine;
 
 namespace VeloxDev.Core.Test.TimeLine;
@@ -27,8 +28,8 @@ public class TimeLineEventArgsTests
     public void FrameEventArgs_DefaultValues()
     {
         var args = new FrameEventArgs();
-        Assert.AreEqual(0, args.DeltaTime);
-        Assert.AreEqual(0, args.TotalTime);
+        Assert.AreEqual(TimeSpan.Zero, args.DeltaTime);
+        Assert.AreEqual(TimeSpan.Zero, args.TotalTime);
         Assert.AreEqual(0, args.CurrentFPS);
         Assert.AreEqual(0, args.TargetFPS);
         Assert.IsFalse(args.Handled);
