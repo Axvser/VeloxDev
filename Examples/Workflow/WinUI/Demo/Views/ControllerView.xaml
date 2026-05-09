@@ -6,9 +6,13 @@
     xmlns:local="using:Demo.Views"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Clip="{x:Null}"
+    local:WorkflowSlotLayoutBehavior.IsEnabled="True"
+    local:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
+    local:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
     mc:Ignorable="d">
 
-    <Grid>
+    <Grid Clip="{x:Null}">
         <Grid.RowDefinitions>
             <RowDefinition Height="52" />
             <RowDefinition Height="*" />
@@ -24,10 +28,8 @@
         <Border Grid.Row="0"
                 CornerRadius="5,5,0,0"
                 Background="#2D2D2D"
-                PointerPressed="OnPointerPressed"
-                PointerReleased="OnPointerReleased"
-                PointerMoved="OnPointerMoved"
-                PointerCaptureLost="OnPointerCaptureLost">
+                local:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                local:WorkflowNodeDragBehavior.IsEnabled="True">
             <TextBlock Text="Network Flow Controller"
                        VerticalAlignment="Center"
                        HorizontalAlignment="Center"

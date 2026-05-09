@@ -12,6 +12,8 @@ namespace Demo.Views;
 
 public sealed partial class LinkView : UserControl
 {
+    private static readonly DoubleCollection VirtualStrokeDashArray = [4, 2];
+
     public LinkView()
     {
         InitializeComponent();
@@ -24,7 +26,7 @@ public sealed partial class LinkView : UserControl
         // 创建路径用于绘制贝塞尔曲线
         _path = new Path
         {
-            Stroke = new SolidColorBrush(Colors.Cyan),
+            Stroke = _strokeBrush,
             StrokeThickness = 2,
             IsHitTestVisible = false
         };
@@ -32,7 +34,7 @@ public sealed partial class LinkView : UserControl
         // 创建箭头路径
         _arrowPath = new Path
         {
-            Fill = new SolidColorBrush(Colors.Cyan),
+            Fill = _arrowBrush,
             IsHitTestVisible = false
         };
 
@@ -40,6 +42,8 @@ public sealed partial class LinkView : UserControl
         container.Children.Add(_arrowPath);
         this.Content = container;
 
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         PointerEntered += (_, _) => { IsHighlighted = true; Focus(FocusState.Pointer); };
         PointerExited += (_, _) => IsHighlighted = false;
         PointerMoved += OnHoverPointerMoved;
@@ -47,6 +51,17 @@ public sealed partial class LinkView : UserControl
 
     private readonly Path _path;
     private readonly Path _arrowPath;
+    private readonly SolidColorBrush _strokeBrush = new(Colors.Cyan);
+    private readonly SolidColorBrush _arrowBrush = new(Colors.Cyan);
+    private readonly PathGeometry _pathGeometry = new();
+    private readonly PathFigure _pathFigure = new() { IsClosed = false };
+    private readonly BezierSegment _bezierSegment = new();
+    private readonly PathGeometry _arrowGeometry = new();
+    private readonly PathFigure _arrowFigure = new() { IsClosed = true };
+    private readonly LineSegment _arrowLeftSegment = new();
+    private readonly LineSegment _arrowRightSegment = new();
+    private bool _updatePending;
+    private bool _isLoaded;
 
     // 依赖属性
     public static readonly DependencyProperty StartLeftProperty =
@@ -83,6 +98,13 @@ public sealed partial class LinkView : UserControl
             typeof(bool),
             typeof(LinkView),
             new PropertyMetadata(true, OnCanRenderChanged));
+
+    public static readonly DependencyProperty LineColorProperty =
+        DependencyProperty.Register(
+            nameof(LineColor),
+            typeof(Windows.UI.Color),
+            typeof(LinkView),
+            new PropertyMetadata(Colors.White, OnPositionChanged));
 
     public static readonly DependencyProperty IsVirtualProperty =
         DependencyProperty.Register(
@@ -121,6 +143,12 @@ public sealed partial class LinkView : UserControl
         set => SetValue(CanRenderProperty, value);
     }
 
+    public Windows.UI.Color LineColor
+    {
+        get => (Windows.UI.Color)GetValue(LineColorProperty);
+        set => SetValue(LineColorProperty, value);
+    }
+
     public bool IsVirtual
     {
         get => (bool)GetValue(IsVirtualProperty);
@@ -139,7 +167,7 @@ public sealed partial class LinkView : UserControl
     private static void OnPositionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var control = (LinkView)d;
-        control.UpdateLinkPath();
+        control.ScheduleUpdate();
     }
 
     private static void OnCanRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -151,16 +179,70 @@ public sealed partial class LinkView : UserControl
     private static void OnIsVirtualChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var control = (LinkView)d;
-        control.UpdateLinkPath();
+        control.ScheduleUpdate();
     }
 
     private void OnCanRenderChanged(bool oldValue, bool newValue)
     {
-        UpdateLinkPath();
+        ScheduleUpdate();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = true;
+        EnsureGeometry();
+        ScheduleUpdate();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = false;
+        _updatePending = false;
+    }
+
+    private void EnsureGeometry()
+    {
+        if (_pathFigure.Segments.Count == 0)
+        {
+            _pathFigure.Segments.Add(_bezierSegment);
+            _pathGeometry.Figures.Add(_pathFigure);
+        }
+
+        if (_arrowFigure.Segments.Count == 0)
+        {
+            _arrowFigure.Segments.Add(_arrowLeftSegment);
+            _arrowFigure.Segments.Add(_arrowRightSegment);
+            _arrowGeometry.Figures.Add(_arrowFigure);
+        }
+    }
+
+    private void ScheduleUpdate()
+    {
+        if (!_isLoaded)
+        {
+            return;
+        }
+
+        if (_updatePending)
+        {
+            return;
+        }
+
+        _updatePending = true;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
+        {
+            _updatePending = false;
+            if (_isLoaded)
+            {
+                UpdateLinkPath();
+            }
+        });
     }
 
     private void UpdateLinkPath()
     {
+        EnsureGeometry();
+
         if (!CanRender)
         {
             _path.Data = null;
@@ -182,40 +264,28 @@ public sealed partial class LinkView : UserControl
             EndTop - diffy * 0.1);
 
         // 创建贝塞尔曲线几何图形
-        var pathGeometry = new PathGeometry();
-        var pathFigure = new PathFigure
-        {
-            StartPoint = new Point(StartLeft, StartTop),
-            IsClosed = false
-        };
-
-        var bezierSegment = new BezierSegment
-        {
-            Point1 = cp1,
-            Point2 = cp2,
-            Point3 = new Point(EndLeft, EndTop)
-        };
-
-        pathFigure.Segments.Add(bezierSegment);
-        pathGeometry.Figures.Add(pathFigure);
+        _pathFigure.StartPoint = new Point(StartLeft, StartTop);
+        _bezierSegment.Point1 = cp1;
+        _bezierSegment.Point2 = cp2;
+        _bezierSegment.Point3 = new Point(EndLeft, EndTop);
 
         // 设置线条样式
-        var lineColor = IsHighlighted ? Microsoft.UI.Colors.OrangeRed : Colors.Cyan;
+        var lineColor = IsHighlighted ? Microsoft.UI.Colors.OrangeRed : LineColor;
         var strokeThickness = IsHighlighted ? 3.5 : 2.0;
-        _path.Stroke = new SolidColorBrush(lineColor);
+        _strokeBrush.Color = lineColor;
         _path.StrokeThickness = strokeThickness;
-        _arrowPath.Fill = new SolidColorBrush(lineColor);
+        _arrowBrush.Color = lineColor;
 
         if (IsVirtual)
         {
-            _path.StrokeDashArray = new DoubleCollection { 4, 2 }; // 虚线样式
+            _path.StrokeDashArray = VirtualStrokeDashArray; // 虚线样式
         }
         else
         {
             _path.StrokeDashArray = null; // 实线
         }
 
-        _path.Data = pathGeometry;
+        _path.Data = _pathGeometry;
 
         // 绘制箭头
         DrawArrow();
@@ -244,6 +314,12 @@ public sealed partial class LinkView : UserControl
 
         // 归一化切线向量
         var length = Math.Sqrt(tangentX * tangentX + tangentY * tangentY);
+        if (length <= double.Epsilon)
+        {
+            _arrowPath.Data = null;
+            return;
+        }
+
         var unitTangentX = tangentX / length;
         var unitTangentY = tangentY / length;
 
@@ -261,19 +337,10 @@ public sealed partial class LinkView : UserControl
             EndTop - arrowLength * unitTangentY - arrowWidth * unitNormalY);
 
         // 创建箭头几何图形
-        var arrowGeometry = new PathGeometry();
-        var arrowFigure = new PathFigure
-        {
-            StartPoint = arrowTip,
-            IsClosed = true
-        };
-
-        arrowFigure.Segments.Add(new LineSegment { Point = arrowLeft });
-        arrowFigure.Segments.Add(new LineSegment { Point = arrowRight });
-
-        arrowGeometry.Figures.Add(arrowFigure);
-        _arrowPath.Data = arrowGeometry;
-        _arrowPath.Fill = new SolidColorBrush(Colors.Violet);
+        _arrowFigure.StartPoint = arrowTip;
+        _arrowLeftSegment.Point = arrowLeft;
+        _arrowRightSegment.Point = arrowRight;
+        _arrowPath.Data = _arrowGeometry;
     }
 
     private void OnHoverPointerMoved(object sender, PointerRoutedEventArgs e)

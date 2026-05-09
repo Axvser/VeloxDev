@@ -6,9 +6,14 @@
     xmlns:local="using:Demo.Views"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Clip="{x:Null}"
+    local:WorkflowSlotLayoutBehavior.IsEnabled="True"
+    local:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
+    local:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlotsList"
+    local:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
     mc:Ignorable="d">
 
-    <Grid>
+    <Grid Clip="{x:Null}">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
@@ -20,7 +25,7 @@
                 BorderBrush="#d6a0ff"
                 Background="#2a1e35"/>
 
-        <Grid Grid.RowSpan="2" Canvas.ZIndex="6">
+        <Grid Grid.RowSpan="2" Canvas.ZIndex="6" Clip="{x:Null}">
             <local:SlotView x:Name="PART_InputSlot"
                             Width="20" Height="20"
                             HorizontalAlignment="Left"
@@ -35,10 +40,8 @@
                 CornerRadius="4,4,0,0"
                 BorderThickness="0,0,0,0.5"
                 BorderBrush="#d6a0ff"
-                PointerPressed="OnPointerPressed"
-                PointerReleased="OnPointerReleased"
-                PointerMoved="OnPointerMoved"
-                PointerCaptureLost="OnPointerCaptureLost">
+                local:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                local:WorkflowNodeDragBehavior.IsEnabled="True">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
                 <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
                 <Border Background="#2b1540" BorderBrush="#d6a0ff" BorderThickness="1" CornerRadius="10" Padding="6,1">

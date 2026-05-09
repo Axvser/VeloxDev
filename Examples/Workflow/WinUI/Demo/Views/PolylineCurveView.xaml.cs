@@ -5,7 +5,6 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
-using System.Collections.Generic;
 using VeloxDev.WorkflowSystem;
 using Windows.Foundation;
 
@@ -17,8 +16,20 @@ namespace Demo.Views;
 /// </summary>
 public sealed partial class PolylineCurveView : UserControl
 {
+    private static readonly DoubleCollection VirtualStrokeDashArray = [4, 2];
+
     private readonly Path _path;
     private readonly Path _arrowPath;
+    private readonly SolidColorBrush _strokeBrush = new(Colors.Cyan);
+    private readonly PathGeometry _pathGeometry = new();
+    private readonly PathFigure _pathFigure = new() { IsClosed = false };
+    private readonly PathGeometry _arrowGeometry = new();
+    private readonly PathFigure _arrowFigure = new() { IsClosed = true };
+    private readonly LineSegment _arrowLeftSegment = new();
+    private readonly LineSegment _arrowRightSegment = new();
+    private readonly Point[] _points = new Point[4];
+    private bool _updatePending;
+    private bool _isLoaded;
 
     public PolylineCurveView()
     {
@@ -27,12 +38,14 @@ public sealed partial class PolylineCurveView : UserControl
         Canvas.SetZIndex(this, -100);
 
         var container = new Grid();
-        _path = new Path { StrokeThickness = 2, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false };
-        _arrowPath = new Path { IsHitTestVisible = false };
+        _path = new Path { Stroke = _strokeBrush, StrokeThickness = 2, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false };
+        _arrowPath = new Path { Fill = _strokeBrush, IsHitTestVisible = false };
         container.Children.Add(_path);
         container.Children.Add(_arrowPath);
         this.Content = container;
 
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         PointerEntered += (_, _) => { IsHighlighted = true; Focus(FocusState.Pointer); };
         PointerExited += (_, _) => IsHighlighted = false;
         PointerMoved += OnHoverPointerMoved;
@@ -67,12 +80,70 @@ public sealed partial class PolylineCurveView : UserControl
     public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty); set => SetValue(IsHighlightedProperty, value); }
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        => ((PolylineCurveView)d).UpdatePath();
+        => ((PolylineCurveView)d).ScheduleUpdate();
 
     #endregion
 
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = true;
+        EnsureGeometry();
+        ScheduleUpdate();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = false;
+        _updatePending = false;
+    }
+
+    private void EnsureGeometry()
+    {
+        while (_pathFigure.Segments.Count < _points.Length - 1)
+        {
+            _pathFigure.Segments.Add(new LineSegment());
+        }
+
+        if (_pathGeometry.Figures.Count == 0)
+        {
+            _pathGeometry.Figures.Add(_pathFigure);
+        }
+
+        if (_arrowFigure.Segments.Count == 0)
+        {
+            _arrowFigure.Segments.Add(_arrowLeftSegment);
+            _arrowFigure.Segments.Add(_arrowRightSegment);
+            _arrowGeometry.Figures.Add(_arrowFigure);
+        }
+    }
+
+    private void ScheduleUpdate()
+    {
+        if (!_isLoaded)
+        {
+            return;
+        }
+
+        if (_updatePending)
+        {
+            return;
+        }
+
+        _updatePending = true;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
+        {
+            _updatePending = false;
+            if (_isLoaded)
+            {
+                UpdatePath();
+            }
+        });
+    }
+
     private void UpdatePath()
     {
+        EnsureGeometry();
+
         if (!CanRender)
         {
             _path.Data = null;
@@ -80,43 +151,47 @@ public sealed partial class PolylineCurveView : UserControl
             return;
         }
 
-        var pts = BuildPoints();
+        BuildPoints();
         var color = IsHighlighted ? Microsoft.UI.Colors.OrangeRed : LineColor;
         var thickness = IsHighlighted ? 3.5 : 2.0;
-        var brush = new SolidColorBrush(color);
-        _path.Stroke = brush;
+        _strokeBrush.Color = color;
         _path.StrokeThickness = thickness;
 
         if (IsVirtual)
-            _path.StrokeDashArray = new DoubleCollection { 4, 2 };
+            _path.StrokeDashArray = VirtualStrokeDashArray;
         else
             _path.StrokeDashArray = null;
 
-        var geo = new PathGeometry();
-        var fig = new PathFigure { StartPoint = pts[0], IsClosed = false };
-        for (int i = 1; i < pts.Count; i++)
-            fig.Segments.Add(new LineSegment { Point = pts[i] });
-        geo.Figures.Add(fig);
-        _path.Data = geo;
+        _pathFigure.StartPoint = _points[0];
+        for (int i = 1; i < _points.Length; i++)
+        {
+            ((LineSegment)_pathFigure.Segments[i - 1]).Point = _points[i];
+        }
+
+        _path.Data = _pathGeometry;
 
         // Arrowhead
-        if (!IsVirtual && pts.Count >= 2)
+        if (!IsVirtual)
         {
-            var from = pts[^2];
-            var tip = pts[^1];
+            var from = _points[^2];
+            var tip = _points[^1];
             double tx = tip.X - from.X, ty = tip.Y - from.Y;
             double len = Math.Sqrt(tx * tx + ty * ty);
-            if (len > 0.001) { tx /= len; ty /= len; }
+            if (len <= 0.001)
+            {
+                _arrowPath.Data = null;
+                return;
+            }
+
+            tx /= len;
+            ty /= len;
             double nx = -ty, ny = tx;
             double al = 12, aw = 8;
             var baseP = new Point(tip.X - tx * al, tip.Y - ty * al);
-            var arrowGeo = new PathGeometry();
-            var arrowFig = new PathFigure { StartPoint = tip, IsClosed = true };
-            arrowFig.Segments.Add(new LineSegment { Point = new Point(baseP.X + nx * (aw / 2), baseP.Y + ny * (aw / 2)) });
-            arrowFig.Segments.Add(new LineSegment { Point = new Point(baseP.X - nx * (aw / 2), baseP.Y - ny * (aw / 2)) });
-            arrowGeo.Figures.Add(arrowFig);
-            _arrowPath.Data = arrowGeo;
-            _arrowPath.Fill = brush;
+            _arrowFigure.StartPoint = tip;
+            _arrowLeftSegment.Point = new Point(baseP.X + nx * (aw / 2), baseP.Y + ny * (aw / 2));
+            _arrowRightSegment.Point = new Point(baseP.X - nx * (aw / 2), baseP.Y - ny * (aw / 2));
+            _arrowPath.Data = _arrowGeometry;
         }
         else
         {
@@ -124,18 +199,15 @@ public sealed partial class PolylineCurveView : UserControl
         }
     }
 
-    private List<Point> BuildPoints()
+    private void BuildPoints()
     {
         double dx = EndLeft - StartLeft;
         const double phi = 0.6180339887;
         double stub = dx / 2.0 * (1.0 - phi);
-        return
-        [
-            new Point(StartLeft, StartTop),
-            new Point(StartLeft + stub, StartTop),
-            new Point(EndLeft - stub, EndTop),
-            new Point(EndLeft, EndTop)
-        ];
+        _points[0] = new Point(StartLeft, StartTop);
+        _points[1] = new Point(StartLeft + stub, StartTop);
+        _points[2] = new Point(EndLeft - stub, EndTop);
+        _points[3] = new Point(EndLeft, EndTop);
     }
 
     #region Interaction
@@ -162,9 +234,9 @@ public sealed partial class PolylineCurveView : UserControl
     private bool HitTestLine(Point pt)
     {
         const double hitRadius = 6.0;
-        var pts = BuildPoints();
-        for (int i = 0; i < pts.Count - 1; i++)
-            if (DistSeg(pt, pts[i], pts[i + 1]) <= hitRadius) return true;
+        BuildPoints();
+        for (int i = 0; i < _points.Length - 1; i++)
+            if (DistSeg(pt, _points[i], _points[i + 1]) <= hitRadius) return true;
         return false;
     }
 

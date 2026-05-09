@@ -4,6 +4,7 @@ using Demo.Workflow;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Specialized;
 using System.Diagnostics;
@@ -19,6 +20,12 @@ namespace Demo.Views
     public sealed partial class TreeView : UserControl
     {
         private TreeViewModel ViewModel = new();
+
+        public static readonly DependencyProperty CanvasTransformProperty = DependencyProperty.Register(
+            nameof(CanvasTransform),
+            typeof(Transform),
+            typeof(TreeView),
+            new PropertyMetadata(null));
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetActiveWindow();
@@ -41,6 +48,12 @@ namespace Demo.Views
         {
             InitializeComponent();
             InitializeNetworkDemo();
+        }
+
+        public Transform? CanvasTransform
+        {
+            get => (Transform?)GetValue(CanvasTransformProperty);
+            set => SetValue(CanvasTransformProperty, value);
         }
 
         private async void SaveWorkflow(object sender, RoutedEventArgs e)
@@ -104,6 +117,7 @@ namespace Demo.Views
                 ViewModel = result;
                 DataContext = ViewModel;
                 SubscribeAutoScroll(ViewModel);
+                WorkflowSurfaceBehavior.Refresh(this);
                 await ShowMessageAsync("加载成功", $"工作流已从 {file.Name} 加载成功。", "确定");
             }
             catch (Exception ex)
@@ -124,6 +138,7 @@ namespace Demo.Views
             DataContext = ViewModel;
             SubscribeAutoScroll(ViewModel);
             ViewModel.Layout.UpdateCommand.Execute(null);
+            WorkflowSurfaceBehavior.Refresh(this);
         }
 
         private IntPtr GetActiveWindowHandle()
@@ -176,27 +191,6 @@ namespace Demo.Views
             return foundHandle;
         }
 
-        private void Canvas_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            if (ViewModel is null)
-            {
-                return;
-            }
-
-            ViewModel.VirtualLink.Sender.State &= ~SlotState.PreviewSender;
-            ViewModel.ResetVirtualLinkCommand.Execute(null);
-        }
-
-        private void Canvas_PointerMoved(object sender, PointerRoutedEventArgs e)
-        {
-            var position = e.GetCurrentPoint(canvas).Position;
-            var anchor = new Anchor(
-                position.X - ViewModel.Layout.ActualOffset.Horizontal,
-                position.Y - ViewModel.Layout.ActualOffset.Vertical,
-                0);
-            ViewModel.SetPointerCommand.Execute(anchor);
-        }
-
         private void OnSendToAgent(object sender, RoutedEventArgs e)
         {
             var text = AgentInput?.Text?.Trim();
@@ -219,7 +213,10 @@ namespace Demo.Views
             vm.AgentLog.CollectionChanged += OnAgentLogChanged;
             vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
             if (vm.GetHelper() is AgentHelper helper)
+            {
                 helper.ToolCalled += OnAgentToolCalled;
+                helper.VisualRefreshRequested += OnVisualRefreshRequested;
+            }
         }
 
         private void UnsubscribeAutoScroll(TreeViewModel vm)
@@ -227,11 +224,20 @@ namespace Demo.Views
             vm.AgentLog.CollectionChanged -= OnAgentLogChanged;
             vm.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
             if (vm.GetHelper() is AgentHelper helper)
+            {
                 helper.ToolCalled -= OnAgentToolCalled;
+                helper.VisualRefreshRequested -= OnVisualRefreshRequested;
+            }
         }
 
         private void OnAgentToolCalled()
         {
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => WorkflowSurfaceBehavior.Refresh(this));
+        }
+
+        private void OnVisualRefreshRequested()
+        {
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => WorkflowSurfaceBehavior.Refresh(this));
         }
 
         private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
