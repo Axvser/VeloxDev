@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Demo.Controls"
+             x:Class="Demo.Controls.EnumSelectorNodeView"
+             controls:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             controls:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
+             controls:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlotsList"
+             controls:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+    <Grid RowDefinitions="48,*">
+        <Border Grid.RowSpan="2"
+                Stroke="#D6A0FF"
+                StrokeThickness="1.5"
+                StrokeShape="RoundRectangle 6"
+                BackgroundColor="#2A1E35" />
+
+        <Grid Grid.RowSpan="2" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">
+            <controls:SlotView x:Name="PART_InputSlot"
+                               WidthRequest="20"
+                               HeightRequest="20"
+                               HorizontalOptions="Start"
+                               VerticalOptions="Center"
+                               Margin="-10,0,0,0"
+                               BindingContext="{Binding InputSlot}"
+                               IsVisible="{Binding HasInputSlot}"
+                               SlotState="{Binding State}" />
+        </Grid>
+
+        <Border Grid.Row="0"
+                BackgroundColor="#3A2550"
+                Stroke="#D6A0FF"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 4,4,0,0"
+                controls:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                controls:WorkflowNodeDragBehavior.IsEnabled="True">
+            <HorizontalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="8">
+                <Label Text="{Binding Title}" TextColor="White" FontAttributes="Bold" />
+                <Border BackgroundColor="#2B1540" Stroke="#D6A0FF" StrokeThickness="1" StrokeShape="RoundRectangle 10" Padding="6,1">
+                    <Label Text="{Binding LastRouted}" TextColor="#E4D8FF" FontAttributes="Bold" />
+                </Border>
+            </HorizontalStackLayout>
+        </Border>
+
+        <Border Grid.Row="1" BackgroundColor="#2A1E35" StrokeShape="RoundRectangle 0,0,4,4">
+            <VerticalStackLayout Margin="14" Spacing="8">
+                <Label Text="Selected Method" TextColor="#BFBFBF" FontSize="11" />
+                <Picker Title="Select Method"
+                        ItemsSource="{Binding EnumValues}"
+                        SelectedItem="{Binding SelectedValue}" />
+                <Label Text="Output Slots" TextColor="#BFBFBF" FontSize="11" Margin="0,6,0,0" />
+                <VerticalStackLayout x:Name="PART_OutputSlotsList" BindableLayout.ItemsSource="{Binding OutputSlots.Items}" Spacing="2">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Grid.Column="0"
+                                       Text="{Binding Name}"
+                                       TextColor="#D6A0FF"
+                                       FontAttributes="Bold"
+                                       HorizontalTextAlignment="End"
+                                       VerticalTextAlignment="Center"
+                                       Margin="0,0,8,0" />
+                                <controls:SlotView Grid.Column="1"
+                                                   WidthRequest="16"
+                                                   HeightRequest="16"
+                                                   HorizontalOptions="End"
+                                                   VerticalOptions="Center"
+                                                   Margin="0,0,-8,0"
+                                                   BindingContext="{Binding Slot}"
+                                                   SlotState="{Binding Slot.State}" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+        </Border>
+    </Grid>
+</ContentView>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Demo.Controls"
+             x:Class="Demo.Controls.ControllerView"
+             controls:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             controls:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
+             controls:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+    <Grid RowDefinitions="52,*,56">
+        <Border Grid.RowSpan="3"
+                Stroke="White"
+                StrokeThickness="1"
+                StrokeShape="RoundRectangle 5"
+                BackgroundColor="#2D2D2D" />
+
+        <Border Grid.Row="0"
+                BackgroundColor="#2D2D2D"
+                StrokeShape="RoundRectangle 5,5,0,0"
+                controls:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                controls:WorkflowNodeDragBehavior.IsEnabled="True">
+            <Label Text="Network Flow Controller"
+                   HorizontalTextAlignment="Center"
+                   VerticalTextAlignment="Center"
+                   TextColor="White" />
+        </Border>
+
+        <Border Grid.Row="1" BackgroundColor="#252525" Padding="16">
+            <VerticalStackLayout Spacing="10">
+                <Label Text="Seed Payload" TextColor="#DCDCDC" />
+                <Entry Text="{Binding SeedPayload}" />
+                <Label Text="The controller only pushes the initial context into the workflow. Subsequent broadcasting is decided by each node."
+                       TextColor="#BDBDBD" />
+            </VerticalStackLayout>
+        </Border>
+
+        <Border Grid.Row="2" BackgroundColor="#2D2D2D" StrokeShape="RoundRectangle 0,0,5,5" Padding="8">
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button Grid.Column="0" Text="Run Flow" Command="{Binding OpenWorkflowCommand}" />
+                <Button Grid.Column="1" Text="Close Tree" Command="{Binding CloseWorkflowCommand}" />
+            </Grid>
+        </Border>
+
+        <controls:SlotView x:Name="PART_OutputSlot"
+                           WidthRequest="20"
+                           HeightRequest="20"
+                           Grid.RowSpan="3"
+                           HorizontalOptions="End"
+                           VerticalOptions="Center"
+                           Margin="0,0,-10,0"
+                           BindingContext="{Binding OutputSlot}"
+                           SlotState="{Binding State}" />
+    </Grid>
+</ContentView>
