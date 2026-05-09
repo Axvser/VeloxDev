@@ -6,7 +6,10 @@
 			 x:Class="Demo.ControllerView"
 			 xmlns:local="using:Demo"
 			 xmlns:vm="using:Demo.ViewModels"
-            ClipToBounds="False"
+             ClipToBounds="False"
+			 local:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             local:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
+             local:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:ControllerViewModel">
   <Grid RowDefinitions="52,*,56" ColumnDefinitions="*" ClipToBounds="False">
 		<Border Grid.RowSpan="5"
@@ -20,10 +23,8 @@
 				BorderThickness="1"
 				CornerRadius="5,5,0,0"
 				Background="#2d2d2d"
-				PointerPressed="OnPointerPressed"
-				PointerReleased="OnPointerReleased"
-				PointerMoved="OnPointerMoved"
-				PointerCaptureLost="OnPointerCaptureLost">
+                local:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                local:WorkflowNodeDragBehavior.IsEnabled="True">
          <TextBlock Text="Network Flow Controller"
 					   VerticalAlignment="Center"
 					   HorizontalAlignment="Center"

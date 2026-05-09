@@ -6,7 +6,10 @@
 			 x:Class="Demo.NodeView"
 			 xmlns:local="using:Demo"
 			 xmlns:vm="using:Demo.ViewModels"
-          ClipToBounds="False"
+             ClipToBounds="False"
+			 local:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             local:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
+             local:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:NodeViewModel">
     <Grid RowDefinitions="52,*,54" ClipToBounds="False">
 		<Border Grid.RowSpan="3"
@@ -58,11 +61,9 @@
                 Background="{Binding HeaderBackground}"
 				CornerRadius="4,4,0,0"
 				BorderThickness="0,0,0,0.5"
-              BorderBrush="{Binding HeaderBorderBrush}"
-				PointerPressed="OnPointerPressed"
-				PointerReleased="OnPointerReleased"
-				PointerMoved="OnPointerMoved"
-				PointerCaptureLost="OnPointerCaptureLost">
+                BorderBrush="{Binding HeaderBorderBrush}"
+                local:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                local:WorkflowNodeDragBehavior.IsEnabled="True">
 			<Grid ColumnDefinitions="*,Auto" Margin="12,0">
 				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
 					<TextBlock Text="{Binding Title}" Foreground="White" VerticalAlignment="Center" FontWeight="Bold"/>

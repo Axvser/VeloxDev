@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo;
@@ -19,20 +18,5 @@ public partial class SlotView : UserControl
     {
         get => this.GetValue(SlotStateProperty);
         set => SetValue(SlotStateProperty, value);
-    }
-
-    private void OnPointerReleased(object sender, PointerReleasedEventArgs e)
-    {
-        if (DataContext is not IWorkflowSlotViewModel slot) return;
-
-        slot.ReceiveConnectionCommand.Execute(null);
-    }
-
-    private void OnPointerPressed(object sender, PointerPressedEventArgs e)
-    {
-        if (DataContext is not IWorkflowSlotViewModel slot) return;
-
-        slot.SendConnectionCommand.Execute(null);
-        e.Pointer.Capture(null);
     }
 }

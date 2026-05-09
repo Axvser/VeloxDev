@@ -4,9 +4,9 @@
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 			 mc:Ignorable="d" d:DesignWidth="200" d:DesignHeight="200"
 			 x:Class="Demo.SlotView"
+			 xmlns:local="using:Demo"
 			 Background="#01000000"
-			 PointerReleased="OnPointerReleased"
-			 PointerPressed="OnPointerPressed">
+			 local:WorkflowSlotConnectionBehavior.IsEnabled="True">
 	<Viewbox>
 		<Path Fill="{Binding $parent[UserControl].Foreground}"
 			  Data="M517.3248,511.488 m-123.6992,0 a123.6992,123.6992 0 1 0 247.3984,0 a123.6992,123.6992 0 1 0 -247.3984,0 Z

@@ -8,8 +8,11 @@
 			 xmlns:vm="using:Demo.ViewModels"
 			 xmlns:workflow="using:VeloxDev.WorkflowSystem"
 			 x:DataType="vm:TreeViewModel"
-			 PointerReleased="OnPointerReleased"
-			 PointerMoved="OnPointerMoved">
+             local:WorkflowSurfaceBehavior.IsEnabled="True"
+             local:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+			 local:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+			 local:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+			 local:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
 
 	<!-- 模板 -->
 	<UserControl.DataTemplates>
@@ -87,14 +90,12 @@
 	<Grid ColumnDefinitions="2*,auto,8*">
 		<!-- 渲染节点编辑器 ( 虚拟化支持 ) -->
 		<Grid Grid.Column="2">
-			<Border BorderBrush="White" BorderThickness="1" CornerRadius="3"
-					PointerPressed="OnCanvasPointerPressed">
-				<local:WorkflowGridDecorator x:Name="Root_GridDecorator">
-					<ScrollViewer HorizontalScrollBarVisibility="Auto"
-								  ScrollChanged="OnScrollChanged"
-								  x:Name="Root_ScrollViewer">
+            <Border x:Name="PART_SurfaceBorder" BorderBrush="White" BorderThickness="1" CornerRadius="3">
+               <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+                  <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                 x:Name="PART_ScrollViewer">
 						<Canvas x:DataType="vm:TreeViewModel"
-								x:Name="Root_Canvas"
+                                x:Name="PART_Canvas"
 								Width="{Binding Layout.ActualSize.Width}"
 								Height="{Binding Layout.ActualSize.Height}"
 								HorizontalAlignment="Left"
