@@ -7,34 +7,32 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using VeloxDev.MVVM.Serialization;
-using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
 public partial class WorkflowView : UserControl
 {
     private TreeViewModel _workflowViewModel = new();
-    private bool _isPanning;
-    private Point _panStart;
-    private Vector _panStartOffset;
+
+    public static readonly DependencyProperty CanvasTransformProperty = DependencyProperty.Register(
+        nameof(CanvasTransform),
+        typeof(Transform),
+        typeof(WorkflowView),
+        new PropertyMetadata(Transform.Identity));
 
     public WorkflowView()
     {
         InitializeComponent();
+        DataContext = _workflowViewModel;
         InitializeNetworkDemo();
     }
 
-    private void OnCanvasPointerPressed(object sender, MouseButtonEventArgs e)
+    public Transform CanvasTransform
     {
-        if (e.MiddleButton == MouseButtonState.Pressed)
-        {
-            _isPanning = true;
-            _panStart = e.GetPosition(this);
-            _panStartOffset = new Vector(RootScrollViewer.HorizontalOffset, RootScrollViewer.VerticalOffset);
-            Mouse.Capture(RootScrollViewer);
-            e.Handled = true;
-        }
+        get => (Transform)GetValue(CanvasTransformProperty);
+        set => SetValue(CanvasTransformProperty, value);
     }
 
     private async void SelectWorkflow(object sender, RoutedEventArgs e)
@@ -61,7 +59,7 @@ public partial class WorkflowView : UserControl
                 _workflowViewModel = result;
                 DataContext = _workflowViewModel;
                 SubscribeAutoScroll(_workflowViewModel);
-                UpdateVisibleRegion();
+                 WorkflowSurfaceBehavior.Refresh(this);
 
                 MessageBox.Show($"工作流已从 {dialog.FileName} 加载成功。", "加载成功",
                     MessageBoxButton.OK, MessageBoxImage.Information);
@@ -87,42 +85,6 @@ public partial class WorkflowView : UserControl
         }
     }
 
-    private void OnPointerMoved(object sender, MouseEventArgs e)
-    {
-        if (_isPanning)
-        {
-            var current = e.GetPosition(this);
-            var deltaX = _panStart.X - current.X;
-            var deltaY = _panStart.Y - current.Y;
-            RootScrollViewer.ScrollToHorizontalOffset(_panStartOffset.X + deltaX);
-            RootScrollViewer.ScrollToVerticalOffset(_panStartOffset.Y + deltaY);
-            e.Handled = true;
-            return;
-        }
-
-        if (DataContext is not TreeViewModel tree) return;
-        var point = e.GetPosition(WorkflowCanvas);
-        tree.SetPointerCommand.Execute(new Anchor(
-            point.X - tree.Layout.ActualOffset.Horizontal,
-            point.Y - tree.Layout.ActualOffset.Vertical,
-            0));
-    }
-
-    private void OnPointerReleased(object sender, MouseButtonEventArgs e)
-    {
-        if (_isPanning)
-        {
-            _isPanning = false;
-            Mouse.Capture(null);
-            e.Handled = true;
-            return;
-        }
-
-        if (DataContext is not IWorkflowTreeViewModel tree) return;
-        tree.VirtualLink.Sender.State &= ~SlotState.PreviewSender;
-        tree.ResetVirtualLinkCommand.Execute(null);
-    }
-
     private void LoadNetworkDemo(object sender, RoutedEventArgs e)
     {
         InitializeNetworkDemo();
@@ -135,7 +97,7 @@ public partial class WorkflowView : UserControl
         DataContext = _workflowViewModel;
         SubscribeAutoScroll(_workflowViewModel);
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
-        UpdateVisibleRegion();
+        WorkflowSurfaceBehavior.Refresh(this);
     }
 
     private void OnSendToAgent(object sender, RoutedEventArgs e)
@@ -173,24 +135,7 @@ public partial class WorkflowView : UserControl
 
     private void OnAgentToolCalled()
     {
-        Dispatcher.InvokeAsync(UpdateVisibleRegion, System.Windows.Threading.DispatcherPriority.Background);
-    }
-
-    private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
-    {
-        UpdateVisibleRegion();
-    }
-
-    private void UpdateVisibleRegion()
-    {
-        if (RootScrollViewer is not { } viewer || _workflowViewModel is not { } vm) return;
-
-        var helper = vm.GetHelper();
-        helper.Virtualize(new Viewport(
-            viewer.HorizontalOffset - vm.Layout.ActualOffset.Horizontal,
-            viewer.VerticalOffset - vm.Layout.ActualOffset.Vertical,
-            viewer.ViewportWidth,
-            viewer.ViewportHeight));
+        Dispatcher.InvokeAsync(() => WorkflowSurfaceBehavior.Refresh(this), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

@@ -4,38 +4,66 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:Demo.Views.Workflow"
+             xmlns:helper="clr-namespace:Demo.Views.Workflow.Helper"
+             xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
+             xmlns:workflow="clr-namespace:VeloxDev.WorkflowSystem;assembly=VeloxDev.Core"
              mc:Ignorable="d"
-             d:DesignHeight="720" d:DesignWidth="1280">
+             d:DesignHeight="720" d:DesignWidth="1280"
+             local:WorkflowSurfaceBehavior.IsEnabled="True"
+             local:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+             local:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+             local:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+             local:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-        <DataTemplate x:Key="NodeTemplate">
+        <DataTemplate x:Key="NodeTemplate" DataType="{x:Type vm:NodeViewModel}">
             <local:NodeView Width="{Binding Size.Width}"
                             Height="{Binding Size.Height}"
-                            IsEnabled="{Binding IsEnabled}"/>
+                            Canvas.Left="{Binding Anchor.Horizontal}"
+                            Canvas.Top="{Binding Anchor.Vertical}"
+                            Panel.ZIndex="{Binding Anchor.Layer}"
+                            IsEnabled="{Binding IsEnabled}"
+                            RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"/>
         </DataTemplate>
-        <DataTemplate x:Key="ControllerTemplate">
+        <DataTemplate x:Key="ControllerTemplate" DataType="{x:Type vm:ControllerViewModel}">
             <local:ControllerView Width="{Binding Size.Width}"
                                   Height="{Binding Size.Height}"
-                                  IsEnabled="{Binding IsEnabled}"/>
+                                  Canvas.Left="{Binding Anchor.Horizontal}"
+                                  Canvas.Top="{Binding Anchor.Vertical}"
+                                  Panel.ZIndex="{Binding Anchor.Layer}"
+                                  IsEnabled="{Binding IsEnabled}"
+                                  RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"/>
         </DataTemplate>
-        <DataTemplate x:Key="BoolSelectorTemplate">
+        <DataTemplate x:Key="BoolSelectorTemplate" DataType="{x:Type vm:BoolSelectorNodeViewModel}">
             <local:BoolSelectorNodeView Width="{Binding Size.Width}"
                                         Height="{Binding Size.Height}"
-                                        IsEnabled="{Binding IsEnabled}"/>
+                                        Canvas.Left="{Binding Anchor.Horizontal}"
+                                        Canvas.Top="{Binding Anchor.Vertical}"
+                                        Panel.ZIndex="{Binding Anchor.Layer}"
+                                        IsEnabled="{Binding IsEnabled}"
+                                        RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"/>
         </DataTemplate>
-        <DataTemplate x:Key="EnumSelectorTemplate">
+        <DataTemplate x:Key="EnumSelectorTemplate" DataType="{x:Type vm:EnumSelectorNodeViewModel}">
             <local:EnumSelectorNodeView Width="{Binding Size.Width}"
                                         Height="{Binding Size.Height}"
-                                        IsEnabled="{Binding IsEnabled}"/>
+                                        Canvas.Left="{Binding Anchor.Horizontal}"
+                                        Canvas.Top="{Binding Anchor.Vertical}"
+                                        Panel.ZIndex="{Binding Anchor.Layer}"
+                                        IsEnabled="{Binding IsEnabled}"
+                                        RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"/>
         </DataTemplate>
-        <DataTemplate x:Key="LinkTemplate">
+        <DataTemplate x:Key="LinkTemplate" DataType="{x:Type vm:LinkViewModel}">
             <Grid>
                 <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
                                        StartTop="{Binding Sender.Anchor.Vertical}"
                                        EndLeft="{Binding Receiver.Anchor.Horizontal}"
                                        EndTop="{Binding Receiver.Anchor.Vertical}"
                                        CanRender="{Binding IsVisible}"
-                                       FlowColor="White">
+                                       FlowColor="White"
+                                       Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
+                                       Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
+                                       RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"
+                                       Panel.ZIndex="-1">
                     <local:BezierCurveView.Style>
                         <Style TargetType="local:BezierCurveView">
                             <Style.Triggers>
@@ -52,8 +80,23 @@
                                          EndTop="{Binding Receiver.Anchor.Vertical}"
                                          CanRender="{Binding IsVisible}"
                                          LineColor="White"
+                                         Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
+                                         Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
+                                         RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"
+                                         Panel.ZIndex="-1"
                                          Visibility="{Binding UsePolyline, Converter={StaticResource BoolToVisibility}}"/>
             </Grid>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type workflow:IWorkflowLinkViewModel}">
+            <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                   StartTop="{Binding Sender.Anchor.Vertical}"
+                                   EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                   EndTop="{Binding Receiver.Anchor.Vertical}"
+                                   CanRender="{Binding IsVisible}"
+                                   Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
+                                   Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
+                                   RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"
+                                   Panel.ZIndex="-1"/>
         </DataTemplate>
         <local:CustomTemplateSelector x:Key="NodeSelector"
                                       Controller="{StaticResource ControllerTemplate}"
@@ -70,41 +113,25 @@
             <ColumnDefinition Width="8*" />
         </Grid.ColumnDefinitions>
         <Grid Grid.Column="2">
-            <Border Margin="0,20,20,20"
+            <Border x:Name="PART_SurfaceBorder"
+                    Margin="0,20,20,20"
                     BorderBrush="White"
                     BorderThickness="1"
                     CornerRadius="3"
                     Background="#0B1120">
-                <ScrollViewer x:Name="RootScrollViewer"
-                              HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Auto"
-                              PanningMode="Both"
-                              PreviewMouseDown="OnCanvasPointerPressed"
-                              MouseLeftButtonUp="OnPointerReleased"
-                              PreviewMouseMove="OnPointerMoved"
-                              PreviewMouseUp="OnPointerReleased"
-                              ScrollChanged="OnScrollChanged">
-                    <Canvas x:Name="WorkflowCanvas"
-                            Width="{Binding Layout.ActualSize.Width}"
-                            Height="{Binding Layout.ActualSize.Height}"
-                            Background="#0F172A">
-                    <ItemsControl ItemsSource="{Binding Helper.VisibleItems}"
-                                  ItemTemplateSelector="{StaticResource NodeSelector}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <Canvas />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemContainerStyle>
-                            <Style TargetType="ContentPresenter">
-                                <Setter Property="Canvas.Left" Value="{Binding Anchor.Horizontal, FallbackValue=0}" />
-                                <Setter Property="Canvas.Top" Value="{Binding Anchor.Vertical, FallbackValue=0}" />
-                                <Setter Property="Canvas.ZIndex" Value="{Binding Anchor.Layer, FallbackValue=-1}" />
-                            </Style>
-                        </ItemsControl.ItemContainerStyle>
-                    </ItemsControl>
-                    </Canvas>
-                </ScrollViewer>
+                <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+                    <ScrollViewer x:Name="PART_ScrollViewer"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto"
+                                  PanningMode="Both">
+                        <Canvas x:Name="PART_Canvas"
+                                Width="{Binding Layout.ActualSize.Width}"
+                                Height="{Binding Layout.ActualSize.Height}"
+                                Background="Transparent"
+                                helper:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                                helper:ViewPool.TemplateSelector="{StaticResource NodeSelector}"/>
+                    </ScrollViewer>
+                </local:WorkflowGridDecorator>
             </Border>
         </Grid>
 
