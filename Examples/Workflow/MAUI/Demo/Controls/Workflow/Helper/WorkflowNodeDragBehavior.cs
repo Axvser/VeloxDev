@@ -42,6 +42,12 @@ public sealed class WorkflowNodeDragBehavior
         typeof(WorkflowNodeDragBehavior),
         null);
 
+    public static readonly BindableProperty CoordinateHostTypeProperty = BindableProperty.CreateAttached(
+        "CoordinateHostType",
+        typeof(Type),
+        typeof(WorkflowNodeDragBehavior),
+        null);
+
     private static readonly BindableProperty StateProperty = BindableProperty.CreateAttached(
         "State",
         typeof(DragState),
@@ -55,6 +61,10 @@ public sealed class WorkflowNodeDragBehavior
     public static string? GetCoordinateHostName(BindableObject element) => (string?)element.GetValue(CoordinateHostNameProperty);
 
     public static void SetCoordinateHostName(BindableObject element, string? value) => element.SetValue(CoordinateHostNameProperty, value);
+
+    public static Type? GetCoordinateHostType(BindableObject element) => (Type?)element.GetValue(CoordinateHostTypeProperty);
+
+    public static void SetCoordinateHostType(BindableObject element, Type? value) => element.SetValue(CoordinateHostTypeProperty, value);
 
     private static void OnIsEnabledChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
@@ -362,6 +372,7 @@ public sealed class WorkflowNodeDragBehavior
     private static VisualElement? ResolveCoordinateHost(View view)
     {
         var hostName = GetCoordinateHostName(view);
+        var hostType = GetCoordinateHostType(view) ?? typeof(AbsoluteLayout);
         Element? current = view;
         while (current is not null)
         {
@@ -374,9 +385,9 @@ public sealed class WorkflowNodeDragBehavior
                 }
             }
 
-            if (current is AbsoluteLayout absoluteLayout)
+            if (current is VisualElement visual && hostType.IsAssignableFrom(visual.GetType()))
             {
-                return absoluteLayout;
+                return visual;
             }
 
             current = current.Parent;

@@ -25,16 +25,7 @@ public partial class ControllerViewModel
     private async Task OpenWorkflow(object? parameters, CancellationToken ct)
     {
         var tree = Parent as TreeViewModel;
-        if (tree is not null)
-        {
-            if (tree.IsWorkflowRunning) return;
-            tree.BeginWorkflowRun();
-        }
-        else
-        {
-            if (IsActive) return;
-            IsActive = true;
-        }
+        tree?.BeginWorkflowRun();
 
         try
         {
@@ -44,10 +35,6 @@ public partial class ControllerViewModel
         catch
         {
             tree?.EndWorkflowRun();
-            if (tree is null)
-            {
-                IsActive = false;
-            }
             throw;
         }
     }
@@ -60,10 +47,6 @@ public partial class ControllerViewModel
         if (Parent is TreeViewModel tree)
         {
             tree.EndWorkflowRun();
-        }
-        else
-        {
-            IsActive = false;
         }
     }
 }

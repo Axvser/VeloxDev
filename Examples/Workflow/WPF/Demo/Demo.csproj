@@ -16,8 +16,4 @@
 		<ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <Folder Include="ViewModels\Workflow\Helper\" />
-	</ItemGroup>
-
 </Project>

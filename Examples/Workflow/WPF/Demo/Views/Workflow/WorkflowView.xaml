@@ -53,50 +53,28 @@
                                         RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"/>
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate" DataType="{x:Type vm:LinkViewModel}">
-            <Grid>
-                <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                       StartTop="{Binding Sender.Anchor.Vertical}"
-                                       EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                       EndTop="{Binding Receiver.Anchor.Vertical}"
-                                       CanRender="{Binding IsVisible}"
-                                       FlowColor="White"
-                                       Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
-                                       Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
-                                       RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"
-                                       Panel.ZIndex="-1">
-                    <local:BezierCurveView.Style>
-                        <Style TargetType="local:BezierCurveView">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding UsePolyline}" Value="True">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </local:BezierCurveView.Style>
-                </local:BezierCurveView>
-                <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                         StartTop="{Binding Sender.Anchor.Vertical}"
-                                         EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                         EndTop="{Binding Receiver.Anchor.Vertical}"
-                                         CanRender="{Binding IsVisible}"
-                                         LineColor="White"
-                                         Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
-                                         Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
-                                         RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"
-                                         Panel.ZIndex="-1"
-                                         Visibility="{Binding UsePolyline, Converter={StaticResource BoolToVisibility}}"/>
-            </Grid>
+            <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                     StartTop="{Binding Sender.Anchor.Vertical}"
+                                     EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                     EndTop="{Binding Receiver.Anchor.Vertical}"
+                                     CanRender="{Binding IsVisible}"
+                                     LineColor="White"
+                                     Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
+                                     Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
+                                     RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"
+                                     Panel.ZIndex="-1"/>
         </DataTemplate>
         <DataTemplate DataType="{x:Type workflow:IWorkflowLinkViewModel}">
-            <local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                   StartTop="{Binding Sender.Anchor.Vertical}"
-                                   EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                   EndTop="{Binding Receiver.Anchor.Vertical}"
-                                   CanRender="{Binding IsVisible}"
-                                   Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
-                                   Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
-                                   RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"
-                                   Panel.ZIndex="-1"/>
+            <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                     StartTop="{Binding Sender.Anchor.Vertical}"
+                                     EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                     EndTop="{Binding Receiver.Anchor.Vertical}"
+                                     CanRender="{Binding IsVisible}"
+                                     LineColor="White"
+                                     Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
+                                     Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
+                                     RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"
+                                     Panel.ZIndex="-1"/>
         </DataTemplate>
         <local:CustomTemplateSelector x:Key="NodeSelector"
                                       Controller="{StaticResource ControllerTemplate}"

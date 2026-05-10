@@ -44,11 +44,20 @@
             reloadButton = new Button();
             stopButton = new Button();
             runButton = new Button();
+            undoButton = new Button();
+            redoButton = new Button();
+            saveButton = new Button();
+            selectButton = new Button();
+            loadDemoButton = new Button();
+            nodeCountLabel = new Label();
+            visibleCountLabel = new Label();
+            nodeCountCaptionLabel = new Label();
+            visibleCountCaptionLabel = new Label();
             seedTextBox = new TextBox();
             seedLabel = new Label();
             titleLabel = new Label();
             executionLogListBox = new ListBox();
-            workflowSurfaceControl = new Controls.WorkflowSurfaceControl();
+            workflowSurfaceControl = new Controls.WorkflowCanvas();
             ((System.ComponentModel.ISupportInitialize)splitContainer).BeginInit();
             splitContainer.Panel1.SuspendLayout();
             splitContainer.Panel2.SuspendLayout();
@@ -79,20 +88,29 @@
             toolbarPanel.Controls.Add(reloadButton);
             toolbarPanel.Controls.Add(stopButton);
             toolbarPanel.Controls.Add(runButton);
+            toolbarPanel.Controls.Add(undoButton);
+            toolbarPanel.Controls.Add(redoButton);
+            toolbarPanel.Controls.Add(saveButton);
+            toolbarPanel.Controls.Add(selectButton);
+            toolbarPanel.Controls.Add(loadDemoButton);
+            toolbarPanel.Controls.Add(nodeCountCaptionLabel);
+            toolbarPanel.Controls.Add(nodeCountLabel);
+            toolbarPanel.Controls.Add(visibleCountCaptionLabel);
+            toolbarPanel.Controls.Add(visibleCountLabel);
             toolbarPanel.Controls.Add(seedTextBox);
             toolbarPanel.Controls.Add(seedLabel);
             toolbarPanel.Controls.Add(titleLabel);
             toolbarPanel.Dock = DockStyle.Top;
             toolbarPanel.Location = new Point(12, 12);
             toolbarPanel.Name = "toolbarPanel";
-            toolbarPanel.Size = new Size(376, 220);
+            toolbarPanel.Size = new Size(376, 248);
             toolbarPanel.TabIndex = 0;
             // 
             // statusValueLabel
             // 
             statusValueLabel.AutoSize = true;
             statusValueLabel.Font = new Font("Microsoft YaHei UI", 10.5F, FontStyle.Bold, GraphicsUnit.Point, 134);
-            statusValueLabel.Location = new Point(247, 120);
+            statusValueLabel.Location = new Point(313, 42);
             statusValueLabel.Name = "statusValueLabel";
             statusValueLabel.Size = new Size(37, 19);
             statusValueLabel.TabIndex = 10;
@@ -101,7 +119,7 @@
             // statusLabel
             // 
             statusLabel.AutoSize = true;
-            statusLabel.Location = new Point(190, 122);
+            statusLabel.Location = new Point(266, 44);
             statusLabel.Name = "statusLabel";
             statusLabel.Size = new Size(43, 17);
             statusLabel.TabIndex = 9;
@@ -109,8 +127,9 @@
             // 
             // summaryLabel
             // 
+            summaryLabel.Visible = false;
             summaryLabel.AutoSize = true;
-            summaryLabel.Location = new Point(4, 152);
+            summaryLabel.Location = new Point(4, 248);
             summaryLabel.MaximumSize = new Size(360, 0);
             summaryLabel.Name = "summaryLabel";
             summaryLabel.Size = new Size(356, 51);
@@ -146,6 +165,88 @@
             runButton.Text = "运行工作流";
             runButton.UseVisualStyleBackColor = true;
             runButton.Click += RunWorkflow;
+            // 
+            // undoButton
+            // 
+            undoButton.Location = new Point(4, 122);
+            undoButton.Name = "undoButton";
+            undoButton.Size = new Size(80, 32);
+            undoButton.TabIndex = 11;
+            undoButton.Text = "Undo";
+            undoButton.UseVisualStyleBackColor = true;
+            undoButton.Click += UndoWorkflow;
+            // 
+            // redoButton
+            // 
+            redoButton.Location = new Point(90, 122);
+            redoButton.Name = "redoButton";
+            redoButton.Size = new Size(80, 32);
+            redoButton.TabIndex = 12;
+            redoButton.Text = "Redo";
+            redoButton.UseVisualStyleBackColor = true;
+            redoButton.Click += RedoWorkflow;
+            // 
+            // saveButton
+            // 
+            saveButton.Location = new Point(176, 122);
+            saveButton.Name = "saveButton";
+            saveButton.Size = new Size(80, 32);
+            saveButton.TabIndex = 13;
+            saveButton.Text = "Save";
+            saveButton.UseVisualStyleBackColor = true;
+            saveButton.Click += SaveWorkflow;
+            // 
+            // selectButton
+            // 
+            selectButton.Location = new Point(4, 160);
+            selectButton.Name = "selectButton";
+            selectButton.Size = new Size(80, 32);
+            selectButton.TabIndex = 14;
+            selectButton.Text = "Select";
+            selectButton.UseVisualStyleBackColor = true;
+            selectButton.Click += SelectWorkflow;
+            // 
+            // loadDemoButton
+            // 
+            loadDemoButton.Location = new Point(90, 160);
+            loadDemoButton.Name = "loadDemoButton";
+            loadDemoButton.Size = new Size(166, 32);
+            loadDemoButton.TabIndex = 15;
+            loadDemoButton.Text = "Load Workflow Demo";
+            loadDemoButton.UseVisualStyleBackColor = true;
+            loadDemoButton.Click += LoadNetworkDemo;
+            // 
+            // nodeCountCaptionLabel
+            // 
+            nodeCountCaptionLabel.AutoSize = true;
+            nodeCountCaptionLabel.Location = new Point(4, 202);
+            nodeCountCaptionLabel.Name = "nodeCountCaptionLabel";
+            nodeCountCaptionLabel.TabIndex = 16;
+            nodeCountCaptionLabel.Text = "节点总数：";
+            // 
+            // nodeCountLabel
+            // 
+            nodeCountLabel.AutoSize = true;
+            nodeCountLabel.Location = new Point(80, 202);
+            nodeCountLabel.Name = "nodeCountLabel";
+            nodeCountLabel.TabIndex = 17;
+            nodeCountLabel.Text = "0";
+            // 
+            // visibleCountCaptionLabel
+            // 
+            visibleCountCaptionLabel.AutoSize = true;
+            visibleCountCaptionLabel.Location = new Point(4, 222);
+            visibleCountCaptionLabel.Name = "visibleCountCaptionLabel";
+            visibleCountCaptionLabel.TabIndex = 18;
+            visibleCountCaptionLabel.Text = "可见组件数：";
+            // 
+            // visibleCountLabel
+            // 
+            visibleCountLabel.AutoSize = true;
+            visibleCountLabel.Location = new Point(80, 222);
+            visibleCountLabel.Name = "visibleCountLabel";
+            visibleCountLabel.TabIndex = 19;
+            visibleCountLabel.Text = "0";
             // 
             // seedTextBox
             // 
@@ -279,6 +380,15 @@
         private Button reloadButton;
         private Button stopButton;
         private Button runButton;
+        private Button undoButton;
+        private Button redoButton;
+        private Button saveButton;
+        private Button selectButton;
+        private Button loadDemoButton;
+        private Label nodeCountCaptionLabel;
+        private Label nodeCountLabel;
+        private Label visibleCountCaptionLabel;
+        private Label visibleCountLabel;
         private TextBox seedTextBox;
         private Label seedLabel;
         private Label titleLabel;
@@ -290,6 +400,6 @@
         private TextBox agentInputTextBox;
         private Button agentSendButton;
         private ListBox executionLogListBox;
-        private Controls.WorkflowSurfaceControl workflowSurfaceControl;
+        private Controls.WorkflowCanvas workflowSurfaceControl;
     }
 }

@@ -39,6 +39,12 @@ public sealed class WorkflowSlotLayoutBehavior
         typeof(WorkflowSlotLayoutBehavior),
         null);
 
+    public static readonly BindableProperty CoordinateHostTypeProperty = BindableProperty.CreateAttached(
+        "CoordinateHostType",
+        typeof(Type),
+        typeof(WorkflowSlotLayoutBehavior),
+        null);
+
     public static readonly BindableProperty ParentHostNameProperty = BindableProperty.CreateAttached(
         "ParentHostName",
         typeof(string),
@@ -71,6 +77,8 @@ public sealed class WorkflowSlotLayoutBehavior
     public static void SetSlotEnumeratorNames(BindableObject element, string? value) => element.SetValue(SlotEnumeratorNamesProperty, value);
     public static string? GetCoordinateHostName(BindableObject element) => (string?)element.GetValue(CoordinateHostNameProperty);
     public static void SetCoordinateHostName(BindableObject element, string? value) => element.SetValue(CoordinateHostNameProperty, value);
+    public static Type? GetCoordinateHostType(BindableObject element) => (Type?)element.GetValue(CoordinateHostTypeProperty);
+    public static void SetCoordinateHostType(BindableObject element, Type? value) => element.SetValue(CoordinateHostTypeProperty, value);
     public static string? GetParentHostName(BindableObject element) => (string?)element.GetValue(ParentHostNameProperty);
     public static void SetParentHostName(BindableObject element, string? value) => element.SetValue(ParentHostNameProperty, value);
     public static string? GetLayoutPropertyName(BindableObject element) => (string?)element.GetValue(LayoutPropertyNameProperty);
@@ -322,6 +330,7 @@ public sealed class WorkflowSlotLayoutBehavior
     private static VisualElement? ResolveCoordinateHost(ContentView control, ContentView parentHost)
     {
         var hostName = GetCoordinateHostName(control);
+        var hostType = GetCoordinateHostType(control) ?? typeof(AbsoluteLayout);
         if (!string.IsNullOrWhiteSpace(hostName))
         {
             var namedHost = ResolveNamedHost(parentHost, hostName);
@@ -331,7 +340,9 @@ public sealed class WorkflowSlotLayoutBehavior
             }
         }
 
-        return EnumerateSelfAndAncestors(parentHost).OfType<AbsoluteLayout>().FirstOrDefault();
+        return EnumerateSelfAndAncestors(parentHost)
+            .OfType<VisualElement>()
+            .FirstOrDefault(x => hostType.IsAssignableFrom(x.GetType()));
     }
 
     private static ContentView ResolveParentHost(ContentView control)

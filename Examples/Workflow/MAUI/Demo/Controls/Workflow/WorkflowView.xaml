@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Demo.Controls"
+             xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
+             xmlns:workflow="clr-namespace:VeloxDev.WorkflowSystem;assembly=VeloxDev.Core"
+             x:Class="Demo.Controls.WorkflowView"
+             x:Name="Root"
+             controls:WorkflowSurfaceBehavior.IsEnabled="True"
+             controls:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+             controls:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+             controls:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+             controls:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+    <ContentView.Resources>
+        <DataTemplate x:Key="NodeTemplate" x:DataType="vm:NodeViewModel">
+            <controls:NodeView WidthRequest="{Binding Size.Width}"
+                               HeightRequest="{Binding Size.Height}" />
+        </DataTemplate>
+        <DataTemplate x:Key="ControllerTemplate" x:DataType="vm:ControllerViewModel">
+            <controls:ControllerView WidthRequest="{Binding Size.Width}"
+                                     HeightRequest="{Binding Size.Height}" />
+        </DataTemplate>
+        <DataTemplate x:Key="BoolSelectorTemplate" x:DataType="vm:BoolSelectorNodeViewModel">
+            <controls:BoolSelectorNodeView WidthRequest="{Binding Size.Width}"
+                                           HeightRequest="{Binding Size.Height}" />
+        </DataTemplate>
+        <DataTemplate x:Key="EnumSelectorTemplate" x:DataType="vm:EnumSelectorNodeViewModel">
+            <controls:EnumSelectorNodeView WidthRequest="{Binding Size.Width}"
+                                           HeightRequest="{Binding Size.Height}" />
+        </DataTemplate>
+        <DataTemplate x:Key="LinkTemplate" x:DataType="vm:LinkViewModel">
+            <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                        StartTop="{Binding Sender.Anchor.Vertical}"
+                                        EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                        EndTop="{Binding Receiver.Anchor.Vertical}"
+                                        ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}"
+                                        ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}"
+                                        CanRender="{Binding IsVisible}"
+                                        WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}"
+                                        HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}" />
+        </DataTemplate>
+        <DataTemplate x:Key="VirtualLinkTemplate" x:DataType="workflow:IWorkflowLinkViewModel">
+            <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                        StartTop="{Binding Sender.Anchor.Vertical}"
+                                        EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                        EndTop="{Binding Receiver.Anchor.Vertical}"
+                                        ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}"
+                                        ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}"
+                                        CanRender="{Binding IsVisible}"
+                                        WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}"
+                                        HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}"
+                                        LineColor="#E2E8F0"
+                                        IsVirtual="True" />
+        </DataTemplate>
+        <controls:CustomTemplateSelector x:Key="NodeSelector"
+                                         ControllerTemplate="{StaticResource ControllerTemplate}"
+                                         NodeTemplate="{StaticResource NodeTemplate}"
+                                         BoolSelectorTemplate="{StaticResource BoolSelectorTemplate}"
+                                         EnumSelectorTemplate="{StaticResource EnumSelectorTemplate}"
+                                         LinkTemplate="{StaticResource LinkTemplate}" />
+    </ContentView.Resources>
+
+    <Border x:Name="PART_SurfaceBorder"
+            Margin="0"
+            Stroke="White"
+            StrokeThickness="1"
+            StrokeShape="RoundRectangle 3"
+            BackgroundColor="#0B1120">
+        <controls:WorkflowGridDecorator x:Name="PART_GridDecorator">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <ScrollView x:Name="PART_ScrollViewer"
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Orientation="Both"
+                            BackgroundColor="Transparent">
+                    <AbsoluteLayout x:Name="PART_Canvas"
+                                    WidthRequest="{Binding Layout.ActualSize.Width}"
+                                    HeightRequest="{Binding Layout.ActualSize.Height}"
+                                    BackgroundColor="Transparent">
+                            <Grid BindingContext="{Binding VirtualLink}"
+                                  AbsoluteLayout.LayoutBounds="0,0,-1,-1"
+                                  AbsoluteLayout.LayoutFlags="None">
+                                <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                                            StartTop="{Binding Sender.Anchor.Vertical}"
+                                                            EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                                            EndTop="{Binding Receiver.Anchor.Vertical}"
+                                                            ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}"
+                                                            ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}"
+                                                            CanRender="{Binding IsVisible}"
+                                                            WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}"
+                                                            HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}"
+                                                            LineColor="#E2E8F0"
+                                                            IsVirtual="True"
+                                                            ZIndex="-1" />
+                        </Grid>
+                    </AbsoluteLayout>
+                </ScrollView>
+            </Grid>
+        </controls:WorkflowGridDecorator>
+    </Border>
+</ContentView>

@@ -16,6 +16,10 @@ public sealed class WorkflowSurfaceBehavior
         public INotifyPropertyChanged? LayoutNotifier { get; set; }
         public double LastPanTotalX { get; set; }
         public double LastPanTotalY { get; set; }
+        public bool HasPendingScrollRestore { get; set; }
+        public bool IsApplyingPendingScrollRestore { get; set; }
+        public double PendingViewportX { get; set; }
+        public double PendingViewportY { get; set; }
     }
 
     public static readonly BindableProperty IsEnabledProperty = BindableProperty.CreateAttached(
@@ -80,6 +84,24 @@ public sealed class WorkflowSurfaceBehavior
         ResolveNamedControls(host, state);
         ApplyLayout(host, state);
         UpdateVisibleRegion(host, state);
+        ApplyPendingScrollRestore(host, state);
+    }
+
+    public static void RequestViewportRestore(ContentView host, double viewportX, double viewportY)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+
+        if (!GetIsEnabled(host))
+        {
+            return;
+        }
+
+        var state = (SurfaceState?)host.GetValue(StateProperty) ?? new SurfaceState();
+        host.SetValue(StateProperty, state);
+        state.PendingViewportX = viewportX;
+        state.PendingViewportY = viewportY;
+        state.HasPendingScrollRestore = true;
+        Refresh(host);
     }
 
     private static void OnIsEnabledChanged(BindableObject bindable, object? oldValue, object? newValue)
@@ -317,11 +339,11 @@ public sealed class WorkflowSurfaceBehavior
         var actualOffset = viewModel.Layout.ActualOffset;
         var actualSize = viewModel.Layout.ActualSize;
 
-        state.Canvas.Margin = new Thickness(actualOffset.Horizontal, actualOffset.Vertical, 0, 0);
-        state.Canvas.TranslationX = 0;
-        state.Canvas.TranslationY = 0;
-        state.Canvas.WidthRequest = Math.Max(1, actualSize.Width);
-        state.Canvas.HeightRequest = Math.Max(1, actualSize.Height);
+        state.Canvas.Margin = new Thickness(0);
+        state.Canvas.TranslationX = actualOffset.Horizontal;
+        state.Canvas.TranslationY = actualOffset.Vertical;
+        state.Canvas.WidthRequest = Math.Max(1, actualSize.Width + actualOffset.Horizontal);
+        state.Canvas.HeightRequest = Math.Max(1, actualSize.Height + actualOffset.Vertical);
 
         UpdateGridDecorator(viewModel, state);
     }
@@ -339,11 +361,6 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        if (WorkflowNodeDragBehavior.IsDraggingNode)
-        {
-            return;
-        }
-
         switch (e.StatusType)
         {
             case GestureStatus.Started:
@@ -351,6 +368,13 @@ public sealed class WorkflowSurfaceBehavior
                 state.LastPanTotalY = 0;
                 break;
             case GestureStatus.Running:
+                if (WorkflowNodeDragBehavior.IsDraggingNode || WorkflowSlotConnectionBehavior.IsDraggingConnection)
+                {
+                    state.LastPanTotalX = e.TotalX;
+                    state.LastPanTotalY = e.TotalY;
+                    break;
+                }
+
                 await ApplyPanAsync(host, state, e).ConfigureAwait(false);
                 break;
             case GestureStatus.Canceled:
@@ -459,5 +483,49 @@ public sealed class WorkflowSurfaceBehavior
         state.GridDecorator.ScrollOffsetY = state.ScrollViewer.ScrollY;
         state.GridDecorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         state.GridDecorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
+    }
+
+    private static void ApplyPendingScrollRestore(ContentView host, SurfaceState state)
+    {
+        if (!state.HasPendingScrollRestore || state.IsApplyingPendingScrollRestore || state.ScrollViewer is null)
+        {
+            return;
+        }
+
+        state.IsApplyingPendingScrollRestore = true;
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            try
+            {
+                await Task.Yield();
+
+                if (state.ScrollViewer is null)
+                {
+                    return;
+                }
+
+                var viewModel = ResolveTreeViewModel(host);
+                if (viewModel is null)
+                {
+                    return;
+                }
+
+                var targetX = state.PendingViewportX + viewModel.Layout.ActualOffset.Horizontal;
+                var targetY = state.PendingViewportY + viewModel.Layout.ActualOffset.Vertical;
+                targetX = Math.Max(0, Math.Min(targetX, GetHorizontalScrollMaximum(state.ScrollViewer)));
+                targetY = Math.Max(0, Math.Min(targetY, GetVerticalScrollMaximum(state.ScrollViewer)));
+                if (Math.Abs(state.ScrollViewer.ScrollX - targetX) > 0.5 || Math.Abs(state.ScrollViewer.ScrollY - targetY) > 0.5)
+                {
+                    await state.ScrollViewer.ScrollToAsync(targetX, targetY, false);
+                }
+
+                UpdateVisibleRegion(host, state);
+            }
+            finally
+            {
+                state.HasPendingScrollRestore = false;
+                state.IsApplyingPendingScrollRestore = false;
+            }
+        });
     }
 }

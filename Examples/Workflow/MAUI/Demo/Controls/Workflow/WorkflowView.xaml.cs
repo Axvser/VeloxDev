@@ -128,10 +128,18 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
     }
 
     private void OnCanvasNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => MainThread.BeginInvokeOnMainThread(() => SyncCanvasItems(e));
+    {
+        var viewportX = PART_ScrollViewer.ScrollX - _workflowViewModel.Layout.ActualOffset.Horizontal;
+        var viewportY = PART_ScrollViewer.ScrollY - _workflowViewModel.Layout.ActualOffset.Vertical;
+        MainThread.BeginInvokeOnMainThread(() => SyncCanvasItems(e, viewportX, viewportY));
+    }
 
     private void OnCanvasLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => MainThread.BeginInvokeOnMainThread(() => SyncCanvasItems(e));
+    {
+        var viewportX = PART_ScrollViewer.ScrollX - _workflowViewModel.Layout.ActualOffset.Horizontal;
+        var viewportY = PART_ScrollViewer.ScrollY - _workflowViewModel.Layout.ActualOffset.Vertical;
+        MainThread.BeginInvokeOnMainThread(() => SyncCanvasItems(e, viewportX, viewportY));
+    }
 
     private void RebuildCanvasItems(TreeViewModel tree)
     {
@@ -150,7 +158,7 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
         Log($"RebuildCanvasItems: nodes={tree.Nodes.Count}, links={tree.Links.Count}, canvasItems={_canvasItems.Count}, sample={string.Join(",", _canvasItems.Take(6).Select(x => x.GetType().Name))}");
     }
 
-    private void SyncCanvasItems(NotifyCollectionChangedEventArgs e)
+    private void SyncCanvasItems(NotifyCollectionChangedEventArgs e, double viewportX, double viewportY)
     {
         switch (e.Action)
         {
@@ -186,6 +194,7 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
 
         Log($"SyncCanvasItems: action={e.Action}, canvasItems={_canvasItems.Count}, canvasChildren={PART_Canvas.Children.Count}");
         RefreshNodeLayouts();
+        WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
     }
 
     private void RefreshNodeLayouts()
@@ -216,14 +225,19 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
     {
         ArgumentNullException.ThrowIfNull(sourceSlot);
 
+        var viewportX = PART_ScrollViewer.ScrollX - _workflowViewModel.Layout.ActualOffset.Horizontal;
+        var viewportY = PART_ScrollViewer.ScrollY - _workflowViewModel.Layout.ActualOffset.Vertical;
+
         var receiver = HitTestSlot(anchor, sourceSlot);
         if (receiver is not null)
         {
             receiver.ReceiveConnectionCommand.Execute(null);
+            WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
             return;
         }
 
         _workflowViewModel.ResetVirtualLinkCommand.Execute(null);
+        WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
     }
 
     private IWorkflowSlotViewModel? HitTestSlot(Anchor anchor, IWorkflowSlotViewModel exclude)

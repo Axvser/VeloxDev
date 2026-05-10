@@ -120,7 +120,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.Unloaded += OnUnloaded;
         control.DataContextChanged += OnDataContextChanged;
         control.PointerMoved += OnPointerMoved;
-        control.PointerReleased += OnHostPointerReleased;
+        control.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnPointerReleased), true);
         ResolveNamedControls(control, state);
         Refresh(control);
     }
@@ -131,7 +131,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.Unloaded -= OnUnloaded;
         control.DataContextChanged -= OnDataContextChanged;
         control.PointerMoved -= OnPointerMoved;
-        control.PointerReleased -= OnHostPointerReleased;
+        control.RemoveHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnPointerReleased));
 
         if (control.GetValue(StateProperty) is SurfaceState state)
         {
@@ -196,7 +196,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.PointerPressSource is not null)
         {
             state.PointerPressSource.PointerPressed += OnPointerPressed;
-            state.PointerPressSource.PointerReleased += OnSurfacePointerReleased;
         }
 
         if (state.ScrollViewer is not null)
@@ -210,7 +209,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.PointerPressSource is not null)
         {
             state.PointerPressSource.PointerPressed -= OnPointerPressed;
-            state.PointerPressSource.PointerReleased -= OnSurfacePointerReleased;
         }
 
         if (state.ScrollViewer is not null)
@@ -250,34 +248,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         e.Handled = true;
     }
 
-    private static void OnSurfacePointerReleased(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is not FrameworkElement source)
-        {
-            return;
-        }
-
-        var host = EnumerateVisualAncestors(source).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
-        if (host is null || host.GetValue(StateProperty) is not SurfaceState state || state.IsPanning)
-        {
-            return;
-        }
-
-        if (host.DataContext is not TreeViewModel viewModel || !viewModel.VirtualLink.IsVisible)
-        {
-            return;
-        }
-
-        if (e.OriginalSource is not DependencyObject originalSource || !IsSurfaceBlankInteraction(originalSource, state))
-        {
-            return;
-        }
-
-        viewModel.VirtualLink.Sender.State &= ~SlotState.PreviewSender;
-        viewModel.ResetVirtualLinkCommand.Execute(null);
-        e.Handled = true;
-    }
-
     private static void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
@@ -291,33 +261,39 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (host.DataContext is not TreeViewModel viewModel || state.Canvas is null)
+        if (host.DataContext is not TreeViewModel viewModel || state.ScrollViewer is null)
         {
             return;
         }
 
-        var point = e.GetCurrentPoint(state.Canvas).Position;
+        var point = e.GetCurrentPoint(state.ScrollViewer).Position;
         viewModel.SetPointerCommand.Execute(new Anchor(
-            point.X - viewModel.Layout.ActualOffset.Horizontal,
-            point.Y - viewModel.Layout.ActualOffset.Vertical,
+            state.ScrollViewer.HorizontalOffset + point.X - viewModel.Layout.ActualOffset.Horizontal,
+            state.ScrollViewer.VerticalOffset + point.Y - viewModel.Layout.ActualOffset.Vertical,
             0));
     }
 
-    private static void OnHostPointerReleased(object sender, PointerRoutedEventArgs e)
+    private static void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
         {
             return;
         }
 
-        if (!state.IsPanning)
+        if (state.IsPanning)
+        {
+            state.IsPanning = false;
+            e.Handled = true;
+            return;
+        }
+
+        if (host.DataContext is not TreeViewModel viewModel)
         {
             return;
         }
 
-        state.IsPanning = false;
-        state.PointerPressSource?.ReleasePointerCapture(e.Pointer);
-        e.Handled = true;
+        viewModel.VirtualLink.Sender.State &= ~SlotState.PreviewSender;
+        viewModel.ResetVirtualLinkCommand.Execute(null);
     }
 
     private static void OnViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
@@ -463,34 +439,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     private static double GetVerticalScrollMaximum(ScrollViewer scrollViewer)
         => Math.Max(0, scrollViewer.ExtentHeight - scrollViewer.ViewportHeight);
-
-    private static bool IsSurfaceBlankInteraction(DependencyObject source, SurfaceState state)
-    {
-        if (IsWorkflowItemVisual(source))
-        {
-            return false;
-        }
-
-        var ancestors = EnumerateVisualAncestors(source).ToArray();
-        if (ancestors.Any(IsWorkflowItemVisual))
-        {
-            return false;
-        }
-
-        return source == state.Canvas
-            || source == state.ScrollViewer
-            || source == state.PointerPressSource
-            || source == state.GridDecorator
-            || ancestors.Any(x => x == state.Canvas
-                || x == state.ScrollViewer
-                || x == state.PointerPressSource
-                || x == state.GridDecorator
-                || x is ScrollContentPresenter);
-    }
-
-    private static bool IsWorkflowItemVisual(DependencyObject source)
-        => source is LinkView or PolylineCurveView
-            || source is FrameworkElement { DataContext: IWorkflowLinkViewModel or IWorkflowNodeViewModel or IWorkflowSlotViewModel };
 
     private static IEnumerable<DependencyObject> EnumerateVisualAncestors(DependencyObject source)
     {

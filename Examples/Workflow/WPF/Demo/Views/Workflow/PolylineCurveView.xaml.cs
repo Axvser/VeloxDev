@@ -53,7 +53,17 @@ public partial class PolylineCurveView : UserControl
     public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty); set => SetValue(IsHighlightedProperty, value); }
 
     private static void OnRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        => ((PolylineCurveView)d).InvalidateVisual();
+    {
+        var control = (PolylineCurveView)d;
+        control.UpdateInteractivity();
+        control.InvalidateVisual();
+    }
+
+    private void UpdateInteractivity()
+    {
+        IsHitTestVisible = !IsVirtual;
+        Focusable = !IsVirtual;
+    }
 
     #endregion
 

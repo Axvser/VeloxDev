@@ -23,6 +23,11 @@ public sealed class ViewManager
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _layout.SizeChanged += OnLayoutSizeChanged;
+
+        if (_layout is VisualElement visualElement)
+        {
+            visualElement.PropertyChanged += OnLayoutPropertyChanged;
+        }
     }
 
     public void Attach(INotifyCollectionChanged collection)
@@ -53,6 +58,11 @@ public sealed class ViewManager
     public void Detach()
     {
         _layout.SizeChanged -= OnLayoutSizeChanged;
+
+        if (_layout is VisualElement visualElement)
+        {
+            visualElement.PropertyChanged -= OnLayoutPropertyChanged;
+        }
 
         if (_currentCollection is not null)
         {
@@ -250,6 +260,17 @@ public sealed class ViewManager
         }
     }
 
+    private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not nameof(VisualElement.WidthRequest)
+            and not nameof(VisualElement.HeightRequest))
+        {
+            return;
+        }
+
+        OnLayoutSizeChanged(sender, EventArgs.Empty);
+    }
+
     private PropertyChangedEventHandler? SubscribeToLayoutChanges(object viewModel, View view)
     {
         if (viewModel is not INotifyPropertyChanged notify)
@@ -291,6 +312,12 @@ public sealed class ViewManager
             return new ContentView();
         }
 
+        var linkHost = new Grid
+        {
+            InputTransparent = true,
+            ZIndex = -1
+        };
+
         var linkView = new PolylineCurveView
         {
             InputTransparent = true,
@@ -302,11 +329,14 @@ public sealed class ViewManager
         linkView.SetBinding(PolylineCurveView.StartTopProperty, "Sender.Anchor.Vertical");
         linkView.SetBinding(PolylineCurveView.EndLeftProperty, "Receiver.Anchor.Horizontal");
         linkView.SetBinding(PolylineCurveView.EndTopProperty, "Receiver.Anchor.Vertical");
+        linkView.SetBinding(PolylineCurveView.ContentOffsetXProperty, new Binding(nameof(VisualElement.TranslationX), source: canvas));
+        linkView.SetBinding(PolylineCurveView.ContentOffsetYProperty, new Binding(nameof(VisualElement.TranslationY), source: canvas));
         linkView.SetBinding(PolylineCurveView.CanRenderProperty, nameof(IWorkflowLinkViewModel.IsVisible));
-        linkView.SetBinding(VisualElement.WidthRequestProperty, new Binding(nameof(VisualElement.Width), source: canvas));
-        linkView.SetBinding(VisualElement.HeightRequestProperty, new Binding(nameof(VisualElement.Height), source: canvas));
+        linkView.SetBinding(VisualElement.WidthRequestProperty, new Binding(nameof(VisualElement.WidthRequest), source: canvas));
+        linkView.SetBinding(VisualElement.HeightRequestProperty, new Binding(nameof(VisualElement.HeightRequest), source: canvas));
 
-        return linkView;
+        linkHost.Children.Add(linkView);
+        return linkHost;
     }
 
     private static void UnsubscribeFromLayoutChanges(ControlItem item)
@@ -332,7 +362,7 @@ public sealed class ViewManager
                 break;
             case IWorkflowLinkViewModel:
                 AbsoluteLayout.SetLayoutFlags(view, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
-                AbsoluteLayout.SetLayoutBounds(view, new Rect(0, 0, Math.Max(1, canvas.Width), Math.Max(1, canvas.Height)));
+                AbsoluteLayout.SetLayoutBounds(view, new Rect(0, 0, Math.Max(1, GetCanvasExtent(canvas.WidthRequest, canvas.Width)), Math.Max(1, GetCanvasExtent(canvas.HeightRequest, canvas.Height))));
                 break;
             default:
                 AbsoluteLayout.SetLayoutFlags(view, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
@@ -340,6 +370,9 @@ public sealed class ViewManager
                 break;
         }
     }
+
+    private static double GetCanvasExtent(double requested, double actual)
+        => requested > 0 ? requested : actual;
 
     private DataTemplate? FindDataTemplate(object context)
     {

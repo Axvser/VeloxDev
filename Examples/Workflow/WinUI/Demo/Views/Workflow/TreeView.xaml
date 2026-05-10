@@ -50,28 +50,15 @@
                                         IsEnabled="{Binding IsEnabled}"/>
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
-            <Grid>
-                <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                StartTop="{Binding Sender.Anchor.Vertical}"
-                                EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                EndTop="{Binding Receiver.Anchor.Vertical}"
-                                CanRender="{Binding IsVisible}"
-                                LineColor="White"
-                                Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
-                                Canvas.ZIndex="-1"
-                                Visibility="{Binding UsePolyline, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}" />
-                <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                         StartTop="{Binding Sender.Anchor.Vertical}"
-                                         EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                         EndTop="{Binding Receiver.Anchor.Vertical}"
-                                         CanRender="{Binding IsVisible}"
-                                         LineColor="White"
-                                         Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                         Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
-                                         Canvas.ZIndex="-1"
-                                         Visibility="{Binding UsePolyline, Converter={StaticResource BoolToVisibility}}" />
-            </Grid>
+            <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                     StartTop="{Binding Sender.Anchor.Vertical}"
+                                     EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                     EndTop="{Binding Receiver.Anchor.Vertical}"
+                                     CanRender="{Binding IsVisible}"
+                                     LineColor="White"
+                                     Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
+                                     Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
+                                     Canvas.ZIndex="-1" />
         </DataTemplate>
         <local:CustomTemplateSelector x:Key="NodeSelector"
                                       ControllerTemplate="{StaticResource ControllerTemplate}"
@@ -116,16 +103,6 @@
 
                             <Grid Canvas.ZIndex="-1"
                                   DataContext="{Binding VirtualLink}">
-                                <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                                StartTop="{Binding Sender.Anchor.Vertical}"
-                                                EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                                EndTop="{Binding Receiver.Anchor.Vertical}"
-                                                CanRender="{Binding IsVisible}"
-                                                IsVirtual="True"
-                                                LineColor="White"
-                                                Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                                Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
-                                                Visibility="{Binding UsePolyline, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}" />
                                 <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
                                                          StartTop="{Binding Sender.Anchor.Vertical}"
                                                          EndLeft="{Binding Receiver.Anchor.Horizontal}"
@@ -134,8 +111,7 @@
                                                          IsVirtual="True"
                                                          LineColor="White"
                                                          Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                                         Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
-                                                         Visibility="{Binding UsePolyline, Converter={StaticResource BoolToVisibility}}" />
+                                                         Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}" />
                             </Grid>
                         </Canvas>
                     </ScrollViewer>

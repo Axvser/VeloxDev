@@ -97,25 +97,6 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     public static string? GetActualOffsetPropertyName(DependencyObject element) => element.GetValue(ActualOffsetPropertyNameProperty) as string;
     public static void SetActualOffsetPropertyName(DependencyObject element, string? value) => element.SetValue(ActualOffsetPropertyNameProperty, value);
 
-    public static void Refresh(UserControl control) => ScheduleSync(control);
-
-    public static void RefreshNow(UserControl control)
-    {
-        ArgumentNullException.ThrowIfNull(control);
-
-        if (!GetIsEnabled(control))
-        {
-            return;
-        }
-
-        if (control.GetValue(StateProperty) is LayoutState state)
-        {
-            state.SyncPending = false;
-        }
-
-        Sync(control);
-    }
-
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not UserControl control)
@@ -249,7 +230,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
 
         state.SyncPending = true;
-        control.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        control.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
         {
             if (control.GetValue(StateProperty) is not LayoutState currentState)
             {
@@ -416,7 +397,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
 
         var actualOffsetProperty = layout.GetType().GetProperty(actualOffsetPropertyName, BindingFlags.Instance | BindingFlags.Public);
-        return actualOffsetProperty?.GetValue(layout) as Offset ?? new Offset();
+        return actualOffsetProperty?.GetValue(layout) is Offset offset ? offset : new Offset();
     }
 
     private static T? FindDescendant<T>(DependencyObject parent) where T : DependencyObject

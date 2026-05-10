@@ -4,12 +4,16 @@ namespace Demo.Controls;
 
 public sealed class WorkflowSlotConnectionBehavior
 {
+    internal static bool IsDraggingConnection { get; private set; }
+
     public static readonly BindableProperty IsEnabledProperty = BindableProperty.CreateAttached(
         "IsEnabled",
         typeof(bool),
         typeof(WorkflowSlotConnectionBehavior),
         false,
         propertyChanged: OnIsEnabledChanged);
+
+    internal static void SetIsDraggingConnection(bool isDraggingConnection) => IsDraggingConnection = isDraggingConnection;
 
     public static bool GetIsEnabled(BindableObject element) => (bool)element.GetValue(IsEnabledProperty);
 

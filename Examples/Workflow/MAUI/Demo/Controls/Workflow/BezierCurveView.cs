@@ -8,6 +8,8 @@ public sealed class BezierCurveView : GraphicsView
     public static readonly BindableProperty StartTopProperty = BindableProperty.Create(nameof(StartTop), typeof(double), typeof(BezierCurveView), 0d, propertyChanged: OnInvalidateRequested);
     public static readonly BindableProperty EndLeftProperty = BindableProperty.Create(nameof(EndLeft), typeof(double), typeof(BezierCurveView), 0d, propertyChanged: OnInvalidateRequested);
     public static readonly BindableProperty EndTopProperty = BindableProperty.Create(nameof(EndTop), typeof(double), typeof(BezierCurveView), 0d, propertyChanged: OnInvalidateRequested);
+    public static readonly BindableProperty ContentOffsetXProperty = BindableProperty.Create(nameof(ContentOffsetX), typeof(double), typeof(BezierCurveView), 0d, propertyChanged: OnInvalidateRequested);
+    public static readonly BindableProperty ContentOffsetYProperty = BindableProperty.Create(nameof(ContentOffsetY), typeof(double), typeof(BezierCurveView), 0d, propertyChanged: OnInvalidateRequested);
     public static readonly BindableProperty CanRenderProperty = BindableProperty.Create(nameof(CanRender), typeof(bool), typeof(BezierCurveView), true, propertyChanged: OnInvalidateRequested);
     public static readonly BindableProperty LineColorProperty = BindableProperty.Create(nameof(LineColor), typeof(Color), typeof(BezierCurveView), Color.FromArgb("#22D3EE"), propertyChanged: OnInvalidateRequested);
 
@@ -21,6 +23,8 @@ public sealed class BezierCurveView : GraphicsView
     public double StartTop { get => (double)GetValue(StartTopProperty); set => SetValue(StartTopProperty, value); }
     public double EndLeft { get => (double)GetValue(EndLeftProperty); set => SetValue(EndLeftProperty, value); }
     public double EndTop { get => (double)GetValue(EndTopProperty); set => SetValue(EndTopProperty, value); }
+    public double ContentOffsetX { get => (double)GetValue(ContentOffsetXProperty); set => SetValue(ContentOffsetXProperty, value); }
+    public double ContentOffsetY { get => (double)GetValue(ContentOffsetYProperty); set => SetValue(ContentOffsetYProperty, value); }
     public bool CanRender { get => (bool)GetValue(CanRenderProperty); set => SetValue(CanRenderProperty, value); }
     public Color LineColor { get => (Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
 
@@ -28,8 +32,15 @@ public sealed class BezierCurveView : GraphicsView
     {
         if (bindable is BezierCurveView view)
         {
+            view.UpdateVisualOffset();
             view.Invalidate();
         }
+    }
+
+    private void UpdateVisualOffset()
+    {
+        TranslationX = -ContentOffsetX;
+        TranslationY = -ContentOffsetY;
     }
 
     private sealed class CurveDrawable(BezierCurveView owner) : IDrawable
@@ -41,10 +52,10 @@ public sealed class BezierCurveView : GraphicsView
                 return;
             }
 
-            var startX = (float)owner.StartLeft;
-            var startY = (float)owner.StartTop;
-            var endX = (float)owner.EndLeft;
-            var endY = (float)owner.EndTop;
+            var startX = (float)(owner.StartLeft + owner.ContentOffsetX);
+            var startY = (float)(owner.StartTop + owner.ContentOffsetY);
+            var endX = (float)(owner.EndLeft + owner.ContentOffsetX);
+            var endY = (float)(owner.EndTop + owner.ContentOffsetY);
             var controlOffset = Math.Max(80f, Math.Abs(endX - startX) * 0.45f);
 
             var path = new PathF();

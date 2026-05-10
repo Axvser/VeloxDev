@@ -212,4 +212,15 @@ public sealed class WorkflowDemoSession
         tree.GetHelper().SendConnection(sender);
         tree.GetHelper().ReceiveConnection(receiver);
     }
+
+    /// <summary>
+    /// Creates a session from an already-deserialized <see cref="TreeViewModel"/>.
+    /// The controller and node lists are derived from the tree's own node collection.
+    /// </summary>
+    public static WorkflowDemoSession FromTree(TreeViewModel tree)
+    {
+        var controller = tree.Nodes.OfType<ControllerViewModel>().FirstOrDefault() ?? new ControllerViewModel();
+        var nodes = tree.Nodes.OfType<NodeViewModel>();
+        return new WorkflowDemoSession(tree, controller, nodes);
+    }
 }

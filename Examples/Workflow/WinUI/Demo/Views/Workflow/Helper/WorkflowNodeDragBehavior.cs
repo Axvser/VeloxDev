@@ -5,7 +5,6 @@ using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views;
@@ -15,11 +14,8 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
     private sealed class DragState
     {
         public bool IsDragging { get; set; }
-        public Windows.Foundation.Point StartPosition { get; set; }
+        public Windows.Foundation.Point LastPosition { get; set; }
         public FrameworkElement? CoordinateHost { get; set; }
-        public UserControl? Owner { get; set; }
-        public UIElement? DragHandle { get; set; }
-        public Vector3 BaseTranslation { get; set; }
     }
 
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
@@ -95,48 +91,45 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
 
     private static void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (sender is not UIElement element || element.GetValue(StateProperty) is not DragState state)
+        if (sender is not FrameworkElement control || control.GetValue(StateProperty) is not DragState state)
         {
             return;
         }
 
-        var point = e.GetCurrentPoint(element);
+        var point = e.GetCurrentPoint(control);
         if (!point.Properties.IsLeftButtonPressed)
         {
             return;
         }
 
-        state.Owner = ResolveOwner(element);
-        if (state.Owner is null)
-        {
-            return;
-        }
-
-        state.CoordinateHost = ResolveCoordinateHost(element, state.Owner);
+        state.CoordinateHost = ResolveCoordinateHost(control);
         if (state.CoordinateHost is null)
         {
             return;
         }
 
-        state.DragHandle = element;
-        state.StartPosition = e.GetCurrentPoint(state.CoordinateHost).Position;
-        state.BaseTranslation = state.Owner.Translation;
-        UpdateDragTranslation(state, 0, 0);
+        state.LastPosition = e.GetCurrentPoint(state.CoordinateHost).Position;
         state.IsDragging = true;
-        element.CapturePointer(e.Pointer);
+        control.CapturePointer(e.Pointer);
         e.Handled = true;
     }
 
     private static void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (sender is not UIElement || sender is not DependencyObject source || source.GetValue(StateProperty) is not DragState state || !state.IsDragging || state.CoordinateHost is null || state.Owner is null)
+        if (sender is not FrameworkElement control || control.GetValue(StateProperty) is not DragState state || !state.IsDragging || state.CoordinateHost is null)
+        {
+            return;
+        }
+
+        var node = ResolveNode(control);
+        if (node is null)
         {
             return;
         }
 
         var current = e.GetCurrentPoint(state.CoordinateHost).Position;
-        UpdateDragTranslation(state, current.X - state.StartPosition.X, current.Y - state.StartPosition.Y);
-        WorkflowSlotLayoutBehavior.RefreshNow(state.Owner);
+        node.MoveCommand.Execute(new Offset(current.X - state.LastPosition.X, current.Y - state.LastPosition.Y));
+        state.LastPosition = current;
         e.Handled = true;
     }
 
@@ -147,30 +140,9 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
             return;
         }
 
-        var coordinateHost = state.CoordinateHost;
-        var owner = state.Owner;
-        var node = sender as DependencyObject is { } source ? ResolveNode(source) : null;
-        if (coordinateHost is not null && owner is not null && node is not null)
-        {
-            var current = e.GetCurrentPoint(coordinateHost).Position;
-            var delta = new Offset(current.X - state.StartPosition.X, current.Y - state.StartPosition.Y);
-            if (Math.Abs(delta.Horizontal) > double.Epsilon || Math.Abs(delta.Vertical) > double.Epsilon)
-            {
-                node.MoveCommand.Execute(delta);
-            }
-        }
-
         state.IsDragging = false;
-        RestoreOwnerTranslation(state);
-        if (owner is not null)
-        {
-            WorkflowSlotLayoutBehavior.Refresh(owner);
-        }
-
-        element.ReleasePointerCapture(e.Pointer);
         state.CoordinateHost = null;
-        state.Owner = null;
-        state.DragHandle = null;
+        element.ReleasePointerCapture(e.Pointer);
         e.Handled = true;
     }
 
@@ -182,54 +154,23 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
         }
 
         state.IsDragging = false;
-        RestoreOwnerTranslation(state);
-        if (state.Owner is not null)
-        {
-            WorkflowSlotLayoutBehavior.Refresh(state.Owner);
-        }
-
         state.CoordinateHost = null;
-        state.Owner = null;
-        state.DragHandle = null;
     }
 
-    private static void UpdateDragTranslation(DragState state, double x, double y)
+    private static FrameworkElement? ResolveCoordinateHost(FrameworkElement control)
     {
-        if (state.Owner is null)
-        {
-            return;
-        }
-
-        state.Owner.Translation = state.BaseTranslation + new Vector3((float)x, (float)y, 0f);
-    }
-
-    private static void RestoreOwnerTranslation(DragState state)
-    {
-        if (state.Owner is not null)
-        {
-            state.Owner.Translation = state.BaseTranslation;
-        }
-
-        state.BaseTranslation = default;
-    }
-
-    private static UserControl? ResolveOwner(DependencyObject source)
-        => EnumerateVisualAncestors(source).OfType<UserControl>().FirstOrDefault();
-
-    private static FrameworkElement? ResolveCoordinateHost(DependencyObject source, UserControl owner)
-    {
-        var hostName = GetCoordinateHostName(source);
+        var hostName = GetCoordinateHostName(control);
         if (!string.IsNullOrWhiteSpace(hostName))
         {
-            var namedHost = ResolveNamedHost(source, hostName);
+            var namedHost = ResolveNamedHost(control, hostName);
             if (namedHost is not null)
             {
                 return namedHost;
             }
         }
 
-        var hostType = GetCoordinateHostType(source) ?? typeof(Canvas);
-        return EnumerateVisualAncestors(owner).OfType<FrameworkElement>().FirstOrDefault(x => hostType.IsAssignableFrom(x.GetType()));
+        var hostType = GetCoordinateHostType(control) ?? typeof(Canvas);
+        return EnumerateVisualAncestors(control).OfType<FrameworkElement>().FirstOrDefault(x => hostType.IsAssignableFrom(x.GetType()));
     }
 
     private static FrameworkElement? ResolveNamedHost(DependencyObject source, string hostName)

@@ -2,6 +2,7 @@ using Demo.ViewModels;
 using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using VeloxDev.MVVM.Serialization;
 
 namespace Demo
 {
@@ -26,6 +27,56 @@ namespace Demo
 
         private async void ReloadWorkflow(object? sender, EventArgs e)
             => await ExecuteAsync(ReloadWorkflowInternalAsync, "重置示例失败");
+
+        private void UndoWorkflow(object? sender, EventArgs e)
+            => _demo?.Tree.UndoCommand.Execute(null);
+
+        private void RedoWorkflow(object? sender, EventArgs e)
+            => _demo?.Tree.RedoCommand.Execute(null);
+
+        private void SaveWorkflow(object? sender, EventArgs e)
+        {
+            if (_demo is null) return;
+            using var dialog = new FolderBrowserDialog();
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+            {
+                var path = System.IO.Path.Combine(dialog.SelectedPath, "Workflow.json");
+                _demo.Tree.SaveCommand.Execute(path);
+                MessageBox.Show(this, $"Workflow Saved At {dialog.SelectedPath}", "OK", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private async void SelectWorkflow(object? sender, EventArgs e)
+        {
+            using var dialog = new OpenFileDialog
+            {
+                Title = "选择工作流文件",
+                Filter = "JSON 文件 (*.json)|*.json|所有文件 (*.*)|*.*",
+                DefaultExt = ".json",
+                CheckFileExists = true,
+                CheckPathExists = true
+            };
+
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+            {
+                try
+                {
+                    using var stream = System.IO.File.OpenRead(dialog.FileName);
+                    using var reader = new System.IO.StreamReader(stream);
+                    var json = await reader.ReadToEndAsync();
+                    var result = json.Deserialize<TreeViewModel>();
+                    LoadDemo(WorkflowDemoSession.FromTree(result));
+                    MessageBox.Show(this, $"工作流已从 {dialog.FileName} 加载成功。", "加载成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, $"加载文件失败：{ex.GetType().Name}\n{ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private async void LoadNetworkDemo(object? sender, EventArgs e)
+            => await ExecuteAsync(ReloadWorkflowInternalAsync, "加载示例失败");
 
         private async void OnFormClosing(object? sender, FormClosingEventArgs e)
         {
@@ -52,12 +103,14 @@ namespace Demo
                 _demo.Controller.PropertyChanged -= OnControllerPropertyChanged;
                 _demo.Tree.ExecutionLog.CollectionChanged -= OnExecutionLogCollectionChanged;
                 _demo.Tree.AgentLog.CollectionChanged -= OnAgentLogCollectionChanged;
+                _demo.Tree.Nodes.CollectionChanged -= OnNodesCollectionChanged;
             }
 
             _demo = session;
             _demo.Controller.PropertyChanged += OnControllerPropertyChanged;
             _demo.Tree.ExecutionLog.CollectionChanged += OnExecutionLogCollectionChanged;
             _demo.Tree.AgentLog.CollectionChanged += OnAgentLogCollectionChanged;
+            _demo.Tree.Nodes.CollectionChanged += OnNodesCollectionChanged;
 
             _controllerBindingSource.DataSource = _demo.Controller;
 
@@ -82,6 +135,12 @@ namespace Demo
 
                 UpdateControllerState();
             }
+        }
+
+        private void OnNodesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (InvokeRequired) { BeginInvoke(UpdateControllerState); return; }
+            UpdateControllerState();
         }
 
         private void OnExecutionLogCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -124,6 +183,8 @@ namespace Demo
             runButton.Enabled = !isActive;
             stopButton.Enabled = isActive;
             statusValueLabel.Text = isActive ? "运行中" : "空闲";
+            nodeCountLabel.Text = (_demo?.Tree.Nodes.Count ?? 0).ToString();
+            visibleCountLabel.Text = (_demo?.Tree.Helper?.VisibleItems?.Count ?? 0).ToString();
         }
 
         private async Task ExecuteAsync(Func<Task> action, string title)

@@ -27,7 +27,6 @@ public sealed class WorkflowGridDecorator : Grid
 
     private readonly GraphicsView _graphicsView;
     private readonly GridDrawable _drawable;
-
     public WorkflowGridDecorator()
     {
         _drawable = new GridDrawable(this);

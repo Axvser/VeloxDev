@@ -34,7 +34,6 @@ public sealed partial class PolylineCurveView : UserControl
     public PolylineCurveView()
     {
         InitializeComponent();
-        IsHitTestVisible = true;
         Canvas.SetZIndex(this, -100);
 
         var container = new Grid();
@@ -49,6 +48,7 @@ public sealed partial class PolylineCurveView : UserControl
         PointerEntered += (_, _) => { IsHighlighted = true; Focus(FocusState.Pointer); };
         PointerExited += (_, _) => IsHighlighted = false;
         PointerMoved += OnHoverPointerMoved;
+        UpdateInteractivity();
     }
 
     #region Dependency properties
@@ -80,7 +80,17 @@ public sealed partial class PolylineCurveView : UserControl
     public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty); set => SetValue(IsHighlightedProperty, value); }
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        => ((PolylineCurveView)d).ScheduleUpdate();
+    {
+        var control = (PolylineCurveView)d;
+        control.UpdateInteractivity();
+        control.ScheduleUpdate();
+    }
+
+    private void UpdateInteractivity()
+    {
+        IsHitTestVisible = !IsVirtual;
+        IsTabStop = !IsVirtual;
+    }
 
     #endregion
 
