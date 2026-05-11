@@ -8,7 +8,7 @@
 		<LangVersion>latest</LangVersion>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WinForms</Title>
-		<Version>5.0.18</Version>
+		<Version>5.0.21</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinForms</Description>
         <PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -19,7 +19,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="VeloxDev.Core" Version="5.0.18" />
+	  <PackageReference Include="VeloxDev.Core" Version="5.0.21" />
 	</ItemGroup>
 
 </Project>

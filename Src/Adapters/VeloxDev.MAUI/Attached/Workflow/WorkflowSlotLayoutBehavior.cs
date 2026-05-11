@@ -1,10 +1,8 @@
-using Demo.ViewModels;
-using Demo.Workflow;
 using System.ComponentModel;
 using System.Reflection;
 using VeloxDev.WorkflowSystem;
 
-namespace Demo.Controls;
+namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 public sealed class WorkflowSlotLayoutBehavior
 {
@@ -287,7 +285,7 @@ public sealed class WorkflowSlotLayoutBehavior
             return;
         }
 
-        foreach (var slotView in FindDescendants<SlotView>(itemsLayout))
+        foreach (var slotView in FindDescendants<VisualElement>(itemsLayout).Where(static x => x.BindingContext is IWorkflowSlotViewModel))
         {
             SyncSlot(host, coordinateHost, slotView, node);
         }

@@ -3,14 +3,15 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:local="clr-namespace:Demo.Views.Workflow"
+              xmlns:local="clr-namespace:Demo.Views.Workflow"
+              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
              mc:Ignorable="d"
              ClipToBounds="False"
              d:DesignHeight="360" d:DesignWidth="280"
-             local:WorkflowSlotLayoutBehavior.IsEnabled="True"
-             local:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
-             local:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlotsList"
-             local:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
+              behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlotsList"
+              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
@@ -42,8 +43,8 @@
                 CornerRadius="4,4,0,0"
                 BorderThickness="0,0,0,0.5"
                 BorderBrush="#d6a0ff"
-                local:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                local:WorkflowNodeDragBehavior.IsEnabled="True">
+                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
                 <Border Margin="8,0,0,0" Background="#2b1540" BorderBrush="#d6a0ff" BorderThickness="1" CornerRadius="10" Padding="6,1">

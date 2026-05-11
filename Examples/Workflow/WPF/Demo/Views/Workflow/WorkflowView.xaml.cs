@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using VeloxDev.MVVM.Serialization;
+using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
 
@@ -59,7 +60,7 @@ public partial class WorkflowView : UserControl
                 _workflowViewModel = result;
                 DataContext = _workflowViewModel;
                 SubscribeAutoScroll(_workflowViewModel);
-                 WorkflowSurfaceBehavior.Refresh(this);
+                 WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
 
                 MessageBox.Show($"工作流已从 {dialog.FileName} 加载成功。", "加载成功",
                     MessageBoxButton.OK, MessageBoxImage.Information);
@@ -97,7 +98,7 @@ public partial class WorkflowView : UserControl
         DataContext = _workflowViewModel;
         SubscribeAutoScroll(_workflowViewModel);
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
-        WorkflowSurfaceBehavior.Refresh(this);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     private void OnSendToAgent(object sender, RoutedEventArgs e)
@@ -135,7 +136,7 @@ public partial class WorkflowView : UserControl
 
     private void OnAgentToolCalled()
     {
-        Dispatcher.InvokeAsync(() => WorkflowSurfaceBehavior.Refresh(this), System.Windows.Threading.DispatcherPriority.Background);
+        Dispatcher.InvokeAsync(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

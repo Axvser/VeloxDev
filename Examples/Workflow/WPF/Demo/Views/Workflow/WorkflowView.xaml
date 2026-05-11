@@ -4,16 +4,16 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:Demo.Views.Workflow"
-             xmlns:helper="clr-namespace:Demo.Views.Workflow.Helper"
+             xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
              xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
              xmlns:workflow="clr-namespace:VeloxDev.WorkflowSystem;assembly=VeloxDev.Core"
              mc:Ignorable="d"
              d:DesignHeight="720" d:DesignWidth="1280"
-             local:WorkflowSurfaceBehavior.IsEnabled="True"
-             local:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
-             local:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
-             local:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-             local:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+             behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+             behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+             behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <DataTemplate x:Key="NodeTemplate" DataType="{x:Type vm:NodeViewModel}">
@@ -106,8 +106,8 @@
                                 Width="{Binding Layout.ActualSize.Width}"
                                 Height="{Binding Layout.ActualSize.Height}"
                                 Background="Transparent"
-                                helper:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
-                                helper:ViewPool.TemplateSelector="{StaticResource NodeSelector}"/>
+                                behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                                behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}"/>
                     </ScrollViewer>
                 </local:WorkflowGridDecorator>
             </Border>

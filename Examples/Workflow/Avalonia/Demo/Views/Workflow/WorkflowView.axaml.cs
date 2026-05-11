@@ -13,6 +13,7 @@ using System.Collections.Specialized;
 using System.IO;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
+using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo;
 
@@ -82,7 +83,7 @@ public partial class WorkflowView : UserControl
             _workflowViewModel = result;
             DataContext = _workflowViewModel;
             SubscribeAutoScroll(_workflowViewModel);
-            WorkflowSurfaceBehavior.Refresh(this);
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
             _manager.Show(new Notification("OK", $"Workflow Loaded From {path}"));
         }
     }
@@ -100,7 +101,7 @@ public partial class WorkflowView : UserControl
         DataContext = _workflowViewModel;
         SubscribeAutoScroll(_workflowViewModel);
         _workflowViewModel.Layout.UpdateCommand.Execute(null);
-        WorkflowSurfaceBehavior.Refresh(this);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     private void OnSendToAgent(object? sender, RoutedEventArgs e)
@@ -144,12 +145,12 @@ public partial class WorkflowView : UserControl
 
     private void OnAgentToolCalled()
     {
-        Dispatcher.UIThread.Post(() => WorkflowSurfaceBehavior.Refresh(this));
+        Dispatcher.UIThread.Post(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
     }
 
     private void OnVisualRefreshRequested()
     {
-        Dispatcher.UIThread.Post(() => WorkflowSurfaceBehavior.Refresh(this), DispatcherPriority.Background);
+        Dispatcher.UIThread.Post(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this), DispatcherPriority.Background);
     }
 
     private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

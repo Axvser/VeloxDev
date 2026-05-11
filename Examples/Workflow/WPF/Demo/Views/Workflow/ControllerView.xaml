@@ -3,13 +3,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:local="clr-namespace:Demo.Views.Workflow"
+              xmlns:local="clr-namespace:Demo.Views.Workflow"
+              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
              mc:Ignorable="d"
              ClipToBounds="False"
              d:DesignHeight="170" d:DesignWidth="220"
-             local:WorkflowSlotLayoutBehavior.IsEnabled="True"
-             local:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
-             local:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
+              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
@@ -30,8 +31,8 @@
         <Border Grid.Row="0"
                 CornerRadius="5,5,0,0"
                 Background="#2D2D2D"
-                local:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                local:WorkflowNodeDragBehavior.IsEnabled="True">
+                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
             <TextBlock Text="Network Flow Controller"
                        VerticalAlignment="Center"
                        HorizontalAlignment="Center"

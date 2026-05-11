@@ -5,14 +5,15 @@
 			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
 			 x:Class="Demo.WorkflowView"
 			 xmlns:local="using:Demo"
+             xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 			 xmlns:vm="using:Demo.ViewModels"
 			 xmlns:workflow="using:VeloxDev.WorkflowSystem"
 			 x:DataType="vm:TreeViewModel"
-             local:WorkflowSurfaceBehavior.IsEnabled="True"
-             local:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
-			 local:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
-			 local:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-			 local:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+			 behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+			 behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+			 behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+			 behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
 
 	<!-- 模板 -->
 	<UserControl.DataTemplates>
@@ -100,7 +101,7 @@
 								Height="{Binding Layout.ActualSize.Height}"
 								HorizontalAlignment="Left"
 								VerticalAlignment="Top"
-								local:ViewPool.ItemsSource="{Binding Helper.VisibleItems}">
+                             behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}">
 							<Canvas.DataTemplates>
 								<!-- 依照优先级寻找数据模板 >> Self > Parent > App -->
 							</Canvas.DataTemplates>

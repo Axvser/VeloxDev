@@ -4,6 +4,12 @@ namespace VeloxDev.Adapters.NativeInterpolators
 {
     public class TransformInterpolator : IValueInterpolator
     {
+        private sealed class TransformPair
+        {
+            public Transform? Start { get; set; }
+            public Transform? End { get; set; }
+        }
+
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var direction = options is RotationDirection d ? d : RotationDirection.Auto;
@@ -65,7 +71,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return transforms;
         }
 
-        private static List<(Transform? start, Transform? end)> CreateTransformPairs(
+        private static List<TransformPair> CreateTransformPairs(
             List<Transform> startTransforms, List<Transform> endTransforms)
         {
             var allTypes = startTransforms.Select(t => t.GetType())
@@ -73,23 +79,23 @@ namespace VeloxDev.Adapters.NativeInterpolators
                              .Distinct()
                              .ToList();
 
-            var pairs = new List<(Transform?, Transform?)>();
+            var pairs = new List<TransformPair>();
             foreach (var type in allTypes)
             {
                 var start = startTransforms.LastOrDefault(t => t.GetType() == type);
                 var end = endTransforms.LastOrDefault(t => t.GetType() == type);
-                pairs.Add((start, end));
+                pairs.Add(new TransformPair { Start = start, End = end });
             }
             return pairs;
         }
 
-        protected virtual Transform InterpolateTransformPairs(
-            List<(Transform? start, Transform? end)> pairs, double t, RotationDirection direction)
+        private Transform InterpolateTransformPairs(
+            List<TransformPair> pairs, double t, RotationDirection direction)
         {
             var interpolatedTransforms = new List<Transform>();
-            foreach (var (start, end) in pairs)
+            foreach (var pair in pairs)
             {
-                var interpolated = InterpolateSingleTransformPair(start, end, t, direction);
+                var interpolated = InterpolateSingleTransformPair(pair.Start, pair.End, t, direction);
                 if (interpolated != null)
                     interpolatedTransforms.Add(interpolated);
             }

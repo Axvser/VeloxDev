@@ -4,19 +4,12 @@ using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Reflection;
 using VeloxDev.WorkflowSystem;
+using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
 
 /// <summary>
 /// 单个工作流节点的卡片控件。
-///
-/// 职责：
-///   - 展示节点数据（标题、状态、参数等）
-///   - 提供可编辑字段，将用户输入写回 ViewModel
-///   - 向外暴露 <see cref="SlotClicked"/> 事件，由父画布处理连线逻辑
-///
-/// 卡片本身不参与拖拽，也不计算自己的 canvas 坐标——这些全由
-/// <see cref="WorkflowCanvas"/> 统一负责。
 /// </summary>
 internal sealed class WorkflowNodeCard : UserControl
 {
@@ -35,10 +28,6 @@ internal sealed class WorkflowNodeCard : UserControl
     private IWorkflowNodeViewModel? _node;
     private INotifyPropertyChanged? _nodeNotifier;
     private bool _updatingFromVm;
-
-    // ── 节点类型枚举 ──────────────────────────────────────────────────────────
-    private enum Kind { None, Worker, Controller, BoolSelector, EnumSelector }
-    private Kind _kind;
 
     // ── 动态控件引用 ──────────────────────────────────────────────────────────
     private Label? _titleLabel;
@@ -62,20 +51,15 @@ internal sealed class WorkflowNodeCard : UserControl
     private ComboBox? _enumCombo;
     private TableLayoutPanel? _outputSlotsLayout;
     private readonly List<(Label label, SlotButton slot)> _dynamicSlotRows = [];
-    private readonly List<Control> _dragHooked = [];
-
-    // ── 拖拽事件（由画布订阅，用于启动节点移动）──────────────────────────────
-    /// <summary>用户在卡片非交互区域按下左键，画布应开始拖拽此节点。</summary>
-    internal event EventHandler? NodeDragStarted;
 
     // ── 主槽位按钮（边缘固定的圆形槽位，由 WorkflowCanvas 计算屏幕位置）────
     internal SlotButton? InputSlotButton { get; private set; }
     internal SlotButton? OutputSlotButton { get; private set; }
 
     // ── 事件 ──────────────────────────────────────────────────────────────────
-    /// <summary>用户点击了某个槽位按钮，画布应开始/完成连线。</summary>
-    internal event EventHandler<IWorkflowSlotViewModel>? SlotClicked;
-
+    /// <summary>
+    /// Gets the bound node view model.
+    /// </summary>
     internal IWorkflowNodeViewModel? ViewModel => _node;
 
     // ── 构造 ──────────────────────────────────────────────────────────────────
@@ -85,6 +69,10 @@ internal sealed class WorkflowNodeCard : UserControl
         BackColor = Color.FromArgb(11, 17, 32);
         Padding = new Padding(1);
         Margin = Padding.Empty;
+        WorkflowBehaviors.WorkflowNodeDragBehavior.SetIsEnabled(this, true);
+        WorkflowBehaviors.WorkflowNodeDragBehavior.SetCoordinateHostType(this, typeof(WorkflowCanvas));
+        WorkflowBehaviors.WorkflowSlotLayoutBehavior.SetIsEnabled(this, true);
+        WorkflowBehaviors.WorkflowSlotLayoutBehavior.SetCoordinateHostType(this, typeof(WorkflowCanvas));
 
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
@@ -124,6 +112,7 @@ internal sealed class WorkflowNodeCard : UserControl
 
         UnsubscribeVm();
         _node = node;
+        Tag = node;
 
         if (node is INotifyPropertyChanged n)
         {
@@ -138,10 +127,9 @@ internal sealed class WorkflowNodeCard : UserControl
     /// <summary>解除绑定，重置卡片到空状态。</summary>
     internal void Unbind()
     {
-        UnhookDrag();
         UnsubscribeVm();
         _node = null;
-        _kind = Kind.None;
+        Tag = null;
         ClearSlotButtons();
         _headerPanel.Controls.Clear();
         _bodyPanel.Controls.Clear();
@@ -259,46 +247,10 @@ internal sealed class WorkflowNodeCard : UserControl
     {
         if (disposing)
         {
-            UnhookDrag();
             UnsubscribeVm();
         }
 
         base.Dispose(disposing);
-    }
-
-    // ── 拖拽 hook ──────────────────────────────────────────────────────────────
-
-    /// <summary>递归订阅所有非交互子控件的 MouseDown，将其转为 NodeDragStarted。</summary>
-    private void HookDrag()
-    {
-        UnhookDrag();
-        HookDragRecursive(this);
-    }
-
-    private void HookDragRecursive(Control ctrl)
-    {
-        // 可交互控件自己处理鼠标，不参与节点拖拽
-        if (ctrl is TextBoxBase or ComboBox or ButtonBase or CheckBox or SlotButton)
-            return;
-
-        ctrl.MouseDown += OnDragMouseDown;
-        _dragHooked.Add(ctrl);
-
-        foreach (Control child in ctrl.Controls)
-            HookDragRecursive(child);
-    }
-
-    private void UnhookDrag()
-    {
-        foreach (var c in _dragHooked)
-            c.MouseDown -= OnDragMouseDown;
-        _dragHooked.Clear();
-    }
-
-    private void OnDragMouseDown(object? sender, MouseEventArgs e)
-    {
-        if (e.Button == MouseButtons.Left)
-            NodeDragStarted?.Invoke(this, EventArgs.Empty);
     }
 
     // ── 槽位按钮管理 ──────────────────────────────────────────────────────────
@@ -307,7 +259,6 @@ internal sealed class WorkflowNodeCard : UserControl
     {
         var btn = new SlotButton();
         btn.Bind(slot);
-        btn.Clicked += (_, s) => SlotClicked?.Invoke(this, s);
         Controls.Add(btn);
         btn.BringToFront();
         return btn;
@@ -339,7 +290,6 @@ internal sealed class WorkflowNodeCard : UserControl
 
     private void BuildLayout(IWorkflowNodeViewModel node)
     {
-        UnhookDrag();
         ClearSlotButtons();
         ResetRefs();
         _dynamicSlotRows.Clear();
@@ -349,13 +299,11 @@ internal sealed class WorkflowNodeCard : UserControl
 
         switch (node)
         {
-            case NodeViewModel: _kind = Kind.Worker; BuildWorker(); break;
-            case ControllerViewModel: _kind = Kind.Controller; BuildController(); break;
-            case BoolSelectorNodeViewModel: _kind = Kind.BoolSelector; BuildBoolSelector(); break;
-            case EnumSelectorNodeViewModel: _kind = Kind.EnumSelector; BuildEnumSelector(); break;
+            case NodeViewModel: BuildWorker(); break;
+            case ControllerViewModel: BuildController(); break;
+            case BoolSelectorNodeViewModel: BuildBoolSelector(); break;
+            case EnumSelectorNodeViewModel: BuildEnumSelector(); break;
         }
-
-        HookDrag();
     }
 
     private void SetRows(float headerH, float footerH, bool showFooter)
@@ -771,7 +719,6 @@ internal sealed class WorkflowNodeCard : UserControl
 
             var btn = new SlotButton { Margin = new Padding(2, 4, 2, 4) };
             btn.Bind(entries[i].Slot);
-            btn.Clicked += (_, s) => SlotClicked?.Invoke(this, s);
             _outputSlotsLayout.Controls.Add(btn, 1, i);
             _dynamicSlotRows.Add((lbl, btn));
         }
@@ -1059,7 +1006,6 @@ internal sealed class SlotButton : Control
     private IWorkflowSlotViewModel? _slot;
     private INotifyPropertyChanged? _notifier;
 
-    internal event EventHandler<IWorkflowSlotViewModel>? Clicked;
     internal IWorkflowSlotViewModel? ViewModel => _slot;
 
     internal SlotButton()
@@ -1068,6 +1014,7 @@ internal sealed class SlotButton : Control
         Margin = Padding.Empty;
         Cursor = Cursors.Hand;
         TabStop = false;
+        WorkflowBehaviors.WorkflowSlotConnectionBehavior.SetIsEnabled(this, true);
 
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
@@ -1088,6 +1035,7 @@ internal sealed class SlotButton : Control
         }
 
         _slot = slot;
+        Tag = slot;
         Visible = slot is not null;
 
         if (slot is INotifyPropertyChanged n)
@@ -1098,14 +1046,6 @@ internal sealed class SlotButton : Control
 
         Invalidate();
     }
-
-    protected override void OnMouseDown(MouseEventArgs e)
-    {
-        base.OnMouseDown(e);
-        if (e.Button == MouseButtons.Left && _slot is not null)
-            Clicked?.Invoke(this, _slot);
-    }
-
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         // 用父控件背景色填充，避免 WinForms 透明背景异常

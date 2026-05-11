@@ -5,12 +5,13 @@
 			 mc:Ignorable="d" d:DesignWidth="260" d:DesignHeight="220"
 			 x:Class="Demo.BoolSelectorNodeView"
 			 xmlns:local="using:Demo"
+            xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 			 xmlns:vm="using:Demo.ViewModels"
 			 ClipToBounds="False"
-          local:WorkflowSlotLayoutBehavior.IsEnabled="True"
-             local:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
-			 local:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlotsList"
-          local:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
+       behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlotsList"
+		  behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:BoolSelectorNodeViewModel">
 	<Grid RowDefinitions="48,*" ClipToBounds="False">
 		<Border Grid.RowSpan="2"
@@ -41,8 +42,8 @@
 				CornerRadius="4,4,0,0"
 				BorderThickness="0,0,0,0.5"
 				BorderBrush="#6ec6ff"
-                local:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                local:WorkflowNodeDragBehavior.IsEnabled="True">
+                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
 			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
 				<TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
 				<Border Background="#1f3d1f" BorderBrush="#7bd97b" BorderThickness="1" CornerRadius="10" Padding="6,1">

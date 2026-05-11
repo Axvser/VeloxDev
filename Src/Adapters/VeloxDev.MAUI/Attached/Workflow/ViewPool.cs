@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
 
-namespace Demo.Controls;
+namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
 /// Behavior > Provide object pool support for Layout.

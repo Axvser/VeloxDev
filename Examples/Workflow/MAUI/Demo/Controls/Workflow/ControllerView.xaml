@@ -2,10 +2,11 @@
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:Demo.Controls"
+             xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="Demo.Controls.ControllerView"
-             controls:WorkflowSlotLayoutBehavior.IsEnabled="True"
-             controls:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
-             controls:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
+             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
     <Grid RowDefinitions="52,*,56">
         <Border Grid.RowSpan="3"
                 Stroke="White"
@@ -16,8 +17,8 @@
         <Border Grid.Row="0"
                 BackgroundColor="#2D2D2D"
                 StrokeShape="RoundRectangle 5,5,0,0"
-                controls:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                controls:WorkflowNodeDragBehavior.IsEnabled="True">
+                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
             <Label Text="Network Flow Controller"
                    HorizontalTextAlignment="Center"
                    VerticalTextAlignment="Center"

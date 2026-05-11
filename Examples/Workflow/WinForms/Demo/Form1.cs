@@ -3,6 +3,7 @@ using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using VeloxDev.MVVM.Serialization;
+using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo
 {
@@ -14,6 +15,9 @@ namespace Demo
         public Form1()
         {
             InitializeComponent();
+            WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(workflowSurfaceControl, true);
+            WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvasName(workflowSurfaceControl, nameof(workflowSurfaceControl));
+            WorkflowBehaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(workflowSurfaceControl, nameof(workflowSurfaceControl));
             LoadDemo(WorkflowDemoSession.Create());
         }
 
@@ -118,6 +122,7 @@ namespace Demo
             seedTextBox.DataBindings.Add(nameof(TextBox.Text), _controllerBindingSource, nameof(ControllerViewModel.SeedPayload), false, DataSourceUpdateMode.OnPropertyChanged);
 
             workflowSurfaceControl.Session = _demo;
+            WorkflowBehaviors.ViewPool.SetItemsSource(workflowSurfaceControl, _demo.Tree.Helper?.VisibleItems);
 
             ReloadExecutionLog();
             UpdateControllerState();

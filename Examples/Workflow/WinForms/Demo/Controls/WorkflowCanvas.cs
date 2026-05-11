@@ -4,7 +4,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing.Drawing2D;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.StandardEx;
+using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
 
@@ -38,15 +38,6 @@ public sealed class WorkflowCanvas : Panel
     private Point _panOffsetAtPress;
     private Point _panOffset; // 世界坐标原点在客户端中的像素位置
 
-    // 节点拖拽
-    private WorkflowNodeCard? _draggingCard;
-    private IWorkflowNodeViewModel? _draggingNode;
-    private Point _dragLastScreen;
-
-    // 连线
-    private bool _isConnecting;
-    private CanvasMouseFilter? _mouseFilter;
-
     // ── 公共属性 ──────────────────────────────────────────────────────────────
 
     [Browsable(false)]
@@ -69,6 +60,11 @@ public sealed class WorkflowCanvas : Panel
         DoubleBuffered = true;
         BackColor = Color.FromArgb(15, 23, 42);
         AutoScroll = true;
+
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewerName(this, nameof(WorkflowCanvas));
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvasName(this, nameof(WorkflowCanvas));
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(this, nameof(WorkflowCanvas));
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(this, true);
 
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
@@ -105,7 +101,7 @@ public sealed class WorkflowCanvas : Panel
     private void InitialSync()
     {
         SyncAllSlotAnchors();
-        Invalidate();
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     private void DetachSession(WorkflowDemoSession? s)
@@ -118,13 +114,13 @@ public sealed class WorkflowCanvas : Panel
 
         foreach (var card in _cards.Values)
         {
-            card.SlotClicked -= OnSlotClicked;
             Controls.Remove(card);
             card.Dispose();
         }
 
         _cards.Clear();
-        Invalidate();
+        WorkflowBehaviors.ViewPool.SetItemsSource(this, null);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     // ── 节点集合变更 ──────────────────────────────────────────────────────────
@@ -146,7 +142,7 @@ public sealed class WorkflowCanvas : Panel
 
         SyncAllSlotAnchors();
         UpdateCanvasMinSize();
-        Invalidate();
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -154,7 +150,7 @@ public sealed class WorkflowCanvas : Panel
         if (InvokeRequired) { BeginInvoke(new Action(() => OnLinksChanged(sender, e))); return; }
         // 新建/删除连线时重新同步所有槽位锚点，保证两端坐标正确
         SyncAllSlotAnchors();
-        Invalidate();
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -171,8 +167,6 @@ public sealed class WorkflowCanvas : Panel
 
         var card = new WorkflowNodeCard();
         card.Bind(node);
-        card.SlotClicked += OnSlotClicked;
-        card.NodeDragStarted += OnCardDragStarted;
 
         // 订阅节点坐标/尺寸变化
         if (node is INotifyPropertyChanged n) n.PropertyChanged += OnNodePropertyChanged;
@@ -187,8 +181,6 @@ public sealed class WorkflowCanvas : Panel
     {
         if (!_cards.TryGetValue(node, out var card)) return;
         if (node is INotifyPropertyChanged n) n.PropertyChanged -= OnNodePropertyChanged;
-        card.SlotClicked -= OnSlotClicked;
-        card.NodeDragStarted -= OnCardDragStarted;
         card.Unbind();
         Controls.Remove(card);
         card.Dispose();
@@ -211,7 +203,7 @@ public sealed class WorkflowCanvas : Panel
             card.Refresh(node);
         }
 
-        Invalidate();
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     private void RefreshAllCards()
@@ -221,7 +213,7 @@ public sealed class WorkflowCanvas : Panel
             card.RefreshVisual();
         }
 
-        Invalidate();
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     /// <summary>将节点卡片定位到画布坐标对应的客户端位置。</summary>
@@ -245,11 +237,10 @@ public sealed class WorkflowCanvas : Panel
         foreach (var (node, card) in _cards)
         {
             LayoutCard(node, card);
-            SyncNodeSlotAnchors(node, card);
         }
 
         UpdateCanvasMinSize();
-        Invalidate();
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     // ── Slot 锚点同步 ────────────────────────────────────────────────────────
@@ -276,15 +267,6 @@ public sealed class WorkflowCanvas : Panel
             foreach (var (slot, pt) in map)
                 slot.Anchor = new Anchor(pt.X, pt.Y, slot.Anchor.Layer);
         }
-    }
-
-    private void SyncNodeSlotAnchors(IWorkflowNodeViewModel node, WorkflowNodeCard card)
-    {
-        var scroll = AutoScrollPosition;
-        var map = new Dictionary<IWorkflowSlotViewModel, PointF>(ReferenceEqualityComparer.Instance);
-        CollectNodeSlotPositions(card, map, scroll, _panOffset);
-        foreach (var (slot, pt) in map)
-            slot.Anchor = new Anchor(pt.X, pt.Y, slot.Anchor.Layer);
     }
 
     private static void CollectNodeSlotPositions(
@@ -339,84 +321,20 @@ public sealed class WorkflowCanvas : Panel
         }
     }
 
-    // ── 连线交互 ──────────────────────────────────────────────────────────────
-    private bool IsConnectionActive => _session?.Tree.VirtualLink.IsVisible == true;
-
-    private void OnSlotClicked(object? sender, IWorkflowSlotViewModel slot)
-    {
-        if (_session is null) return;
-
-        if (_isConnecting)
-        {
-            // 点击目标 Slot → 同步完成连接
-            slot.StandardReceiveConnection();
-            _session.Tree.StandardResetVirtualLink();
-            StopConnecting();
-        }
-        else
-        {
-            // 发起连接：同步设置 VirtualLink，注册全局鼠标过滤器追踪鼠标位置
-            // 不能 Capture = true，否则子控件 SlotButton 收不到 Click 事件
-            slot.StandardApplyConnection();
-            _isConnecting = true;
-            _mouseFilter = new CanvasMouseFilter(this);
-            Application.AddMessageFilter(_mouseFilter);
-        }
-
-        Invalidate();
-    }
-
-    private void StopConnecting()
-    {
-        _isConnecting = false;
-        if (_mouseFilter is not null)
-        {
-            Application.RemoveMessageFilter(_mouseFilter);
-            _mouseFilter = null;
-        }
-    }
-
-    private void CompleteOrResetConnection(Point clientPt)
-    {
-        if (_session is null) return;
-        var world = ClientToWorld(clientPt);
-        var receiver = HitTestSlot(world);
-        if (receiver is not null)
-            receiver.ReceiveConnectionCommand.Execute(null);
-        else
-            _session.Tree.ResetVirtualLinkCommand.Execute(null);
-
-        Invalidate();
-    }
-
-    private void UpdateVirtualLink(Point clientPt)
-    {
-        if (_session is null) return;
-        _session.Tree.SetPointerCommand.Execute(ClientToWorld(clientPt));
-        Invalidate();
-    }
-
-    private void OnCardDragStarted(object? sender, EventArgs e)
-    {
-        if (sender is not WorkflowNodeCard card || card.ViewModel is null) return;
-        _draggingCard = card;
-        _draggingNode = card.ViewModel;
-        _dragLastScreen = Cursor.Position;
-        Capture = true;
-    }
-
     // ── 鼠标事件（平移、节点拖拽、连线）────────────────────────────────────
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
         if (e.Button != MouseButtons.Left) return;
 
-        if (_isConnecting)
+        if (_session?.Tree.VirtualLink.IsVisible == true)
         {
-            // 点击空白区域 → 取消连线（点在 Slot 上时由 OnSlotClicked 处理，不会走到这里）
-            _session?.Tree.StandardResetVirtualLink();
-            StopConnecting();
-            Invalidate();
+            if (_session.Tree.ResetVirtualLinkCommand.CanExecute(null))
+            {
+                _session.Tree.ResetVirtualLinkCommand.Execute(null);
+            }
+
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
             return;
         }
 
@@ -431,33 +349,6 @@ public sealed class WorkflowCanvas : Panel
     {
         base.OnMouseMove(e);
 
-        if (_draggingNode is not null && _draggingCard is not null)
-        {
-            var cur = Cursor.Position;
-            var dx = cur.X - _dragLastScreen.X;
-            var dy = cur.Y - _dragLastScreen.Y;
-            if (dx != 0 || dy != 0)
-            {
-                // 直接调用 Helper.Move（同步）而非 MoveCommand（VeloxCommand 异步包装），
-                // 保证 node.Anchor 在 LayoutCard 之前已更新
-                _draggingNode.GetHelper().Move(new VeloxDev.WorkflowSystem.Offset(dx, dy));
-                _dragLastScreen = cur;
-
-                // 直接移动卡片控件：触发 card.OnLayout → PositionOverlaySlotButtons 更新槽位按钮位置
-                LayoutCard(_draggingNode, _draggingCard);
-                _draggingCard.PerformLayout();
-
-                // 同步该节点所有 Slot 的 Anchor，保证新建连线回退路径中的坐标也是最新的
-                SyncNodeSlotAnchors(_draggingNode, _draggingCard);
-
-                // 不走 PropertyChanged 事件链，直接请求重绘；
-                // OnPaint 会通过 BuildSlotWorldMap 实时读取槽位按钮位置绘制连线
-                Invalidate();
-            }
-
-            return;
-        }
-
         if (_isPanning)
         {
             var cur = Cursor.Position;
@@ -468,22 +359,12 @@ public sealed class WorkflowCanvas : Panel
             return;
         }
 
-        // 连线模式下的鼠标追踪由 CanvasMouseFilter 处理，无需在此重复
+        // 连线模式下的鼠标追踪由 WorkflowSlotConnectionBehavior 处理，无需在此重复
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
     {
         base.OnMouseUp(e);
-
-        if (_draggingNode is not null)
-        {
-            _draggingCard = null;
-            _draggingNode = null;
-            Capture = false;
-            SyncAllSlotAnchors();
-            Invalidate();
-            return;
-        }
 
         if (_isPanning)
         {
@@ -498,10 +379,8 @@ public sealed class WorkflowCanvas : Panel
         base.OnMouseCaptureChanged(e);
         if (!Capture)
         {
-            _draggingCard = null;
-            _draggingNode = null;
             _isPanning = false;
-            // 连线状态由 StopConnecting() 单独管理，这里不清除
+            // 连线状态由 WorkflowSlotConnectionBehavior 单独管理，这里不清除
         }
     }
 
@@ -771,59 +650,15 @@ public sealed class WorkflowCanvas : Panel
     {
         if (disposing)
         {
-            StopConnecting();
+            if (_session?.Tree.ResetVirtualLinkCommand.CanExecute(null) == true)
+            {
+                _session.Tree.ResetVirtualLinkCommand.Execute(null);
+            }
+
             DetachSession(_session);
         }
 
         base.Dispose(disposing);
-    }
-
-    // ── 全局鼠标过滤器（连线模式专用）────────────────────────────────────────
-    /// <summary>
-    /// 连线模式中注册为 Application.MessageFilter。
-    /// <list type="bullet">
-    ///   <item>WM_MOUSEMOVE：更新虚线端点（不消费，让子控件继续收到事件）。</item>
-    ///   <item>WM_LBUTTONUP：松开鼠标时做 HitTest；若命中 Slot 则完成连线（拖拽模式），
-    ///         否则不消费，让目标 SlotButton 的后续 MouseDown 来完成（点击模式）。</item>
-    /// </list>
-    /// 不使用 Capture，从而保证 SlotButton 等子控件仍能收到 Click/MouseDown 事件。
-    /// </summary>
-    private sealed class CanvasMouseFilter(WorkflowCanvas canvas) : IMessageFilter
-    {
-        private const int WM_MOUSEMOVE = 0x0200;
-        private const int WM_LBUTTONUP = 0x0202;
-
-        public bool PreFilterMessage(ref Message m)
-        {
-            if (!canvas._isConnecting) return false;
-
-            if (m.Msg == WM_MOUSEMOVE)
-            {
-                canvas.UpdateVirtualLink(canvas.PointToClient(Control.MousePosition));
-                return false; // 不消费，子控件继续接收
-            }
-
-            if (m.Msg == WM_LBUTTONUP)
-            {
-                var clientPt = canvas.PointToClient(Control.MousePosition);
-                var world = canvas.ClientToWorld(clientPt);
-                var receiver = canvas.HitTestSlot(world);
-                if (receiver is not null)
-                {
-                    // 拖拽松手命中 Slot → 完成连接
-                    receiver.StandardReceiveConnection();
-                    canvas._session?.Tree.StandardResetVirtualLink();
-                    canvas.StopConnecting();
-                    canvas.Invalidate();
-                    // 不消费 MouseUp：让消息传到持有 capture 的源 SlotButton，
-                    // WinForms 收到 MouseUp 后会自动释放其 auto-capture，
-                    // 否则 capture 永远不释放，用户需多点一次空白处才能解除
-                }
-                // 未命中：不消费，留给"点击模式"的第二次 SlotButton.MouseDown 处理
-            }
-
-            return false;
-        }
     }
 
     // ── 静态辅助 ──────────────────────────────────────────────────────────────

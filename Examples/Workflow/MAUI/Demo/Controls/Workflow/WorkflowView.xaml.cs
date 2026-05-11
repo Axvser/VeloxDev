@@ -5,10 +5,11 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using VeloxDev.WorkflowSystem;
+using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
 
-public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
+public partial class WorkflowView : ContentView
 {
     private TreeViewModel _workflowViewModel = new();
     private DataTemplateSelector? _nodeSelector;
@@ -23,7 +24,7 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
         Log($"ctor: selector={_nodeSelector?.GetType().Name ?? "null"}, canvas={PART_Canvas is null}, resources={Resources.Count}");
         if (_nodeSelector is not null)
         {
-            ViewPool.SetTemplateSelector(PART_Canvas, _nodeSelector);
+            WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, _nodeSelector);
         }
     }
 
@@ -55,7 +56,7 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
             UnsubscribeCanvasItems(oldSession.Tree);
         }
 
-        ViewPool.SetItemsSource(PART_Canvas, null);
+        WorkflowBehaviors.ViewPool.SetItemsSource(PART_Canvas, null);
 
         _workflowViewModel = newSession?.Tree ?? new TreeViewModel();
         PART_SurfaceBorder.BindingContext = _workflowViewModel;
@@ -64,10 +65,10 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
         PART_Canvas.BindingContext = _workflowViewModel;
         if (_nodeSelector is not null)
         {
-            ViewPool.SetTemplateSelector(PART_Canvas, _nodeSelector);
+            WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, _nodeSelector);
         }
         RebuildCanvasItems(_workflowViewModel);
-        ViewPool.SetItemsSource(PART_Canvas, _canvasItems);
+        WorkflowBehaviors.ViewPool.SetItemsSource(PART_Canvas, _canvasItems);
         Log($"AttachSession.afterBind: nodes={_workflowViewModel.Nodes.Count}, links={_workflowViewModel.Links.Count}, canvasItems={_canvasItems.Count}, canvasChildren={PART_Canvas.Children.Count}");
 
         if (newSession is not null)
@@ -80,7 +81,7 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
         MainThread.BeginInvokeOnMainThread(() =>
         {
             Log($"AttachSession.refresh(before): canvasChildren={PART_Canvas.Children.Count}, canvasSize={PART_Canvas.Width}x{PART_Canvas.Height}, request={PART_Canvas.WidthRequest}x{PART_Canvas.HeightRequest}");
-            WorkflowSurfaceBehavior.Refresh(this);
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
             Log($"AttachSession.refresh(after): canvasChildren={PART_Canvas.Children.Count}, canvasSize={PART_Canvas.Width}x{PART_Canvas.Height}, request={PART_Canvas.WidthRequest}x{PART_Canvas.HeightRequest}");
         });
     }
@@ -107,13 +108,13 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
         }
     }
 
-    private void OnAgentToolCalled() => MainThread.BeginInvokeOnMainThread(() => WorkflowSurfaceBehavior.Refresh(this));
+    private void OnAgentToolCalled() => MainThread.BeginInvokeOnMainThread(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
 
     private void OnVisualRefreshRequested() => MainThread.BeginInvokeOnMainThread(RefreshNodeLayouts);
 
-    private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => MainThread.BeginInvokeOnMainThread(() => WorkflowSurfaceBehavior.Refresh(this));
+    private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => MainThread.BeginInvokeOnMainThread(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
 
-    private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => MainThread.BeginInvokeOnMainThread(() => WorkflowSurfaceBehavior.Refresh(this));
+    private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => MainThread.BeginInvokeOnMainThread(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
 
     private void SubscribeCanvasItems(TreeViewModel vm)
     {
@@ -194,17 +195,17 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
 
         Log($"SyncCanvasItems: action={e.Action}, canvasItems={_canvasItems.Count}, canvasChildren={PART_Canvas.Children.Count}");
         RefreshNodeLayouts();
-        WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
     }
 
     private void RefreshNodeLayouts()
     {
         foreach (var child in PART_Canvas.Children.OfType<ContentView>())
         {
-            WorkflowSlotLayoutBehavior.Refresh(child);
+            WorkflowBehaviors.WorkflowSlotLayoutBehavior.Refresh(child);
         }
 
-        WorkflowSurfaceBehavior.Refresh(this);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     private static void Log(string message)
@@ -232,12 +233,12 @@ public partial class WorkflowView : ContentView, IWorkflowSurfaceHost
         if (receiver is not null)
         {
             receiver.ReceiveConnectionCommand.Execute(null);
-            WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
+            WorkflowBehaviors.WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
             return;
         }
 
         _workflowViewModel.ResetVirtualLinkCommand.Execute(null);
-        WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
     }
 
     private IWorkflowSlotViewModel? HitTestSlot(Anchor anchor, IWorkflowSlotViewModel exclude)

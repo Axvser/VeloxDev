@@ -1,8 +1,8 @@
-using Demo.ViewModels;
 using System.ComponentModel;
+using System.Reflection;
 using VeloxDev.WorkflowSystem;
 
-namespace Demo.Controls;
+namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 public sealed class WorkflowSurfaceBehavior
 {
@@ -10,7 +10,7 @@ public sealed class WorkflowSurfaceBehavior
     {
         public ScrollView? ScrollViewer { get; set; }
         public AbsoluteLayout? Canvas { get; set; }
-        public WorkflowGridDecorator? GridDecorator { get; set; }
+        public View? GridDecorator { get; set; }
         public View? PointerPressSource { get; set; }
         public PanGestureRecognizer? PanGesture { get; set; }
         public INotifyPropertyChanged? LayoutNotifier { get; set; }
@@ -207,7 +207,7 @@ public sealed class WorkflowSurfaceBehavior
 
         if (!string.IsNullOrWhiteSpace(gridDecoratorName))
         {
-            state.GridDecorator = control.FindByName<WorkflowGridDecorator>(gridDecoratorName);
+            state.GridDecorator = control.FindByName<View>(gridDecoratorName);
         }
 
         if (!string.IsNullOrWhiteSpace(pointerPressSourceName))
@@ -254,7 +254,7 @@ public sealed class WorkflowSurfaceBehavior
         UnsubscribeLayout(state);
 
         var tree = ResolveTreeViewModel(control);
-        if (tree?.Layout is not INotifyPropertyChanged notifier)
+        if (!TryGetLayout(tree, out var layout) || layout is not INotifyPropertyChanged notifier)
         {
             return;
         }
@@ -336,8 +336,13 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        var actualOffset = viewModel.Layout.ActualOffset;
-        var actualSize = viewModel.Layout.ActualSize;
+        if (!TryGetLayout(viewModel, out var layout))
+        {
+            return;
+        }
+
+        var actualOffset = layout.ActualOffset;
+        var actualSize = layout.ActualSize;
 
         state.Canvas.Margin = new Thickness(0);
         state.Canvas.TranslationX = actualOffset.Horizontal;
@@ -406,26 +411,26 @@ public sealed class WorkflowSurfaceBehavior
 
         if (newOffsetX < 0)
         {
-            viewModel.Layout.NegativeOffset += new Offset(-newOffsetX, 0);
+            AddNegativeOffset(viewModel, -newOffsetX, 0);
             newOffsetX = 0;
             layoutChanged = true;
         }
         else if (newOffsetX > maxH)
         {
-            viewModel.Layout.PositiveOffset += new Offset(newOffsetX - maxH, 0);
+            AddPositiveOffset(viewModel, newOffsetX - maxH, 0);
             newOffsetX = maxH;
             layoutChanged = true;
         }
 
         if (newOffsetY < 0)
         {
-            viewModel.Layout.NegativeOffset += new Offset(0, -newOffsetY);
+            AddNegativeOffset(viewModel, 0, -newOffsetY);
             newOffsetY = 0;
             layoutChanged = true;
         }
         else if (newOffsetY > maxV)
         {
-            viewModel.Layout.PositiveOffset += new Offset(0, newOffsetY - maxV);
+            AddPositiveOffset(viewModel, 0, newOffsetY - maxV);
             newOffsetY = maxV;
             layoutChanged = true;
         }
@@ -449,12 +454,66 @@ public sealed class WorkflowSurfaceBehavior
     private static double GetVerticalScrollMaximum(ScrollView viewer)
         => Math.Max(0, viewer.ContentSize.Height - viewer.Height);
 
-    private static TreeViewModel? ResolveTreeViewModel(ContentView host)
-        => host switch
+    private static IWorkflowTreeViewModel? ResolveTreeViewModel(ContentView host)
+    {
+        if (host.BindingContext is IWorkflowTreeViewModel tree)
         {
-            WorkflowView workflowView => workflowView.WorkflowTree,
-            _ => host.BindingContext as TreeViewModel,
-        };
+            return tree;
+        }
+
+        var property = host.GetType().GetProperty("WorkflowTree", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        return property?.GetValue(host) as IWorkflowTreeViewModel;
+    }
+
+    private static bool TryGetLayout(IWorkflowTreeViewModel? tree, out CanvasLayout layout)
+    {
+        layout = new CanvasLayout();
+        if (tree is null)
+        {
+            return false;
+        }
+
+        var property = tree.GetType().GetProperty("Layout", BindingFlags.Public | BindingFlags.Instance);
+        if (property?.GetValue(tree) is CanvasLayout canvasLayout)
+        {
+            layout = canvasLayout;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Offset GetActualOffset(IWorkflowTreeViewModel tree)
+        => TryGetLayout(tree, out var layout) ? layout.ActualOffset : new Offset();
+
+    private static void AddNegativeOffset(IWorkflowTreeViewModel tree, double horizontal, double vertical)
+    {
+        if (!TryGetLayout(tree, out var layout))
+        {
+            return;
+        }
+
+        layout.NegativeOffset += new Offset(horizontal, vertical);
+    }
+
+    private static void AddPositiveOffset(IWorkflowTreeViewModel tree, double horizontal, double vertical)
+    {
+        if (!TryGetLayout(tree, out var layout))
+        {
+            return;
+        }
+
+        layout.PositiveOffset += new Offset(horizontal, vertical);
+    }
+
+    private static void SetHostProperty(object target, string propertyName, object value)
+    {
+        var property = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+        if (property?.CanWrite == true)
+        {
+            property.SetValue(target, value);
+        }
+    }
 
     private static void UpdateVisibleRegion(ContentView host, SurfaceState state)
     {
@@ -465,24 +524,28 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         UpdateGridDecorator(viewModel, state);
+        var actualOffset = GetActualOffset(viewModel);
         viewModel.GetHelper().Viewport = new Viewport(
-            state.ScrollViewer.ScrollX - viewModel.Layout.ActualOffset.Horizontal,
-            state.ScrollViewer.ScrollY - viewModel.Layout.ActualOffset.Vertical,
+            state.ScrollViewer.ScrollX - actualOffset.Horizontal,
+            state.ScrollViewer.ScrollY - actualOffset.Vertical,
             state.ScrollViewer.Width,
             state.ScrollViewer.Height);
     }
 
-    private static void UpdateGridDecorator(TreeViewModel viewModel, SurfaceState state)
+    private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state)
     {
         if (state.GridDecorator is null || state.ScrollViewer is null)
         {
             return;
         }
 
-        state.GridDecorator.ScrollOffsetX = state.ScrollViewer.ScrollX;
-        state.GridDecorator.ScrollOffsetY = state.ScrollViewer.ScrollY;
-        state.GridDecorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
-        state.GridDecorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
+        SetHostProperty(state.GridDecorator, "ScrollOffsetX", state.ScrollViewer.ScrollX);
+        SetHostProperty(state.GridDecorator, "ScrollOffsetY", state.ScrollViewer.ScrollY);
+        if (TryGetLayout(viewModel, out var layout))
+        {
+            SetHostProperty(state.GridDecorator, "ContentOffsetX", layout.ActualOffset.Horizontal);
+            SetHostProperty(state.GridDecorator, "ContentOffsetY", layout.ActualOffset.Vertical);
+        }
     }
 
     private static void ApplyPendingScrollRestore(ContentView host, SurfaceState state)
@@ -510,8 +573,9 @@ public sealed class WorkflowSurfaceBehavior
                     return;
                 }
 
-                var targetX = state.PendingViewportX + viewModel.Layout.ActualOffset.Horizontal;
-                var targetY = state.PendingViewportY + viewModel.Layout.ActualOffset.Vertical;
+                var actualOffset = GetActualOffset(viewModel);
+                var targetX = state.PendingViewportX + actualOffset.Horizontal;
+                var targetY = state.PendingViewportY + actualOffset.Vertical;
                 targetX = Math.Max(0, Math.Min(targetX, GetHorizontalScrollMaximum(state.ScrollViewer)));
                 targetY = Math.Max(0, Math.Min(targetY, GetVerticalScrollMaximum(state.ScrollViewer)));
                 if (Math.Abs(state.ScrollViewer.ScrollX - targetX) > 0.5 || Math.Abs(state.ScrollViewer.ScrollY - targetY) > 0.5)

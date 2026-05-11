@@ -7,9 +7,10 @@
              mc:Ignorable="d"
              ClipToBounds="False"
              d:DesignHeight="260" d:DesignWidth="300"
-             local:WorkflowSlotLayoutBehavior.IsEnabled="True"
-             local:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
-             local:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
+              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
+              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
@@ -53,8 +54,8 @@
                 CornerRadius="4,4,0,0"
                 BorderThickness="0,0,0,0.5"
                 BorderBrush="{Binding HeaderBorderBrush}"
-                local:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                local:WorkflowNodeDragBehavior.IsEnabled="True">
+                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
             <Grid Margin="12,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

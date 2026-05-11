@@ -1,5 +1,7 @@
 using Microsoft.Maui.Controls.Shapes;
+using System.Reflection;
 using VeloxDev.WorkflowSystem;
+using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 #if WINDOWS
 using Microsoft.UI.Xaml;
@@ -59,7 +61,9 @@ public partial class SlotView : ContentView
 
     private void OnPointerPressed(object? sender, PointerEventArgs e)
     {
-        if (BindingContext is not IWorkflowSlotViewModel slot || FindHost() is not IWorkflowSurfaceHost host)
+        var slot = BindingContext as IWorkflowSlotViewModel;
+        var host = FindHost();
+        if (slot is null || host is null)
         {
             return;
         }
@@ -70,16 +74,22 @@ public partial class SlotView : ContentView
         }
 
         TryCapturePointer(e);
-        WorkflowSlotConnectionBehavior.SetIsDraggingConnection(true);
-        host.BeginConnection(slot);
-        host.UpdateConnectionPointer(anchor);
+        WorkflowBehaviors.WorkflowSlotConnectionBehavior.SetIsDraggingConnection(true);
+        if (slot.SendConnectionCommand.CanExecute(null))
+        {
+            slot.SendConnectionCommand.Execute(null);
+        }
+
+        InvokeHostMethod(host, "UpdateConnectionPointer", anchor);
     }
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (!WorkflowSlotConnectionBehavior.IsDraggingConnection
-            || BindingContext is not IWorkflowSlotViewModel slot
-            || FindHost() is not IWorkflowSurfaceHost host)
+        var slot = BindingContext as IWorkflowSlotViewModel;
+        var host = FindHost();
+        if (!WorkflowBehaviors.WorkflowSlotConnectionBehavior.IsDraggingConnection
+            || slot is null
+            || host is null)
         {
             return;
         }
@@ -89,22 +99,24 @@ public partial class SlotView : ContentView
             return;
         }
 
-        host.UpdateConnectionPointer(anchor);
+        InvokeHostMethod(host, "UpdateConnectionPointer", anchor);
     }
 
     private void OnPointerReleased(object? sender, PointerEventArgs e)
     {
-        if (BindingContext is not IWorkflowSlotViewModel slot || FindHost() is not IWorkflowSurfaceHost host)
+        var slot = BindingContext as IWorkflowSlotViewModel;
+        var host = FindHost();
+        if (slot is null || host is null)
         {
             return;
         }
 
         var anchor = TryGetPointerAnchor(e, slot, out var pointerAnchor) ? pointerAnchor : slot.Anchor;
-        host.CompleteConnection(anchor, slot);
+        InvokeHostMethod(host, "CompleteConnection", anchor, slot);
         MainThread.BeginInvokeOnMainThread(() =>
         {
             TryReleasePointer(e);
-            WorkflowSlotConnectionBehavior.SetIsDraggingConnection(false);
+            WorkflowBehaviors.WorkflowSlotConnectionBehavior.SetIsDraggingConnection(false);
         });
     }
 
@@ -124,12 +136,12 @@ public partial class SlotView : ContentView
         return true;
     }
 
-    private IWorkflowSurfaceHost? FindHost()
+    private ContentView? FindHost()
     {
         Element? current = this;
         while (current is not null)
         {
-            if (current is IWorkflowSurfaceHost host)
+            if (current is ContentView host && HasHostMethod(host, "UpdateConnectionPointer", typeof(Anchor)) && HasHostMethod(host, "CompleteConnection", typeof(Anchor), typeof(IWorkflowSlotViewModel)))
             {
                 return host;
             }
@@ -138,6 +150,24 @@ public partial class SlotView : ContentView
         }
 
         return null;
+    }
+
+    private static bool HasHostMethod(object host, string methodName, params Type[] parameterTypes)
+        => host.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, parameterTypes, null) is not null;
+
+    private static void InvokeHostMethod(object host, string methodName, params object[] arguments)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(arguments);
+
+        var parameterTypes = arguments.Select(static argument => argument.GetType()).ToArray();
+        var method = host.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, parameterTypes, null);
+        if (method is null)
+        {
+            throw new InvalidOperationException($"Host method '{methodName}' was not found on type '{host.GetType().FullName}'.");
+        }
+
+        method.Invoke(host, arguments);
     }
 
     private VisualElement? FindCoordinateHost()

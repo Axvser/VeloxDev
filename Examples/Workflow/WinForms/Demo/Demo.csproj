@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj" />
   </ItemGroup>
 
 </Project>

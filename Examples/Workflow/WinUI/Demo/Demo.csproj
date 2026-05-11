@@ -13,14 +13,6 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-  <ItemGroup>
-    <None Remove="Views\ControllerView.xaml" />
-    <None Remove="Views\LinkView.xaml" />
-    <None Remove="Views\NodeView.xaml" />
-    <None Remove="Views\SlotView.xaml" />
-    <None Remove="Views\TreeView.xaml" />
-  </ItemGroup>
-
 
   <ItemGroup>
     <Content Include="Assets\SplashScreen.scale-200.png" />
@@ -51,41 +43,7 @@
 	
   <ItemGroup>
     <ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
-  </ItemGroup>
-	
-  <ItemGroup>
-    <Page Update="Views\BoolSelectorNodeView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Update="Views\EnumSelectorNodeView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Page Update="Views\ControllerView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
-  <ItemGroup>
-    <Page Update="Views\LinkView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
-  <ItemGroup>
-    <Page Update="Views\SlotView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
-  <ItemGroup>
-    <Page Update="Views\NodeView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
-  <ItemGroup>
-    <Page Update="Views\TreeView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
+    <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WinUI\VeloxDev.WinUI.csproj" />
   </ItemGroup>
 
   <!--

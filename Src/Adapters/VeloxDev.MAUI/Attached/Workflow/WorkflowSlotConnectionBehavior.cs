@@ -1,10 +1,11 @@
 using VeloxDev.WorkflowSystem;
+using System.Reflection;
 
-namespace Demo.Controls;
+namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 public sealed class WorkflowSlotConnectionBehavior
 {
-    internal static bool IsDraggingConnection { get; private set; }
+    public static bool IsDraggingConnection { get; private set; }
 
     public static readonly BindableProperty IsEnabledProperty = BindableProperty.CreateAttached(
         "IsEnabled",
@@ -13,7 +14,7 @@ public sealed class WorkflowSlotConnectionBehavior
         false,
         propertyChanged: OnIsEnabledChanged);
 
-    internal static void SetIsDraggingConnection(bool isDraggingConnection) => IsDraggingConnection = isDraggingConnection;
+    public static void SetIsDraggingConnection(bool isDraggingConnection) => IsDraggingConnection = isDraggingConnection;
 
     public static bool GetIsEnabled(BindableObject element) => (bool)element.GetValue(IsEnabledProperty);
 
@@ -42,33 +43,14 @@ public sealed class WorkflowSlotConnectionBehavior
 
     private static void OnTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is not BindableObject { BindingContext: IWorkflowSlotViewModel slot } bindable)
+        if (sender is not BindableObject { BindingContext: IWorkflowSlotViewModel slot })
         {
             return;
         }
 
-        var host = FindHost(bindable);
-        if (host is null)
+        if (slot.SendConnectionCommand.CanExecute(null))
         {
-            return;
+            slot.SendConnectionCommand.Execute(null);
         }
-
-        host.BeginConnection(slot);
-    }
-
-    private static IWorkflowSurfaceHost? FindHost(BindableObject bindable)
-    {
-        Element? current = bindable as Element;
-        while (current is not null)
-        {
-            if (current is IWorkflowSurfaceHost host)
-            {
-                return host;
-            }
-
-            current = current.Parent;
-        }
-
-        return null;
     }
 }

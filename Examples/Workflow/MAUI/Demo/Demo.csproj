@@ -72,12 +72,6 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
+        <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.MAUI\VeloxDev.MAUI.csproj" />
 	</ItemGroup>
-
-	<ItemGroup>
-	  <MauiXaml Update="Controls\Workflow\WorkflowView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </MauiXaml>
-	</ItemGroup>
-
 </Project>

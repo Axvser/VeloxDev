@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 #endif
 
-namespace Demo.Controls;
+namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 public sealed class WorkflowNodeDragBehavior
 {
@@ -19,9 +19,12 @@ public sealed class WorkflowNodeDragBehavior
     {
         public bool IsDragging { get; set; }
         public PointerGestureRecognizer? PointerGesture { get; set; }
+        public PanGestureRecognizer? PanGesture { get; set; }
         public ButtonsMask ActiveButton { get; set; }
         public double LastX { get; set; }
         public double LastY { get; set; }
+        public double LastPanX { get; set; }
+        public double LastPanY { get; set; }
         public VisualElement? CoordinateHost { get; set; }
         public View? OwnerView { get; set; }
 #if WINDOWS
@@ -94,9 +97,14 @@ public sealed class WorkflowNodeDragBehavior
         pointer.PointerMoved += OnPointerMoved;
         pointer.PointerReleased += OnPointerReleased;
         pointer.PointerExited += OnPointerReleased;
-        view.GestureRecognizers.Add(pointer);
 
-        view.SetValue(StateProperty, new DragState { PointerGesture = pointer });
+        var pan = new PanGestureRecognizer();
+        pan.PanUpdated += OnPanUpdated;
+
+        view.GestureRecognizers.Add(pointer);
+        view.GestureRecognizers.Add(pan);
+
+        view.SetValue(StateProperty, new DragState { PointerGesture = pointer, PanGesture = pan, OwnerView = view });
 #endif
     }
 
@@ -109,13 +117,22 @@ public sealed class WorkflowNodeDragBehavior
             UnhookPlatformEvents(state);
         }
 #else
-        foreach (var gesture in view.GestureRecognizers.OfType<PointerGestureRecognizer>().ToArray())
+        if (view.GetValue(StateProperty) is DragState state)
         {
-            gesture.PointerPressed -= OnPointerPressed;
-            gesture.PointerMoved -= OnPointerMoved;
-            gesture.PointerReleased -= OnPointerReleased;
-            gesture.PointerExited -= OnPointerReleased;
-            view.GestureRecognizers.Remove(gesture);
+            if (state.PointerGesture is not null)
+            {
+                state.PointerGesture.PointerPressed -= OnPointerPressed;
+                state.PointerGesture.PointerMoved -= OnPointerMoved;
+                state.PointerGesture.PointerReleased -= OnPointerReleased;
+                state.PointerGesture.PointerExited -= OnPointerReleased;
+                view.GestureRecognizers.Remove(state.PointerGesture);
+            }
+
+            if (state.PanGesture is not null)
+            {
+                state.PanGesture.PanUpdated -= OnPanUpdated;
+                view.GestureRecognizers.Remove(state.PanGesture);
+            }
         }
 #endif
 
@@ -279,6 +296,8 @@ public sealed class WorkflowNodeDragBehavior
             state.CoordinateHost = coordinateHost;
             state.LastX = position.Value.X;
             state.LastY = position.Value.Y;
+            state.LastPanX = 0d;
+            state.LastPanY = 0d;
             state.IsDragging = true;
             IsDraggingNode = true;
             TryCapturePointer(view, e);
@@ -296,33 +315,11 @@ public sealed class WorkflowNodeDragBehavior
             return;
         }
 
-        var node = ResolveNode(view);
-        if (node is null)
-        {
-            return;
-        }
-
         var position = e.GetPosition(state.CoordinateHost);
-        if (position is null)
+        if (position is not null)
         {
-            return;
-        }
-
-        var current = position.Value;
-        var deltaX = current.X - state.LastX;
-        var deltaY = current.Y - state.LastY;
-        if (Math.Abs(deltaX) <= double.Epsilon && Math.Abs(deltaY) <= double.Epsilon)
-        {
-            return;
-        }
-
-        node.MoveCommand.Execute(new Offset(deltaX, deltaY));
-        state.LastX = current.X;
-        state.LastY = current.Y;
-
-        if (FindAncestorContentView(view) is { } owner)
-        {
-            WorkflowSlotLayoutBehavior.Refresh(owner);
+            state.LastX = position.Value.X;
+            state.LastY = position.Value.Y;
         }
 #endif
     }
@@ -335,10 +332,63 @@ public sealed class WorkflowNodeDragBehavior
         if (sender is View view && view.GetValue(StateProperty) is DragState state)
         {
             TryReleasePointer(view, e);
-            state.ActiveButton = default;
-            state.IsDragging = false;
-            IsDraggingNode = false;
-            state.CoordinateHost = null;
+            ResetDragState(state);
+        }
+#endif
+    }
+
+    private static void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
+    {
+#if WINDOWS
+        return;
+#else
+        if (sender is not View view || view.GetValue(StateProperty) is not DragState state)
+        {
+            return;
+        }
+
+        switch (e.StatusType)
+        {
+            case GestureStatus.Started:
+                state.CoordinateHost ??= ResolveCoordinateHost(view);
+                state.LastPanX = 0d;
+                state.LastPanY = 0d;
+                state.IsDragging = true;
+                IsDraggingNode = true;
+                break;
+            case GestureStatus.Running:
+                if (!state.IsDragging)
+                {
+                    state.CoordinateHost ??= ResolveCoordinateHost(view);
+                    state.IsDragging = true;
+                    IsDraggingNode = true;
+                }
+
+                if (ResolveNode(view) is not IWorkflowNodeViewModel node)
+                {
+                    return;
+                }
+
+                var deltaX = e.TotalX - state.LastPanX;
+                var deltaY = e.TotalY - state.LastPanY;
+                if (Math.Abs(deltaX) <= double.Epsilon && Math.Abs(deltaY) <= double.Epsilon)
+                {
+                    return;
+                }
+
+                node.MoveCommand.Execute(new Offset(deltaX, deltaY));
+                state.LastPanX = e.TotalX;
+                state.LastPanY = e.TotalY;
+
+                if (FindAncestorContentView(view) is { } owner)
+                {
+                    WorkflowSlotLayoutBehavior.Refresh(owner);
+                }
+                break;
+            case GestureStatus.Completed:
+            case GestureStatus.Canceled:
+                ResetDragState(state);
+                break;
         }
 #endif
     }
@@ -368,6 +418,16 @@ public sealed class WorkflowNodeDragBehavior
     {
     }
 #endif
+
+    private static void ResetDragState(DragState state)
+    {
+        state.ActiveButton = default;
+        state.IsDragging = false;
+        state.LastPanX = 0d;
+        state.LastPanY = 0d;
+        IsDraggingNode = false;
+        state.CoordinateHost = null;
+    }
 
     private static VisualElement? ResolveCoordinateHost(View view)
     {

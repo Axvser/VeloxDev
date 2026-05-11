@@ -5,11 +5,12 @@
 			 mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="450"
 			 x:Class="Demo.ControllerView"
 			 xmlns:local="using:Demo"
+            xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 			 xmlns:vm="using:Demo.ViewModels"
              ClipToBounds="False"
-			 local:WorkflowSlotLayoutBehavior.IsEnabled="True"
-             local:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
-             local:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
+           behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
+			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:ControllerViewModel">
   <Grid RowDefinitions="52,*,56" ColumnDefinitions="*" ClipToBounds="False">
 		<Border Grid.RowSpan="5"
@@ -23,8 +24,8 @@
 				BorderThickness="1"
 				CornerRadius="5,5,0,0"
 				Background="#2d2d2d"
-                local:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                local:WorkflowNodeDragBehavior.IsEnabled="True">
+                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
          <TextBlock Text="Network Flow Controller"
 					   VerticalAlignment="Center"
 					   HorizontalAlignment="Center"

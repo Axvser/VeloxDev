@@ -2,15 +2,16 @@
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:Demo.Controls"
+             xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
              xmlns:workflow="clr-namespace:VeloxDev.WorkflowSystem;assembly=VeloxDev.Core"
              x:Class="Demo.Controls.WorkflowView"
              x:Name="Root"
-             controls:WorkflowSurfaceBehavior.IsEnabled="True"
-             controls:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
-             controls:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
-             controls:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-             controls:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+             behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+             behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+             behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
     <ContentView.Resources>
         <DataTemplate x:Key="NodeTemplate" x:DataType="vm:NodeViewModel">
             <controls:NodeView WidthRequest="{Binding Size.Width}"

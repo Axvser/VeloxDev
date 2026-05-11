@@ -1,4 +1,3 @@
-using Demo.ViewModels;
 using System.Collections;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -6,7 +5,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using VeloxDev.WorkflowSystem;
 
-namespace Demo.Controls;
+namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 public sealed class ViewManager
 {
@@ -179,17 +178,12 @@ public sealed class ViewManager
 
         if (view is null)
         {
-            view = CreateView(viewModel);
-            Log($"AddOrReuseView.createDirect: vm={viewModel.GetType().Name}, view={view?.GetType().Name ?? "null"}");
-            if (view is null)
-            {
-                var template = FindDataTemplate(viewModel)
-                    ?? throw new InvalidOperationException($"No DataTemplate found for type: {viewType.FullName}");
-                Log($"AddOrReuseView.template: vm={viewModel.GetType().Name}, template={template.GetType().Name}");
-                view = (View?)template.CreateContent()
-                    ?? throw new InvalidOperationException($"DataTemplate returned null for {viewType.FullName}");
-                Log($"AddOrReuseView.templateContent: vm={viewModel.GetType().Name}, view={view.GetType().Name}");
-            }
+            var template = FindDataTemplate(viewModel)
+                ?? throw new InvalidOperationException($"No DataTemplate found for type: {viewType.FullName}");
+            Log($"AddOrReuseView.template: vm={viewModel.GetType().Name}, template={template.GetType().Name}");
+            view = (View?)template.CreateContent()
+                ?? throw new InvalidOperationException($"DataTemplate returned null for {viewType.FullName}");
+            Log($"AddOrReuseView.templateContent: vm={viewModel.GetType().Name}, view={view.GetType().Name}");
 
             _layout.Children.Add(view);
             Log($"AddOrReuseView.added: vm={viewModel.GetType().Name}, children={_layout.Children.Count}");
@@ -294,51 +288,6 @@ public sealed class ViewManager
         return handler;
     }
 
-    private View? CreateView(object context)
-        => context switch
-        {
-            ControllerViewModel => new ControllerView(),
-            BoolSelectorNodeViewModel => new BoolSelectorNodeView(),
-            EnumSelectorNodeViewModel => new EnumSelectorNodeView(),
-            NodeViewModel => new NodeView(),
-            IWorkflowLinkViewModel => CreateLinkView(),
-            _ => null,
-        };
-
-    private View CreateLinkView()
-    {
-        if (_layout is not AbsoluteLayout canvas)
-        {
-            return new ContentView();
-        }
-
-        var linkHost = new Grid
-        {
-            InputTransparent = true,
-            ZIndex = -1
-        };
-
-        var linkView = new PolylineCurveView
-        {
-            InputTransparent = true,
-            ZIndex = -1,
-            LineColor = Color.FromArgb("#22D3EE")
-        };
-
-        linkView.SetBinding(PolylineCurveView.StartLeftProperty, "Sender.Anchor.Horizontal");
-        linkView.SetBinding(PolylineCurveView.StartTopProperty, "Sender.Anchor.Vertical");
-        linkView.SetBinding(PolylineCurveView.EndLeftProperty, "Receiver.Anchor.Horizontal");
-        linkView.SetBinding(PolylineCurveView.EndTopProperty, "Receiver.Anchor.Vertical");
-        linkView.SetBinding(PolylineCurveView.ContentOffsetXProperty, new Binding(nameof(VisualElement.TranslationX), source: canvas));
-        linkView.SetBinding(PolylineCurveView.ContentOffsetYProperty, new Binding(nameof(VisualElement.TranslationY), source: canvas));
-        linkView.SetBinding(PolylineCurveView.CanRenderProperty, nameof(IWorkflowLinkViewModel.IsVisible));
-        linkView.SetBinding(VisualElement.WidthRequestProperty, new Binding(nameof(VisualElement.WidthRequest), source: canvas));
-        linkView.SetBinding(VisualElement.HeightRequestProperty, new Binding(nameof(VisualElement.HeightRequest), source: canvas));
-
-        linkHost.Children.Add(linkView);
-        return linkHost;
-    }
-
     private static void UnsubscribeFromLayoutChanges(ControlItem item)
     {
         if (item.Handler is not null && item.ViewModel is INotifyPropertyChanged notify)
@@ -405,15 +354,7 @@ public sealed class ViewManager
     private bool TryFindTemplateByResourceKey(object context, out DataTemplate? template)
     {
         template = null;
-        var resourceKey = context switch
-        {
-            ControllerViewModel => "ControllerTemplate",
-            BoolSelectorNodeViewModel => "BoolSelectorTemplate",
-            EnumSelectorNodeViewModel => "EnumSelectorTemplate",
-            NodeViewModel => "NodeTemplate",
-            IWorkflowLinkViewModel => "LinkTemplate",
-            _ => null,
-        };
+        var resourceKey = (string?)null;
 
         if (resourceKey is null)
         {
@@ -455,5 +396,17 @@ public sealed class ViewManager
         public int GetHashCode(object obj) => RuntimeHelpers.GetHashCode(obj);
     }
 
-    private sealed record ControlItem(object ViewModel, View View, PropertyChangedEventHandler? Handler);
+    private sealed class ControlItem
+    {
+        public object ViewModel { get; }
+        public View View { get; }
+        public PropertyChangedEventHandler? Handler { get; }
+
+        public ControlItem(object viewModel, View view, PropertyChangedEventHandler? handler)
+        {
+            ViewModel = viewModel;
+            View = view;
+            Handler = handler;
+        }
+    }
 }

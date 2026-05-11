@@ -14,6 +14,7 @@ using System.Text;
 using System.Threading.Tasks;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
+using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views
 {
@@ -47,6 +48,7 @@ namespace Demo.Views
         public TreeView()
         {
             InitializeComponent();
+            WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, Resources["NodeSelector"] as DataTemplateSelector);
             InitializeNetworkDemo();
         }
 
@@ -117,7 +119,7 @@ namespace Demo.Views
                 ViewModel = result;
                 DataContext = ViewModel;
                 SubscribeAutoScroll(ViewModel);
-                WorkflowSurfaceBehavior.Refresh(this);
+                WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
                 await ShowMessageAsync("加载成功", $"工作流已从 {file.Name} 加载成功。", "确定");
             }
             catch (Exception ex)
@@ -138,7 +140,7 @@ namespace Demo.Views
             DataContext = ViewModel;
             SubscribeAutoScroll(ViewModel);
             ViewModel.Layout.UpdateCommand.Execute(null);
-            WorkflowSurfaceBehavior.Refresh(this);
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
         }
 
         private IntPtr GetActiveWindowHandle()
@@ -232,12 +234,12 @@ namespace Demo.Views
 
         private void OnAgentToolCalled()
         {
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => WorkflowSurfaceBehavior.Refresh(this));
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
         }
 
         private void OnVisualRefreshRequested()
         {
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => WorkflowSurfaceBehavior.Refresh(this));
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
         }
 
         private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
