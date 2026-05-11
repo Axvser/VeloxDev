@@ -39,7 +39,29 @@ public partial class NodeView : WikiElementViewBase
 
     protected override IEnumerable<Control> CreateAdditionalContextMenuItems()
     {
-        var addChild = new MenuItem { Header = "Add Child" };
+        var document = GetOwnerDocument();
+
+        var insertAbove = new MenuItem { Header = document?.InsertPageAboveLabel ?? "↑ Sibling" };
+        insertAbove.Click += (_, _) =>
+        {
+            if (GetOwnerDocument() is { } document && DataContext is NodeProvider node)
+            {
+                document.SelectedNode = node;
+                document.InsertSiblingAboveCommand.Execute(null);
+            }
+        };
+
+        var insertBelow = new MenuItem { Header = document?.InsertPageBelowLabel ?? "↓ Sibling" };
+        insertBelow.Click += (_, _) =>
+        {
+            if (GetOwnerDocument() is { } document && DataContext is NodeProvider node)
+            {
+                document.SelectedNode = node;
+                document.InsertSiblingBelowCommand.Execute(null);
+            }
+        };
+
+        var addChild = new MenuItem { Header = document?.AddChildLabel ?? "Add Child" };
         addChild.Click += (_, _) =>
         {
             if (GetOwnerDocument() is { } document && DataContext is NodeProvider node)
@@ -50,6 +72,8 @@ public partial class NodeView : WikiElementViewBase
         };
 
         yield return new Separator();
+        yield return insertAbove;
+        yield return insertBelow;
         yield return addChild;
     }
 }

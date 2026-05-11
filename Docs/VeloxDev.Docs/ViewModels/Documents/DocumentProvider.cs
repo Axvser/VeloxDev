@@ -109,10 +109,14 @@ public partial class DocumentProvider : IWikiElement
     public string OpenLabel => IsEnglish ? "📂 Open" : "📂 打开";
     public string AddPageLabel => IsEnglish ? "+ Page" : "+ 页面";
     public string AddChildLabel => IsEnglish ? "+ Child" : "+ 子页";
+    public string InsertPageAboveLabel => IsEnglish ? "↑ Sibling" : "↑ 同级";
+    public string InsertPageBelowLabel => IsEnglish ? "↓ Sibling" : "↓ 同级";
     public string SaveTooltip => IsEnglish ? "Save to JSON" : "保存为 JSON";
     public string OpenTooltip => IsEnglish ? "Open JSON" : "打开 JSON";
     public string AddPageTooltip => IsEnglish ? "Add root page" : "添加根页面";
     public string AddChildTooltip => IsEnglish ? "Add child page" : "添加子页面";
+    public string InsertPageAboveTooltip => IsEnglish ? "Insert sibling page above selected page" : "在选中页面上方插入同级页面";
+    public string InsertPageBelowTooltip => IsEnglish ? "Insert sibling page below selected page" : "在选中页面下方插入同级页面";
     public string RemovePageTooltip => IsEnglish ? "Remove selected page" : "移除选中页面";
     public string LanguageTooltip => IsEnglish ? "Document language" : "文档语言";
 
@@ -143,10 +147,14 @@ public partial class DocumentProvider : IWikiElement
         OnPropertyChanged(nameof(OpenLabel));
         OnPropertyChanged(nameof(AddPageLabel));
         OnPropertyChanged(nameof(AddChildLabel));
+        OnPropertyChanged(nameof(InsertPageAboveLabel));
+        OnPropertyChanged(nameof(InsertPageBelowLabel));
         OnPropertyChanged(nameof(SaveTooltip));
         OnPropertyChanged(nameof(OpenTooltip));
         OnPropertyChanged(nameof(AddPageTooltip));
         OnPropertyChanged(nameof(AddChildTooltip));
+        OnPropertyChanged(nameof(InsertPageAboveTooltip));
+        OnPropertyChanged(nameof(InsertPageBelowTooltip));
         OnPropertyChanged(nameof(RemovePageTooltip));
         OnPropertyChanged(nameof(LanguageTooltip));
 
@@ -458,6 +466,30 @@ public partial class DocumentProvider : IWikiElement
     }
 
     [VeloxCommand]
+    private void InsertSiblingAbove()
+    {
+        if (SelectedNode is not { } anchor)
+        {
+            AddRoot();
+            return;
+        }
+
+        InsertSibling(anchor, below: false);
+    }
+
+    [VeloxCommand]
+    private void InsertSiblingBelow()
+    {
+        if (SelectedNode is not { } anchor)
+        {
+            AddRoot();
+            return;
+        }
+
+        InsertSibling(anchor, below: true);
+    }
+
+    [VeloxCommand]
     private void RemoveNode()
     {
         if (SelectedNode is not { } node)
@@ -687,6 +719,35 @@ public partial class DocumentProvider : IWikiElement
             return Children;
 
         return FindOwnerCollection(Nodes.OfType<NodeProvider>(), element);
+    }
+
+    public void InsertSibling(NodeProvider anchor, bool below)
+    {
+        ArgumentNullException.ThrowIfNull(anchor);
+
+        var owner = anchor.Parent is NodeProvider parent
+            ? parent.Nodes
+            : Nodes;
+
+        var index = owner.IndexOf(anchor);
+        if (index < 0)
+            return;
+
+        var title = below ? "New Page Below" : "New Page Above";
+        var node = NodeProvider.Create(title, anchor.Parent);
+        owner.Insert(below ? index + 1 : index, node);
+        SelectedNode = node;
+    }
+
+    public void InsertSelectedSibling(bool below)
+    {
+        if (SelectedNode is not { } anchor)
+        {
+            AddRoot();
+            return;
+        }
+
+        InsertSibling(anchor, below);
     }
 
     private static ObservableCollection<IWikiElement>? FindOwnerCollection(IEnumerable<NodeProvider> nodes, IWikiElement element)

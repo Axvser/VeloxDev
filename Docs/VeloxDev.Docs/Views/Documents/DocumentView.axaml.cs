@@ -46,4 +46,5 @@ public partial class DocumentView : UserControl
 
         flyout.ShowAt(button);
     }
+
 }

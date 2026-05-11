@@ -30,10 +30,10 @@
 				</ScrollViewer>
 			</Grid>
 
-           <Grid x:Name="EditPanel" IsVisible="False" RowDefinitions="Auto,8,*" HorizontalAlignment="Stretch">
+           <Grid x:Name="EditPanel" IsVisible="False" RowDefinitions="Auto,8,Auto,8,*" HorizontalAlignment="Stretch">
 				<Grid ColumnDefinitions="Auto,8,*,Auto">
 					<TextBlock Text="Language" VerticalAlignment="Center" Opacity="0.6" FontSize="12" />
-                 <ComboBox Grid.Column="2"
+				 <ComboBox Grid.Column="2"
 							  ItemsSource="{Binding Languages}"
 							  SelectedItem="{Binding Language}"
 							  MinWidth="140" />
@@ -42,7 +42,29 @@
 							CommandParameter="{Binding $self}"
 							Margin="8,0,0,0" />
 				</Grid>
-             <ScrollViewer x:Name="EditScrollViewer" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" IsScrollChainingEnabled="False" HorizontalAlignment="Stretch">
+				<WrapPanel Grid.Row="2"
+						   Orientation="Horizontal"
+						   VerticalAlignment="Center">
+					<CheckBox Content="Auto height"
+							  IsChecked="{Binding AutoHeight}"
+							  Margin="0,0,12,4"
+							  VerticalAlignment="Center" />
+					<StackPanel Orientation="Horizontal"
+								Spacing="6"
+								VerticalAlignment="Center"
+								IsVisible="{Binding HasFixedHeight}">
+						<TextBlock Text="Max"
+								   Opacity="0.7"
+								   VerticalAlignment="Center" />
+						<NumericUpDown Minimum="120"
+									   Maximum="5000"
+									   Increment="20"
+									   FormatString="0"
+									   Value="{Binding MaxHeightValue}"
+									   MinWidth="120" />
+					</StackPanel>
+				</WrapPanel>
+			 <ScrollViewer x:Name="EditScrollViewer" Grid.Row="4" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" IsScrollChainingEnabled="False" HorizontalAlignment="Stretch">
 					<TextBox Text="{Binding Code}"
 							 AcceptsReturn="True"
 							 TextWrapping="NoWrap"

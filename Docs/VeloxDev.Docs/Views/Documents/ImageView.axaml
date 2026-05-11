@@ -133,6 +133,11 @@
                                        Value="{Binding PixelHeight}"
                                        MinWidth="120" />
                     </StackPanel>
+                     <TextBlock Text="Width fills container; height keeps image ratio."
+                                Margin="0,0,12,8"
+                                VerticalAlignment="Center"
+                                Opacity="0.7"
+                                IsVisible="{Binding IsFillWidthMode}" />
                 </WrapPanel>
                 <Grid Grid.Row="4">
                     <Image x:Name="EditImage"

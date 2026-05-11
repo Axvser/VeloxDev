@@ -1,4 +1,5 @@
 ﻿using Avalonia.Media;
+using System;
 using System.ComponentModel;
 using VeloxDev.Docs.ViewModels;
 
@@ -13,6 +14,7 @@ public partial class ImageView : WikiElementViewBase
         InitializeComponent();
         InitializeEditChrome(ChromeBorder, DisplayPanel, EditPanel);
         DataContextChanged += (_, _) => AttachProvider();
+        SizeChanged += (_, _) => ApplyScale(_provider);
         ResizeThumb.DragDelta += (_, e) =>
         {
             if (DataContext is not ImageProvider image)
@@ -62,13 +64,29 @@ public partial class ImageView : WikiElementViewBase
     {
         var alignment = image.GetHorizontalAlignment();
         var stretch = image.KeepAspectRatio ? Stretch.Uniform : Stretch.Fill;
+        var fillWidth = image.IsFillWidthMode;
+        var availableWidth = GetAvailableImageWidth();
+        var height = fillWidth
+            ? image.GetScaledHeightForWidth(availableWidth)
+            : image.GetScaledHeight();
+
         DisplayImage.HorizontalAlignment = alignment;
         EditImage.HorizontalAlignment = alignment;
         DisplayImage.Stretch = stretch;
         EditImage.Stretch = stretch;
-        DisplayImage.Width = image.GetScaledWidth();
-        DisplayImage.Height = image.GetScaledHeight();
-        EditImage.Width = image.GetScaledWidth();
-        EditImage.Height = image.GetScaledHeight();
+        DisplayImage.Width = fillWidth ? availableWidth : image.GetScaledWidth();
+        DisplayImage.Height = height;
+        EditImage.Width = fillWidth ? availableWidth : image.GetScaledWidth();
+        EditImage.Height = height;
+    }
+
+    private double GetAvailableImageWidth()
+    {
+        var width = Bounds.Width;
+        if (double.IsNaN(width) || width <= 0)
+            return _provider?.GetScaledWidth() ?? 0;
+
+        const double chromePadding = 16;
+        return Math.Max(16, width - chromePadding);
     }
 }

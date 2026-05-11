@@ -23,6 +23,9 @@ public partial class ImageProvider : IWikiElement
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
     private const double DefaultMaxWidth = 640;
     private const double DefaultMaxHeight = 360;
+    private const string ScaleSizeMode = "Scale";
+    private const string PixelSizeMode = "Pixels";
+    private const string FillWidthSizeMode = "Fill Width";
     private bool _syncingSize;
 
     private CancellationTokenSource? _loadCts;
@@ -42,10 +45,11 @@ public partial class ImageProvider : IWikiElement
     [VeloxProperty] public partial AvaloniaImage? ImageSource { get; internal set; }
     [VeloxProperty] public partial bool IsLoading { get; internal set; }
 
-    public IReadOnlyList<string> SizeModes { get; } = ["Scale", "Pixels"];
+    public IReadOnlyList<string> SizeModes { get; } = [ScaleSizeMode, PixelSizeMode, FillWidthSizeMode];
     public IReadOnlyList<string> Alignments { get; } = ["Left", "Center", "Right"];
-    public bool IsScaleMode => string.Equals(SizeMode, "Scale", StringComparison.Ordinal);
-    public bool IsPixelMode => string.Equals(SizeMode, "Pixels", StringComparison.Ordinal);
+    public bool IsScaleMode => string.Equals(SizeMode, ScaleSizeMode, StringComparison.Ordinal);
+    public bool IsPixelMode => string.Equals(SizeMode, PixelSizeMode, StringComparison.Ordinal);
+    public bool IsFillWidthMode => string.Equals(SizeMode, FillWidthSizeMode, StringComparison.Ordinal);
     public bool HasImage => ImageSource is not null;
     public bool HasNoImage => !IsLoading && ImageSource is null;
 
@@ -57,7 +61,7 @@ public partial class ImageProvider : IWikiElement
         PixelWidth = DefaultMaxWidth;
         PixelHeight = DefaultMaxHeight * 0.75;
         KeepAspectRatio = true;
-        SizeMode = "Scale";
+        SizeMode = ScaleSizeMode;
         Alignment = "Center";
     }
 
@@ -103,6 +107,7 @@ public partial class ImageProvider : IWikiElement
     {
         OnPropertyChanged(nameof(IsScaleMode));
         OnPropertyChanged(nameof(IsPixelMode));
+        OnPropertyChanged(nameof(IsFillWidthMode));
 
         if (_syncingSize)
             return;
@@ -314,6 +319,17 @@ public partial class ImageProvider : IWikiElement
     public double GetScaledWidth() => PixelWidth;
     public double GetScaledHeight() => PixelHeight;
 
+    public double GetScaledHeightForWidth(double width)
+    {
+        if (width <= 0)
+            return GetScaledHeight();
+
+        if (_baseWidth <= 0 || _baseHeight <= 0)
+            return Math.Max(16, Math.Round(width * (DefaultMaxHeight / DefaultMaxWidth), 2));
+
+        return Math.Max(16, Math.Round(width * (_baseHeight / _baseWidth), 2));
+    }
+
     public HorizontalAlignment GetHorizontalAlignment() => Alignment switch
     {
         "Left" => HorizontalAlignment.Left,
@@ -324,6 +340,9 @@ public partial class ImageProvider : IWikiElement
     public void ResizeByFactor(double factor)
     {
         factor = Math.Max(0.1, factor);
+
+        if (IsFillWidthMode)
+            return;
 
         if (IsScaleMode)
         {
