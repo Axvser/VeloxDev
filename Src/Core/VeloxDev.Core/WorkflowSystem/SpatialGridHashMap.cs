@@ -48,7 +48,12 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
                     if (!seen.Add(item)) continue;
 
                     var itemBounds = item.Bounds;
-                    if (viewport.IntersectsWith(itemBounds))
+                    // Zero-size items (e.g. nodes not yet measured by the view) are tested
+                    // as points so they appear immediately after being added programmatically.
+                    bool visible = itemBounds.IsEmpty
+                        ? viewport.Contains(itemBounds.Horizontal, itemBounds.Vertical)
+                        : viewport.IntersectsWith(itemBounds);
+                    if (visible)
                         yield return item;
                 }
             }
@@ -118,7 +123,17 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
 
     private IEnumerable<CellKey> GetCells(Viewport bounds)
     {
-        if (bounds.IsEmpty) yield break;
+        // Zero-size bounds (e.g. a node that has not yet been measured by the view layer)
+        // must still be indexed so that Virtualize can include them in VisibleItems and
+        // allow the view to render and measure the node.  Index the single cell that
+        // contains the node's anchor point.
+        if (bounds.IsEmpty)
+        {
+            yield return new CellKey(
+                (int)Math.Floor(bounds.Horizontal / _cellSize),
+                (int)Math.Floor(bounds.Vertical / _cellSize));
+            yield break;
+        }
 
         int minX = (int)Math.Floor(bounds.Horizontal / _cellSize);
         int maxX = (int)Math.Ceiling(bounds.Right / _cellSize);

@@ -334,8 +334,10 @@ public sealed class ViewManager(Panel panel)
                 Canvas.SetLeft(view, node.Anchor.Horizontal);
                 Canvas.SetTop(view, node.Anchor.Vertical);
                 Canvas.SetZIndex(view, node.Anchor.Layer);
-                view.Width = Math.Max(0, node.Size.Width);
-                view.Height = Math.Max(0, node.Size.Height);
+                // When Size is (0,0) the view has not been measured yet; use NaN so
+                // the platform auto-sizes to content instead of collapsing to 0×0.
+                view.Width = node.Size.Width > 0 ? node.Size.Width : double.NaN;
+                view.Height = node.Size.Height > 0 ? node.Size.Height : double.NaN;
                 break;
             case IWorkflowLinkViewModel:
                 Canvas.SetLeft(view, 0);

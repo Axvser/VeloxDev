@@ -8,6 +8,10 @@ namespace VeloxDev.WorkflowSystem;
 [AgentContext(AgentLanguages.English, "Workflow Tree component interface, maintaining all Node, Slot, and Link components within a workspace")]
 public interface IWorkflowTreeViewModel : IWorkflowViewModel
 {
+    [AgentContext(AgentLanguages.Chinese, "画布布局上下文，记录画布尺寸与偏移信息")]
+    [AgentContext(AgentLanguages.English, "Canvas layout context, recording canvas size and offset information")]
+    public CanvasLayout Layout { get; set; }
+
     [AgentContext(AgentLanguages.Chinese, "仅在建立连接的过程中可见")]
     [AgentContext(AgentLanguages.English, "Only visible during the connection establishment process")]
     public IWorkflowLinkViewModel VirtualLink { get; set; }

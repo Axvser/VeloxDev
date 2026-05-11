@@ -22,12 +22,6 @@ namespace Demo.Views
     {
         private TreeViewModel ViewModel = new();
 
-        public static readonly DependencyProperty CanvasTransformProperty = DependencyProperty.Register(
-            nameof(CanvasTransform),
-            typeof(Transform),
-            typeof(TreeView),
-            new PropertyMetadata(null));
-
         [DllImport("user32.dll")]
         private static extern IntPtr GetActiveWindow();
 
@@ -50,12 +44,6 @@ namespace Demo.Views
             InitializeComponent();
             WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, Resources["NodeSelector"] as DataTemplateSelector);
             InitializeNetworkDemo();
-        }
-
-        public Transform? CanvasTransform
-        {
-            get => (Transform?)GetValue(CanvasTransformProperty);
-            set => SetValue(CanvasTransformProperty, value);
         }
 
         private async void SaveWorkflow(object sender, RoutedEventArgs e)
@@ -114,6 +102,9 @@ namespace Demo.Views
                     await ShowMessageAsync("加载失败", "文件格式不正确或解析失败。", "确定");
                     return;
                 }
+
+                result.Layout = result.Layout.AdaptTo(
+                    new VeloxDev.WorkflowSystem.Size(1920, 1080));
 
                 UnsubscribeAutoScroll(ViewModel);
                 ViewModel = result;

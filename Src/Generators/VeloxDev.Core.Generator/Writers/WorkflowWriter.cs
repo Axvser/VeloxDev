@@ -388,6 +388,7 @@ namespace VeloxDev.Generators.Writers
          public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
 
          private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel virtualLink = new {{model.VirtualLinkType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() { Sender = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}(), Receiver = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() };
+         private {{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout layout = new();
          private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel> nodes = [];
          private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel> links = [];
          private {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel>> linksMap = [];
@@ -451,6 +452,22 @@ namespace VeloxDev.Generators.Writers
              Helper = helper;
          }
 
+        public {{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout Layout
+        {
+            get => layout;
+            set
+            {
+               if({{ObjectFullName}}.Equals(layout,value)) return;
+               var old = layout;
+               OnPropertyChanging(nameof(Layout));
+               OnLayoutChanging(old,value);
+               layout = value;
+               OnLayoutChanged(old,value);
+               OnPropertyChanged(nameof(Layout));
+            }
+        }
+        partial void OnLayoutChanging({{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout newValue);
+        partial void OnLayoutChanged({{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout newValue);
         public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel VirtualLink
         {
             get => virtualLink;

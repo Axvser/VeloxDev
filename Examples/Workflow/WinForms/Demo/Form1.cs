@@ -69,6 +69,8 @@ namespace Demo
                     using var reader = new System.IO.StreamReader(stream);
                     var json = await reader.ReadToEndAsync();
                     var result = json.Deserialize<TreeViewModel>();
+                    result.Layout = result.Layout.AdaptTo(
+                        new VeloxDev.WorkflowSystem.Size(1920, 1080));
                     LoadDemo(WorkflowDemoSession.FromTree(result));
                     MessageBox.Show(this, $"工作流已从 {dialog.FileName} 加载成功。", "加载成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }

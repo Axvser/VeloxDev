@@ -17,23 +17,11 @@ public partial class WorkflowView : UserControl
 {
     private TreeViewModel _workflowViewModel = new();
 
-    public static readonly DependencyProperty CanvasTransformProperty = DependencyProperty.Register(
-        nameof(CanvasTransform),
-        typeof(Transform),
-        typeof(WorkflowView),
-        new PropertyMetadata(Transform.Identity));
-
     public WorkflowView()
     {
         InitializeComponent();
         DataContext = _workflowViewModel;
         InitializeNetworkDemo();
-    }
-
-    public Transform CanvasTransform
-    {
-        get => (Transform)GetValue(CanvasTransformProperty);
-        set => SetValue(CanvasTransformProperty, value);
     }
 
     private async void SelectWorkflow(object sender, RoutedEventArgs e)
@@ -55,12 +43,25 @@ public partial class WorkflowView : UserControl
                 using var reader = new StreamReader(stream);
                 var json = await reader.ReadToEndAsync();
                 var result = json.Deserialize<TreeViewModel>();
+                result.Layout = result.Layout.AdaptTo(
+                    new VeloxDev.WorkflowSystem.Size(1920, 1080),
+                    out double vpX, out double vpY);
 
                 UnsubscribeAutoScroll(_workflowViewModel);
                 _workflowViewModel = result;
                 DataContext = _workflowViewModel;
                 SubscribeAutoScroll(_workflowViewModel);
-                 WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+                WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+                Dispatcher.InvokeAsync(() =>
+                {
+                    var sv = this.FindName("PART_ScrollViewer") as System.Windows.Controls.ScrollViewer;
+                    if (sv is not null)
+                    {
+                        var offset = _workflowViewModel.Layout.ActualOffset;
+                        sv.ScrollToHorizontalOffset(vpX + offset.Horizontal);
+                        sv.ScrollToVerticalOffset(vpY + offset.Vertical);
+                    }
+                }, System.Windows.Threading.DispatcherPriority.Loaded);
 
                 MessageBox.Show($"工作流已从 {dialog.FileName} 加载成功。", "加载成功",
                     MessageBoxButton.OK, MessageBoxImage.Information);

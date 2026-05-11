@@ -16,9 +16,6 @@ public partial class TreeViewModel
 
     // …… 自由扩展您的工作流树视图模型
 
-    [AgentContext(AgentLanguages.Chinese, "画布布局上下文")]
-    [VeloxProperty] private CanvasLayout layout = new();
-
     [VeloxProperty] private ObservableCollection<string> executionLog = [];
     [VeloxProperty] private ObservableCollection<string> agentLog = [];
     [VeloxProperty] private bool isWorkflowRunning = false;

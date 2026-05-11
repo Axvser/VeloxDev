@@ -44,6 +44,19 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
         {
             Component?.Virtualize(Viewport);
             isDirty = false;
+            BroadcastVisibleItemLayout();
+        }
+    }
+
+    private void BroadcastVisibleItemLayout()
+    {
+        foreach (var item in VisibleItems)
+        {
+            if (item is IWorkflowNodeViewModel node)
+            {
+                node.OnPropertyChanged(nameof(node.Anchor));
+                node.OnPropertyChanged(nameof(node.Size));
+            }
         }
     }
 

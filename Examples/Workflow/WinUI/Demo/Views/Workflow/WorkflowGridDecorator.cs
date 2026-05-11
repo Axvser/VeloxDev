@@ -7,11 +7,12 @@ using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 using Windows.Foundation;
 
 namespace Demo.Views;
 
-public sealed class WorkflowGridDecorator : Grid
+public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 

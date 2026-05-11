@@ -2,6 +2,8 @@
 
 > **决策规则**：在进行任何工具调用之前，先问自己：*“我是否即将进行 2 次或更多次釁目标相同节点或同一组节点的顺序调用？”*。若是，将下表先查阅——使用组合工具或 BatchExecute 几乎总是更优的选择。
 
+> **状态复用规则**：允许为了节省 token 而复用缓存拓扑，而不是每次操作前都重新读取实时状态。但只要发生结构变更，缓存就应视为失效。
+
 **优先使用组合工具，而非多步序列：**
 
 | 组合工具 | 等效替代 | 节省 |
@@ -27,3 +29,19 @@
 - **ResolveSlotId**：通过属性名直接获取插槽运行时 ID，避免为解析 ID 而调用 GetNodeDetail。
 - 多步操作中优先使用 **RuntimeId**（而非索引），在增删操作后依然稳定。
 - 已有插槽 ID 时使用 **ConnectSlotsById**；知道属性名时使用 **ConnectByProperty**。
+
+### 缓存失效检查表
+
+如果刚调用过以下任一操作，在下一次依赖拓扑的步骤前应先刷新：
+
+- `CreateNode`、`DeleteNode`、`DeleteSlot`、`CloneNodes`
+- `CreateSlotOnNode`、`AddSlotToCollection`、`RemoveSlotFromCollection`
+- `SetEnumSlotCollection`
+
+这些操作之后：
+
+- 旧 **node index** 可能已指向别的节点
+- 旧 **slot index** 可能已指向别的插槽
+- 旧 **枚举 slot runtime ID** 可能已经不存在
+
+若未发生上述失效操作，则允许按速度优先策略复用缓存 ID 与拓扑。

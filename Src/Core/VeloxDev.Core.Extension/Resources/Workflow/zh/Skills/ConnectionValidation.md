@@ -16,3 +16,9 @@
 - 若是通道问题 → 检查并考虑用 SetSlotChannel 更改通道；
 - 若是容量问题 → 先断开现有连接；
 - 若是 ValidateConnection → 告知用户。
+
+### 连接工具的刷新策略
+
+- 若前几步**没有**改变拓扑，可继续复用缓存的 slot ID。
+- 若最近改动了插槽集合、删除了组件、克隆了节点，或调用了 `SetEnumSlotCollection`，则应先刷新插槽身份信息。
+- 在未改变前置条件（channel、端点、selector 类型、容量占用）前，不要对同一 `Connect*` 调用做循环重试。

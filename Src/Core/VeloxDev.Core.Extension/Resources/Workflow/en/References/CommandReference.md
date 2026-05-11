@@ -26,6 +26,7 @@
 | **Delete multiple nodes** | **DeleteNodes** | Node.DeleteCommand × N |
 | **Position multiple nodes** | **ArrangeNodes** | SetAnchorCommand × N |
 | **Full graph snapshot** | **GetFullTopology** | All nodes + slots + connections in one call |
+| **Mark workflow dirty** | **MarkDirty** | TreeHelper.MarkDirty |
 | **Reverse broadcast** | **ReverseBroadcastNode** | Node.ReverseBroadcastCommand |
 | **Search downstream** | **SearchForward** | BFS via SearchForwardNodes extension |
 | **Search upstream** | **SearchReverse** | BFS via SearchReverseNodes extension |
@@ -59,3 +60,9 @@ Properties annotated with `[AgentContext]` are **explicitly intended by the deve
 ## Context Caching
 
 You do NOT need to call `GetWorkflowSummary` or `GetComponentContext` every turn. Once you have read a type's context, remember it for the rest of the conversation. Only re-read if the user indicates types have changed.
+
+## Dirty Marking Rule
+
+- Agent mutations no longer imply automatic dirty marking.
+- After finishing one or more workflow mutations, call **`MarkDirty` exactly once at the end of the task**.
+- Query-only tasks do not need `MarkDirty`.

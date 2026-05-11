@@ -9,6 +9,7 @@ public sealed class WorkflowSlotLayoutBehavior
     private sealed class LayoutState
     {
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
+        public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
         public bool SyncPending { get; set; }
     }
 
@@ -122,9 +123,11 @@ public sealed class WorkflowSlotLayoutBehavior
         control.BindingContextChanged -= OnBindingContextChanged;
         control.SizeChanged -= OnSizeChanged;
 
-        if (control.GetValue(StateProperty) is LayoutState state && state.PropertyChangedSource is not null)
+        if (control.GetValue(StateProperty) is LayoutState state
+            && state.PropertyChangedSource is not null
+            && state.PropertyChangedHandler is not null)
         {
-            state.PropertyChangedSource.PropertyChanged -= OnNodePropertyChanged;
+            state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
         }
 
         control.ClearValue(StateProperty);
@@ -165,45 +168,6 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private static void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (sender is not BindableObject bindable)
-        {
-            return;
-        }
-
-        var control = FindAncestor(bindable);
-        if (control is null)
-        {
-            return;
-        }
-
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor)
-            or nameof(IWorkflowNodeViewModel.Size)
-            or "InputSlot"
-            or "OutputSlot"
-            or "OutputSlots")
-        {
-            ScheduleSync(control);
-        }
-    }
-
-    private static ContentView? FindAncestor(BindableObject bindable)
-    {
-        Element? current = bindable as Element;
-        while (current is not null)
-        {
-            if (current is ContentView view && GetIsEnabled(view))
-            {
-                return view;
-            }
-
-            current = current.Parent;
-        }
-
-        return null;
-    }
-
     private static void UpdatePropertyChangedSubscription(ContentView control)
     {
         if (control.GetValue(StateProperty) is not LayoutState state)
@@ -211,16 +175,32 @@ public sealed class WorkflowSlotLayoutBehavior
             return;
         }
 
-        if (state.PropertyChangedSource is not null)
+        if (state.PropertyChangedSource is not null && state.PropertyChangedHandler is not null)
         {
-            state.PropertyChangedSource.PropertyChanged -= OnNodePropertyChanged;
+            state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
             state.PropertyChangedSource = null;
+            state.PropertyChangedHandler = null;
         }
 
         if (control.BindingContext is INotifyPropertyChanged notify)
         {
+            // Use a lambda that directly captures the ContentView. The node VM is a plain
+            // INotifyPropertyChanged (not a BindableObject / Element), so we cannot walk
+            // the visual tree from the sender to find the associated view.
+            PropertyChangedEventHandler handler = (_, e) =>
+            {
+                if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor)
+                    or nameof(IWorkflowNodeViewModel.Size)
+                    or "InputSlot"
+                    or "OutputSlot"
+                    or "OutputSlots")
+                {
+                    ScheduleSync(control);
+                }
+            };
             state.PropertyChangedSource = notify;
-            notify.PropertyChanged += OnNodePropertyChanged;
+            state.PropertyChangedHandler = handler;
+            notify.PropertyChanged += handler;
         }
     }
 
@@ -232,15 +212,27 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         state.SyncPending = true;
+
+        // Two-level dispatch is required to fix a MAUI-specific race condition:
+        // WorkflowSlotLayoutBehavior and ViewManager both subscribe to node.PropertyChanged.
+        // SlotLayoutBehavior subscribes first (via BindingContextChanged), so its
+        // BeginInvokeOnMainThread(Sync) is queued before ViewManager's
+        // BeginInvokeOnMainThread(ApplyLayout/SetLayoutBounds).
+        // The outer dispatch joins the current queue; the inner dispatch runs only after
+        // ApplyLayout has already updated AbsoluteLayout.LayoutBounds, so GetLocationOnScreen
+        // reads the correct (new) position rather than the stale element.X/Y.
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            if (control.GetValue(StateProperty) is not LayoutState currentState)
+            MainThread.BeginInvokeOnMainThread(() =>
             {
-                return;
-            }
+                if (control.GetValue(StateProperty) is not LayoutState currentState)
+                {
+                    return;
+                }
 
-            currentState.SyncPending = false;
-            Sync(control);
+                currentState.SyncPending = false;
+                Sync(control);
+            });
         });
     }
 

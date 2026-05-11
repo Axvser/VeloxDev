@@ -23,7 +23,7 @@
                             Canvas.Top="{Binding Anchor.Vertical}"
                             Panel.ZIndex="{Binding Anchor.Layer}"
                             IsEnabled="{Binding IsEnabled}"
-                            RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"/>
+                            RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
         </DataTemplate>
         <DataTemplate x:Key="ControllerTemplate" DataType="{x:Type vm:ControllerViewModel}">
             <local:ControllerView Width="{Binding Size.Width}"
@@ -32,7 +32,7 @@
                                   Canvas.Top="{Binding Anchor.Vertical}"
                                   Panel.ZIndex="{Binding Anchor.Layer}"
                                   IsEnabled="{Binding IsEnabled}"
-                                  RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"/>
+                                  RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
         </DataTemplate>
         <DataTemplate x:Key="BoolSelectorTemplate" DataType="{x:Type vm:BoolSelectorNodeViewModel}">
             <local:BoolSelectorNodeView Width="{Binding Size.Width}"
@@ -41,7 +41,7 @@
                                         Canvas.Top="{Binding Anchor.Vertical}"
                                         Panel.ZIndex="{Binding Anchor.Layer}"
                                         IsEnabled="{Binding IsEnabled}"
-                                        RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"/>
+                                        RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
         </DataTemplate>
         <DataTemplate x:Key="EnumSelectorTemplate" DataType="{x:Type vm:EnumSelectorNodeViewModel}">
             <local:EnumSelectorNodeView Width="{Binding Size.Width}"
@@ -50,7 +50,7 @@
                                         Canvas.Top="{Binding Anchor.Vertical}"
                                         Panel.ZIndex="{Binding Anchor.Layer}"
                                         IsEnabled="{Binding IsEnabled}"
-                                        RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"/>
+                                        RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate" DataType="{x:Type vm:LinkViewModel}">
             <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
@@ -61,7 +61,7 @@
                                      LineColor="White"
                                      Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
                                      Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
-                                     RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"
+                                     RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"
                                      Panel.ZIndex="-1"/>
         </DataTemplate>
         <DataTemplate DataType="{x:Type workflow:IWorkflowLinkViewModel}">
@@ -73,7 +73,7 @@
                                      LineColor="White"
                                      Width="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualWidth}"
                                      Height="{Binding RelativeSource={RelativeSource AncestorType={x:Type Canvas}}, Path=ActualHeight}"
-                                     RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=CanvasTransform}"
+                                     RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"
                                      Panel.ZIndex="-1"/>
         </DataTemplate>
         <local:CustomTemplateSelector x:Key="NodeSelector"

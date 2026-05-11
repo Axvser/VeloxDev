@@ -15,6 +15,7 @@ public partial class TreeViewModelBase : IWorkflowTreeViewModel, IWorkflowIdenti
 
     public TreeViewModelBase() { InitializeWorkflow(); }
 
+    [VeloxProperty] private CanvasLayout layout = new();
     [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkViewModelBase() { Sender = new SlotViewModelBase(), Receiver = new SlotViewModelBase() };
     [VeloxProperty] private ObservableCollection<IWorkflowNodeViewModel> nodes = [];
     [VeloxProperty] private ObservableCollection<IWorkflowLinkViewModel> links = [];

@@ -15,3 +15,9 @@ The framework may **silently reject** a connection attempt. All Connect tools ve
 2. If **channel issue** → check and possibly change channel with `SetSlotChannel`.
 3. If **capacity** → disconnect the existing connection first with `DisconnectSlotsById`.
 4. If **ValidateConnection** → inform the user; do not retry.
+
+### Refresh policy for connection tools
+
+- If the immediately previous steps did **not** change topology, you may reuse cached slot IDs.
+- If you recently changed slot collections, deleted components, cloned nodes, or called `SetEnumSlotCollection`, refresh slot identity first.
+- Do not loop on `Connect*` after a rejection unless you changed one of the preconditions: channel, endpoint, selector type, or existing capacity.

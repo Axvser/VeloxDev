@@ -1,8 +1,9 @@
 using System.Globalization;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
 
-public sealed class WorkflowGridDecorator : Grid
+public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 {
     public static readonly BindableProperty RulerThicknessProperty = BindableProperty.Create(
         nameof(RulerThickness), typeof(double), typeof(WorkflowGridDecorator), 28d, propertyChanged: OnVisualPropertyChanged);

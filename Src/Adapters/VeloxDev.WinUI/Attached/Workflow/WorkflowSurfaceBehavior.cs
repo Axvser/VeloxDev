@@ -5,8 +5,6 @@ using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
-using System.Reflection;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -268,10 +266,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var point = e.GetCurrentPoint(state.ScrollViewer).Position;
-        var actualOffset = GetActualOffset(viewModel);
         viewModel.SetPointerCommand.Execute(new Anchor(
-            state.ScrollViewer.HorizontalOffset + point.X - actualOffset.Horizontal,
-            state.ScrollViewer.VerticalOffset + point.Y - actualOffset.Vertical,
+            state.ScrollViewer.HorizontalOffset + point.X - viewModel.Layout.ActualOffset.Horizontal,
+            state.ScrollViewer.VerticalOffset + point.Y - viewModel.Layout.ActualOffset.Vertical,
             0));
     }
 
@@ -335,26 +332,26 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         if (newOffsetX < 0)
         {
-            AddNegativeOffset(viewModel, -newOffsetX, 0);
+            viewModel.Layout.NegativeOffset += new Offset(-newOffsetX, 0);
             newOffsetX = 0;
             layoutChanged = true;
         }
         else if (newOffsetX > maxH)
         {
-            AddPositiveOffset(viewModel, newOffsetX - maxH, 0);
+            viewModel.Layout.PositiveOffset += new Offset(newOffsetX - maxH, 0);
             newOffsetX = maxH;
             layoutChanged = true;
         }
 
         if (newOffsetY < 0)
         {
-            AddNegativeOffset(viewModel, 0, -newOffsetY);
+            viewModel.Layout.NegativeOffset += new Offset(0, -newOffsetY);
             newOffsetY = 0;
             layoutChanged = true;
         }
         else if (newOffsetY > maxV)
         {
-            AddPositiveOffset(viewModel, 0, newOffsetY - maxV);
+            viewModel.Layout.PositiveOffset += new Offset(0, newOffsetY - maxV);
             newOffsetY = maxV;
             layoutChanged = true;
         }
@@ -389,19 +386,18 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        var actualOffset = GetActualOffset(viewModel);
         var transform = new TranslateTransform
         {
-            X = actualOffset.Horizontal,
-            Y = actualOffset.Vertical
+            X = viewModel.Layout.ActualOffset.Horizontal,
+            Y = viewModel.Layout.ActualOffset.Vertical
         };
 
-        state.Canvas.Translation = new Vector3(
-            (float)actualOffset.Horizontal,
-            (float)actualOffset.Vertical,
+        state.Canvas.Translation = new System.Numerics.Vector3(
+            (float)viewModel.Layout.ActualOffset.Horizontal,
+            (float)viewModel.Layout.ActualOffset.Vertical,
             0f);
 
-        SetHostProperty(host, "CanvasTransform", transform);
+        WorkflowCanvasTransformBehavior.Apply(host, transform);
 
         UpdateGridDecorator(viewModel, state);
     }
@@ -438,26 +434,23 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         UpdateGridDecorator(viewModel, state);
         viewModel.GetHelper().Viewport = new Viewport(
-            state.ScrollViewer.HorizontalOffset - GetActualOffset(viewModel).Horizontal,
-            state.ScrollViewer.VerticalOffset - GetActualOffset(viewModel).Vertical,
+            state.ScrollViewer.HorizontalOffset - viewModel.Layout.ActualOffset.Horizontal,
+            state.ScrollViewer.VerticalOffset - viewModel.Layout.ActualOffset.Vertical,
             state.ScrollViewer.ViewportWidth,
             state.ScrollViewer.ViewportHeight);
     }
 
     private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state)
     {
-        if (state.GridDecorator is null || state.ScrollViewer is null)
+        if (state.GridDecorator is not IWorkflowGridDecorator decorator || state.ScrollViewer is null)
         {
             return;
         }
 
-        SetHostProperty(state.GridDecorator, "ScrollOffsetX", state.ScrollViewer.HorizontalOffset);
-        SetHostProperty(state.GridDecorator, "ScrollOffsetY", state.ScrollViewer.VerticalOffset);
-        if (TryGetLayout(viewModel, out var layout))
-        {
-            SetHostProperty(state.GridDecorator, "ContentOffsetX", layout.ActualOffset.Horizontal);
-            SetHostProperty(state.GridDecorator, "ContentOffsetY", layout.ActualOffset.Vertical);
-        }
+        decorator.ScrollOffsetX = state.ScrollViewer.HorizontalOffset;
+        decorator.ScrollOffsetY = state.ScrollViewer.VerticalOffset;
+        decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
+        decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
     }
 
     private static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)
@@ -476,48 +469,4 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
     }
 
-    private static bool TryGetLayout(IWorkflowTreeViewModel tree, out CanvasLayout layout)
-    {
-        layout = new CanvasLayout();
-        var property = tree.GetType().GetProperty("Layout", BindingFlags.Public | BindingFlags.Instance);
-        if (property?.GetValue(tree) is CanvasLayout canvasLayout)
-        {
-            layout = canvasLayout;
-            return true;
-        }
-
-        return false;
     }
-
-    private static void SetHostProperty(object target, string propertyName, object value)
-    {
-        var property = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
-        if (property?.CanWrite == true)
-        {
-            property.SetValue(target, value);
-        }
-    }
-
-    private static Offset GetActualOffset(IWorkflowTreeViewModel tree)
-        => TryGetLayout(tree, out var layout) ? layout.ActualOffset : new Offset();
-
-    private static void AddNegativeOffset(IWorkflowTreeViewModel tree, double horizontal, double vertical)
-    {
-        if (!TryGetLayout(tree, out var layout))
-        {
-            return;
-        }
-
-        layout.NegativeOffset += new Offset(horizontal, vertical);
-    }
-
-    private static void AddPositiveOffset(IWorkflowTreeViewModel tree, double horizontal, double vertical)
-    {
-        if (!TryGetLayout(tree, out var layout))
-        {
-            return;
-        }
-
-        layout.PositiveOffset += new Offset(horizontal, vertical);
-    }
-}

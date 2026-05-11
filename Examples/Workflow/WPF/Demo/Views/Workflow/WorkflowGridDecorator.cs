@@ -3,10 +3,11 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
 
-public sealed class WorkflowGridDecorator : Decorator
+public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 

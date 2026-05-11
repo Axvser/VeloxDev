@@ -9,13 +9,13 @@ using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
 
-public partial class WorkflowView : ContentView
+public partial class WorkflowView : ContentView, WorkflowBehaviors.IWorkflowSurfaceHost
 {
     private TreeViewModel _workflowViewModel = new();
     private DataTemplateSelector? _nodeSelector;
     private readonly ObservableCollection<IWorkflowViewModel> _canvasItems = [];
 
-    internal TreeViewModel WorkflowTree => _workflowViewModel;
+    IWorkflowTreeViewModel? WorkflowBehaviors.IWorkflowSurfaceHost.WorkflowTree => _workflowViewModel;
 
     public WorkflowView()
     {

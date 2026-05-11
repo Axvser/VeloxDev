@@ -2,6 +2,8 @@
 
 > **Decision Rule**: Before making any tool call, ask: *"Am I about to make 2 or more sequential calls that share the same target node or the same set of nodes?"* If yes, check the table below first — a composite or BatchExecute almost always applies.
 
+> **State Reuse Rule**: Token saving is allowed. You may deliberately reuse cached topology instead of re-reading live state before every operation. This is safe only until a structure-changing operation invalidates the cache.
+
 Prefer composite tools over multi-step sequences to reduce round-trips:
 
 | Instead of… | Use… | Saves |
@@ -29,3 +31,19 @@ Prefer composite tools over multi-step sequences to reduce round-trips:
 - **ResolveSlotId** — get slot ID by property name without full GetNodeDetail.
 - Prefer **RuntimeId** over indices for multi-step operations (stable across add/remove).
 - Use **ConnectSlotsById** when you already have slot IDs, or **ConnectByProperty** when you know property names.
+
+### Cache invalidation checklist
+
+Refresh before the next topology-sensitive step if you just called any of these:
+
+- `CreateNode`, `DeleteNode`, `DeleteSlot`, `CloneNodes`
+- `CreateSlotOnNode`, `AddSlotToCollection`, `RemoveSlotFromCollection`
+- `SetEnumSlotCollection`
+
+After these operations:
+
+- old **node indices** may point to a different node
+- old **slot indices** may point to a different slot
+- old **enum-slot runtime IDs** may no longer exist
+
+If no invalidating operation occurred, speed-first reuse of cached IDs and topology is acceptable.

@@ -7,3 +7,4 @@
 - **CloneNodes**: Duplicates a set of nodes (with internal connections) to a new position. Provide node indices and an offset.
 - **AutoLayout**: Uses topology-aware Sugiyama-style layered layout following the propagation chain from source nodes (in-degree = 0). Within each layer, nodes are ordered to minimize edge crossings. Node sizes are respected to avoid overlap. Disconnected subgraphs are laid out separately.
 - **ResolveSlotId / ConnectByProperty on typed slots**: Safe and efficient — accessing the property triggers auto-creation if needed, so you never get "slot is null" errors.
+- **Topology-changing operations invalidate stale handles**: After creating, deleting, cloning, rebuilding enum slots, or mutating slot collections, previously cached node indices, slot indices, and some slot runtime IDs may no longer be valid. Refresh only when needed — but never keep using stale handles after structure changes.

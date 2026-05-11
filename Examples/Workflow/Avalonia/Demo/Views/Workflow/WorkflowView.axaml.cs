@@ -22,15 +22,6 @@ public partial class WorkflowView : UserControl
     private TreeViewModel _workflowViewModel = new();
     private WindowNotificationManager _manager;
 
-    public static readonly StyledProperty<Transform> CanvasTransformProperty =
-        AvaloniaProperty.Register<WorkflowView, Transform>(nameof(CanvasTransform));
-
-    public Transform CanvasTransform
-    {
-        get => this.GetValue(CanvasTransformProperty);
-        set => SetValue(CanvasTransformProperty, value);
-    }
-
     public WorkflowView()
     {
         InitializeComponent();
@@ -79,11 +70,24 @@ public partial class WorkflowView : UserControl
         var success = json.TryDeserialize<TreeViewModel>(out var result);
         if (success && result is not null)
         {
+            result.Layout = result.Layout.AdaptTo(
+                new VeloxDev.WorkflowSystem.Size(1920, 1080),
+                out double vpX, out double vpY);
+
             UnsubscribeAutoScroll(_workflowViewModel);
             _workflowViewModel = result;
             DataContext = _workflowViewModel;
             SubscribeAutoScroll(_workflowViewModel);
             WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+            Dispatcher.UIThread.Post(() =>
+            {
+                var sv = this.FindControl<Avalonia.Controls.ScrollViewer>("PART_ScrollViewer");
+                if (sv is not null)
+                {
+                    var offset = _workflowViewModel.Layout.ActualOffset;
+                    sv.Offset = new Avalonia.Vector(vpX + offset.Horizontal, vpY + offset.Vertical);
+                }
+            }, Avalonia.Threading.DispatcherPriority.Loaded);
             _manager.Show(new Notification("OK", $"Workflow Loaded From {path}"));
         }
     }

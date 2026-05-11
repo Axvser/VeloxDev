@@ -13,6 +13,30 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
     [VeloxProperty] private Size actualSize = new(1920, 1080);
     [VeloxProperty] private Offset actualOffset = new(0, 0);
 
+    public CanvasLayout AdaptTo(
+        Size targetOriginSize,
+        out double suggestedViewportX,
+        out double suggestedViewportY)
+    {
+        var adapted = new CanvasLayout
+        {
+            OriginSize     = new Size(targetOriginSize.Width, targetOriginSize.Height),
+            PositiveOffset = new Offset(PositiveOffset.Horizontal, PositiveOffset.Vertical),
+            NegativeOffset = new Offset(NegativeOffset.Horizontal, NegativeOffset.Vertical),
+        };
+
+        var newActualWidth  = targetOriginSize.Width  + PositiveOffset.Horizontal + NegativeOffset.Horizontal;
+        var newActualHeight = targetOriginSize.Height + PositiveOffset.Vertical   + NegativeOffset.Vertical;
+
+        suggestedViewportX = newActualWidth  / 2.0 - NegativeOffset.Horizontal;
+        suggestedViewportY = newActualHeight / 2.0 - NegativeOffset.Vertical;
+
+        return adapted;
+    }
+
+    public CanvasLayout AdaptTo(Size targetOriginSize)
+        => AdaptTo(targetOriginSize, out _, out _);
+
     public bool Equals(CanvasLayout? other)
         => other is not null &&
            OriginSize == other.OriginSize &&

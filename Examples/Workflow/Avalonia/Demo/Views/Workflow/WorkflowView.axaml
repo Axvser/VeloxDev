@@ -5,7 +5,7 @@
 			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
 			 x:Class="Demo.WorkflowView"
 			 xmlns:local="using:Demo"
-             xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 			 xmlns:vm="using:Demo.ViewModels"
 			 xmlns:workflow="using:VeloxDev.WorkflowSystem"
 			 x:DataType="vm:TreeViewModel"
@@ -24,7 +24,7 @@
 							Canvas.Left="{Binding Anchor.Horizontal}"
 							Canvas.Top="{Binding Anchor.Vertical}"
 							ZIndex="{Binding Anchor.Layer}"
-							RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+							RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 		</DataTemplate>
 		<DataTemplate DataType="vm:ControllerViewModel">
 			<local:ControllerView Width="{Binding Size.Width}"
@@ -32,7 +32,7 @@
 								  Canvas.Left="{Binding Anchor.Horizontal}"
 								  Canvas.Top="{Binding Anchor.Vertical}"
 								  ZIndex="{Binding Anchor.Layer}"
-								  RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+								  RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 		</DataTemplate>
 		<DataTemplate DataType="vm:BoolSelectorNodeViewModel">
 			<local:BoolSelectorNodeView Width="{Binding Size.Width}"
@@ -40,7 +40,7 @@
 										Canvas.Left="{Binding Anchor.Horizontal}"
 										Canvas.Top="{Binding Anchor.Vertical}"
 										ZIndex="{Binding Anchor.Layer}"
-										RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+										RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 		</DataTemplate>
 		<DataTemplate DataType="vm:EnumSelectorNodeViewModel">
 			<local:EnumSelectorNodeView Width="{Binding Size.Width}"
@@ -48,7 +48,7 @@
 										Canvas.Left="{Binding Anchor.Horizontal}"
 										Canvas.Top="{Binding Anchor.Vertical}"
 										ZIndex="{Binding Anchor.Layer}"
-										RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"/>
+										RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 		</DataTemplate>
 		<!-- 连接线模板 -->
 		<DataTemplate DataType="vm:LinkViewModel">
@@ -61,7 +61,7 @@
 									   IsVisible="{Binding !UsePolyline}"
 									   Width="{Binding $parent[Canvas].Bounds.Width}"
 									   Height="{Binding $parent[Canvas].Bounds.Height}"
-									   RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"
+									   RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"
 									   ZIndex="-1"/>
 				<local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
 										 StartTop="{Binding Sender.Anchor.Vertical}"
@@ -71,7 +71,7 @@
 										 IsVisible="{Binding UsePolyline}"
 										 Width="{Binding $parent[Canvas].Bounds.Width}"
 										 Height="{Binding $parent[Canvas].Bounds.Height}"
-										 RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"
+										 RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"
 										 ZIndex="-1"/>
 			</Panel>
 		</DataTemplate>
@@ -83,7 +83,7 @@
 								   CanRender="{Binding IsVisible}"
 								   Width="{Binding $parent[Canvas].Bounds.Width}"
 								   Height="{Binding $parent[Canvas].Bounds.Height}"
-								   RenderTransform="{Binding $parent[local:WorkflowView].CanvasTransform}"
+								   RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"
 								   ZIndex="-1"/>
 		</DataTemplate>
 	</UserControl.DataTemplates>

@@ -4,10 +4,11 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
 using System.Globalization;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo;
 
-public sealed class WorkflowGridDecorator : Decorator
+public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 

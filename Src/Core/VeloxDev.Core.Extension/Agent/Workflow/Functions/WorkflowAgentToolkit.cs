@@ -51,6 +51,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             // ── State Tracking / Diff ──
             T(TakeSnapshot, nameof(TakeSnapshot)),
             T(GetChangesSinceSnapshot, nameof(GetChangesSinceSnapshot)),
+            T(MarkDirty, nameof(MarkDirty)),
             // ── Mutation ──
             T(MoveNode, nameof(MoveNode)),
             T(SetNodePosition, nameof(SetNodePosition)),
@@ -543,6 +544,13 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return _tracker.GetChangesSinceLastSnapshot();
     }
 
+    [Description("Marks the workflow tree as dirty. Call once at the end of an Agent task after one or more mutations so the view can refresh consistently.")]
+    private string MarkDirty()
+    {
+        Tree.GetHelper().MarkDirty();
+        return Ok("Tree marked dirty.");
+    }
+
     // ────────────────────────── Generic Command Execution ──────────────────────────
 
     [Description("Executes any command on a node by index. Use ListComponentCommands to discover available commands.")]
@@ -652,8 +660,13 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         {
             var node = (IWorkflowNodeViewModel)Activator.CreateInstance(type);
             node.Anchor = new Anchor(left, top, 0);
+            // Set size before adding to tree so the first Virtualize call (fired by
+            // OnNodesChanged → Nodes.Add) already sees the correct bounds.  If size
+            // were set afterwards the node would enter the spatial index with zero-size
+            // bounds and miss the viewport check, causing it to never enter VisibleItems.
+            node.Size.Width = width;
+            node.Size.Height = height;
             Tree.CreateNodeCommand.Execute(node);
-            node.SetSizeCommand.Execute(new Size(width, height));
             var result = new JObject
             {
                 ["status"] = "ok",

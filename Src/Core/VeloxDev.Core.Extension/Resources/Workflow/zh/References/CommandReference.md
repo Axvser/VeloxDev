@@ -26,6 +26,7 @@
 | **批量删除节点** | **DeleteNodes** | Node.DeleteCommand × N |
 | **批量定位节点** | **ArrangeNodes** | SetAnchorCommand × N |
 | **完整图快照** | **GetFullTopology** | 一次调用获取所有节点+插槽+连接 |
+| **标记工作流为脏** | **MarkDirty** | TreeHelper.MarkDirty |
 | **反向广播** | **ReverseBroadcastNode** | Node.ReverseBroadcastCommand |
 | **向下搜索** | **SearchForward** | BFS via SearchForwardNodes |
 | **向上搜索** | **SearchReverse** | BFS via SearchReverseNodes |
@@ -59,3 +60,9 @@
 ## 上下文缓存
 
 无需每轮都调用 `GetWorkflowSummary` 或 `GetComponentContext`。读取过某类型的上下文后，在整个对话中记住它即可。仅当用户提示类型发生变更时才重新读取。
+
+## 脏标记规则
+
+- Agent 的变更操作不再隐式自动标脏。
+- 当一次任务中完成一个或多个工作流变更后，在任务末尾**只调用一次** **`MarkDirty`**。
+- 纯查询任务不需要调用 `MarkDirty`。
