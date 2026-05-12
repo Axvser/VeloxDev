@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Reflection;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -44,24 +43,6 @@ public sealed class WorkflowSlotLayoutBehavior
         typeof(WorkflowSlotLayoutBehavior),
         null);
 
-    public static readonly BindableProperty ParentHostNameProperty = BindableProperty.CreateAttached(
-        "ParentHostName",
-        typeof(string),
-        typeof(WorkflowSlotLayoutBehavior),
-        null);
-
-    public static readonly BindableProperty LayoutPropertyNameProperty = BindableProperty.CreateAttached(
-        "LayoutPropertyName",
-        typeof(string),
-        typeof(WorkflowSlotLayoutBehavior),
-        "Layout");
-
-    public static readonly BindableProperty ActualOffsetPropertyNameProperty = BindableProperty.CreateAttached(
-        "ActualOffsetPropertyName",
-        typeof(string),
-        typeof(WorkflowSlotLayoutBehavior),
-        "ActualOffset");
-
     private static readonly BindableProperty StateProperty = BindableProperty.CreateAttached(
         "State",
         typeof(LayoutState),
@@ -78,13 +59,6 @@ public sealed class WorkflowSlotLayoutBehavior
     public static void SetCoordinateHostName(BindableObject element, string? value) => element.SetValue(CoordinateHostNameProperty, value);
     public static Type? GetCoordinateHostType(BindableObject element) => (Type?)element.GetValue(CoordinateHostTypeProperty);
     public static void SetCoordinateHostType(BindableObject element, Type? value) => element.SetValue(CoordinateHostTypeProperty, value);
-    public static string? GetParentHostName(BindableObject element) => (string?)element.GetValue(ParentHostNameProperty);
-    public static void SetParentHostName(BindableObject element, string? value) => element.SetValue(ParentHostNameProperty, value);
-    public static string? GetLayoutPropertyName(BindableObject element) => (string?)element.GetValue(LayoutPropertyNameProperty);
-    public static void SetLayoutPropertyName(BindableObject element, string? value) => element.SetValue(LayoutPropertyNameProperty, value);
-    public static string? GetActualOffsetPropertyName(BindableObject element) => (string?)element.GetValue(ActualOffsetPropertyNameProperty);
-    public static void SetActualOffsetPropertyName(BindableObject element, string? value) => element.SetValue(ActualOffsetPropertyNameProperty, value);
-
     public static void Refresh(ContentView control) => ScheduleSync(control);
 
     private static void OnIsEnabledChanged(BindableObject bindable, object? oldValue, object? newValue)
@@ -264,7 +238,7 @@ public sealed class WorkflowSlotLayoutBehavior
             return;
         }
 
-        var parentHost = ResolveParentHost(control);
+        var parentHost = control;
         var coordinateHost = ResolveCoordinateHost(control, parentHost);
 
         foreach (var slotName in GetAllSlotNames(control))
@@ -356,18 +330,6 @@ public sealed class WorkflowSlotLayoutBehavior
             .FirstOrDefault(x => hostType.IsAssignableFrom(x.GetType()));
     }
 
-    private static ContentView ResolveParentHost(ContentView control)
-    {
-        var hostName = GetParentHostName(control);
-        if (string.IsNullOrWhiteSpace(hostName))
-        {
-            return control;
-        }
-
-        var namedHost = ResolveNamedHost(control, hostName);
-        return namedHost as ContentView ?? control;
-    }
-
     private static VisualElement? ResolveNamedHost(Element control, string hostName)
     {
         foreach (var current in EnumerateSelfAndAncestors(control))
@@ -395,36 +357,6 @@ public sealed class WorkflowSlotLayoutBehavior
         => string.IsNullOrWhiteSpace(names)
             ? Enumerable.Empty<string>()
             : names.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0);
-
-    private static Offset GetActualOffset(ContentView control, IWorkflowTreeViewModel? tree)
-    {
-        if (tree is null)
-        {
-            return new Offset();
-        }
-
-        var layoutPropertyName = GetLayoutPropertyName(control);
-        if (string.IsNullOrWhiteSpace(layoutPropertyName))
-        {
-            return new Offset();
-        }
-
-        var property = tree.GetType().GetProperty(layoutPropertyName, BindingFlags.Public | BindingFlags.Instance);
-        var layout = property?.GetValue(tree);
-        if (layout is null)
-        {
-            return new Offset();
-        }
-
-        var actualOffsetPropertyName = GetActualOffsetPropertyName(control);
-        if (string.IsNullOrWhiteSpace(actualOffsetPropertyName))
-        {
-            return new Offset();
-        }
-
-        var actualOffsetProperty = layout.GetType().GetProperty(actualOffsetPropertyName, BindingFlags.Public | BindingFlags.Instance);
-        return actualOffsetProperty?.GetValue(layout) is Offset offset ? offset : new Offset();
-    }
 
     private static Point? GetCenterRelativeTo(VisualElement element, VisualElement relativeTo)
     {

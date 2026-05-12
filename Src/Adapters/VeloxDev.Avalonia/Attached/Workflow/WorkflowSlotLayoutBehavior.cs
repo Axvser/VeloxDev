@@ -5,7 +5,6 @@ using Avalonia.VisualTree;
 using System;
 using System.ComponentModel;
 using System.Linq;
-using System.Reflection;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -32,15 +31,6 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
 
     public static readonly AttachedProperty<Type?> CoordinateHostTypeProperty =
         AvaloniaProperty.RegisterAttached<WorkflowSlotLayoutBehavior, UserControl, Type?>("CoordinateHostType");
-
-    public static readonly AttachedProperty<string?> ParentHostNameProperty =
-        AvaloniaProperty.RegisterAttached<WorkflowSlotLayoutBehavior, UserControl, string?>("ParentHostName");
-
-    public static readonly AttachedProperty<string?> LayoutPropertyNameProperty =
-        AvaloniaProperty.RegisterAttached<WorkflowSlotLayoutBehavior, UserControl, string?>("LayoutPropertyName", defaultValue: "Layout");
-
-    public static readonly AttachedProperty<string?> ActualOffsetPropertyNameProperty =
-        AvaloniaProperty.RegisterAttached<WorkflowSlotLayoutBehavior, UserControl, string?>("ActualOffsetPropertyName", defaultValue: "ActualOffset");
 
     private static readonly AttachedProperty<LayoutState?> StateProperty =
         AvaloniaProperty.RegisterAttached<WorkflowSlotLayoutBehavior, UserControl, LayoutState?>("State");
@@ -69,18 +59,6 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
     public static Type? GetCoordinateHostType(AvaloniaObject element) => element.GetValue(CoordinateHostTypeProperty);
 
     public static void SetCoordinateHostType(AvaloniaObject element, Type? value) => element.SetValue(CoordinateHostTypeProperty, value);
-
-    public static string? GetParentHostName(AvaloniaObject element) => element.GetValue(ParentHostNameProperty);
-
-    public static void SetParentHostName(AvaloniaObject element, string? value) => element.SetValue(ParentHostNameProperty, value);
-
-    public static string? GetLayoutPropertyName(AvaloniaObject element) => element.GetValue(LayoutPropertyNameProperty);
-
-    public static void SetLayoutPropertyName(AvaloniaObject element, string? value) => element.SetValue(LayoutPropertyNameProperty, value);
-
-    public static string? GetActualOffsetPropertyName(AvaloniaObject element) => element.GetValue(ActualOffsetPropertyNameProperty);
-
-    public static void SetActualOffsetPropertyName(AvaloniaObject element, string? value) => element.SetValue(ActualOffsetPropertyNameProperty, value);
 
     private static void OnIsEnabledChanged(UserControl control, AvaloniaPropertyChangedEventArgs e)
     {
@@ -213,7 +191,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         if (control.DataContext is not IWorkflowNodeViewModel node)
             return;
 
-        var parentHost = ResolveParentHost(control);
+        var parentHost = control;
         var coordinateHost = ResolveCoordinateHost(control, parentHost);
 
         foreach (var slotName in GetAllSlotNames(control))
@@ -258,7 +236,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             var centerOnCanvas = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), coordinateHost);
             if (centerOnCanvas is not null)
             {
-                var actualOffset = GetActualOffset(host, node.Parent);
+                var actualOffset = GetActualOffset(node.Parent);
                 slot.Anchor = new Anchor(
                     centerOnCanvas.Value.X - actualOffset.Horizontal,
                     centerOnCanvas.Value.Y - actualOffset.Vertical,
@@ -294,16 +272,6 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             .FirstOrDefault(x => hostType.IsAssignableFrom(x.GetType()));
     }
 
-    private static UserControl ResolveParentHost(UserControl control)
-    {
-        var hostName = GetParentHostName(control);
-        if (string.IsNullOrWhiteSpace(hostName))
-            return control;
-
-        var namedHost = ResolveNamedHost(control, hostName);
-        return namedHost as UserControl ?? control;
-    }
-
     private static Control? ResolveNamedHost(Control control, string hostName)
     {
         if (control.Name == hostName)
@@ -331,28 +299,11 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
                 .Where(static x => x.Length > 0)
                 .ToArray();
 
-    private static Offset GetActualOffset(UserControl control, IWorkflowTreeViewModel? tree)
+    private static Offset GetActualOffset(IWorkflowTreeViewModel? tree)
     {
         if (tree is null)
             return new Offset();
 
-        var layoutPropertyName = GetLayoutPropertyName(control);
-        if (string.IsNullOrWhiteSpace(layoutPropertyName))
-            return new Offset();
-
-        var property = tree.GetType().GetProperty(layoutPropertyName, BindingFlags.Public | BindingFlags.Instance);
-        var layout = property?.GetValue(tree);
-        if (layout is null)
-            return new Offset();
-
-        var actualOffsetPropertyName = GetActualOffsetPropertyName(control);
-        if (string.IsNullOrWhiteSpace(actualOffsetPropertyName))
-            return new Offset();
-
-        var actualOffsetProperty = layout.GetType().GetProperty(actualOffsetPropertyName, BindingFlags.Public | BindingFlags.Instance);
-        if (actualOffsetProperty?.GetValue(layout) is Offset offset)
-            return offset;
-
-        return new Offset();
+        return tree.Layout.ActualOffset;
     }
 }

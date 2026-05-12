@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -51,24 +50,6 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         typeof(WorkflowSlotLayoutBehavior),
         new PropertyMetadata(null));
 
-    public static readonly DependencyProperty ParentHostNameProperty = DependencyProperty.RegisterAttached(
-        "ParentHostName",
-        typeof(string),
-        typeof(WorkflowSlotLayoutBehavior),
-        new PropertyMetadata(null));
-
-    public static readonly DependencyProperty LayoutPropertyNameProperty = DependencyProperty.RegisterAttached(
-        "LayoutPropertyName",
-        typeof(string),
-        typeof(WorkflowSlotLayoutBehavior),
-        new PropertyMetadata("Layout"));
-
-    public static readonly DependencyProperty ActualOffsetPropertyNameProperty = DependencyProperty.RegisterAttached(
-        "ActualOffsetPropertyName",
-        typeof(string),
-        typeof(WorkflowSlotLayoutBehavior),
-        new PropertyMetadata("ActualOffset"));
-
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
         "State",
         typeof(LayoutState),
@@ -89,15 +70,6 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
     public static Type? GetCoordinateHostType(DependencyObject element) => (Type?)element.GetValue(CoordinateHostTypeProperty);
     public static void SetCoordinateHostType(DependencyObject element, Type? value) => element.SetValue(CoordinateHostTypeProperty, value);
-
-    public static string? GetParentHostName(DependencyObject element) => (string?)element.GetValue(ParentHostNameProperty);
-    public static void SetParentHostName(DependencyObject element, string? value) => element.SetValue(ParentHostNameProperty, value);
-
-    public static string? GetLayoutPropertyName(DependencyObject element) => (string?)element.GetValue(LayoutPropertyNameProperty);
-    public static void SetLayoutPropertyName(DependencyObject element, string? value) => element.SetValue(LayoutPropertyNameProperty, value);
-
-    public static string? GetActualOffsetPropertyName(DependencyObject element) => (string?)element.GetValue(ActualOffsetPropertyNameProperty);
-    public static void SetActualOffsetPropertyName(DependencyObject element, string? value) => element.SetValue(ActualOffsetPropertyNameProperty, value);
 
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -264,7 +236,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             return;
         }
 
-        var parentHost = ResolveParentHost(control);
+        var parentHost = control;
         var coordinateHost = ResolveCoordinateHost(control, parentHost);
 
         foreach (var slotName in GetAllSlotNames(control))
@@ -323,7 +295,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         if (coordinateHost is not null)
         {
             var centerOnCanvas = control.TranslatePoint(new Point(control.ActualWidth / 2, control.ActualHeight / 2), coordinateHost);
-            var actualOffset = GetActualOffset(host, node.Parent);
+            var actualOffset = GetActualOffset(node.Parent);
             slot.Anchor = new Anchor(
                 centerOnCanvas.X - actualOffset.Horizontal,
                 centerOnCanvas.Y - actualOffset.Vertical,
@@ -361,18 +333,6 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             .FirstOrDefault(x => hostType.IsAssignableFrom(x.GetType()));
     }
 
-    private static UserControl ResolveParentHost(UserControl control)
-    {
-        var hostName = GetParentHostName(control);
-        if (string.IsNullOrWhiteSpace(hostName))
-        {
-            return control;
-        }
-
-        var namedHost = ResolveNamedHost(control, hostName);
-        return namedHost as UserControl ?? control;
-    }
-
     private static FrameworkElement? ResolveNamedHost(FrameworkElement control, string hostName)
     {
         if (control.Name == hostName)
@@ -396,34 +356,14 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             ? Enumerable.Empty<string>()
             : names.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0);
 
-    private static Offset GetActualOffset(UserControl control, IWorkflowTreeViewModel? tree)
+    private static Offset GetActualOffset(IWorkflowTreeViewModel? tree)
     {
         if (tree is null)
         {
             return new Offset();
         }
 
-        var layoutPropertyName = GetLayoutPropertyName(control);
-        if (string.IsNullOrWhiteSpace(layoutPropertyName))
-        {
-            return new Offset();
-        }
-
-        var property = tree.GetType().GetProperty(layoutPropertyName, BindingFlags.Public | BindingFlags.Instance);
-        var layout = property?.GetValue(tree);
-        if (layout is null)
-        {
-            return new Offset();
-        }
-
-        var actualOffsetPropertyName = GetActualOffsetPropertyName(control);
-        if (string.IsNullOrWhiteSpace(actualOffsetPropertyName))
-        {
-            return new Offset();
-        }
-
-        var actualOffsetProperty = layout.GetType().GetProperty(actualOffsetPropertyName, BindingFlags.Public | BindingFlags.Instance);
-        return actualOffsetProperty?.GetValue(layout) is Offset offset ? offset : new Offset();
+        return tree.Layout.ActualOffset;
     }
 
     private static FrameworkElement? FindDescendantWithSlotDataContext(DependencyObject parent)
