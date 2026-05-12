@@ -111,6 +111,7 @@ public sealed class WorkflowSlotLayoutBehavior
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.BindingContextChanged += OnBindingContextChanged;
+        control.PropertyChanged += OnControlPropertyChanged;
         control.SizeChanged += OnSizeChanged;
         UpdatePropertyChangedSubscription(control);
         ScheduleSync(control);
@@ -121,6 +122,7 @@ public sealed class WorkflowSlotLayoutBehavior
         control.Loaded -= OnLoaded;
         control.Unloaded -= OnUnloaded;
         control.BindingContextChanged -= OnBindingContextChanged;
+        control.PropertyChanged -= OnControlPropertyChanged;
         control.SizeChanged -= OnSizeChanged;
 
         if (control.GetValue(StateProperty) is LayoutState state
@@ -163,6 +165,25 @@ public sealed class WorkflowSlotLayoutBehavior
     private static void OnSizeChanged(object? sender, EventArgs e)
     {
         if (sender is ContentView control)
+        {
+            ScheduleSync(control);
+        }
+    }
+
+    private static void OnControlPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is not ContentView control)
+        {
+            return;
+        }
+
+        if (e.PropertyName is nameof(VisualElement.X)
+            or nameof(VisualElement.Y)
+            or nameof(VisualElement.Width)
+            or nameof(VisualElement.Height)
+            or nameof(VisualElement.TranslationX)
+            or nameof(VisualElement.TranslationY)
+            or nameof(VisualElement.IsVisible))
         {
             ScheduleSync(control);
         }
@@ -424,17 +445,45 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static Point? GetLocationOnScreen(VisualElement element)
     {
-        double x = element.X;
-        double y = element.Y;
+        double x = GetLeftInParent(element);
+        double y = GetTopInParent(element);
         Element? current = element.Parent;
         while (current is VisualElement visual)
         {
-            x += visual.X;
-            y += visual.Y;
+            x += GetLeftInParent(visual);
+            y += GetTopInParent(visual);
             current = visual.Parent;
         }
 
         return new Point(x, y);
+    }
+
+    private static double GetLeftInParent(VisualElement element)
+    {
+        if (element.Parent is AbsoluteLayout)
+        {
+            var bounds = AbsoluteLayout.GetLayoutBounds(element);
+            if (!double.IsNaN(bounds.X))
+            {
+                return bounds.X;
+            }
+        }
+
+        return element.X;
+    }
+
+    private static double GetTopInParent(VisualElement element)
+    {
+        if (element.Parent is AbsoluteLayout)
+        {
+            var bounds = AbsoluteLayout.GetLayoutBounds(element);
+            if (!double.IsNaN(bounds.Y))
+            {
+                return bounds.Y;
+            }
+        }
+
+        return element.Y;
     }
 
     private static IEnumerable<Element> EnumerateSelfAndAncestors(Element source)
