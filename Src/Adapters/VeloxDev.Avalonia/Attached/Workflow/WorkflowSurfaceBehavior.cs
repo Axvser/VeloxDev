@@ -99,6 +99,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         control.DataContextChanged += OnDataContextChanged;
         control.PointerMoved += OnPointerMoved;
         control.PointerReleased += OnPointerReleased;
+        control.PointerCaptureLost += OnPointerCaptureLost;
         ResolveNamedControls(control, state);
         Refresh(control);
     }
@@ -110,6 +111,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         control.DataContextChanged -= OnDataContextChanged;
         control.PointerMoved -= OnPointerMoved;
         control.PointerReleased -= OnPointerReleased;
+        control.PointerCaptureLost -= OnPointerCaptureLost;
 
         if (control.GetValue(StateProperty) is SurfaceState state)
             UnsubscribeResolvedControls(state);
@@ -185,12 +187,13 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (host is null || host.GetValue(StateProperty) is not SurfaceState state || state.ScrollViewer is null)
             return;
 
-        if (!e.GetCurrentPoint(state.ScrollViewer).Properties.IsMiddleButtonPressed)
+        if (!ShouldStartPan(e, state))
             return;
 
         state.IsPanning = true;
         state.PanStart = e.GetPosition(host);
         state.PanStartOffset = state.ScrollViewer.Offset;
+        e.Pointer.Capture(source);
         e.Handled = true;
     }
 
@@ -221,6 +224,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (state.IsPanning)
         {
             state.IsPanning = false;
+            e.Pointer.Capture(null);
             e.Handled = true;
             return;
         }
@@ -230,6 +234,14 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         viewModel.VirtualLink.Sender.State &= ~SlotState.PreviewSender;
         viewModel.ResetVirtualLinkCommand.Execute(null);
+    }
+
+    private static void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
+            return;
+
+        state.IsPanning = false;
     }
 
     private static void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
@@ -246,6 +258,13 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     {
         if (!state.IsPanning || state.ScrollViewer is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
             return;
+
+        if (!IsPanStillActive(host, e))
+        {
+            state.IsPanning = false;
+            e.Pointer.Capture(null);
+            return;
+        }
 
         var current = e.GetPosition(host);
         var newOffsetX = state.PanStartOffset.X + (state.PanStart.X - current.X);
@@ -350,6 +369,54 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
     private static double GetVerticalScrollMaximum(ScrollViewer scrollViewer)
         => Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+
+    private static bool ShouldStartPan(PointerPressedEventArgs e, SurfaceState state)
+    {
+        var properties = e.GetCurrentPoint(state.ScrollViewer!).Properties;
+        return (properties.IsLeftButtonPressed || properties.IsMiddleButtonPressed)
+            && IsSurfaceBlankInteraction(e.Source, state);
+    }
+
+    private static bool IsPanStillActive(UserControl host, PointerEventArgs e)
+    {
+        var properties = e.GetCurrentPoint(host).Properties;
+        return properties.IsLeftButtonPressed || properties.IsMiddleButtonPressed;
+    }
+
+    private static bool IsSurfaceBlankInteraction(object? source, SurfaceState state)
+    {
+        if (source is not Visual visual)
+            return false;
+
+        if (IsWorkflowNodeOrSlotVisual(visual))
+            return false;
+
+        var ancestors = visual.GetVisualAncestors().OfType<Visual>().ToArray();
+        if (ancestors.Any(IsWorkflowNodeOrSlotVisual))
+            return false;
+
+        if (IsWorkflowLinkVisual(visual) || ancestors.Any(IsWorkflowLinkVisual))
+            return true;
+
+        return ReferenceEquals(visual, state.Canvas)
+            || ReferenceEquals(visual, state.ScrollViewer)
+            || ReferenceEquals(visual, state.PointerPressSource)
+            || ReferenceEquals(visual, state.GridDecorator)
+            || ancestors.Any(x => ReferenceEquals(x, state.Canvas)
+                || ReferenceEquals(x, state.ScrollViewer)
+                || ReferenceEquals(x, state.PointerPressSource)
+                || ReferenceEquals(x, state.GridDecorator)
+                || string.Equals(x.GetType().Name, "ScrollContentPresenter", StringComparison.Ordinal));
+    }
+
+    private static bool IsWorkflowNodeOrSlotVisual(Visual source)
+        => source is StyledElement { DataContext: IWorkflowNodeViewModel or IWorkflowSlotViewModel };
+
+    private static bool IsWorkflowLinkVisual(Visual source)
+        => source is StyledElement element
+            && (element.DataContext is IWorkflowLinkViewModel
+                || string.Equals(element.GetType().Name, "BezierCurveView", StringComparison.Ordinal)
+                || string.Equals(element.GetType().Name, "PolylineCurveView", StringComparison.Ordinal));
 
 
     }

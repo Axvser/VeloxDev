@@ -234,12 +234,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        var point = e.GetCurrentPoint(host);
-        if (!point.Properties.IsMiddleButtonPressed)
+        if (!ShouldStartPan(e, state))
         {
             return;
         }
 
+        var point = e.GetCurrentPoint(host);
         state.IsPanning = true;
         state.PanStart = point.Position;
         state.PanStartOffset = new Windows.Foundation.Point(state.ScrollViewer.HorizontalOffset, state.ScrollViewer.VerticalOffset);
@@ -316,7 +316,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (!e.GetCurrentPoint(host).Properties.IsMiddleButtonPressed)
+        if (!IsPanStillActive(host, e))
         {
             state.IsPanning = false;
             state.PointerPressSource?.ReleasePointerCaptures();
@@ -458,6 +458,62 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     private static double GetVerticalScrollMaximum(ScrollViewer scrollViewer)
         => Math.Max(0, scrollViewer.ExtentHeight - scrollViewer.ViewportHeight);
+
+    private static bool ShouldStartPan(PointerRoutedEventArgs e, SurfaceState state)
+    {
+        var properties = e.GetCurrentPoint(state.ScrollViewer!).Properties;
+        return (properties.IsLeftButtonPressed || properties.IsMiddleButtonPressed)
+            && IsSurfaceBlankInteraction(e.OriginalSource as DependencyObject, state);
+    }
+
+    private static bool IsPanStillActive(UserControl host, PointerRoutedEventArgs e)
+    {
+        var properties = e.GetCurrentPoint(host).Properties;
+        return properties.IsLeftButtonPressed || properties.IsMiddleButtonPressed;
+    }
+
+    private static bool IsSurfaceBlankInteraction(DependencyObject? source, SurfaceState state)
+    {
+        if (source is null)
+        {
+            return false;
+        }
+
+        if (IsWorkflowNodeOrSlotVisual(source))
+        {
+            return false;
+        }
+
+        var ancestors = EnumerateVisualAncestors(source).ToArray();
+        if (ancestors.Any(IsWorkflowNodeOrSlotVisual))
+        {
+            return false;
+        }
+
+        if (IsWorkflowLinkVisual(source) || ancestors.Any(IsWorkflowLinkVisual))
+        {
+            return true;
+        }
+
+        return source == state.Canvas
+            || source == state.ScrollViewer
+            || source == state.PointerPressSource
+            || source == state.GridDecorator
+            || ancestors.Any(x => x == state.Canvas
+                || x == state.ScrollViewer
+                || x == state.PointerPressSource
+                || x == state.GridDecorator
+                || string.Equals(x.GetType().Name, "ScrollContentPresenter", StringComparison.Ordinal));
+    }
+
+    private static bool IsWorkflowNodeOrSlotVisual(DependencyObject source)
+        => source is FrameworkElement { DataContext: IWorkflowNodeViewModel or IWorkflowSlotViewModel };
+
+    private static bool IsWorkflowLinkVisual(DependencyObject source)
+        => source is FrameworkElement element
+            && (element.DataContext is IWorkflowLinkViewModel
+                || string.Equals(element.GetType().Name, "BezierCurveView", StringComparison.Ordinal)
+                || string.Equals(element.GetType().Name, "PolylineCurveView", StringComparison.Ordinal));
 
     private static IEnumerable<DependencyObject> EnumerateVisualAncestors(DependencyObject source)
     {
