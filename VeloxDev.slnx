@@ -8,6 +8,7 @@
   <Folder Name="/Adapters/">
     <Project Path="Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj" />
     <Project Path="Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj" />
+    <Project Path="Src/Adapters/VeloxDev.Razor/VeloxDev.Razor.csproj" Id="7fd995c3-8c46-486c-b8b2-e2bcac557da7" />
     <Project Path="Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj" />
     <Project Path="Src/Adapters/VeloxDev.WinUI/VeloxDev.WinUI.csproj" />
     <Project Path="Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj" />
@@ -52,6 +53,10 @@
   <Folder Name="/Examples/Transition/" />
   <Folder Name="/Examples/Transition/Avalonia/">
     <Project Path="Examples/Transition/Avalonia/Demo/Demo.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Transition/Blazor/">
+    <Project Path="Examples/Transition/Blazor/Demo/Demo.Client/Demo.Client.csproj" Id="534345b5-cb67-4a11-9c9a-3f6536832490" />
+    <Project Path="Examples/Transition/Blazor/Demo/Demo/Demo.csproj" Id="3f35e363-d582-4cdd-9d95-598bcfb50846" />
   </Folder>
   <Folder Name="/Examples/Transition/MAUI/">
     <Project Path="Examples/Transition/MAUI/Demo/Demo.csproj">

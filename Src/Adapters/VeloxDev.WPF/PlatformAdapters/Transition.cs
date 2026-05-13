@@ -209,7 +209,7 @@ namespace VeloxDev.TransitionSystem
                 return this;
             }
 
-#if NETCOREAPP || NETFRAMEWORK || NET
+#if !NETSTANDARD2_0
             public StateSnapshot Property(Expression<Func<T, System.Numerics.Vector2>> propertyLambda, System.Numerics.Vector2 newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);

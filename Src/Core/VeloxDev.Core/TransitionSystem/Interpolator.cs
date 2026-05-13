@@ -141,7 +141,7 @@ public abstract class InterpolatorCore : IFrameInterpolatorCore
         RegisterInterpolator(typeof(Color), new ColorInterpolator());
         RegisterInterpolator(typeof(Rectangle), new RectangleInterpolator());
         RegisterInterpolator(typeof(RectangleF), new RectangleFInterpolator());
-#if NETCOREAPP || NETFRAMEWORK || NET
+#if !NETSTANDARD2_0
         RegisterInterpolator(typeof(Vector2), new Vector2Interpolator());
         RegisterInterpolator(typeof(Vector3), new Vector3Interpolator());
         RegisterInterpolator(typeof(Vector4), new Vector4Interpolator());

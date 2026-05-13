@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Numerics;
+using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.NativeInterpolators;
 
 namespace VeloxDev.Core.Test.TransitionSystem;
@@ -40,6 +41,37 @@ public class NativeInterpolatorsExtendedTests
         Assert.AreEqual(3, result.Count);
         Assert.IsNull(result[0]);
         Assert.AreEqual(end, result[2]);
+    }
+
+    // ───────── String color interpolation ─────────
+
+    [TestMethod]
+    public void StringColorInterpolation_InterpolatesHexColor()
+    {
+        var interp = new TestStringInterpolator();
+        var start = "#000000";
+        var end = "#ffffff";
+
+        var result = interp.Interpolate(start, end, 3);
+
+        Assert.AreEqual(3, result.Count);
+        Assert.AreEqual(start, result[0]);
+        Assert.AreEqual("rgba(128, 128, 128, 1)", result[1]);
+        Assert.AreEqual(end, result[2]);
+    }
+
+    [TestMethod]
+    public void StringColorInterpolation_ForNonColorString_UsesDiscreteFrames()
+    {
+        var interp = new TestStringInterpolator();
+
+        var result = interp.Interpolate("translateX(0px)", "translateX(100px)", 4);
+
+        Assert.AreEqual(4, result.Count);
+        Assert.AreEqual("translateX(0px)", result[0]);
+        Assert.AreEqual("translateX(0px)", result[1]);
+        Assert.AreEqual("translateX(0px)", result[2]);
+        Assert.AreEqual("translateX(100px)", result[3]);
     }
 
     // ───────── PointInterpolator ─────────
@@ -255,6 +287,70 @@ public class NativeInterpolatorsExtendedTests
         var end = new Vector4(1, 2, 3, 4);
         var result = interp.Interpolate(Vector4.Zero, end, 1);
         Assert.AreEqual(end, result[0]);
+    }
+
+    private sealed class TestStringInterpolator : VeloxDev.TransitionSystem.IValueInterpolator
+    {
+        public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
+        {
+            if (steps <= 0)
+            {
+                return [];
+            }
+
+            var startValue = start as string;
+            var endValue = end as string;
+            if (steps == 1)
+            {
+                return [endValue];
+            }
+
+            if (TryParseHexColor(startValue, out var startColor) && TryParseHexColor(endValue, out var endColor))
+            {
+                var result = new List<object?>(steps);
+                for (var index = 0; index < steps; index++)
+                {
+                    var progress = (float)index / (steps - 1);
+                    result.Add($"rgba({InterpolateChannel(startColor.R, endColor.R, progress)}, {InterpolateChannel(startColor.G, endColor.G, progress)}, {InterpolateChannel(startColor.B, endColor.B, progress)}, 1)");
+                }
+
+                result[0] = startValue;
+                result[^1] = endValue;
+                return result;
+            }
+
+            var discrete = new List<object?>(steps);
+            for (var index = 0; index < steps; index++)
+            {
+                discrete.Add(index == steps - 1 ? endValue : startValue);
+            }
+
+            return discrete;
+        }
+
+        private static bool TryParseHexColor(string? value, out Color color)
+        {
+            color = default;
+            if (string.IsNullOrWhiteSpace(value) || value.Length != 7 || value[0] != '#')
+            {
+                return false;
+            }
+
+            if (!byte.TryParse(value.Substring(1, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var red)
+                || !byte.TryParse(value.Substring(3, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var green)
+                || !byte.TryParse(value.Substring(5, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var blue))
+            {
+                return false;
+            }
+
+            color = Color.FromArgb(255, red, green, blue);
+            return true;
+        }
+
+        private static byte InterpolateChannel(byte start, byte end, float progress)
+        {
+            return (byte)Math.Round(start + ((end - start) * progress));
+        }
     }
 
     // ───────── QuaternionInterpolator ─────────

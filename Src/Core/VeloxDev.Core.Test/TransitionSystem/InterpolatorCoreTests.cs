@@ -56,4 +56,16 @@ public class InterpolatorCoreTests
         Assert.IsTrue(InterpolatorCore.NativeInterpolators.ContainsKey(typeof(double)));
         Assert.IsTrue(InterpolatorCore.NativeInterpolators.ContainsKey(typeof(long)));
     }
+
+    [TestMethod]
+    public void RegisterInterpolator_ForString_Succeeds()
+    {
+        var interpolator = new FloatInterpolator();
+        InterpolatorCore.RegisterInterpolator(typeof(string), interpolator);
+
+        Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(string), out var result));
+        Assert.AreSame(interpolator, result);
+
+        InterpolatorCore.UnregisterInterpolator(typeof(string), out _);
+    }
 }

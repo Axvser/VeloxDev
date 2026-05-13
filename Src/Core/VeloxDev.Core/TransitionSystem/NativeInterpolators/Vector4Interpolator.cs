@@ -2,7 +2,7 @@
 
 namespace VeloxDev.TransitionSystem.NativeInterpolators
 {
-#if NETCOREAPP || NETFRAMEWORK || NET
+#if !NETSTANDARD2_0
     public class Vector4Interpolator : IValueInterpolator
     {
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)

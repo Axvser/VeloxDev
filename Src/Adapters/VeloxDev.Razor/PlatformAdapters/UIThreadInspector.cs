@@ -1,0 +1,74 @@
+namespace VeloxDev.TransitionSystem
+{
+    public class UIThreadInspector : UIThreadInspectorCore
+    {
+        private static SynchronizationContext? _uiSyncContext;
+        private static int _uiThreadId = -1;
+        private static bool _isAppRunning = false;
+
+        public static void CaptureUIThread()
+        {
+            if (_uiThreadId != -1)
+                return;
+
+            _uiSyncContext = SynchronizationContext.Current;
+            _uiThreadId = Thread.CurrentThread.ManagedThreadId;
+            _isAppRunning = true;
+        }
+
+        public static void NotifyShutdown() => _isAppRunning = false;
+
+        public override bool IsAppAlive() => _isAppRunning;
+
+        public override bool IsUIThread() => Thread.CurrentThread.ManagedThreadId == _uiThreadId;
+
+        public override object? ProtectedGetValue(bool isUIThread, object target, ITransitionProperty property)
+        {
+            if (isUIThread)
+                return property.GetValue(target);
+
+            var tcs = new TaskCompletionSource<object?>();
+            _uiSyncContext?.Post(_ =>
+            {
+                try { tcs.SetResult(property.GetValue(target)); }
+                catch (Exception ex) { tcs.SetException(ex); }
+            }, null);
+            return tcs.Task.GetAwaiter().GetResult();
+        }
+
+        public override List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
+        {
+            if (isUIThread)
+                return interpolate();
+
+            var tcs = new TaskCompletionSource<List<object?>>();
+            _uiSyncContext?.Post(_ =>
+            {
+                try { tcs.SetResult(interpolate()); }
+                catch (Exception ex) { tcs.SetException(ex); }
+            }, null);
+            return tcs.Task.GetAwaiter().GetResult() ?? [];
+        }
+
+        public override void ProtectedInvoke(bool isUIThread, Action action)
+        {
+            if (isUIThread)
+            {
+                action.Invoke();
+                return;
+            }
+
+            var tcs = new TaskCompletionSource<object?>();
+            _uiSyncContext?.Post(_ =>
+            {
+                try
+                {
+                    action.Invoke();
+                    tcs.SetResult(null);
+                }
+                catch (Exception ex) { tcs.SetException(ex); }
+            }, null);
+            tcs.Task.GetAwaiter().GetResult();
+        }
+    }
+}
