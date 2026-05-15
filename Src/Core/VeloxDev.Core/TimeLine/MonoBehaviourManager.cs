@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using VeloxDev.MonoBehaviour;
@@ -106,9 +105,9 @@ namespace VeloxDev.TimeLine
 
         #region LoopChannel
 
-        private sealed class LoopChannel
+        private sealed class LoopChannel(string name)
         {
-            public readonly string Name;
+            public readonly string Name = name;
 
             private readonly ConcurrentDictionary<int, BehaviorWrapper> _behaviors = new();
             private readonly ConcurrentQueue<IMonoBehaviour> _addQueue = new();
@@ -137,6 +136,9 @@ namespace VeloxDev.TimeLine
             private volatile bool _isFixedUpdateThreadActive;
             private long _updateThreadLastActivityTimestamp;
             private long _fixedUpdateThreadLastActivityTimestamp;
+            // WASM 模式下替代 Thread 的异步任务
+            private Task? _updateTask;
+            private Task? _fixedUpdateTask;
 
             private readonly ObjectPool<FrameEventArgs> _frameEventArgsPool = new(DEFAULT_OBJECT_POOL_SIZE);
             private readonly ObjectPool<ConfigChangeRequest> _configRequestPool = new(DEFAULT_OBJECT_POOL_SIZE);
@@ -152,8 +154,6 @@ namespace VeloxDev.TimeLine
             public event EventHandler? Paused;
             public event EventHandler? Resumed;
             public event EventHandler? Stopped;
-
-            public LoopChannel(string name) { Name = name; }
 
             #region 公共属性
 
@@ -232,22 +232,30 @@ namespace VeloxDev.TimeLine
 
                 var token = _cts.Token;
 
-                _fixedUpdateThread = new Thread(() => FixedUpdateLoop(token))
+                if (MonoBehaviourManager.UseAsyncLoop)
                 {
-                    Name = $"VeloxDev.FixedUpdate[{Name}]",
-                    IsBackground = true,
-                    Priority = ThreadPriority.AboveNormal
-                };
-
-                _updateThread = new Thread(() => UpdateLoop(token))
+                    _fixedUpdateTask = FixedUpdateLoopAsync(token);
+                    _updateTask = UpdateLoopAsync(token);
+                }
+                else
                 {
-                    Name = $"VeloxDev.Update[{Name}]",
-                    IsBackground = true,
-                    Priority = ThreadPriority.AboveNormal
-                };
+                    _fixedUpdateThread = new Thread(() => FixedUpdateLoop(token))
+                    {
+                        Name = $"VeloxDev.FixedUpdate[{Name}]",
+                        IsBackground = true,
+                        Priority = ThreadPriority.AboveNormal
+                    };
 
-                _fixedUpdateThread.Start();
-                _updateThread.Start();
+                    _updateThread = new Thread(() => UpdateLoop(token))
+                    {
+                        Name = $"VeloxDev.Update[{Name}]",
+                        IsBackground = true,
+                        Priority = ThreadPriority.AboveNormal
+                    };
+
+                    _fixedUpdateThread.Start();
+                    _updateThread.Start();
+                }
 
                 Started?.Invoke(this, EventArgs.Empty);
             }
@@ -266,17 +274,30 @@ namespace VeloxDev.TimeLine
 
                 try
                 {
-                    await Task.Run(() =>
+                    if (MonoBehaviourManager.UseAsyncLoop)
                     {
-                        _updateThread?.Join(RESTART_SHUTDOWN_TIMEOUT_MS);
-                        _fixedUpdateThread?.Join(RESTART_SHUTDOWN_TIMEOUT_MS);
-                    }).ConfigureAwait(false);
+                        var pending = new System.Collections.Generic.List<Task>(2);
+                        if (_updateTask != null) pending.Add(_updateTask);
+                        if (_fixedUpdateTask != null) pending.Add(_fixedUpdateTask);
+                        if (pending.Count > 0)
+                            await Task.WhenAny(Task.WhenAll(pending), Task.Delay(RESTART_SHUTDOWN_TIMEOUT_MS)).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await Task.Run(() =>
+                        {
+                            _updateThread?.Join(RESTART_SHUTDOWN_TIMEOUT_MS);
+                            _fixedUpdateThread?.Join(RESTART_SHUTDOWN_TIMEOUT_MS);
+                        }).ConfigureAwait(false);
+                    }
                 }
                 catch (Exception) { }
                 finally
                 {
                     _updateThread = null;
                     _fixedUpdateThread = null;
+                    _updateTask = null;
+                    _fixedUpdateTask = null;
                     ResetStatistics();
                     ClearQueues();
                 }
@@ -426,6 +447,122 @@ namespace VeloxDev.TimeLine
 
                         UpdatePerformanceStats(frameStartTime, deltaTime);
                         FrameRateControlSync(frameStartTime, token);
+                        Interlocked.Increment(ref _totalFrames);
+                    }
+                }
+                catch (OperationCanceledException) { }
+                finally
+                {
+                    _isUpdateThreadActive = false;
+                }
+            }
+
+            // WASM 兼容路径：以 async/await + Task.Delay 替代 Thread + Thread.Sleep
+            private async Task FixedUpdateLoopAsync(CancellationToken token)
+            {
+                _isFixedUpdateThreadActive = true;
+                Interlocked.Exchange(ref _fixedUpdateThreadLastActivityTimestamp, GetTimestamp());
+
+                long lastFixedUpdateTime = GetTimestamp();
+
+                try
+                {
+                    while (_isRunning && !token.IsCancellationRequested)
+                    {
+                        Interlocked.Exchange(ref _fixedUpdateThreadLastActivityTimestamp, GetTimestamp());
+
+                        if (_isPaused)
+                        {
+                            await Task.Delay(DEFAULT_PAUSE_DELAY_MS, token).ConfigureAwait(false);
+                            continue;
+                        }
+
+                        var currentTime = GetTimestamp();
+                        var interval = Volatile.Read(ref _fixedUpdateInterval);
+                        var elapsed = currentTime - lastFixedUpdateTime;
+
+                        if (elapsed >= MillisecondsToStopwatchTicks(interval))
+                        {
+                            var fixedFrameArgs = CreateFrameEventArgs((int)elapsed);
+                            ExecuteBehaviorsFixedUpdateSync(fixedFrameArgs, token);
+
+                            if (!fixedFrameArgs.Handled)
+                                _fixedUpdateEvents.Enqueue(fixedFrameArgs);
+                            else
+                                _frameEventArgsPool.Return(fixedFrameArgs);
+
+                            lastFixedUpdateTime = currentTime;
+                        }
+
+                        var nextUpdateTime = lastFixedUpdateTime + MillisecondsToStopwatchTicks(interval);
+                        var waitTicks = nextUpdateTime - GetTimestamp();
+                        if (waitTicks > 0)
+                        {
+                            var waitMs = (int)Math.Max(1, StopwatchTicksToMilliseconds(waitTicks));
+                            await Task.Delay(waitMs, token).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await Task.Yield();
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { }
+                finally
+                {
+                    _isFixedUpdateThreadActive = false;
+                }
+            }
+
+            private async Task UpdateLoopAsync(CancellationToken token)
+            {
+                _isUpdateThreadActive = true;
+                Interlocked.Exchange(ref _updateThreadLastActivityTimestamp, GetTimestamp());
+
+                try
+                {
+                    while (_isRunning && !token.IsCancellationRequested)
+                    {
+                        Interlocked.Exchange(ref _updateThreadLastActivityTimestamp, GetTimestamp());
+
+                        if (_isPaused)
+                        {
+                            await Task.Delay(DEFAULT_PAUSE_DELAY_MS, token).ConfigureAwait(false);
+                            continue;
+                        }
+
+                        var frameStartTime = GetTimestamp();
+                        ProcessMainThreadOperations();
+
+                        var deltaTime = CalculateDeltaTime(frameStartTime);
+                        if (deltaTime <= 0)
+                        {
+                            await Task.Delay(MIN_SLEEP_MS, token).ConfigureAwait(false);
+                            continue;
+                        }
+
+                        var frameArgs = CreateFrameEventArgs(deltaTime);
+                        DrainFixedUpdateEvents();
+
+                        ExecuteBehaviorsUpdateSync(frameArgs, token);
+                        ExecuteBehaviorsLateUpdateSync(frameArgs, token);
+
+                        _frameEventArgsPool.Return(frameArgs);
+
+                        UpdatePerformanceStats(frameStartTime, deltaTime);
+
+                        var frameElapsed = GetTimestamp() - frameStartTime;
+                        var frameTarget = _cachedTargetFrameDurationTicks;
+                        if (frameElapsed < frameTarget)
+                        {
+                            var waitMs = (int)Math.Max(1, StopwatchTicksToMilliseconds((long)(frameTarget - frameElapsed)));
+                            await Task.Delay(waitMs, token).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await Task.Yield();
+                        }
+
                         Interlocked.Increment(ref _totalFrames);
                     }
                 }
@@ -768,6 +905,8 @@ namespace VeloxDev.TimeLine
 
                 _updateThread = null;
                 _fixedUpdateThread = null;
+                _updateTask = null;
+                _fixedUpdateTask = null;
                 _isRunning = false;
                 _isUpdateThreadActive = false;
                 _isFixedUpdateThreadActive = false;
@@ -788,6 +927,21 @@ namespace VeloxDev.TimeLine
 
             #endregion
         }
+
+        #endregion
+
+        #region 配置
+
+        /// <summary>
+        /// 使用 async/await + Task.Delay 替代原生 Thread 驱动帧循环。
+        /// 在不支持 Thread 的平台（WASM、iOS NativeAOT 等）下会自动启用。
+        /// </summary>
+        public static bool UseAsyncLoop { get; set; } =
+#if NET5_0_OR_GREATER
+            OperatingSystem.IsBrowser() || OperatingSystem.IsIOS();
+#else
+            false;
+#endif
 
         #endregion
 
@@ -907,9 +1061,8 @@ namespace VeloxDev.TimeLine
         #endregion
     }
 
-    public sealed class MonoBehaviourChannelEventArgs : EventArgs
+    public sealed class MonoBehaviourChannelEventArgs(string channelName) : EventArgs
     {
-        public string ChannelName { get; }
-        public MonoBehaviourChannelEventArgs(string channelName) { ChannelName = channelName; }
+        public string ChannelName { get; } = channelName;
     }
 }
