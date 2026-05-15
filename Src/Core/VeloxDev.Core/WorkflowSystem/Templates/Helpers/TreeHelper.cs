@@ -10,9 +10,17 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>
 /// [ Component Helper ] Provide standard supports for Tree Component
 /// </summary>
-public class TreeHelper(double cellSize = 200) : TreeHelper<IWorkflowTreeViewModel>(cellSize)
+public class TreeHelper : TreeHelper<IWorkflowTreeViewModel>
 {
+    public TreeHelper() : base()
+    {
 
+    }
+
+    public TreeHelper(double cellSize) : base(cellSize)
+    {
+
+    }
 }
 
 /// <summary>
@@ -23,8 +31,14 @@ public class TreeHelper(double cellSize = 200) : TreeHelper<IWorkflowTreeViewMod
 public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
     where T : class, IWorkflowTreeViewModel
 {
-    public TreeHelper(double cellSize = 200)
+    public TreeHelper()
     {
+        useVirtualization = false;
+    }
+
+    public TreeHelper(double cellSize)
+    {
+        useVirtualization = true;
         CellSize = cellSize;
         if (!MonoBehaviourManager.IsRunning(nameof(TreeHelper)))
         {
@@ -36,11 +50,12 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
     private IReadOnlyCollection<IVeloxCommand> commands = [];
     private double CellSize { get; } = 200;
 
+    private readonly bool useVirtualization = false;
     private bool isDirty = false;
 
     partial void Update(FrameEventArgs e)
     {
-        if (isDirty)
+        if (useVirtualization && isDirty)
         {
             Component?.Virtualize(Viewport);
             isDirty = false;
@@ -98,6 +113,9 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
         VisibleItems = [];
         tree.Nodes.CollectionChanged += OnNodesChanged;
         tree.Links.CollectionChanged += OnLinksChanged;
+
+        if (!useVirtualization) return;
+
         if (Component is null || tree.EnableMap(CellSize, VisibleItems) < 0)
         {
             Debug.Fail("EnableMap did not return a non-negative value as expected. Please check the implementation of EnableMap in the IWorkflowTreeViewModel.");
@@ -111,6 +129,9 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
         commands = [];
         tree.Nodes.CollectionChanged -= OnNodesChanged;
         tree.Links.CollectionChanged -= OnLinksChanged;
+
+        if (!useVirtualization) return;
+
         if (tree.ClearMap() != 5)
         {
             Debug.WriteLine("ClearMap did not return 5 as expected. Please check the implementation of ClearMap in the IWorkflowTreeViewModel.");
