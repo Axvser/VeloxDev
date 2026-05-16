@@ -9,7 +9,9 @@
 | Resize node | ResizeNode | SetSizeCommand |
 | Create node | CreateNode | Tree.CreateNodeCommand |
 | Create slot | CreateSlotOnNode | Node.CreateSlotCommand |
-| Connect | ConnectSlots / ConnectSlotsById | Tree.Send/ReceiveConnectionCommand |
+| Connect (preferred) | **ConnectByProperty** | Tree.Send/ReceiveConnectionCommand |
+| Connect (by index) | ConnectSlots | Tree.Send/ReceiveConnectionCommand (⚠️ indices unstable — see below) |
+| Connect (by ID) | ConnectSlotsById | Tree.Send/ReceiveConnectionCommand (⚠️ IDs stale after SlotEnumerator reconfig) |
 | Disconnect | DisconnectSlots | Link.DeleteCommand |
 | Delete node | DeleteNode | Node.DeleteCommand |
 | Delete slot | DeleteSlot | Slot.DeleteCommand |
@@ -21,7 +23,6 @@
 | Set enum on slot collection | SetEnumSlotCollection | Clears + rebuilds enum-driven collection |
 | Find nodes by filter | FindNodes | Introspection (no mutation) |
 | Resolve slot ID by property | ResolveSlotId | Introspection (no mutation) |
-| **Connect by property name** | **ConnectByProperty** | Tree.Send/ReceiveConnectionCommand |
 | **Create + configure node** | **CreateAndConfigureNode** | CreateNode + Patch + SetEnum in one call |
 | **Delete multiple nodes** | **DeleteNodes** | Node.DeleteCommand × N |
 | **Position multiple nodes** | **ArrangeNodes** | SetAnchorCommand × N |
@@ -48,6 +49,23 @@
 | List creatable types | ListCreatableTypes | Discover available node/slot types |
 | Validate workflow | ValidateWorkflow | Check for issues (zero size, isolated nodes) |
 
+## Slot Connection Safety Rules
+
+> `SlotEnumerator<T>` members inside Node components are created by the **source generator** during `InitializeWorkflow()`. Reconfiguring via `SetEnumSlotCollection` rebuilds all enum-driven slots, invalidating all **slot indices and IDs**.
+
+### Priority
+
+1. **Always prefer `ConnectByProperty`** — connects by stable property name, valid throughout the component lifetime.
+2. **For SlotEnumerator slots use `ConnectEnumSlot`** — routes by condition value (enum member name or True/False).
+3. **Avoid `ConnectSlots` (index-based)** — use only after confirming stable indices via `ListSlotProperties`. On success the response includes `senderProperty`/`receiverProperty` — switch to `ConnectByProperty` next time.
+4. **Use `ConnectSlotsById` carefully** — IDs go stale after `SetEnumSlotCollection`; safe only if IDs were obtained from `GetFullTopology` in the same task without an intervening reconfig.
+
+### Handling Connection Failure
+
+- When the response contains `"status":"rejected"`, **do NOT retry with the same arguments**.
+- Inspect the `reasons` field to diagnose channel incompatibility or `ValidateConnection` constraints.
+- If the response includes `senderProperty` / `receiverProperty`, switch to `ConnectByProperty` immediately.
+
 ## AgentContext Property Rule
 
 Properties annotated with `[AgentContext]` are **explicitly intended by the developer for Agent read/write**.
@@ -63,6 +81,12 @@ You do NOT need to call `GetWorkflowSummary` or `GetComponentContext` every turn
 
 ## Dirty Marking Rule
 
-- Agent mutations no longer imply automatic dirty marking.
-- After finishing one or more workflow mutations, call **`MarkDirty` exactly once at the end of the task**.
-- Query-only tasks do not need `MarkDirty`.
+Dirty-marking behavior is controlled by `WorkflowAgentScope.WithAutoMarkDirty(bool)`:
+
+| Mode | Configuration | Agent Behavior |
+|---|---|---|
+| **Manual (default)** | `WithAutoMarkDirty(false)` or omitted | Call **`MarkDirty` exactly once** at the end of a mutation task |
+| **Automatic** | `WithAutoMarkDirty(true)` | Framework marks dirty after every mutation tool call — **no need to call `MarkDirty`** |
+
+- Pure query tools (`ListNodes`, `FindNodes`, `GetFullTopology`, etc.) **never trigger** auto dirty marking.
+- In automatic mode the `MarkDirty` tool can still be called explicitly without side effects.

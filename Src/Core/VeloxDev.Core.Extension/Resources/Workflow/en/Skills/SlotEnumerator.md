@@ -1,6 +1,6 @@
 ## Skill: SlotEnumerator
 
-Node types may declare **SlotEnumerator properties** (e.g. `SlotEnumerator<SlotViewModel> OutputSlots`). These auto-generate one output slot per value of the configured selector type (enum or bool).
+Node types may declare **SlotEnumerator properties** — any property whose type implements `IConditionalSlotProvider<TSlot>` (e.g. `SlotEnumerator<SlotViewModel> OutputSlots`). When the property type is the raw `IConditionalSlotProvider<TSlot>` interface, the generator automatically uses `SlotEnumerator<TSlot>` as the concrete default. These properties auto-generate one output slot per value of the configured selector type (enum or bool).
 
 ### Creation
 

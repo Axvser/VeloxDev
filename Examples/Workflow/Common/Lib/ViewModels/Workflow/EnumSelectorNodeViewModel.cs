@@ -21,6 +21,8 @@ public partial class EnumSelectorNodeViewModel
     [AgentContext(AgentLanguages.English, "Input slot (receiver). After creating the node you MUST connect an upstream output slot to this slot; routing only fires when data arrives here. Reference it with prop='InputSlot'.")]
     [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 
+    [AgentContext(AgentLanguages.Chinese, "枚举输出口集合，由当前枚举类型动态生成，每个枚举值对应一个输出口。使用 SetEnumSlotCollection 工具切换枚举类型；切换后原有连接会被销毁，需重新连接。")]
+    [AgentContext(AgentLanguages.English, "Enum-driven output slot collection. Each enum member maps to one output slot. Use SetEnumSlotCollection to change the enum type — existing connections on output slots are destroyed and must be rewired.")]
     [VeloxProperty]
     [SlotSelectors(typeof(NetworkRequestMethod), typeof(SlotChannel))]
     public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }
@@ -46,6 +48,7 @@ public partial class EnumSelectorNodeViewModel
     [VeloxProperty] private string title = "Enum Selector";
 
     [AgentContext(AgentLanguages.Chinese, "当前选中的枚举值，决定路由到哪个输出口")]
+    [AgentContext(AgentLanguages.English, "Currently selected enum value. Determines which output slot receives the routed input. Set to the desired enum member name (string) or its underlying integer value.")]
     [VeloxProperty] private object? selectedValue;
 
     [VeloxProperty] private string lastRouted = "-";

@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 xmlns:vm="using:Demo.ViewModels.Workflow"
+			 xmlns:local="using:Demo"
+			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+			 x:Class="Demo.NodeView"
+			 x:DataType="vm:NodeViewModel"
+			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+			 behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots"
+			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas" >
+
+	<Grid RowDefinitions="48,*">
+		<!-- 标题 -->
+		<Border Grid.Row="0"
+				Background="#3a2550"
+				CornerRadius="4,4,0,0"
+				BorderThickness="0,0,0,0.5"
+				BorderBrush="#d6a0ff"
+				behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+				<TextBlock Text="{Binding Name}" Foreground="White" FontWeight="Bold"/>
+			</StackPanel>
+		</Border>
+
+		<!-- 连接器：输入端 -->
+		<Grid Grid.Row="1" ZIndex="6">
+			<local:SlotView x:Name="PART_InputSlot"
+							Width="20" Height="20"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Center"
+							DataContext="{Binding InputSlot}" />
+		</Grid>
+
+		<!-- 连接器：输出端 -->
+		<Border Grid.Row="1" Background="#2a1e35" CornerRadius="0,0,4,4">
+			<ItemsControl x:Name="PART_OutputSlots"
+						  ItemsSource="{Binding OutputSlots.Items}"
+						  VerticalAlignment="Center" >
+				<ItemsControl.ItemTemplate>
+					<DataTemplate>
+						<Grid ColumnDefinitions="*,Auto" Margin="0,2" ClipToBounds="False">
+							<TextBlock Grid.Column="0"
+									   Text="{Binding Name}"
+									   Foreground="#d6a0ff"
+									   FontWeight="SemiBold"
+									   VerticalAlignment="Center"
+									   HorizontalAlignment="Right"
+									   Margin="0,0,16,0"/>
+							<local:SlotView Grid.Column="1" Width="16" Height="16"
+											HorizontalAlignment="Right"
+											VerticalAlignment="Center"
+											DataContext="{Binding Slot}" />
+						</Grid>
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+		</Border>
+	</Grid>
+
+</UserControl>

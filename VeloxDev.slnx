@@ -79,8 +79,19 @@
     <Project Path="Examples/Transition/WPF/Demo/Demo.csproj" />
   </Folder>
   <Folder Name="/Examples/Workflow/">
-    <File Path="Examples/Workflow/README.md" />
     <Project Path="Examples/Workflow/Common/Lib/Lib.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Workflow/Avalonia Trimmed/">
+    <File Path="Examples/Workflow/Avalonia Trimmed/Demo/Directory.Packages.props" />
+    <Project Path="Examples/Workflow/Avalonia Trimmed/Demo/Demo.Android/Demo.Android.csproj">
+      <Deploy />
+    </Project>
+    <Project Path="Examples/Workflow/Avalonia Trimmed/Demo/Demo.Browser/Demo.Browser.csproj" />
+    <Project Path="Examples/Workflow/Avalonia Trimmed/Demo/Demo.Desktop/Demo.Desktop.csproj" />
+    <Project Path="Examples/Workflow/Avalonia Trimmed/Demo/Demo.iOS/Demo.iOS.csproj">
+      <Deploy />
+    </Project>
+    <Project Path="Examples/Workflow/Avalonia Trimmed/Demo/Demo/Demo.csproj" />
   </Folder>
   <Folder Name="/Examples/Workflow/Avalonia/">
     <Project Path="Examples/Workflow/Avalonia/Demo/Demo.csproj" />

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using VeloxDev.AI;
 using VeloxDev.AI.Workflow.Functions;
 using VeloxDev.WorkflowSystem;
 
@@ -17,6 +18,14 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// Maximum number of tool calls allowed per agent session. <c>null</c> means unlimited.
     /// </summary>
     public int? MaxToolCalls { get; private set; }
+
+    /// <summary>
+    /// When <c>true</c>, the toolkit automatically calls <see cref="IWorkflowHelper.MarkDirty"/>
+    /// after every mutation tool call (any tool whose name is not a pure read query).
+    /// Defaults to <c>false</c> to preserve backward-compatible behavior where the caller
+    /// controls dirty marking explicitly via the <c>MarkDirty</c> tool.
+    /// </summary>
+    public bool AutoMarkDirty { get; private set; }
 
     /// <inheritdoc />
     public event EventHandler<AgentToolCallEventArgs>? ToolCalled;
@@ -69,6 +78,17 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithMaxToolCalls(int maxCalls)
     {
         MaxToolCalls = maxCalls;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures whether every mutation tool call automatically marks the workflow tree as dirty.
+    /// When enabled, the Agent does not need to call <c>MarkDirty</c> at the end of each task.
+    /// When disabled (the default), the Agent must call <c>MarkDirty</c> once after completing mutations.
+    /// </summary>
+    public WorkflowAgentScope WithAutoMarkDirty(bool enabled = true)
+    {
+        AutoMarkDirty = enabled;
         return this;
     }
 
@@ -149,6 +169,77 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         {
             CustomerData[language] = [.. dataTypes];
         }
+        return this;
+    }
+
+    /// <summary>
+    /// Scans <paramref name="assembly"/> and automatically registers all workflow-related types
+    /// so the developer does not need to call <see cref="WithComponents"/>, <see cref="WithEnums"/>,
+    /// or <see cref="WithData"/> manually.
+    /// <list type="bullet">
+    ///   <item>Concrete <see cref="IWorkflowNodeViewModel"/> / Slot / Link / Tree classes → <see cref="WithComponents"/>.</item>
+    ///   <item>Enum types referenced by <c>[SlotSelectors]</c> on any registered component → <see cref="WithEnums"/>.</item>
+    ///   <item>Custom parameter types referenced by <c>[AgentCommandParameter]</c> on any method → <see cref="WithData"/>.</item>
+    ///   <item>Non-workflow classes/structs decorated with <c>[AgentContext]</c> → <see cref="WithData"/>.</item>
+    /// </list>
+    /// Already-registered types are not re-added (de-duplicated).
+    /// </summary>
+    public WorkflowAgentScope WithAutoDiscovery(Assembly assembly, AgentLanguages language)
+    {
+        if (assembly is null) throw new ArgumentNullException(nameof(assembly));
+
+        var workflowBase = typeof(IWorkflowViewModel);
+        var nodeBase     = typeof(IWorkflowNodeViewModel);
+        var slotBase     = typeof(IWorkflowSlotViewModel);
+        var linkBase     = typeof(IWorkflowLinkViewModel);
+        var treeBase     = typeof(IWorkflowTreeViewModel);
+
+        foreach (var type in assembly.GetTypes())
+        {
+            if (type.IsAbstract || type.IsInterface) continue;
+
+            bool isWorkflowComponent = nodeBase.IsAssignableFrom(type)
+                || slotBase.IsAssignableFrom(type)
+                || linkBase.IsAssignableFrom(type)
+                || treeBase.IsAssignableFrom(type);
+
+            if (isWorkflowComponent)
+            {
+                WithComponents(language, type);
+
+                // [AgentCommandParameter] on any method → register the parameter type as Data
+                foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                {
+                    var paramAttr = method.GetCustomAttribute<AgentCommandParameterAttribute>();
+                    if (paramAttr?.ParameterType is { } pt
+                        && !pt.IsPrimitive
+                        && pt != typeof(string)
+                        && pt != typeof(object)
+                        && !workflowBase.IsAssignableFrom(pt))
+                    {
+                        WithData(language, pt);
+                    }
+                }
+
+                // [SlotSelectors] on any property → register allowed enum types
+                foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    var sel = prop.GetCustomAttribute<SlotSelectorsAttribute>();
+                    if (sel == null) continue;
+                    foreach (var et in sel.AllowedEnumTypes)
+                        WithEnums(language, et);
+                    // string-only names cannot be resolved at scan time — skip them
+                }
+            }
+            else
+            {
+                // Non-workflow types decorated with [AgentContext] → Data
+                bool hasContext = type.GetCustomAttributes<AgentContextAttribute>().Any();
+                if (hasContext)
+                    WithData(language, type);
+            }
+        }
+
         return this;
     }
 
@@ -292,6 +383,16 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             result.AppendLine($"- `{t.FullName}` (framework base class)");
         foreach (var t in FrameworkData)
             result.AppendLine($"- `{t.FullName}` (framework data)");
+        foreach (var kvp in CustomerEnums)
+        {
+            foreach (var t in kvp.Value)
+                result.AppendLine($"- `{t.FullName}` (customer enum)");
+        }
+        foreach (var kvp in CustomerInterfaces)
+        {
+            foreach (var t in kvp.Value)
+                result.AppendLine($"- `{t.FullName}` (customer interface)");
+        }
         foreach (var kvp in CustomerComponents)
         {
             foreach (var t in kvp.Value)

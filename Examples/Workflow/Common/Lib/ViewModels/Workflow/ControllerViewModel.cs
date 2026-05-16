@@ -13,14 +13,19 @@ public partial class ControllerViewModel
     public ControllerViewModel() => InitializeWorkflow();
 
     [AgentContext(AgentLanguages.Chinese, "输出口")]
+    [AgentContext(AgentLanguages.English, "Output slot (sender). Connect this to the first downstream node's input slot to start the execution chain.")]
     [VeloxProperty] public partial SlotViewModel OutputSlot { get; set; }
 
     [AgentContext(AgentLanguages.Chinese, "是否处于活跃状态")]
+    [AgentContext(AgentLanguages.English, "Indicates whether the workflow is currently running.")]
     [VeloxProperty] private bool isActive = false;
 
     [AgentContext(AgentLanguages.Chinese, "种子负载，工作流执行时的初始数据")]
+    [AgentContext(AgentLanguages.English, "Initial payload string injected into the workflow context when execution starts.")]
     [VeloxProperty] private string seedPayload = "demo-request-chain";
 
+    [AgentContext(AgentLanguages.Chinese, "启动工作流，向下游广播种子负载")]
+    [AgentContext(AgentLanguages.English, "Starts the workflow: broadcasts SeedPayload to all connected downstream nodes.")]
     [VeloxCommand]
     private async Task OpenWorkflow(object? parameters, CancellationToken ct)
     {
@@ -39,6 +44,8 @@ public partial class ControllerViewModel
         }
     }
 
+    [AgentContext(AgentLanguages.Chinese, "停止工作流，关闭所有正在运行的任务")]
+    [AgentContext(AgentLanguages.English, "Stops the workflow and closes all in-progress work items.")]
     [VeloxCommand]
     private async Task CloseWorkflow(object? parameters, CancellationToken ct)
     {

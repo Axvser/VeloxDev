@@ -15,18 +15,23 @@ public partial class NodeViewModel
     public NodeViewModel() => InitializeWorkflow();
 
     [AgentContext(AgentLanguages.Chinese, "输入口")]
+    [AgentContext(AgentLanguages.English, "Input slot (receiver). Connect an upstream output slot here to feed data into this node.")]
     [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 
     [AgentContext(AgentLanguages.Chinese, "输出口")]
+    [AgentContext(AgentLanguages.English, "Output slot (sender). Connect this to a downstream input slot to forward execution results.")]
     [VeloxProperty] public partial SlotViewModel OutputSlot { get; set; }
 
     [AgentContext(AgentLanguages.Chinese, "标题")]
+    [AgentContext(AgentLanguages.English, "Display title shown in the node header.")]
     [VeloxProperty] private string title = "Workflow Step";
 
     [AgentContext(AgentLanguages.Chinese, "模拟延迟时间")]
+    [AgentContext(AgentLanguages.English, "Simulated HTTP delay in milliseconds before the node completes its work step.")]
     [VeloxProperty] private int delayMilliseconds = 1200;
 
     [AgentContext(AgentLanguages.Chinese, "是否自动广播给下游节点")]
+    [AgentContext(AgentLanguages.English, "When true, the node automatically forwards the result to all connected downstream nodes after execution.")]
     [VeloxProperty] private bool autoBroadcast = true;
 
     [VeloxProperty] private bool isRunning = false;

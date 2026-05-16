@@ -69,7 +69,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
                 typeof(SlotViewModel),
                 typeof(LinkViewModel),
                 typeof(TreeViewModel))
-            .WithEnums(AgentLanguages.English, [])
+            .WithEnums(AgentLanguages.English, [typeof(NetworkRequestMethod)])
             .WithInterfaces(AgentLanguages.English, [])
             .WithToolCallCallback((_, _) => helper.ToolCalled?.Invoke())
             .WithTools(

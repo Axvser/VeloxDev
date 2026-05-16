@@ -25,17 +25,21 @@ public partial class BoolSelectorNodeViewModel
     }
 
     [AgentContext(AgentLanguages.Chinese, "输入口")]
+    [AgentContext(AgentLanguages.English, "Input slot (receiver). Connect an upstream output slot here to trigger routing.")]
     [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 
     [AgentContext(AgentLanguages.Chinese, "布尔输出口集合（False/True），由 SlotEnumerator<bool> 管理")]
+    [AgentContext(AgentLanguages.English, "Bool output slot collection (False/True). Pre-populated on creation — do not add or remove slots manually.")]
     [VeloxProperty]
     [SlotSelectors(typeof(bool))]
     public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }
 
     [AgentContext(AgentLanguages.Chinese, "标题")]
+    [AgentContext(AgentLanguages.English, "Display title shown in the node header.")]
     [VeloxProperty] private string title = "Bool Selector";
 
     [AgentContext(AgentLanguages.Chinese, "路由条件，true 走 TrueSlot，false 走 FalseSlot")]
+    [AgentContext(AgentLanguages.English, "Routing condition. true routes to TrueSlot; false routes to FalseSlot.")]
     [VeloxProperty] private bool condition = true;
 
     [VeloxProperty] private string lastRouted = "-";

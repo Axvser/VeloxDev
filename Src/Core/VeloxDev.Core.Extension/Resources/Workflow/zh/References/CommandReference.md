@@ -9,7 +9,9 @@
 | 调整节点大小 | ResizeNode | SetSizeCommand |
 | 创建节点 | CreateNode | Tree.CreateNodeCommand |
 | 创建插槽 | CreateSlotOnNode | Node.CreateSlotCommand |
-| 连接 | ConnectSlots / ConnectSlotsById | Tree.Send/ReceiveConnectionCommand |
+| 连接（首选） | **ConnectByProperty** | Tree.Send/ReceiveConnectionCommand |
+| 连接（按索引） | ConnectSlots | Tree.Send/ReceiveConnectionCommand（⚠️ 索引不稳定，见下） |
+| 连接（按 ID） | ConnectSlotsById | Tree.Send/ReceiveConnectionCommand（⚠️ ID 在 SlotEnumerator 重配后失效） |
 | 断开连接 | DisconnectSlots | Link.DeleteCommand |
 | 删除节点 | DeleteNode | Node.DeleteCommand |
 | 删除插槽 | DeleteSlot | Slot.DeleteCommand |
@@ -21,7 +23,6 @@
 | 设置枚举插槽集合 | SetEnumSlotCollection | 清除并重建枚举驱动集合 |
 | 按条件查找节点 | FindNodes | 仅只读查询 |
 | 通过属性解析插槽 ID | ResolveSlotId | 仅只读查询 |
-| **按属性名连接** | **ConnectByProperty** | Tree.Send/ReceiveConnectionCommand |
 | **创建并配置节点** | **CreateAndConfigureNode** | CreateNode + Patch + SetEnum 合并为一次调用 |
 | **批量删除节点** | **DeleteNodes** | Node.DeleteCommand × N |
 | **批量定位节点** | **ArrangeNodes** | SetAnchorCommand × N |
@@ -48,6 +49,23 @@
 | 列出可创建类型 | ListCreatableTypes | 发现可用节点/插槽类型 |
 | 验证工作流 | ValidateWorkflow | 检查问题（零尺寸、孤立节点等） |
 
+## 插槽连接安全规则
+
+> Node 组件中的 `SlotEnumerator<T>` 成员由**源代码生成器**在 `InitializeWorkflow()` 中创建。重配（`SetEnumSlotCollection`）会重建所有枚举驱动插槽，导致插槽**索引与 ID 全部失效**。
+
+### 优先级
+
+1. **首选 `ConnectByProperty`** — 按属性名连接，属性名在整个生命周期内稳定。
+2. **其次 `ConnectEnumSlot`** — 专用于 `SlotEnumerator` 插槽，按条件值（枚举成员名或 True/False）定位。
+3. **避免 `ConnectSlots`（索引）** — 仅当已通过 `ListSlotProperties` 确认稳定索引后才可使用；工具会在响应中返回属性路由提示，下次应改用 `ConnectByProperty`。
+4. **谨慎 `ConnectSlotsById`** — ID 在 `SetEnumSlotCollection` 重配后失效；若在同一任务中未调用重配，可安全使用 `GetFullTopology` 中取得的 ID。
+
+### 连接失败处理
+
+- 响应中 `status=rejected` 时，**禁止用相同参数重试**。
+- 查看 `reasons` 字段诊断通道不兼容或 `ValidateConnection` 约束。
+- 若响应包含 `senderProperty` / `receiverProperty`，立即改用 `ConnectByProperty`。
+
 ## AgentContext 属性规则
 
 标注了 `[AgentContext]` 的属性是**开发者明确授权 Agent 读写**的属性。
@@ -63,6 +81,12 @@
 
 ## 脏标记规则
 
-- Agent 的变更操作不再隐式自动标脏。
-- 当一次任务中完成一个或多个工作流变更后，在任务末尾**只调用一次** **`MarkDirty`**。
-- 纯查询任务不需要调用 `MarkDirty`。
+脏标记行为由 `WorkflowAgentScope.WithAutoMarkDirty(bool)` 控制：
+
+| 模式 | 配置方式 | Agent 行为 |
+|---|---|---|
+| **手动（默认）** | `WithAutoMarkDirty(false)` 或不调用 | 完成所有变更后，在任务末尾**调用一次 `MarkDirty`** |
+| **自动** | `WithAutoMarkDirty(true)` | 每次变更工具调用后框架自动标脏，**无需调用 `MarkDirty`** |
+
+- 纯查询任务（`ListNodes`、`FindNodes`、`GetFullTopology` 等）**永不触发**自动标脏。
+- 自动模式下 `MarkDirty` 工具仍可调用，不产生副作用。

@@ -1,6 +1,6 @@
 ## Skill: SlotEnumerator（枚举插槽集合）
 
-节点类型可声明 **SlotEnumerator 属性**（如 `SlotEnumerator<SlotViewModel> OutputSlots`）。根据配置的选择器类型（枚举或 bool）自动为每个值生成一个输出插槽。
+节点类型可声明 **SlotEnumerator 属性**——任何实现了 `IConditionalSlotProvider<TSlot>` 接口的属性（如 `SlotEnumerator<SlotViewModel> OutputSlots`）均可被识别。若属性类型直接使用 `IConditionalSlotProvider<TSlot>` 接口本身，生成器将自动以 `SlotEnumerator<TSlot>` 作为默认实现。这类属性根据配置的选择器类型（枚举或 bool）自动为每个值生成一个输出插槽。
 
 ### 创建节点
 

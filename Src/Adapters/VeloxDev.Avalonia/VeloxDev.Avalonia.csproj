@@ -7,10 +7,10 @@
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Avalonia</Title>
-		<Version>5.0.29</Version>
+		<Version>5.0.35</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + Avalonia</Description>
-       <PackageIcon>veloxdev-logo.png</PackageIcon>
+		<PackageIcon>veloxdev-logo.png</PackageIcon>
 		<AvaloniaVersion>11.1.0</AvaloniaVersion>
 	</PropertyGroup>
 
@@ -33,7 +33,7 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="VeloxDev.Core" Version="5.0.29" />
+		<PackageReference Include="VeloxDev.Core" Version="5.0.35" />
 	</ItemGroup>
 
 </Project>

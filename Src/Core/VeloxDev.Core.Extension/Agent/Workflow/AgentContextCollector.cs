@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text;
 using System.Windows.Input;
 using VeloxDev.MVVM;
+using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.AI.Workflow;
 
@@ -187,8 +188,9 @@ public static class AgentContextCollector
                 Contexts = GetAgentContext(p, language),
                 HasVelox = p.GetCustomAttributes<VeloxPropertyAttribute>(inherit: false).Any(),
                 IsSlotEnumerator = IsSlotEnumeratorType(p.PropertyType),
+                IsSingleSlot = IsSingleSlotType(p.PropertyType),
             })
-            .Where(p => (p.HasVelox && p.Contexts.Length > 0) || p.IsSlotEnumerator)
+            .Where(p => (p.HasVelox && p.Contexts.Length > 0) || p.IsSlotEnumerator || p.IsSingleSlot)
             .ToList();
 
         foreach (var item in veloxProps)
@@ -197,6 +199,12 @@ public static class AgentContextCollector
             if (item.Contexts.Length > 0)
             {
                 description = string.Join("; ", item.Contexts.Select((ctx, i) => $"[{i + 1}-{ctx}]"));
+            }
+            else if (item.IsSingleSlot)
+            {
+                description = language == AgentLanguages.Chinese
+                    ? $"单插槽属性（{item.Property.PropertyType.Name}）— 通过 ResolveSlotId 按属性名解析，或用 ConnectByProperty 直接连接"
+                    : $"Single slot property ({item.Property.PropertyType.Name}) — resolve via ResolveSlotId by property name, or connect directly with ConnectByProperty.";
             }
             else
             {
@@ -320,4 +328,7 @@ public static class AgentContextCollector
         var def = type.GetGenericTypeDefinition();
         return def.Name.StartsWith("SlotEnumerator`") && def.Namespace == "VeloxDev.WorkflowSystem";
     }
+
+    private static bool IsSingleSlotType(Type type)
+        => typeof(IWorkflowSlotViewModel).IsAssignableFrom(type);
 }

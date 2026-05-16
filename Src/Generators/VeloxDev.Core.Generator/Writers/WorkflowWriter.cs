@@ -1217,10 +1217,24 @@ namespace VeloxDev.Generators.Writers
         private bool IsSlotEnumeratorType(ITypeSymbol typeSymbol)
         {
             if (typeSymbol is not INamedTypeSymbol namedType || !namedType.IsGenericType) return false;
+
+            // 1. Exact match: SlotEnumerator<TSlot>
             var original = namedType.OriginalDefinition;
             var name = original.Name;
             if (name.Contains('`')) name = name.Substring(0, name.IndexOf('`'));
-            return name == "SlotEnumerator";
+            if (name == "SlotEnumerator") return true;
+
+            // 2. Any type that directly IS IConditionalSlotProvider<TSlot>
+            if (name == "IConditionalSlotProvider") return true;
+
+            // 3. Any concrete type that implements IConditionalSlotProvider<TSlot>
+            return namedType.AllInterfaces.Any(i =>
+            {
+                if (!i.IsGenericType) return false;
+                var iName = i.OriginalDefinition.Name;
+                if (iName.Contains('`')) iName = iName.Substring(0, iName.IndexOf('`'));
+                return iName == "IConditionalSlotProvider";
+            });
         }
 
         private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
@@ -1266,6 +1280,7 @@ namespace VeloxDev.Generators.Writers
             public string PropertyName;
             public string FullTypeName;
             public bool IsSlotEnumerator;
+            public bool IsConditionalSlotProviderInterface;
             public bool IsWorkflowSlot;
         }
 
@@ -1311,6 +1326,14 @@ namespace VeloxDev.Generators.Writers
 
                 if (!isEnumerator && !isSlot) continue;
 
+                bool isInterface = false;
+                if (isEnumerator && typeSymbol is INamedTypeSymbol nt)
+                {
+                    var baseName = nt.OriginalDefinition.Name;
+                    if (baseName.Contains('`')) baseName = baseName.Substring(0, baseName.IndexOf('`'));
+                    isInterface = baseName == "IConditionalSlotProvider";
+                }
+
                 var displayFormat = new SymbolDisplayFormat(
                     typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
                     genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
@@ -1322,6 +1345,7 @@ namespace VeloxDev.Generators.Writers
                     PropertyName = GetPropertyNameFromFieldName(fieldName),
                     FullTypeName = typeSymbol.ToDisplayString(displayFormat),
                     IsSlotEnumerator = isEnumerator,
+                    IsConditionalSlotProviderInterface = isInterface,
                     IsWorkflowSlot = isSlot,
                 });
             }
@@ -1344,8 +1368,22 @@ namespace VeloxDev.Generators.Writers
                     // Assign through the property so that OnXxxChanging/Changed notifications fire.
                     // If the user pre-assigned the enumerator in their constructor the equality guard
                     // in the property setter will short-circuit, so this is always safe.
-                    var nonNullableType = m.FullTypeName.TrimEnd('?');
-                    sb.AppendLine($"if ({m.FieldName} is null) {m.PropertyName} = new {nonNullableType}();");
+                    // When the field/property type is the IConditionalSlotProvider<TSlot> interface,
+                    // fall back to SlotEnumerator<TSlot> as the concrete default implementation.
+                    string concreteType;
+                    if (m.IsConditionalSlotProviderInterface)
+                    {
+                        // Replace leading namespace+"IConditionalSlotProvider" with "VeloxDev.WorkflowSystem.SlotEnumerator"
+                        var raw = m.FullTypeName.TrimEnd('?');
+                        var lt = raw.IndexOf('<');
+                        var slotArg = lt >= 0 ? raw.Substring(lt) : string.Empty;
+                        concreteType = "global::VeloxDev.WorkflowSystem.SlotEnumerator" + slotArg;
+                    }
+                    else
+                    {
+                        concreteType = m.FullTypeName.TrimEnd('?');
+                    }
+                    sb.AppendLine($"if ({m.FieldName} is null) {m.PropertyName} = new {concreteType}();");
                     sb.AppendLine($"{m.FieldName}.Install(this);");
                 }
                 else if (m.IsWorkflowSlot)

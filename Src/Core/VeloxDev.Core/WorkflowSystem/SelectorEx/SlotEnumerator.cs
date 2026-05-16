@@ -6,7 +6,7 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
-public partial class SlotEnumerator<TSlot> : IEnumerable<TSlot>
+public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
     where TSlot : IWorkflowSlotViewModel, new()
 {
     public SlotEnumerator()

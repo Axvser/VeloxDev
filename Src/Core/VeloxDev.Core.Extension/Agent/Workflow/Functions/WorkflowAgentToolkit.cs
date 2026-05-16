@@ -148,7 +148,22 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     /// <summary>
-    /// Wraps a tool result with call counting, callback invocation, and max-call enforcement.
+    /// Tool names that are purely read-only queries and must never trigger a dirty mark.
+    /// Every other tool is treated as a mutation when <see cref="WorkflowAgentScope.AutoMarkDirty"/> is enabled.
+    /// </summary>
+    private static readonly HashSet<string> QueryToolNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ListNodes", "GetNodeDetail", "GetWorkflowSummary", "GetComponentContext",
+        "ListComponentCommands", "GetChangesSinceSnapshot", "TakeSnapshot",
+        "GetFullTopology", "FindNodes", "ResolveSlotId", "ListSlotProperties",
+        "GetEnumSlotByValue", "GetLinkDetail", "GetNodeStatistics", "ListCreatableTypes",
+        "ValidateWorkflow", "SearchForward", "SearchReverse", "SearchAllRelative",
+        "IsConnected", "FindPath",
+    };
+
+    /// <summary>
+    /// Wraps a tool result with call counting, callback invocation, max-call enforcement,
+    /// and optional auto-dirty marking when <see cref="WorkflowAgentScope.AutoMarkDirty"/> is enabled.
     /// </summary>
     private string Track(string toolName, string result)
     {
@@ -156,6 +171,8 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         _scope.RaiseToolCalled(toolName, result, _toolCallCount);
         if (_scope.MaxToolCalls.HasValue && _toolCallCount > _scope.MaxToolCalls.Value)
             return Error($"Tool call limit ({_scope.MaxToolCalls.Value}) exceeded.");
+        if (_scope.AutoMarkDirty && !QueryToolNames.Contains(toolName))
+            Tree.GetHelper().MarkDirty();
         return result;
     }
 
@@ -343,7 +360,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return Ok($"Slot [{nodeIndex}][{slotIndex}] deleted.");
     }
 
-    [Description("Connects two slots by node/slot indices. Uses Tree.SendConnectionCommand + ReceiveConnectionCommand. The framework may silently reject: check 'connected' in the response. Rejection reasons: channel incompatibility, same-node connection, or developer ValidateConnection rule.")]
+    [Description("⚠ PREFER ConnectByProperty — slot indices are UNSTABLE for generated nodes (SlotEnumerator members can shift). ConnectByProperty uses stable property names and is always safer. Use ConnectSlots ONLY when you have already called ListSlotProperties and confirmed the exact stable index. Uses Tree.SendConnectionCommand + ReceiveConnectionCommand. Returns slot-property map on success so you can switch to property-based routing immediately.")]
     private string ConnectSlots(
         [Description("Sender node index.")] int senderNodeIndex,
         [Description("Sender slot index.")] int senderSlotIndex,
@@ -353,17 +370,41 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!TryGetSlot(senderNodeIndex, senderSlotIndex, out var senderSlot, out var error)) return error;
         if (!TryGetSlot(receiverNodeIndex, receiverSlotIndex, out var receiverSlot, out error)) return error;
 
+        // Preflight: resolve property names so failure diagnostics are actionable
+        var senderPropMap = BuildSlotPropertyMap(Tree.Nodes[senderNodeIndex]);
+        var receiverPropMap = BuildSlotPropertyMap(Tree.Nodes[receiverNodeIndex]);
+        senderPropMap.TryGetValue(senderSlot!, out var senderPropHint);
+        receiverPropMap.TryGetValue(receiverSlot!, out var receiverPropHint);
+
         Tree.SendConnectionCommand.Execute(senderSlot!);
         Tree.ReceiveConnectionCommand.Execute(receiverSlot!);
 
         bool connected = VerifyConnection(senderSlot!, receiverSlot!);
         if (!connected)
-            return ConnectionRejected(senderSlot!, receiverSlot!,
-                $"[{senderNodeIndex}][{senderSlotIndex}]", $"[{receiverNodeIndex}][{receiverSlotIndex}]");
-        return Ok($"Connected [{senderNodeIndex}][{senderSlotIndex}]→[{receiverNodeIndex}][{receiverSlotIndex}].");
+        {
+            var rejected = JObject.Parse(ConnectionRejected(senderSlot!, receiverSlot!,
+                $"[{senderNodeIndex}][{senderSlotIndex}]", $"[{receiverNodeIndex}][{receiverSlotIndex}]"));
+            if (senderPropHint != null)
+                rejected["senderProperty"] = senderPropHint;
+            if (receiverPropHint != null)
+                rejected["receiverProperty"] = receiverPropHint;
+            rejected["preferredAlternative"] = $"ConnectByProperty senderNode={senderNodeIndex} senderProperty={senderPropHint ?? "?"} receiverNode={receiverNodeIndex} receiverProperty={receiverPropHint ?? "?"}";
+            return rejected.ToString(Formatting.None);
+        }
+
+        var result = new JObject
+        {
+            ["status"] = "ok",
+            ["message"] = $"Connected [{senderNodeIndex}][{senderSlotIndex}]→[{receiverNodeIndex}][{receiverSlotIndex}].",
+        };
+        if (senderPropHint != null) result["senderProperty"] = senderPropHint;
+        if (receiverPropHint != null) result["receiverProperty"] = receiverPropHint;
+        if (senderPropHint != null && receiverPropHint != null)
+            result["preferPropertyRoute"] = $"Next time use ConnectByProperty senderNode={senderNodeIndex} senderProperty={senderPropHint} receiverNode={receiverNodeIndex} receiverProperty={receiverPropHint}";
+        return result.ToString(Formatting.None);
     }
 
-    [Description("Connects two slots by their runtime IDs. Stable across add/remove. The framework may silently reject: check 'connected' in the response.")]
+    [Description("Connects two slots by their runtime IDs. IDs are stable across UI redraws but NOT across SlotEnumerator reconfiguration. ⚠ PREFER ConnectByProperty unless you obtained IDs from GetFullTopology in the same task. The framework may silently reject: check 'connected' in the response.")]
     private string ConnectSlotsById(
         [Description("Runtime ID of the sender slot.")] string senderSlotId,
         [Description("Runtime ID of the receiver slot.")] string receiverSlotId)
@@ -371,13 +412,26 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (FindComponentById(senderSlotId) is not IWorkflowSlotViewModel sender) return Error($"Sender slot '{senderSlotId}' not found.");
         if (FindComponentById(receiverSlotId) is not IWorkflowSlotViewModel receiver) return Error($"Receiver slot '{receiverSlotId}' not found.");
 
+        // Preflight: resolve property names for richer diagnostics
+        var senderPropHint = sender.Parent != null ? (BuildSlotPropertyMap(sender.Parent).TryGetValue(sender, out var sp) ? sp : null) : null;
+        var receiverPropHint = receiver.Parent != null ? (BuildSlotPropertyMap(receiver.Parent).TryGetValue(receiver, out var rp) ? rp : null) : null;
+
         Tree.SendConnectionCommand.Execute(sender);
         Tree.ReceiveConnectionCommand.Execute(receiver);
 
         bool connected = VerifyConnection(sender, receiver);
         if (!connected)
-            return ConnectionRejected(sender, receiver, senderSlotId, receiverSlotId);
-        return Ok($"Connected {senderSlotId}→{receiverSlotId}.");
+        {
+            var rejected = JObject.Parse(ConnectionRejected(sender, receiver, senderSlotId, receiverSlotId));
+            if (senderPropHint != null) rejected["senderProperty"] = senderPropHint;
+            if (receiverPropHint != null) rejected["receiverProperty"] = receiverPropHint;
+            return rejected.ToString(Formatting.None);
+        }
+
+        var result = new JObject { ["status"] = "ok", ["message"] = $"Connected {senderSlotId}→{receiverSlotId}." };
+        if (senderPropHint != null) result["senderProperty"] = senderPropHint;
+        if (receiverPropHint != null) result["receiverProperty"] = receiverPropHint;
+        return result.ToString(Formatting.None);
     }
 
     [Description("Removes a connection between two slots by node/slot indices.")]
@@ -1058,12 +1112,34 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     {
         slotType = null;
         if (!type.IsGenericType) return false;
+
+        // 1. Exact match: SlotEnumerator<TSlot>
         var def = type.GetGenericTypeDefinition();
         if (def.Name.StartsWith("SlotEnumerator`") && def.Namespace == "VeloxDev.WorkflowSystem")
         {
             slotType = type.GetGenericArguments()[0];
             return true;
         }
+
+        // 2. The type IS IConditionalSlotProvider<TSlot> itself
+        if (def.Name.StartsWith("IConditionalSlotProvider`") && def.Namespace == "VeloxDev.WorkflowSystem")
+        {
+            slotType = type.GetGenericArguments()[0];
+            return true;
+        }
+
+        // 3. The type implements IConditionalSlotProvider<TSlot>
+        foreach (var iface in type.GetInterfaces())
+        {
+            if (!iface.IsGenericType) continue;
+            var ifaceDef = iface.GetGenericTypeDefinition();
+            if (ifaceDef.Name.StartsWith("IConditionalSlotProvider`") && ifaceDef.Namespace == "VeloxDev.WorkflowSystem")
+            {
+                slotType = iface.GetGenericArguments()[0];
+                return true;
+            }
+        }
+
         return false;
     }
 
