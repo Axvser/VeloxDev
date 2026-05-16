@@ -1,10 +1,13 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Input;
+using Avalonia.Input.GestureRecognizers;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using System;
 using System.Linq;
+using System.Reflection;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -161,7 +164,14 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             state.PointerPressSource.PointerPressed += OnPointerPressed;
 
         if (state.ScrollViewer is not null)
+        {
             state.ScrollViewer.ScrollChanged += OnScrollChanged;
+            // Remove the built-in ScrollGestureRecognizer from ScrollContentPresenter.
+            // Without this, on touch platforms (Android/iOS) the recognizer steals pointer
+            // capture mid-drag, breaking node drag and slot connection interactions.
+            // WorkflowSurfaceBehavior implements its own complete pan logic.
+            state.ScrollViewer.LayoutUpdated += OnScrollViewerLayoutUpdated;
+        }
     }
 
     private static void UnsubscribeResolvedControls(SurfaceState state)
@@ -170,7 +180,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             state.PointerPressSource.PointerPressed -= OnPointerPressed;
 
         if (state.ScrollViewer is not null)
+        {
             state.ScrollViewer.ScrollChanged -= OnScrollChanged;
+            state.ScrollViewer.LayoutUpdated -= OnScrollViewerLayoutUpdated;
+        }
 
         state.PointerPressSource = null;
         state.ScrollViewer = null;
@@ -242,6 +255,31 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
 
         state.IsPanning = false;
+    }
+
+    private static void OnScrollViewerLayoutUpdated(object? sender, EventArgs e)
+    {
+        if (sender is not ScrollViewer viewer)
+            return;
+
+        // GestureRecognizerCollection only exposes Add (IReadOnlyCollection).
+        // Access the backing _recognizers field via reflection to remove ScrollGestureRecognizer,
+        // which otherwise steals pointer capture mid-drag on touch platforms.
+        var presenter = viewer.GetVisualDescendants().OfType<ScrollContentPresenter>().FirstOrDefault();
+        if (presenter is null)
+            return;
+
+        var hasScrollRecognizer = presenter.GestureRecognizers.OfType<ScrollGestureRecognizer>().Any();
+        if (!hasScrollRecognizer)
+            return;
+
+        var field = presenter.GestureRecognizers.GetType()
+            .GetField("_recognizers", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (field?.GetValue(presenter.GestureRecognizers) is System.Collections.Generic.List<GestureRecognizer> list)
+        {
+            list.RemoveAll(static r => r is ScrollGestureRecognizer);
+            viewer.LayoutUpdated -= OnScrollViewerLayoutUpdated;
+        }
     }
 
     private static void OnScrollChanged(object? sender, ScrollChangedEventArgs e)

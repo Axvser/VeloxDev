@@ -518,7 +518,7 @@ public static class WorkflowTreeEx
 
     private static bool ShouldCleanupConnections(SlotChannel channel, bool isSender, int existingConnections)
     {
-        if (channel.HasFlag(SlotChannel.None))
+        if (channel == SlotChannel.None)
             return false;
 
         // 发送端逻辑

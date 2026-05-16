@@ -940,7 +940,7 @@ namespace VeloxDev.TimeLine
 #if NET5_0_OR_GREATER
             OperatingSystem.IsBrowser() || OperatingSystem.IsIOS();
 #else
-            false;
+            true;
 #endif
 
         #endregion
