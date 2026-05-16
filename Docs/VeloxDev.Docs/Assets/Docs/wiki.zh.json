@@ -1530,7 +1530,7 @@
               "Source": "avares://VeloxDev.Docs/Assets/Images/workflow.png",
               "ScaleX": 1.0,
               "ScaleY": 1.0,
-              "PixelWidth": 640.0,
+              "PixelWidth": 492.06,
               "PixelHeight": 360.0,
               "KeepAspectRatio": true,
               "SizeMode": "Fill Width",
@@ -1624,9 +1624,9 @@
               "$id": "178",
               "$type": "VeloxDev.Docs.ViewModels.ImageProvider, VeloxDev.Docs",
               "Source": "avares://VeloxDev.Docs/Assets/Images/workflow_framework.png",
-              "ScaleX": 0.7796388888888889,
-              "ScaleY": 0.7796388888888889,
-              "PixelWidth": 498.97,
+              "ScaleX": 1.0,
+              "ScaleY": 1.0,
+              "PixelWidth": 640.0,
               "PixelHeight": 280.67,
               "KeepAspectRatio": true,
               "SizeMode": "Fill Width",
@@ -2562,7 +2562,7 @@
                 {
                   "$id": "274",
                   "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
-                  "Text": "本章节适用于 Avalonia / WPF / WinUI / MAUI（ Winfroms 无附加属性机制，只是API相似 ，实际推荐的做法是直接从仓库的 Demo 移植 ）",
+                  "Text": "本章节适用于 Avalonia / WPF / WinUI / MAUI（ Winfroms 无附加属性机制，只是API相似 ，实际推荐的做法是直接从仓库的 Demo 移植；Razor 还在实验阶段 ）",
                   "Parent": {
                     "$ref": "270"
                   }
@@ -2585,49 +2585,74 @@
                   "Parent": {
                     "$ref": "270"
                   }
+                },
+                {
+                  "$id": "277",
+                  "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
+                  "Text": "模板",
+                  "Parent": {
+                    "$ref": "270"
+                  }
+                },
+                {
+                  "$id": "278",
+                  "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
+                  "Text": "仓库包含两个 Avalonia 示例，其中一个已经经过人工裁剪，保持了最简洁的代码模板，并且已在 Android / Browser / Desktop 成功运行，您可点击下述链接以查看",
+                  "Parent": {
+                    "$ref": "270"
+                  }
+                },
+                {
+                  "$id": "279",
+                  "$type": "VeloxDev.Docs.ViewModels.LinkProvider, VeloxDev.Docs",
+                  "Text": "Avalonia 最简模板",
+                  "Url": "https://github.com/Axvser/VeloxDev/tree/master/Examples/Workflow/Avalonia%20Trimmed/Demo",
+                  "Parent": {
+                    "$ref": "270"
+                  }
                 }
               ],
               "Nodes": [
                 {
-                  "$id": "277",
+                  "$id": "280",
                   "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
                   "Children": [
                     {
-                      "$id": "278",
+                      "$id": "281",
                       "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
                       "Level": "1",
                       "Text": "Tree View",
                       "Parent": {
-                        "$ref": "277"
-                      }
-                    },
-                    {
-                      "$id": "279",
-                      "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
-                      "Level": "2",
-                      "Text": "[ Surface Behavior ]",
-                      "Parent": {
-                        "$ref": "277"
-                      }
-                    },
-                    {
-                      "$id": "280",
-                      "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
-                      "Text": "在 UserControl 级别提供基于 Name 捕获的行为注册，涵盖 Canvas 、ScrollViewer 、网格装饰线等元素所需的交互行为",
-                      "Parent": {
-                        "$ref": "277"
-                      }
-                    },
-                    {
-                      "$id": "281",
-                      "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
-                      "Text": "属性一览",
-                      "Parent": {
-                        "$ref": "277"
+                        "$ref": "280"
                       }
                     },
                     {
                       "$id": "282",
+                      "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
+                      "Level": "2",
+                      "Text": "[ Surface Behavior ]",
+                      "Parent": {
+                        "$ref": "280"
+                      }
+                    },
+                    {
+                      "$id": "283",
+                      "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
+                      "Text": "在 UserControl 级别提供基于 Name 捕获的行为注册，涵盖 Canvas 、ScrollViewer 、网格装饰线等元素所需的交互行为",
+                      "Parent": {
+                        "$ref": "280"
+                      }
+                    },
+                    {
+                      "$id": "284",
+                      "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
+                      "Text": "属性一览",
+                      "Parent": {
+                        "$ref": "280"
+                      }
+                    },
+                    {
+                      "$id": "285",
                       "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
                       "Text": "| 附加属性 | 类型 | 作用 |\r\n|---|---|---|\r\n| `IsEnabled` | `bool` | 启用整套工作流画布交互行为 |\r\n| `ScrollViewerName` | `string?` | 指定用于滚动与视口计算的 `ScrollViewer` |\r\n| `CanvasName` | `string?` | 指定工作流内容画布 |\r\n| `GridDecoratorName` | `string?` | 指定网格/标尺装饰器，用于同步滚动偏移与内容偏移 |\r\n| `PointerPressSourceName` | `string?` | 指定接收按下事件、用于启动画布平移的元素 |",
                       "AutoHeight": true,
@@ -2635,36 +2660,36 @@
                       "EmbeddedCodeAutoHeight": true,
                       "EmbeddedCodeMaxHeightValue": 300.0,
                       "Parent": {
-                        "$ref": "277"
-                      }
-                    },
-                    {
-                      "$id": "283",
-                      "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
-                      "Level": "2",
-                      "Text": "[ ViewPool Behavior ]",
-                      "Parent": {
-                        "$ref": "277"
-                      }
-                    },
-                    {
-                      "$id": "284",
-                      "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
-                      "Text": "为 Canvas 提供对象池机制，重用视图元素对于降低GC压力与提升渲染性能起到关键作用",
-                      "Parent": {
-                        "$ref": "277"
-                      }
-                    },
-                    {
-                      "$id": "285",
-                      "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
-                      "Text": "属性一览",
-                      "Parent": {
-                        "$ref": "277"
+                        "$ref": "280"
                       }
                     },
                     {
                       "$id": "286",
+                      "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
+                      "Level": "2",
+                      "Text": "[ ViewPool Behavior ]",
+                      "Parent": {
+                        "$ref": "280"
+                      }
+                    },
+                    {
+                      "$id": "287",
+                      "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
+                      "Text": "为 Canvas 提供对象池机制，重用视图元素对于降低GC压力与提升渲染性能起到关键作用",
+                      "Parent": {
+                        "$ref": "280"
+                      }
+                    },
+                    {
+                      "$id": "288",
+                      "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
+                      "Text": "属性一览",
+                      "Parent": {
+                        "$ref": "280"
+                      }
+                    },
+                    {
+                      "$id": "289",
                       "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs",
                       "Headers": [
                         "附加属性",
@@ -2678,7 +2703,7 @@
                       ],
                       "Rows": [
                         {
-                          "$id": "287",
+                          "$id": "290",
                           "Cells": [
                             "ItemsSource",
                             "INotifyCollectionChanged",
@@ -2686,7 +2711,7 @@
                           ]
                         },
                         {
-                          "$id": "288",
+                          "$id": "291",
                           "Cells": [
                             "TemplateSelector",
                             "取决于GUI框架对应的模板选择器接口",
@@ -2695,26 +2720,26 @@
                         }
                       ],
                       "Parent": {
-                        "$ref": "277"
+                        "$ref": "280"
                       }
                     },
                     {
-                      "$id": "289",
+                      "$id": "292",
                       "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                       "Text": "XAML",
                       "Parent": {
-                        "$ref": "277"
+                        "$ref": "280"
                       }
                     },
                     {
-                      "$id": "290",
+                      "$id": "293",
                       "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                       "Code": "<UserControl xmlns=\"https://github.com/avaloniaui\"\r\n\t\t\t xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"\r\n\t\t\t xmlns:d=\"http://schemas.microsoft.com/expression/blend/2008\"\r\n\t\t\t xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\"\r\n\t\t\t mc:Ignorable=\"d\" d:DesignWidth=\"800\" d:DesignHeight=\"450\"\r\n\t\t\t x:Class=\"Demo.WorkflowView\"\r\n\t\t\t xmlns:local=\"using:Demo\"\r\n\t\t\t xmlns:vm=\"using:Demo.ViewModels\"\r\n\t\t\t xmlns:workflow=\"using:VeloxDev.WorkflowSystem\"\r\n\t\t\t x:DataType=\"vm:TreeViewModel\"\r\n\r\n             xmlns:behaviors=\"using:VeloxDev.WorkflowSystem.AttachedBehaviors\"\r\n             behaviors:WorkflowSurfaceBehavior.IsEnabled=\"True\"\r\n             behaviors:WorkflowSurfaceBehavior.ScrollViewerName=\"PART_ScrollViewer\"\r\n\t\t\t behaviors:WorkflowSurfaceBehavior.CanvasName=\"PART_Canvas\"\r\n\t\t\t behaviors:WorkflowSurfaceBehavior.GridDecoratorName=\"PART_GridDecorator\"\r\n\t\t\t behaviors:WorkflowSurfaceBehavior.PointerPressSourceName=\"PART_SurfaceBorder\" >\r\n    \r\n    <!-- Avalonia 将模板置于此处即可自动匹配，无需使用 ViewPool.TemplateSelector -->\r\n    <!-- RenderTransform 是否需要绑定取决于具体 GUI 框架 -->\r\n    <UserControl.DataTemplates>\r\n        <!-- 节点模板 -->\r\n\t\t<DataTemplate DataType=\"vm:NodeViewModel\">\r\n\t\t\t<local:NodeView Width=\"{Binding Size.Width}\" Height=\"{Binding Size.Height}\"\r\n\t\t\t\t\t\t\tCanvas.Left=\"{Binding Anchor.Horizontal}\" Canvas.Top=\"{Binding Anchor.Vertical}\" ZIndex=\"{Binding Anchor.Layer}\"\r\n\t\t\t\t\t\t\tRenderTransform=\"{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}\"/>\r\n\t\t</DataTemplate>\r\n\r\n        <!-- 连线模板 -->\r\n\t\t<DataTemplate DataType=\"vm:LinkViewModel\">\r\n\t\t\t<local:BezierCurveView StartLeft=\"{Binding Sender.Anchor.Horizontal}\" StartTop=\"{Binding Sender.Anchor.Vertical}\"\r\n\t\t\t\t\t\t\t\t   EndLeft=\"{Binding Receiver.Anchor.Horizontal}\" EndTop=\"{Binding Receiver.Anchor.Vertical}\"\r\n                                   ZIndex=\"-1\"\r\n\t\t\t\t\t\t\t\t   CanRender=\"{Binding IsVisible}\"\r\n\t\t\t\t\t\t\t\t   Width=\"{Binding $parent[Canvas].Bounds.Width}\" Height=\"{Binding $parent[Canvas].Bounds.Height}\"\r\n\t\t\t\t\t\t\t\t   RenderTransform=\"{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}\" />\r\n\t\t</DataTemplate>\r\n    </UserControl.DataTemplates>\r\n\r\n\t<!-- 渲染节点编辑器 ( 虚拟化支持 ) -->\r\n\t<Grid Grid.Column=\"2\">\r\n        <Border x:Name=\"PART_SurfaceBorder\" BorderBrush=\"White\" BorderThickness=\"1\" CornerRadius=\"3\">\r\n            <local:WorkflowGridDecorator x:Name=\"PART_GridDecorator\">\r\n                <ScrollViewer x:Name=\"PART_ScrollViewer\" HorizontalScrollBarVisibility=\"Auto\" >\r\n\t\t\t\t    <Canvas x:Name=\"PART_Canvas\"\r\n                            x:DataType=\"vm:TreeViewModel\" Width=\"{Binding Layout.ActualSize.Width}\" Height=\"{Binding Layout.ActualSize.Height}\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Top\"\r\n                            behaviors:ViewPool.ItemsSource=\"{Binding Helper.VisibleItems}\">\r\n\t\t\t\t\t    <Canvas.DataTemplates>\r\n\t\t\t\t\t\t    <!-- 依照优先级寻找数据模板： Self > Parent > App -->\r\n\t\t\t\t\t    </Canvas.DataTemplates>\r\n\t\t\t\t    </Canvas>\r\n\t\t\t    </ScrollViewer>\r\n\t\t    </local:WorkflowGridDecorator>\r\n\t    </Border>\r\n\t</Grid>\r\n\r\n</UserControl>\r\n",
                       "Language": "xml",
                       "AutoHeight": true,
                       "MaxHeightValue": 300.0,
                       "Parent": {
-                        "$ref": "277"
+                        "$ref": "280"
                       }
                     }
                   ],
@@ -2725,45 +2750,45 @@
                   }
                 },
                 {
-                  "$id": "291",
+                  "$id": "294",
                   "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
                   "Children": [
                     {
-                      "$id": "292",
+                      "$id": "295",
                       "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
                       "Level": "1",
                       "Text": "Node View",
                       "Parent": {
-                        "$ref": "291"
-                      }
-                    },
-                    {
-                      "$id": "293",
-                      "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
-                      "Level": "2",
-                      "Text": "[ Slot Layout Behavior ]",
-                      "Parent": {
-                        "$ref": "291"
-                      }
-                    },
-                    {
-                      "$id": "294",
-                      "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
-                      "Text": "节点挂载连接器，这组附加属性负责这些连接器的行为",
-                      "Parent": {
-                        "$ref": "291"
-                      }
-                    },
-                    {
-                      "$id": "295",
-                      "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
-                      "Text": "属性一览",
-                      "Parent": {
-                        "$ref": "291"
+                        "$ref": "294"
                       }
                     },
                     {
                       "$id": "296",
+                      "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
+                      "Level": "2",
+                      "Text": "[ Slot Layout Behavior ]",
+                      "Parent": {
+                        "$ref": "294"
+                      }
+                    },
+                    {
+                      "$id": "297",
+                      "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
+                      "Text": "节点挂载连接器，这组附加属性负责这些连接器的行为",
+                      "Parent": {
+                        "$ref": "294"
+                      }
+                    },
+                    {
+                      "$id": "298",
+                      "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
+                      "Text": "属性一览",
+                      "Parent": {
+                        "$ref": "294"
+                      }
+                    },
+                    {
+                      "$id": "299",
                       "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs",
                       "Headers": [
                         "附加属性",
@@ -2777,7 +2802,7 @@
                       ],
                       "Rows": [
                         {
-                          "$id": "297",
+                          "$id": "300",
                           "Cells": [
                             "IsEnabled",
                             "bool",
@@ -2785,7 +2810,7 @@
                           ]
                         },
                         {
-                          "$id": "298",
+                          "$id": "301",
                           "Cells": [
                             "SlotNames",
                             "string[]",
@@ -2793,7 +2818,7 @@
                           ]
                         },
                         {
-                          "$id": "299",
+                          "$id": "302",
                           "Cells": [
                             "CoordinateHostName",
                             "string",
@@ -2802,36 +2827,36 @@
                         }
                       ],
                       "Parent": {
-                        "$ref": "291"
-                      }
-                    },
-                    {
-                      "$id": "300",
-                      "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
-                      "Level": "2",
-                      "Text": "[ Node Drag Behavior ]",
-                      "Parent": {
-                        "$ref": "291"
-                      }
-                    },
-                    {
-                      "$id": "301",
-                      "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
-                      "Text": "处理节点拖拽行为",
-                      "Parent": {
-                        "$ref": "291"
-                      }
-                    },
-                    {
-                      "$id": "302",
-                      "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
-                      "Text": "属性一览",
-                      "Parent": {
-                        "$ref": "291"
+                        "$ref": "294"
                       }
                     },
                     {
                       "$id": "303",
+                      "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
+                      "Level": "2",
+                      "Text": "[ Node Drag Behavior ]",
+                      "Parent": {
+                        "$ref": "294"
+                      }
+                    },
+                    {
+                      "$id": "304",
+                      "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
+                      "Text": "处理节点拖拽行为",
+                      "Parent": {
+                        "$ref": "294"
+                      }
+                    },
+                    {
+                      "$id": "305",
+                      "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
+                      "Text": "属性一览",
+                      "Parent": {
+                        "$ref": "294"
+                      }
+                    },
+                    {
+                      "$id": "306",
                       "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs",
                       "Headers": [
                         "附加属性",
@@ -2845,7 +2870,7 @@
                       ],
                       "Rows": [
                         {
-                          "$id": "304",
+                          "$id": "307",
                           "Cells": [
                             "IsEnabled",
                             "bool",
@@ -2853,7 +2878,7 @@
                           ]
                         },
                         {
-                          "$id": "305",
+                          "$id": "308",
                           "Cells": [
                             "CoordinateHostName",
                             "string",
@@ -2862,26 +2887,26 @@
                         }
                       ],
                       "Parent": {
-                        "$ref": "291"
+                        "$ref": "294"
                       }
                     },
                     {
-                      "$id": "306",
+                      "$id": "309",
                       "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                       "Text": "XAML",
                       "Parent": {
-                        "$ref": "291"
+                        "$ref": "294"
                       }
                     },
                     {
-                      "$id": "307",
+                      "$id": "310",
                       "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
-                      "Code": "<UserControl xmlns=\"https://github.com/avaloniaui\"\r\n\t\t\t xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"\r\n\t\t\t xmlns:d=\"http://schemas.microsoft.com/expression/blend/2008\"\r\n\t\t\t xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\"\r\n\t\t\t mc:Ignorable=\"d\" d:DesignWidth=\"300\" d:DesignHeight=\"450\"\r\n\t\t\t x:Class=\"Demo.NodeView\"\r\n\t\t\t xmlns:local=\"using:Demo\"\r\n\t\t\t xmlns:vm=\"using:Demo.ViewModels\"\r\n             ClipToBounds=\"False\"\r\n             x:DataType=\"vm:NodeViewModel\"\r\n\r\n             xmlns:behaviors=\"using:VeloxDev.WorkflowSystem.AttachedBehaviors\"\r\n             behaviors:WorkflowSlotLayoutBehavior.IsEnabled=\"True\"\r\n\t\t\t behaviors:WorkflowSlotLayoutBehavior.SlotNames=\"PART_InputSlot,PART_OutputSlot\"\r\n\t\t\t behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName=\"PART_Canvas\" >\r\n\r\n    <Grid RowDefinitions=\"52,*,54\" ClipToBounds=\"False\">\r\n        <!-- 连接器 -->\r\n\t\t<Grid Grid.RowSpan=\"3\" ZIndex=\"6\" ClipToBounds=\"False\">\r\n\t\t\t<local:SlotView x:Name=\"PART_InputSlot\"\r\n\t\t\t\t\t\t Width=\"20\" eight=\"20\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"-10,0,0,0\"\r\n\t\t\t\t\t\t DataContext=\"{Binding InputSlot}\" />\r\n\r\n\t\t\t<local:SlotView x:Name=\"PART_OutputSlot\"\r\n\t\t\t\t\t\t Width=\"20\" Height=\"20\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\" Margin=\"0,0,-10,0\"\r\n\t\t\t\t\t\t DataContext=\"{Binding OutputSlot}\" />\r\n\t\t</Grid>\r\n\r\n\t\t<!-- 标题栏 -->\r\n\t\t<Border Grid.Row=\"0\" Background=\"{Binding HeaderBackground}\" CornerRadius=\"4,4,0,0\" BorderThickness=\"0,0,0,0.5\" BorderBrush=\"{Binding HeaderBorderBrush}\"\r\n                behaviors:WorkflowNodeDragBehavior.CoordinateHostName=\"PART_Canvas\"\r\n\t\t\t\tbehaviors:WorkflowNodeDragBehavior.IsEnabled=\"True\">\r\n\r\n\t\t</Border>\r\n        \r\n        <!-- 节点内容 -->\r\n        <Border Grid.Row=\"1\" Background=\"#252525\">\r\n\r\n\t\t</Border>\r\n\t</Grid>\r\n</UserControl>\r\n",
+                      "Code": "<UserControl xmlns=\"https://github.com/avaloniaui\"\r\n\t\t\t xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"\r\n\t\t\t xmlns:d=\"http://schemas.microsoft.com/expression/blend/2008\"\r\n\t\t\t xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\"\r\n\t\t\t xmlns:vm=\"using:Demo.ViewModels.Workflow\"\r\n\t\t\t xmlns:local=\"using:Demo\"\r\n\t\t\t mc:Ignorable=\"d\" d:DesignWidth=\"800\" d:DesignHeight=\"450\"\r\n\t\t\t x:Class=\"Demo.NodeView\"\r\n\t\t\t x:DataType=\"vm:NodeViewModel\"\r\n\t\t\t xmlns:behaviors=\"using:VeloxDev.WorkflowSystem.AttachedBehaviors\"\r\n\t\t\t behaviors:WorkflowSlotLayoutBehavior.IsEnabled=\"True\"\r\n\t\t\t behaviors:WorkflowSlotLayoutBehavior.SlotNames=\"PART_InputSlot\"\r\n\t\t\t behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames=\"PART_OutputSlots\"\r\n\t\t\t behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName=\"PART_Canvas\" >\r\n\r\n\t<Grid RowDefinitions=\"48,*\">\r\n\t\t<!-- 标题 -->\r\n\t\t<Border Grid.Row=\"0\"\r\n\t\t\t\tBackground=\"#3a2550\"\r\n\t\t\t\tCornerRadius=\"4,4,0,0\"\r\n\t\t\t\tBorderThickness=\"0,0,0,0.5\"\r\n\t\t\t\tBorderBrush=\"#d6a0ff\"\r\n\t\t\t\tbehaviors:WorkflowNodeDragBehavior.CoordinateHostName=\"PART_Canvas\"\r\n\t\t\t\tbehaviors:WorkflowNodeDragBehavior.IsEnabled=\"True\">\r\n\t\t\t<StackPanel Orientation=\"Horizontal\" HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" Spacing=\"8\">\r\n\t\t\t\t<TextBlock Text=\"{Binding Name}\" Foreground=\"White\" FontWeight=\"Bold\"/>\r\n\t\t\t</StackPanel>\r\n\t\t</Border>\r\n\r\n\t\t<!-- 连接器：输入端 -->\r\n\t\t<Grid Grid.Row=\"1\" ZIndex=\"6\">\r\n\t\t\t<local:SlotView x:Name=\"PART_InputSlot\"\r\n\t\t\t\t\t\t\tWidth=\"20\" Height=\"20\"\r\n\t\t\t\t\t\t\tHorizontalAlignment=\"Left\"\r\n\t\t\t\t\t\t\tVerticalAlignment=\"Center\"\r\n\t\t\t\t\t\t\tDataContext=\"{Binding InputSlot}\" />\r\n\t\t</Grid>\r\n\r\n\t\t<!-- 连接器：从枚举类自动生成的多个输出端 -->\r\n\t\t<Border Grid.Row=\"1\" Background=\"#2a1e35\" CornerRadius=\"0,0,4,4\">\r\n\t\t\t<ItemsControl x:Name=\"PART_OutputSlots\"\r\n\t\t\t\t\t\t  ItemsSource=\"{Binding OutputSlots.Items}\"\r\n\t\t\t\t\t\t  VerticalAlignment=\"Center\" >\r\n\t\t\t\t<ItemsControl.ItemTemplate>\r\n\t\t\t\t\t<DataTemplate>\r\n\t\t\t\t\t\t<Grid ColumnDefinitions=\"*,Auto\" Margin=\"0,2\" ClipToBounds=\"False\">\r\n\t\t\t\t\t\t\t<TextBlock Grid.Column=\"0\"\r\n\t\t\t\t\t\t\t\t\t   Text=\"{Binding Name}\"\r\n\t\t\t\t\t\t\t\t\t   Foreground=\"#d6a0ff\"\r\n\t\t\t\t\t\t\t\t\t   FontWeight=\"SemiBold\"\r\n\t\t\t\t\t\t\t\t\t   VerticalAlignment=\"Center\"\r\n\t\t\t\t\t\t\t\t\t   HorizontalAlignment=\"Right\"\r\n\t\t\t\t\t\t\t\t\t   Margin=\"0,0,16,0\"/>\r\n\t\t\t\t\t\t\t<local:SlotView Grid.Column=\"1\" Width=\"16\" Height=\"16\"\r\n\t\t\t\t\t\t\t\t\t\t\tHorizontalAlignment=\"Right\"\r\n\t\t\t\t\t\t\t\t\t\t\tVerticalAlignment=\"Center\"\r\n\t\t\t\t\t\t\t\t\t\t\tDataContext=\"{Binding Slot}\" />\r\n\t\t\t\t\t\t</Grid>\r\n\t\t\t\t\t</DataTemplate>\r\n\t\t\t\t</ItemsControl.ItemTemplate>\r\n\t\t\t</ItemsControl>\r\n\t\t</Border>\r\n\t</Grid>\r\n\r\n</UserControl>\r\n",
                       "Language": "xml",
                       "AutoHeight": true,
                       "MaxHeightValue": 300.0,
                       "Parent": {
-                        "$ref": "291"
+                        "$ref": "294"
                       }
                     }
                   ],
@@ -2892,45 +2917,45 @@
                   }
                 },
                 {
-                  "$id": "308",
+                  "$id": "311",
                   "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
                   "Children": [
                     {
-                      "$id": "309",
+                      "$id": "312",
                       "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
                       "Level": "1",
                       "Text": "Slot View",
                       "Parent": {
-                        "$ref": "308"
-                      }
-                    },
-                    {
-                      "$id": "310",
-                      "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
-                      "Level": "2",
-                      "Text": "[ WorkflowSlotConnectionBehavior ]",
-                      "Parent": {
-                        "$ref": "308"
-                      }
-                    },
-                    {
-                      "$id": "311",
-                      "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
-                      "Text": "负责为连接器注入发起连接、接收连接的行为",
-                      "Parent": {
-                        "$ref": "308"
-                      }
-                    },
-                    {
-                      "$id": "312",
-                      "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
-                      "Text": "属性一览",
-                      "Parent": {
-                        "$ref": "308"
+                        "$ref": "311"
                       }
                     },
                     {
                       "$id": "313",
+                      "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
+                      "Level": "2",
+                      "Text": "[ WorkflowSlotConnectionBehavior ]",
+                      "Parent": {
+                        "$ref": "311"
+                      }
+                    },
+                    {
+                      "$id": "314",
+                      "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
+                      "Text": "负责为连接器注入发起连接、接收连接的行为",
+                      "Parent": {
+                        "$ref": "311"
+                      }
+                    },
+                    {
+                      "$id": "315",
+                      "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
+                      "Text": "属性一览",
+                      "Parent": {
+                        "$ref": "311"
+                      }
+                    },
+                    {
+                      "$id": "316",
                       "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs",
                       "Headers": [
                         "附加属性",
@@ -2944,7 +2969,7 @@
                       ],
                       "Rows": [
                         {
-                          "$id": "314",
+                          "$id": "317",
                           "Cells": [
                             "IsEnabled",
                             "bool",
@@ -2953,26 +2978,26 @@
                         }
                       ],
                       "Parent": {
-                        "$ref": "308"
+                        "$ref": "311"
                       }
                     },
                     {
-                      "$id": "315",
+                      "$id": "318",
                       "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                       "Text": "XAML",
                       "Parent": {
-                        "$ref": "308"
+                        "$ref": "311"
                       }
                     },
                     {
-                      "$id": "316",
+                      "$id": "319",
                       "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                       "Code": "<UserControl xmlns=\"https://github.com/avaloniaui\"\r\n\t\t\t xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"\r\n\t\t\t xmlns:d=\"http://schemas.microsoft.com/expression/blend/2008\"\r\n\t\t\t xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\"\r\n\t\t\t mc:Ignorable=\"d\" d:DesignWidth=\"200\" d:DesignHeight=\"200\"\r\n\t\t\t x:Class=\"Demo.SlotView\"\r\n\t\t\t xmlns:local=\"using:Demo\"\r\n\t\t\t Background=\"#01000000\"\r\n\r\n             xmlns:behaviors=\"using:VeloxDev.WorkflowSystem.AttachedBehaviors\"\r\n             behaviors:WorkflowSlotConnectionBehavior.IsEnabled=\"True\">\r\n\r\n    <!-- 渲染连接器 -->\r\n\t\r\n</UserControl>\r\n",
                       "Language": "xml",
                       "AutoHeight": true,
                       "MaxHeightValue": 300.0,
                       "Parent": {
-                        "$ref": "308"
+                        "$ref": "311"
                       }
                     }
                   ],
@@ -2983,24 +3008,24 @@
                   }
                 },
                 {
-                  "$id": "317",
+                  "$id": "320",
                   "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
                   "Children": [
                     {
-                      "$id": "318",
+                      "$id": "321",
                       "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
                       "Level": "1",
                       "Text": "Link View",
                       "Parent": {
-                        "$ref": "317"
+                        "$ref": "320"
                       }
                     },
                     {
-                      "$id": "319",
+                      "$id": "322",
                       "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
                       "Text": "无需附加属性，使用几何或装饰器实现绘制即可",
                       "Parent": {
-                        "$ref": "317"
+                        "$ref": "320"
                       }
                     }
                   ],
@@ -3023,93 +3048,93 @@
           }
         },
         {
-          "$id": "320",
+          "$id": "323",
           "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
           "Children": [
             {
-              "$id": "321",
+              "$id": "324",
               "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
               "Level": "1",
               "Text": "持久化",
               "Parent": {
-                "$ref": "320"
+                "$ref": "323"
               }
             },
             {
-              "$id": "322",
+              "$id": "325",
               "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
               "Text": "VeloxDev.Core.Extension 为视图模型提供一组扩展方法，具备以下特点：\r\n    - Dictionary<,> 可使用任何类型作为Key，不再局限于string\r\n    - 唯有属性的setter和getter均为public时，该属性才会被序列化，并且序列化只处理属性",
               "Parent": {
-                "$ref": "320"
+                "$ref": "323"
               }
             },
             {
-              "$id": "323",
+              "$id": "326",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "同步",
               "Parent": {
-                "$ref": "320"
+                "$ref": "323"
               }
             },
             {
-              "$id": "324",
+              "$id": "327",
               "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
               "Code": "using VeloxDev.MVVM.Serialization;\n\n// serialize\nvar json = tree.Serialize();\nFile.WriteAllText(path, json);\n\n// deserialize\nvar loadedJson = File.ReadAllText(path);\nvar loadedTree = loadedJson.Deserialize<TreeViewModel>();",
               "Language": "csharp",
               "AutoHeight": false,
               "MaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "320"
+                "$ref": "323"
               }
             },
             {
-              "$id": "325",
+              "$id": "328",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "异步",
               "Parent": {
-                "$ref": "320"
+                "$ref": "323"
               }
             },
             {
-              "$id": "326",
+              "$id": "329",
               "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
               "Code": "using VeloxDev.MVVM.Serialization;\n\n// serialize\nvar json = await tree.SerializeAsync();\nawait File.WriteAllTextAsync(path, json);\n\n// deserialize\nvar loadedJson = await File.ReadAllTextAsync(path);\nvar loadedTree = await loadedJson.DeserializeAsync<TreeViewModel>();",
               "Language": "csharp",
               "AutoHeight": false,
               "MaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "320"
+                "$ref": "323"
               }
             },
             {
-              "$id": "327",
+              "$id": "330",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "流式",
               "Parent": {
-                "$ref": "320"
+                "$ref": "323"
               }
             },
             {
-              "$id": "328",
+              "$id": "331",
               "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
               "Code": "using VeloxDev.MVVM.Serialization;\n\n// serialize\nawait using var writeStream = File.Create(path);\nawait tree.SerializeToStreamAsync(writeStream);\n\n// deserialize\nawait using var readStream = File.OpenRead(path);\nvar loadedTree = await readStream.DeserializeFromStreamAsync<TreeViewModel>();",
               "Language": "csharp",
               "AutoHeight": false,
               "MaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "320"
+                "$ref": "323"
               }
             },
             {
-              "$id": "329",
+              "$id": "332",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "配置速查",
               "Parent": {
-                "$ref": "320"
+                "$ref": "323"
               }
             },
             {
-              "$id": "330",
+              "$id": "333",
               "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
               "Text": "| 目标/场景 | 配置写法 | 为什么这样配 | 是否推荐 |\r\n|---|---|---|---|\r\n| 调试、查看 JSON、做 diff | `SerializationOptions.Create().WithIndented().WithTypeNameHandling(TypeNameHandling.Auto).WithNullValueHandling(NullValueHandling.Include).WithDefaultValueHandling(DefaultValueHandling.Include)` | JSON 可读性最好，且能完整保留多态、空值、默认值，最适合排查工作流恢复问题 | 强烈推荐 |\r\n| 正式保存到文件 | `SerializationOptions.Create().WithCompact().WithTypeNameHandling(TypeNameHandling.Auto).WithNullValueHandling(NullValueHandling.Include).WithDefaultValueHandling(DefaultValueHandling.Include)` | 文件更小，但仍保留完整恢复所需信息，适合工作流持久化 | 推荐 |\r\n| 只追求最小体积 | `SerializationOptions.Create().WithCompact().WithNullValueHandling(NullValueHandling.Ignore).WithDefaultValueHandling(DefaultValueHandling.Ignore)` | 能缩小 JSON，但可能丢失恢复所需字段，不适合复杂工作流对象图 | 谨慎使用 |\r\n| 有派生节点、接口属性、多态对象 | `WithTypeNameHandling(TypeNameHandling.Auto)` | 让反序列化时能恢复真实运行时类型；Workflow 场景通常需要 | 必配 |\r\n| 希望恢复后状态完全一致 | `WithNullValueHandling(NullValueHandling.Include).WithDefaultValueHandling(DefaultValueHandling.Include)` | 保留 `null` 和默认值，避免反序列化后状态偏差 | 推荐 |\r\n| 只想让 JSON 更易读 | `WithIndented()` | 仅改善可读性，不改变对象语义 | 按需 |\r\n| 只想减小文件大小 | `WithCompact()` | 去掉缩进和空白，最简单的压缩方式 | 按需 |\r\n| 同步 API 使用 | `var json = tree.Serialize(options);` / `var tree = json.Deserialize<TreeViewModel>(options);` | 适合简单保存/加载 | 推荐 |\r\n| 安全加载 | `json.TryDeserialize<TreeViewModel>(options, out var tree)` | 外部文件或用户输入可能损坏时更稳妥，不会直接抛异常 | 强烈推荐 |\r\n| 异步 API 使用 | `await tree.SerializeAsync(options)` / `await json.DeserializeAsync<TreeViewModel>(options)` | 适合 UI、命令、文件 IO 链路 | 推荐 |\r\n| 流式/Stream API 使用 | `await tree.SerializeToStreamAsync(stream, options)` / `await stream.DeserializeFromStreamAsync<TreeViewModel>(options)` | 适合文件流、网络流、内存流 | 推荐 |\r\n| 最稳妥的 Workflow 默认方案 | `SerializationOptions.Create().WithIndented().WithTypeNameHandling(TypeNameHandling.Auto).WithNullValueHandling(NullValueHandling.Include).WithDefaultValueHandling(DefaultValueHandling.Include)` | 如果你不确定怎么选，就用这一套；对工作流对象图最安全 | 默认首选 |",
               "AutoHeight": true,
@@ -3117,7 +3142,7 @@
               "EmbeddedCodeAutoHeight": true,
               "EmbeddedCodeMaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "320"
+                "$ref": "323"
               }
             }
           ],
@@ -3134,74 +3159,74 @@
       }
     },
     {
-      "$id": "331",
+      "$id": "334",
       "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
       "Children": [
         {
-          "$id": "332",
+          "$id": "335",
           "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
           "Level": "1",
           "Text": "APIs",
           "Parent": {
-            "$ref": "331"
+            "$ref": "334"
           }
         },
         {
-          "$id": "333",
+          "$id": "336",
           "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
           "Text": "成员速查",
           "Parent": {
-            "$ref": "331"
+            "$ref": "334"
           }
         }
       ],
       "Nodes": [
         {
-          "$id": "334",
+          "$id": "337",
           "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
           "Children": [
             {
-              "$id": "335",
+              "$id": "338",
               "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
               "Level": "1",
               "Text": "MVVM",
               "Parent": {
-                "$ref": "334"
+                "$ref": "337"
               }
             },
             {
-              "$id": "336",
+              "$id": "339",
               "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
               "Text": "通知属性、命令速查",
               "Parent": {
-                "$ref": "334"
+                "$ref": "337"
               }
             }
           ],
           "Nodes": [
             {
-              "$id": "337",
+              "$id": "340",
               "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
               "Children": [
                 {
-                  "$id": "338",
+                  "$id": "341",
                   "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
                   "Level": "1",
                   "Text": "通知属性",
                   "Parent": {
-                    "$ref": "337"
+                    "$ref": "340"
                   }
                 },
                 {
-                  "$id": "339",
+                  "$id": "342",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "方法",
                   "Parent": {
-                    "$ref": "337"
+                    "$ref": "340"
                   }
                 },
                 {
-                  "$id": "340",
+                  "$id": "343",
                   "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs",
                   "Headers": [
                     "方法",
@@ -3213,14 +3238,14 @@
                   ],
                   "Rows": [
                     {
-                      "$id": "341",
+                      "$id": "344",
                       "Cells": [
                         "OnPropertyChanging ( string propertyName )",
                         "通知属性即将发生更新"
                       ]
                     },
                     {
-                      "$id": "342",
+                      "$id": "345",
                       "Cells": [
                         "OnPropertyChanged ( string propertyName )",
                         "通知属性已经发生更新"
@@ -3228,58 +3253,58 @@
                     }
                   ],
                   "Parent": {
-                    "$ref": "337"
+                    "$ref": "340"
                   }
                 }
               ],
               "Nodes": [],
               "Title": "通知属性",
               "Parent": {
-                "$ref": "334"
+                "$ref": "337"
               }
             },
             {
-              "$id": "343",
+              "$id": "346",
               "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
               "Children": [
                 {
-                  "$id": "344",
+                  "$id": "347",
                   "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
                   "Level": "1",
                   "Text": "命令",
                   "Parent": {
-                    "$ref": "343"
+                    "$ref": "346"
                   }
                 },
                 {
-                  "$id": "345",
+                  "$id": "348",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "接口",
                   "Parent": {
-                    "$ref": "343"
+                    "$ref": "346"
                   }
                 },
                 {
-                  "$id": "346",
+                  "$id": "349",
                   "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                   "Code": "public interface IVeloxCommand : ICommand\n{\n\n}",
                   "Language": "csharp",
                   "AutoHeight": true,
                   "MaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "343"
+                    "$ref": "346"
                   }
                 },
                 {
-                  "$id": "347",
+                  "$id": "350",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "VeloxCommandAttribute",
                   "Parent": {
-                    "$ref": "343"
+                    "$ref": "346"
                   }
                 },
                 {
-                  "$id": "348",
+                  "$id": "351",
                   "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
                   "Text": "| 参数 | 默认值 | 描述 |\r\n|------|--------|------|\r\n| `name` | `\"Auto\"` | 命令属性名称。`\"Auto\"` = 方法名 + `\"Command\"` |\r\n| `canValidate` | `false` | 若为 `true`，则查找 `bool CanXxx()` 或 `bool CanXxx` 成员 |\r\n| `semaphore` | `1` | 最大并发执行数 |",
                   "AutoHeight": true,
@@ -3287,19 +3312,19 @@
                   "EmbeddedCodeAutoHeight": true,
                   "EmbeddedCodeMaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "343"
+                    "$ref": "346"
                   }
                 },
                 {
-                  "$id": "349",
+                  "$id": "352",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "方法",
                   "Parent": {
-                    "$ref": "343"
+                    "$ref": "346"
                   }
                 },
                 {
-                  "$id": "350",
+                  "$id": "353",
                   "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
                   "Text": "| 方法 | 描述 |\n|--------|-------------|\n| `void Lock()` | 防止新执行开始 |\n| `void UnLock()` | 重新启用新执行 |\n| `void Notify()` | 强制触发 `CanExecuteChanged` |\n| `void Clear()` | 取消所有待处理和正在运行的执行（生命周期结束） |\n| `void Interrupt()` | 仅取消当前正在运行的执行 |\n| `void Continue()` | 在 `Interrupt` 后重新启用执行 |\n| `void ChangeSemaphore(int semaphore)` | 更改并发执行限制 |",
                   "AutoHeight": true,
@@ -3307,19 +3332,19 @@
                   "EmbeddedCodeAutoHeight": true,
                   "EmbeddedCodeMaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "343"
+                    "$ref": "346"
                   }
                 },
                 {
-                  "$id": "351",
+                  "$id": "354",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "事件",
                   "Parent": {
-                    "$ref": "343"
+                    "$ref": "346"
                   }
                 },
                 {
-                  "$id": "352",
+                  "$id": "355",
                   "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
                   "Text": "| 事件 | 类型 | 描述 |\n|------|------|------|\n| `Created` | `CommandEventHandler` | 当命令实例被创建时触发 |\n| `Enqueued` | `CommandEventHandler` | 当执行被加入队列时触发（达到信号量限制） |\n| `Dequeued` | `CommandEventHandler` | 当排队的执行被移出队列时触发 |\n| `Started` | `CommandEventHandler` | 当执行实际开始时触发 |\n| `Completed` | `CommandEventHandler` | 当执行成功完成时触发 |\n| `Failed` | `CommandEventHandler` | 当执行抛出未处理异常时触发 |\n| `Canceled` | `CommandEventHandler` | 当通过 `CancellationToken` 取消执行时触发 |\n| `Exited` | `CommandEventHandler` | 当命令生命周期结束时触发（`Clear`） |",
                   "AutoHeight": true,
@@ -3327,72 +3352,72 @@
                   "EmbeddedCodeAutoHeight": true,
                   "EmbeddedCodeMaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "343"
+                    "$ref": "346"
                   }
                 }
               ],
               "Nodes": [],
               "Title": "命令",
               "Parent": {
-                "$ref": "334"
+                "$ref": "337"
               }
             }
           ],
           "Title": "MVVM",
           "Parent": {
-            "$ref": "331"
+            "$ref": "334"
           }
         },
         {
-          "$id": "353",
+          "$id": "356",
           "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
           "Children": [
             {
-              "$id": "354",
+              "$id": "357",
               "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
               "Level": "1",
               "Text": "面向切面编程",
               "Parent": {
-                "$ref": "353"
+                "$ref": "356"
               }
             },
             {
-              "$id": "355",
+              "$id": "358",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "接口",
               "Parent": {
-                "$ref": "353"
+                "$ref": "356"
               }
             },
             {
-              "$id": "356",
+              "$id": "359",
               "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
               "Code": "public interface IProxy { }",
               "Language": "csharp",
               "AutoHeight": true,
               "MaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "353"
+                "$ref": "356"
               }
             },
             {
-              "$id": "357",
+              "$id": "360",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "扩展方法",
               "Parent": {
-                "$ref": "353"
+                "$ref": "356"
               }
             },
             {
-              "$id": "358",
+              "$id": "361",
               "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
               "Text": "（1）创建",
               "Parent": {
-                "$ref": "353"
+                "$ref": "356"
               }
             },
             {
-              "$id": "359",
+              "$id": "362",
               "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
               "Text": "| 方法 | 描述 |\n|--------|-------------|\n| `T CreateProxy<T>(this T target) where T : IProxy` | 使用 `DispatchProxy` 包装 `target`，返回该代理（接口类型与 `T` 相同）。 |\n| `void SetProxy<T>(this T target, ProxyMembers memberType, string memberName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end)` | 为代理成员附加拦截处理程序 |",
               "AutoHeight": true,
@@ -3400,77 +3425,77 @@
               "EmbeddedCodeAutoHeight": true,
               "EmbeddedCodeMaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "353"
+                "$ref": "356"
               }
             },
             {
-              "$id": "360",
+              "$id": "363",
               "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
               "Text": "（2）代理目标",
               "Parent": {
-                "$ref": "353"
+                "$ref": "356"
               }
             },
             {
-              "$id": "361",
+              "$id": "364",
               "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
               "Code": "public enum ProxyMembers\r\n{\r\n    Getter,   // 属性获取器\r\n    Setter,   // 属性设置器\r\n    Method    // 普通方法\r\n}",
               "Language": "csharp",
               "AutoHeight": true,
               "MaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "353"
+                "$ref": "356"
               }
             }
           ],
           "Nodes": [],
           "Title": "面向切面编程",
           "Parent": {
-            "$ref": "331"
+            "$ref": "334"
           }
         },
         {
-          "$id": "362",
+          "$id": "365",
           "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
           "Children": [
             {
-              "$id": "363",
+              "$id": "366",
               "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
               "Level": "1",
               "Text": "帧循环",
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "364",
+              "$id": "367",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "接口",
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "365",
+              "$id": "368",
               "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
               "Code": "public interface IMonoBehaviour\n{\n    void InitializeMonoBehaviour();   // 向 MonoBehaviourManager 注册\n    void CloseMonoBehaviour();        // 从 MonoBehaviourManager 注销\n\n    void InvokeAwake();                         // 在首次 Update 前调用一次\n    void InvokeStart();                         // 在第一帧上调用一次\n    void InvokeUpdate(FrameEventArgs e);        // 每帧调用一次\n    void InvokeLateUpdate(FrameEventArgs e);    // 每帧在 Update 之后调用一次\n    void InvokeFixedUpdate(FrameEventArgs e);   // 在固定时间间隔定时器上调用一次\n}",
               "Language": "csharp",
               "AutoHeight": true,
               "MaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "366",
+              "$id": "369",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "MonoBehaviourAttribute",
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "367",
+              "$id": "370",
               "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
               "Text": "| 参数 | 默认值 | 描述 |\r\n|-----------|---------|-------------|\r\n| `channel` | `\"default\"` | 命名更新循环通道 |\r\n| `fps` | `-1` | 该通道的目标帧率（-1 = 使用通道当前设置） |",
               "AutoHeight": true,
@@ -3478,19 +3503,19 @@
               "EmbeddedCodeAutoHeight": true,
               "EmbeddedCodeMaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "368",
+              "$id": "371",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "内置方法",
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "369",
+              "$id": "372",
               "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
               "Text": "| 方法 | 描述 |\n|--------|-------------|\n| `void Start()` | 启动更新循环 |\n| `void Stop()` | 停止更新循环 |\n| `void Pause()` | 暂停但不终止线程 |\n| `void Resume()` | 从暂停状态恢复 |\n| `void Restart()` | 停止 + 启动（含清理） |\n| `void Register(IMonoBehaviour behaviour, int executionOrder = 0)` | 添加一个行为 |\n| `void Unregister(IMonoBehaviour behaviour)` | 移除一个行为 |\n| `void SetTargetFPS(int fps)` | 排队的 FPS 更改 [1, 1000] |\n| `void SetFixedUpdateInterval(int intervalMs)` | 排队的固定间隔更改 |\n| `void SetTimeScale(float timeScale)` | 排队的时间缩放更改 [0.0, 10.0] |\n| `void SetPauseState(bool pause)` | 排队的暂停/恢复操作 |",
               "AutoHeight": true,
@@ -3498,19 +3523,19 @@
               "EmbeddedCodeAutoHeight": true,
               "EmbeddedCodeMaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "370",
+              "$id": "373",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "静态",
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "371",
+              "$id": "374",
               "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
               "Text": "| 方法 | 描述 |\n|--------|-------------|\n| `LoopChannel GetOrCreateChannel(string name)` | 返回现有通道，或创建一个新通道 |\n| `bool TryGetChannel(string name, out LoopChannel channel)` | 非创建式查找 |\n| `void RemoveChannel(string name)` | 停止并移除指定名称的通道 |\n| `IReadOnlyCollection<string> GetChannelNames()` | 列出所有通道名称 |",
               "AutoHeight": true,
@@ -3518,19 +3543,19 @@
               "EmbeddedCodeAutoHeight": true,
               "EmbeddedCodeMaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "372",
+              "$id": "375",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "状态",
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "373",
+              "$id": "376",
               "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
               "Text": "| 成员 | 类型 | 描述 |\n|------|------|------|\n| `IsRunning` | `bool` | 循环是否处于活动状态 |\n| `IsPaused` | `bool` | 循环是否已暂停 |\n| `CurrentFPS` | `int` | 实测帧率（FPS） |\n| `TargetFPS` | `int` | 配置的目标帧率（FPS） |\n| `TotalTime` | `TimeSpan` | 总经过的托管时间 |\n| `TotalTimeMs` | `long` | 总经过时间（毫秒） |\n| `TotalFrames` | `long` | 已完成的总帧数 |\n| `ActiveBehaviorCount` | `int` | 已注册行为的数量 |\n| `TimeScale` | `float` | 时间缩放系数 [0.0, 10.0] |\n| `SystemStatus` | `string` | `\"Running\"` / `\"Paused\"` / `\"Stopped\"` |\n| `IsUpdateThreadAlive` | `bool` | 更新线程是否健康 |\n| `IsFixedUpdateThreadAlive` | `bool` | 固定更新线程是否健康 |",
               "AutoHeight": true,
@@ -3538,19 +3563,19 @@
               "EmbeddedCodeAutoHeight": true,
               "EmbeddedCodeMaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "374",
+              "$id": "377",
               "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
               "Text": "FrameEventArgs",
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             },
             {
-              "$id": "375",
+              "$id": "378",
               "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
               "Text": "| 属性 | 类型 | 描述 |\r\n|----------|------|-------------|\r\n| `DeltaTime` | `double` | 自上一帧以来的时间（毫秒），已按 `TimeScale` 缩放 |\r\n| `UnscaledDeltaTime` | `double` | 自上一帧以来的原始时间（未缩放） |\r\n| `TotalTime` | `long` | 总托管时间（毫秒） |\r\n| `FrameCount` | `long` | 此通道的总帧数 |",
               "AutoHeight": true,
@@ -3558,22 +3583,22 @@
               "EmbeddedCodeAutoHeight": true,
               "EmbeddedCodeMaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "362"
+                "$ref": "365"
               }
             }
           ],
           "Nodes": [],
           "Title": "帧循环",
           "Parent": {
-            "$ref": "331"
+            "$ref": "334"
           }
         },
         {
-          "$id": "376",
+          "$id": "379",
           "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
           "Children": [
             {
-              "$id": "377",
+              "$id": "380",
               "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
               "Text": "> **程序集**：`VeloxDev.Core` + 平台适配器  \n> **命名空间**：`VeloxDev.TransitionSystem`、`VeloxDev.TransitionSystem.Abstractions`  \n> **目标框架**：netstandard2.0 及更高版本 +，平台适配器各不相同\r\n\r\n---\r\n\r\n## 概述\r\n\r\n过渡系统提供了一个与框架无关、支持属性插值的动画引擎。  \n该架构将关注点分离为：\r\n\r\n```\r\nTransitionEffect  ─► 定义定时、帧率（FPS）、循环、缓动及生命周期事件\r\nIFrameState       ─► 存储目标属性值和插值器\r\nIFrameInterpolator─► 将 IFrameState 转换为 IFrameSequence（帧数据）\r\nIFrameSequence    ─► 逐帧将动画应用到目标对象\r\nITransitionInterpreter ─► 驱动帧循环（定时、取消）\r\nITransitionScheduler   ─► 管理互斥性与任务生命周期\r\nIUIThreadInspector     ─► 抽象 UI 线程封送处理（平台特定）\r\n```\r\n\r\n平台适配器（Avalonia、WPF、WinForms、MAUI、WinUI）提供了平台特定类型的具象实现。\r\n\r\n---\r\n\r\n## 1. `ITransitionEffectCore` — 动画效果描述符\r\n\r\n```csharp\r\npublic interface ITransitionEffectCore\r\n```\r\n\r\n### 属性\r\n\r\n| 属性 | 类型 | 默认值 | 描述 |\n|----------|------|---------|-------------|\n| `FPS` | `int` | 60 | 每秒帧数 |\n| `Duration` | `TimeSpan` | `0ms` | 动画总持续时间 |\n| `IsAutoReverse` | `bool` | false | 完成后是否反向播放 |\n| `LoopTime` | `int` | 0 | 循环次数（0 = 播放一次） |\n| `Ease` | `IEaseCalculator` | `Eases.Default` | 缓动函数 |\r\n\r\n### 事件\r\n\r\n所有事件均携带 `TransitionEventArgs`：\r\n\r\n| 事件 | 触发时机 |\n|------|----------|\n| `Awaked` | 在任何帧运行之前（首次更新） |\n| `Start` | 在应用第一帧时 |\n| `Update` | 每次帧更新时 |\n| `LateUpdate` | 每次帧更新之后 |\n| `Canceled` | 被外部取消时 |\n| `Completed` | 动画正常完成时 |\n| `Finally` | 总是触发（无论被取消还是正常完成） |\r\n\r\n### 调用方法\r\n\r\n```csharp\r\nvoid InvokeAwake(object sender, TransitionEventArgs e)\r\nvoid InvokeStart(object sender, TransitionEventArgs e)\r\nvoid InvokeUpdate(object sender, TransitionEventArgs e)\r\nvoid InvokeLateUpdate(object sender, TransitionEventArgs e)\r\nvoid InvokeCompleted(object sender, TransitionEventArgs e)\r\nvoid InvokeCancled(object sender, TransitionEventArgs e)\r\nvoid InvokeFinally(object sender, TransitionEventArgs e)\r\nITransitionEffectCore Clone()\r\n```\r\n\r\n---\r\n\r\n## 2. `ITransitionEffect<TPriorityCore>` — 平台类型效果\r\n\r\n**继承自**: `ITransitionEffectCore`\r\n\r\n```csharp\npublic interface ITransitionEffect<TPriorityCore> : ITransitionEffectCore\n{\n    TPriorityCore Priority { get; set; }\n    new ITransitionEffect<TPriorityCore> Clone();\n}\n```\r\n\r\n`TPriorityCore` 是平台的调度器优先级类型（例如，WPF/Avalonia 中的 `DispatcherPriority`）。\r\n\r\n**具体基类**：`TransitionEffectCore<TPriorityCore>`（非泛型形式为 `TransitionEffectCore`）。  \n**平台具体实现**：各适配器项目中的 `TransitionEffect`。\r\n\r\n---\r\n\r\n## 3. `TransitionEffectCore` — 基础实现（可重写）\r\n\r\n```csharp\r\nclass TransitionEffectCore : ITransitionEffectCore\r\n```\r\n\r\n所有属性和事件订阅均为 `virtual`。重写以自定义行为。\r\n\r\n**平台预构建效果**（在适配器包中）：\r\n\r\n```csharp\r\n// 示例（Avalonia）：\r\nTransitionEffects.Empty  — 持续时间 = 0\r\nTransitionEffects.Theme  — 持续时间 = 0.46 秒\r\nTransitionEffects.Hover  — 持续时间 = 0.32 秒\r\n```\r\n\r\n---\r\n\r\n## 4. `IEaseCalculator` — 缓动函数\r\n\r\n```csharp\npublic interface IEaseCalculator\n{\n    double Ease(double t);   // t ∈ [0.0, 1.0] → 经缓动处理的 t\n}\n```\r\n\r\n### `Eases` 静态工厂\r\n\r\n访问内置缓动函数：\r\n\r\n```csharp\r\nEases.Default          // 线性（t → t）\n\nEases.Sine.In / Out / InOut\nEases.Quad.In / Out / InOut\nEases.Cubic.In / Out / InOut\nEases.Quart.In / Out / InOut\nEases.Quint.In / Out / InOut\nEases.Expo.In / Out / InOut\nEases.Circ.In / Out / InOut\nEases.Back.In / Out / InOut\nEases.Elastic.In / Out / InOut\nEases.Bounce.In / Out / InOut\n```\r\n\r\n---\r\n\r\n## 5. `IFrameState` — 属性目标状态\r\n\r\n```csharp\r\npublic interface IFrameState\r\n```\r\n\r\n存储动画目标的所需属性值和可选的插值器。\r\n\r\n### 字典（只读）\r\n\r\n| 属性 | 类型 | 描述 |\n|----------|------|-------------|\n| `Values` | `ConcurrentDictionary<ITransitionProperty, object?>` | 目标值 |\n| `Interpolators` | `ConcurrentDictionary<ITransitionProperty, IValueInterpolator>` | 每个属性的插值器 |\n| `Options` | `ConcurrentDictionary<ITransitionProperty, object?>` | 每个属性的选项 |\r\n\r\n### 通用访问器方法（强类型、基于 Expression）\r\n\r\n```csharp\r\nvoid SetValue<TSource, TValue>(Expression<Func<TSource, TValue>> expression, TValue? value)\r\nvoid SetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, IValueInterpolator interpolator)\r\nvoid SetOptions<TSource, TValue>(Expression<Func<TSource, TValue>> expression, object? options)\r\nbool TryGetValue<TSource, TValue>(Expression<Func<TSource, TValue>> expression, out TValue? value)\r\nbool TryGetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, out IValueInterpolator? interpolator)\r\n```\r\n\r\n### 非泛型访问器\r\n\r\n```csharp\r\nvoid SetValue(ITransitionProperty property, object? value)\r\nvoid SetInterpolator(ITransitionProperty property, IValueInterpolator interpolator)\r\nvoid SetOptions(ITransitionProperty property, object? options)\r\nbool TryGetValue(ITransitionProperty property, out object? value)\r\nbool TryGetInterpolator(ITransitionProperty property, out IValueInterpolator? interpolator)\r\nbool TryGetOptions(ITransitionProperty property, out object? options)\r\n\r\n// 也提供 PropertyInfo 重载：\r\nvoid SetValue(PropertyInfo propertyInfo, object? value)\r\nvoid SetInterpolator(PropertyInfo propertyInfo, IValueInterpolator interpolator)\r\nbool TryGetValue(PropertyInfo propertyInfo, out object? value)\r\nbool TryGetInterpolator(PropertyInfo propertyInfo, out IValueInterpolator? interpolator)\r\n\r\nIFrameState Clone()\r\n```\r\n\r\n**具体基类**：`StateCore`（完全可重写）。平台具体实现：各适配器中的 `State`。\r\n\r\n---\r\n\r\n## 6. `ITransitionProperty` — 属性描述符\r\n\r\n```csharp\r\npublic interface ITransitionProperty\r\n{\r\n    string Path { get; } // 路径\r\n    Type PropertyType { get; } // 属性类型\r\n    PropertyInfo PropertyInfo { get; } // 属性信息\r\n    bool CanRead { get; } // 是否可读\r\n    bool CanWrite { get; } // 是否可写\r\n    object? GetValue(object target); // 获取值\r\n    bool SetValue(object target, object? value); // 设置值\r\n}\r\n```\r\n\r\n在 `IFrameState` 中用作字典键。通过 `TransitionProperty.TryCreate(expression, out property)` 创建。\r\n\r\n---\r\n\r\n## 7. `IValueInterpolator` — 每属性插值器\r\n\r\n```csharp\r\npublic interface IValueInterpolator\r\n{\r\n    List<object?> Interpolate(object? start, object? end, int steps, object? options = null);\r\n}\r\n```\r\n\r\n返回一个列表，其中包含 `steps` 个介于 `start` 和 `end` 之间的中间值。\r\n\r\n还可作为 `IInterpolable`（契约相同）使用，适用于可自行插值的对象。\r\n\r\n### 内置插值器（VeloxDev.Core）\r\n\r\n| 类 | 类型 |\n|-------|------|\n| `IntInterpolator` | `int` |\n| `LongInterpolator` | `long` |\n| `FloatInterpolator` | `float` |\n| `DoubleInterpolator` | `double` |\n| `ColorInterpolator` | `System.Drawing.Color` |\n| `PointInterpolator` | `System.Drawing.Point` |\n| `PointFInterpolator` | `System.Drawing.PointF` |\n| `SizeInterpolator` | `System.Drawing.Size` |\n| `SizeFInterpolator` | `System.Drawing.SizeF` |\n| `RectangleInterpolator` | `System.Drawing.Rectangle` |\n| `RectangleFInterpolator` | `System.Drawing.RectangleF` |\n| `Vector2Interpolator` | `System.Numerics.Vector2` |\n| `Vector3Interpolator` | `System.Numerics.Vector3` |\n| `Vector4Interpolator` | `System.Numerics.Vector4` |\n| `QuaternionInterpolator` | `System.Numerics.Quaternion` |\r\n\r\n### 平台专用插值器\r\n\r\n**Avalonia** 适配器添加了：  \n`BoxShadowsInterpolator`, `BrushInterpolator`, `ColorInterpolator`, `CornerRadiusInterpolator`,  \n`GridLengthInterpolator`, `PixelPointInterpolator`, `PixelRectInterpolator`, `PixelSizeInterpolator`,  \n`PointInterpolator`, `RelativePointInterpolator`, `RelativeRectInterpolator`, `SizeInterpolator`,  \n`ThicknessInterpolator`, `TransformInterpolator`\r\n\r\n**WPF** 适配器添加了：  \n`BrushInterpolator`、`ColorInterpolator`、`CornerRadiusInterpolator`、`DropShadowEffectInterpolator`、  \n`Point3DInterpolator`、`PointInterpolator`、`RectInterpolator`、`SizeInterpolator`、  \n`ThicknessInterpolator`、`TransformInterpolator`、`Vector3DInterpolator`、`VectorInterpolator`\r\n\r\n**WinForms** 适配器添加：  \n`PaddingInterpolator`\r\n\r\n---\r\n\r\n## 8. `IFrameInterpolatorCore` / `IFrameInterpolator` — 快照转换器\r\n\r\n将 `IFrameState` 转换为预计算的 `IFrameSequence`。\r\n\r\n```csharp\r\npublic interface IFrameInterpolatorCore\r\n{\r\n    IFrameSequenceCore Interpolate(\r\n        object target,\r\n        IFrameState state,\r\n        ITransitionEffectCore effect,\r\n        bool isUIAccess,\r\n        IUIThreadInspectorCore inspector);\r\n}\r\n```\r\n\r\n通用变体：\r\n\r\n```csharp\npublic interface IFrameInterpolator<TPriorityCore> : IFrameInterpolatorCore\n{\n    IFrameSequence<TPriorityCore> Interpolate(\n        object target,\n        IFrameState state,\n        ITransitionEffect<TPriorityCore> effect,\n        bool isUIAccess,\n        IUIThreadInspector<TPriorityCore> inspector);\n}\n```\r\n\r\n---\r\n\r\n## 9. `IFrameSequenceCore` / `IFrameSequence` — 帧数据\r\n\r\n保存插值帧并将其应用到目标上。\r\n\r\n```csharp\npublic interface IFrameSequenceCore\n{\n    int Count { get; }\n    void SetValues(object target, int frameIndex);\n    void Update(object target, int frameIndex, bool isUIAccess, object? priority = default);\n    void AddPropertyInterpolations(ITransitionProperty property, List<object?> objects);\n    void SetCount(int count);\n}\n```\r\n\r\n泛型变体添加：\r\n\r\n```csharp\r\nvoid Update(object target, int frameIndex, bool isUIAccess, TPriorityCore priority);\r\n```\r\n\r\n---\r\n\r\n## 10. `IUIThreadInspectorCore` — UI 线程抽象\r\n\r\n```csharp\r\npublic interface IUIThreadInspectorCore\r\n{\r\n    bool IsAppAlive();\r\n    bool IsUIThread();\r\n    void ProtectedInvoke(bool isUIThread, Action action, object? priority = default);\r\n    object? ProtectedGetValue(bool isUIThread, object target, ITransitionProperty property);\r\n    List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate);\r\n}\r\n```\r\n\r\n平台特定变体：\r\n\r\n```csharp\r\ninterface IUIThreadInspector : IUIThreadInspectorCore\r\n{\r\n    void ProtectedInvoke(bool isUIThread, Action action);\r\n}\r\n\r\ninterface IUIThreadInspector<TPriorityCore> : IUIThreadInspectorCore\r\n{\r\n    void ProtectedInvoke(bool isUIThread, Action action, TPriorityCore priority);\r\n}\r\n```\r\n\r\n---\r\n\r\n## 11. `ITransitionSchedulerCore` / `ITransitionScheduler` — 任务管理器\r\n\r\n```csharp\r\npublic interface ITransitionSchedulerCore\r\n{\r\n    Task Execute(IFrameInterpolatorCore interpolator, IFrameState state,\r\n                 ITransitionEffectCore effect, CancellationTokenSource? externCts = default);\r\n    void Exit();\r\n}\r\n\r\npublic interface ITransitionScheduler<TPriorityCore> : ITransitionSchedulerCore\r\n{\r\n    Task Execute(IFrameInterpolator<TPriorityCore> interpolator, IFrameState state,\r\n                 ITransitionEffect<TPriorityCore> effect, CancellationTokenSource? externCts = default);\r\n}\r\n```\r\n\r\n---\r\n\r\n## 12. `ITransitionInterpreterCore` — 帧循环驱动器\r\n\r\n```csharp\npublic interface ITransitionInterpreterCore : IDisposable\n{\n    TransitionEventArgs Args { get; set; }\n    Task Execute(object target, IFrameSequenceCore frameSequence,\n                 ITransitionEffectCore effect, bool isUIAccess, CancellationTokenSource cts);\n    void Exit();\n}\n```\r\n\r\n---\r\n\r\n## 13. `TransitionCore` / `Transition<T>` — 高级别流式 API\r\n\r\n### 静态退出\r\n\r\n```csharp\r\nTransitionCore.Exit<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)\r\n```\r\n在 `target` 上停止运行动画。`IncludeMutual` 停止互斥调度器。`IncludeNoMutual` 停止并行调度器。\r\n\r\n### `Transition<T>.StateSnapshot` — 流畅构建器\r\n\r\n平台适配器公开一个具体的 `Transition<T>.StateSnapshot`。核心流程：\r\n\r\n```csharp\n// 1. 捕获当前状态\nvar snapshot = myControl.Snapshot(c => c.Opacity, c => c.Width);\n\n// 2. 配置目标状态\nsnapshot\n    .Set(c => c.Opacity, 1.0)\n    .Set(c => c.Width, 200)\n    .Effect(effect => { effect.Duration = TimeSpan.FromSeconds(0.3); effect.Ease = Eases.Cubic.Out; })\n    .Execute(myControl);\n```\r\n\r\n**扩展方法**（位于 `TransitionCoreEx` 中）：\r\n\r\n```csharp\r\nT Await<T>(this T snapshot, TimeSpan timeSpan)          // 在下一个片段之前插入延迟\r\nT Then<T>(this T snapshot)                               // 链接一个新快照片段\r\nT AwaitThen<T>(this T snapshot, TimeSpan timeSpan)      // 延迟 + 链接\r\nTSnapshot Interpolator<TSnapshot,TTarget,TValue>(\r\n    this TSnapshot snapshot,\r\n    Expression<Func<TTarget, TValue>> property,\r\n    IValueInterpolator interpolator)                     // 为单个属性重写插值器\r\nvoid Execute<T>(this T snapshot, object target, bool CanMutualTask = true)\r\nvoid Execute<T>(this T snapshot, bool CanMutualTask = true)\r\n```\r\n\r\n**平台适配器** `TransitionEx` 扩展方法：\r\n\r\n```csharp\r\n// Avalonia / WPF:\r\nTransition<T>.StateSnapshot Snapshot<T>(this T target,\r\n    params Expression<Func<T, object?>>[] expressions)          // 捕获特定属性\r\nTransition<T>.StateSnapshot SnapshotAll<T>(this T target,\r\n    params Expression<Func<T, object?>>[] extraExpressions)     // 捕获所有可插值属性\r\nTransition<T>.StateSnapshot SnapshotExcept<T>(this T target,\r\n    params Expression<Func<T, object?>>[] excludedExpressions)  // 捕获除所列属性外的所有属性\r\n```\r\n\r\n---\r\n\r\n## 14. `TransitionSnapshotHelper` — 快照工具\r\n\r\n```csharp\r\nstatic class TransitionSnapshotHelper\r\n```\r\n\r\n| 方法 | 描述 |\n|--------|-------------|\n| `CaptureSpecific(object target, IFrameState state, expressions)` | 从目标对象读取所列属性到状态中 |\n| `CaptureAll(object target, IFrameState state, Predicate<Type> filter, extraExpressions)` | 读取所有可通过类型筛选器的可读/可写属性 |\n| `CaptureAllExcept(object target, IFrameState state, Predicate<Type> filter, excludedExpressions)` | 功能相同，但跳过所列属性 |\r\n",
               "AutoHeight": true,
@@ -3581,22 +3606,22 @@
               "EmbeddedCodeAutoHeight": true,
               "EmbeddedCodeMaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "376"
+                "$ref": "379"
               }
             }
           ],
           "Nodes": [],
           "Title": "动画",
           "Parent": {
-            "$ref": "331"
+            "$ref": "334"
           }
         },
         {
-          "$id": "378",
+          "$id": "381",
           "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
           "Children": [
             {
-              "$id": "379",
+              "$id": "382",
               "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
               "Text": "> **程序集**：`VeloxDev.Core`  \n> **命名空间**：`VeloxDev.WorkflowSystem`  \n> **目标框架**：netstandard 2.0+\r\n\r\n---\r\n\r\n## 概述\r\n\r\n工作流系统（Workflow System）是 VeloxDev 的核心模块。它提供了一种基于节点的可视化编程模型，该模型由四个主要的 ViewModel 组件构成：\r\n\r\n| 组件 | 接口 | 默认实现 |\n|------|------|----------|\n| 树（工作区） | `IWorkflowTreeViewModel` | `TreeViewModelBase` |\n| 节点 | `IWorkflowNodeViewModel` | `NodeViewModelBase` |\n| 插槽（端口） | `IWorkflowSlotViewModel` | `SlotViewModelBase` |\n| 连接线（连接） | `IWorkflowLinkViewModel` | `LinkViewModelBase` |\r\n\r\n每个组件都与一个 **Helper** 接口配对，该接口封装了其内部逻辑，从而可通过 `SetHelper(...)` 实现完全替换。\r\n\r\n---\r\n\r\n## 1. `IWorkflowViewModel` — 基础接口\r\n\r\n**命名空间**: `VeloxDev.WorkflowSystem`  \n**继承自**: `INotifyPropertyChanging`, `INotifyPropertyChanged`\r\n\r\n所有工作流组件都实现此接口。\r\n\r\n```\r\nIWorkflowViewModel\r\n├── void InitializeWorkflow()\r\n│       初始化该组件。由构造函数自动调用。\r\n├── void OnPropertyChanging(string propertyName)\r\n│       触发 INotifyPropertyChanging，以便在属性更改前通知 UI。\r\n├── void OnPropertyChanged(string propertyName)\r\n│       触发 INotifyPropertyChanged，以便在属性更改后通知 UI。\r\n└── IVeloxCommand CloseCommand { get; }\r\n        终止此组件上所有正在运行的任务。参数：null。\r\n```\r\n\r\n---\r\n\r\n## 2. `IWorkflowIdentifiable` — 运行时 ID 接口\r\n\r\n```\r\nIWorkflowIdentifiable\r\n└── string RuntimeId { get; }\r\n        在组件创建时分配的全局唯一标识符。在集合发生变更时保持稳定。\r\n```\r\n\r\n**用法**：由全部四个基类（`TreeViewModelBase`、`NodeViewModelBase`、`SlotViewModelBase`、`LinkViewModelBase`）实现。\r\n\r\n---\r\n\r\n## 3. `IWorkflowTreeViewModel` — 工作区接口\r\n\r\n**继承自**: `IWorkflowViewModel`\r\n\r\n在一个工作区中维护所有节点（Nodes）、链接（Links）以及连接映射（connection map）。\r\n\r\n### 属性\r\n\r\n| 属性 | 类型 | 描述 |\n|----------|------|-------------|\n| `Layout` | `CanvasLayout` | 画布尺寸和偏移上下文 |\n| `VirtualLink` | `IWorkflowLinkViewModel` | 仅在连接构建过程中显示的临时链接 |\n| `Nodes` | `ObservableCollection<IWorkflowNodeViewModel>` | 所有节点组件 |\n| `Links` | `ObservableCollection<IWorkflowLinkViewModel>` | 所有链接组件 |\n| `LinksMap` | `Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>>` | 插槽到插槽的连接映射 |\r\n\r\n### 命令（全部实现 `IVeloxCommand`）\r\n\r\n| 命令 | 参数类型 | 描述 |\n|---------|---------------|-------------|\n| `CreateNodeCommand` | `IWorkflowNodeViewModel` | 向工作区添加一个节点 |\n| `SetPointerCommand` | `Anchor` | 更新虚拟连接线的接收端点（指针跟踪） |\n| `ResetVirtualLinkCommand` | null | 将虚拟连接线重置为隐藏状态 |\n| `SendConnectionCommand` | `IWorkflowSlotViewModel` | 从指定插槽发起连接 |\n| `ReceiveConnectionCommand` | `IWorkflowSlotViewModel` | 完成到指定插槽的连接 |\n| `SubmitCommand` | `IWorkflowActionPair` | 将可撤销的操作对提交至历史记录栈 |\n| `RedoCommand` | null | 重做上一次被撤销的操作 |\n| `UndoCommand` | null | 撤销上一次提交的操作 |\n| `CloseCommand` | null | （继承自父类）关闭所有任务 |\r\n\r\n### 辅助访问\r\n\r\n```csharp\r\nIWorkflowTreeViewModelHelper 获取帮助器();\r\nvoid 设置帮助器(IWorkflowTreeViewModelHelper helper);\r\n```\r\n\r\n---\r\n\r\n## 4. `IWorkflowTreeViewModelHelper` — 树逻辑接口\r\n\r\n实现树的内部逻辑。通过 `SetHelper(...)` 替换以自定义行为。\r\n\r\n### 事件\r\n\r\n| 事件 | 参数 | 描述 |\n|------|------|------|\n| `NodeAdded` | `IWorkflowNodeViewModel` | 当节点被添加时触发 |\n| `NodeRemoved` | `IWorkflowNodeViewModel` | 当节点被移除时触发 |\n| `LinkAdded` | `IWorkflowLinkViewModel` | 当连接被添加时触发 |\n| `LinkRemoved` | `IWorkflowLinkViewModel` | 当连接被移除时触发 |\n| `VisibleItemAdded` | `IWorkflowViewModel` | 当某项进入可见集合时触发 |\n| `VisibleItemRemoved` | `IWorkflowViewModel` | 当某项离开可见集合时触发 |\r\n\r\n### 属性\r\n\r\n| 属性 | 类型 | 描述 |\n|----------|------|-------------|\n| `VisibleItems` | `ObservableCollection<IWorkflowViewModel>` | 当前位于视口内的项（用于虚拟化） |\n| `Viewport` | `Viewport` | 当前可见区域 |\r\n\r\n### 方法\r\n\r\n| 方法 | 描述 |\n|--------|-------------|\n| `void Install(IWorkflowTreeViewModel tree)` | 将辅助工具绑定到树实例 |\n| `void Uninstall(IWorkflowTreeViewModel tree)` | 将辅助工具从树实例解绑 |\n| `void CreateNode(IWorkflowNodeViewModel node)` | 添加节点并在树中注册该节点 |\n| `IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)` | 在两个插槽之间创建并注册一条连接线 |\n| `void SetPointer(Anchor anchor)` | 更新虚拟连接线的接收端锚点 |\n| `bool ValidateConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)` | 若允许建立连接则返回 true |\n| `void SendConnection(IWorkflowSlotViewModel slot)` | 从发送端开始连接跟踪 |\n| `void ReceiveConnection(IWorkflowSlotViewModel slot)` | 完成至接收端的连接 |\n| `void ResetVirtualLink()` | 隐藏并重置虚拟连接线 |\n| `void Virtualize(Viewport viewport)` | 根据新视口更新 `VisibleItems` |\n| `void Submit(IWorkflowActionPair actionPair)` | 记录一个可撤销的操作 |\n| `void Redo()` | 重做上一次被撤销的操作 |\n| `void Undo()` | 撤销上一次提交的操作 |\r\n\r\n*还继承 `IWorkflowHelper`：`Closing()`、`Task CloseAsync()`、`Closed()`*\r\n\r\n---\r\n\r\n## 5. `IWorkflowNodeViewModel` — 节点接口\r\n\r\n**继承自**: `IWorkflowViewModel`\r\n\r\n维护节点的空间数据、插槽集合以及广播行为。\r\n\r\n### 属性\r\n\r\n| 属性 | 类型 | 描述 |\n|------|------|------|\n| `Parent` | `IWorkflowTreeViewModel?` | 所属树 |\n| `Anchor` | `Anchor` | 画布位置（左、上、图层） |\n| `Size` | `Size` | 节点的宽 × 高 |\n| `Slots` | `ObservableCollection<IWorkflowSlotViewModel>` | 该节点上的所有端口 |\r\n\r\n### 命令\r\n\r\n| 命令 | 参数类型 | 描述 |\n|---------|---------------|-------------|\n| `MoveCommand` | `Offset` | 按相对偏移量移动节点 |\n| `SetAnchorCommand` | `Anchor` | 设置节点的绝对位置 |\n| `SetSizeCommand` | `Size` | 设置节点的大小 |\n| `CreateSlotCommand` | `IWorkflowSlotViewModel` | 向该节点添加一个插槽 |\n| `DeleteCommand` | null | 删除该节点、其插槽及关联的连接线 |\n| `WorkCommand` | null/any | 执行该节点的工作逻辑 |\n| `BroadcastCommand` | null/any | 将数据向前传播至相连的节点 |\n| `ReverseBroadcastCommand` | null/any | 将数据向后传播至相连的节点 |\n| `CloseCommand` | null | （继承自父类）关闭所有任务 |\r\n\r\n### 辅助访问\r\n\r\n```csharp\r\nIWorkflowNodeViewModelHelper 获取帮助器();\r\nvoid 设置帮助器(IWorkflowNodeViewModelHelper helper);\r\n```\r\n\r\n---\r\n\r\n## 6. `IWorkflowNodeViewModelHelper` — 节点逻辑接口\r\n\r\n### 事件\r\n\r\n| 事件 | 参数 | 描述 |\n|------|------|------|\n| `SlotAdded` | `IWorkflowSlotViewModel` | 添加插槽时触发 |\n| `SlotRemoved` | `IWorkflowSlotViewModel` | 移除插槽时触发 |\r\n\r\n### 方法\r\n\r\n| 方法 | 描述 |\n|--------|-------------|\n| `void Install(IWorkflowNodeViewModel node)` | 将辅助工具绑定到节点 |\n| `void Uninstall(IWorkflowNodeViewModel node)` | 解除辅助工具的绑定 |\n| `void CreateSlot(IWorkflowSlotViewModel slot)` | 添加一个插槽并设置其父级 |\n| `void Move(Offset offset)` | 按偏移量移动节点 |\n| `void SetAnchor(Anchor newValue)` | 直接设置节点的锚点 |\n| `void SetSize(Size newValue)` | 直接设置节点的尺寸 |\n| `Task WorkAsync(object? parameter, CancellationToken ct)` | 自定义工作逻辑（可通过辅助工具重写） |\n| `Task BroadcastAsync(object? parameter, CancellationToken ct)` | 转发广播逻辑 |\n| `Task ReverseBroadcastAsync(object? parameter, CancellationToken ct)` | 反向广播逻辑 |\n| `Task<bool> ValidateBroadcastAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, object? parameter, CancellationToken ct)` | 验证广播是否允许跨越某条连接线 |\n| `void Delete()` | 删除该节点、其所有插槽及关联的连接线 |\r\n\r\n---\r\n\r\n## 7. `IWorkflowSlotViewModel` — 插槽（端口）接口\r\n\r\n**继承自**: `IWorkflowViewModel`\r\n\r\n管理节点之间的连接。\r\n\r\n### 属性\r\n\r\n| 属性 | 类型 | 描述 |\n|----------|------|-------------|\n| `Targets` | `ObservableCollection<IWorkflowSlotViewModel>` | 此插槽所连接的目标插槽 |\n| `Sources` | `ObservableCollection<IWorkflowSlotViewModel>` | 连接到此插槽的源插槽 |\n| `Parent` | `IWorkflowNodeViewModel?` | 所属节点 |\n| `Channel` | `SlotChannel` | 连接容量（标志枚举） |\n| `State` | `SlotState` | 当前连接状态（标志枚举） |\n| `Anchor` | `Anchor` | 此插槽在画布上的位置 |\r\n\r\n### 命令\r\n\r\n| 命令 | 参数类型 | 描述 |\n|---------|---------------|-------------|\n| `SetChannelCommand` | `SlotChannel` | 更改插槽的通道类型 |\n| `SendConnectionCommand` | null | 作为连接发送方 |\n| `ReceiveConnectionCommand` | null | 作为连接接收方 |\n| `DeleteCommand` | null | 删除此插槽及其所有连接 |\n| `CloseCommand` | null | （继承自父类）关闭所有任务 |\r\n\r\n### 辅助访问\r\n\r\n```csharp\r\nIWorkflowSlotViewModelHelper 获取帮助器();\r\nvoid 设置帮助器(IWorkflowSlotViewModelHelper helper);\r\n```\r\n\r\n---\r\n\r\n## 8. `IWorkflowSlotViewModelHelper` — 插槽逻辑接口\r\n\r\n### 事件\r\n\r\n| 事件 | 参数 | 描述 |\n|------|------|------|\n| `TargetAdded` | `IWorkflowSlotViewModel` | 已添加目标插槽 |\n| `TargetRemoved` | `IWorkflowSlotViewModel` | 已移除目标插槽 |\n| `SourceAdded` | `IWorkflowSlotViewModel` | 已添加源插槽 |\n| `SourceRemoved` | `IWorkflowSlotViewModel` | 已移除源插槽 |\r\n\r\n### 方法\r\n\r\n| 方法 | 描述 |\n|--------|-------------|\n| `void Install(IWorkflowSlotViewModel slot)` | 绑定辅助对象 |\n| `void Uninstall(IWorkflowSlotViewModel slot)` | 解除辅助对象的绑定 |\n| `void SetChannel(SlotChannel channel)` | 设置通道并清理无效连接 |\n| `void UpdateState()` | 重新计算并设置 `State` |\n| `void SendConnection()` | 告知父树：该插槽为发送方 |\n| `void ReceiveConnection()` | 告知父树：该插槽为接收方 |\n| `void Delete()` | 删除该插槽及所有关联的连接 |\r\n\r\n---\r\n\r\n## 9. `IWorkflowLinkViewModel` — 连接（链接）接口\r\n\r\n**继承自**: `IWorkflowViewModel`\r\n\r\n表示两个插槽之间的有向连接。\r\n\r\n### 属性\r\n\r\n| 属性 | 类型 | 描述 |\n|----------|------|-------------|\n| `Sender` | `IWorkflowSlotViewModel` | 源插槽 |\n| `Receiver` | `IWorkflowSlotViewModel` | 目标插槽 |\n| `IsVisible` | `bool` | 链接是否渲染 |\r\n\r\n### 命令\r\n\r\n| 命令 | 参数类型 | 描述 |\n|---------|---------------|-------------|\n| `DeleteCommand` | null | 删除链接并更新两个插槽 |\n| `CloseCommand` | null | （继承的）关闭所有任务 |\r\n\r\n### 辅助访问\r\n\r\n```csharp\r\nIWorkflowLinkViewModelHelper 获取帮助器();\r\nvoid 设置帮助器(IWorkflowLinkViewModelHelper helper);\r\n```\r\n\r\n---\r\n\r\n## 10. `IWorkflowLinkViewModelHelper` — 链接逻辑接口\r\n\r\n| 方法 | 描述 |\n|--------|-------------|\n| `void Install(IWorkflowLinkViewModel link)` | 绑定辅助程序 |\n| `void Uninstall(IWorkflowLinkViewModel link)` | 解除辅助程序的绑定 |\n| `void Delete()` | 从树中移除该连接并更新插槽状态 |\r\n\r\n---\r\n\r\n## 11. `IWorkflowHelper` — 通用生命周期接口\r\n\r\n由全部四种 Helper 类型实现。\r\n\r\n```csharp\npublic interface IWorkflowHelper\n{\n    void Closing();       // 在异步关闭开始前调用；在此处锁定命令\n    Task CloseAsync();    // 可等待的关机操作；取消/清除正在运行的任务\n    void Closed();        // 在关闭完成后调用；在此处解锁命令\n}\n```\r\n\r\n---\r\n\r\n## 12. `IWorkflowActionPair` — 撤销/重做配对\r\n\r\n```csharp\r\npublic interface IWorkflowActionPair\r\n{\r\n    Action 重做 { get; }\r\n    Action 撤销 { get; }\r\n}\r\n```\r\n\r\n使用 `WorkflowActionPair(Action redo, Action undo)` 作为具体实现。  \n通过 `tree.SubmitCommand.Execute(pair)` 或 `tree.GetHelper().Submit(pair)` 提交。\r\n\r\n---\r\n\r\n## 13. 空间界面\r\n\r\n### `ISpatialMap<T>`（其中 `T : class, ISpatialBoundsProvider`）\r\n\r\n| 方法 | 描述 |\n|--------|-------------|\n| `void Insert(T item)` | 将项添加到空间索引中 |\n| `void Remove(T item)` | 从空间索引中移除项 |\n| `IEnumerable<T> Query(Viewport viewport)` | 返回与视口相交的项 |\n| `void Clear()` | 清空所有项 |\r\n\r\n### `ISpatialBoundsProvider`\r\n\r\n**继承自**: `INotifyPropertyChanged`\r\n\r\n```csharp\r\nViewport Bounds { get; }   // 当前画布坐标系中的边界框\r\n```\r\n\r\n实现必须在边界发生变化时引发 `PropertyChanged(\"Bounds\")`。\r\n\r\n---\r\n\r\n## 14. 枚举\r\n\r\n### `SlotChannel`（标志）\r\n\r\n| 值 | 整数 | 描述 |\n|-------|-----|-------------|\n| `None` | 0 | 不允许任何连接 |\n| `OneTarget` | 1 | 最多 1 个传出连接 |\n| `OneSource` | 2 | 最多 1 个传入连接 |\n| `OneBoth` | 3 | `OneTarget` \\| `OneSource` |\n| `MultipleTargets` | 4 | 传出连接数量无限制 |\n| `MultipleSources` | 8 | 传入连接数量无限制 |\n| `MultipleBoth` | 12 | `MultipleTargets` \\| `MultipleSources` |\r\n\r\n### `SlotState`（标志）\r\n\r\n| 值 | 整数 | 描述 |\n|-------|-----|-------------|\n| `StandBy` | 1 | 空闲状态，无活动连接 |\n| `PreviewSender` | 2 | 正在拖拽一条传出连接 |\n| `PreviewReceiver` | 4 | 正在拖拽一条传入连接 |\n| `Sender` | 8 | 已建立的传出连接 |\n| `Receiver` | 16 | 已建立的传入连接 |\r\n",
               "AutoHeight": true,
@@ -3604,14 +3629,14 @@
               "EmbeddedCodeAutoHeight": true,
               "EmbeddedCodeMaxHeightValue": 300.0,
               "Parent": {
-                "$ref": "378"
+                "$ref": "381"
               }
             }
           ],
           "Nodes": [],
           "Title": "工作流",
           "Parent": {
-            "$ref": "331"
+            "$ref": "334"
           }
         }
       ],
@@ -3621,49 +3646,49 @@
       }
     },
     {
-      "$id": "380",
+      "$id": "383",
       "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
       "Children": [
         {
-          "$id": "381",
+          "$id": "384",
           "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
           "Level": "1",
           "Text": "智能体",
           "Parent": {
-            "$ref": "380"
+            "$ref": "383"
           }
         },
         {
-          "$id": "382",
+          "$id": "385",
           "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
           "Text": "基于 MAF 提供的 Function Calling，仓库从C#对象出发，逐步提供智能体可用的工具，并最终发展到工作流系统等适合用智能体赋能的功能模块上，最终开发者只需使用自然语言标注代码中的成员，智能体便可在运行时动态理解、动态修改内存对象",
           "Parent": {
-            "$ref": "380"
+            "$ref": "383"
           }
         }
       ],
       "Nodes": [
         {
-          "$id": "383",
+          "$id": "386",
           "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
           "Children": [
             {
-              "$id": "384",
+              "$id": "387",
               "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
               "Level": "1",
               "Text": "基础能力",
               "Parent": {
-                "$ref": "383"
+                "$ref": "386"
               }
             }
           ],
           "Nodes": [
             {
-              "$id": "385",
+              "$id": "388",
               "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
               "Children": [
                 {
-                  "$id": "386",
+                  "$id": "389",
                   "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
                   "Text": "# VeloxDev Agent 基础能力总结\r\n\r\n## 核心定位\r\n- 定义Agent元数据表达方式\r\n- 提供多语言上下文描述能力\r\n- 提供反射发现能力\r\n- 提供属性、方法、命令的访问与执行能力\r\n- 将任意.NET对象包装为AI可调用的工具集\r\n\r\n## 核心模块\r\n### 元数据与语言体系\r\n- 位置：`Src/Core/VeloxDev.Core/AI/`\r\n- 核心类型：\r\n  - `AgentContextAttribute`：为类型、属性、方法等提供语义描述\r\n  - `AgentCommandParameterAttribute`：标记命令参数期望类型\r\n  - `AgentLanguages`：支持的语言枚举\r\n  - 作用：提供统一的描述语言，实现“可解释性”\r\n\r\n### 上下文读取\r\n- `AgentContextReader`：从代码中提取语义说明\r\n\r\n### 属性访问\r\n- `AgentPropertyAccessor`：\r\n  - 发现、读取、设置属性\r\n  - 批量设置属性\r\n  - 基础类型转换\r\n\r\n### 方法调用\r\n- `AgentMethodInvoker`：\r\n  - 发现公开方法并执行调用\r\n  - 处理重载匹配\r\n  - 参数类型转换\r\n  - 支持实例与静态方法\r\n\r\n### 命令发现与执行\r\n- `AgentCommandDiscoverer`：\r\n  - 发现对象上的`ICommand`属性\r\n  - 读取命令参数和描述\r\n  - 按名称执行命令\r\n  - 特别适合MVVM风格对象\r\n\r\n### 类型解析\r\n- `AgentTypeResolver`：在已加载程序集中解析.NET类型\r\n\r\n### 工具调用通知\r\n- `AgentToolCallEventArgs`：工具调用事件数据\r\n- `IAgentToolCallNotifier`：工具调用通知接口\r\n\r\n## 通用对象工具化\r\n- 位置：`Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs`\r\n- 核心类型：\r\n  - `AgentObjectToolkit`：将任意对象包装为一组`AITool`\r\n  - 可暴露的工具能力：\r\n    - 获取组件信息\r\n    - 列出/获取/设置属性\r\n    - 列出/执行命令\r\n    - 列出/调用方法\r\n    - 解析类型\r\n- 价值：\r\n  - 不要求特定框架或基类\r\n  - 统一反射能力为AI工具\r\n\r\n## 能力分层\r\n| 层级 | 内容 |\r\n|---|---|\r\n| 元数据层 | 描述性属性、语言支持 |\r\n| 发现层 | 上下文读取、属性/方法/命令发现 |\r\n| 执行层 | 属性设置、方法调用、命令执行 |\r\n| 工具层 | 对象包装、工具化 |\r\n\r\n## 特点\r\n- **通用性强**：面向任意.NET对象，不绑定特定框架\r\n- **低耦合**：元数据与执行逻辑分离\r\n- **易扩展**：支持扩展新工具包装器、描述器等\r\n\r\n## 适用场景\r\n- ViewModel Agent化\r\n- 通用组件调试\r\n- AI辅助对象检视\r\n- 反射工具系统构建\r\n- 多语言语义驱动Agent\r\n\r\n## 核心价值\r\n- 让代码结构可被Agent理解\r\n- 让对象能力可被Agent发现\r\n- 让运行时对象可被Agent安全调用\r\n- 让任意对象能被统一包装为AI工具集",
                   "AutoHeight": true,
@@ -3671,73 +3696,73 @@
                   "EmbeddedCodeAutoHeight": true,
                   "EmbeddedCodeMaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "385"
+                    "$ref": "388"
                   }
                 }
               ],
               "Nodes": [],
               "Title": "概述",
               "Parent": {
-                "$ref": "383"
+                "$ref": "386"
               }
             },
             {
-              "$id": "387",
+              "$id": "390",
               "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
               "Children": [
                 {
-                  "$id": "388",
+                  "$id": "391",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "将普通对象包装为Agent可操作的",
                   "Parent": {
-                    "$ref": "387"
+                    "$ref": "390"
                   }
                 },
                 {
-                  "$id": "389",
+                  "$id": "392",
                   "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                   "Code": "using Microsoft.Extensions.AI;\nusing OpenAI;\nusing System.ClientModel;\nusing VeloxDev.AI;\n\nvar vm = new TaskViewModel();\nvar tools = vm.AsAgentTools(AgentLanguages.Chinese);\n\nvar chatClient = new OpenAIClient(\n    new ApiKeyCredential(\"your-api-key\"))\n    .GetChatClient(\"gpt-4.1\")\n    .AsIChatClient();\n\nvar agent = chatClient.AsAIAgent(\n    instructions: \"You are an object operation assistant. You can read properties, call methods and execute commands.\",\n    tools: tools);",
                   "Language": "csharp",
                   "AutoHeight": false,
                   "MaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "387"
+                    "$ref": "390"
                   }
                 }
               ],
               "Nodes": [],
               "Title": "代码",
               "Parent": {
-                "$ref": "383"
+                "$ref": "386"
               }
             }
           ],
           "Title": "基础能力",
           "Parent": {
-            "$ref": "380"
+            "$ref": "383"
           }
         },
         {
-          "$id": "390",
+          "$id": "393",
           "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
           "Children": [
             {
-              "$id": "391",
+              "$id": "394",
               "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
               "Level": "1",
               "Text": "工作流",
               "Parent": {
-                "$ref": "390"
+                "$ref": "393"
               }
             }
           ],
           "Nodes": [
             {
-              "$id": "392",
+              "$id": "395",
               "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
               "Children": [
                 {
-                  "$id": "393",
+                  "$id": "396",
                   "$type": "VeloxDev.Docs.ViewModels.MarkdownProvider, VeloxDev.Docs",
                   "Text": "# VeloxDev Workflow 能力总结\r\n\r\n## 核心定位\r\n面向可视化工作流编辑场景，提供：\r\n- 工作流图数据模型\r\n- 节点布局与空间管理\r\n- 连接、广播、反向广播等运行行为\r\n- 可撤销/可重做的编辑历史\r\n- 动态节点、动态插槽与枚举插槽管理\r\n- 面向Agent的工作流查询、操作、分析与接管能力\r\n\r\n## 核心领域模型\r\n### 核心接口\r\n- `IWorkflowViewModel`：Workflow组件通用基接口\r\n- `IWorkflowTreeViewModel`：工作流树/画布根对象\r\n- `IWorkflowNodeViewModel`：工作流节点对象\r\n- `IWorkflowSlotViewModel`：工作流插槽对象\r\n- `IWorkflowLinkViewModel`：工作流连线对象\r\n- 辅助接口：提供行为驱动辅助\r\n\r\n### 核心数据类型\r\n- `Anchor`：节点位置与层级\r\n- `Offset`/`Size`/`Viewport`：空间信息\r\n- `WorkflowActionPair`：Undo/Redo动作对\r\n- `CellKey`/`CanvasLayout`：布局与网格\r\n\r\n### 默认实现模板\r\n- `TreeViewModelBase`：工作流树默认实现\r\n- `NodeViewModelBase`：节点默认实现\r\n- `SlotViewModelBase`/`LinkViewModelBase`：插槽与连线默认实现\r\n\r\n## 基本运行能力\r\n### Tree级能力\r\n- 维护节点集合`Nodes`、连线集合`Links`\r\n- 维护连接映射`LinksMap`\r\n- 创建节点、设置指针位置\r\n- 发起和接收连接建立\r\n- 支持撤销与重做\r\n\r\n### Node级能力\r\n- 维护节点`Anchor`、`Size`、`Slots`\r\n- 提供移动、设置位置/尺寸命令\r\n- 提供创建插槽、删除节点命令\r\n- 提供执行工作、广播、反向广播命令\r\n\r\n### Slot与Link能力\r\n- Slot：节点上的输入输出连接点\r\n- Link：两个Slot之间的实际连线\r\n- Tree通过`LinksMap`快速维护拓扑映射\r\n\r\n## 扩展机制\r\n### 标准扩展模块\r\n- `WorkflowTreeEx`/`WorkflowNodeEx`等：补充默认工作流组件的便利API\r\n\r\n### 模板辅助模块\r\n- `TreeHelper`/`NodeHelper`等：承载默认实现中的行为逻辑\r\n- 包括：节点创建、连线建立、删除逻辑、Undo/Redo提交\r\n\r\n### 空间与可视化支持\r\n- `WorkflowSpatialManager`：空间索引\r\n- `SpatialGridHashMap`：可视区域查询\r\n- 支持节点碰撞判断、边界计算\r\n\r\n## Agent操作支持\r\n### 入口与作用域\r\n- `AgentEx`：提供`AsAgentScope()`入口\r\n- `WorkflowAgentScope`：管理Agent作用域、上下文与资源\r\n- 支持自定义组件、工具、技能注册\r\n\r\n### 类型上下文能力\r\n- `AgentContextCollector`：为Workflow类型生成Agent可读的上下文文档\r\n- `AgentEmbeddedResources`：读取嵌入式Markdown技能与参考资料\r\n\r\n### 状态跟踪能力\r\n- `WorkflowStateTracker`：生成工作流快照并输出差异\r\n- 支持计算新增/删除/修改的节点和连线\r\n- 适合Agent在多轮对话中维护状态感知\r\n\r\n### 参数协议模型\r\n- `WorkflowProtocols.cs`：提供强类型协议对象\r\n- 包括：`MoveNodeProtocol`、`ConnectSlotsProtocol`、`CreateNodeProtocol`等\r\n- 使Workflow操作参数具备强类型表达能力\r\n\r\n## WorkflowAgentToolkit能力\r\n### 查询类能力\r\n- `ListNodes`/`GetNodeDetail`：查询节点信息\r\n- `ListConnections`/`GetFullTopology`：查询连接拓扑\r\n- `GetWorkflowSummary`/`GetComponentContext`：获取摘要与上下文\r\n\r\n### 变更类能力\r\n- `MoveNode`/`SetNodePosition`/`ResizeNode`：节点位置尺寸调整\r\n- `DeleteNode`/`CreateNode`：节点增删\r\n- `PatchNodeProperties`：属性批量修改\r\n\r\n### 连线管理能力\r\n- `ConnectSlots`/`DisconnectSlots`：连接建立与断开\r\n- `DisconnectAllFromNode`/`ReplaceConnection`：批量连接管理\r\n- `ConnectByProperty`：按属性连接\r\n\r\n### 执行类能力\r\n- `ExecuteWork`：执行节点工作\r\n- `BroadcastNode`/`ReverseBroadcastNode`：广播与反向广播\r\n- `ExecuteCommandOnNode`：执行节点命令\r\n- `BatchExecute`：批量执行\r\n\r\n### Slot集合与枚举插槽能力\r\n- `ListSlotProperties`：列出插槽属性\r\n- `AddSlotToCollection`/`RemoveSlotFromCollection`：动态插槽管理\r\n- `SetEnumSlotCollection`/`ConnectEnumSlot`：枚举插槽管理\r\n\r\n### 搜索、分析与布局能力\r\n- `FindNodes`/`SearchForward`/`SearchReverse`：拓扑搜索\r\n- `FindPath`/`IsConnected`：路径查找\r\n- `GetNodeStatistics`/`ValidateWorkflow`：统计分析\r\n- `AlignNodes`/`AutoLayout`/`ArrangeNodes`：自动化布局\r\n\r\n### 历史与状态能力\r\n- `TakeSnapshot`/`GetChangesSinceSnapshot`：状态快照\r\n- `Undo`/`Redo`：编辑回滚\r\n\r\n## 能力特点\r\n1. **面向图结构**：关注节点集合、连线拓扑、传播关系\r\n2. **面向编辑器场景**：支持可视化编辑、空间移动、Undo/Redo\r\n3. **面向扩展与定制**：支持自定义节点类型、插槽类型、枚举插槽\r\n\r\n## 适用场景\r\n- 可视化工作流编辑器\r\n- 节点式逻辑编排系统\r\n- 数据流/控制流图设计器\r\n- 规则编排与执行图系统\r\n- 需要Agent接管或辅助编辑的工作流场景\r\n\r\n## 核心价值\r\n- 定义统一的工作流组件模型\r\n- 提供默认实现与行为辅助层\r\n- 支持拓扑连接、空间布局和历史回滚\r\n- 支持动态插槽与枚举插槽等高级结构\r\n- 支持面向Agent的工作流查询、操作与全量接管",
                   "AutoHeight": true,
@@ -3745,126 +3770,126 @@
                   "EmbeddedCodeAutoHeight": true,
                   "EmbeddedCodeMaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "392"
+                    "$ref": "395"
                   }
                 }
               ],
               "Nodes": [],
               "Title": "概述",
               "Parent": {
-                "$ref": "390"
+                "$ref": "393"
               }
             },
             {
-              "$id": "394",
+              "$id": "397",
               "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
               "Children": [
                 {
-                  "$id": "395",
+                  "$id": "398",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "描述组件的作用",
                   "Parent": {
-                    "$ref": "394"
+                    "$ref": "397"
                   }
                 },
                 {
-                  "$id": "396",
+                  "$id": "399",
                   "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                   "Code": "[AgentContext(AgentLanguages.English, \"A derived Node component that acts as a workflow initiator/controller. Default size: 300×260. Never use Size(0,0).\")]\r\n[WorkflowBuilder.Node<NodeHelper>]\r\npublic partial class ControllerViewModel\r\n{\r\n\r\n}",
                   "Language": "csharp",
                   "AutoHeight": false,
                   "MaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "394"
+                    "$ref": "397"
                   }
                 },
                 {
-                  "$id": "397",
+                  "$id": "400",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "描述成员的作用",
                   "Parent": {
-                    "$ref": "394"
+                    "$ref": "397"
                   }
                 },
                 {
-                  "$id": "398",
+                  "$id": "401",
                   "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                   "Code": "[AgentContext(AgentLanguages.English, \"The title must concisely state the function of this node.\")]\r\n[VeloxProperty] private string title = \"default\";",
                   "Language": "csharp",
                   "AutoHeight": false,
                   "MaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "394"
+                    "$ref": "397"
                   }
                 },
                 {
-                  "$id": "399",
+                  "$id": "402",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "限制条件分支成员可用的条件类型",
                   "Parent": {
-                    "$ref": "394"
+                    "$ref": "397"
                   }
                 },
                 {
-                  "$id": "400",
+                  "$id": "403",
                   "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                   "Code": "// 此特性规定了条件枚举支持的类型范围，标注后，智能体无权越界，当然，[AgentContext]也可以做到一样的效果，但显然没有这种写法方便\r\n[SlotSelectors(typeof(NetworkRequestMethod), typeof(SlotChannel))] \r\n[VeloxProperty] public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }",
                   "Language": "csharp",
                   "AutoHeight": false,
                   "MaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "394"
+                    "$ref": "397"
                   }
                 },
                 {
-                  "$id": "401",
+                  "$id": "404",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "限制命令的参数类型",
                   "Parent": {
-                    "$ref": "394"
+                    "$ref": "397"
                   }
                 },
                 {
-                  "$id": "402",
+                  "$id": "405",
                   "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                   "Code": "// 描述命令的作用\r\n[AgentContext(AgentLanguages.English, \"\")]\r\n\r\n// 智能体在执行此命令时，会使用 Offset 对象\r\n[AgentCommandParameter(typeof(Offset))]\r\n\r\npublic ICommand MoveCommand { get; }",
                   "Language": "csharp",
                   "AutoHeight": false,
                   "MaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "394"
+                    "$ref": "397"
                   }
                 },
                 {
-                  "$id": "403",
+                  "$id": "406",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "智能体创建",
                   "Parent": {
-                    "$ref": "394"
+                    "$ref": "397"
                   }
                 },
                 {
-                  "$id": "404",
+                  "$id": "407",
                   "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                   "Code": "public static async Task<ChatClientAgent> ProvideAgent(IWorkflowTreeViewModel tree, AgentHelper helper)\r\n{\r\n    // 以单个Tree组件作为Agent的接管范围（域），你可使用 Fluent API 添加工作流需要的各种定义\r\n    var scope = tree.AsAgentScope()\r\n        .WithComponents(AgentLanguages.English,\r\n            typeof(NodeViewModel),\r\n            typeof(ControllerViewModel),\r\n            typeof(SlotViewModel),\r\n            typeof(LinkViewModel),\r\n            typeof(TreeViewModel))\r\n        .WithEnums(AgentLanguages.English, [])\r\n        .WithInterfaces(AgentLanguages.English, [])\r\n        .WithToolCallCallback((_, _) => helper.ToolCalled?.Invoke())\r\n        .WithTools(\r\n            \"Your Prompt\",\r\n            AIFunctionFactory.Create(Your Agent Tools)\r\n                  ));\r\n\r\n    // 渐进式上下文\r\n    var contextPrompt = scope.ProvideProgressiveContextPrompt(AgentLanguages.English);\r\n\r\n    // 创建MAF工具集\r\n    var tools = scope.ProvideTools();\r\n\r\n    var apiKey = Environment.GetEnvironmentVariable(EnvironmentVariableName);\r\n\r\n    var chatClient = new OpenAIClient(\r\n        new ApiKeyCredential(apiKey),\r\n        new OpenAIClientOptions\r\n        {\r\n            Endpoint = new Uri(Endpoint)\r\n        }).GetChatClient(string.IsNullOrWhiteSpace(Model) ? \"qwen-plus\" : Model)\r\n          .AsIChatClient();\r\n\r\n    var agent = chatClient.AsAIAgent(\r\n        instructions: contextPrompt,\r\n        tools: tools);\r\n\r\n    return agent;\r\n}",
                   "Language": "csharp",
                   "AutoHeight": false,
                   "MaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "394"
+                    "$ref": "397"
                   }
                 }
               ],
               "Nodes": [],
               "Title": "代码",
               "Parent": {
-                "$ref": "390"
+                "$ref": "393"
               }
             }
           ],
           "Title": "工作流",
           "Parent": {
-            "$ref": "380"
+            "$ref": "383"
           }
         }
       ],
@@ -3874,149 +3899,308 @@
       }
     },
     {
-      "$id": "405",
+      "$id": "408",
       "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
       "Children": [
         {
-          "$id": "406",
+          "$id": "409",
           "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
           "Level": "1",
           "Text": "平台适配",
           "Parent": {
-            "$ref": "405"
+            "$ref": "408"
           }
         },
         {
-          "$id": "407",
+          "$id": "410",
           "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
           "Text": "该章节持续跟进 VeloxDev 在不同 GUI 框架中的使用，收集并回答问题",
           "Parent": {
-            "$ref": "405"
+            "$ref": "408"
           }
         }
       ],
       "Nodes": [
         {
-          "$id": "408",
+          "$id": "411",
           "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
           "Children": [
             {
-              "$id": "409",
+              "$id": "412",
               "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
               "Level": "1",
-              "Text": "WinUI FAQ",
+              "Text": "WinUI",
               "Parent": {
-                "$ref": "408"
+                "$ref": "411"
               }
             }
           ],
           "Nodes": [
             {
-              "$id": "410",
+              "$id": "413",
               "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
               "Children": [
                 {
-                  "$id": "411",
+                  "$id": "414",
                   "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
                   "Level": "1",
                   "Text": "WinUI 动画",
                   "Parent": {
-                    "$ref": "410"
+                    "$ref": "413"
                   }
                 },
                 {
-                  "$id": "412",
+                  "$id": "415",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
                   "Text": "适配",
                   "Parent": {
-                    "$ref": "410"
+                    "$ref": "413"
                   }
                 },
                 {
-                  "$id": "413",
+                  "$id": "416",
                   "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
                   "Text": "为了确保线程安全，您在使用 VeloxDev.WinUI 时，必须让 UIThreadInspector 获取窗口",
                   "Parent": {
-                    "$ref": "410"
+                    "$ref": "413"
                   }
                 },
                 {
-                  "$id": "414",
+                  "$id": "417",
                   "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                   "Code": "public MainWindow()\r\n{\r\n    InitializeComponent();\r\n\r\n    // VeloxDev.WinUI 强制要求执行这行代码\r\n    UIThreadInspector.SetWindow(this);\r\n}",
                   "Language": "csharp",
                   "AutoHeight": false,
                   "MaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "410"
+                    "$ref": "413"
                   }
                 }
               ],
               "Nodes": [],
               "Title": "动画",
               "Parent": {
-                "$ref": "408"
+                "$ref": "411"
               }
             }
           ],
           "Title": "WinUI",
           "Parent": {
-            "$ref": "405"
+            "$ref": "408"
           }
         },
         {
-          "$id": "415",
+          "$id": "418",
           "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
           "Children": [
             {
-              "$id": "416",
+              "$id": "419",
               "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
               "Level": "1",
-              "Text": "WASM FAQ",
+              "Text": "Trimmed / AOT",
               "Parent": {
-                "$ref": "415"
+                "$ref": "418"
               }
             }
           ],
           "Nodes": [
             {
-              "$id": "417",
+              "$id": "420",
               "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
               "Children": [
                 {
-                  "$id": "418",
+                  "$id": "421",
                   "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
-                  "Text": "WASM 项目若使用 VeloxDev.Core.Extension 提供的序列化、智能体服务，建议添加下述项目配置，因为它们内部都依赖反射序列化",
+                  "Text": "VeloxDev.Core.Extension 提供的序列化依赖反射，而智能体的部分能力依赖序列化，若您在裁剪敏感的环境下遇到了无法运行Agent或者无法执行序列化，可以试着关闭裁剪",
                   "Parent": {
-                    "$ref": "417"
+                    "$ref": "420"
                   }
                 },
                 {
-                  "$id": "419",
+                  "$id": "422",
                   "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
                   "Code": "<PublishTrimmed>false</PublishTrimmed>",
                   "Language": "csharp",
                   "AutoHeight": false,
                   "MaxHeightValue": 300.0,
                   "Parent": {
-                    "$ref": "417"
+                    "$ref": "420"
                   }
                 }
               ],
               "Nodes": [],
-              "Title": "裁剪与序列化",
+              "Title": "序列化",
               "Parent": {
-                "$ref": "415"
+                "$ref": "418"
               }
             }
           ],
-          "Title": "WASM",
+          "Title": "Trimmed / AOT",
           "Parent": {
-            "$ref": "405"
+            "$ref": "408"
+          }
+        },
+        {
+          "$id": "423",
+          "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+          "Children": [
+            {
+              "$id": "424",
+              "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
+              "Level": "1",
+              "Text": "帧循环",
+              "Parent": {
+                "$ref": "1"
+              }
+            },
+            {
+              "$id": "425",
+              "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
+              "Text": "由于不是所有运行时都支持 Thread，帧循环会走两个路径。保守起见，低于 .NET5 的版本默认使用异步而非 Thread，更高的版本已内置了平台检测，其检测逻辑遵顼下表",
+              "Parent": {
+                "$ref": "1"
+              }
+            },
+            {
+              "$id": "426",
+              "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
+              "Text": "await Task",
+              "Parent": {
+                "$ref": "1"
+              }
+            },
+            {
+              "$id": "427",
+              "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs",
+              "Headers": [
+                "平台"
+              ],
+              "Alignments": [
+                "Left"
+              ],
+              "Rows": [
+                {
+                  "$id": "428",
+                  "Cells": [
+                    "Browser"
+                  ]
+                },
+                {
+                  "$id": "429",
+                  "Cells": [
+                    "iOS"
+                  ]
+                }
+              ],
+              "Parent": {
+                "$ref": "1"
+              }
+            },
+            {
+              "$id": "430",
+              "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
+              "Text": "Thread",
+              "Parent": {
+                "$ref": "1"
+              }
+            },
+            {
+              "$id": "431",
+              "$type": "VeloxDev.Docs.ViewModels.TableProvider, VeloxDev.Docs",
+              "Headers": [
+                "平台"
+              ],
+              "Alignments": [
+                "Left"
+              ],
+              "Rows": [
+                {
+                  "$id": "432",
+                  "Cells": [
+                    "Windows"
+                  ]
+                },
+                {
+                  "$id": "433",
+                  "Cells": [
+                    "Linux"
+                  ]
+                },
+                {
+                  "$id": "434",
+                  "Cells": [
+                    "Android"
+                  ]
+                }
+              ],
+              "Parent": {
+                "$ref": "1"
+              }
+            },
+            {
+              "$id": "435",
+              "$type": "VeloxDev.Docs.ViewModels.SubtitleProvider, VeloxDev.Docs",
+              "Text": "手动配置",
+              "Parent": {
+                "$ref": "1"
+              }
+            },
+            {
+              "$id": "436",
+              "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
+              "Text": "MonoBehaviourManager 存在一个名为 UseAsyncLoop 的静态属性，true 表示启用异步来获取最大兼容性，您可在执行此类提供的 Start（）函数之前修改 UseAsyncLoop",
+              "Parent": {
+                "$ref": "1"
+              }
+            },
+            {
+              "$id": "437",
+              "$type": "VeloxDev.Docs.ViewModels.CodeProvider, VeloxDev.Docs",
+              "Code": "        public static bool UseAsyncLoop { get; set; } =\r\n#if NET5_0_OR_GREATER\r\n        OperatingSystem.IsBrowser() || OperatingSystem.IsIOS();\r\n#else\r\n        true;\r\n#endif",
+              "Language": "csharp",
+              "AutoHeight": true,
+              "MaxHeightValue": 300.0,
+              "Parent": {
+                "$ref": "1"
+              }
+            }
+          ],
+          "Nodes": [],
+          "Title": "帧循环",
+          "Parent": {
+            "$ref": "408"
+          }
+        },
+        {
+          "$id": "438",
+          "$type": "VeloxDev.Docs.ViewModels.NodeProvider, VeloxDev.Docs",
+          "Children": [
+            {
+              "$id": "439",
+              "$type": "VeloxDev.Docs.ViewModels.TitleProvider, VeloxDev.Docs",
+              "Level": "1",
+              "Text": "解决方案",
+              "Parent": {
+                "$ref": "1"
+              }
+            },
+            {
+              "$id": "440",
+              "$type": "VeloxDev.Docs.ViewModels.ParagraphProvider, VeloxDev.Docs",
+              "Text": "检查您的组件挂载顺序，Node组件必须先挂载到Tree组件才能执行内部命令，Slot组件必须先挂载到Node组件才能执行内部命令",
+              "Parent": {
+                "$ref": "1"
+              }
+            }
+          ],
+          "Nodes": [],
+          "Title": "工作流命令无效",
+          "Parent": {
+            "$ref": "408"
           }
         }
       ],
-      "Title": "平台适配",
+      "Title": "问题",
       "Parent": {
         "$ref": "30"
       }
