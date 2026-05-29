@@ -2,7 +2,7 @@
 
 # ⚡ VeloxDev
 
-**A modern .NET infrastructure toolkit — Source Generators, cross-platform abstractions, and extensible runtime models.**
+**Build modern, AI-controllable workflow editors on any .NET GUI — WPF, Avalonia, WinUI, MAUI, or WinForms.**
 
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=4caf50&logo=nuget&label=VeloxDev.Core)](https://www.nuget.org/packages/VeloxDev.Core/)
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Extension?color=4caf50&logo=nuget&label=VeloxDev.Core.Extension)](https://www.nuget.org/packages/VeloxDev.Core.Extension/)
@@ -19,25 +19,28 @@
 
 ## ✨ What is VeloxDev?
 
-VeloxDev brings together a set of carefully designed capabilities that are often scattered across separate libraries:
+VeloxDev gives .NET developers a complete foundation for building **interactive workflow editors** — the kind where users drag nodes, wire slots together, and watch data flow through a graph at runtime.
 
-| Feature | Description | Adapter needed? |
-|---------|-------------|:---------------:|
-| 🪶 **MVVM** | Source Generator for observable properties & async commands | ❌ |
-| ⛓️ **Workflow** | Drag-and-drop workflow tree / node / slot / wire templates | ❌ |
-| 🤖 **Agent Infrastructure** | Zero-dependency reflection utilities: property access, method invocation, command discovery, semantic context | ❌ |
-| 🤖 **Workflow Agent** | 30+ Function Calling tools for AI runtime control via MAF | ✔ Extension |
-| 🎞️ **Transition** | Cross-platform interpolation animation with easing & Fluent API | ✔ |
-| 🌀 **AOP** | Compile-time aspect proxies: pre/post hooks and method replacement | ❌ |
-| 🎨 **Theme** | Theme registration, caching, instant & animated switching | ✔ |
-| ⚙️ **MonoBehaviour** | Frame-driven lifecycle loop (Update / Start / OnDestroy …) | ❌ |
-| 📦 **AOT Reflection** | Source-generated reflection preservation for AOT & trimming | ❌ |
+The workflow system is the core. Everything else exists to make workflows **more extensible**, **more polished**, and **AI-controllable**:
+
+| Layer | What it provides | Adapter needed? |
+|-------|-----------------|:---------------:|
+| ⛓️ **Workflow** | Tree / Node / Slot / Link templates with full undo-redo, spatial indexing, and a serialization model | ❌ |
+| 🤖 **Workflow Agent** | 30+ Function Calling tools — an AI can create nodes, wire slots, patch properties, and manage routing at runtime via natural language | ✔ Extension |
+| 🪶 **MVVM** | Source Generator for observable properties and async, cancellable commands — the glue that keeps node ViewModels lightweight | ❌ |
+| 🎞️ **Transition** | Cross-platform interpolation animation with easing & Fluent API — smooth visual feedback for workflow state changes | ✔ |
+| 🎨 **Theme** | Runtime theme switching with animated transitions — instant visual identity for your editor | ✔ |
+| 🌀 **AOP** | Compile-time aspect proxies — intercept node execution, add logging or validation without modifying business logic | ❌ |
+| ⚙️ **MonoBehaviour** | Frame-driven lifecycle loop — tick-based node simulation or real-time graph execution | ❌ |
+| 📦 **AOT Reflection** | Source-generated reflection preservation — keeps workflow introspection working after trimming and AOT compilation | ❌ |
 
 ---
 
 ## 📦 Installation
 
-### Platform adapter packages *(batteries included)*
+Pick the adapter for your GUI framework and you get everything — workflow, agent, animations, and theming wired up for that platform.
+
+### Platform adapter packages *(recommended)*
 
 | Platform | Package | NuGet |
 |----------|---------|-------|
@@ -47,42 +50,54 @@ VeloxDev brings together a set of carefully designed capabilities that are often
 | MAUI | `VeloxDev.MAUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) |
 | WinForms | `VeloxDev.WinForms` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinForms?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinForms/) |
 
-### Core-only packages *(build your own adapter)*
+### Core-only packages *(bring your own adapter)*
 
 | Package | NuGet | Description |
 |---------|-------|-------------|
-| `VeloxDev.Core` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/) | Shared abstractions, generators & runtime models — no third-party dependencies |
-| `VeloxDev.Core.Extension` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Extension?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core.Extension/) | MAF-based Workflow Agent tools & additional runtime extensions |
+| `VeloxDev.Core` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/) | Workflow abstractions, MVVM generators, and runtime models — zero third-party dependencies |
+| `VeloxDev.Core.Extension` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Extension?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core.Extension/) | MAF-based Workflow Agent tools and additional runtime extensions |
 
 ---
 
 ## 🚀 Quick Look
 
+### Define a node
+
 ```csharp
-// Observable property + async command — generated entirely by Source Generator
-public sealed partial class MyViewModel
+// Declare a node — the Source Generator handles INotifyPropertyChanged,
+// slot lifecycle, and command wiring automatically.
+[WorkflowBuilder.Node<MyNodeHelper>]
+public partial class MyNodeViewModel
 {
-    [VeloxProperty]
-    private string title = string.Empty;
+    public MyNodeViewModel() => InitializeWorkflow();
 
-    partial void OnTitleChanged(string oldValue, string newValue) { /* react */ }
+    [AgentContext(AgentLanguages.English, "Input slot (receiver)")]
+    [VeloxProperty] public partial MySlotViewModel InputSlot { get; set; }
 
-    [VeloxCommand]
-    private async Task Save(object? parameter, CancellationToken ct)
-    {
-        await DoSaveAsync(ct);
-    }
+    [AgentContext(AgentLanguages.English, "Output slot (sender)")]
+    [VeloxProperty] public partial MySlotViewModel OutputSlot { get; set; }
 
-    private void ControlCommands()
-    {
-        SaveCommand.Execute(null);   // run
-        SaveCommand.Interrupt();     // cancel current task
-        SaveCommand.Clear();         // cancel all queued tasks
-        SaveCommand.Lock();          // prevent new executions
-        SaveCommand.UnLock();
-    }
+    [AgentContext(AgentLanguages.English, "Display title shown in the node header")]
+    [VeloxProperty] private string title = "My Node";
 }
 ```
+
+### Let an AI control the workflow at runtime
+
+```csharp
+// One fluent call wires up discovery, tools, and the agent session.
+var scope = tree.AsAgentScope()
+    .WithAutoDiscovery(assemblyName: "MyApp")
+    .WithInteractionSafety(3)          // confirm before destructive ops; present choices via tool
+    .WithSelectionHandler(ShowDialog)
+    .WithConfirmationHandler(ShowDialog);
+
+var agent = chatClient.AsAIAgent(
+    instructions: scope.ProvideProgressiveContextPrompt(),
+    tools: scope.ProvideTools());
+```
+
+The agent can then create nodes, wire slots, change routing credentials, and patch properties — all through natural-language instructions, with full undo/redo support.
 
 ---
 
@@ -92,7 +107,7 @@ public sealed partial class MyViewModel
 VeloxDev/
 ├── Src/
 │   ├── Core/
-│   │   ├── VeloxDev.Core                   # Shared abstractions, runtime models & generators
+│   │   ├── VeloxDev.Core                   # Workflow abstractions, MVVM generators & runtime models
 │   │   ├── VeloxDev.Core.Extension         # MAF-based Workflow Agent tools & runtime extensions
 │   │   ├── VeloxDev.Core.Test              # Unit tests for VeloxDev.Core
 │   │   └── VeloxDev.Core.Extension.Test    # Unit tests for VeloxDev.Core.Extension
@@ -105,12 +120,12 @@ VeloxDev/
 │   └── Generators/
 │       └── VeloxDev.Core.Generator         # Roslyn Source Generators (netstandard2.0)
 ├── Examples/
-│   ├── MVVM/          WPF · Avalonia
-│   ├── AOP/           WPF · Avalonia
-│   ├── AOTReflection/
 │   ├── Workflow/      WPF · Avalonia · WinUI · WinForms · MAUI · Common(Lib)
+│   ├── MVVM/          WPF · Avalonia
 │   ├── Transition/    WPF · Avalonia · WinUI · WinForms · MAUI
 │   ├── Theme/         WPF · Avalonia
+│   ├── AOP/           WPF · Avalonia
+│   ├── AOTReflection/
 │   └── MonoBehaviour/ WPF
 └── Docs/
     ├── VeloxDev.Docs           # Documentation site (Blazor WebAssembly)
