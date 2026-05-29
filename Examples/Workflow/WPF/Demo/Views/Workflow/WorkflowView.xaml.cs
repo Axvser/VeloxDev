@@ -4,10 +4,13 @@ using Demo.Workflow;
 using Microsoft.Win32;
 using System.Collections.Specialized;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using VeloxDev.AI;
+using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -124,7 +127,12 @@ public partial class WorkflowView : UserControl
         vm.AgentLog.CollectionChanged += OnAgentLogChanged;
         vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
+        {
+            helper.SelectionHandler = ShowSelectionDialogAsync;
+            helper.ConfirmationHandler = ShowConfirmationDialogAsync;
             helper.ToolCalled += OnAgentToolCalled;
+            helper.VisualRefreshRequested += OnVisualRefreshRequested;
+        }
     }
 
     private void UnsubscribeAutoScroll(TreeViewModel vm)
@@ -132,12 +140,224 @@ public partial class WorkflowView : UserControl
         vm.AgentLog.CollectionChanged -= OnAgentLogChanged;
         vm.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
+        {
+            helper.SelectionHandler = null;
+            helper.ConfirmationHandler = null;
             helper.ToolCalled -= OnAgentToolCalled;
+            helper.VisualRefreshRequested -= OnVisualRefreshRequested;
+        }
     }
 
     private void OnAgentToolCalled()
     {
         Dispatcher.InvokeAsync(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void OnVisualRefreshRequested()
+    {
+        Dispatcher.InvokeAsync(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private async Task<string?> ShowSelectionDialogAsync(string prompt, string[] options)
+    {
+        return await Dispatcher.InvokeAsync<string?>(() =>
+        {
+            var win = new System.Windows.Window
+            {
+                Title = "Agent · 请选择",
+                Width = 440,
+                SizeToContent = System.Windows.SizeToContent.Height,
+                WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
+                ResizeMode = System.Windows.ResizeMode.NoResize,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a2e")),
+            };
+
+            string? chosen = null;
+
+            // Header
+            var headerStack = new StackPanel { Margin = new Thickness(18, 14, 18, 14) };
+            headerStack.Children.Add(new TextBlock
+            {
+                Text = "🤖  Agent · 请选择",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+            });
+            headerStack.Children.Add(new TextBlock
+            {
+                Text = prompt,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e0e0e0")),
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Margin = new Thickness(0, 4, 0, 0),
+            });
+            var header = new Border
+            {
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#16213e")),
+                Child = headerStack,
+            };
+
+            // Options
+            var optionStack = new StackPanel { Margin = new Thickness(16, 12, 16, 12) };
+            foreach (var opt in options)
+            {
+                var captured = opt;
+                var btn = new System.Windows.Controls.Button
+                {
+                    Content = opt,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    Padding = new Thickness(14, 10, 14, 10),
+                    FontSize = 12,
+                    Margin = new Thickness(0, 0, 0, 6),
+                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0f3460")),
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e0e0e0")),
+                    BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
+                    BorderThickness = new Thickness(1),
+                };
+                btn.Click += (_, _) => { chosen = captured; win.Close(); };
+                optionStack.Children.Add(btn);
+            }
+
+            var cancelBtn = new System.Windows.Controls.Button
+            {
+                Content = "取消（不选择）",
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                Padding = new Thickness(14, 8, 14, 8),
+                FontSize = 11,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2a2a3e")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#444444")),
+                BorderThickness = new Thickness(1),
+            };
+            cancelBtn.Click += (_, _) => win.Close();
+            optionStack.Children.Add(cancelBtn);
+
+            var scroll = new System.Windows.Controls.ScrollViewer
+            {
+                MaxHeight = 420,
+                VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
+                Content = optionStack,
+            };
+
+            var root = new StackPanel
+            {
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a2e")),
+            };
+            root.Children.Add(header);
+            root.Children.Add(scroll);
+            win.Content = root;
+
+            var owner = System.Windows.Application.Current?.MainWindow;
+            if (owner is not null) win.Owner = owner;
+            win.ShowDialog();
+            return chosen;
+        });
+    }
+
+    private async Task<AgentConfirmationResult> ShowConfirmationDialogAsync(string operationKey, string description)
+    {
+        return await Dispatcher.InvokeAsync<AgentConfirmationResult>(() =>
+        {
+            var result = AgentConfirmationResult.Deny;
+
+            var win = new System.Windows.Window
+            {
+                Title = "Agent · 操作确认",
+                Width = 440,
+                SizeToContent = System.Windows.SizeToContent.Height,
+                WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
+                ResizeMode = System.Windows.ResizeMode.NoResize,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a2e")),
+            };
+
+            // Header
+            var headerStack = new StackPanel { Margin = new Thickness(18, 14, 18, 14) };
+            headerStack.Children.Add(new TextBlock
+            {
+                Text = "⚠️  Agent · 操作确认",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ffd166")),
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+            });
+            headerStack.Children.Add(new Border
+            {
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2a1f00")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ffd166")),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(5),
+                Padding = new Thickness(10, 6, 10, 6),
+                Margin = new Thickness(0, 4, 0, 0),
+                Child = new TextBlock
+                {
+                    Text = operationKey,
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ffd166")),
+                    FontSize = 11,
+                    FontFamily = new FontFamily("Consolas"),
+                },
+            });
+            var header = new Border
+            {
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#16213e")),
+                Child = headerStack,
+            };
+
+            // Body
+            var bodyStack = new StackPanel { Margin = new Thickness(18, 14, 18, 14), MinWidth = 300 };
+            bodyStack.Children.Add(new TextBlock
+            {
+                Text = description,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e0e0e0")),
+                FontSize = 12,
+            });
+
+            static System.Windows.Controls.Button MakeBtn(string label, string bg, string fg, string border) =>
+                new()
+                {
+                    Content = label,
+                    Padding = new Thickness(16, 9, 16, 9),
+                    FontSize = 12,
+                    Margin = new Thickness(4, 0, 0, 0),
+                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(bg)),
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(fg)),
+                    BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(border)),
+                    BorderThickness = new Thickness(1),
+                };
+
+            var denyBtn   = MakeBtn("✕  拒绝",            "#3b0000", "#ff6b6b", "#ff6b6b");
+            var onceBtn   = MakeBtn("✓  仅同意一次",       "#0f3460", "#7ec8ff", "#7ec8ff");
+            var alwaysBtn = MakeBtn("✓✓  本次会话始终同意", "#0d3b1a", "#6bffb8", "#6bffb8");
+
+            denyBtn.Click   += (_, _) => { result = AgentConfirmationResult.Deny;        win.Close(); };
+            onceBtn.Click   += (_, _) => { result = AgentConfirmationResult.AllowOnce;   win.Close(); };
+            alwaysBtn.Click += (_, _) => { result = AgentConfirmationResult.AllowAlways; win.Close(); };
+
+            var btnRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 14, 0, 0),
+            };
+            btnRow.Children.Add(denyBtn);
+            btnRow.Children.Add(onceBtn);
+            btnRow.Children.Add(alwaysBtn);
+            bodyStack.Children.Add(btnRow);
+
+            var root = new StackPanel
+            {
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a2e")),
+            };
+            root.Children.Add(header);
+            root.Children.Add(bodyStack);
+            win.Content = root;
+
+            var owner = System.Windows.Application.Current?.MainWindow;
+            if (owner is not null) win.Owner = owner;
+            win.ShowDialog();
+            return result;
+        });
     }
 
     private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

@@ -82,6 +82,34 @@ public static class AgentEmbeddedResources
     public static string ReadAllReferences(string system, AgentLanguages language = AgentLanguages.English)
         => ReadAll(system, "References", language);
 
+    // ── Safety ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reads the content of <c>Resources/{system}/{lang}/Safety/{name}.md</c>.
+    /// Falls back to the English variant when the requested language is not found.
+    /// Returns <c>null</c> if neither variant exists.
+    /// </summary>
+    public static string? ReadSafety(string system, string name, AgentLanguages language = AgentLanguages.English)
+        => ReadWithFallback(system, "Safety", name, language);
+
+    /// <summary>
+    /// Concatenates specific safety files for the given system and language in the specified order.
+    /// </summary>
+    public static string ReadSafetyFiles(string system, AgentLanguages language, params string[] names)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var name in names)
+        {
+            var content = ReadSafety(system, name, language);
+            if (!string.IsNullOrWhiteSpace(content))
+            {
+                sb.AppendLine(content);
+                sb.AppendLine();
+            }
+        }
+        return sb.ToString();
+    }
+
     // ── Scripts ──────────────────────────────────────────────────────────────
 
     /// <summary>

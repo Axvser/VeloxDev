@@ -12,6 +12,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -207,6 +208,8 @@ namespace Demo.Views
             vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
             if (vm.GetHelper() is AgentHelper helper)
             {
+                helper.SelectionHandler = ShowSelectionDialogAsync;
+                helper.ConfirmationHandler = ShowConfirmationDialogAsync;
                 helper.ToolCalled += OnAgentToolCalled;
                 helper.VisualRefreshRequested += OnVisualRefreshRequested;
             }
@@ -218,9 +221,111 @@ namespace Demo.Views
             vm.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
             if (vm.GetHelper() is AgentHelper helper)
             {
+                helper.SelectionHandler = null;
+                helper.ConfirmationHandler = null;
                 helper.ToolCalled -= OnAgentToolCalled;
                 helper.VisualRefreshRequested -= OnVisualRefreshRequested;
             }
+        }
+
+        private async Task<string?> ShowSelectionDialogAsync(string prompt, string[] options)
+        {
+            var tcs = new TaskCompletionSource<string?>();
+
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                string? chosen = null;
+
+                var optionStack = new StackPanel { Spacing = 6 };
+                optionStack.Children.Add(new TextBlock
+                {
+                    Text = prompt,
+                    TextWrapping = TextWrapping.WrapWholeWords,
+                    Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 8),
+                });
+
+                ContentDialog dialog = new()
+                {
+                    Title = "🤖  Agent · 请选择",
+                    PrimaryButtonText = "取消",
+                    XamlRoot = this.XamlRoot,
+                    DefaultButton = ContentDialogButton.None,
+                };
+
+                foreach (var opt in options)
+                {
+                    var captured = opt;
+                    var btn = new Button
+                    {
+                        Content = opt,
+                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                        HorizontalContentAlignment = HorizontalAlignment.Left,
+                        Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4),
+                    };
+                    btn.Click += (_, _) => { chosen = captured; dialog.Hide(); };
+                    optionStack.Children.Add(btn);
+                }
+
+                var scroller = new ScrollViewer
+                {
+                    MaxHeight = 400,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    Content = optionStack,
+                };
+                dialog.Content = scroller;
+
+                await dialog.ShowAsync();
+                tcs.TrySetResult(chosen);
+            });
+
+            return await tcs.Task;
+        }
+
+        private async Task<AgentConfirmationResult> ShowConfirmationDialogAsync(string operationKey, string description)
+        {
+            var tcs = new TaskCompletionSource<AgentConfirmationResult>();
+
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                var result = AgentConfirmationResult.Deny;
+
+                var bodyPanel = new StackPanel { Spacing = 8 };
+                bodyPanel.Children.Add(new TextBlock
+                {
+                    Text = operationKey,
+                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+                    FontSize = 11,
+                    Opacity = 0.7,
+                });
+                bodyPanel.Children.Add(new TextBlock
+                {
+                    Text = description,
+                    TextWrapping = TextWrapping.WrapWholeWords,
+                });
+
+                var dialog = new ContentDialog
+                {
+                    Title = "⚠️  Agent · 操作确认",
+                    Content = bodyPanel,
+                    PrimaryButtonText = "✓  仅同意一次",
+                    SecondaryButtonText = "✓✓  本次会话始终同意",
+                    CloseButtonText = "✕  拒绝",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = this.XamlRoot,
+                };
+
+                var outcome = await dialog.ShowAsync();
+                result = outcome switch
+                {
+                    ContentDialogResult.Primary   => AgentConfirmationResult.AllowOnce,
+                    ContentDialogResult.Secondary => AgentConfirmationResult.AllowAlways,
+                    _                             => AgentConfirmationResult.Deny,
+                };
+
+                tcs.TrySetResult(result);
+            });
+
+            return await tcs.Task;
         }
 
         private void OnAgentToolCalled()

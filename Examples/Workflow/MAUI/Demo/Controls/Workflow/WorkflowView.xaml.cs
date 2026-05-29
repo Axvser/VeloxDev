@@ -4,6 +4,7 @@ using Demo.Workflow;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using VeloxDev.AI.Workflow;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -92,6 +93,8 @@ public partial class WorkflowView : ContentView, WorkflowBehaviors.IWorkflowSurf
         vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
         {
+            helper.SelectionHandler = ShowSelectionDialogAsync;
+            helper.ConfirmationHandler = ShowConfirmationDialogAsync;
             helper.ToolCalled += OnAgentToolCalled;
             helper.VisualRefreshRequested += OnVisualRefreshRequested;
         }
@@ -103,9 +106,52 @@ public partial class WorkflowView : ContentView, WorkflowBehaviors.IWorkflowSurf
         vm.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
         {
+            helper.SelectionHandler = null;
+            helper.ConfirmationHandler = null;
             helper.ToolCalled -= OnAgentToolCalled;
             helper.VisualRefreshRequested -= OnVisualRefreshRequested;
         }
+    }
+
+    private Task<string?> ShowSelectionDialogAsync(string prompt, string[] options)
+    {
+        var tcs = new TaskCompletionSource<string?>();
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            // DisplayActionSheet 返回用户选中的选项文本，点取消时返回 null
+            var result = await Application.Current!.MainPage!.DisplayActionSheet(
+                prompt, "取消（不选择）", null, options);
+            tcs.TrySetResult(result == "取消（不选择）" ? null : result);
+        });
+        return tcs.Task;
+    }
+
+    private Task<AgentConfirmationResult> ShowConfirmationDialogAsync(string operationKey, string description)
+    {
+        var tcs = new TaskCompletionSource<AgentConfirmationResult>();
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            // 第一步：使用 DisplayAlert 说明操作，选择是否允许
+            var allow = await Application.Current!.MainPage!.DisplayAlert(
+                $"⚠️ Agent · 操作确认",
+                $"[操作] {operationKey}\n\n{description}",
+                "允许", "拒绝");
+
+            if (!allow)
+            {
+                tcs.TrySetResult(AgentConfirmationResult.Deny);
+                return;
+            }
+
+            // 第二步：选择仅一次还是始终允许
+            var always = await Application.Current!.MainPage!.DisplayAlert(
+                $"⚠️ Agent · 授权范围",
+                $"是否在本次会话中始终允许该操作？",
+                "始终允许", "仅同意一次");
+
+            tcs.TrySetResult(always ? AgentConfirmationResult.AllowAlways : AgentConfirmationResult.AllowOnce);
+        });
+        return tcs.Task;
     }
 
     private void OnAgentToolCalled() => MainThread.BeginInvokeOnMainThread(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));

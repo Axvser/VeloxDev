@@ -2,6 +2,8 @@ using Demo.ViewModels;
 using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Threading.Tasks;
+using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -110,6 +112,7 @@ namespace Demo
                 _demo.Tree.ExecutionLog.CollectionChanged -= OnExecutionLogCollectionChanged;
                 _demo.Tree.AgentLog.CollectionChanged -= OnAgentLogCollectionChanged;
                 _demo.Tree.Nodes.CollectionChanged -= OnNodesCollectionChanged;
+                UnsubscribeHelper(_demo);
             }
 
             _demo = session;
@@ -117,6 +120,7 @@ namespace Demo
             _demo.Tree.ExecutionLog.CollectionChanged += OnExecutionLogCollectionChanged;
             _demo.Tree.AgentLog.CollectionChanged += OnAgentLogCollectionChanged;
             _demo.Tree.Nodes.CollectionChanged += OnNodesCollectionChanged;
+            SubscribeHelper(_demo);
 
             _controllerBindingSource.DataSource = _demo.Controller;
 
@@ -128,6 +132,50 @@ namespace Demo
 
             ReloadExecutionLog();
             UpdateControllerState();
+        }
+
+        private void SubscribeHelper(WorkflowDemoSession session)
+        {
+            if (session.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+            helper.SelectionHandler = ShowSelectionDialogAsync;
+            helper.ConfirmationHandler = ShowConfirmationDialogAsync;
+            helper.ToolCalled += OnAgentToolCalled;
+            helper.VisualRefreshRequested += OnAgentToolCalled;
+        }
+
+        private void UnsubscribeHelper(WorkflowDemoSession session)
+        {
+            if (session.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+            helper.SelectionHandler = null;
+            helper.ConfirmationHandler = null;
+            helper.ToolCalled -= OnAgentToolCalled;
+            helper.VisualRefreshRequested -= OnAgentToolCalled;
+        }
+
+        private void OnAgentToolCalled()
+        {
+            if (InvokeRequired) { BeginInvoke(OnAgentToolCalled); return; }
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(workflowSurfaceControl);
+        }
+
+        private Task<string?> ShowSelectionDialogAsync(string prompt, string[] options)
+        {
+            if (InvokeRequired)
+                return (Task<string?>)Invoke(() => ShowSelectionDialogAsync(prompt, options));
+
+            using var dlg = new AgentSelectionDialog(prompt, options);
+            dlg.ShowDialog(this);
+            return Task.FromResult(dlg.ChosenOption);
+        }
+
+        private Task<AgentConfirmationResult> ShowConfirmationDialogAsync(string operationKey, string description)
+        {
+            if (InvokeRequired)
+                return (Task<AgentConfirmationResult>)Invoke(() => ShowConfirmationDialogAsync(operationKey, description));
+
+            using var dlg = new AgentConfirmationDialog(operationKey, description);
+            dlg.ShowDialog(this);
+            return Task.FromResult(dlg.Result);
         }
 
         private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)

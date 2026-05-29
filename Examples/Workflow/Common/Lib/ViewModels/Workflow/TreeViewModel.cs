@@ -185,12 +185,13 @@ public partial class TreeViewModel
     private Task AgentContextTest()
     {
         var context = this.AsAgentScope()
-            .WithComponents(AgentLanguages.Chinese,
+            .WithLanguage(AgentLanguages.Chinese)
+            .WithComponents([
                 typeof(NodeViewModel),
                 typeof(ControllerViewModel),
                 typeof(SlotViewModel),
                 typeof(LinkViewModel),
-                typeof(TreeViewModel))
+                typeof(TreeViewModel)])
             .ProvideAllContexts(AgentLanguages.English);
 
         ExecutionLog.Add(context);

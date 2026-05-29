@@ -2,6 +2,7 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -11,6 +12,9 @@ using Demo.Workflow;
 using System;
 using System.Collections.Specialized;
 using System.IO;
+using System.Threading.Tasks;
+using VeloxDev.AI;
+using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -131,6 +135,9 @@ public partial class WorkflowView : UserControl
         vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
         {
+            // 直接内联：工具始终已注册，handler 在此赋值后即可触发
+            helper.SelectionHandler = ShowSelectionDialogAsync;
+            helper.ConfirmationHandler = ShowConfirmationDialogAsync;
             helper.ToolCalled += OnAgentToolCalled;
             helper.VisualRefreshRequested += OnVisualRefreshRequested;
         }
@@ -142,9 +149,219 @@ public partial class WorkflowView : UserControl
         vm.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
         {
+            helper.SelectionHandler = null;
+            helper.ConfirmationHandler = null;
             helper.ToolCalled -= OnAgentToolCalled;
             helper.VisualRefreshRequested -= OnVisualRefreshRequested;
         }
+    }
+
+    // ── Agent interaction dialogs ────────────────────────────────────────────
+
+    private async Task<string?> ShowSelectionDialogAsync(string prompt, string[] options)
+    {
+        return await Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            string? chosen = null;
+
+            var dialog = new Window
+            {
+                Title = "Agent · 请选择",
+                Width = 440,
+                MinHeight = 160,
+                SizeToContent = SizeToContent.Height,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                CanResize = false,
+                Background = new SolidColorBrush(Color.Parse("#1a1a2e")),
+            };
+
+            // ── Header ────────────────────────────────────────────────────
+            var headerPanel = new StackPanel { Spacing = 4, Margin = new Thickness(18, 14) };
+            headerPanel.Children.Add(new TextBlock
+            {
+                Text = "🤖  Agent · 请选择",
+                Foreground = new SolidColorBrush(Color.Parse("#7ec8ff")),
+                FontSize = 13,
+                FontWeight = FontWeight.Bold,
+            });
+            headerPanel.Children.Add(new TextBlock
+            {
+                Text = prompt,
+                Foreground = new SolidColorBrush(Color.Parse("#e0e0e0")),
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+            });
+            var header = new Border
+            {
+                Background = new SolidColorBrush(Color.Parse("#16213e")),
+                Child = headerPanel,
+            };
+
+            // ── Options ───────────────────────────────────────────────────
+            var optionsPanel = new StackPanel { Spacing = 6, Margin = new Thickness(16, 12) };
+            foreach (var opt in options)
+            {
+                var captured = opt;
+                var btn = new Button
+                {
+                    Content = opt,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    Padding = new Thickness(14, 10),
+                    FontSize = 12,
+                    Background = new SolidColorBrush(Color.Parse("#0f3460")),
+                    Foreground = new SolidColorBrush(Color.Parse("#e0e0e0")),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = new SolidColorBrush(Color.Parse("#7ec8ff")),
+                    CornerRadius = new CornerRadius(6),
+                };
+                btn.Click += (_, _) => { chosen = captured; dialog.Close(); };
+                optionsPanel.Children.Add(btn);
+            }
+
+            // ── Cancel ────────────────────────────────────────────────────
+            var cancelBtn = new Button
+            {
+                Content = "取消（不选择）",
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                Padding = new Thickness(14, 8),
+                FontSize = 11,
+                Margin = new Thickness(0, 4, 0, 0),
+                Background = new SolidColorBrush(Color.Parse("#2a2a3e")),
+                Foreground = new SolidColorBrush(Color.Parse("#888888")),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.Parse("#444444")),
+                CornerRadius = new CornerRadius(6),
+            };
+            cancelBtn.Click += (_, _) => dialog.Close();
+            optionsPanel.Children.Add(cancelBtn);
+
+            dialog.Content = new StackPanel
+            {
+                Background = new SolidColorBrush(Color.Parse("#1a1a2e")),
+                Children =
+                {
+                    header,
+                    new ScrollViewer
+                    {
+                        MaxHeight = 420,
+                        VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                        Content = optionsPanel,
+                    },
+                },
+            };
+
+            var owner = TopLevel.GetTopLevel(this) as Window;
+            if (owner is not null)
+                await dialog.ShowDialog(owner);
+            else
+                dialog.Show();
+
+            return chosen;
+        });
+    }
+
+    private async Task<AgentConfirmationResult> ShowConfirmationDialogAsync(string operationKey, string description)
+    {
+        return await Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            var result = AgentConfirmationResult.Deny;
+
+            var dialog = new Window
+            {
+                Title = "Agent · 操作确认",
+                Width = 440,
+                SizeToContent = SizeToContent.Height,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                CanResize = false,
+                Background = new SolidColorBrush(Color.Parse("#1a1a2e")),
+            };
+
+            // ── Header ────────────────────────────────────────────────────
+            var headerPanel = new StackPanel { Spacing = 4, Margin = new Thickness(18, 14) };
+            headerPanel.Children.Add(new TextBlock
+            {
+                Text = "⚠️  Agent · 操作确认",
+                Foreground = new SolidColorBrush(Color.Parse("#ffd166")),
+                FontSize = 13,
+                FontWeight = FontWeight.Bold,
+            });
+            headerPanel.Children.Add(new Border
+            {
+                Background = new SolidColorBrush(Color.Parse("#2a1f00")),
+                BorderBrush = new SolidColorBrush(Color.Parse("#ffd166")),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(5),
+                Padding = new Thickness(10, 6),
+                Margin = new Thickness(0, 4, 0, 0),
+                Child = new TextBlock
+                {
+                    Text = operationKey,
+                    Foreground = new SolidColorBrush(Color.Parse("#ffd166")),
+                    FontSize = 11,
+                    FontFamily = new FontFamily("Consolas,Menlo,monospace"),
+                },
+            });
+            var header = new Border
+            {
+                Background = new SolidColorBrush(Color.Parse("#16213e")),
+                Child = headerPanel,
+            };
+
+            // ── Body ──────────────────────────────────────────────────────
+            var bodyPanel = new StackPanel { Spacing = 16, Margin = new Thickness(18, 14) };
+            bodyPanel.Children.Add(new TextBlock
+            {
+                Text = description,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush(Color.Parse("#e0e0e0")),
+                FontSize = 12,
+            });
+
+            // ── Buttons ───────────────────────────────────────────────────
+            static Button MakeBtn(string label, string bg, string fg, string border) => new()
+            {
+                Content = label,
+                Padding = new Thickness(16, 9),
+                FontSize = 12,
+                Background = new SolidColorBrush(Color.Parse(bg)),
+                Foreground = new SolidColorBrush(Color.Parse(fg)),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.Parse(border)),
+                CornerRadius = new CornerRadius(6),
+            };
+
+            var denyBtn   = MakeBtn("✕  拒绝",            "#3b0000", "#ff6b6b", "#ff6b6b");
+            var onceBtn   = MakeBtn("✓  仅同意一次",       "#0f3460", "#7ec8ff", "#7ec8ff");
+            var alwaysBtn = MakeBtn("✓✓  本次会话始终同意", "#0d3b1a", "#6bffb8", "#6bffb8");
+
+            denyBtn.Click   += (_, _) => { result = AgentConfirmationResult.Deny;        dialog.Close(); };
+            onceBtn.Click   += (_, _) => { result = AgentConfirmationResult.AllowOnce;   dialog.Close(); };
+            alwaysBtn.Click += (_, _) => { result = AgentConfirmationResult.AllowAlways; dialog.Close(); };
+
+            bodyPanel.Children.Add(new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Children = { denyBtn, onceBtn, alwaysBtn },
+            });
+
+            dialog.Content = new StackPanel
+            {
+                Background = new SolidColorBrush(Color.Parse("#1a1a2e")),
+                Children = { header, bodyPanel },
+            };
+
+            var owner = TopLevel.GetTopLevel(this) as Window;
+            if (owner is not null)
+                await dialog.ShowDialog(owner);
+            else
+                dialog.Show();
+
+            return result;
+        });
     }
 
     private void OnAgentToolCalled()

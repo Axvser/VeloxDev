@@ -123,6 +123,12 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             T(GetFullTopology, nameof(GetFullTopology)),
         };
 
+        // ── Interaction (only registered when handlers are configured) ──
+        if (_scope.SelectionHandler != null)
+            tools.Add(T(RequestSelection, nameof(RequestSelection)));
+        if (_scope.ConfirmationHandler != null)
+            tools.Add(T(RequestConfirmation, nameof(RequestConfirmation)));
+
         // Merge developer-registered custom tools
         foreach (var tool in _scope.CustomTools)
             tools.Add(tool);
@@ -158,7 +164,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         "GetFullTopology", "FindNodes", "ResolveSlotId", "ListSlotProperties",
         "GetEnumSlotByValue", "GetLinkDetail", "GetNodeStatistics", "ListCreatableTypes",
         "ValidateWorkflow", "SearchForward", "SearchReverse", "SearchAllRelative",
-        "IsConnected", "FindPath",
+        "IsConnected", "FindPath", "RequestSelection", "RequestConfirmation",
     };
 
     /// <summary>
@@ -1734,13 +1740,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return Ok($"Slot '{conditionValue}' in {propertyName}[{nodeIndex}] channel set to {ch}");
     }
 
-    [Description("Connects SlotEnumerator slot (by condition) to another slot")]
+    [Description("Connects SlotEnumerator slot (by condition) to another slot. The receiver can be a plain slot property/index OR another SlotEnumerator slot — supply receiverCondition to pick the receiver slot by its enum/bool condition value instead of by index.")]
     private string ConnectEnumSlot(
         [Description("Sender node index")] int senderNodeIndex,
         [Description("Sender SlotEnumerator property")] string senderProperty,
         [Description("Sender condition value")] string senderCondition,
         [Description("Receiver node index")] int receiverNodeIndex,
-        [Description("Receiver slot property or index")] string receiverSlot)
+        [Description("Receiver slot property or index. When receiverCondition is supplied this must be the SlotEnumerator property name.")] string receiverSlot,
+        [Description("Optional: receiver condition value (enum name or True/False). Set this when the receiver slot also lives inside a SlotEnumerator property.")] string? receiverCondition = null)
     {
         var senderResult = GetEnumSlotByValue(senderNodeIndex, senderProperty, senderCondition);
         var senderParsed = JObject.Parse(senderResult);
@@ -1752,7 +1759,20 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
         if (!TryGetNode(receiverNodeIndex, out var receiverNode, out var error)) return error;
         IWorkflowSlotViewModel? receiver;
-        if (int.TryParse(receiverSlot, out var receiverIndex))
+
+        if (!string.IsNullOrEmpty(receiverCondition))
+        {
+            // Receiver is also a SlotEnumerator slot — resolve by condition value.
+            var receiverResult = GetEnumSlotByValue(receiverNodeIndex, receiverSlot, receiverCondition);
+            var receiverParsed = JObject.Parse(receiverResult);
+            if (receiverParsed["ok"]?.Value<bool>() != true) return receiverResult;
+            var receiverSlotId = receiverParsed["slotId"]?.ToString();
+            if (string.IsNullOrEmpty(receiverSlotId)) return Error("No receiver slotId");
+            if (receiverSlotId is null || FindComponentById(receiverSlotId) is not IWorkflowSlotViewModel enumReceiver)
+                return Error($"Receiver '{receiverSlotId}' not found");
+            receiver = enumReceiver;
+        }
+        else if (int.TryParse(receiverSlot, out var receiverIndex))
         {
             if (!TryGetSlot(receiverNodeIndex, receiverIndex, out receiver, out error)) return error;
         }
@@ -2330,6 +2350,41 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         }.ToString(Formatting.None);
     }
 
+    // ────────────────────────── Interaction Tools ──────────────────────────
+
+    [Description("Presents a single-choice selection to the user and waits for their answer. Use this tool when there are multiple plausible options and you need the user to pick one before proceeding. Returns the chosen option string, or an error if the user rejected the selection.")]
+    private async Task<string> RequestSelection(
+        [Description("A clear, concise prompt describing what the user needs to choose.")] string prompt,
+        [Description("JSON array of option strings the user can pick from, e.g. [\"Option A\",\"Option B\"].")] string optionsJson)
+    {
+        string[] options;
+        try { options = JsonConvert.DeserializeObject<string[]>(optionsJson) ?? []; }
+        catch (Exception ex) { return Error($"Invalid options JSON: {ex.Message}"); }
+
+        if (options.Length == 0) return Error("No options provided.");
+        if (_scope.SelectionHandler == null) return Error("No SelectionHandler registered on WorkflowAgentScope.");
+
+        var chosen = await _scope.SelectionHandler(prompt, options);
+        if (chosen == null)
+            return Error("User rejected the selection.");
+
+        return JsonConvert.SerializeObject(new { status = "ok", chosen }, Formatting.None);
+    }
+
+    [Description("Requests explicit user confirmation before performing a dangerous or sensitive operation (e.g. deleting nodes, bulk mutations). The user can allow once, allow always for this session, or deny. Do NOT proceed with the operation if this tool returns denied.")]
+    private async Task<string> RequestConfirmation(
+        [Description("A stable, unique key identifying this operation type, e.g. 'delete-all-nodes'. Used to remember session-wide approvals.")] string operationKey,
+        [Description("A human-readable description of what will happen if confirmed.")] string description)
+    {
+        if (_scope.ConfirmationHandler == null) return Error("No ConfirmationHandler registered on WorkflowAgentScope.");
+
+        var allowed = await _scope.ResolveConfirmationAsync(operationKey, description);
+        if (!allowed)
+            return JsonConvert.SerializeObject(new { status = "denied", message = "User denied the operation. Do NOT proceed." }, Formatting.None);
+
+        return JsonConvert.SerializeObject(new { status = "ok", message = "User confirmed. Proceed." }, Formatting.None);
+    }
+
     // ────────────────────────── Helpers ──────────────────────────
 
     private bool TryGetNode(int index, out IWorkflowNodeViewModel? node, out string error)
@@ -2735,6 +2790,8 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     /// <summary>
     /// Resolves a slot instance from node index + property name + optional collection index.
+    /// Supports direct slot properties, plain slot collections, and SlotEnumerator (IConditionalSlotProvider) properties.
+    /// For SlotEnumerator properties <paramref name="collectionIndex"/> selects the slot by Items[i].Slot.
     /// Returns null if not found.
     /// </summary>
     private IWorkflowSlotViewModel? ResolveSlotFromProperty(int nodeIndex, string propertyName, int collectionIndex = 0)
@@ -2745,6 +2802,21 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
         if (typeof(IWorkflowSlotViewModel).IsAssignableFrom(prop.PropertyType))
             return prop.GetValue(node) as IWorkflowSlotViewModel;
+
+        if (IsSlotEnumeratorProperty(prop.PropertyType, out _))
+        {
+            var enumerator = prop.GetValue(node);
+            if (enumerator == null) return null;
+            if (enumerator.GetType().GetProperty("Items")?.GetValue(enumerator) is not IEnumerable items) return null;
+            int i = 0;
+            foreach (var item in items)
+            {
+                if (i == collectionIndex)
+                    return item?.GetType().GetProperty("Slot")?.GetValue(item) as IWorkflowSlotViewModel;
+                i++;
+            }
+            return null;
+        }
 
         if (IsSlotCollection(prop.PropertyType, out _))
         {

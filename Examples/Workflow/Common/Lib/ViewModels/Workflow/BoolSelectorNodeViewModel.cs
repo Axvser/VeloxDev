@@ -13,8 +13,8 @@ public partial class TestNode : BoolSelectorNodeViewModel
     }
 }
 
-[AgentContext(AgentLanguages.Chinese, "布尔选择器节点，将输入路由到 True 或 False 输出口。默认大小为 260*200。创建后已预置 True/False 输出口，Condition 属性控制路由方向")]
-[AgentContext(AgentLanguages.English, "Bool selector node that routes input to True or False output slot based on Condition. Default size: 260×200. True/False slots are pre-populated on creation.")]
+[AgentContext(AgentLanguages.Chinese, "布尔选择器节点，将输入路由到 True 或 False 输出口。默认大小为 260*200")]
+[AgentContext(AgentLanguages.English, "Bool selector node that routes input to True or False output slot based on Condition. Default size: 260×200")]
 [WorkflowBuilder.Node<BoolSelectorHelper>(workSemaphore: 1)]
 public partial class BoolSelectorNodeViewModel
 {
@@ -28,8 +28,8 @@ public partial class BoolSelectorNodeViewModel
     [AgentContext(AgentLanguages.English, "Input slot (receiver). Connect an upstream output slot here to trigger routing.")]
     [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese, "布尔输出口集合（False/True），由 SlotEnumerator<bool> 管理")]
-    [AgentContext(AgentLanguages.English, "Bool output slot collection (False/True). Pre-populated on creation — do not add or remove slots manually.")]
+    [AgentContext(AgentLanguages.Chinese, "输出口（False/True）")]
+    [AgentContext(AgentLanguages.English, "Output slot (False/True)")]
     [VeloxProperty]
     [SlotSelectors(typeof(bool))]
     public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }
