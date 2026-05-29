@@ -185,7 +185,7 @@ public partial class TreeViewModel
     private Task AgentContextTest()
     {
         var context = this.AsAgentScope()
-            .WithLanguage(AgentLanguages.Chinese)
+            .WithPromptLanguage(AgentLanguages.Chinese)
             .WithComponents([
                 typeof(NodeViewModel),
                 typeof(ControllerViewModel),

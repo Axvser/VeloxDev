@@ -47,6 +47,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     private readonly StringBuilder _customToolPrompt = new();
 
     private AgentLanguages _defaultLanguage = AgentLanguages.English;
+    private AgentLanguages? _outputLanguage;
 
     /// <summary>
     /// Tools registered by the developer via <see cref="WithTools"/>.
@@ -57,13 +58,24 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// Sets the global default language used when a per-call <c>language</c> argument is <c>null</c>.
     /// Call this once at the start of the fluent chain before any <c>With*</c> registration.
     /// </summary>
-    public WorkflowAgentScope WithLanguage(AgentLanguages language)
+    public WorkflowAgentScope WithPromptLanguage(AgentLanguages language)
     {
         _defaultLanguage = language;
         return this;
     }
 
     private AgentLanguages Resolve(AgentLanguages? language) => language ?? _defaultLanguage;
+
+    /// <summary>
+    /// Sets the language the LLM should use when generating its responses.
+    /// This is independent of the prompt/documentation language set by <see cref="WithPromptLanguage"/>.
+    /// When not configured the LLM will respond in whatever language it deems appropriate.
+    /// </summary>
+    public WorkflowAgentScope WithOutputLanguage(AgentLanguages language)
+    {
+        _outputLanguage = language;
+        return this;
+    }
 
     public WorkflowAgentScope WithMaxToolCalls(int maxCalls)
     {
@@ -100,15 +112,22 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return this;
     }
 
-    public WorkflowAgentScope WithToolCallCallback(EventHandler<AgentToolCallEventArgs> handler)
+    private Func<AgentToolCallEventArgs, Task>? _toolCallHandler;
+
+    /// <summary>
+    /// Registers an asynchronous handler invoked after every Agent tool call.
+    /// The handler receives an <see cref="AgentToolCallEventArgs"/> with the tool name,
+    /// result, and cumulative call count. Replaces any previously registered handler.
+    /// </summary>
+    public WorkflowAgentScope WithToolCallCallback(Func<AgentToolCallEventArgs, Task> handler)
     {
-        ToolCalled += handler;
+        _toolCallHandler = handler;
         return this;
     }
 
     // ── Interactive handlers ────────────────────────────────────────────────
 
-    // Delegate signatures for the two interaction patterns.
+    // Low-level Func delegates consumed by WorkflowAgentToolkit.
     // null means the tool is not available (tool won't be registered).
     internal Func<string, string[], Task<string?>>? SelectionHandler { get; private set; }
     internal Func<string, string, Task<AgentConfirmationResult>>? ConfirmationHandler { get; private set; }
@@ -167,23 +186,35 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     /// <summary>
     /// Registers an asynchronous handler for the <c>RequestSelection</c> tool.
-    /// The handler receives a <c>prompt</c> and an array of <c>options</c> and must
-    /// return the chosen option string, or <c>null</c> if the user rejected the selection.
+    /// The handler receives an <see cref="AgentSelectionEventArgs"/> describing the prompt and options,
+    /// and must set <see cref="AgentSelectionEventArgs.SelectedOption"/> before completing.
+    /// When <c>null</c>, the <c>RequestSelection</c> tool is not registered.
     /// </summary>
-    public WorkflowAgentScope WithSelectionHandler(Func<string, string[], Task<string?>> handler)
+    public WorkflowAgentScope WithSelectionHandler(Func<AgentSelectionEventArgs, Task> handler)
     {
-        SelectionHandler = handler;
+        SelectionHandler = handler is null ? null : async (prompt, options) =>
+        {
+            var args = new AgentSelectionEventArgs(prompt, options);
+            await handler(args);
+            return args.SelectedOption;
+        };
         return this;
     }
 
     /// <summary>
     /// Registers an asynchronous handler for the <c>RequestConfirmation</c> tool.
-    /// The handler receives an <c>operationKey</c> (stable identifier) and a human-readable
-    /// <c>description</c>, and must return an <see cref="AgentConfirmationResult"/>.
+    /// The handler receives an <see cref="AgentConfirmationEventArgs"/> describing the operation,
+    /// and must set <see cref="AgentConfirmationEventArgs.Result"/> before completing.
+    /// When <c>null</c>, the <c>RequestConfirmation</c> tool is not registered.
     /// </summary>
-    public WorkflowAgentScope WithConfirmationHandler(Func<string, string, Task<AgentConfirmationResult>> handler)
+    public WorkflowAgentScope WithConfirmationHandler(Func<AgentConfirmationEventArgs, Task> handler)
     {
-        ConfirmationHandler = handler;
+        ConfirmationHandler = handler is null ? null : async (key, desc) =>
+        {
+            var args = new AgentConfirmationEventArgs(key, desc);
+            await handler(args);
+            return args.Result;
+        };
         return this;
     }
 
@@ -207,9 +238,12 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return result != AgentConfirmationResult.Deny;
     }
 
-    internal void RaiseToolCalled(string toolName, string result, int callCount)
+    internal async Task RaiseToolCalledAsync(string toolName, string result, int callCount)
     {
-        ToolCalled?.Invoke(this, new AgentToolCallEventArgs(toolName, result, callCount));
+        var args = new AgentToolCallEventArgs(toolName, result, callCount);
+        ToolCalled?.Invoke(this, args);
+        if (_toolCallHandler is not null)
+            await _toolCallHandler(args);
     }
 
     // ── Interaction safety prompt ───────────────────────────────────────────
@@ -348,7 +382,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// Already-registered types and framework built-in types are never re-added.
     /// </summary>
     /// <param name="assembly">The assembly to scan.</param>
-    /// <param name="language">Override language for this call; if <c>null</c> the global default set by <see cref="WithLanguage"/> is used.</param>
+    /// <param name="language">Override language for this call; if <c>null</c> the global default set by <see cref="WithPromptLanguage"/> is used.</param>
     public WorkflowAgentScope WithAutoDiscovery(Assembly assembly, AgentLanguages? language = null)
     {
         if (assembly is null) throw new ArgumentNullException(nameof(assembly));
@@ -388,7 +422,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// Scans <paramref name="assemblyName"/> and automatically registers all workflow-related types.
     /// </summary>
     /// <param name="assemblyName">Simple name of the assembly to scan (e.g. <c>"Lib"</c>).</param>
-    /// <param name="language">Override language for this call; if <c>null</c> the global default set by <see cref="WithLanguage"/> is used.</param>
+    /// <param name="language">Override language for this call; if <c>null</c> the global default set by <see cref="WithPromptLanguage"/> is used.</param>
     public WorkflowAgentScope WithAutoDiscovery(string assemblyName, AgentLanguages? language = null)
     {
         var assembly = AppDomain.CurrentDomain.GetAssemblies()
@@ -547,7 +581,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     }
 
     /// <summary>
-    /// Provides full context using the global default language set by <see cref="WithLanguage"/>.
+    /// Provides full context using the global default language set by <see cref="WithPromptLanguage"/>.
     /// </summary>
     public string ProvideAllContexts() => ProvideAllContexts(_defaultLanguage);
 
@@ -588,6 +622,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         // ── Built-in Skills ──
         result.AppendLine(AgentEmbeddedResources.ReadAllSkills(SystemName, language).TrimEnd());
         result.AppendLine();
+        AppendOutputLanguageDirective(result);
         return result.ToString();
     }
 
@@ -597,7 +632,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// GetWorkflowSummary / GetComponentContext / ListComponentCommands
     /// to discover details on demand, reducing initial token overhead.
     /// </summary>
-    /// <summary>Provides a progressive context prompt using the global default language set by <see cref="WithLanguage"/>.</summary>
+    /// <summary>Provides a progressive context prompt using the global default language set by <see cref="WithPromptLanguage"/>.</summary>
     public string ProvideProgressiveContextPrompt() => ProvideProgressiveContextPrompt(_defaultLanguage);
 
     public string ProvideProgressiveContextPrompt(AgentLanguages language)
@@ -660,7 +695,23 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         // ── Built-in Skills ──
         result.AppendLine(AgentEmbeddedResources.ReadAllSkills(SystemName, language).TrimEnd());
         result.AppendLine();
+        AppendOutputLanguageDirective(result);
         return result.ToString();
+    }
+
+    private void AppendOutputLanguageDirective(StringBuilder result)
+    {
+        if (_outputLanguage is null) return;
+        var displayName = _outputLanguage.Value.GetDisplayName();
+        var langCode = _outputLanguage.Value.ToLanguageCode();
+        result.AppendLine();
+        result.AppendLine("## Output Language");
+        result.AppendLine();
+        result.AppendLine($"> **Always use {displayName} ({langCode}) for ALL output**, including:");
+        result.AppendLine($"> - Every conversational reply to the user.");
+        result.AppendLine($"> - The `prompt` argument of `RequestSelection` and the `description` argument of `RequestConfirmation`.");
+        result.AppendLine($"> - Any human-readable text embedded inside tool call arguments.");
+        result.AppendLine($"> This rule overrides any language implied by the source material or documentation.");
     }
 
     public string ProvideFrameworkContext(AgentLanguages language = AgentLanguages.English)

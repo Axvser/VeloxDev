@@ -4,7 +4,7 @@ using Demo.Workflow;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
-using VeloxDev.AI.Workflow;
+using VeloxDev.AI;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -113,43 +113,43 @@ public partial class WorkflowView : ContentView, WorkflowBehaviors.IWorkflowSurf
         }
     }
 
-    private Task<string?> ShowSelectionDialogAsync(string prompt, string[] options)
+    private Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
     {
-        var tcs = new TaskCompletionSource<string?>();
+        var tcs = new TaskCompletionSource();
         MainThread.BeginInvokeOnMainThread(async () =>
         {
-            // DisplayActionSheet 返回用户选中的选项文本，点取消时返回 null
             var result = await Application.Current!.MainPage!.DisplayActionSheet(
-                prompt, "取消（不选择）", null, options);
-            tcs.TrySetResult(result == "取消（不选择）" ? null : result);
+                args.Prompt, "取消（不选择）", null, [.. args.Options]);
+            args.SelectedOption = result == "取消（不选择）" ? null : result;
+            tcs.TrySetResult();
         });
         return tcs.Task;
     }
 
-    private Task<AgentConfirmationResult> ShowConfirmationDialogAsync(string operationKey, string description)
+    private Task ShowConfirmationDialogAsync(AgentConfirmationEventArgs args)
     {
-        var tcs = new TaskCompletionSource<AgentConfirmationResult>();
+        var tcs = new TaskCompletionSource();
         MainThread.BeginInvokeOnMainThread(async () =>
         {
-            // 第一步：使用 DisplayAlert 说明操作，选择是否允许
             var allow = await Application.Current!.MainPage!.DisplayAlert(
-                $"⚠️ Agent · 操作确认",
-                $"[操作] {operationKey}\n\n{description}",
+                "⚠️ Agent · 操作确认",
+                $"[操作] {args.OperationKey}\n\n{args.Description}",
                 "允许", "拒绝");
 
             if (!allow)
             {
-                tcs.TrySetResult(AgentConfirmationResult.Deny);
+                args.Result = AgentConfirmationResult.Deny;
+                tcs.TrySetResult();
                 return;
             }
 
-            // 第二步：选择仅一次还是始终允许
             var always = await Application.Current!.MainPage!.DisplayAlert(
-                $"⚠️ Agent · 授权范围",
-                $"是否在本次会话中始终允许该操作？",
+                "⚠️ Agent · 授权范围",
+                "是否在本次会话中始终允许该操作？",
                 "始终允许", "仅同意一次");
 
-            tcs.TrySetResult(always ? AgentConfirmationResult.AllowAlways : AgentConfirmationResult.AllowOnce);
+            args.Result = always ? AgentConfirmationResult.AllowAlways : AgentConfirmationResult.AllowOnce;
+            tcs.TrySetResult();
         });
         return tcs.Task;
     }

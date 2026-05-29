@@ -1,7 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
-using VeloxDev.AI.Workflow;
+using VeloxDev.AI;
 
 namespace Demo;
 

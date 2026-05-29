@@ -3,7 +3,7 @@ using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Threading.Tasks;
-using VeloxDev.AI.Workflow;
+using VeloxDev.AI;
 using VeloxDev.MVVM.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -158,24 +158,26 @@ namespace Demo
             WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(workflowSurfaceControl);
         }
 
-        private Task<string?> ShowSelectionDialogAsync(string prompt, string[] options)
+        private Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
         {
             if (InvokeRequired)
-                return (Task<string?>)Invoke(() => ShowSelectionDialogAsync(prompt, options));
+                return (Task)Invoke(() => ShowSelectionDialogAsync(args));
 
-            using var dlg = new AgentSelectionDialog(prompt, options);
+            using var dlg = new AgentSelectionDialog(args.Prompt, [.. args.Options]);
             dlg.ShowDialog(this);
-            return Task.FromResult(dlg.ChosenOption);
+            args.SelectedOption = dlg.ChosenOption;
+            return Task.CompletedTask;
         }
 
-        private Task<AgentConfirmationResult> ShowConfirmationDialogAsync(string operationKey, string description)
+        private Task ShowConfirmationDialogAsync(AgentConfirmationEventArgs args)
         {
             if (InvokeRequired)
-                return (Task<AgentConfirmationResult>)Invoke(() => ShowConfirmationDialogAsync(operationKey, description));
+                return (Task)Invoke(() => ShowConfirmationDialogAsync(args));
 
-            using var dlg = new AgentConfirmationDialog(operationKey, description);
+            using var dlg = new AgentConfirmationDialog(args.OperationKey, args.Description);
             dlg.ShowDialog(this);
-            return Task.FromResult(dlg.Result);
+            args.Result = dlg.Result;
+            return Task.CompletedTask;
         }
 
         private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)

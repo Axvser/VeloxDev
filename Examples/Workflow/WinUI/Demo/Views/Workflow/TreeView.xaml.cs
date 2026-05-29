@@ -12,7 +12,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
-using VeloxDev.AI.Workflow;
+using VeloxDev.AI;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -228,13 +228,15 @@ namespace Demo.Views
             }
         }
 
-        private async Task<string?> ShowSelectionDialogAsync(string prompt, string[] options)
+        private async Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
         {
             var tcs = new TaskCompletionSource<string?>();
 
             DispatcherQueue.TryEnqueue(async () =>
             {
                 string? chosen = null;
+                var prompt = args.Prompt;
+                var options = args.Options;
 
                 var optionStack = new StackPanel { Spacing = 6 };
                 optionStack.Children.Add(new TextBlock
@@ -278,16 +280,18 @@ namespace Demo.Views
                 tcs.TrySetResult(chosen);
             });
 
-            return await tcs.Task;
+            args.SelectedOption = await tcs.Task;
         }
 
-        private async Task<AgentConfirmationResult> ShowConfirmationDialogAsync(string operationKey, string description)
+        private async Task ShowConfirmationDialogAsync(AgentConfirmationEventArgs args)
         {
             var tcs = new TaskCompletionSource<AgentConfirmationResult>();
 
             DispatcherQueue.TryEnqueue(async () =>
             {
                 var result = AgentConfirmationResult.Deny;
+                var operationKey = args.OperationKey;
+                var description = args.Description;
 
                 var bodyPanel = new StackPanel { Spacing = 8 };
                 bodyPanel.Children.Add(new TextBlock
@@ -325,7 +329,7 @@ namespace Demo.Views
                 tcs.TrySetResult(result);
             });
 
-            return await tcs.Task;
+            args.Result = await tcs.Task;
         }
 
         private void OnAgentToolCalled()

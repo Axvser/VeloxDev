@@ -17,6 +17,8 @@ CreateAndConfigureNode(fullTypeName, ..., enumSlotProperty="OutputSlots", enumTy
 
 调用 `SetEnumSlotCollection(nodeIndex, propertyName, fullEnumTypeName)`。**不要删除并重新创建节点**。
 
+- `fullEnumTypeName` 是**完全限定类型名字符串**（如 `"Demo.ViewModels.MyEnum"`），与 `CreateAndConfigureNode` 中使用的值相同。
+
 > ⚠️ 切换枚举类型会销毁旧输出插槽上的所有连接，完成后必须重新连线。
 
 ### 通过条件值直接访问内部插槽
@@ -27,12 +29,39 @@ CreateAndConfigureNode(fullTypeName, ..., enumSlotProperty="OutputSlots", enumTy
 - **`SetEnumSlotChannel(nodeIndex, propertyName, conditionValue, channel)`** – 修改指定插槽的 `SlotChannel`。
 - **`ConnectEnumSlot(senderNodeIndex, senderProperty, senderCondition, receiverNodeIndex, receiverSlot)`** – 通过条件值连接枚举器插槽到另一个插槽。自动验证连接成功。
 
-**典型工作流程:**
-1. 调用 `GetEnumSlotByValue(2, "OutputSlots", "GET")` 定位 `GET` 输出插槽。
-2. 调用 `ConnectEnumSlot(2, "OutputSlots", "GET", 5, "InputSlot")` 将其连接到节点 5 的输入插槽。
+### 强制连接协议（严格执行，不得跳过）
+
+在连接 `SlotEnumerator` 内任意插槽之前，**必须**完整执行阶段一。跳过阶段一会导致同一源插槽被连接到多个意料外的分支。
+
+**阶段一 — 先普查所有内部插槽**
+
+对拥有该 SlotEnumerator 的节点调用 `ListSlotProperties(nodeIndex)`，找到 `slotEnumerator` 为 `true` 的条目，读取其 `currentSelectorType` 及所有条件值列表。在完整获得条件值列表之前，**不得进入阶段二**。
+
+**阶段二 — 逐一连接每个插槽**
+
+对阶段一列出的每个条件值，恰好调用一次 `ConnectEnumSlot`，`senderCondition` 须与条件值精确匹配。不得使用阶段一未返回的条件值调用 `ConnectEnumSlot`。
+
+**示例（正确）**
+```
+// 阶段一
+ListSlotProperties(2)  →  OutputSlots: ["GET", "POST", "DELETE"]
+
+// 阶段二 —— 每个条件值恰好调用一次
+ConnectEnumSlot(2, "OutputSlots", "GET",    5, "InputSlot")
+ConnectEnumSlot(2, "OutputSlots", "POST",   6, "InputSlot")
+ConnectEnumSlot(2, "OutputSlots", "DELETE", 7, "InputSlot")
+```
+
+**示例（错误 — 禁止）**
+```
+// ✗ 未普查直接连接 —— 可能连接到错误的条件
+ConnectEnumSlot(2, "OutputSlots", "GET", 5, "InputSlot")
+ConnectEnumSlot(2, "OutputSlots", "GET", 6, "InputSlot")  // 重复 → 一个插槽连了两个目标
+```
 
 ### 规则
 
+- **`enumTypeName` / `fullEnumTypeName`** 始终接受**完全限定类型名字符串**。在 C# API 层面，`SetSelector(object? selector)` 同时支持传入 `Type` 对象或字符串两种形式。
 - 禁止手动增删 SlotEnumerator 属性上的插槽。
 - 禁止用 `PatchNodeProperties` 设置选择器类型，该操作会被拒绝。
 - **`[SlotSelectors]` 是用户自定义类型的权威白名单**；框架枚举（`SlotChannel`、`SlotState`）无论是否在白名单中，始终合法。

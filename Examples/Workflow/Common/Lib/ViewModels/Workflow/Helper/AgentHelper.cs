@@ -51,17 +51,19 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
 
     /// <summary>
     /// Set by the View layer to handle <c>RequestSelection</c> tool calls.
-    /// Receives a prompt and a list of options; returns the chosen option or <c>null</c> if rejected.
+    /// Receives an <see cref="AgentSelectionEventArgs"/> with prompt and options;
+    /// set <see cref="AgentSelectionEventArgs.SelectedOption"/> before completing.
     /// When <c>null</c>, the selection tool is not registered.
     /// </summary>
-    public Func<string, string[], Task<string?>>? SelectionHandler { get; set; }
+    public Func<AgentSelectionEventArgs, Task>? SelectionHandler { get; set; }
 
     /// <summary>
     /// Set by the View layer to handle <c>RequestConfirmation</c> tool calls.
-    /// Receives an operation key and a description; returns an <see cref="AgentConfirmationResult"/>.
+    /// Receives an <see cref="AgentConfirmationEventArgs"/> with operation key and description;
+    /// set <see cref="AgentConfirmationEventArgs.Result"/> before completing.
     /// When <c>null</c>, the confirmation tool is not registered.
     /// </summary>
-    public Func<string, string, Task<AgentConfirmationResult>>? ConfirmationHandler { get; set; }
+    public Func<AgentConfirmationEventArgs, Task>? ConfirmationHandler { get; set; }
 
     /// <summary>
     /// Controls how aggressively the Agent uses interaction tools (0–3).
@@ -80,23 +82,25 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     {
         // 创建独立的工作空间
         var scope = tree.AsAgentScope()
-            .WithLanguage(AgentLanguages.English)   // 默认提示词语言
+            .WithPromptLanguage(AgentLanguages.English)   // 默认提示词语言
+            .WithOutputLanguage(AgentLanguages.Chinese)   // 默认输出语言
             .WithAutoDiscovery(assemblyName: "Lib") // 从程序集自动发现组件
             .WithAutoMarkDirty(false)               // 视图是否自动标记为脏
             .WithMaxToolCalls(200)                  // 最大工具调用数
-            .WithToolCallCallback((sender, e) =>    // 工具调用回调
+            .WithToolCallCallback(args =>           // 工具调用回调
             {
                 helper.ToolCalled?.Invoke();
+                return Task.CompletedTask;
             })
-            .WithSelectionHandler(async (prompt, options) => // Agent询问用户执行哪一项操作
+            .WithSelectionHandler(async args => // Agent询问用户执行哪一项操作
             {
-                if (helper.SelectionHandler is null) return null;
-                return await helper.SelectionHandler(prompt, options);
+                if (helper.SelectionHandler is not null)
+                    await helper.SelectionHandler(args);
             })
-            .WithConfirmationHandler(async (key, desc) => // Agent向用户确认操作权限
+            .WithConfirmationHandler(async args => // Agent向用户确认操作权限
             {
-                if (helper.ConfirmationHandler is null) return AgentConfirmationResult.Deny;
-                return await helper.ConfirmationHandler(key, desc);
+                if (helper.ConfirmationHandler is not null)
+                    await helper.ConfirmationHandler(args);
             });
 
         // 交互工具激进程度 0~3

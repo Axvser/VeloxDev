@@ -133,11 +133,24 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
         return conditionMap.TryGetValue(value, out slot);
     }
 
-    public void SetSelector(Type selectorType)
+    public void SetSelector(object? selector)
     {
         if (Parent is null)
         {
             Debug.Fail("Parent must be set before configuring selector type.");
+            return;
+        }
+
+        Type? selectorType = selector switch
+        {
+            Type t => t,
+            string s => Type.GetType(s),
+            _ => null
+        };
+
+        if (selectorType is null)
+        {
+            Debug.Fail($"SetSelector: cannot resolve a Type from '{selector}'. Pass a Type or a fully-qualified type name string.");
             return;
         }
 

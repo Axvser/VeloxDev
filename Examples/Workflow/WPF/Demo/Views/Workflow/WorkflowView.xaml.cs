@@ -10,7 +10,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using VeloxDev.AI;
-using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -158,10 +157,12 @@ public partial class WorkflowView : UserControl
         Dispatcher.InvokeAsync(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this), System.Windows.Threading.DispatcherPriority.Background);
     }
 
-    private async Task<string?> ShowSelectionDialogAsync(string prompt, string[] options)
+    private async Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
     {
-        return await Dispatcher.InvokeAsync<string?>(() =>
+        var chosen = await Dispatcher.InvokeAsync<string?>(() =>
         {
+            var prompt = args.Prompt;
+            var options = args.Options;
             var win = new System.Windows.Window
             {
                 Title = "Agent · 请选择",
@@ -254,12 +255,15 @@ public partial class WorkflowView : UserControl
             win.ShowDialog();
             return chosen;
         });
+        args.SelectedOption = chosen;
     }
 
-    private async Task<AgentConfirmationResult> ShowConfirmationDialogAsync(string operationKey, string description)
+    private async Task ShowConfirmationDialogAsync(AgentConfirmationEventArgs args)
     {
-        return await Dispatcher.InvokeAsync<AgentConfirmationResult>(() =>
+        var result = await Dispatcher.InvokeAsync<AgentConfirmationResult>(() =>
         {
+            var operationKey = args.OperationKey;
+            var description = args.Description;
             var result = AgentConfirmationResult.Deny;
 
             var win = new System.Windows.Window
@@ -358,6 +362,7 @@ public partial class WorkflowView : UserControl
             win.ShowDialog();
             return result;
         });
+        args.Result = result;
     }
 
     private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)

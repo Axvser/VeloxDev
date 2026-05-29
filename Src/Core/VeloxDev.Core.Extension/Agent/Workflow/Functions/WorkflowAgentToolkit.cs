@@ -148,7 +148,10 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             AIFunctionArguments arguments, CancellationToken cancellationToken)
         {
             var result = await base.InvokeCoreAsync(arguments, cancellationToken);
-            _toolkit.Track(Name, result?.ToString() ?? string.Empty);
+            var resultText = result?.ToString() ?? string.Empty;
+            await _toolkit.TrackAsync(Name, resultText);
+            if (_toolkit._scope.MaxToolCalls.HasValue && _toolkit._toolCallCount > _toolkit._scope.MaxToolCalls.Value)
+                return WorkflowAgentToolkit.Error($"Tool call limit ({_toolkit._scope.MaxToolCalls.Value}) exceeded.");
             return result;
         }
     }
@@ -171,15 +174,12 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// Wraps a tool result with call counting, callback invocation, max-call enforcement,
     /// and optional auto-dirty marking when <see cref="WorkflowAgentScope.AutoMarkDirty"/> is enabled.
     /// </summary>
-    private string Track(string toolName, string result)
+    private async Task TrackAsync(string toolName, string result)
     {
         _toolCallCount++;
-        _scope.RaiseToolCalled(toolName, result, _toolCallCount);
-        if (_scope.MaxToolCalls.HasValue && _toolCallCount > _scope.MaxToolCalls.Value)
-            return Error($"Tool call limit ({_scope.MaxToolCalls.Value}) exceeded.");
+        await _scope.RaiseToolCalledAsync(toolName, result, _toolCallCount);
         if (_scope.AutoMarkDirty && !QueryToolNames.Contains(toolName))
             Tree.GetHelper().MarkDirty();
-        return result;
     }
 
     // ────────────────────────── Query Functions ──────────────────────────

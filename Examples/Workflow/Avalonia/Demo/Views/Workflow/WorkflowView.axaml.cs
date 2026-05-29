@@ -14,6 +14,7 @@ using System.Collections.Specialized;
 using System.IO;
 using System.Threading.Tasks;
 using VeloxDev.AI;
+using VeloxDev.AI;
 using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
@@ -158,11 +159,13 @@ public partial class WorkflowView : UserControl
 
     // ── Agent interaction dialogs ────────────────────────────────────────────
 
-    private async Task<string?> ShowSelectionDialogAsync(string prompt, string[] options)
+    private async Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
     {
-        return await Dispatcher.UIThread.InvokeAsync(async () =>
+        string? chosen = null;
+        await Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            string? chosen = null;
+            var prompt = args.Prompt;
+            var options = args.Options;
 
             var dialog = new Window
             {
@@ -258,15 +261,18 @@ public partial class WorkflowView : UserControl
             else
                 dialog.Show();
 
-            return chosen;
+            return;
         });
+        args.SelectedOption = chosen;
     }
 
-    private async Task<AgentConfirmationResult> ShowConfirmationDialogAsync(string operationKey, string description)
+    private async Task ShowConfirmationDialogAsync(AgentConfirmationEventArgs args)
     {
-        return await Dispatcher.UIThread.InvokeAsync(async () =>
+        var result = AgentConfirmationResult.Deny;
+        await Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            var result = AgentConfirmationResult.Deny;
+            var operationKey = args.OperationKey;
+            var description = args.Description;
 
             var dialog = new Window
             {
@@ -359,9 +365,8 @@ public partial class WorkflowView : UserControl
                 await dialog.ShowDialog(owner);
             else
                 dialog.Show();
-
-            return result;
         });
+        args.Result = result;
     }
 
     private void OnAgentToolCalled()
