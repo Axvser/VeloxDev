@@ -141,6 +141,33 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
             return;
         }
 
+        // ISlotProvider path: instance-driven slot list (not enum/bool)
+        if (selector is ISlotProvider provider)
+        {
+            var definitions = provider.GetSlots().ToArray();
+            var providerTypeName = provider.GetType().FullName ?? provider.GetType().Name;
+
+            SelectorType = provider.GetType();
+            SelectorTypeName = providerTypeName;
+            conditionMap.Clear();
+            for (int i = Items.Count - 1; i >= 0; i--)
+                Items.RemoveAt(i);
+
+            foreach (var def in definitions)
+            {
+                var slot = new TSlot();
+                var label = string.IsNullOrEmpty(def.Label) ? def.Value?.ToString() ?? string.Empty : def.Label;
+                var conditional = new ConditionalSlot<TSlot>
+                {
+                    Name = label,
+                    Value = def.Value,
+                    Slot = slot
+                };
+                Items.Add(conditional);
+            }
+            return;
+        }
+
         Type? selectorType = selector switch
         {
             Type t => t,
@@ -150,13 +177,13 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
         if (selectorType is null)
         {
-            Debug.Fail($"SetSelector: cannot resolve a Type from '{selector}'. Pass a Type or a fully-qualified type name string.");
+            Debug.Fail($"SetSelector: cannot resolve a Type from '{selector}'. Pass a Type, a fully-qualified type name string, or an ISlotProvider instance.");
             return;
         }
 
         if (!selectorType.IsEnum && selectorType != typeof(bool))
         {
-            Debug.Fail("Provided type must be an enum or bool.");
+            Debug.Fail("Provided type must be an enum or bool. For custom slot lists implement ISlotProvider and pass an instance.");
             return;
         }
 

@@ -22,9 +22,11 @@ public partial class EnumSelectorNodeViewModel
     [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 
     [AgentContext(AgentLanguages.Chinese, "输出口（发送端）")]
-    [AgentContext(AgentLanguages.English, "Output slot (sender)")]
+    [AgentContext(AgentLanguages.English, "Output slot (sender). Supports enum types (NetworkRequestMethod, VoltageRange, ModelProtocol) " +
+        "and the instance-driven CustomRouteSelector. " +
+        "For CustomRouteSelector pass its JSON to 'selectorTypeOrJson' and 'Demo.ViewModels.CustomRouteSelector' to 'nonEnumTypeName' when calling SetEnumSlotCollection.")]
     [VeloxProperty]
-    [SlotSelectors(typeof(NetworkRequestMethod), typeof(VoltageRange), typeof(ModelProtocol))]
+    [SlotSelectors(typeof(NetworkRequestMethod), typeof(VoltageRange), typeof(ModelProtocol), typeof(CustomRouteSelector))]
     public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }
 
     partial void OnOutputSlotsChanged(SlotEnumerator<SlotViewModel>? oldValue, SlotEnumerator<SlotViewModel>? newValue)

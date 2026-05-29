@@ -15,11 +15,31 @@ CreateAndConfigureNode(fullTypeName, ..., enumSlotProperty="OutputSlots", enumTy
 
 ### 修改已有节点的枚举类型
 
-调用 `SetEnumSlotCollection(nodeIndex, propertyName, fullEnumTypeName)`。**不要删除并重新创建节点**。
+调用 `SetEnumSlotCollection(nodeIndex, propertyName, selectorTypeOrJson, nonEnumTypeName?)`。**不要删除并重新创建节点**。
 
-- `fullEnumTypeName` 是**完全限定类型名字符串**（如 `"Demo.ViewModels.MyEnum"`），与 `CreateAndConfigureNode` 中使用的值相同。
+**枚举 / bool 选择器**（最常见）：
 
-> ⚠️ 切换枚举类型会销毁旧输出插槽上的所有连接，完成后必须重新连线。
+- 在 `selectorTypeOrJson` 中传入完全限定类型名（如 `"Demo.ViewModels.MyEnum"`）。
+- `nonEnumTypeName` 留空。
+
+**ISlotProvider（实例驱动）选择器**：
+
+当 `[SlotSelectors]` 白名单中存在非枚举类型（即实现了 `ISlotProvider` 的类型）时，必须遵循以下两步协议：
+
+1. **先查结构** — 调用 `GetTypeSchema(nonEnumTypeName)` 读取该类型的属性结构、嵌套类型及开发者说明。不得在未检查 schema 的情况下假设 JSON 结构。
+2. **构造并应用** — 根据 schema 构建正确的 JSON，再调用 `SetEnumSlotCollection`，将 JSON 填入 `selectorTypeOrJson`，完全限定类型名填入 `nonEnumTypeName`。
+
+```
+// 第一步 —— 调用前必须先查结构
+GetTypeSchema("Demo.ViewModels.CustomRouteSelector")
+
+// 第二步 —— 依据 schema 构造 JSON，然后应用
+SetEnumSlotCollection(nodeIndex, "OutputSlots",
+    "{\"Routes\":[{\"Key\":\"A\",\"Label\":\"路径A\"},{\"Key\":\"B\",\"Label\":\"路径B\"}]}",
+    "Demo.ViewModels.CustomRouteSelector")
+```
+
+> ⚠️ 切换选择器类型会销毁旧输出插槽上的所有连接，完成后必须重新连线。
 
 ### 通过条件值直接访问内部插槽
 

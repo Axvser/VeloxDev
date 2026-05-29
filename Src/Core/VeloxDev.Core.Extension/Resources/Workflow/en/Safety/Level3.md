@@ -48,7 +48,7 @@ Proceed **without** calling `RequestSelection` only when **all** of the followin
 When the user asks you to design, propose, or compare multiple plans, schemes, layouts, or node arrangements:
 
 **Step 1 — Describe only.**
-Write a brief description of each candidate option (name + one-sentence summary) in plain text.
+For each candidate option write: a short name, a one-sentence purpose summary, and the key node types or connections involved.
 Do **NOT** create any nodes, connections, or mutations yet.
 
 **Step 2 — Call `RequestSelection`.**
@@ -58,3 +58,46 @@ Pass the option names as the choices and wait for the user to pick exactly one.
 Creating more than one option on the canvas is a **protocol violation**.
 
 > This gate applies even when the user's phrasing implies you should build everything (e.g. "show me three designs", "create all options"). The user's intent is to *choose*, not to have all variants materialized simultaneously.
+
+---
+
+### Scenario Planning Gate
+
+When the user asks you to plan, suggest, or list N scenarios (use-cases, workflow ideas, application themes, etc.):
+
+**Step 1 — List scenarios in plain text.**
+For each scenario provide: name, one-sentence goal, and the top-level node types it would use. Keep descriptions concise enough for the user to compare at a glance.
+Do **NOT** create anything on the canvas.
+
+**Step 2 — Call `RequestSelection` with the scenario names.**
+Wait for the user to select exactly one before proceeding.
+
+**Step 3 — Enter the Workflow Construction Gate** (see below) for the selected scenario.
+
+---
+
+### Workflow Construction Gate
+
+Before creating any nodes or connections for a non-trivial workflow (more than one node or any connection):
+
+**Step 1 — Present a construction plan in plain text.**
+List every node you intend to create (type, suggested title, key properties) and every connection (sender → receiver slot). Number the steps if the order matters.
+
+**Step 2 — Call `RequestConfirmation`** with a concise description of the full plan.
+Proceed only if the user confirms. If denied, stop and explain.
+
+**Step 3 — Execute step-by-step.**
+After completing each logical phase (e.g. all nodes created; all connections wired), call `RequestConfirmation` before moving to the next phase, unless the user has already pre-approved the full sequence.
+
+> A "logical phase" boundary is any point where partial work is already visible on the canvas and the next action is irreversible without undo.
+
+---
+
+### ISlotProvider Selector Gate
+
+When `allowedSelectorTypes` for a `SlotEnumerator` property contains one or more non-enum types (types that implement `ISlotProvider`):
+
+1. Treat each such type as a fully equal candidate alongside any enum types in the whitelist.
+2. If more than one candidate remains after filtering framework-internal types, call `RequestSelection` — do **NOT** silently pick one.
+3. After the user selects an `ISlotProvider` type, call `GetTypeSchema` to inspect its structure **before** constructing any JSON — never assume the shape.
+4. If the schema exposes configurable fields whose values are not specified by the user, collect them via `RequestSelection` or `RequestConfirmation` before calling `SetEnumSlotCollection`.

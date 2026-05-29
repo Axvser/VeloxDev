@@ -15,11 +15,31 @@ CreateAndConfigureNode(fullTypeName, ..., enumSlotProperty="OutputSlots", enumTy
 
 ### Changing Selector on an Existing Node
 
-Call `SetEnumSlotCollection(nodeIndex, propertyName, fullEnumTypeName)`. Do **NOT** delete and recreate the node.
+Call `SetEnumSlotCollection(nodeIndex, propertyName, selectorTypeOrJson, nonEnumTypeName?)`.  Do **NOT** delete and recreate the node.
 
-- `fullEnumTypeName` is a **fully-qualified type name string** (e.g. `"Demo.ViewModels.MyEnum"`). This is the same value used in `CreateAndConfigureNode`.
+**Enum / bool selector** (most common):
 
-> ⚠️ Switching enum type destroys ALL existing connections on old output slots — you must rewire them after calling.
+- Pass the fully-qualified type name in `selectorTypeOrJson` (e.g. `"Demo.ViewModels.MyEnum"`).
+- Leave `nonEnumTypeName` empty.
+
+**ISlotProvider (instance-driven) selector**:
+
+When `[SlotSelectors]` lists a non-enum type (one that implements `ISlotProvider`), follow this mandatory two-step protocol:
+
+1. **Inspect first** — call `GetTypeSchema(nonEnumTypeName)` to read the type's property structure, nested types, and developer instructions. Never assume the JSON shape.
+2. **Construct and apply** — build the correct JSON from the schema, then call `SetEnumSlotCollection` with that JSON in `selectorTypeOrJson` and the fully-qualified type name in `nonEnumTypeName`.
+
+```
+// Step 1 — always inspect before constructing
+GetTypeSchema("Demo.ViewModels.CustomRouteSelector")
+
+// Step 2 — construct JSON based on schema, then apply
+SetEnumSlotCollection(nodeIndex, "OutputSlots",
+    "{\"Routes\":[{\"Key\":\"A\",\"Label\":\"Path A\"},{\"Key\":\"B\",\"Label\":\"Path B\"}]}",
+    "Demo.ViewModels.CustomRouteSelector")
+```
+
+> ⚠️ Switching selector type destroys ALL existing connections on old output slots — rewire after calling.
 
 ### Accessing Internal Slots by Condition Value
 

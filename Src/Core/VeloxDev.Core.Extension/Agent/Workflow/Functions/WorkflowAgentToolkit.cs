@@ -984,11 +984,18 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return Error($"Slot '{slotRuntimeId}' not found in '{propertyName}'.");
     }
 
-    [Description("Sets or changes the selector type (enum or bool) on a SlotEnumerator property of an EXISTING node. This is the correct way to change the enum type on a node that already exists — do NOT delete and recreate the node. Calls SetSelector on the enumerator to rebuild slots. Pass 'System.Boolean' for bool selection. WARNING: switching enum type destroys ALL existing connections on the old output slots; you must rewire them after calling this. The node's other slots (e.g. InputSlot) are not affected.")]
+    [Description("Sets or changes the selector on a SlotEnumerator property of an EXISTING node. " +
+                 "For enum/bool selectors pass the fully-qualified type name in 'selectorTypeOrJson' (e.g. 'Demo.ViewModels.NetworkRequestMethod' or 'System.Boolean'). " +
+                 "For non-enum ISlotProvider selectors: FIRST call GetTypeSchema(nonEnumTypeName) to understand the type's property structure, " +
+                 "THEN construct the correct JSON and pass it in 'selectorTypeOrJson', with the fully-qualified type name in 'nonEnumTypeName'. " +
+                 "Never hard-code the JSON without inspecting the schema first — the type structure may differ from assumptions. " +
+                 "This is the correct way to change the selector on a node that already exists — do NOT delete and recreate the node. " +
+                 "WARNING: switching selector type destroys ALL existing connections on the old output slots; you must rewire them after calling this.")]
     private string SetEnumSlotCollection(
         [Description("Node index.")] int nodeIndex,
         [Description("Name of the slot collection or SlotEnumerator property, e.g. 'OutputSlots'.")] string propertyName,
-        [Description("Fully-qualified enum or bool type name, e.g. 'Demo.ViewModels.NetworkRequestMethod' or 'System.Boolean'.")] string fullEnumTypeName)
+        [Description("For enum/bool: fully-qualified type name (e.g. 'Demo.ViewModels.NetworkRequestMethod'). For non-enum ISlotProvider: JSON constructed after calling GetTypeSchema to understand the type structure.")] string selectorTypeOrJson,
+        [Description("Only required for non-enum ISlotProvider selectors: the fully-qualified .NET type name. Call GetTypeSchema with this name first to inspect structure before constructing JSON. Leave empty for enum/bool selectors.")] string nonEnumTypeName = "")
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var type = node!.GetType();
@@ -1001,12 +1008,61 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             var enumerator = prop.GetValue(node);
             if (enumerator == null) return Error($"SlotEnumerator '{propertyName}' is null.");
 
-            var selectorType = fullEnumTypeName == "System.Boolean" || fullEnumTypeName == "bool"
+            // Locate SetSelector(object?) via the runtime type
+            var setSelector = enumerator.GetType().GetMethod("SetSelector", [typeof(object)]);
+            if (setSelector == null) return Error($"SetSelector method not found on SlotEnumerator.");
+
+            // Determine whether we are in enum/bool mode or arbitrary-object mode
+            bool isNonEnum = !string.IsNullOrWhiteSpace(nonEnumTypeName);
+
+            if (isNonEnum)
+            {
+                // Non-enum path: deserialize JSON → concrete object, pass directly to SetSelector
+                var targetType = TypeIntrospector.ResolveType(nonEnumTypeName);
+                if (targetType == null) return Error($"Type '{nonEnumTypeName}' not found.");
+
+                // Validate against [SlotSelectors] whitelist when present.
+                var selectorsAttrNE = prop.GetCustomAttribute<SlotSelectorsAttribute>();
+                if (selectorsAttrNE != null && !IsEnumTypeAllowed(selectorsAttrNE, targetType))
+                {
+                    var allowed = GetAllowedEnumTypeDisplayNames(selectorsAttrNE);
+                    return Error($"Selector type '{nonEnumTypeName}' is not allowed for '{propertyName}'. Allowed types: {allowed}");
+                }
+
+                object? selectorValue;
+                try
+                {
+                    selectorValue = JsonConvert.DeserializeObject(selectorTypeOrJson, targetType);
+                }
+                catch (Exception ex)
+                {
+                    return Error($"Failed to deserialize selector JSON as '{nonEnumTypeName}': {ex.Message}");
+                }
+
+                if (selectorValue == null) return Error($"Deserialized selector value is null.");
+
+                var capturedEnumeratorNE = enumerator;
+                var capturedNodeNE = node!;
+                var oldSelectorNE = enumerator.GetType().GetProperty("SelectorType")?.GetValue(enumerator) as Type;
+                Tree.GetHelper().Submit(new WorkflowActionPair(
+                    () => { setSelector.Invoke(capturedEnumeratorNE, [selectorValue]); NudgeNode(capturedNodeNE); },
+                    () => { if (oldSelectorNE != null) setSelector.Invoke(capturedEnumeratorNE, [oldSelectorNE]); NudgeNode(capturedNodeNE); }));
+
+                return new JObject
+                {
+                    ["ok"] = true,
+                    ["selectorType"] = targetType.FullName,
+                    ["property"] = propertyName,
+                }.ToString(Formatting.None);
+            }
+
+            // Enum/bool path (original behaviour)
+            var selectorType = selectorTypeOrJson == "System.Boolean" || selectorTypeOrJson == "bool"
                 ? typeof(bool)
-                : TypeIntrospector.ResolveType(fullEnumTypeName);
-            if (selectorType == null) return Error($"Type '{fullEnumTypeName}' not found.");
+                : TypeIntrospector.ResolveType(selectorTypeOrJson);
+            if (selectorType == null) return Error($"Type '{selectorTypeOrJson}' not found.");
             if (!selectorType.IsEnum && selectorType != typeof(bool))
-                return Error($"'{fullEnumTypeName}' is not an enum or bool type.");
+                return Error($"'{selectorTypeOrJson}' is not an enum or bool type. If you intended to pass a non-enum selector value, supply the type name in 'nonEnumTypeName' and JSON in 'selectorTypeOrJson'.");
 
             // Validate against [SlotSelectors] allowed types if present on the enumerator property.
             // Framework-owned enum types (SlotChannel, SlotState, …) are always valid regardless of
@@ -1017,12 +1073,9 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 if (!IsEnumTypeAllowed(selectorsAttr2, selectorType))
                 {
                     var allowed = GetAllowedEnumTypeDisplayNames(selectorsAttr2);
-                    return Error($"Selector type '{fullEnumTypeName}' is not allowed for '{propertyName}'. Allowed types: {allowed}");
+                    return Error($"Selector type '{selectorTypeOrJson}' is not allowed for '{propertyName}'. Allowed types: {allowed}");
                 }
             }
-
-            var setSelector = enumerator.GetType().GetMethod("SetSelector", [typeof(Type)]);
-            if (setSelector == null) return Error($"SetSelector method not found on SlotEnumerator.");
 
             // Capture old selector type for undo — read SelectorType property if available
             var oldSelectorType = enumerator.GetType().GetProperty("SelectorType")?.GetValue(enumerator) as Type;
