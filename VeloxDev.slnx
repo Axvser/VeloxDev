@@ -29,7 +29,6 @@
   <Folder Name="/Examples/AOP/WPF/">
     <Project Path="Examples/AOP/WPF/Demo/Demo.csproj" />
   </Folder>
-  <Folder Name="/Examples/AOTReflection/" />
   <Folder Name="/Examples/MonoBehaviour/" />
   <Folder Name="/Examples/MonoBehaviour/WPF/">
     <Project Path="Examples/MonoBehaviour/WPF/Demo/Demo.csproj" />
@@ -101,8 +100,22 @@
       <Deploy Solution="Release|Any CPU" />
     </Project>
   </Folder>
+  <Folder Name="/Examples/Workflow/MAUI Trimmed/">
+    <Project Path="Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj">
+      <Deploy Solution="Release|Any CPU" />
+    </Project>
+  </Folder>
   <Folder Name="/Examples/Workflow/Winforms/">
     <Project Path="Examples/Workflow/WinForms/Demo/Demo.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Workflow/WinUI Trimmed/">
+    <Project Path="Examples/Workflow/WinUI Trimmed/Demo/Demo.csproj">
+      <Platform Solution="*|Any CPU" Project="x64" />
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="*|x86" Project="x86" />
+      <Deploy />
+    </Project>
   </Folder>
   <Folder Name="/Examples/Workflow/WinUI/">
     <Project Path="Examples/Workflow/WinUI/Demo/Demo.csproj">
@@ -112,6 +125,9 @@
       <Platform Solution="*|x86" Project="x86" />
       <Deploy />
     </Project>
+  </Folder>
+  <Folder Name="/Examples/Workflow/WPF Trimmed/">
+    <Project Path="Examples/Workflow/WPF Trimmed/Demo/Demo.csproj" />
   </Folder>
   <Folder Name="/Examples/Workflow/WPF/">
     <Project Path="Examples/Workflow/WPF/Demo/Demo.csproj" />

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl x:Class="Demo.Views.Workflow.TreeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:Demo.Views.Workflow"
+             xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+             behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+             behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+             behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+    <UserControl.Resources>
+        <DataTemplate x:Key="NodeTemplate">
+            <local:NodeView Width="{Binding Size.Width}"
+                            Height="{Binding Size.Height}"
+                            Canvas.Left="{Binding Anchor.Horizontal}"
+                            Canvas.Top="{Binding Anchor.Vertical}"
+                            Canvas.ZIndex="{Binding Anchor.Layer}" />
+        </DataTemplate>
+        <DataTemplate x:Key="LinkTemplate">
+            <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                     StartTop="{Binding Sender.Anchor.Vertical}"
+                                     EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                     EndTop="{Binding Receiver.Anchor.Vertical}"
+                                     CanRender="{Binding IsVisible}"
+                                     LineColor="White"
+                                     Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
+                                     Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
+                                     Canvas.ZIndex="-1" />
+        </DataTemplate>
+        <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
+                                      NodeTemplate="{StaticResource NodeTemplate}"
+                                      LinkTemplate="{StaticResource LinkTemplate}" />
+    </UserControl.Resources>
+    <Border x:Name="PART_SurfaceBorder" BorderBrush="White" BorderThickness="1" Background="#0B1120">
+        <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+            <ScrollViewer x:Name="PART_ScrollViewer"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          ZoomMode="Disabled">
+                <Canvas x:Name="PART_Canvas"
+                        Width="{Binding Layout.ActualSize.Width}"
+                        Height="{Binding Layout.ActualSize.Height}"
+                        Background="Transparent"
+                        behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                        behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}">
+                    <local:PolylineCurveView DataContext="{Binding VirtualLink}"
+                                             StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                             StartTop="{Binding Sender.Anchor.Vertical}"
+                                             EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                             EndTop="{Binding Receiver.Anchor.Vertical}"
+                                             CanRender="{Binding IsVisible}"
+                                             IsVirtual="True"
+                                             LineColor="White"
+                                             Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
+                                             Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
+                                             Canvas.ZIndex="-1" />
+                </Canvas>
+            </ScrollViewer>
+        </local:WorkflowGridDecorator>
+    </Border>
+</UserControl>
