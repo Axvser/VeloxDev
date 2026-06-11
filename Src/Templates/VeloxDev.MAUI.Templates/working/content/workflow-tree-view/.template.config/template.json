@@ -9,7 +9,7 @@
     "Tree"
   ],
   "identity": "VeloxDev.MAUI.WorkflowTreeView",
-  "name": "VeloxDev .NET MAUI Workflow Tree View",
+  "name": "VeloxDev MAUI Workflow Tree View",
   "description": "A minimal .NET MAUI view for a VeloxDev workflow tree component.",
   "shortName": "maui-v-tree",
   "sourceName": "TemplateClass",

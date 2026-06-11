@@ -9,7 +9,7 @@
     "Slot"
   ],
   "identity": "VeloxDev.MAUI.WorkflowSlotView",
-  "name": "VeloxDev .NET MAUI Workflow Slot View",
+  "name": "VeloxDev MAUI Workflow Slot View",
   "description": "A minimal .NET MAUI view for a VeloxDev workflow slot component.",
   "shortName": "maui-v-slot",
   "sourceName": "TemplateClass",

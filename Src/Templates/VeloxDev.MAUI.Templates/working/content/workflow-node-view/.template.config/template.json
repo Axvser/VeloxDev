@@ -9,7 +9,7 @@
     "Node"
   ],
   "identity": "VeloxDev.MAUI.WorkflowNodeView",
-  "name": "VeloxDev .NET MAUI Workflow Node View",
+  "name": "VeloxDev MAUI Workflow Node View",
   "description": "A minimal .NET MAUI view for a VeloxDev workflow node component.",
   "shortName": "maui-v-node",
   "sourceName": "TemplateClass",

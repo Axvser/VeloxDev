@@ -9,7 +9,7 @@
     "Link"
   ],
   "identity": "VeloxDev.MAUI.WorkflowLinkView",
-  "name": "VeloxDev .NET MAUI Workflow Link View",
+  "name": "VeloxDev MAUI Workflow Link View",
   "description": "A minimal .NET MAUI view for a VeloxDev workflow link component.",
   "shortName": "maui-v-link",
   "sourceName": "TemplateClass",
