@@ -1,0 +1,5 @@
+<!-- VeloxDev customization: Customize line geometry, color, thickness, hit testing, and virtual-link rendering in the code-behind. -->
+<UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="TemplateNamespace.TemplateClass">
+</UserControl>

@@ -50,6 +50,29 @@ Pick the adapter for your GUI framework and you get everything — workflow, age
 | MAUI | `VeloxDev.MAUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) |
 | WinForms | `VeloxDev.WinForms` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinForms?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinForms/) |
 
+### Build a WPF workflow view suite with the CLI
+
+Run these commands from an existing WPF project. Replace `MyApp` with the
+project's root namespace:
+
+```powershell
+dotnet new install VeloxDev.WPF.Templates
+dotnet add package VeloxDev.WPF
+
+dotnet new wpf-v-slot -n WorkflowSlotView -ns MyApp.Views.Workflow -o Views/Workflow
+dotnet new wpf-v-node -n WorkflowNodeView -ns MyApp.Views.Workflow -o Views/Workflow
+dotnet new wpf-v-link -n WorkflowLinkView -ns MyApp.Views.Workflow -o Views/Workflow
+dotnet new wpf-v-selector -n WorkflowTemplateSelector -ns MyApp.Views.Workflow -o Views/Workflow
+dotnet new wpf-v-decorator -n WorkflowGridDecorator -ns MyApp.Views.Workflow -o Views/Workflow
+dotnet new wpf-v-tree -n WorkflowTreeView -ns MyApp.Views.Workflow -o Views/Workflow
+
+dotnet build
+```
+
+The template package contains the Node, Slot, Link, Tree, template selector,
+and grid decorator views. Each view template generates its XAML and code-behind
+files with the required VeloxDev workflow behaviors already connected.
+
 ### Core-only packages *(bring your own adapter)*
 
 | Package | NuGet | Description |
@@ -117,8 +140,9 @@ VeloxDev/
 │   │   ├── VeloxDev.WinUI                  # WinUI 3 platform adapter
 │   │   ├── VeloxDev.MAUI                   # .NET MAUI platform adapter
 │   │   └── VeloxDev.WinForms               # WinForms platform adapter
-│   └── Generators/
-│       └── VeloxDev.Core.Generator         # Roslyn Source Generators (netstandard2.0)
+│   ├── Generators/
+│   │   └── VeloxDev.Core.Generator         # Roslyn Source Generators (netstandard2.0)
+│   └── Templates/                          # dotnet new item templates for GUI adapters
 ├── Examples/
 │   ├── Workflow/      WPF · Avalonia · WinUI · WinForms · MAUI · Common(Lib)
 │   ├── MVVM/          WPF · Avalonia

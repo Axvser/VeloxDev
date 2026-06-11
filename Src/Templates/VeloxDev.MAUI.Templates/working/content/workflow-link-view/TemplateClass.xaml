@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- VeloxDev customization: Customize line geometry, color, thickness, and virtual-link rendering in the code-behind. -->
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="TemplateNamespace.TemplateClass"
+             InputTransparent="True">
+    <GraphicsView x:Name="PART_Graphics" />
+</ContentView>

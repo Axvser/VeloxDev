@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [ "VeloxDev", "Workflow", "MAUI", "Code" ],
+  "identity": "VeloxDev.MAUI.WorkflowGridDecorator",
+  "name": "VeloxDev MAUI Workflow Grid Decorator",
+  "description": "A lightweight .NET MAUI workflow grid implementing IWorkflowGridDecorator.",
+  "shortName": "maui-v-decorator",
+  "sourceName": "TemplateClass",
+  "defaultName": "WorkflowGridDecorator",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated decorator.",
+      "defaultValue": "MyApp.Views",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "TemplateClass.cs" }
+  ]
+}

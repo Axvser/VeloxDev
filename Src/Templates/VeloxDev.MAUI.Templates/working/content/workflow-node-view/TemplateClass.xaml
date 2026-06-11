@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Customize the content, but keep PART_* names synchronized with WorkflowSlotLayoutBehavior. -->
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:TemplateNamespace"
+             xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
+             x:Class="TemplateNamespace.TemplateClass"
+             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
+             behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots"
+             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+    <Grid RowDefinitions="36,*">
+        <Border Grid.RowSpan="2"
+                Stroke="#331E1E1E"
+                StrokeThickness="1"
+                StrokeShape="RoundRectangle 6"
+                BackgroundColor="#DDFFFFFF" />
+
+        <Grid Grid.Row="0"
+              Margin="12,0"
+              behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+              behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+            <Label Text="{Binding Name}"
+                   TextColor="#DD1E1E1E"
+                   FontAttributes="Bold"
+                   VerticalTextAlignment="Center" />
+        </Grid>
+
+        <Grid Grid.Row="1" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">
+            <controls:WorkflowSlotView x:Name="PART_InputSlot"
+                                       WidthRequest="18"
+                                       HeightRequest="18"
+                                       HorizontalOptions="Start"
+                                       VerticalOptions="Center"
+                                       Margin="-9,0,0,0"
+                                       BindingContext="{Binding InputSlot}"
+                                       SlotState="{Binding State}" />
+        </Grid>
+
+        <VerticalStackLayout x:Name="PART_OutputSlots"
+                             Grid.Row="1"
+                             Margin="12,6"
+                             Spacing="6"
+                             VerticalOptions="Center"
+                             BindableLayout.ItemsSource="{Binding OutputSlots.Items}">
+            <BindableLayout.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Text="{Binding Name}"
+                               TextColor="#DD1E1E1E"
+                               HorizontalTextAlignment="End"
+                               VerticalTextAlignment="Center"
+                               Margin="0,0,10,0" />
+                        <controls:WorkflowSlotView Grid.Column="1"
+                                                   WidthRequest="14"
+                                                   HeightRequest="14"
+                                                   Margin="0,0,-7,0"
+                                                   BindingContext="{Binding Slot}"
+                                                   SlotState="{Binding Slot.State}" />
+                    </Grid>
+                </DataTemplate>
+            </BindableLayout.ItemTemplate>
+        </VerticalStackLayout>
+    </Grid>
+</ContentView>

@@ -1,0 +1,68 @@
+<!-- Customize the content, but keep PART_* names synchronized with WorkflowSlotLayoutBehavior. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 xmlns:local="using:TemplateNamespace"
+			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+			 x:Class="TemplateNamespace.TemplateClass"
+			 x:CompileBindings="False"
+			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+			 Foreground="#DD1E1E1E"
+			 behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots"
+			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+
+	<!-- Replace x:CompileBindings=False with a concrete x:DataType after defining your node ViewModel. -->
+	<Grid RowDefinitions="36,*" ClipToBounds="False">
+		<Border Grid.RowSpan="2"
+				Background="#DDFFFFFF"
+				BorderBrush="#331E1E1E"
+				BorderThickness="1"
+				CornerRadius="6" />
+
+		<Grid Grid.Row="0"
+				Margin="12,0"
+				behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+			<TextBlock Text="{Binding Name}"
+					   FontWeight="SemiBold"
+					   VerticalAlignment="Center" />
+		</Grid>
+
+		<Grid Grid.Row="1" ZIndex="6" ClipToBounds="False">
+			<local:WorkflowSlotView x:Name="PART_InputSlot"
+									Width="18"
+									Height="18"
+									Margin="-9,0,0,0"
+									HorizontalAlignment="Left"
+									VerticalAlignment="Center"
+									Foreground="#DD1E1E1E"
+									DataContext="{Binding InputSlot}" />
+		</Grid>
+
+		<ItemsControl x:Name="PART_OutputSlots"
+					  Grid.Row="1"
+					  Margin="12,6"
+					  ItemsSource="{Binding OutputSlots.Items}"
+					  VerticalAlignment="Center">
+			<ItemsControl.ItemTemplate>
+				<DataTemplate>
+					<Grid ColumnDefinitions="*,Auto" Margin="0,3" ClipToBounds="False">
+						<TextBlock Text="{Binding Name}"
+								   Margin="0,0,10,0"
+								   HorizontalAlignment="Right"
+								   VerticalAlignment="Center" />
+						<local:WorkflowSlotView Grid.Column="1"
+												Width="14"
+												Height="14"
+												Margin="0,0,-7,0"
+												Foreground="#DD1E1E1E"
+												DataContext="{Binding Slot}" />
+					</Grid>
+				</DataTemplate>
+			</ItemsControl.ItemTemplate>
+		</ItemsControl>
+	</Grid>
+</UserControl>

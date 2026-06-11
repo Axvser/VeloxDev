@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "WinUI",
+    "XAML",
+    "Slot"
+  ],
+  "identity": "VeloxDev.WinUI.WorkflowSlotView",
+  "name": "VeloxDev WinUI Workflow Slot View",
+  "description": "A minimal WinUI view for a VeloxDev workflow slot component.",
+  "shortName": "winui-v-slot",
+  "sourceName": "TemplateClass",
+  "defaultName": "WorkflowSlotView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated slot view.",
+      "defaultValue": "MyApp.Views.Workflow",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.xaml"
+    },
+    {
+      "path": "TemplateClass.xaml.cs"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "WinUI",
+    "XAML",
+    "Tree"
+  ],
+  "identity": "VeloxDev.WinUI.WorkflowTreeView",
+  "name": "VeloxDev WinUI Workflow Tree View",
+  "description": "A minimal WinUI view for a VeloxDev workflow tree component.",
+  "shortName": "winui-v-tree",
+  "sourceName": "TemplateClass",
+  "defaultName": "WorkflowTreeView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated tree view.",
+      "defaultValue": "MyApp.Views.Workflow",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.xaml"
+    },
+    {
+      "path": "TemplateClass.xaml.cs"
+    }
+  ]
+}

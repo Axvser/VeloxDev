@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "Avalonia",
+    "XAML",
+    "Node"
+  ],
+  "identity": "VeloxDev.Avalonia.WorkflowNodeView",
+  "name": "VeloxDev Avalonia Workflow Node View",
+  "description": "A minimal Avalonia view for a VeloxDev workflow node component.",
+  "shortName": "ava-v-node",
+  "sourceName": "TemplateClass",
+  "defaultName": "WorkflowNodeView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated node view.",
+      "defaultValue": "MyApp.Views.Workflow",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.axaml"
+    },
+    {
+      "path": "TemplateClass.axaml.cs"
+    }
+  ]
+}

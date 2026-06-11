@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "MAUI",
+    "XAML",
+    "Link"
+  ],
+  "identity": "VeloxDev.MAUI.WorkflowLinkView",
+  "name": "VeloxDev .NET MAUI Workflow Link View",
+  "description": "A minimal .NET MAUI view for a VeloxDev workflow link component.",
+  "shortName": "maui-v-link",
+  "sourceName": "TemplateClass",
+  "defaultName": "WorkflowLinkView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated link view.",
+      "defaultValue": "MyApp.Views.Workflow",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.xaml"
+    },
+    {
+      "path": "TemplateClass.xaml.cs"
+    }
+  ]
+}

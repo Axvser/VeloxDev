@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [ "VeloxDev", "Workflow", "WinUI", "Code" ],
+  "identity": "VeloxDev.WinUI.WorkflowGridDecorator",
+  "name": "VeloxDev WinUI Workflow Grid Decorator",
+  "description": "A lightweight WinUI workflow grid implementing IWorkflowGridDecorator.",
+  "shortName": "winui-v-decorator",
+  "sourceName": "TemplateClass",
+  "defaultName": "WorkflowGridDecorator",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated decorator.",
+      "defaultValue": "MyApp.Views",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "TemplateClass.cs" }
+  ]
+}

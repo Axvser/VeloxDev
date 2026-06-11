@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [ "VeloxDev", "Workflow", "WPF", "Code" ],
+  "identity": "VeloxDev.WPF.WorkflowTemplateSelector",
+  "name": "VeloxDev WPF Workflow Template Selector",
+  "description": "A WPF DataTemplateSelector for VeloxDev node, slot, link, and tree view models.",
+  "shortName": "wpf-v-selector",
+  "sourceName": "TemplateClass",
+  "defaultName": "WorkflowTemplateSelector",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated selector.",
+      "defaultValue": "MyApp.Views",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "TemplateClass.cs" }
+  ]
+}

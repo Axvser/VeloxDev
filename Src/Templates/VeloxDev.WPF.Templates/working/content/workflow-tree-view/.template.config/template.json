@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "WPF",
+    "XAML",
+    "Tree"
+  ],
+  "identity": "VeloxDev.WPF.WorkflowTreeView",
+  "name": "VeloxDev WPF Workflow Tree View",
+  "description": "A minimal WPF view for a VeloxDev workflow tree component.",
+  "shortName": "wpf-v-tree",
+  "sourceName": "TemplateClass",
+  "defaultName": "WorkflowTreeView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated tree view.",
+      "defaultValue": "MyApp.Views.Workflow",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.xaml"
+    },
+    {
+      "path": "TemplateClass.xaml.cs"
+    }
+  ]
+}

@@ -20,9 +20,7 @@
     <Project Path="Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" />
   </Folder>
   <Folder Name="/Examples/" />
-  <Folder Name="/Examples/AOP/">
-    <File Path="Examples/AOP/README.md" />
-  </Folder>
+  <Folder Name="/Examples/AOP/" />
   <Folder Name="/Examples/AOP/Avalonia/">
     <Project Path="Examples/AOP/Avalonia/Demo/Demo.csproj" />
   </Folder>
@@ -33,9 +31,7 @@
   <Folder Name="/Examples/MonoBehaviour/WPF/">
     <Project Path="Examples/MonoBehaviour/WPF/Demo/Demo.csproj" />
   </Folder>
-  <Folder Name="/Examples/MVVM/">
-    <File Path="Examples/MVVM/README.md" />
-  </Folder>
+  <Folder Name="/Examples/MVVM/" />
   <Folder Name="/Examples/MVVM/Avalonia/">
     <Project Path="Examples/MVVM/Avalonia/Demo/Demo.csproj" />
   </Folder>
@@ -146,5 +142,11 @@
     <Project Path="Docs/VeloxDev.Docs.Browser/VeloxDev.Docs.Browser.csproj" />
     <Project Path="Docs/VeloxDev.Docs.Desktop/VeloxDev.Docs..Desktop.csproj" />
     <Project Path="Docs/VeloxDev.Docs/VeloxDev.Docs.csproj" />
+  </Folder>
+  <Folder Name="/Templates/">
+    <Project Path="Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj" />
+    <Project Path="Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj" />
+    <Project Path="Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj" />
+    <Project Path="Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj" />
   </Folder>
 </Solution>

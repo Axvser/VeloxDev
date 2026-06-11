@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "WinUI",
+    "XAML",
+    "Link"
+  ],
+  "identity": "VeloxDev.WinUI.WorkflowLinkView",
+  "name": "VeloxDev WinUI Workflow Link View",
+  "description": "A minimal WinUI view for a VeloxDev workflow link component.",
+  "shortName": "winui-v-link",
+  "sourceName": "TemplateClass",
+  "defaultName": "WorkflowLinkView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated link view.",
+      "defaultValue": "MyApp.Views.Workflow",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.xaml"
+    },
+    {
+      "path": "TemplateClass.xaml.cs"
+    }
+  ]
+}

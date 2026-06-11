@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "Avalonia",
+    "XAML",
+    "Slot"
+  ],
+  "identity": "VeloxDev.Avalonia.WorkflowSlotView",
+  "name": "VeloxDev Avalonia Workflow Slot View",
+  "description": "A minimal Avalonia view for a VeloxDev workflow slot component.",
+  "shortName": "ava-v-slot",
+  "sourceName": "TemplateClass",
+  "defaultName": "WorkflowSlotView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated slot view.",
+      "defaultValue": "MyApp.Views.Workflow",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.axaml"
+    },
+    {
+      "path": "TemplateClass.axaml.cs"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>VeloxDev.Avalonia.Templates</PackageId>
+    <Version>5.0.0</Version>
+    <Authors>Axvser</Authors>
+    <Title>VeloxDev Avalonia templates</Title>
+    <Description>Item templates for building VeloxDev workflow views with Avalonia.</Description>
+    <PackageTags>dotnet-new;templates;veloxdev;workflow;avalonia</PackageTags>
+    <PackageType>Template</PackageType>
+    <PackageIcon>veloxdev-logo.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Axvser/VeloxDev</RepositoryUrl>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="content\**\*" Pack="true" PackagePath="content" />
+    <None Include="..\..\..\..\Assets\veloxdev-logo.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>
