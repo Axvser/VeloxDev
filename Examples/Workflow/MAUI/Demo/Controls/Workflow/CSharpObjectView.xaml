@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Demo.Controls"
+             xmlns:csharp="clr-namespace:VeloxDev.WorkflowSystem.CSharp;assembly=VeloxDev.Core"
+             xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
+             x:Class="Demo.Controls.CSharpObjectView"
+             x:DataType="csharp:CSharpObject"
+             InputTransparent="False"
+             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
+             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+    <Grid RowDefinitions="46,*,48">
+        <Border Grid.RowSpan="3"
+                StrokeThickness="1.5"
+                StrokeShape="RoundRectangle 7"
+                Stroke="#60A5FA"
+                BackgroundColor="#111827" />
+
+        <Grid Grid.RowSpan="3" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">
+            <controls:SlotView x:Name="PART_InputSlot"
+                               WidthRequest="20"
+                               HeightRequest="20"
+                               HorizontalOptions="Start"
+                               VerticalOptions="Center"
+                               Margin="-10,0,0,0"
+                               BindingContext="{Binding InputSlot}"
+                               SlotState="{Binding State}" />
+            <controls:SlotView x:Name="PART_OutputSlot"
+                               WidthRequest="20"
+                               HeightRequest="20"
+                               HorizontalOptions="End"
+                               VerticalOptions="Center"
+                               Margin="0,0,-10,0"
+                               BindingContext="{Binding OutputSlot}"
+                               SlotState="{Binding State}" />
+        </Grid>
+
+        <Border Grid.Row="0"
+                BackgroundColor="#1E3A5F"
+                Stroke="#60A5FA"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 6,6,0,0"
+                Padding="10,0"
+                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+            <Grid ColumnDefinitions="*,Auto">
+                <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                    <Label Text="C# Object" TextColor="White" FontAttributes="Bold" FontSize="15" />
+                    <Border Padding="6,1" BackgroundColor="#0F2942" StrokeThickness="0" StrokeShape="RoundRectangle 9">
+                        <Label Text="reflection" TextColor="#93C5FD" FontSize="10" />
+                    </Border>
+                    <Border Padding="6,1" BackgroundColor="#312E81" StrokeThickness="0" StrokeShape="RoundRectangle 9">
+                        <Label Text="{Binding SelectedMethodMember.Role}" TextColor="#C7D2FE" FontSize="10" />
+                    </Border>
+                </HorizontalStackLayout>
+                <Label Grid.Column="1"
+                       Text="{Binding HostType}"
+                       TextColor="#BFDBFE"
+                       FontSize="10"
+                       WidthRequest="130"
+                       LineBreakMode="TailTruncation"
+                       VerticalTextAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" BackgroundColor="#111827">
+            <ScrollView Orientation="Vertical">
+                <VerticalStackLayout Margin="10" Spacing="6">
+                    <Label Text="Host type" TextColor="#93C5FD" FontAttributes="Bold" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <Editor Text="{Binding HostType}"
+                                AutoSize="TextChanges"
+                                TextColor="#E5E7EB"
+                                BackgroundColor="#1F2937" />
+                        <Button Grid.Column="1"
+                                Text="Refresh"
+                                Padding="10,4"
+                                Command="{Binding RefreshMembersCommand}" />
+                    </Grid>
+
+                    <Label Text="Values" TextColor="#93C5FD" FontAttributes="Bold" Margin="0,4,0,0" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Values}">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="csharp:ValueMember">
+                                <Border Margin="0,2"
+                                        Padding="8"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 4"
+                                        BackgroundColor="#1F2937">
+                                    <VerticalStackLayout Spacing="5">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <CheckBox IsChecked="{Binding IsEnabled}" />
+                                            <VerticalStackLayout Grid.Column="1" Margin="6,0,0,0">
+                                                <Label Text="{Binding Path}" TextColor="#F3F4F6" FontAttributes="Bold" />
+                                                <Label Text="{Binding ValueType}" TextColor="#6B7280" FontSize="10" LineBreakMode="TailTruncation" />
+                                            </VerticalStackLayout>
+                                        </Grid>
+                                        <Entry Text="{Binding Value}" TextColor="#E5E7EB" BackgroundColor="#111827" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+
+                    <Label Text="Collections" TextColor="#93C5FD" FontAttributes="Bold" Margin="0,4,0,0" />
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Collections}">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="csharp:CollectionMember">
+                                <Border Margin="0,2"
+                                        Padding="8"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 4"
+                                        BackgroundColor="#1F2937">
+                                    <VerticalStackLayout Spacing="5">
+                                        <Grid ColumnDefinitions="Auto,*,Auto">
+                                            <CheckBox IsChecked="{Binding IsEnabled}" />
+                                            <VerticalStackLayout Grid.Column="1" Margin="6,0,0,0">
+                                                <Label Text="{Binding Path}" TextColor="#F3F4F6" FontAttributes="Bold" />
+                                                <Label Text="{Binding ValueType}" TextColor="#6B7280" FontSize="10" />
+                                            </VerticalStackLayout>
+                                            <Button Grid.Column="2" Text="+" Padding="8,2" Command="{Binding AddItemCommand}" />
+                                        </Grid>
+                                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Items}">
+                                            <BindableLayout.ItemTemplate>
+                                                <DataTemplate x:DataType="csharp:CollectionItem">
+                                                    <Grid ColumnDefinitions="52,*,Auto" ColumnSpacing="5" Margin="0,2">
+                                                        <Entry Text="{Binding Index}" Keyboard="Numeric" />
+                                                        <Entry Grid.Column="1" Text="{Binding Value}" />
+                                                        <Button Grid.Column="2" Text="×" Padding="7,2" Command="{Binding DeleteCommand}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </BindableLayout.ItemTemplate>
+                                        </VerticalStackLayout>
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+
+                    <Label Text="Methods" TextColor="#93C5FD" FontAttributes="Bold" Margin="0,4,0,0" />
+                    <Picker ItemsSource="{Binding Methods}"
+                            ItemDisplayBinding="{Binding DisplayName}"
+                            SelectedItem="{Binding SelectedMethodMember, Mode=OneWay}"
+                            SelectedIndexChanged="OnMethodSelectionChanged" />
+
+                    <Border Padding="8"
+                            Stroke="#334155"
+                            StrokeThickness="1"
+                            StrokeShape="RoundRectangle 4"
+                            BackgroundColor="#0F172A">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="Execution" TextColor="#93C5FD" FontAttributes="Bold" />
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                <Label Text="{Binding ExecutionState}" TextColor="#FDE68A" />
+                                <Label Grid.Column="1" Text="Runs:" TextColor="#94A3B8" Margin="8,0,4,0" />
+                                <Label Grid.Column="2" Text="{Binding ExecutionCount}" TextColor="#E2E8F0" />
+                            </Grid>
+                            <HorizontalStackLayout Spacing="4">
+                                <Label Text="Duration:" TextColor="#94A3B8" />
+                                <Label Text="{Binding LastDurationMilliseconds}" TextColor="#E2E8F0" />
+                                <Label Text="ms" TextColor="#94A3B8" />
+                            </HorizontalStackLayout>
+                            <Label Text="{Binding LastExecutionSummary}" TextColor="#D1FAE5" />
+                            <Label Text="{Binding LastError}" TextColor="#FCA5A5" />
+                        </VerticalStackLayout>
+                    </Border>
+                </VerticalStackLayout>
+            </ScrollView>
+        </Border>
+
+        <Border Grid.Row="2"
+                Padding="1"
+                BackgroundColor="#1F2937"
+                StrokeShape="RoundRectangle 0,0,6,6">
+            <Grid ColumnDefinitions="*,*">
+                <Button Grid.Column="0" Text="Run / Start chain" Command="{Binding WorkCommand}" />
+                <Button Grid.Column="1" Text="Forward result" Command="{Binding BroadcastCommand}" />
+            </Grid>
+        </Border>
+
+    </Grid>
+</ContentView>

@@ -103,6 +103,26 @@ public partial class WorkflowView : UserControl
         _manager.Show(new Notification("OK", "Workflow demo loaded."));
     }
 
+    private void AddCSharpObject(object? sender, RoutedEventArgs e)
+    {
+        CSharpObjectDemo.AddNextPipeline(_workflowViewModel);
+        _workflowViewModel.Layout.UpdateCommand.Execute(null);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        _manager.Show(new Notification(
+            "C# Script",
+            "Four-stage script pipeline added."));
+    }
+
+    private void RunCSharpPipeline(object? sender, RoutedEventArgs e)
+    {
+        if (CSharpObjectDemo.RunLatestPipeline(_workflowViewModel))
+        {
+            _manager.Show(new Notification(
+                "C# Script",
+                "The latest script pipeline is running."));
+        }
+    }
+
     private void InitializeNetworkDemo()
     {
         UnsubscribeAutoScroll(_workflowViewModel);

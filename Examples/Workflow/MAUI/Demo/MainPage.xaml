@@ -25,7 +25,7 @@
 
                         <Grid ColumnDefinitions="*,*"
                               ColumnSpacing="8"
-                              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                             <Label Text="Seed Payload"
                                    TextColor="#E2E8F0"
                                    FontAttributes="Bold"
@@ -52,9 +52,16 @@
                                     Text="Undo"
                                     Command="{Binding Tree.UndoCommand}" />
                             <Button Grid.Row="4"
+                                    Text="Add C# Script Chain"
+                                    Clicked="AddCSharpObject" />
+                            <Button Grid.Row="4"
                                     Grid.Column="1"
                                     Text="Redo"
                                     Command="{Binding Tree.RedoCommand}" />
+                            <Button Grid.Row="5"
+                                    Grid.ColumnSpan="2"
+                                    Text="Run C# Script"
+                                    Clicked="RunCSharpPipeline" />
                         </Grid>
                     </VerticalStackLayout>
                 </Border>

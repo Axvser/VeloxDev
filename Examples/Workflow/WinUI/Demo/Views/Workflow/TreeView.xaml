@@ -7,6 +7,7 @@
     xmlns:local="using:Demo.Views"
     xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
     xmlns:vm="using:Demo.ViewModels"
+    xmlns:csharp="using:VeloxDev.WorkflowSystem.CSharp"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
@@ -50,6 +51,14 @@
                                         Canvas.ZIndex="{Binding Anchor.Layer}"
                                         IsEnabled="{Binding IsEnabled}"/>
         </DataTemplate>
+        <DataTemplate x:Key="CSharpObjectTemplate">
+            <local:CSharpObjectView Width="{Binding Size.Width}"
+                                    Height="{Binding Size.Height}"
+                                    Canvas.Left="{Binding Anchor.Horizontal}"
+                                    Canvas.Top="{Binding Anchor.Vertical}"
+                                    Canvas.ZIndex="{Binding Anchor.Layer}"
+                                    IsEnabled="{Binding IsEnabled}"/>
+        </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
             <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
                                      StartTop="{Binding Sender.Anchor.Vertical}"
@@ -66,6 +75,7 @@
                                       NodeTemplate="{StaticResource NodeTemplate}"
                                       BoolSelectorTemplate="{StaticResource BoolSelectorTemplate}"
                                       EnumSelectorTemplate="{StaticResource EnumSelectorTemplate}"
+                                      CSharpObjectTemplate="{StaticResource CSharpObjectTemplate}"
                                       LinkTemplate="{StaticResource LinkTemplate}"/>
     </UserControl.Resources>
 
@@ -121,6 +131,8 @@
                     <Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
                     <Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
                     <Button Content="Load Workflow Demo" Width="140" Height="50" Click="LoadNetworkDemo" />
+                    <Button Content="Add C# Script Chain" Width="160" Height="50" Click="AddCSharpObject" />
+                    <Button Content="Run C# Script" Width="160" Height="50" Click="RunCSharpPipeline" />
 
                     <TextBlock Margin="0,12,0,0" Text="节点总数：" Foreground="White" />
                     <TextBlock Text="{Binding Nodes.Count}" Foreground="White" />

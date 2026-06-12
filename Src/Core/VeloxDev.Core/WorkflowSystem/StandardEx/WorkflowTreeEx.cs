@@ -243,9 +243,8 @@ public static class WorkflowTreeEx
 
     private static void CreateNodeUndo(IWorkflowTreeViewModel component, IWorkflowNodeViewModel node, IWorkflowTreeViewModel? oldParent)
     {
-        node.GetHelper().Delete();
-        node.Parent = oldParent;
         component.Nodes.Remove(node);
+        node.Parent = oldParent;
     }
 
     private static void StandardSmartCleanupSenderConnections(this IWorkflowTreeViewModel component, IWorkflowSlotViewModel sender)

@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VeloxDev.Core.Extension\VeloxDev.Core.Extension.csproj" />
+    <ProjectReference Include="..\VeloxDev.Core\VeloxDev.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

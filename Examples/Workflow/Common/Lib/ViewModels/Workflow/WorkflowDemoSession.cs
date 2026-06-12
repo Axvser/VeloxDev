@@ -20,7 +20,7 @@ public sealed class WorkflowDemoSession
     public static WorkflowDemoSession Create()
     {
         var tree = new TreeViewModel();
-        tree.Layout.OriginSize = new Size(3200, 1600);
+        tree.Layout.OriginSize = new Size(3200, 2200);
 
         var helper = tree.GetHelper();
         var nodeSize = new Size(300, 260);
@@ -189,6 +189,8 @@ public sealed class WorkflowDemoSession
         Connect(tree, handlePost.OutputSlot!, finalize.InputSlot!);
         Connect(tree, handlePut.OutputSlot!, finalize.InputSlot!);
         Connect(tree, handleDelete.OutputSlot!, finalize.InputSlot!);
+
+        CSharpObjectDemo.AddPipeline(tree);
 
         helper.ClearHistory();
         return new WorkflowDemoSession(tree, controller,

@@ -8,6 +8,7 @@
 			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 			 xmlns:vm="using:Demo.ViewModels"
 			 xmlns:workflow="using:VeloxDev.WorkflowSystem"
+			 xmlns:csharp="using:VeloxDev.WorkflowSystem.CSharp"
 			 x:DataType="vm:TreeViewModel"
              behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
 			 behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
@@ -49,6 +50,14 @@
 										Canvas.Top="{Binding Anchor.Vertical}"
 										ZIndex="{Binding Anchor.Layer}"
 										RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
+		</DataTemplate>
+		<DataTemplate DataType="csharp:CSharpObject">
+			<local:CSharpObjectView Width="{Binding Size.Width}"
+									Height="{Binding Size.Height}"
+									Canvas.Left="{Binding Anchor.Horizontal}"
+									Canvas.Top="{Binding Anchor.Vertical}"
+									ZIndex="{Binding Anchor.Layer}"
+									RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 		</DataTemplate>
 		<!-- 连接线模板 -->
 		<DataTemplate DataType="vm:LinkViewModel">
@@ -120,6 +129,8 @@
 					<Button Content="Save" Width="100" Height="50" Click="SaveWorkflow" />
 					<Button Content="Select" Width="100" Height="50" Click="SelectWorkflow" />
 					<Button Content="Load Workflow Demo" Width="140" Height="50" Click="LoadNetworkDemo" />
+					<Button Content="Add C# Script Chain" Width="160" Height="50" Click="AddCSharpObject" />
+					<Button Content="Run C# Script" Width="160" Height="50" Click="RunCSharpPipeline" />
 						<TextBlock Text="节点总数：" />
 						<TextBlock Text="{Binding Nodes.Count}"/>
 						<TextBlock Text="可见组件数：( Node / Link )" />

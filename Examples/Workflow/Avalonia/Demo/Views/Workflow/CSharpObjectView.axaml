@@ -1,0 +1,191 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="using:Demo"
+             xmlns:csharp="using:VeloxDev.WorkflowSystem.CSharp"
+             xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+             x:Class="Demo.CSharpObjectView"
+             x:DataType="csharp:CSharpObject"
+             mc:Ignorable="d"
+             d:DesignWidth="400"
+             d:DesignHeight="520"
+             ClipToBounds="False"
+             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
+             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+    <Grid RowDefinitions="46,*,48" ClipToBounds="False">
+        <Border Grid.RowSpan="3"
+                CornerRadius="7"
+                BorderThickness="1.5"
+                BorderBrush="#60A5FA"
+                Background="#111827" />
+
+        <Grid Grid.RowSpan="3" ZIndex="6" ClipToBounds="False">
+            <local:SlotView x:Name="PART_InputSlot"
+                            Width="20"
+                            Height="20"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Margin="-10,0,0,0"
+                            DataContext="{Binding InputSlot}"
+                            SlotState="{Binding State}" />
+            <local:SlotView x:Name="PART_OutputSlot"
+                            Width="20"
+                            Height="20"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,-10,0"
+                            DataContext="{Binding OutputSlot}"
+                            SlotState="{Binding State}" />
+        </Grid>
+
+        <Border Grid.Row="0"
+                Background="#1E3A5F"
+                CornerRadius="6,6,0,0"
+                BorderBrush="#60A5FA"
+                BorderThickness="0,0,0,1"
+                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+            <Grid ColumnDefinitions="*,Auto" Margin="10,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                    <TextBlock Text="C# Object" Foreground="White" FontWeight="Bold" FontSize="15" />
+                    <Border Padding="6,1" Background="#0F2942" CornerRadius="9">
+                        <TextBlock Text="reflection" Foreground="#93C5FD" FontSize="10" />
+                    </Border>
+                    <Border Padding="6,1" Background="#312E81" CornerRadius="9">
+                        <TextBlock Text="{Binding SelectedMethodMember.Role}" Foreground="#C7D2FE" FontSize="10" />
+                    </Border>
+                </StackPanel>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding HostType}"
+                           Foreground="#BFDBFE"
+                           VerticalAlignment="Center"
+                           FontSize="10"
+                           MaxWidth="130"
+                           TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Background="#111827">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="10" Spacing="6">
+                    <TextBlock Text="Host type" Foreground="#93C5FD" FontWeight="SemiBold" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding HostType, Mode=TwoWay}"
+                                 Foreground="#E5E7EB"
+                                 Background="#1F2937"
+                                 BorderBrush="#374151"
+                                 TextWrapping="Wrap" />
+                        <Button Grid.Column="1"
+                                Margin="6,0,0,0"
+                                Padding="10,4"
+                                Content="Refresh"
+                                Command="{Binding RefreshMembersCommand}" />
+                    </Grid>
+
+                    <Expander HorizontalAlignment="Stretch" Header="Values" IsExpanded="False">
+                        <ItemsControl ItemsSource="{Binding Values}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="csharp:ValueMember">
+                                    <Border Margin="0,4,0,0" Padding="8" CornerRadius="4" Background="#1F2937">
+                                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                                            <CheckBox IsChecked="{Binding IsEnabled}" VerticalAlignment="Center" />
+                                            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                                <TextBlock Text="{Binding Path}" Foreground="#F3F4F6" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding ValueType}" Foreground="#6B7280" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <TextBox Grid.Row="1"
+                                                     Grid.ColumnSpan="2"
+                                                     Margin="0,6,0,0"
+                                                     Text="{Binding Value, Mode=TwoWay}"
+                                                     Background="#111827"
+                                                     Foreground="#E5E7EB"
+                                                     BorderBrush="#374151" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Expander>
+
+                    <Expander HorizontalAlignment="Stretch" Header="Collections" IsExpanded="False">
+                        <ItemsControl ItemsSource="{Binding Collections}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="csharp:CollectionMember">
+                                    <Border Margin="0,4,0,0" Padding="8" CornerRadius="4" Background="#1F2937">
+                                        <StackPanel Spacing="5">
+                                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                                <CheckBox IsChecked="{Binding IsEnabled}" VerticalAlignment="Center" />
+                                                <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                                    <TextBlock Text="{Binding Path}" Foreground="#F3F4F6" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding ValueType}" Foreground="#6B7280" FontSize="10" />
+                                                </StackPanel>
+                                                <Button Grid.Column="2" Padding="8,2" Content="+" Command="{Binding AddItemCommand}" />
+                                            </Grid>
+                                            <ItemsControl ItemsSource="{Binding Items}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="csharp:CollectionItem">
+                                                        <Grid ColumnDefinitions="48,*,Auto" Margin="0,2,0,0">
+                                                            <TextBox Text="{Binding Index, Mode=TwoWay}" />
+                                                            <TextBox Grid.Column="1" Margin="5,0" Text="{Binding Value, Mode=TwoWay}" />
+                                                            <Button Grid.Column="2" Padding="7,2" Content="×" Command="{Binding DeleteCommand}" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Expander>
+
+                    <Expander HorizontalAlignment="Stretch" Header="Methods" IsExpanded="False">
+                        <StackPanel Spacing="4">
+                            <ComboBox ItemsSource="{Binding Methods}"
+                                      SelectedItem="{Binding SelectedMethodMember, Mode=OneWay}"
+                                      SelectionChanged="OnMethodSelectionChanged">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="csharp:MethodMember">
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </StackPanel>
+                    </Expander>
+
+                    <Border Padding="8"
+                            Background="#0F172A"
+                            BorderBrush="#334155"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Execution" Foreground="#93C5FD" FontWeight="SemiBold" />
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                <TextBlock Text="{Binding ExecutionState}" Foreground="#FDE68A" />
+                                <TextBlock Grid.Column="1" Text="Runs:" Foreground="#94A3B8" Margin="8,0,4,0" />
+                                <TextBlock Grid.Column="2" Text="{Binding ExecutionCount}" Foreground="#E2E8F0" />
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="Duration:" Foreground="#94A3B8" />
+                                <TextBlock Text="{Binding LastDurationMilliseconds}" Foreground="#E2E8F0" />
+                                <TextBlock Text="ms" Foreground="#94A3B8" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding LastExecutionSummary}" Foreground="#D1FAE5" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding LastError}" Foreground="#FCA5A5" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Border Grid.Row="2" Padding="1" Background="#1F2937" CornerRadius="0,0,6,6">
+            <Grid ColumnDefinitions="*,*">
+                <Button Grid.Column="0" Content="Run / Start chain" Command="{Binding WorkCommand}" />
+                <Button Grid.Column="1" Content="Forward result" Command="{Binding BroadcastCommand}" />
+            </Grid>
+        </Border>
+
+    </Grid>
+</UserControl>

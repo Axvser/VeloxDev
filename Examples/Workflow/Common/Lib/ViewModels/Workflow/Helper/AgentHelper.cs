@@ -14,7 +14,7 @@ namespace Demo.ViewModels.Workflow.Helper;
 
 public class AgentHelper() : TreeHelper<TreeViewModel>(200)
 {
-    private const string EnvironmentVariableName = "DASHSCOPE_API_KEY";
+    private const string EnvironmentVariableName = "API_KEY_QWEN";
     private const string Endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1";
     private const string Model = "qwen-plus";
 
@@ -116,6 +116,11 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         var tools = scope.ProvideTools();
 
         var apiKey = Environment.GetEnvironmentVariable(EnvironmentVariableName);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new InvalidOperationException(
+                $"Environment variable '{EnvironmentVariableName}' is not configured.");
+        }
 
         var chatClient = new OpenAIClient(
             new ApiKeyCredential(apiKey),

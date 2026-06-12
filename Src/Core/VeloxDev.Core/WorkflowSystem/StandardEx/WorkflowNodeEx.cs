@@ -25,20 +25,19 @@ public static class WorkflowNodeEx
         if (component.Parent is null)
         {
             slot.Parent = newParent;
-            component.Slots.Add(slot);
+                component.Slots.Add(slot);
             return;
         }
         component.Parent.GetHelper().Submit(new WorkflowActionPair(
             () =>
             {
                 slot.Parent = newParent;
-                component.Slots.Add(slot);
+                    component.Slots.Add(slot);
             },
             () =>
             {
-                slot.GetHelper().Delete();
-                slot.Parent = oldParent;
                 component.Slots.Remove(slot);
+                slot.Parent = oldParent;
             }));
     }
 
@@ -205,7 +204,7 @@ public static class WorkflowNodeEx
         int maxDepth,
         HashSet<IWorkflowNodeViewModel>? visited = null)
     {
-        visited ??= new HashSet<IWorkflowNodeViewModel> { start };
+        visited ??= [start];
         var queue = new Queue<(IWorkflowNodeViewModel Node, int Depth)>();
         queue.Enqueue((start, 0));
 

@@ -5,6 +5,7 @@
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
              xmlns:workflow="clr-namespace:VeloxDev.WorkflowSystem;assembly=VeloxDev.Core"
+             xmlns:csharp="clr-namespace:VeloxDev.WorkflowSystem.CSharp;assembly=VeloxDev.Core"
              x:Class="Demo.Controls.WorkflowView"
              x:Name="Root"
              behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
@@ -28,6 +29,10 @@
         <DataTemplate x:Key="EnumSelectorTemplate" x:DataType="vm:EnumSelectorNodeViewModel">
             <controls:EnumSelectorNodeView WidthRequest="{Binding Size.Width}"
                                            HeightRequest="{Binding Size.Height}" />
+        </DataTemplate>
+        <DataTemplate x:Key="CSharpObjectTemplate" x:DataType="csharp:CSharpObject">
+            <controls:CSharpObjectView WidthRequest="{Binding Size.Width}"
+                                       HeightRequest="{Binding Size.Height}" />
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate" x:DataType="vm:LinkViewModel">
             <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
@@ -58,6 +63,7 @@
                                          NodeTemplate="{StaticResource NodeTemplate}"
                                          BoolSelectorTemplate="{StaticResource BoolSelectorTemplate}"
                                          EnumSelectorTemplate="{StaticResource EnumSelectorTemplate}"
+                                         CSharpObjectTemplate="{StaticResource CSharpObjectTemplate}"
                                          LinkTemplate="{StaticResource LinkTemplate}" />
     </ContentView.Resources>
 

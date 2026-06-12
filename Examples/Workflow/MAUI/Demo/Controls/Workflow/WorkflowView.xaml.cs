@@ -6,6 +6,7 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using VeloxDev.AI;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.CSharp;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
@@ -333,6 +334,15 @@ public partial class WorkflowView : ContentView, WorkflowBehaviors.IWorkflowSurf
             {
                 if (workflowNode.InputSlot is not null) yield return workflowNode.InputSlot;
                 if (workflowNode.OutputSlot is not null) yield return workflowNode.OutputSlot;
+                continue;
+            }
+
+            if (node is CSharpObject csharpObject)
+            {
+                if (csharpObject.InputSlot is not null)
+                    yield return csharpObject.InputSlot;
+                if (csharpObject.OutputSlot is not null)
+                    yield return csharpObject.OutputSlot;
                 continue;
             }
 

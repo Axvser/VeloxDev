@@ -125,6 +125,16 @@ namespace Demo.Views
             InitializeNetworkDemo();
         }
 
+        private void AddCSharpObject(object sender, RoutedEventArgs e)
+        {
+            CSharpObjectDemo.AddNextPipeline(ViewModel);
+            ViewModel.Layout.UpdateCommand.Execute(null);
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        }
+
+        private void RunCSharpPipeline(object sender, RoutedEventArgs e)
+            => CSharpObjectDemo.RunLatestPipeline(ViewModel);
+
         private void InitializeNetworkDemo()
         {
             UnsubscribeAutoScroll(ViewModel);

@@ -1,5 +1,6 @@
 using Demo.ViewModels;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.CSharp;
 
 namespace Demo.Controls;
 
@@ -9,6 +10,7 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
     public DataTemplate? NodeTemplate { get; set; }
     public DataTemplate? BoolSelectorTemplate { get; set; }
     public DataTemplate? EnumSelectorTemplate { get; set; }
+    public DataTemplate? CSharpObjectTemplate { get; set; }
     public DataTemplate? LinkTemplate { get; set; }
 
     protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
@@ -17,6 +19,7 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
             ControllerViewModel => ControllerTemplate ?? throw new InvalidOperationException("ControllerTemplate is not set."),
             BoolSelectorNodeViewModel => BoolSelectorTemplate ?? throw new InvalidOperationException("BoolSelectorTemplate is not set."),
             EnumSelectorNodeViewModel => EnumSelectorTemplate ?? throw new InvalidOperationException("EnumSelectorTemplate is not set."),
+            CSharpObject => CSharpObjectTemplate ?? throw new InvalidOperationException("CSharpObjectTemplate is not set."),
             NodeViewModel => NodeTemplate ?? throw new InvalidOperationException("NodeTemplate is not set."),
             IWorkflowLinkViewModel => LinkTemplate ?? throw new InvalidOperationException("LinkTemplate is not set."),
             _ => throw new InvalidOperationException($"Unknown data type: {item?.GetType().Name}")
