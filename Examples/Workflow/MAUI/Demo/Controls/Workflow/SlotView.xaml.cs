@@ -1,18 +1,9 @@
-using Microsoft.Maui.Controls.Shapes;
-using System.Reflection;
 using VeloxDev.WorkflowSystem;
-using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
-
-#if WINDOWS
-using Microsoft.UI.Xaml;
-#endif
 
 namespace Demo.Controls;
 
 public partial class SlotView : ContentView
 {
-    private PointerGestureRecognizer? _pointerGesture;
-
     public static readonly BindableProperty SlotStateProperty = BindableProperty.Create(
         nameof(SlotState),
         typeof(SlotState),
@@ -32,25 +23,6 @@ public partial class SlotView : ContentView
         set => SetValue(SlotStateProperty, value);
     }
 
-    protected override void OnParentSet()
-    {
-        base.OnParentSet();
-
-        if (_pointerGesture is not null)
-        {
-            _pointerGesture.PointerPressed -= OnPointerPressed;
-            _pointerGesture.PointerMoved -= OnPointerMoved;
-            _pointerGesture.PointerReleased -= OnPointerReleased;
-            GestureRecognizers.Remove(_pointerGesture);
-        }
-
-        _pointerGesture = new PointerGestureRecognizer();
-        _pointerGesture.PointerPressed += OnPointerPressed;
-        _pointerGesture.PointerMoved += OnPointerMoved;
-        _pointerGesture.PointerReleased += OnPointerReleased;
-        GestureRecognizers.Add(_pointerGesture);
-    }
-
     private static void OnSlotStateChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
         if (bindable is SlotView slotView)
@@ -59,159 +31,6 @@ public partial class SlotView : ContentView
         }
     }
 
-    private void OnPointerPressed(object? sender, PointerEventArgs e)
-    {
-        var slot = BindingContext as IWorkflowSlotViewModel;
-        var host = FindHost();
-        if (slot is null || host is null)
-        {
-            return;
-        }
-
-        if (!TryGetPointerAnchor(e, slot, out var anchor))
-        {
-            return;
-        }
-
-        TryCapturePointer(e);
-        WorkflowBehaviors.WorkflowSlotConnectionBehavior.SetIsDraggingConnection(true);
-        if (slot.SendConnectionCommand.CanExecute(null))
-        {
-            slot.SendConnectionCommand.Execute(null);
-        }
-
-        InvokeHostMethod(host, "UpdateConnectionPointer", anchor);
-    }
-
-    private void OnPointerMoved(object? sender, PointerEventArgs e)
-    {
-        var slot = BindingContext as IWorkflowSlotViewModel;
-        var host = FindHost();
-        if (!WorkflowBehaviors.WorkflowSlotConnectionBehavior.IsDraggingConnection
-            || slot is null
-            || host is null)
-        {
-            return;
-        }
-
-        if (!TryGetPointerAnchor(e, slot, out var anchor))
-        {
-            return;
-        }
-
-        InvokeHostMethod(host, "UpdateConnectionPointer", anchor);
-    }
-
-    private void OnPointerReleased(object? sender, PointerEventArgs e)
-    {
-        var slot = BindingContext as IWorkflowSlotViewModel;
-        var host = FindHost();
-        if (slot is null || host is null)
-        {
-            return;
-        }
-
-        var anchor = TryGetPointerAnchor(e, slot, out var pointerAnchor) ? pointerAnchor : slot.Anchor;
-        InvokeHostMethod(host, "CompleteConnection", anchor, slot);
-        MainThread.BeginInvokeOnMainThread(() =>
-        {
-            TryReleasePointer(e);
-            WorkflowBehaviors.WorkflowSlotConnectionBehavior.SetIsDraggingConnection(false);
-        });
-    }
-
-    private bool TryGetPointerAnchor(PointerEventArgs e, IWorkflowSlotViewModel slot, out Anchor anchor)
-    {
-        anchor = slot.Anchor;
-        var coordinateHost = FindCoordinateHost();
-        var position = coordinateHost is null ? e.GetPosition(this) : e.GetPosition(coordinateHost);
-        if (position is null)
-        {
-            return false;
-        }
-
-        anchor = coordinateHost is null
-            ? new Anchor(slot.Anchor.Horizontal + position.Value.X, slot.Anchor.Vertical + position.Value.Y, slot.Anchor.Layer)
-            : new Anchor(position.Value.X, position.Value.Y, slot.Anchor.Layer);
-        return true;
-    }
-
-    private ContentView? FindHost()
-    {
-        Element? current = this;
-        while (current is not null)
-        {
-            if (current is ContentView host && HasHostMethod(host, "UpdateConnectionPointer", typeof(Anchor)) && HasHostMethod(host, "CompleteConnection", typeof(Anchor), typeof(IWorkflowSlotViewModel)))
-            {
-                return host;
-            }
-
-            current = current.Parent;
-        }
-
-        return null;
-    }
-
-    private static bool HasHostMethod(object host, string methodName, params Type[] parameterTypes)
-        => host.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, parameterTypes, null) is not null;
-
-    private static void InvokeHostMethod(object host, string methodName, params object[] arguments)
-    {
-        ArgumentNullException.ThrowIfNull(host);
-        ArgumentNullException.ThrowIfNull(arguments);
-
-        var parameterTypes = arguments.Select(static argument => argument.GetType()).ToArray();
-        var method = host.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, parameterTypes, null);
-        if (method is null)
-        {
-            throw new InvalidOperationException($"Host method '{methodName}' was not found on type '{host.GetType().FullName}'.");
-        }
-
-        method.Invoke(host, arguments);
-    }
-
-    private VisualElement? FindCoordinateHost()
-    {
-        Element? current = this;
-        while (current is not null)
-        {
-            if (current is AbsoluteLayout layout)
-            {
-                return layout;
-            }
-
-            current = current.Parent;
-        }
-
-        return null;
-    }
-
-#if WINDOWS
-    private void TryCapturePointer(PointerEventArgs e)
-    {
-        if (Handler?.PlatformView is UIElement element && e.PlatformArgs?.PointerRoutedEventArgs is { Pointer: { } pointer })
-        {
-            element.CapturePointer(pointer);
-        }
-    }
-
-    private void TryReleasePointer(PointerEventArgs e)
-    {
-        if (Handler?.PlatformView is UIElement element && e.PlatformArgs?.PointerRoutedEventArgs is { Pointer: { } pointer })
-        {
-            element.ReleasePointerCapture(pointer);
-        }
-    }
-#else
-    private void TryCapturePointer(PointerEventArgs e)
-    {
-    }
-
-    private void TryReleasePointer(PointerEventArgs e)
-    {
-    }
-#endif
-
     private sealed class SlotDrawable(SlotView owner) : IDrawable
     {
         public void Draw(ICanvas canvas, RectF dirtyRect)
@@ -219,7 +38,7 @@ public partial class SlotView : ContentView
             var color = ResolveSlotColor(owner.SlotState);
             var centerX = dirtyRect.Center.X;
             var centerY = dirtyRect.Center.Y;
-            var radius = Math.Min(dirtyRect.Width, dirtyRect.Height) / 2f - 1f;
+            var radius = Math.Max(0, Math.Min(dirtyRect.Width, dirtyRect.Height) / 2f - 1f);
 
             canvas.FillColor = color;
             canvas.FillCircle(centerX, centerY, radius);

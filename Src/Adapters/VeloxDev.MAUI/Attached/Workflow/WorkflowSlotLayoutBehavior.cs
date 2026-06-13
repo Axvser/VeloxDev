@@ -428,7 +428,7 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static IEnumerable<T> FindDescendants<T>(Element parent) where T : Element
     {
-        foreach (var child in parent.LogicalChildren)
+        foreach (var child in ((Microsoft.Maui.IVisualTreeElement)parent).GetVisualChildren().OfType<Element>())
         {
             if (child is T result)
             {

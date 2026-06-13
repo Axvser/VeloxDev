@@ -8,9 +8,21 @@ namespace VeloxDev.WorkflowSystem;
 [AgentContext(AgentLanguages.Chinese, "工作流Slot组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Slot component interface")]
 [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
-public partial class SlotViewModelBase : IWorkflowSlotViewModel, IWorkflowIdentifiable
+public sealed partial class SlotViewModelBase : IWorkflowSlotViewModel, IWorkflowIdentifiable
 {
-    private IWorkflowSlotViewModelHelper Helper = new SlotHelper();
+    private IWorkflowSlotViewModelHelper helper = new SlotHelper();
+    public IWorkflowSlotViewModelHelper Helper
+    {
+        get => helper;
+        private set
+        {
+            if (ReferenceEquals(helper, value)) return;
+            OnPropertyChanging(nameof(Helper));
+            helper = value;
+            OnPropertyChanged(nameof(Helper));
+        }
+    }
+
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     public SlotViewModelBase() { InitializeWorkflow(); }
@@ -23,42 +35,46 @@ public partial class SlotViewModelBase : IWorkflowSlotViewModel, IWorkflowIdenti
     [VeloxProperty] private Anchor anchor = new();
 
     [VeloxCommand]
-    protected virtual Task SetChannel(object? parameter, CancellationToken ct)
+    private Task SetChannel(object? parameter, CancellationToken ct)
     {
         if (parameter is not SlotChannel slotChannel) return Task.CompletedTask;
         Helper.SetChannel(slotChannel);
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    protected virtual Task SendConnection(object? parameter, CancellationToken ct)
+    private Task SendConnection(object? parameter, CancellationToken ct)
     {
         Helper.SendConnection();
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    protected virtual Task ReceiveConnection(object? parameter, CancellationToken ct)
+    private Task ReceiveConnection(object? parameter, CancellationToken ct)
     {
         Helper.ReceiveConnection();
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    protected virtual Task Delete(object? parameter, CancellationToken ct)
+    private Task Delete(object? parameter, CancellationToken ct)
     {
         Helper.Delete();
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    protected virtual async Task Close(object? parameter, CancellationToken ct)
+    private async Task Close(object? parameter, CancellationToken ct)
     {
         await Helper.CloseAsync();
     }
 
-    public virtual IWorkflowSlotViewModelHelper GetHelper() => Helper;
-    public virtual void InitializeWorkflow() => Helper.Install(this);
-    public virtual void SetHelper(IWorkflowSlotViewModelHelper helper)
+    public IWorkflowSlotViewModelHelper GetHelper() => Helper;
+    public void InitializeWorkflow()
     {
+        Helper.Install(this);
+    }
+    public void SetHelper(IWorkflowSlotViewModelHelper helper)
+    {
+        if (ReferenceEquals(Helper, helper)) return;
         Helper.Uninstall(this);
-        helper.Install(this);
         Helper = helper;
+        helper.Install(this);
     }
 }

@@ -214,7 +214,7 @@ namespace VeloxDev.Generators.Base
             {
                 Modifies = modifies;
                 FullTypeName = fieldAnalizer.TypeName;
-                SourceName = fieldAnalizer.FieldName;
+                SourceName = $"this.{fieldAnalizer.FieldName}";
                 PropertyName = fieldAnalizer.PropertyName;
                 IsNullable = fieldAnalizer.IsNullable;
                 IsView = isView;

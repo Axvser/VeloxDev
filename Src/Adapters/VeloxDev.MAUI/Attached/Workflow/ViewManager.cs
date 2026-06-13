@@ -192,6 +192,10 @@ public sealed class ViewManager
         view.BindingContext = viewModel;
         view.IsVisible = true;
         ApplyLayout(viewModel, view);
+        if (viewModel is IWorkflowNodeViewModel && view is ContentView nodeView)
+        {
+            WorkflowSlotLayoutBehavior.Refresh(nodeView);
+        }
         view.ZIndex = viewModel is IWorkflowLinkViewModel ? -1 : 1;
         _activeViews.Add(new ControlItem(viewModel, view, SubscribeToLayoutChanges(viewModel, view)));
         Log($"AddOrReuseView.bound: vm={viewModel.GetType().Name}, view={view.GetType().Name}, bounds={AbsoluteLayout.GetLayoutBounds(view)}, active={_activeViews.Count}");

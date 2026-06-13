@@ -7,9 +7,21 @@ namespace VeloxDev.WorkflowSystem;
 [AgentContext(AgentLanguages.Chinese, "工作流Link组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Link component interface")]
 [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
-public partial class LinkViewModelBase : IWorkflowLinkViewModel, IWorkflowIdentifiable
+public sealed partial class LinkViewModelBase : IWorkflowLinkViewModel, IWorkflowIdentifiable
 {
-    private IWorkflowLinkViewModelHelper Helper = new LinkHelper();
+    private IWorkflowLinkViewModelHelper helper = new LinkHelper();
+    public IWorkflowLinkViewModelHelper Helper
+    {
+        get => helper;
+        private set
+        {
+            if (ReferenceEquals(helper, value)) return;
+            OnPropertyChanging(nameof(Helper));
+            helper = value;
+            OnPropertyChanged(nameof(Helper));
+        }
+    }
+
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     public LinkViewModelBase() { InitializeWorkflow(); }
@@ -19,23 +31,27 @@ public partial class LinkViewModelBase : IWorkflowLinkViewModel, IWorkflowIdenti
     [VeloxProperty] private bool isVisible = false;
 
     [VeloxCommand]
-    protected virtual Task Delete(object? parameter, CancellationToken ct)
+    private Task Delete(object? parameter, CancellationToken ct)
     {
         Helper.Delete();
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    protected virtual async Task Close(object? parameter, CancellationToken ct)
+    private async Task Close(object? parameter, CancellationToken ct)
     {
         await Helper.CloseAsync();
     }
 
-    public virtual IWorkflowLinkViewModelHelper GetHelper() => Helper;
-    public virtual void InitializeWorkflow() => Helper.Install(this);
-    public virtual void SetHelper(IWorkflowLinkViewModelHelper helper)
+    public IWorkflowLinkViewModelHelper GetHelper() => Helper;
+    public void InitializeWorkflow()
     {
+        Helper.Install(this);
+    }
+    public void SetHelper(IWorkflowLinkViewModelHelper helper)
+    {
+        if (ReferenceEquals(Helper, helper)) return;
         Helper.Uninstall(this);
-        helper.Install(this);
         Helper = helper;
+        helper.Install(this);
     }
 }

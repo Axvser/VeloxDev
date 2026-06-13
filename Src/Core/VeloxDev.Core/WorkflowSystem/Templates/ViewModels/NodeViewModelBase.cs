@@ -8,9 +8,21 @@ namespace VeloxDev.WorkflowSystem;
 [AgentContext(AgentLanguages.Chinese, "工作流Node组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Node component interface")]
 [AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
-public partial class NodeViewModelBase : IWorkflowNodeViewModel, IWorkflowIdentifiable
+public sealed partial class NodeViewModelBase : IWorkflowNodeViewModel, IWorkflowIdentifiable
 {
-    private IWorkflowNodeViewModelHelper Helper = new NodeHelper();
+    private IWorkflowNodeViewModelHelper helper = new NodeHelper();
+    public IWorkflowNodeViewModelHelper Helper
+    {
+        get => helper;
+        private set
+        {
+            if (ReferenceEquals(helper, value)) return;
+            OnPropertyChanging(nameof(Helper));
+            helper = value;
+            OnPropertyChanged(nameof(Helper));
+        }
+    }
+
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     public NodeViewModelBase() { InitializeWorkflow(); }
@@ -21,66 +33,70 @@ public partial class NodeViewModelBase : IWorkflowNodeViewModel, IWorkflowIdenti
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> slots = [];
 
     [VeloxCommand]
-    protected virtual Task Move(object? parameter, CancellationToken ct)
+    private Task Move(object? parameter, CancellationToken ct)
     {
         if (parameter is not Offset offset) return Task.CompletedTask;
         Helper.Move(offset);
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    protected virtual Task SetAnchor(object? parameter, CancellationToken ct)
+    private Task SetAnchor(object? parameter, CancellationToken ct)
     {
         if (parameter is not Anchor anchor) return Task.CompletedTask;
         Helper.SetAnchor(anchor);
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    protected virtual Task SetSize(object? parameter, CancellationToken ct)
+    private Task SetSize(object? parameter, CancellationToken ct)
     {
         if (parameter is not Size scale) return Task.CompletedTask;
         Helper.SetSize(scale);
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    protected virtual Task CreateSlot(object? parameter, CancellationToken ct)
+    private Task CreateSlot(object? parameter, CancellationToken ct)
     {
         if (parameter is not IWorkflowSlotViewModel slot) return Task.CompletedTask;
         Helper.CreateSlot(slot);
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    protected virtual Task Delete(object? parameter, CancellationToken ct)
+    private Task Delete(object? parameter, CancellationToken ct)
     {
         Helper.Delete();
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    protected virtual async Task Work(object? parameter, CancellationToken ct)
+    private async Task Work(object? parameter, CancellationToken ct)
     {
         await Helper.WorkAsync(parameter, ct);
     }
     [VeloxCommand]
-    protected virtual async Task Broadcast(object? parameter, CancellationToken ct)
+    private async Task Broadcast(object? parameter, CancellationToken ct)
     {
         await Helper.BroadcastAsync(parameter, ct);
     }
     [VeloxCommand]
-    protected virtual async Task ReverseBroadcast(object? parameter, CancellationToken ct)
+    private async Task ReverseBroadcast(object? parameter, CancellationToken ct)
     {
         await Helper.ReverseBroadcastAsync(parameter, ct);
     }
     [VeloxCommand]
-    protected virtual async Task Close(object? parameter, CancellationToken ct)
+    private async Task Close(object? parameter, CancellationToken ct)
     {
         await Helper.CloseAsync();
     }
 
-    public virtual IWorkflowNodeViewModelHelper GetHelper() => Helper;
-    public virtual void InitializeWorkflow() => Helper.Install(this);
-    public virtual void SetHelper(IWorkflowNodeViewModelHelper helper)
+    public IWorkflowNodeViewModelHelper GetHelper() => Helper;
+    public void InitializeWorkflow()
     {
+        Helper.Install(this);
+    }
+    public void SetHelper(IWorkflowNodeViewModelHelper helper)
+    {
+        if (ReferenceEquals(Helper, helper)) return;
         Helper.Uninstall(this);
-        helper.Install(this);
         Helper = helper;
+        helper.Install(this);
     }
 }

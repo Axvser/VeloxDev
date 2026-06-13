@@ -135,6 +135,7 @@ file sealed class StubNode : IWorkflowNodeViewModel
 // ---------------------------------------------------------------------------
 
 file enum BranchKind { Yes, No }
+file enum AlternateBranchKind { First, Second, Third }
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -143,6 +144,52 @@ file enum BranchKind { Yes, No }
 [TestClass]
 public class SlotEnumeratorTests
 {
+    [TestMethod]
+    public void WhenSelectorChanges_UndoOnceRestoresSlotsAndConnections()
+    {
+        var tree = new TreeViewModelBase();
+        var senderNode = new NodeViewModelBase();
+        var receiverNode = new NodeViewModelBase();
+        var receiverSlot = new SlotViewModelBase { Channel = SlotChannel.OneSource };
+        var enumerator = new SlotEnumerator<SlotViewModelBase>();
+
+        tree.GetHelper().CreateNode(senderNode);
+        tree.GetHelper().CreateNode(receiverNode);
+        receiverNode.GetHelper().CreateSlot(receiverSlot);
+        enumerator.Install(senderNode);
+        enumerator.SetSelector(typeof(BranchKind));
+
+        var originalItems = enumerator.Items.ToArray();
+        var originalSender = originalItems[0].Slot;
+        originalSender.Channel = SlotChannel.OneTarget;
+        tree.GetHelper().SendConnection(originalSender);
+        tree.GetHelper().ReceiveConnection(receiverSlot);
+        Assert.HasCount(1, tree.Links);
+
+        tree.GetHelper().ClearHistory();
+        enumerator.SetSelector(typeof(AlternateBranchKind));
+
+        Assert.HasCount(3, enumerator.Items);
+        Assert.IsEmpty(tree.Links);
+
+        tree.GetHelper().Undo();
+
+        CollectionAssert.AreEqual(originalItems, enumerator.Items.ToArray());
+        Assert.HasCount(1, tree.Links);
+        Assert.AreSame(originalSender, tree.Links[0].Sender);
+        Assert.AreSame(receiverSlot, tree.Links[0].Receiver);
+
+        tree.GetHelper().Undo();
+
+        CollectionAssert.AreEqual(originalItems, enumerator.Items.ToArray());
+        Assert.HasCount(1, tree.Links);
+
+        tree.GetHelper().Redo();
+
+        Assert.HasCount(3, enumerator.Items);
+        Assert.IsEmpty(tree.Links);
+    }
+
     /// <summary>
     /// Simulates the JSON round-trip: after SetSelector creates placeholder slots,
     /// the deserializer appends NEW slot instances (carrying real connection history)

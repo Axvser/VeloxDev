@@ -360,21 +360,26 @@ namespace VeloxDev.Generators.Writers
         private void GenerateHelperOverrideBody(StringBuilder sb, WorkflowAttributeModel model)
         {
             sb.AppendLine($$"""
-                    public override {{GetWorkflowHelperInterfaceName(model.WorkflowType)}} Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+                    protected override void EnsureWorkflowHelper()
+                    {
+                        if (Helper is not {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}})
+                        {
+                            Helper = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+                        }
+                    }
                 """);
 
-            // For Node subclasses, also override InitializeWorkflow to create subclass slots/enumerators.
-            // Only emit the override when this subclass actually declares slot/enumerator members;
-            // an empty override would call base.InitializeWorkflow() redundantly.
+            // Node subclasses extend the one-time initialization core with their own slots/enumerators.
             if (model.WorkflowType == 2)
             {
                 var members = GetNodeInitMembers(model.TargetClassSymbol);
                 if (members.Count > 0)
                 {
-                    var initBody = GenerateInitializeWorkflowBody(model.TargetClassSymbol, isOverride: true);
+                    var initBody = GenerateInitializeWorkflowBody(model.TargetClassSymbol, isOverride: false);
                     sb.AppendLine($$"""
-                        public override void InitializeWorkflow()
+                        protected override void InitializeWorkflowCore()
                         {
+                            base.InitializeWorkflowCore();
                             {{initBody}}
                         }
                         """);
@@ -382,10 +387,90 @@ namespace VeloxDev.Generators.Writers
             }
         }
 
+        private string GenerateHelperProperty(WorkflowAttributeModel model)
+        {
+            var helperInterface = GetWorkflowHelperInterfaceName(model.WorkflowType);
+            var helperType = model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+            return $$"""
+                private {{helperInterface}} workflowHelper = new {{helperType}}();
+                public virtual {{helperInterface}} Helper
+                {
+                    get => workflowHelper;
+                    protected set
+                    {
+                        if (global::System.Object.ReferenceEquals(workflowHelper, value)) return;
+                        OnPropertyChanging(nameof(Helper));
+                        workflowHelper = value;
+                        OnPropertyChanged(nameof(Helper));
+                    }
+                }
+                """;
+        }
+
+        private string GenerateWorkflowLifecycleBody(WorkflowAttributeModel model, string initializeCoreBody)
+        {
+            var helperInterface = GetWorkflowHelperInterfaceName(model.WorkflowType);
+            var helperType = model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var componentType = GetWorkflowInterfaceName(model.WorkflowType);
+            var coreBody = string.IsNullOrWhiteSpace(initializeCoreBody)
+                ? string.Empty
+                : initializeCoreBody;
+
+            return $$"""
+                private bool __veloxWorkflowInitializationStarted;
+                private bool __veloxWorkflowHelperInstalled;
+                private bool __veloxWorkflowCoreInitialized;
+
+                protected virtual void EnsureWorkflowHelper()
+                {
+                    if (Helper is not {{helperType}})
+                    {
+                        Helper = new {{helperType}}();
+                    }
+                }
+                protected virtual void InitializeWorkflowCore()
+                {
+                    {{coreBody}}
+                }
+                public virtual {{helperInterface}} GetHelper() => Helper;
+                public virtual void InitializeWorkflow()
+                {
+                    if (!__veloxWorkflowInitializationStarted)
+                    {
+                        __veloxWorkflowInitializationStarted = true;
+                        EnsureWorkflowHelper();
+                    }
+                    if (!__veloxWorkflowHelperInstalled)
+                    {
+                        Helper.Install(({{componentType}})this);
+                        __veloxWorkflowHelperInstalled = true;
+                    }
+                    if (!__veloxWorkflowCoreInitialized)
+                    {
+                        __veloxWorkflowCoreInitialized = true;
+                        InitializeWorkflowCore();
+                    }
+                }
+                public virtual void SetHelper({{helperInterface}} helper)
+                {
+                    if (global::System.Object.ReferenceEquals(Helper, helper)) return;
+                    __veloxWorkflowInitializationStarted = true;
+                    if (__veloxWorkflowHelperInstalled)
+                    {
+                        Helper.Uninstall(({{componentType}})this);
+                    }
+                    Helper = helper;
+                    helper.Install(({{componentType}})this);
+                    __veloxWorkflowHelperInstalled = true;
+                }
+                """;
+        }
+
         private void GenerateTreeBody(StringBuilder sb, TreeAttributeModel model)
         {
             sb.AppendLine($$"""
-         public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+         {{GenerateHelperProperty(model)}}
 
          private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel virtualLink = new {{model.VirtualLinkType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() { Sender = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}(), Receiver = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() };
          private {{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout layout = new();
@@ -443,14 +528,7 @@ namespace VeloxDev.Generators.Writers
              await Helper.CloseAsync();
          }
 
-         public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModelHelper GetHelper() => Helper;
-         public virtual void InitializeWorkflow() => Helper.Install(this);
-         public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModelHelper helper)
-         {
-             Helper.Uninstall(this);
-             helper.Install(this);
-             Helper = helper;
-         }
+         {{GenerateWorkflowLifecycleBody(model, string.Empty)}}
 
         public {{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout Layout
         {
@@ -637,7 +715,7 @@ namespace VeloxDev.Generators.Writers
         private void GenerateNodeBody(StringBuilder sb, NodeAttributeModel model)
         {
             sb.AppendLine($$"""
-                    public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+                    {{GenerateHelperProperty(model)}}
 
                     private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel? parent = null;
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
@@ -690,18 +768,7 @@ namespace VeloxDev.Generators.Writers
                         await Helper.CloseAsync();
                     }
 
-                    public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper GetHelper() => Helper;
-                    public virtual void InitializeWorkflow()
-                    {
-                        Helper.Install(this);
-                        {{GenerateInitializeWorkflowBody(model.TargetClassSymbol, isOverride: false)}}
-                    }
-                    public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModelHelper helper)
-                    {
-                        Helper.Uninstall(this);
-                        helper.Install(this);
-                        Helper = helper;
-                    }
+                    {{GenerateWorkflowLifecycleBody(model, GenerateInitializeWorkflowBody(model.TargetClassSymbol, isOverride: false))}}
 
                     public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel Parent
                     {
@@ -898,7 +965,7 @@ namespace VeloxDev.Generators.Writers
         private void GenerateSlotBody(StringBuilder sb, SlotAttributeModel model)
         {
             sb.AppendLine($$"""
-        public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+        {{GenerateHelperProperty(model)}}
 
         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> targets = [];
         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> sources = [];
@@ -933,14 +1000,7 @@ namespace VeloxDev.Generators.Writers
             await Helper.CloseAsync();
         }
 
-        public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModelHelper GetHelper() => Helper;
-        public virtual void InitializeWorkflow() => Helper.Install(this);
-        public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModelHelper helper)
-        {
-            Helper.Uninstall(this);
-            helper.Install(this);
-            Helper = helper;
-        }
+        {{GenerateWorkflowLifecycleBody(model, string.Empty)}}
 
         public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> Targets
         {
@@ -1099,7 +1159,7 @@ namespace VeloxDev.Generators.Writers
         private void GenerateLinkBody(StringBuilder sb, LinkAttributeModel model)
         {
             sb.AppendLine($$"""
-        public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModelHelper Helper { get; protected set; } = new {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+        {{GenerateHelperProperty(model)}}
 
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel sender = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel receiver = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
@@ -1115,14 +1175,7 @@ namespace VeloxDev.Generators.Writers
             await Helper.CloseAsync();
         }
 
-        public virtual {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModelHelper GetHelper() => Helper;
-        public virtual void InitializeWorkflow() => Helper.Install(this);
-        public virtual void SetHelper({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModelHelper helper)
-        {
-            Helper.Uninstall(this);
-            helper.Install(this);
-            Helper = helper;
-        }
+        {{GenerateWorkflowLifecycleBody(model, string.Empty)}}
 
         public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel Sender
         {

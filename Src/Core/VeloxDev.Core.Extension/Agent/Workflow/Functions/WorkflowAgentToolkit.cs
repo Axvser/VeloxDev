@@ -410,7 +410,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return result.ToString(Formatting.None);
     }
 
-    [Description("Connects two slots by their runtime IDs. IDs are stable across UI redraws but NOT across SlotEnumerator reconfiguration. ⚠ PREFER ConnectByProperty unless you obtained IDs from GetFullTopology in the same task. The framework may silently reject: check 'connected' in the response.")]
+    [Description("Connects two slots by their runtime IDs. IDs are stable across UI redraws but NOT across SlotEnumerator reconfiguration. Prefer ConnectByProperty for SlotEnumerator and generated slot collections; use this only with IDs obtained after the latest collection configuration. The framework may silently reject: check 'connected' in the response.")]
     private string ConnectSlotsById(
         [Description("Runtime ID of the sender slot.")] string senderSlotId,
         [Description("Runtime ID of the receiver slot.")] string receiverSlotId)
@@ -2488,20 +2488,22 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     {
         foreach (var node in Tree.Nodes)
         {
-            if (node is IWorkflowIdentifiable nid && nid.RuntimeId == runtimeId)
+            if (GetComponentId(node) == runtimeId)
                 return node;
-            foreach (var slot in node.Slots)
+
+            var propertySlots = BuildSlotPropertyMap(node).Keys;
+            foreach (var slot in node.Slots.Concat(propertySlots).Distinct())
             {
-                if (slot is IWorkflowIdentifiable sid && sid.RuntimeId == runtimeId)
+                if (GetComponentId(slot) == runtimeId)
                     return slot;
             }
         }
         foreach (var link in Tree.Links)
         {
-            if (link is IWorkflowIdentifiable lid && lid.RuntimeId == runtimeId)
+            if (GetComponentId(link) == runtimeId)
                 return link;
         }
-        if (Tree is IWorkflowIdentifiable tid && tid.RuntimeId == runtimeId)
+        if (GetComponentId(Tree) == runtimeId)
             return Tree;
         return null;
     }

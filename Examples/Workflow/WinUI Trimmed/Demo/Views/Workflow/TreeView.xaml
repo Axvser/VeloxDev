@@ -44,17 +44,7 @@
                         Background="Transparent"
                         behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
                         behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}">
-                    <local:PolylineCurveView DataContext="{Binding VirtualLink}"
-                                             StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                             StartTop="{Binding Sender.Anchor.Vertical}"
-                                             EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                             EndTop="{Binding Receiver.Anchor.Vertical}"
-                                             CanRender="{Binding IsVisible}"
-                                             IsVirtual="True"
-                                             LineColor="White"
-                                             Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                             Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
-                                             Canvas.ZIndex="-1" />
+
                 </Canvas>
             </ScrollViewer>
         </local:WorkflowGridDecorator>

@@ -1,7 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using VeloxDev.DynamicTheme;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
@@ -19,6 +18,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
     [VeloxProperty] private Dictionary<object, TSlot> conditionMap = [];
 
     private bool _isDeduplicating = false;
+    private bool _isApplyingState = false;
 
     [VeloxProperty] public partial Type? SelectorType { get; protected set; }
     [VeloxProperty] public partial ObservableCollection<ConditionalSlot<TSlot>> Items { get; set; }
@@ -27,6 +27,9 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
     partial void OnItemAddedToItems(IEnumerable<ConditionalSlot<TSlot>> items)
     {
+        if (_isApplyingState)
+            return;
+
         List<ConditionalSlot<TSlot>>? stale = null;
 
         foreach (var item in items)
@@ -104,6 +107,9 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
     partial void OnItemRemovedFromItems(IEnumerable<ConditionalSlot<TSlot>> items)
     {
+        if (_isApplyingState)
+            return;
+
         foreach (var item in items)
         {
             if (_isDeduplicating)
@@ -116,18 +122,6 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
         }
     }
 
-    partial void OnSelectorTypeNameChanged(string oldValue, string newValue)
-    {
-        if (!string.IsNullOrEmpty(newValue))
-        {
-            SelectorType = Type.GetType(newValue);
-        }
-        else
-        {
-            SelectorType = null;
-        }
-    }
-
     public bool TrySelect(object value, out TSlot? slot)
     {
         return conditionMap.TryGetValue(value, out slot);
@@ -137,21 +131,19 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
     {
         if (Parent is null)
         {
-            Debug.Fail("Parent must be set before configuring selector type.");
             return;
         }
 
-        // ISlotProvider path: instance-driven slot list (not enum/bool)
+        var oldState = CaptureState();
+        List<ConditionalSlot<TSlot>> newItems = [];
+        string newTypeName;
+        Type? newType;
+
         if (selector is ISlotProvider provider)
         {
             var definitions = provider.GetSlots().ToArray();
-            var providerTypeName = provider.GetType().FullName ?? provider.GetType().Name;
-
-            SelectorType = provider.GetType();
-            SelectorTypeName = providerTypeName;
-            conditionMap.Clear();
-            for (int i = Items.Count - 1; i >= 0; i--)
-                Items.RemoveAt(i);
+            newType = provider.GetType();
+            newTypeName = newType.FullName ?? newType.Name;
 
             foreach (var def in definitions)
             {
@@ -163,57 +155,192 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
                     Value = def.Value,
                     Slot = slot
                 };
-                Items.Add(conditional);
+                newItems.Add(conditional);
             }
-            return;
         }
-
-        Type? selectorType = selector switch
+        else
         {
-            Type t => t,
-            string s => Type.GetType(s),
-            _ => null
-        };
-
-        if (selectorType is null)
-        {
-            Debug.Fail($"SetSelector: cannot resolve a Type from '{selector}'. Pass a Type, a fully-qualified type name string, or an ISlotProvider instance.");
-            return;
-        }
-
-        if (!selectorType.IsEnum && selectorType != typeof(bool))
-        {
-            Debug.Fail("Provided type must be an enum or bool. For custom slot lists implement ISlotProvider and pass an instance.");
-            return;
-        }
-
-        var typeFullName = selectorType.FullName ?? selectorType.Name;
-        if (SelectorTypeName == typeFullName)
-            return;
-
-        var rawValues = (selectorType == typeof(bool)
-            ? [false, true]
-            : Enumerable.Cast<object>(Enum.GetValues(selectorType)))
-            .Where(v => !ConditionMap.ContainsKey(v))
-            .ToArray();
-
-        SelectorType = selectorType;
-        SelectorTypeName = typeFullName;
-        conditionMap.Clear();
-        for (int i = Items.Count - 1; i >= 0; i--)
-            Items.RemoveAt(i);
-
-        foreach (var value in rawValues)
-        {
-            var slot = new TSlot();
-            var conditional = new ConditionalSlot<TSlot>
+            Type? selectorType = selector switch
             {
-                Name = value.ToString() ?? string.Empty,
-                Value = value,
-                Slot = slot
+                Type t => t,
+                string s => Type.GetType(s),
+                _ => null
             };
-            Items.Add(conditional);
+
+            if (selectorType is null)
+            {
+                Debug.Fail($"SetSelector: cannot resolve a Type from '{selector}'. Pass a Type, a fully-qualified type name string, or an ISlotProvider instance.");
+                return;
+            }
+
+            if (!selectorType.IsEnum && selectorType != typeof(bool))
+            {
+                Debug.Fail("Provided type must be an enum or bool. For custom slot lists implement ISlotProvider and pass an instance.");
+                return;
+            }
+
+            var typeFullName = selectorType.FullName ?? selectorType.Name;
+            if (SelectorTypeName == typeFullName)
+                return;
+
+            var rawValues = selectorType == typeof(bool)
+                ? [false, true]
+                : Enumerable.Cast<object>(Enum.GetValues(selectorType)).ToArray();
+
+            newType = selectorType;
+            newTypeName = typeFullName;
+
+            foreach (var value in rawValues)
+            {
+                var slot = new TSlot();
+                var conditional = new ConditionalSlot<TSlot>
+                {
+                    Name = value.ToString() ?? string.Empty,
+                    Value = value,
+                    Slot = slot
+                };
+                newItems.Add(conditional);
+            }
         }
+
+        var newState = new SelectorState(newTypeName, newType, newItems, []);
+        var tree = Parent.Parent;
+        if (tree is null)
+        {
+            ApplyDetachedState(newState);
+            return;
+        }
+
+        tree.GetHelper().Submit(new WorkflowActionPair(
+            () => ApplyAttachedState(tree, newState),
+            () => ApplyAttachedState(tree, oldState)));
+    }
+
+    private SelectorState CaptureState()
+    {
+        var slots = new HashSet<IWorkflowSlotViewModel>(
+            Items.Select(item => (IWorkflowSlotViewModel)item.Slot));
+        var links = Parent?.Parent?.Links
+            .Where(link => slots.Contains(link.Sender) || slots.Contains(link.Receiver))
+            .Distinct()
+            .ToArray() ?? [];
+
+        return new SelectorState(SelectorTypeName, SelectorType, [.. Items], links);
+    }
+
+    private void ApplyDetachedState(SelectorState state)
+    {
+        SelectorTypeName = state.TypeName;
+        SelectorType = state.Type;
+        ConditionMap.Clear();
+        Items.Clear();
+        foreach (var item in state.Items)
+            Items.Add(item);
+    }
+
+    private void ApplyAttachedState(IWorkflowTreeViewModel tree, SelectorState state)
+    {
+        if (Parent is null)
+            return;
+
+        var currentSlots = new HashSet<IWorkflowSlotViewModel>(
+            Items.Select(item => (IWorkflowSlotViewModel)item.Slot));
+        foreach (var link in tree.Links
+            .Where(link => currentSlots.Contains(link.Sender) || currentSlots.Contains(link.Receiver))
+            .ToArray())
+        {
+            RemoveLink(tree, link);
+        }
+
+        foreach (var slot in currentSlots)
+        {
+            Parent.Slots.Remove(slot);
+            slot.Parent = null;
+        }
+
+        _isApplyingState = true;
+        try
+        {
+            SelectorTypeName = state.TypeName;
+            SelectorType = state.Type;
+            ConditionMap.Clear();
+            Items.Clear();
+            foreach (var item in state.Items)
+            {
+                Items.Add(item);
+                if (item.Value is not null)
+                    ConditionMap[item.Value] = item.Slot;
+            }
+        }
+        finally
+        {
+            _isApplyingState = false;
+        }
+
+        foreach (var item in state.Items)
+        {
+            item.Slot.Parent = Parent;
+            if (!Parent.Slots.Contains(item.Slot))
+                Parent.Slots.Add(item.Slot);
+        }
+
+        foreach (var link in state.Links)
+            RestoreLink(tree, link);
+    }
+
+    private static void RemoveLink(IWorkflowTreeViewModel tree, IWorkflowLinkViewModel link)
+    {
+        var sender = link.Sender;
+        var receiver = link.Receiver;
+
+        sender.Targets.Remove(receiver);
+        receiver.Sources.Remove(sender);
+        if (tree.LinksMap.TryGetValue(sender, out var receivers))
+        {
+            receivers.Remove(receiver);
+            if (receivers.Count == 0)
+                tree.LinksMap.Remove(sender);
+        }
+        tree.Links.Remove(link);
+        link.IsVisible = false;
+        sender.GetHelper().UpdateState();
+        receiver.GetHelper().UpdateState();
+    }
+
+    private static void RestoreLink(IWorkflowTreeViewModel tree, IWorkflowLinkViewModel link)
+    {
+        var sender = link.Sender;
+        var receiver = link.Receiver;
+        if (sender.Parent?.Parent != tree || receiver.Parent?.Parent != tree)
+            return;
+
+        if (!tree.LinksMap.TryGetValue(sender, out var receivers))
+        {
+            receivers = [];
+            tree.LinksMap[sender] = receivers;
+        }
+        receivers[receiver] = link;
+        if (!tree.Links.Contains(link))
+            tree.Links.Add(link);
+        if (!sender.Targets.Contains(receiver))
+            sender.Targets.Add(receiver);
+        if (!receiver.Sources.Contains(sender))
+            receiver.Sources.Add(sender);
+        link.IsVisible = true;
+        sender.GetHelper().UpdateState();
+        receiver.GetHelper().UpdateState();
+    }
+
+    private sealed class SelectorState(
+        string typeName,
+        Type? type,
+        IReadOnlyList<ConditionalSlot<TSlot>> items,
+        IReadOnlyList<IWorkflowLinkViewModel> links)
+    {
+        public string TypeName { get; } = typeName;
+        public Type? Type { get; } = type;
+        public IReadOnlyList<ConditionalSlot<TSlot>> Items { get; } = items;
+        public IReadOnlyList<IWorkflowLinkViewModel> Links { get; } = links;
     }
 
     public void Install(IWorkflowNodeViewModel parent)

@@ -8,7 +8,7 @@
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<LangVersion>latest</LangVersion>
 		<Title>VeloxDev.Razor</Title>
-		<Version>5.2.0</Version>
+		<Version>5.2.1</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + Razor/Blazor</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -23,7 +23,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="VeloxDev.Core" Version="5.2.0" />
+		<PackageReference Include="VeloxDev.Core" Version="5.2.1" />
 	</ItemGroup>
 
 </Project>

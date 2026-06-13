@@ -6,18 +6,15 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using VeloxDev.AI;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.CSharp;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
 
-public partial class WorkflowView : ContentView, WorkflowBehaviors.IWorkflowSurfaceHost
+public partial class WorkflowView : ContentView
 {
     private TreeViewModel _workflowViewModel = new();
     private DataTemplateSelector? _nodeSelector;
     private readonly ObservableCollection<IWorkflowViewModel> _canvasItems = [];
-
-    IWorkflowTreeViewModel? WorkflowBehaviors.IWorkflowSurfaceHost.WorkflowTree => _workflowViewModel;
 
     public WorkflowView()
     {
@@ -258,98 +255,4 @@ public partial class WorkflowView : ContentView, WorkflowBehaviors.IWorkflowSurf
     private static void Log(string message)
         => Debug.WriteLine($"[WorkflowView] {message}");
 
-    public void BeginConnection(IWorkflowSlotViewModel slot)
-    {
-        ArgumentNullException.ThrowIfNull(slot);
-        slot.SendConnectionCommand.Execute(null);
-    }
-
-    public void UpdateConnectionPointer(Anchor anchor)
-    {
-        _workflowViewModel.SetPointerCommand.Execute(anchor);
-    }
-
-    public void CompleteConnection(Anchor anchor, IWorkflowSlotViewModel sourceSlot)
-    {
-        ArgumentNullException.ThrowIfNull(sourceSlot);
-
-        var viewportX = PART_ScrollViewer.ScrollX - _workflowViewModel.Layout.ActualOffset.Horizontal;
-        var viewportY = PART_ScrollViewer.ScrollY - _workflowViewModel.Layout.ActualOffset.Vertical;
-
-        var receiver = HitTestSlot(anchor, sourceSlot);
-        if (receiver is not null)
-        {
-            receiver.ReceiveConnectionCommand.Execute(null);
-            WorkflowBehaviors.WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
-            return;
-        }
-
-        _workflowViewModel.ResetVirtualLinkCommand.Execute(null);
-        WorkflowBehaviors.WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
-    }
-
-    private IWorkflowSlotViewModel? HitTestSlot(Anchor anchor, IWorkflowSlotViewModel exclude)
-    {
-        const double radius = 18d;
-        var radiusSquared = radius * radius;
-
-        foreach (var slot in EnumerateSlots())
-        {
-            if (ReferenceEquals(slot, exclude))
-            {
-                continue;
-            }
-
-            var dx = slot.Anchor.Horizontal - anchor.Horizontal;
-            var dy = slot.Anchor.Vertical - anchor.Vertical;
-            if ((dx * dx) + (dy * dy) <= radiusSquared)
-            {
-                return slot;
-            }
-        }
-
-        return null;
-    }
-
-    private IEnumerable<IWorkflowSlotViewModel> EnumerateSlots()
-    {
-        foreach (var node in _workflowViewModel.Nodes)
-        {
-            if (node is BoolSelectorNodeViewModel boolSelector)
-            {
-                if (boolSelector.InputSlot is not null) yield return boolSelector.InputSlot;
-                if (boolSelector.TrueSlot is not null) yield return boolSelector.TrueSlot;
-                if (boolSelector.FalseSlot is not null) yield return boolSelector.FalseSlot;
-                continue;
-            }
-
-            if (node is EnumSelectorNodeViewModel enumSelector)
-            {
-                if (enumSelector.InputSlot is not null) yield return enumSelector.InputSlot;
-                foreach (var slot in enumSelector.OutputSlots) yield return slot;
-                continue;
-            }
-
-            if (node is NodeViewModel workflowNode)
-            {
-                if (workflowNode.InputSlot is not null) yield return workflowNode.InputSlot;
-                if (workflowNode.OutputSlot is not null) yield return workflowNode.OutputSlot;
-                continue;
-            }
-
-            if (node is CSharpObject csharpObject)
-            {
-                if (csharpObject.InputSlot is not null)
-                    yield return csharpObject.InputSlot;
-                if (csharpObject.OutputSlot is not null)
-                    yield return csharpObject.OutputSlot;
-                continue;
-            }
-
-            if (node is ControllerViewModel controller && controller.OutputSlot is not null)
-            {
-                yield return controller.OutputSlot;
-            }
-        }
-    }
 }

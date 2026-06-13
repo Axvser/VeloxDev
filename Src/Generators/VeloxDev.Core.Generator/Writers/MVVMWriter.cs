@@ -14,7 +14,12 @@ namespace VeloxDev.Generators.Writers
         private bool IsWorkflowComponent { get; set; } = false;
         private bool _isWorkflowComponentOrBase = false;
         private bool _isWorkflowNodeComponentOrBase = false;
-        private bool _hasBasePropertyNotificationInfrastructure = false;
+        private bool _generatePropertyChangingEvent;
+        private bool _generatePropertyChangedEvent;
+        private bool _addNotifyPropertyChangingInterface;
+        private bool _addNotifyPropertyChangedInterface;
+        private string _propertyChangingMethodDeclaration = string.Empty;
+        private string _propertyChangedMethodDeclaration = string.Empty;
         private bool _hasBaseCollectionNotificationInfrastructure = false;
         private bool _hasBaseWorkflowSlotInfrastructure = false;
 
@@ -22,18 +27,14 @@ namespace VeloxDev.Generators.Writers
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
 
-            if (namedTypeSymbol.BaseType != null)
-            {
-                _hasBasePropertyNotificationInfrastructure = CheckBaseClassForPropertyInfrastructure(namedTypeSymbol.BaseType);
-                _hasBaseCollectionNotificationInfrastructure = CheckBaseClassForCollectionInfrastructure(namedTypeSymbol.BaseType);
-                _hasBaseWorkflowSlotInfrastructure = CheckBaseClassForWorkflowSlotInfrastructure(namedTypeSymbol.BaseType);
-            }
-
             _isWorkflowComponentOrBase = HasWorkflowAttributeInHierarchy(namedTypeSymbol);
             _isWorkflowNodeComponentOrBase = HasWorkflowNodeAttributeInHierarchy(namedTypeSymbol);
+            IsWorkflowComponent = HasWorkflowAttribute(namedTypeSymbol);
+            ConfigurePropertyNotificationInfrastructure(namedTypeSymbol);
+            _hasBaseCollectionNotificationInfrastructure = CheckBaseClassForCollectionInfrastructure(namedTypeSymbol);
+            _hasBaseWorkflowSlotInfrastructure = CheckBaseClassForWorkflowSlotInfrastructure(namedTypeSymbol);
             ReadMVVMConfig(namedTypeSymbol);
             ReadAutoProperties(namedTypeSymbol);
-            IsWorkflowComponent = HasWorkflowAttribute(namedTypeSymbol);
         }
 
         private void ReadMVVMConfig(INamedTypeSymbol symbol)
@@ -45,6 +46,7 @@ namespace VeloxDev.Generators.Writers
                     .Where(field => field.GetAttributes().Any(attr =>
                         attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
                         NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
+                    .Where(field => ShouldGenerateFieldProperty(symbol, field))
                     .Select(field =>
                     {
                         var analizer = new MVVMFieldAnalizer(field);
@@ -68,6 +70,7 @@ namespace VeloxDev.Generators.Writers
                     .Where(property => property.GetAttributes().Any(attr =>
                         attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
                         NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute"))
+                    .Where(ShouldGeneratePartialProperty)
                     .Select(property =>
                     {
                         var analizer = new MVVMPropertyAnalizer(property);
@@ -80,6 +83,345 @@ namespace VeloxDev.Generators.Writers
                         return factory;
                     })
             ];
+        }
+
+        private bool ShouldGenerateFieldProperty(INamedTypeSymbol symbol, IFieldSymbol field)
+        {
+            if (HasCompetingPropertyGeneratorAttribute(field))
+                return false;
+
+            var propertyName = new MVVMFieldAnalizer(field).PropertyName;
+            var current = symbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                if (current.GetMembers(propertyName).OfType<IPropertySymbol>().Any())
+                    return false;
+
+                current = current.BaseType;
+            }
+
+            return true;
+        }
+
+        private bool ShouldGeneratePartialProperty(IPropertySymbol property)
+        {
+            if (HasCompetingPropertyGeneratorAttribute(property))
+                return false;
+
+            return property.DeclaringSyntaxReferences
+                .Select(reference => reference.GetSyntax())
+                .OfType<PropertyDeclarationSyntax>()
+                .Any(syntax => syntax.Modifiers.Any(modifier =>
+                    modifier.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword)));
+        }
+
+        private static bool HasCompetingPropertyGeneratorAttribute(ISymbol symbol)
+        {
+            foreach (var attribute in symbol.GetAttributes())
+            {
+                var attributeClass = attribute.AttributeClass;
+                if (attributeClass == null)
+                    continue;
+
+                var fullName = attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                var isSupportedFramework =
+                    fullName.StartsWith("global::CommunityToolkit.Mvvm.") ||
+                    fullName.StartsWith("global::ReactiveUI.") ||
+                    fullName.StartsWith("global::Prism.") ||
+                    fullName.StartsWith("global::Caliburn.Micro.");
+
+                if (!isSupportedFramework)
+                    continue;
+
+                if (attributeClass.Name is "ObservablePropertyAttribute" or "ReactiveAttribute")
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void ConfigurePropertyNotificationInfrastructure(INamedTypeSymbol symbol)
+        {
+            var toolkitObservableObject = HasAttributeInHierarchy(
+                symbol,
+                "global::CommunityToolkit.Mvvm.ComponentModel.ObservableObjectAttribute");
+            var toolkitChangedOnly = HasAttributeInHierarchy(
+                symbol,
+                "global::CommunityToolkit.Mvvm.ComponentModel.INotifyPropertyChangedAttribute");
+            var baseVeloxInfrastructure =
+                HasWorkflowAttributeInHierarchy(symbol.BaseType) ||
+                HasVeloxPropertyInHierarchy(symbol.BaseType);
+
+            var plannedChangingInfrastructure = toolkitObservableObject || baseVeloxInfrastructure;
+            var plannedChangedInfrastructure =
+                toolkitObservableObject ||
+                toolkitChangedOnly ||
+                baseVeloxInfrastructure;
+
+            var changingEvent = FindEventInHierarchy(
+                symbol,
+                "PropertyChanging",
+                "global::System.ComponentModel.PropertyChangingEventHandler");
+            var changedEvent = FindEventInHierarchy(
+                symbol,
+                "PropertyChanged",
+                "global::System.ComponentModel.PropertyChangedEventHandler");
+
+            _generatePropertyChangingEvent = changingEvent == null && !plannedChangingInfrastructure;
+            _generatePropertyChangedEvent = changedEvent == null && !plannedChangedInfrastructure;
+
+            var workflowProvidesNotificationContracts = _isWorkflowComponentOrBase;
+            _addNotifyPropertyChangingInterface =
+                !workflowProvidesNotificationContracts &&
+                !plannedChangingInfrastructure &&
+                !ImplementsInterface(symbol, "global::System.ComponentModel.INotifyPropertyChanging");
+            _addNotifyPropertyChangedInterface =
+                !workflowProvidesNotificationContracts &&
+                !plannedChangedInfrastructure &&
+                !ImplementsInterface(symbol, "global::System.ComponentModel.INotifyPropertyChanged");
+
+            var baseProvidesWorkflowMethods =
+                HasWorkflowAttributeInHierarchy(symbol.BaseType) ||
+                (symbol.BaseType != null &&
+                 ImplementsInterface(symbol.BaseType, "global::VeloxDev.WorkflowSystem.IWorkflowViewModel"));
+            var requiresPublicWorkflowMethods = IsWorkflowComponent && !baseProvidesWorkflowMethods;
+
+            _propertyChangingMethodDeclaration = BuildNotificationMethodDeclaration(
+                symbol,
+                isChanging: true,
+                plannedStringMethod: plannedChangingInfrastructure,
+                eventSymbol: changingEvent,
+                generateEvent: _generatePropertyChangingEvent,
+                requiresPublicWorkflowMethod: requiresPublicWorkflowMethods);
+            _propertyChangedMethodDeclaration = BuildNotificationMethodDeclaration(
+                symbol,
+                isChanging: false,
+                plannedStringMethod: plannedChangedInfrastructure,
+                eventSymbol: changedEvent,
+                generateEvent: _generatePropertyChangedEvent,
+                requiresPublicWorkflowMethod: requiresPublicWorkflowMethods);
+        }
+
+        private string BuildNotificationMethodDeclaration(
+            INamedTypeSymbol symbol,
+            bool isChanging,
+            bool plannedStringMethod,
+            IEventSymbol? eventSymbol,
+            bool generateEvent,
+            bool requiresPublicWorkflowMethod)
+        {
+            var methodName = isChanging ? "OnPropertyChanging" : "OnPropertyChanged";
+            var eventName = isChanging ? "PropertyChanging" : "PropertyChanged";
+            var eventArgsType = isChanging
+                ? "global::System.ComponentModel.PropertyChangingEventArgs"
+                : "global::System.ComponentModel.PropertyChangedEventArgs";
+            var stringMethod = FindMethodInHierarchy(symbol, methodName, SpecialType.System_String);
+
+            if (stringMethod != null || plannedStringMethod)
+            {
+                if (!requiresPublicWorkflowMethod)
+                    return string.Empty;
+
+                if (plannedStringMethod ||
+                    (stringMethod != null &&
+                     SymbolEqualityComparer.Default.Equals(stringMethod.ContainingType, symbol)))
+                {
+                    if (stringMethod?.DeclaredAccessibility == Accessibility.Public)
+                        return string.Empty;
+
+                    return
+                        $"void {NAMESPACE_VELOX_IWORKFLOW}.IWorkflowViewModel.{methodName}(string propertyName) => {methodName}(propertyName);";
+                }
+
+                if (stringMethod?.DeclaredAccessibility == Accessibility.Public)
+                    return string.Empty;
+
+                return $"public new void {methodName}(string propertyName) => base.{methodName}(propertyName);";
+            }
+
+            var body = BuildNotificationMethodBody(
+                symbol,
+                isChanging,
+                eventName,
+                eventArgsType,
+                eventSymbol,
+                generateEvent);
+            var methodModifier = symbol.IsSealed ? string.Empty : "virtual ";
+
+            return $$"""
+                public {{methodModifier}}void {{methodName}}(string propertyName)
+                {
+                    {{body}}
+                }
+                """;
+        }
+
+        private string BuildNotificationMethodBody(
+            INamedTypeSymbol symbol,
+            bool isChanging,
+            string eventName,
+            string eventArgsType,
+            IEventSymbol? eventSymbol,
+            bool generateEvent)
+        {
+            if (generateEvent ||
+                (eventSymbol != null &&
+                 SymbolEqualityComparer.Default.Equals(eventSymbol.ContainingType, symbol)))
+            {
+                return $"{eventName}?.Invoke(this, new {eventArgsType}(propertyName));";
+            }
+
+            var methodName = isChanging ? "OnPropertyChanging" : "OnPropertyChanged";
+            var eventArgsMethod = FindMethodInHierarchy(symbol, methodName, eventArgsType);
+            if (eventArgsMethod != null)
+                return $"{methodName}(new {eventArgsType}(propertyName));";
+
+            var forwardingNames = isChanging
+                ? new[] { "RaisePropertyChanging", "NotifyOfPropertyChanging" }
+                : new[] { "RaisePropertyChanged", "NotifyOfPropertyChange" };
+            foreach (var forwardingName in forwardingNames)
+            {
+                if (FindMethodInHierarchy(symbol, forwardingName, SpecialType.System_String) != null)
+                    return $"{forwardingName}(propertyName);";
+            }
+
+            if (ImplementsInterface(symbol, "global::ReactiveUI.IReactiveObject"))
+            {
+                var extensionMethod = isChanging ? "RaisePropertyChanging" : "RaisePropertyChanged";
+                return $"global::ReactiveUI.IReactiveObjectExtensions.{extensionMethod}(this, propertyName);";
+            }
+
+            return string.Empty;
+        }
+
+        private static bool HasAttributeInHierarchy(INamedTypeSymbol symbol, string fullyQualifiedName)
+        {
+            var current = symbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                if (current.GetAttributes().Any(attribute =>
+                        attribute.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                        fullyQualifiedName))
+                {
+                    return true;
+                }
+
+                current = current.BaseType;
+            }
+
+            return false;
+        }
+
+        private static bool HasVeloxPropertyInHierarchy(INamedTypeSymbol? symbol)
+        {
+            var current = symbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                if (current.GetMembers().Any(member =>
+                        member.GetAttributes().Any(attribute =>
+                            attribute.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                            NAMESPACE_VELOX_MVVM + ".VeloxPropertyAttribute")))
+                {
+                    return true;
+                }
+
+                current = current.BaseType;
+            }
+
+            return false;
+        }
+
+        private static bool ImplementsInterface(INamedTypeSymbol symbol, string fullyQualifiedName)
+        {
+            return symbol.AllInterfaces.Any(@interface =>
+                @interface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                fullyQualifiedName);
+        }
+
+        private IEventSymbol? FindEventInHierarchy(
+            INamedTypeSymbol symbol,
+            string eventName,
+            string eventHandlerType)
+        {
+            var current = symbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                var eventSymbol = current.GetMembers(eventName)
+                    .OfType<IEventSymbol>()
+                    .FirstOrDefault(candidate =>
+                        !candidate.IsStatic &&
+                        candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                        eventHandlerType &&
+                        IsAccessibleFromTarget(candidate, symbol));
+                if (eventSymbol != null)
+                    return eventSymbol;
+
+                current = current.BaseType;
+            }
+
+            return null;
+        }
+
+        private IMethodSymbol? FindMethodInHierarchy(
+            INamedTypeSymbol symbol,
+            string methodName,
+            SpecialType parameterType)
+        {
+            return FindMethodInHierarchy(symbol, methodName, parameter =>
+                parameter.Type.SpecialType == parameterType);
+        }
+
+        private IMethodSymbol? FindMethodInHierarchy(
+            INamedTypeSymbol symbol,
+            string methodName,
+            string parameterType)
+        {
+            return FindMethodInHierarchy(symbol, methodName, parameter =>
+                parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                parameterType);
+        }
+
+        private IMethodSymbol? FindMethodInHierarchy(
+            INamedTypeSymbol symbol,
+            string methodName,
+            System.Func<IParameterSymbol, bool> parameterMatches)
+        {
+            var current = symbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                var method = current.GetMembers(methodName)
+                    .OfType<IMethodSymbol>()
+                    .FirstOrDefault(candidate =>
+                        !candidate.IsStatic &&
+                        candidate.ReturnsVoid &&
+                        candidate.Parameters.Length == 1 &&
+                        parameterMatches(candidate.Parameters[0]) &&
+                        IsAccessibleFromTarget(candidate, symbol));
+                if (method != null)
+                    return method;
+
+                current = current.BaseType;
+            }
+
+            return null;
+        }
+
+        private static bool IsAccessibleFromTarget(ISymbol member, INamedTypeSymbol target)
+        {
+            if (SymbolEqualityComparer.Default.Equals(member.ContainingType, target))
+                return true;
+
+            return member.DeclaredAccessibility switch
+            {
+                Accessibility.Public => true,
+                Accessibility.Protected => true,
+                Accessibility.ProtectedOrInternal => true,
+                Accessibility.Internal =>
+                    SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, target.ContainingAssembly),
+                Accessibility.ProtectedAndInternal =>
+                    SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, target.ContainingAssembly),
+                _ => false
+            };
         }
 
         private void ConfigureWorkflowSlotProperty(MVVMPropertyFactory factory, ISymbol memberSymbol, ITypeSymbol typeSymbol)
@@ -398,28 +740,6 @@ namespace VeloxDev.Generators.Writers
             return typeSymbol.AllInterfaces.Any(i =>
                 i.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.ICollection<T>");
         }
-        private bool CheckBaseClassForPropertyInfrastructure(INamedTypeSymbol? symbol)
-        {
-            if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
-                return false;
-
-            if (HasPropertyInfrastructureMethods(symbol))
-                return true;
-
-            // 1. 检查 [VeloxProperty]
-            if (symbol.GetMembers().Any(m => m.GetAttributes().Any(a =>
-                    a.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).EndsWith("VeloxPropertyAttribute") == true)))
-                return true;
-
-            // 2. 检查工作流特性
-            if (HasWorkflowAttribute(symbol)) return true;
-
-            // 3. 检查主流框架
-            if (HasMainstreamFrameworkFeatures(symbol)) return true;
-
-            return CheckBaseClassForPropertyInfrastructure(symbol.BaseType);
-        }
-
         private bool CheckBaseClassForCollectionInfrastructure(INamedTypeSymbol? symbol)
         {
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
@@ -450,22 +770,6 @@ namespace VeloxDev.Generators.Writers
                    methods.Any(m => m.Name == "CreateWorkflowSlot" && !m.IsStatic && m.IsGenericMethod);
         }
 
-        private bool HasPropertyInfrastructureMethods(INamedTypeSymbol symbol)
-        {
-            var methods = symbol.GetMembers().OfType<IMethodSymbol>().ToList();
-
-            return methods.Any(method =>
-                       method.Name == "OnPropertyChanging" &&
-                       !method.IsStatic &&
-                       method.Parameters.Length == 1 &&
-                       method.Parameters[0].Type.SpecialType == SpecialType.System_String) &&
-                   methods.Any(method =>
-                       method.Name == "OnPropertyChanged" &&
-                       !method.IsStatic &&
-                       method.Parameters.Length == 1 &&
-                       method.Parameters[0].Type.SpecialType == SpecialType.System_String);
-        }
-
         private bool HasCollectionInfrastructureMethods(INamedTypeSymbol symbol)
         {
             return symbol.GetMembers().OfType<IMethodSymbol>().Any(method =>
@@ -477,47 +781,26 @@ namespace VeloxDev.Generators.Writers
                 method.Parameters[0].Type.SpecialType == SpecialType.System_String);
         }
 
-        private bool HasMainstreamFrameworkFeatures(INamedTypeSymbol symbol)
-        {
-            var fullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
-            // 检查基类名称
-            if (fullName.Contains("CommunityToolkit.Mvvm.ComponentModel.ObservableObject") ||
-                fullName.Contains("CommunityToolkit.Mvvm.ComponentModel.ObservableValidator") ||
-                fullName.Contains("Prism.Mvvm.BindableBase") ||
-                fullName.Contains("ReactiveUI.ReactiveObject") ||
-                fullName.Contains("Caliburn.Micro.PropertyChangedBase"))
-                return true;
-
-            // 检查特性
-            foreach (var attr in symbol.GetAttributes())
-            {
-                var attrName = attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                if (attrName is null || string.IsNullOrEmpty(attrName)) continue;
-
-                if (attrName.Contains("CommunityToolkit.Mvvm.ComponentModel.ObservablePropertyAttribute") ||
-                    attrName.Contains("CommunityToolkit.Mvvm.ComponentModel.NotifyPropertyChangedForAttribute") ||
-                    attrName.Contains("Prism.Mvvm") ||
-                    attrName.Contains("ReactiveUI"))
-                    return true;
-            }
-
-            return false;
-        }
-
         public override bool CanWrite() => MVVMProperties.Count > 0 || AutoProperties.Count > 0 || IsWorkflowComponent;
 
         public override string GetFileName()
         {
             if (Syntax == null || Symbol == null) return string.Empty;
-            return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_MVVM.g.cs";
+            var namespaceName = Symbol.ContainingNamespace.IsGlobalNamespace
+                ? "Global"
+                : Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_');
+            return $"{Syntax.Identifier.Text}_{namespaceName}_MVVM.g.cs";
         }
 
-        public override string[] GenerateBaseInterfaces() =>
-        [
-            $"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanging",
-            $"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanged"
-        ];
+        public override string[] GenerateBaseInterfaces()
+        {
+            var interfaces = new List<string>();
+            if (_addNotifyPropertyChangingInterface)
+                interfaces.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanging");
+            if (_addNotifyPropertyChangedInterface)
+                interfaces.Add($"{NAMESPACE_SYSTEM_MVVM}.INotifyPropertyChanged");
+            return [.. interfaces];
+        }
 
         public override string[] GenerateBaseTypes() => [];
 
@@ -527,29 +810,14 @@ namespace VeloxDev.Generators.Writers
 
             var builder = new StringBuilder();
 
-            // 仅在基类未生成属性通知基础设施时生成事件和方法
-            if (!_hasBasePropertyNotificationInfrastructure)
-            {
-                // 检查类是否为 sealed
-                bool isSealed = Symbol.IsSealed;
-
-                // 如果是 sealed，不能使用 virtual；否则使用 virtual 以支持多态
-                string methodModifier = isSealed ? "" : "virtual ";
-
-                builder.AppendLine($$"""
-                        public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventHandler? PropertyChanging;
-                        public event {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventHandler? PropertyChanged;
-                        
-                        public {{methodModifier}}void OnPropertyChanging(string propertyName)
-                        {
-                            PropertyChanging?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangingEventArgs(propertyName));
-                        }
-                        public {{methodModifier}}void OnPropertyChanged(string propertyName)
-                        {
-                            PropertyChanged?.Invoke(this, new {{NAMESPACE_SYSTEM_MVVM}}.PropertyChangedEventArgs(propertyName));
-                        }
-                    """);
-            }
+            if (_generatePropertyChangingEvent)
+                builder.AppendLine($"public event {NAMESPACE_SYSTEM_MVVM}.PropertyChangingEventHandler? PropertyChanging;");
+            if (_generatePropertyChangedEvent)
+                builder.AppendLine($"public event {NAMESPACE_SYSTEM_MVVM}.PropertyChangedEventHandler? PropertyChanged;");
+            if (!string.IsNullOrWhiteSpace(_propertyChangingMethodDeclaration))
+                builder.AppendLine(_propertyChangingMethodDeclaration);
+            if (!string.IsNullOrWhiteSpace(_propertyChangedMethodDeclaration))
+                builder.AppendLine(_propertyChangedMethodDeclaration);
 
             if (!_hasBaseCollectionNotificationInfrastructure && MVVMProperties.Concat(AutoProperties).Any(property => property.IsNotifyCollectionChanged))
             {

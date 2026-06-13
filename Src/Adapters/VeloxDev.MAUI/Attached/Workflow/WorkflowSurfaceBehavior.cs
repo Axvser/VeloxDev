@@ -7,12 +7,14 @@ public sealed class WorkflowSurfaceBehavior
 {
     private sealed class SurfaceState
     {
+        public ContentView? Host { get; set; }
         public ScrollView? ScrollViewer { get; set; }
         public AbsoluteLayout? Canvas { get; set; }
         public View? GridDecorator { get; set; }
         public View? PointerPressSource { get; set; }
         public PanGestureRecognizer? PanGesture { get; set; }
         public INotifyPropertyChanged? LayoutNotifier { get; set; }
+        public PropertyChangedEventHandler? LayoutChangedHandler { get; set; }
         public double LastPanTotalX { get; set; }
         public double LastPanTotalY { get; set; }
         public bool HasPendingScrollRestore { get; set; }
@@ -110,6 +112,24 @@ public sealed class WorkflowSurfaceBehavior
         Refresh(host);
     }
 
+    internal static bool TryGetViewport(ContentView host, out double viewportX, out double viewportY)
+    {
+        viewportX = 0;
+        viewportY = 0;
+
+        if (!GetIsEnabled(host)
+            || host.GetValue(StateProperty) is not SurfaceState state
+            || state.ScrollViewer is null
+            || ResolveTreeViewModel(host, state) is not { } viewModel)
+        {
+            return false;
+        }
+
+        viewportX = state.ScrollViewer.ScrollX - viewModel.Layout.ActualOffset.Horizontal;
+        viewportY = state.ScrollViewer.ScrollY - viewModel.Layout.ActualOffset.Vertical;
+        return true;
+    }
+
     private static void OnIsEnabledChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
         if (bindable is not ContentView control)
@@ -130,7 +150,10 @@ public sealed class WorkflowSurfaceBehavior
     {
         Detach(control);
 
-        var state = new SurfaceState();
+        var state = new SurfaceState
+        {
+            Host = control,
+        };
         control.SetValue(StateProperty, state);
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
@@ -152,6 +175,7 @@ public sealed class WorkflowSurfaceBehavior
         {
             UnsubscribeResolvedControls(state);
             UnsubscribeLayout(state);
+            state.Host = null;
         }
 
         control.ClearValue(StateProperty);
@@ -211,6 +235,11 @@ public sealed class WorkflowSurfaceBehavior
         if (!string.IsNullOrWhiteSpace(canvasName))
         {
             state.Canvas = control.FindByName<AbsoluteLayout>(canvasName);
+            if (state.Canvas is not null)
+            {
+                state.Canvas.ChildAdded += OnCanvasChildAdded;
+                state.Canvas.ChildRemoved += OnCanvasChildRemoved;
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(gridDecoratorName))
@@ -244,6 +273,12 @@ public sealed class WorkflowSurfaceBehavior
             state.ScrollViewer.SizeChanged -= OnScrollViewerSizeChanged;
         }
 
+        if (state.Canvas is not null)
+        {
+            state.Canvas.ChildAdded -= OnCanvasChildAdded;
+            state.Canvas.ChildRemoved -= OnCanvasChildRemoved;
+        }
+
         if (state.PointerPressSource is not null && state.PanGesture is not null)
         {
             state.PanGesture.PanUpdated -= OnPanUpdated;
@@ -261,36 +296,51 @@ public sealed class WorkflowSurfaceBehavior
     {
         UnsubscribeLayout(state);
 
-        var tree = ResolveTreeViewModel(control);
+        var tree = ResolveTreeViewModel(control, state);
         if (tree is null || tree.Layout is not INotifyPropertyChanged notifier)
         {
             return;
         }
 
         state.LayoutNotifier = notifier;
-        notifier.PropertyChanged += OnLayoutPropertyChanged;
+        state.LayoutChangedHandler = (_, _) => Refresh(control);
+        notifier.PropertyChanged += state.LayoutChangedHandler;
     }
 
     private static void UnsubscribeLayout(SurfaceState state)
     {
-        if (state.LayoutNotifier is not null)
+        if (state.LayoutNotifier is not null && state.LayoutChangedHandler is not null)
         {
-            state.LayoutNotifier.PropertyChanged -= OnLayoutPropertyChanged;
+            state.LayoutNotifier.PropertyChanged -= state.LayoutChangedHandler;
             state.LayoutNotifier = null;
+            state.LayoutChangedHandler = null;
         }
     }
 
-    private static void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private static void OnCanvasChildAdded(object? sender, ElementEventArgs e)
     {
-        if (sender is not BindableObject bindable)
+        if (sender is not AbsoluteLayout canvas)
         {
             return;
         }
 
-        var host = FindAncestorContentView(bindable);
+        if (e.Element is ContentView child)
+        {
+            WorkflowSlotLayoutBehavior.Refresh(child);
+        }
+
+        var host = FindAncestorContentView(canvas);
         if (host is not null)
         {
-            Refresh(host);
+            MainThread.BeginInvokeOnMainThread(() => Refresh(host));
+        }
+    }
+
+    private static void OnCanvasChildRemoved(object? sender, ElementEventArgs e)
+    {
+        if (sender is AbsoluteLayout canvas && FindAncestorContentView(canvas) is { } host)
+        {
+            MainThread.BeginInvokeOnMainThread(() => Refresh(host));
         }
     }
 
@@ -338,7 +388,7 @@ public sealed class WorkflowSurfaceBehavior
 
     private static void ApplyLayout(ContentView host, SurfaceState state)
     {
-        var viewModel = ResolveTreeViewModel(host);
+        var viewModel = ResolveTreeViewModel(host, state);
         if (viewModel is null || state.Canvas is null)
         {
             return;
@@ -395,7 +445,7 @@ public sealed class WorkflowSurfaceBehavior
 
     private static async Task ApplyPanAsync(ContentView host, SurfaceState state, PanUpdatedEventArgs e)
     {
-        var viewModel = ResolveTreeViewModel(host);
+        var viewModel = ResolveTreeViewModel(host, state);
         if (viewModel is null || state.ScrollViewer is null)
         {
             return;
@@ -457,14 +507,16 @@ public sealed class WorkflowSurfaceBehavior
     private static double GetVerticalScrollMaximum(ScrollView viewer)
         => Math.Max(0, viewer.ContentSize.Height - viewer.Height);
 
-    private static IWorkflowTreeViewModel? ResolveTreeViewModel(ContentView host)
-        => host is IWorkflowSurfaceHost surfaceHost
-            ? surfaceHost.WorkflowTree
-            : host.BindingContext as IWorkflowTreeViewModel;
+    private static IWorkflowTreeViewModel? ResolveTreeViewModel(ContentView host, SurfaceState state)
+        => host.BindingContext as IWorkflowTreeViewModel
+            ?? state.Canvas?.BindingContext as IWorkflowTreeViewModel
+            ?? state.ScrollViewer?.BindingContext as IWorkflowTreeViewModel
+            ?? state.GridDecorator?.BindingContext as IWorkflowTreeViewModel
+            ?? state.PointerPressSource?.BindingContext as IWorkflowTreeViewModel;
 
     private static void UpdateVisibleRegion(ContentView host, SurfaceState state)
     {
-        var viewModel = ResolveTreeViewModel(host);
+        var viewModel = ResolveTreeViewModel(host, state);
         if (viewModel is null || state.ScrollViewer is null)
         {
             return;
@@ -510,7 +562,7 @@ public sealed class WorkflowSurfaceBehavior
                     return;
                 }
 
-                var viewModel = ResolveTreeViewModel(host);
+                var viewModel = ResolveTreeViewModel(host, state);
                 if (viewModel is null)
                 {
                     return;
