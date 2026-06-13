@@ -11,7 +11,8 @@
 
 ---
 
-### 📖 [Full documentation & guides → Wiki](https://axvser.github.io/VeloxDev/)
+### 🌐 [Online Wiki](https://axvser.github.io/VeloxDev/)
+### 📁 [Local Wiki](https://github.com/Axvser/VeloxDev/tree/master/Docs)
 
 ---
 
@@ -79,7 +80,7 @@ options. Common short aliases include:
 | Template | Style aliases |
 |----------|---------------|
 | Node | `-bg` background, `-fg` foreground, `-bb` border brush, `-bt` border thickness, `-cr` corner radius |
-| Slot | `-bg` background, `-sc` standby color, `-bc` border color |
+| Slot | `-bg` background, `-sc` standby color, `-bc` border color, `-sp` SVG path data |
 | Link | `-lc` line color, `-lt` line thickness |
 | Tree | `-bg` background, `-bb` border brush, `-bt` border thickness, `-cr` corner radius |
 | Grid decorator | `-bg` background, `-mic` minor color, `-mac` major color, `-ac` axis color, `-gs` spacing, `-mle` major interval |

@@ -3,14 +3,14 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>VeloxDev.Avalonia.Templates</PackageId>
-    <Version>5.0.2</Version>
+    <Version>5.0.3</Version>
     <Authors>Axvser</Authors>
     <Title>VeloxDev Avalonia templates</Title>
     <Description>Item templates for building VeloxDev workflow views with Avalonia.</Description>
     <PackageTags>dotnet-new;templates;veloxdev;workflow;avalonia</PackageTags>
     <PackageType>Template</PackageType>
     <PackageIcon>veloxdev-logo.png</PackageIcon>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReadmeFile></PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/Axvser/VeloxDev</RepositoryUrl>
     <IncludeBuildOutput>false</IncludeBuildOutput>
@@ -24,7 +24,7 @@
   <ItemGroup>
     <None Include="content\**\*" Pack="true" PackagePath="content" />
     <None Include="..\..\..\..\Assets\veloxdev-logo.png" Pack="true" PackagePath="\" Visible="false" />
-    <None Include="..\..\..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\skills\veloxdev-workflow-item-templates\references\**\*" Pack="true" PackagePath="references" Visible="false" />
   </ItemGroup>
 
 </Project>

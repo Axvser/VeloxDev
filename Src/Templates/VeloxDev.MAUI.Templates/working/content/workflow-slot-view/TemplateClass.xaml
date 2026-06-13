@@ -3,11 +3,17 @@
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:TemplateNamespace"
+             xmlns:shapes="clr-namespace:Microsoft.Maui.Controls.Shapes;assembly=Microsoft.Maui.Controls"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="TemplateNamespace.TemplateClass"
              behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"
              BackgroundColor="TemplateSlotBackground">
     <Grid BackgroundColor="TemplateSlotBackground">
-        <GraphicsView x:Name="IconView" />
+        <shapes:Path x:Name="RootPath"
+                     Margin="1"
+                     Aspect="Uniform"
+                     Stroke="TemplateSlotBorderColor"
+                     StrokeThickness="1.5"
+                     Data="TemplateSlotPath" />
     </Grid>
 </ContentView>

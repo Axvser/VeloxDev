@@ -1,7 +1,6 @@
 // VeloxDev customization: Add connector-specific interaction here only when the platform behavior does not already cover it.
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using VeloxDev.WorkflowSystem;
 
@@ -41,21 +40,4 @@ public partial class TemplateClass : UserControl
         };
     }
 
-    private void OnPointerPressed(object sender, MouseButtonEventArgs e)
-    {
-        if (DataContext is not IWorkflowSlotViewModel context) return;
-
-        context.SendConnectionCommand.Execute(null);
-
-        e.Handled = true;
-    }
-
-    private void OnPointerReleased(object sender, MouseButtonEventArgs e)
-    {
-        if (DataContext is not IWorkflowSlotViewModel context) return;
-
-        context.ReceiveConnectionCommand.Execute(null);
-
-        e.Handled = true;
-    }
 }
