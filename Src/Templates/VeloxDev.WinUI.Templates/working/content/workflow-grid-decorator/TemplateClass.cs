@@ -11,14 +11,14 @@ namespace TemplateNamespace;
 
 public sealed class TemplateClass : Grid, IWorkflowGridDecorator
 {
-    private static readonly SolidColorBrush BackgroundBrush = CreateBrush("#1E1E1E");
-    private static readonly SolidColorBrush MinorGridBrush = CreateBrush("#2A2D2E");
-    private static readonly SolidColorBrush MajorGridBrush = CreateBrush("#3A3D40");
-    private static readonly SolidColorBrush AxisBrush = CreateBrush("#4D4D4D");
+    private static readonly SolidColorBrush BackgroundBrush = CreateBrush("TemplateGridBackground");
+    private static readonly SolidColorBrush MinorGridBrush = CreateBrush("TemplateMinorGridColor");
+    private static readonly SolidColorBrush MajorGridBrush = CreateBrush("TemplateMajorGridColor");
+    private static readonly SolidColorBrush AxisBrush = CreateBrush("TemplateAxisColor");
     private readonly Canvas _gridLayer = new() { IsHitTestVisible = false };
 
-    public static readonly DependencyProperty GridSpacingProperty = RegisterProperty(nameof(GridSpacing), 40d);
-    public static readonly DependencyProperty MajorLineEveryProperty = RegisterProperty(nameof(MajorLineEvery), 5);
+    public static readonly DependencyProperty GridSpacingProperty = RegisterProperty(nameof(GridSpacing), TemplateGridSpacing);
+    public static readonly DependencyProperty MajorLineEveryProperty = RegisterProperty(nameof(MajorLineEvery), TemplateMajorLineEvery);
     public static readonly DependencyProperty ScrollOffsetXProperty = RegisterProperty(nameof(ScrollOffsetX), 0d);
     public static readonly DependencyProperty ScrollOffsetYProperty = RegisterProperty(nameof(ScrollOffsetY), 0d);
     public static readonly DependencyProperty ContentOffsetXProperty = RegisterProperty(nameof(ContentOffsetX), 0d);
@@ -130,10 +130,16 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
     {
         hex = hex.TrimStart('#');
         var value = uint.Parse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
-        return new SolidColorBrush(Windows.UI.Color.FromArgb(
-            0xFF,
-            (byte)(value >> 16),
-            (byte)(value >> 8),
-            (byte)value));
+        return new SolidColorBrush(hex.Length == 8
+            ? Windows.UI.Color.FromArgb(
+                (byte)(value >> 24),
+                (byte)(value >> 16),
+                (byte)(value >> 8),
+                (byte)value)
+            : Windows.UI.Color.FromArgb(
+                0xFF,
+                (byte)(value >> 16),
+                (byte)(value >> 8),
+                (byte)value));
     }
 }

@@ -5,12 +5,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:TemplateNamespace"
              xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True" behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot" behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots" behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
              Clip="{x:Null}"
-             Foreground="#DD1E1E1E"
-             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
-             behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
-             behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots"
-             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+             Foreground="TemplateNodeForeground">
     <Grid Clip="{x:Null}">
         <Grid.RowDefinitions>
             <RowDefinition Height="36" />
@@ -18,35 +15,31 @@
         </Grid.RowDefinitions>
 
         <Border Grid.RowSpan="2"
-                Background="#DDFFFFFF"
-                BorderBrush="#331E1E1E"
-                BorderThickness="1"
-                CornerRadius="6" />
+                Background="TemplateNodeBackground"
+                BorderBrush="TemplateNodeBorderBrush"
+                BorderThickness="TemplateNodeBorderThickness"
+                CornerRadius="TemplateNodeCornerRadius" />
 
-        <Grid Grid.Row="0"
-              Margin="12,0"
-              behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-              behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+        <Grid behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas" behaviors:WorkflowNodeDragBehavior.IsEnabled="True"
+              Grid.Row="0"
+              Margin="12,0">
             <TextBlock Text="{Binding Name}"
                        FontWeight="SemiBold"
                        VerticalAlignment="Center" />
         </Grid>
 
         <Grid Grid.Row="1" Canvas.ZIndex="6" Clip="{x:Null}">
-            <local:WorkflowSlotView x:Name="PART_InputSlot"
+            <local:SlotView x:Name="PART_InputSlot" DataContext="{Binding InputSlot}" SlotState="{Binding State}"
                                     Width="18"
                                     Height="18"
                                     Margin="-9,0,0,0"
                                     HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    DataContext="{Binding InputSlot}"
-                                    SlotState="{Binding State}" />
+                                    VerticalAlignment="Center" />
         </Grid>
 
-        <ItemsControl x:Name="PART_OutputSlots"
+        <ItemsControl x:Name="PART_OutputSlots" ItemsSource="{Binding OutputSlots.Items}"
                       Grid.Row="1"
                       Margin="12,6"
-                      ItemsSource="{Binding OutputSlots.Items}"
                       VerticalAlignment="Center">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
@@ -59,12 +52,11 @@
                                    Margin="0,0,10,0"
                                    HorizontalAlignment="Right"
                                    VerticalAlignment="Center" />
-                        <local:WorkflowSlotView Grid.Column="1"
+                        <local:SlotView DataContext="{Binding Slot}" SlotState="{Binding Slot.State}"
+                                                Grid.Column="1"
                                                 Width="14"
                                                 Height="14"
-                                                Margin="0,0,-7,0"
-                                                DataContext="{Binding Slot}"
-                                                SlotState="{Binding Slot.State}" />
+                                                Margin="0,0,-7,0" />
                     </Grid>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>

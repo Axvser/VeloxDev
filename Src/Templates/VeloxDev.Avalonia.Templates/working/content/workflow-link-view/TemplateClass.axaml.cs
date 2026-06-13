@@ -5,6 +5,7 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
 using System.Collections.Generic;
+using VeloxDev.WorkflowSystem;
 
 namespace TemplateNamespace;
 
@@ -15,9 +16,14 @@ public partial class TemplateClass : Control
         InitializeComponent();
         IsHitTestVisible = true;
         Focusable = true;
+        DataContextChanged += (_, _) =>
+        {
+            UpdateInteractivity();
+            InvalidateVisual();
+        };
     }
 
-    #region Avalonia 属性定义
+    #region StyledProperty
 
     public static readonly StyledProperty<double> StartLeftProperty =
         AvaloniaProperty.Register<TemplateClass, double>(nameof(StartLeft));
@@ -38,10 +44,10 @@ public partial class TemplateClass : Control
         AvaloniaProperty.Register<TemplateClass, bool>(nameof(IsVirtual), false);
 
     public static readonly StyledProperty<Color> LineColorProperty =
-        AvaloniaProperty.Register<TemplateClass, Color>(nameof(LineColor), Color.Parse("#DDFFFFFF"));
+        AvaloniaProperty.Register<TemplateClass, Color>(nameof(LineColor), Color.Parse("TemplateLinkColor"));
 
     public static readonly StyledProperty<double> LineThicknessProperty =
-        AvaloniaProperty.Register<TemplateClass, double>(nameof(LineThickness), 2.0);
+        AvaloniaProperty.Register<TemplateClass, double>(nameof(LineThickness), TemplateLinkThickness);
 
     public static readonly StyledProperty<IList<double>> DashArrayProperty =
         AvaloniaProperty.Register<TemplateClass, IList<double>>(nameof(DashArray), [0d]);
@@ -106,9 +112,24 @@ public partial class TemplateClass : Control
             StartLeftProperty, StartTopProperty, EndLeftProperty, EndTopProperty,
             CanRenderProperty, IsVirtualProperty, LineColorProperty,
             LineThicknessProperty, DashArrayProperty);
+        IsVirtualProperty.Changed.AddClassHandler<TemplateClass>((control, _) => control.UpdateInteractivity());
     }
 
     #endregion
+
+    private bool IsVirtualLink
+        => IsVirtual
+            || DataContext is IWorkflowLinkViewModel
+            {
+                Sender.Parent: null,
+                Receiver.Parent: null
+            };
+
+    private void UpdateInteractivity()
+    {
+        IsHitTestVisible = !IsVirtualLink;
+        Focusable = !IsVirtualLink;
+    }
 
     public override void Render(DrawingContext context)
     {
@@ -121,8 +142,7 @@ public partial class TemplateClass : Control
 
         DrawBezierLine(context, geometry);
 
-        // 如果不是虚线，绘制箭头
-        if (!IsVirtual && (DashArray == null || DashArray.Count == 0))
+        if (!IsVirtualLink && (DashArray == null || DashArray.Count == 0))
         {
             DrawArrowhead(context);
         }
@@ -135,9 +155,9 @@ public partial class TemplateClass : Control
         var brush = new ImmutableSolidColorBrush(color);
 
         Pen pen;
-        if (IsVirtual || (DashArray != null && DashArray.Count > 0))
+        if (IsVirtualLink || (DashArray != null && DashArray.Count > 0))
         {
-            var dashArray = IsVirtual ? [4.0, 2.0] : DashArray;
+            var dashArray = IsVirtualLink ? [4.0, 2.0] : DashArray;
             pen = new Pen(brush, thickness) { DashStyle = new DashStyle(dashArray, 0) };
         }
         else
@@ -152,7 +172,6 @@ public partial class TemplateClass : Control
     {
         var diffx = EndLeft - StartLeft;
 
-        // 计算控制点（三阶贝塞尔曲线需要两个控制点）
         var cp1 = new Point(StartLeft + diffx * 0.3, StartTop);
         var cp2 = new Point(EndLeft - diffx * 0.3, EndTop);
 
@@ -172,7 +191,6 @@ public partial class TemplateClass : Control
     {
         var diffx = EndLeft - StartLeft;
 
-        // 计算箭头方向（使用曲线末端的方向）
         var cp2 = new Point(EndLeft - diffx * 0.3, EndTop);
         var arrowTip = new Point(EndLeft, EndTop);
 

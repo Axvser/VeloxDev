@@ -13,7 +13,7 @@
   "description": "A minimal .NET MAUI view for a VeloxDev workflow tree component.",
   "shortName": "maui-v-tree",
   "sourceName": "TemplateClass",
-  "defaultName": "WorkflowTreeView",
+  "defaultName": "TreeView",
   "preferNameDirectory": false,
   "tags": {
     "language": "C#",
@@ -24,8 +24,36 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Namespace for the generated tree view.",
-      "defaultValue": "MyApp.Views.Workflow",
+      "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
+    },
+    "surfaceBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Workflow surface background color.",
+      "defaultValue": "#1E1E1E",
+      "replaces": "TemplateSurfaceBackground"
+    },
+    "surfaceBorderBrush": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Workflow surface border color.",
+      "defaultValue": "#33FFFFFF",
+      "replaces": "TemplateSurfaceBorderBrush"
+    },
+    "surfaceBorderThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Workflow surface border thickness.",
+      "defaultValue": "1",
+      "replaces": "TemplateSurfaceBorderThickness"
+    },
+    "surfaceCornerRadius": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Workflow surface corner radius.",
+      "defaultValue": "3",
+      "replaces": "TemplateSurfaceCornerRadius"
     }
   },
   "primaryOutputs": [

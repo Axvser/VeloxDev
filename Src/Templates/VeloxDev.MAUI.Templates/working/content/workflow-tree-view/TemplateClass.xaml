@@ -5,57 +5,27 @@
              xmlns:local="clr-namespace:TemplateNamespace"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="TemplateNamespace.TemplateClass"
-             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
-             behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
-             behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
-             behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+             behaviors:WorkflowSurfaceBehavior.IsEnabled="True" behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer" behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas" behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator" behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
     <ContentView.Resources>
         <DataTemplate x:Key="NodeTemplate">
-            <local:WorkflowNodeView WidthRequest="{Binding Size.Width}"
-                                    HeightRequest="{Binding Size.Height}" />
+            <local:NodeView WidthRequest="{Binding Size.Width}" HeightRequest="{Binding Size.Height}" />
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
-            <local:WorkflowLinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                    StartTop="{Binding Sender.Anchor.Vertical}"
-                                    EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                    EndTop="{Binding Receiver.Anchor.Vertical}"
-                                    ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}"
-                                    ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}"
-                                    CanRender="{Binding IsVisible}"
-                                    WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}"
-                                    HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}" />
+            <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}" EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}" ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}" ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}" CanRender="{Binding IsVisible}" WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}" HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}" />
         </DataTemplate>
-        <local:WorkflowTemplateSelector x:Key="WorkflowTemplateSelector"
-                                        NodeTemplate="{StaticResource NodeTemplate}"
-                                        LinkTemplate="{StaticResource LinkTemplate}" />
+        <local:TemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" LinkTemplate="{StaticResource LinkTemplate}" />
     </ContentView.Resources>
 
     <Border x:Name="PART_SurfaceBorder"
-            Stroke="#33FFFFFF"
-            StrokeThickness="1"
-            BackgroundColor="#1E1E1E">
-        <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
-            <ScrollView x:Name="PART_ScrollViewer" Orientation="Both">
-                <AbsoluteLayout x:Name="PART_Canvas"
-                                WidthRequest="{Binding Layout.ActualSize.Width}"
-                                HeightRequest="{Binding Layout.ActualSize.Height}">
-                    <!-- Keep this virtual link so connection dragging has immediate visual feedback. -->
-                    <local:WorkflowLinkView BindingContext="{Binding VirtualLink}"
-                                            StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                            StartTop="{Binding Sender.Anchor.Vertical}"
-                                            EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                            EndTop="{Binding Receiver.Anchor.Vertical}"
-                                            ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}"
-                                            ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}"
-                                            CanRender="{Binding IsVisible}"
-                                            IsVirtual="True"
-                                            LineColor="White"
-                                            WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}"
-                                            HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}"
-                                            ZIndex="-1" />
-                </AbsoluteLayout>
+            Stroke="TemplateSurfaceBorderBrush"
+            StrokeThickness="TemplateSurfaceBorderThickness"
+            StrokeShape="RoundRectangle TemplateSurfaceCornerRadius"
+            BackgroundColor="TemplateSurfaceBackground">
+        <local:GridDecorator x:Name="PART_GridDecorator">
+            <ScrollView x:Name="PART_ScrollViewer"
+                        Orientation="Both">
+                <AbsoluteLayout x:Name="PART_Canvas" WidthRequest="{Binding Layout.ActualSize.Width}" HeightRequest="{Binding Layout.ActualSize.Height}" behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}" behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
             </ScrollView>
-        </local:WorkflowGridDecorator>
+        </local:GridDecorator>
     </Border>
 </ContentView>

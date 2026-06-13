@@ -59,12 +59,12 @@ project's root namespace:
 dotnet new install VeloxDev.WPF.Templates
 dotnet add package VeloxDev.WPF
 
-dotnet new wpf-v-slot -n WorkflowSlotView -ns MyApp.Views.Workflow -o Views/Workflow
-dotnet new wpf-v-node -n WorkflowNodeView -ns MyApp.Views.Workflow -o Views/Workflow
-dotnet new wpf-v-link -n WorkflowLinkView -ns MyApp.Views.Workflow -o Views/Workflow
-dotnet new wpf-v-selector -n WorkflowTemplateSelector -ns MyApp.Views.Workflow -o Views/Workflow
-dotnet new wpf-v-decorator -n WorkflowGridDecorator -ns MyApp.Views.Workflow -o Views/Workflow
-dotnet new wpf-v-tree -n WorkflowTreeView -ns MyApp.Views.Workflow -o Views/Workflow
+dotnet new wpf-v-slot -n SlotView -ns MyApp.Views -o Views
+dotnet new wpf-v-node -n NodeView -ns MyApp.Views -o Views
+dotnet new wpf-v-link -n LinkView -ns MyApp.Views -o Views
+dotnet new wpf-v-selector -n TemplateSelector -ns MyApp.Views -o Views
+dotnet new wpf-v-decorator -n GridDecorator -ns MyApp.Views -o Views
+dotnet new wpf-v-tree -n TreeView -ns MyApp.Views -o Views
 
 dotnet build
 ```
@@ -72,6 +72,19 @@ dotnet build
 The template package contains the Node, Slot, Link, Tree, template selector,
 and grid decorator views. Each view template generates its XAML and code-behind
 files with the required VeloxDev workflow behaviors already connected.
+
+The Avalonia, WPF, WinUI, and MAUI template suites expose the same style
+options. Common short aliases include:
+
+| Template | Style aliases |
+|----------|---------------|
+| Node | `-bg` background, `-fg` foreground, `-bb` border brush, `-bt` border thickness, `-cr` corner radius |
+| Slot | `-bg` background, `-sc` standby color, `-bc` border color |
+| Link | `-lc` line color, `-lt` line thickness |
+| Tree | `-bg` background, `-bb` border brush, `-bt` border thickness, `-cr` corner radius |
+| Grid decorator | `-bg` background, `-mic` minor color, `-mac` major color, `-ac` axis color, `-gs` spacing, `-mle` major interval |
+
+All templates use `-ns` for the generated namespace.
 
 ### Core-only packages *(bring your own adapter)*
 

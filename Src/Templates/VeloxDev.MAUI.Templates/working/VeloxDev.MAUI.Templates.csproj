@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>VeloxDev.MAUI.Templates</PackageId>
-    <Version>5.0.1</Version>
+    <Version>5.0.2</Version>
     <Authors>Axvser</Authors>
     <Title>VeloxDev MAUI templates</Title>
     <Description>Item templates for building VeloxDev workflow views with .NET MAUI.</Description>

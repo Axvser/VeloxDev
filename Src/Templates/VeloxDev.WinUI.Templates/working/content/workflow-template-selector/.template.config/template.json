@@ -7,7 +7,7 @@
   "description": "A WinUI DataTemplateSelector for VeloxDev node, slot, link, and tree view models.",
   "shortName": "winui-v-selector",
   "sourceName": "TemplateClass",
-  "defaultName": "WorkflowTemplateSelector",
+  "defaultName": "TemplateSelector",
   "preferNameDirectory": false,
   "tags": {
     "language": "C#",

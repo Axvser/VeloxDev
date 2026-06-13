@@ -5,58 +5,29 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:TemplateNamespace"
              xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
-             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
-             behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
-             behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
-             behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+             behaviors:WorkflowSurfaceBehavior.IsEnabled="True" behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer" behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas" behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator" behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
     <UserControl.Resources>
         <DataTemplate x:Key="NodeTemplate">
-            <local:WorkflowNodeView Width="{Binding Size.Width}"
-                            Height="{Binding Size.Height}"
-                            Canvas.Left="{Binding Anchor.Horizontal}"
-                            Canvas.Top="{Binding Anchor.Vertical}"
-                            Canvas.ZIndex="{Binding Anchor.Layer}" />
+            <local:NodeView Width="{Binding Size.Width}" Height="{Binding Size.Height}" Canvas.Left="{Binding Anchor.Horizontal}" Canvas.Top="{Binding Anchor.Vertical}" Canvas.ZIndex="{Binding Anchor.Layer}" />
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
-            <local:WorkflowLinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                     StartTop="{Binding Sender.Anchor.Vertical}"
-                                     EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                     EndTop="{Binding Receiver.Anchor.Vertical}"
-                                     CanRender="{Binding IsVisible}"
-                                     LineColor="White"
-                                     Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                     Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
-                                     Canvas.ZIndex="-1" />
+            <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}" EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}" CanRender="{Binding IsVisible}" Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}" Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}" Canvas.ZIndex="-1" />
         </DataTemplate>
-        <local:WorkflowTemplateSelector x:Key="WorkflowTemplateSelector"
-                                      NodeTemplate="{StaticResource NodeTemplate}"
-                                      LinkTemplate="{StaticResource LinkTemplate}" />
+        <local:TemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" LinkTemplate="{StaticResource LinkTemplate}" />
     </UserControl.Resources>
-    <Border x:Name="PART_SurfaceBorder" BorderBrush="#33FFFFFF" BorderThickness="1" Background="#1E1E1E">
-        <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+    <Border x:Name="PART_SurfaceBorder"
+            Background="TemplateSurfaceBackground"
+            BorderBrush="TemplateSurfaceBorderBrush"
+            BorderThickness="TemplateSurfaceBorderThickness"
+            CornerRadius="TemplateSurfaceCornerRadius">
+        <local:GridDecorator x:Name="PART_GridDecorator">
             <ScrollViewer x:Name="PART_ScrollViewer"
                           HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto"
                           ZoomMode="Disabled">
-                <Canvas x:Name="PART_Canvas"
-                        Width="{Binding Layout.ActualSize.Width}"
-                        Height="{Binding Layout.ActualSize.Height}"
-                        Background="Transparent"
-                        behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}">
-                    <local:WorkflowLinkView DataContext="{Binding VirtualLink}"
-                                             StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                             StartTop="{Binding Sender.Anchor.Vertical}"
-                                             EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                             EndTop="{Binding Receiver.Anchor.Vertical}"
-                                             CanRender="{Binding IsVisible}"
-                                             IsVirtual="True"
-                                             LineColor="White"
-                                             Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                             Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
-                                             Canvas.ZIndex="-1" />
-                </Canvas>
+                <Canvas x:Name="PART_Canvas" Width="{Binding Layout.ActualSize.Width}" Height="{Binding Layout.ActualSize.Height}" behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}" behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"
+                        Background="Transparent" />
             </ScrollViewer>
-        </local:WorkflowGridDecorator>
+        </local:GridDecorator>
     </Border>
 </UserControl>

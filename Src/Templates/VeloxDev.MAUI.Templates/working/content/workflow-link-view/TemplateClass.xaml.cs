@@ -1,4 +1,6 @@
 // VeloxDev customization: Adjust drawing while preserving the bindable endpoint properties used by the tree template.
+using VeloxDev.WorkflowSystem;
+
 namespace TemplateNamespace;
 
 public partial class TemplateClass : ContentView
@@ -11,12 +13,13 @@ public partial class TemplateClass : ContentView
     public static readonly BindableProperty ContentOffsetYProperty = Create(nameof(ContentOffsetY), 0d);
     public static readonly BindableProperty CanRenderProperty = Create(nameof(CanRender), true);
     public static readonly BindableProperty IsVirtualProperty = Create(nameof(IsVirtual), false);
-    public static readonly BindableProperty LineColorProperty = Create(nameof(LineColor), Color.FromArgb("#DDFFFFFF"));
+    public static readonly BindableProperty LineColorProperty = Create(nameof(LineColor), Color.FromArgb("TemplateLinkColor"));
 
     public TemplateClass()
     {
         InitializeComponent();
         PART_Graphics.Drawable = new LinkDrawable(this);
+        BindingContextChanged += (_, _) => UpdateVisual();
     }
 
     public double StartLeft { get => (double)GetValue(StartLeftProperty); set => SetValue(StartLeftProperty, value); }
@@ -40,10 +43,19 @@ public partial class TemplateClass : ContentView
 
     private void UpdateVisual()
     {
+        InputTransparent = IsVirtualLink;
         TranslationX = -ContentOffsetX;
         TranslationY = -ContentOffsetY;
         PART_Graphics.Invalidate();
     }
+
+    private bool IsVirtualLink
+        => IsVirtual
+            || BindingContext is IWorkflowLinkViewModel
+            {
+                Sender.Parent: null,
+                Receiver.Parent: null
+            };
 
     private sealed class LinkDrawable(TemplateClass owner) : IDrawable
     {
@@ -64,13 +76,13 @@ public partial class TemplateClass : ContentView
             var secondTurnX = endX - stub;
 
             canvas.StrokeColor = owner.LineColor;
-            canvas.StrokeSize = 3;
-            canvas.StrokeDashPattern = owner.IsVirtual ? [4, 2] : null;
+            canvas.StrokeSize = (float)TemplateLinkThickness;
+            canvas.StrokeDashPattern = owner.IsVirtualLink ? [4, 2] : null;
             canvas.DrawLine(startX, startY, firstTurnX, startY);
             canvas.DrawLine(firstTurnX, startY, secondTurnX, endY);
             canvas.DrawLine(secondTurnX, endY, endX, endY);
 
-            if (!owner.IsVirtual)
+            if (!owner.IsVirtualLink)
             {
                 DrawArrowhead(canvas, secondTurnX, endY, endX, endY, owner.LineColor);
             }

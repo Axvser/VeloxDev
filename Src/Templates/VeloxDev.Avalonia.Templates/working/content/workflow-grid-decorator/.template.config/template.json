@@ -7,7 +7,7 @@
   "description": "A lightweight Avalonia workflow grid implementing IWorkflowGridDecorator.",
   "shortName": "ava-v-decorator",
   "sourceName": "TemplateClass",
-  "defaultName": "WorkflowGridDecorator",
+  "defaultName": "GridDecorator",
   "preferNameDirectory": false,
   "tags": {
     "language": "C#",
@@ -20,6 +20,48 @@
       "description": "Namespace for the generated decorator.",
       "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
+    },
+    "gridBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Grid background color.",
+      "defaultValue": "#1E1E1E",
+      "replaces": "TemplateGridBackground"
+    },
+    "minorGridColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minor grid line color.",
+      "defaultValue": "#2A2D2E",
+      "replaces": "TemplateMinorGridColor"
+    },
+    "majorGridColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Major grid line color.",
+      "defaultValue": "#3A3D40",
+      "replaces": "TemplateMajorGridColor"
+    },
+    "axisColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Grid axis color.",
+      "defaultValue": "#4D4D4D",
+      "replaces": "TemplateAxisColor"
+    },
+    "gridSpacing": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minor grid spacing.",
+      "defaultValue": "40d",
+      "replaces": "TemplateGridSpacing"
+    },
+    "majorLineEvery": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Number of minor cells between major lines.",
+      "defaultValue": "5",
+      "replaces": "TemplateMajorLineEvery"
     }
   },
   "primaryOutputs": [

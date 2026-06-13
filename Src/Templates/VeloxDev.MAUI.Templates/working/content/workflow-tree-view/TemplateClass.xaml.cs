@@ -23,7 +23,8 @@ public partial class TemplateClass : ContentView, WorkflowBehaviors.IWorkflowSur
             ?? throw new InvalidOperationException(
                 "Set BindingContext to an IWorkflowTreeViewModel before loading the workflow tree view.");
 
-    IWorkflowTreeViewModel? WorkflowBehaviors.IWorkflowSurfaceHost.WorkflowTree => WorkflowTree;
+    IWorkflowTreeViewModel? WorkflowBehaviors.IWorkflowSurfaceHost.WorkflowTree
+        => BindingContext as IWorkflowTreeViewModel;
 
     private void OnLoaded(object? sender, EventArgs e)
     {
@@ -32,9 +33,6 @@ public partial class TemplateClass : ContentView, WorkflowBehaviors.IWorkflowSur
             return;
         }
 
-        var selector = (DataTemplateSelector)Resources["WorkflowTemplateSelector"];
-        WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, selector);
-        WorkflowBehaviors.ViewPool.SetItemsSource(PART_Canvas, tree.GetHelper().VisibleItems);
         tree.Layout.UpdateCommand.Execute(null);
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
         ScheduleNodeLayoutRefresh();
@@ -125,7 +123,7 @@ public partial class TemplateClass : ContentView, WorkflowBehaviors.IWorkflowSur
         }
     }
 
-    private IEnumerable<WorkflowSlotView> EnumerateVisibleSlotViews()
+    private IEnumerable<SlotView> EnumerateVisibleSlotViews()
     {
         foreach (var child in PART_Canvas.Children.OfType<Element>())
         {
@@ -136,9 +134,9 @@ public partial class TemplateClass : ContentView, WorkflowBehaviors.IWorkflowSur
         }
     }
 
-    private static IEnumerable<WorkflowSlotView> EnumerateSlotViews(Element element)
+    private static IEnumerable<SlotView> EnumerateSlotViews(Element element)
     {
-        if (element is WorkflowSlotView slotView)
+        if (element is SlotView slotView)
         {
             yield return slotView;
             yield break;

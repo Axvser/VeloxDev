@@ -1,4 +1,6 @@
 // VeloxDev customization: Adjust drawing and hit testing here while preserving the bindable endpoint properties.
+using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -23,6 +25,11 @@ public partial class TemplateClass : UserControl
         MouseEnter += (_, _) => { IsHighlighted = true; Focus(); };
         MouseLeave += (_, _) => IsHighlighted = false;
         MouseMove += OnHoverMouseMove;
+        DataContextChanged += (_, _) =>
+        {
+            UpdateInteractivity();
+            InvalidateVisual();
+        };
     }
 
     #region Dependency properties
@@ -40,7 +47,7 @@ public partial class TemplateClass : UserControl
     public static readonly DependencyProperty IsVirtualProperty =
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnRenderChanged));
     public static readonly DependencyProperty LineColorProperty =
-        DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(TemplateClass), new PropertyMetadata(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF), OnRenderChanged));
+        DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(TemplateClass), new PropertyMetadata((Color)ColorConverter.ConvertFromString("TemplateLinkColor"), OnRenderChanged));
     public static readonly DependencyProperty IsHighlightedProperty =
         DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnRenderChanged));
 
@@ -62,9 +69,17 @@ public partial class TemplateClass : UserControl
 
     private void UpdateInteractivity()
     {
-        IsHitTestVisible = !IsVirtual;
-        Focusable = !IsVirtual;
+        IsHitTestVisible = !IsVirtualLink;
+        Focusable = !IsVirtualLink;
     }
+
+    private bool IsVirtualLink
+        => IsVirtual
+            || DataContext is IWorkflowLinkViewModel
+            {
+                Sender.Parent: null,
+                Receiver.Parent: null
+            };
 
     #endregion
 
@@ -79,10 +94,10 @@ public partial class TemplateClass : UserControl
         if (points.Count < 2) return;
 
         var color = IsHighlighted ? Colors.OrangeRed : LineColor;
-        var thickness = IsHighlighted ? 3.5 : 2.0;
+        var thickness = IsHighlighted ? 3.5 : TemplateLinkThickness;
         var brush = new SolidColorBrush(color);
 
-        var pen = IsVirtual
+        var pen = IsVirtualLink
             ? new Pen(brush, thickness) { DashStyle = new DashStyle(new double[] { 4, 2 }, 0) }
             : new Pen(brush, thickness);
 
@@ -96,7 +111,7 @@ public partial class TemplateClass : UserControl
         for (int i = 0; i < points.Count - 1; i++)
             ctx.DrawLine(pen, points[i], points[i + 1]);
 
-        if (!IsVirtual)
+        if (!IsVirtualLink)
             DrawArrowhead(ctx, points[^2], points[^1], brush, thickness);
     }
 

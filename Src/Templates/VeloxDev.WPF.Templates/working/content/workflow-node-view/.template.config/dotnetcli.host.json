@@ -1,9 +1,11 @@
 {
   "$schema": "http://json.schemastore.org/dotnetcli.host",
   "symbolInfo": {
-    "namespace": {
-      "longName": "namespace",
-      "shortName": "ns"
-    }
+    "namespace": { "longName": "namespace", "shortName": "ns" },
+    "nodeBackground": { "longName": "background", "shortName": "bg" },
+    "nodeForeground": { "longName": "foreground", "shortName": "fg" },
+    "nodeBorderBrush": { "longName": "border-brush", "shortName": "bb" },
+    "nodeBorderThickness": { "longName": "border-thickness", "shortName": "bt" },
+    "nodeCornerRadius": { "longName": "corner-radius", "shortName": "cr" }
   }
 }

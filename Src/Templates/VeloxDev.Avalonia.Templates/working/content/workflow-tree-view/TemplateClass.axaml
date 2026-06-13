@@ -3,50 +3,47 @@
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-			 xmlns:framework="using:VeloxDev.WorkflowSystem"	
 			 xmlns:local="using:TemplateNamespace"
 			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
 			 x:Class="TemplateNamespace.TemplateClass"
-			 x:CompileBindings="False"
 			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
-			 behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
-			 behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
-			 behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
-			 behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-			 behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+			 xmlns:framework="using:VeloxDev.WorkflowSystem"
+			 behaviors:WorkflowSurfaceBehavior.IsEnabled="True" behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer" behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas" behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator" behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+			 x:CompileBindings="False">
+			 <!-- Replace x:CompileBindings=False with a concrete x:DataType after defining your ViewModel. -->
 	
 	<UserControl.DataTemplates>
-		<!-- 节点模板 -->
+		<!-- Node Templates -->
 		<DataTemplate DataType="framework:IWorkflowNodeViewModel">
-			<local:WorkflowNodeView Width="{Binding Size.Width}" Height="{Binding Size.Height}"
-							Canvas.Left="{Binding Anchor.Horizontal}" Canvas.Top="{Binding Anchor.Vertical}" ZIndex="{Binding Anchor.Layer}"
-							RenderTransform="{Binding $parent[local:TemplateClass].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
+			<local:NodeView Width="{Binding Size.Width}" Height="{Binding Size.Height}" Canvas.Left="{Binding Anchor.Horizontal}" Canvas.Top="{Binding Anchor.Vertical}" ZIndex="{Binding Anchor.Layer}" RenderTransform="{Binding $parent[local:TemplateClass].(behaviors:WorkflowCanvasTransformBehavior.Transform)}" />
 		</DataTemplate>
 
-		<!-- 连线模板 -->
+		<!-- Connection Templates -->
 		<DataTemplate DataType="framework:IWorkflowLinkViewModel">
-			<local:WorkflowLinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}"
-							EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}"
-							ZIndex="-1"
-							CanRender="{Binding IsVisible}"
-							Width="{Binding $parent[Canvas].Bounds.Width}" Height="{Binding $parent[Canvas].Bounds.Height}"
-							RenderTransform="{Binding $parent[local:TemplateClass].(behaviors:WorkflowCanvasTransformBehavior.Transform)}" />
+			<local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}" EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}" ZIndex="-1" CanRender="{Binding IsVisible}" Width="{Binding $parent[Canvas].Bounds.Width}" Height="{Binding $parent[Canvas].Bounds.Height}" RenderTransform="{Binding $parent[local:TemplateClass].(behaviors:WorkflowCanvasTransformBehavior.Transform)}" />
 		</DataTemplate>
 	</UserControl.DataTemplates>
 
-	<!-- 渲染节点编辑器 ( 支持虚拟化 ) -->
+	<!-- Render Node Editor -->
 	<Grid Grid.Column="2">
-		<Border x:Name="PART_SurfaceBorder" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="3">
-			<local:WorkflowGridDecorator x:Name="PART_GridDecorator">
-				<ScrollViewer x:Name="PART_ScrollViewer" HorizontalScrollBarVisibility="Auto" IsScrollInertiaEnabled="False" >
-					<!-- Add a concrete x:DataType and re-enable compiled bindings after choosing your Tree ViewModel. -->
-					<Canvas x:Name="PART_Canvas" Width="{Binding Layout.ActualSize.Width}" Height="{Binding Layout.ActualSize.Height}" HorizontalAlignment="Left" VerticalAlignment="Top">
+		<Border x:Name="PART_SurfaceBorder"
+				Background="TemplateSurfaceBackground"
+				BorderBrush="TemplateSurfaceBorderBrush"
+				BorderThickness="TemplateSurfaceBorderThickness"
+				CornerRadius="TemplateSurfaceCornerRadius">
+			<local:GridDecorator x:Name="PART_GridDecorator">
+				<ScrollViewer x:Name="PART_ScrollViewer"
+							  HorizontalScrollBarVisibility="Auto"
+							  IsScrollInertiaEnabled="False">
+					<Canvas x:Name="PART_Canvas" Width="{Binding Layout.ActualSize.Width}" Height="{Binding Layout.ActualSize.Height}" behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Top">
 						<Canvas.DataTemplates>
-							<!-- 依照优先级寻找数据模板： Self > Parent > App -->
+							<!-- Templates Locator : Self > Parent > App -->
 						</Canvas.DataTemplates>
 					</Canvas>
 				</ScrollViewer>
-			</local:WorkflowGridDecorator>
+			</local:GridDecorator>
 		</Border>
 	</Grid>
 </UserControl>

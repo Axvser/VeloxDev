@@ -5,9 +5,9 @@
              xmlns:controls="clr-namespace:TemplateNamespace"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="TemplateNamespace.TemplateClass"
-             BackgroundColor="Transparent"
-             behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
-    <Grid BackgroundColor="Transparent">
+             behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"
+             BackgroundColor="TemplateSlotBackground">
+    <Grid BackgroundColor="TemplateSlotBackground">
         <GraphicsView x:Name="IconView" />
     </Grid>
 </ContentView>

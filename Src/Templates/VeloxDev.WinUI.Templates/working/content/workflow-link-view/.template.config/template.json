@@ -13,7 +13,7 @@
   "description": "A minimal WinUI view for a VeloxDev workflow link component.",
   "shortName": "winui-v-link",
   "sourceName": "TemplateClass",
-  "defaultName": "WorkflowLinkView",
+  "defaultName": "LinkView",
   "preferNameDirectory": false,
   "tags": {
     "language": "C#",
@@ -24,8 +24,22 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Namespace for the generated link view.",
-      "defaultValue": "MyApp.Views.Workflow",
+      "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
+    },
+    "linkColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Link line color.",
+      "defaultValue": "#DDFFFFFF",
+      "replaces": "TemplateLinkColor"
+    },
+    "linkThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Link line thickness.",
+      "defaultValue": "2",
+      "replaces": "TemplateLinkThickness"
     }
   },
   "primaryOutputs": [

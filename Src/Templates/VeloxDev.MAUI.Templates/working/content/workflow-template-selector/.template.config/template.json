@@ -7,7 +7,7 @@
   "description": "A .NET MAUI DataTemplateSelector for VeloxDev node, slot, link, and tree view models.",
   "shortName": "maui-v-selector",
   "sourceName": "TemplateClass",
-  "defaultName": "WorkflowTemplateSelector",
+  "defaultName": "TemplateSelector",
   "preferNameDirectory": false,
   "tags": {
     "language": "C#",

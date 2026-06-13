@@ -5,48 +5,29 @@
              xmlns:local="clr-namespace:TemplateNamespace"
              xmlns:workflowViews="clr-namespace:TemplateNamespace"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
-             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
-             behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
-             behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
-             behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+             behaviors:WorkflowSurfaceBehavior.IsEnabled="True" behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer" behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas" behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator" behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
     <UserControl.Resources>
         <DataTemplate x:Key="NodeTemplate">
-            <workflowViews:WorkflowNodeView Width="{Binding Size.Width}"
-                                    Height="{Binding Size.Height}"
-                                    Canvas.Left="{Binding Anchor.Horizontal}"
-                                    Canvas.Top="{Binding Anchor.Vertical}"
-                                    Panel.ZIndex="{Binding Anchor.Layer}"
-                                    RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:TemplateClass}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}" />
+            <workflowViews:NodeView Width="{Binding Size.Width}" Height="{Binding Size.Height}" Canvas.Left="{Binding Anchor.Horizontal}" Canvas.Top="{Binding Anchor.Vertical}" Panel.ZIndex="{Binding Anchor.Layer}" RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:TemplateClass}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}" />
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
-            <workflowViews:WorkflowLinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                             StartTop="{Binding Sender.Anchor.Vertical}"
-                                             EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                             EndTop="{Binding Receiver.Anchor.Vertical}"
-                                             CanRender="{Binding IsVisible}"
-                                             LineColor="White"
-                                             Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                             Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
-                                             Panel.ZIndex="-1"
-                                             RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:TemplateClass}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}" />
+            <workflowViews:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}" EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}" CanRender="{Binding IsVisible}" Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}" Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}" Panel.ZIndex="-1" RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:TemplateClass}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}" />
         </DataTemplate>
-        <workflowViews:WorkflowTemplateSelector x:Key="WorkflowTemplateSelector"
-                                              NodeTemplate="{StaticResource NodeTemplate}"
-                                              LinkTemplate="{StaticResource LinkTemplate}" />
+        <workflowViews:TemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" LinkTemplate="{StaticResource LinkTemplate}" />
     </UserControl.Resources>
-    <Border x:Name="PART_SurfaceBorder" BorderBrush="#33FFFFFF" BorderThickness="1" Background="#1E1E1E">
-        <workflowViews:WorkflowGridDecorator x:Name="PART_GridDecorator">
+    <Border x:Name="PART_SurfaceBorder"
+            Background="TemplateSurfaceBackground"
+            BorderBrush="TemplateSurfaceBorderBrush"
+            BorderThickness="TemplateSurfaceBorderThickness"
+            CornerRadius="TemplateSurfaceCornerRadius">
+        <workflowViews:GridDecorator x:Name="PART_GridDecorator">
             <ScrollViewer x:Name="PART_ScrollViewer"
                           HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto"
                           PanningMode="Both">
-                <Canvas x:Name="PART_Canvas"
-                        Width="{Binding Layout.ActualSize.Width}"
-                        Height="{Binding Layout.ActualSize.Height}"
-                        Background="Transparent"
-                        behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
+                <Canvas x:Name="PART_Canvas" Width="{Binding Layout.ActualSize.Width}" Height="{Binding Layout.ActualSize.Height}" behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}" behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"
+                        Background="Transparent" />
             </ScrollViewer>
-        </workflowViews:WorkflowGridDecorator>
+        </workflowViews:GridDecorator>
     </Border>
 </UserControl>

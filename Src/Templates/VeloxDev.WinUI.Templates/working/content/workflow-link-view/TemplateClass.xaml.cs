@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
+using System.Globalization;
 using VeloxDev.WorkflowSystem;
 using Windows.Foundation;
 
@@ -21,7 +22,7 @@ public sealed partial class TemplateClass : UserControl
 
     private readonly Path _path;
     private readonly Path _arrowPath;
-    private readonly SolidColorBrush _strokeBrush = new(Windows.UI.Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF));
+    private readonly SolidColorBrush _strokeBrush = new(ParseColor("TemplateLinkColor"));
     private readonly PathGeometry _pathGeometry = new();
     private readonly PathFigure _pathFigure = new() { IsClosed = false };
     private readonly PathGeometry _arrowGeometry = new();
@@ -38,7 +39,7 @@ public sealed partial class TemplateClass : UserControl
         Canvas.SetZIndex(this, -100);
 
         var container = new Grid();
-        _path = new Path { Stroke = _strokeBrush, StrokeThickness = 2, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false };
+        _path = new Path { Stroke = _strokeBrush, StrokeThickness = TemplateLinkThickness, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false };
         _arrowPath = new Path { Fill = _strokeBrush, IsHitTestVisible = false };
         container.Children.Add(_path);
         container.Children.Add(_arrowPath);
@@ -49,6 +50,11 @@ public sealed partial class TemplateClass : UserControl
         PointerEntered += (_, _) => { IsHighlighted = true; Focus(FocusState.Pointer); };
         PointerExited += (_, _) => IsHighlighted = false;
         PointerMoved += OnHoverPointerMoved;
+        DataContextChanged += (_, _) =>
+        {
+            UpdateInteractivity();
+            ScheduleUpdate();
+        };
         UpdateInteractivity();
     }
 
@@ -67,7 +73,7 @@ public sealed partial class TemplateClass : UserControl
     public static readonly DependencyProperty IsVirtualProperty =
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnChanged));
     public static readonly DependencyProperty LineColorProperty =
-        DependencyProperty.Register(nameof(LineColor), typeof(Windows.UI.Color), typeof(TemplateClass), new PropertyMetadata(Windows.UI.Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF), OnChanged));
+        DependencyProperty.Register(nameof(LineColor), typeof(Windows.UI.Color), typeof(TemplateClass), new PropertyMetadata(ParseColor("TemplateLinkColor"), OnChanged));
     public static readonly DependencyProperty IsHighlightedProperty =
         DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnChanged));
 
@@ -89,9 +95,17 @@ public sealed partial class TemplateClass : UserControl
 
     private void UpdateInteractivity()
     {
-        IsHitTestVisible = !IsVirtual;
-        IsTabStop = !IsVirtual;
+        IsHitTestVisible = !IsVirtualLink;
+        IsTabStop = !IsVirtualLink;
     }
+
+    private bool IsVirtualLink
+        => IsVirtual
+            || DataContext is IWorkflowLinkViewModel
+            {
+                Sender.Parent: null,
+                Receiver.Parent: null
+            };
 
     #endregion
 
@@ -164,11 +178,11 @@ public sealed partial class TemplateClass : UserControl
 
         BuildPoints();
         var color = IsHighlighted ? Microsoft.UI.Colors.OrangeRed : LineColor;
-        var thickness = IsHighlighted ? 3.5 : 2.0;
+        var thickness = IsHighlighted ? 3.5 : TemplateLinkThickness;
         _strokeBrush.Color = color;
         _path.StrokeThickness = thickness;
 
-        if (IsVirtual)
+        if (IsVirtualLink)
             _path.StrokeDashArray = VirtualStrokeDashArray;
         else
             _path.StrokeDashArray = null;
@@ -182,7 +196,7 @@ public sealed partial class TemplateClass : UserControl
         _path.Data = _pathGeometry;
 
         // Arrowhead
-        if (!IsVirtual)
+        if (!IsVirtualLink)
         {
             var from = _points[^2];
             var tip = _points[^1];
@@ -259,6 +273,23 @@ public sealed partial class TemplateClass : UserControl
         double t = Math.Clamp(((p.X - a.X) * abx + (p.Y - a.Y) * aby) / len2, 0, 1);
         double px = a.X + t * abx - p.X, py = a.Y + t * aby - p.Y;
         return Math.Sqrt(px * px + py * py);
+    }
+
+    private static Windows.UI.Color ParseColor(string hex)
+    {
+        hex = hex.TrimStart('#');
+        var value = uint.Parse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        return hex.Length == 8
+            ? Windows.UI.Color.FromArgb(
+                (byte)(value >> 24),
+                (byte)(value >> 16),
+                (byte)(value >> 8),
+                (byte)value)
+            : Windows.UI.Color.FromArgb(
+                0xFF,
+                (byte)(value >> 16),
+                (byte)(value >> 8),
+                (byte)value);
     }
 
     #endregion

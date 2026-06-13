@@ -9,16 +9,16 @@ namespace TemplateNamespace;
 
 public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
 {
-    private static readonly IBrush BackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("#1E1E1E"));
-    private static readonly Pen MinorGridPen = CreatePen("#2A2D2E", 1);
-    private static readonly Pen MajorGridPen = CreatePen("#3A3D40", 1);
-    private static readonly Pen AxisPen = CreatePen("#4D4D4D", 1.2);
+    private static readonly IBrush BackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("TemplateGridBackground"));
+    private static readonly Pen MinorGridPen = CreatePen("TemplateMinorGridColor", 1);
+    private static readonly Pen MajorGridPen = CreatePen("TemplateMajorGridColor", 1);
+    private static readonly Pen AxisPen = CreatePen("TemplateAxisColor", 1.2);
 
     public static readonly StyledProperty<double> GridSpacingProperty =
-        AvaloniaProperty.Register<TemplateClass, double>(nameof(GridSpacing), 40d);
+        AvaloniaProperty.Register<TemplateClass, double>(nameof(GridSpacing), TemplateGridSpacing);
 
     public static readonly StyledProperty<int> MajorLineEveryProperty =
-        AvaloniaProperty.Register<TemplateClass, int>(nameof(MajorLineEvery), 5);
+        AvaloniaProperty.Register<TemplateClass, int>(nameof(MajorLineEvery), TemplateMajorLineEvery);
 
     public static readonly StyledProperty<double> ScrollOffsetXProperty =
         AvaloniaProperty.Register<TemplateClass, double>(nameof(ScrollOffsetX));

@@ -37,7 +37,7 @@ public partial class TemplateClass : UserControl
             var state when state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver) => Brushes.Violet,
             var state when state.HasFlag(SlotState.Sender) => Brushes.Tomato,
             var state when state.HasFlag(SlotState.Receiver) => Brushes.Lime,
-            _ => new SolidColorBrush(Color.FromArgb(0xDD, 0x1E, 0x1E, 0x1E)),
+            _ => new SolidColorBrush((Color)ColorConverter.ConvertFromString("TemplateSlotColor")),
         };
     }
 

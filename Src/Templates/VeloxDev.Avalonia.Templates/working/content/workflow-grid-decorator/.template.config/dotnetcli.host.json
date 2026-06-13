@@ -1,9 +1,12 @@
 {
   "$schema": "http://json.schemastore.org/dotnetcli.host",
   "symbolInfo": {
-    "namespace": {
-      "longName": "namespace",
-      "shortName": "ns"
-    }
+    "namespace": { "longName": "namespace", "shortName": "ns" },
+    "gridBackground": { "longName": "background", "shortName": "bg" },
+    "minorGridColor": { "longName": "minor-grid-color", "shortName": "mic" },
+    "majorGridColor": { "longName": "major-grid-color", "shortName": "mac" },
+    "axisColor": { "longName": "axis-color", "shortName": "ac" },
+    "gridSpacing": { "longName": "grid-spacing", "shortName": "gs" },
+    "majorLineEvery": { "longName": "major-line-every", "shortName": "mle" }
   }
 }

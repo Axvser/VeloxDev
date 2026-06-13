@@ -8,22 +8,22 @@ namespace TemplateNamespace;
 
 public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
 {
-    private static readonly Brush BackgroundBrush = CreateBrush("#1E1E1E");
-    private static readonly Pen MinorGridPen = CreatePen("#2A2D2E", 1);
-    private static readonly Pen MajorGridPen = CreatePen("#3A3D40", 1);
-    private static readonly Pen AxisPen = CreatePen("#4D4D4D", 1.2);
+    private static readonly Brush BackgroundBrush = CreateBrush("TemplateGridBackground");
+    private static readonly Pen MinorGridPen = CreatePen("TemplateMinorGridColor", 1);
+    private static readonly Pen MajorGridPen = CreatePen("TemplateMajorGridColor", 1);
+    private static readonly Pen AxisPen = CreatePen("TemplateAxisColor", 1.2);
 
     public static readonly DependencyProperty GridSpacingProperty = DependencyProperty.Register(
         nameof(GridSpacing),
         typeof(double),
         typeof(TemplateClass),
-        new FrameworkPropertyMetadata(40d, FrameworkPropertyMetadataOptions.AffectsRender));
+        new FrameworkPropertyMetadata(TemplateGridSpacing, FrameworkPropertyMetadataOptions.AffectsRender));
 
     public static readonly DependencyProperty MajorLineEveryProperty = DependencyProperty.Register(
         nameof(MajorLineEvery),
         typeof(int),
         typeof(TemplateClass),
-        new FrameworkPropertyMetadata(5, FrameworkPropertyMetadataOptions.AffectsRender));
+        new FrameworkPropertyMetadata(TemplateMajorLineEvery, FrameworkPropertyMetadataOptions.AffectsRender));
 
     public static readonly DependencyProperty ScrollOffsetXProperty = RegisterOffset(nameof(ScrollOffsetX));
     public static readonly DependencyProperty ScrollOffsetYProperty = RegisterOffset(nameof(ScrollOffsetY));

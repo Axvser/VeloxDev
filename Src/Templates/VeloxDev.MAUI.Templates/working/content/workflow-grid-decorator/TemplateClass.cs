@@ -7,8 +7,8 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
 {
     private readonly GraphicsView _gridLayer;
 
-    public static readonly BindableProperty GridSpacingProperty = RegisterProperty(nameof(GridSpacing), 40d);
-    public static readonly BindableProperty MajorLineEveryProperty = RegisterProperty(nameof(MajorLineEvery), 5);
+    public static readonly BindableProperty GridSpacingProperty = RegisterProperty(nameof(GridSpacing), TemplateGridSpacing);
+    public static readonly BindableProperty MajorLineEveryProperty = RegisterProperty(nameof(MajorLineEvery), TemplateMajorLineEvery);
     public static readonly BindableProperty ScrollOffsetXProperty = RegisterProperty(nameof(ScrollOffsetX), 0d);
     public static readonly BindableProperty ScrollOffsetYProperty = RegisterProperty(nameof(ScrollOffsetY), 0d);
     public static readonly BindableProperty ContentOffsetXProperty = RegisterProperty(nameof(ContentOffsetX), 0d);
@@ -16,7 +16,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
 
     public TemplateClass()
     {
-        BackgroundColor = Color.FromArgb("#1E1E1E");
+        BackgroundColor = Color.FromArgb("TemplateGridBackground");
         _gridLayer = new GraphicsView
         {
             Drawable = new GridDrawable(this),
@@ -76,7 +76,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
     {
         public void Draw(ICanvas canvas, RectF dirtyRect)
         {
-            canvas.FillColor = Color.FromArgb("#1E1E1E");
+            canvas.FillColor = Color.FromArgb("TemplateGridBackground");
             canvas.FillRectangle(dirtyRect);
 
             var spacing = Math.Max(8, owner.GridSpacing);
@@ -107,14 +107,14 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         {
             if (Math.Abs(value) < 0.001)
             {
-                canvas.StrokeColor = Color.FromArgb("#4D4D4D");
+                canvas.StrokeColor = Color.FromArgb("TemplateAxisColor");
                 canvas.StrokeSize = 1.2f;
                 return;
             }
 
             canvas.StrokeColor = Math.Abs(value % majorStep) < 0.001
-                ? Color.FromArgb("#3A3D40")
-                : Color.FromArgb("#2A2D2E");
+                ? Color.FromArgb("TemplateMajorGridColor")
+                : Color.FromArgb("TemplateMinorGridColor");
             canvas.StrokeSize = 1;
         }
     }

@@ -7,12 +7,14 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
              d:DesignHeight="20" d:DesignWidth="20"
-             Background="Transparent"
              behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"
+             Background="TemplateSlotBackground"
              MouseLeftButtonUp="OnPointerReleased"
              MouseLeftButtonDown="OnPointerPressed">
     <Viewbox>
         <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+              Stroke="TemplateSlotBorderColor"
+              StrokeThickness="1.5"
               Data="M517.3248,511.488 m-123.6992,0 a123.6992,123.6992 0 1 0 247.3984,0 a123.6992,123.6992 0 1 0 -247.3984,0 Z
                     M366.848,991.5904 a47.2064,47.2064 0 0 1 -15.36,-2.5088 A506.368,506.368 0 0 1 32.8704,655.36 a46.08,46.08 0 1 1 88.32,-26.2144 A414.0544,414.0544 0 0 0 383.9616,928.2048 a46.08,46.08 0 0 1 -15.104,89.6 Z
                     M648.2944,997.888 a46.08,46.08 0 0 1 -13.1072,-90.2656 A413.952,413.952 0 0 0 920.9344,646.8608 a46.08,46.08 0 1 1 87.04,30.208 A506.3168,506.3168 0 0 1 674.5088,996.9408 a45.2608,45.2608 0 0 1 -13.1072,1.9456 Z

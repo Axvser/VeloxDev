@@ -318,7 +318,7 @@ public partial class TemplateClass : ContentView
 
             canvas.FillColor = color;
             canvas.FillCircle(centerX, centerY, radius);
-            canvas.StrokeColor = Colors.White;
+            canvas.StrokeColor = Color.FromArgb("TemplateSlotBorderColor");
             canvas.StrokeSize = 1.5f;
             canvas.DrawCircle(centerX, centerY, radius);
         }
@@ -329,7 +329,7 @@ public partial class TemplateClass : ContentView
                 var value when value.HasFlag(SlotState.Sender) && value.HasFlag(SlotState.Receiver) => Colors.Violet,
                 var value when value.HasFlag(SlotState.Sender) => Colors.Tomato,
                 var value when value.HasFlag(SlotState.Receiver) => Colors.Lime,
-            _ => Color.FromArgb("#DD1E1E1E"),
+            _ => Color.FromArgb("TemplateSlotColor"),
             };
     }
 }

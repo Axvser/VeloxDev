@@ -13,7 +13,7 @@
   "description": "A minimal WinUI view for a VeloxDev workflow node component.",
   "shortName": "winui-v-node",
   "sourceName": "TemplateClass",
-  "defaultName": "WorkflowNodeView",
+  "defaultName": "NodeView",
   "preferNameDirectory": false,
   "tags": {
     "language": "C#",
@@ -24,8 +24,43 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Namespace for the generated node view.",
-      "defaultValue": "MyApp.Views.Workflow",
+      "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
+    },
+    "nodeBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node background color.",
+      "defaultValue": "#DDFFFFFF",
+      "replaces": "TemplateNodeBackground"
+    },
+    "nodeForeground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node foreground color.",
+      "defaultValue": "#DD1E1E1E",
+      "replaces": "TemplateNodeForeground"
+    },
+    "nodeBorderBrush": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node border color.",
+      "defaultValue": "#331E1E1E",
+      "replaces": "TemplateNodeBorderBrush"
+    },
+    "nodeBorderThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node border thickness.",
+      "defaultValue": "1",
+      "replaces": "TemplateNodeBorderThickness"
+    },
+    "nodeCornerRadius": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node corner radius.",
+      "defaultValue": "6",
+      "replaces": "TemplateNodeCornerRadius"
     }
   },
   "primaryOutputs": [
