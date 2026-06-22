@@ -1,9 +1,7 @@
-﻿using VeloxDev.AOT;
-using VeloxDev.MVVM;
+﻿using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
-[AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
 {
     [VeloxProperty] private Size originSize = new(1920, 1080);

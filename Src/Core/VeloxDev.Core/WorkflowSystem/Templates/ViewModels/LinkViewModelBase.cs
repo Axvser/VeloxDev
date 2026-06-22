@@ -1,12 +1,10 @@
 ﻿using VeloxDev.AI;
-using VeloxDev.AOT;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "工作流Link组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Link component interface")]
-[AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 public sealed partial class LinkViewModelBase : IWorkflowLinkViewModel, IWorkflowIdentifiable
 {
     private IWorkflowLinkViewModelHelper helper = new LinkHelper();

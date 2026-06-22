@@ -10,7 +10,7 @@
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core</Title>
-		<Version>5.2.1</Version>
+		<Version>5.3.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>Build modern, AI-controllable workflow editors on any .NET GUI — WPF, Avalonia, WinUI, MAUI ...</Description>
         <PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -20,11 +20,12 @@
 		<RepositoryType>git</RepositoryType>
 		<PackageProjectUrl>https://www.nuget.org/packages/VeloxDev.Core/</PackageProjectUrl>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<UserSecretsId>db10839f-0351-44d6-a2fc-18db31b9f2d9</UserSecretsId>
 	</PropertyGroup>
 	
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="5.2.1" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="5.3.0" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -1,14 +1,11 @@
 ﻿using VeloxDev.AI;
-using VeloxDev.AOT;
 using VeloxDev.MVVM;
 using VeloxDev.TransitionSystem;
-using VeloxDev.TransitionSystem.NativeInterpolators;
 
 namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "用于在工作流系统中描述组件的空间位置")]
 [AgentContext(AgentLanguages.English, "Used to describe the spatial position of components in the workflow system")]
-[AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0) : ICloneable, IEquatable<Anchor>, IInterpolable
 {
     [VeloxProperty]

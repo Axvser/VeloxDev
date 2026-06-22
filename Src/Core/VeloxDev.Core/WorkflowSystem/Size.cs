@@ -1,5 +1,4 @@
 ﻿using VeloxDev.AI;
-using VeloxDev.AOT;
 using VeloxDev.MVVM;
 using VeloxDev.TransitionSystem;
 
@@ -7,7 +6,6 @@ namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "表示一个二维尺寸")]
 [AgentContext(AgentLanguages.English, "Represents a two-dimensional size")]
-[AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 public sealed partial class Size(double width = 0d, double height = 0d) : ICloneable, IEquatable<Size>, IInterpolable
 {
     [VeloxProperty]

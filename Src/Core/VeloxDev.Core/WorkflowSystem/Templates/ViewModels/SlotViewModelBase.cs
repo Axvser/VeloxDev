@@ -1,13 +1,11 @@
 ﻿using System.Collections.ObjectModel;
 using VeloxDev.AI;
-using VeloxDev.AOT;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "工作流Slot组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Slot component interface")]
-[AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 public sealed partial class SlotViewModelBase : IWorkflowSlotViewModel, IWorkflowIdentifiable
 {
     private IWorkflowSlotViewModelHelper helper = new SlotHelper();

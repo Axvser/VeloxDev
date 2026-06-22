@@ -1,5 +1,4 @@
 ﻿using VeloxDev.AI;
-using VeloxDev.AOT;
 using VeloxDev.MVVM;
 using VeloxDev.TransitionSystem;
 
@@ -7,7 +6,6 @@ namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "表示一个二维坐标偏移量")]
 [AgentContext(AgentLanguages.English, "Represents a two-dimensional coordinate offset")]
-[AOTReflection(Constructors: true, Methods: true, Properties: true, Fields: true)]
 public sealed partial class Offset(double left = 0d, double top = 0d) : ICloneable, IEquatable<Offset>, IInterpolable
 {
     [VeloxProperty]
