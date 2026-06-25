@@ -2,7 +2,7 @@
 
 namespace VeloxDev.AspectOriented
 {
-    public interface IProxy
+    public interface IAspectOriented
     {
 
     }

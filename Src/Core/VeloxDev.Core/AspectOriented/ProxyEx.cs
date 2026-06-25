@@ -14,7 +14,7 @@ namespace VeloxDev.AspectOriented
 
     public static class ProxyEx
     {
-        public static T CreateProxy<T>(this T target) where T : IProxy
+        public static T CreateProxy<T>(this T target) where T : IAspectOriented
         {
             var type = typeof(T);
             dynamic proxy = DispatchProxy.Create<T, ProxyInstance>() ?? throw new InvalidOperationException();
@@ -24,7 +24,7 @@ namespace VeloxDev.AspectOriented
             return proxy;
         }
         public static void SetProxy<T>(this T target, ProxyMembers memberType, string memberName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end)
-           where T : class, IProxy
+           where T : class, IAspectOriented
         {
             switch (memberType)
             {
@@ -40,7 +40,7 @@ namespace VeloxDev.AspectOriented
             }
         }
 
-        internal static T SetPropertyGetter<T>(this T source, string propertyName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IProxy
+        internal static T SetPropertyGetter<T>(this T source, string propertyName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IAspectOriented
         {
             if (!ProxyInstance.ProxyIDs.TryGetValue(source, out var id))
             {
@@ -60,7 +60,7 @@ namespace VeloxDev.AspectOriented
             }
             return source;
         }
-        internal static T SetPropertySetter<T>(this T source, string propertyName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IProxy
+        internal static T SetPropertySetter<T>(this T source, string propertyName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IAspectOriented
         {
             if (!ProxyInstance.ProxyIDs.TryGetValue(source, out var id))
             {
@@ -80,7 +80,7 @@ namespace VeloxDev.AspectOriented
             }
             return source;
         }
-        internal static T SetMethod<T>(this T source, string methodName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IProxy
+        internal static T SetMethod<T>(this T source, string methodName, ProxyHandler? start, ProxyHandler? coverage, ProxyHandler? end) where T : IAspectOriented
         {
             if (!ProxyInstance.ProxyIDs.TryGetValue(source, out var id))
             {

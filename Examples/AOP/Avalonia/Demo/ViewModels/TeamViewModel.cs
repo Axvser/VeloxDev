@@ -34,7 +34,7 @@ public partial class TeamViewModel
 
     private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        Proxy.AOP_OnMemberAdded(sender, e);
+        this.Aop().AOP_OnMemberAdded(sender, e);
     }
     [AspectOriented]
     public void AOP_OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
@@ -44,7 +44,7 @@ public partial class TeamViewModel
 
     private void OnMemberRemoved(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        Proxy.AOP_OnMemberRemoved(sender, e);
+        this.Aop().AOP_OnMemberRemoved(sender, e);
     }
     [AspectOriented]
     public void AOP_OnMemberRemoved(object? sender, NotifyCollectionChangedEventArgs e)

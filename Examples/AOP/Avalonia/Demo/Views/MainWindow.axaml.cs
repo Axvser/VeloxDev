@@ -4,7 +4,6 @@ using Avalonia.Interactivity;
 using Demo.ViewModels;
 using System;
 using System.Collections.Specialized;
-using VeloxDev.AopInterfaces;
 using VeloxDev.AspectOriented;
 
 namespace Demo.Views;
@@ -16,110 +15,88 @@ public partial class MainWindow : Window
         InitializeComponent();
         _manager = new WindowNotificationManager(this) { MaxItems = 3 };
         _teamData = new TeamViewModel();
-        _team = ConfigureAOP(_teamData);
+        ConfigureAOP(_teamData);
     }
 
     private readonly WindowNotificationManager _manager;
-    private readonly TeamViewModel _teamData;      // Ô­Ê¼Êı¾İ·ÃÎÊ
-    private readonly TeamViewModel_Demo_ViewModels_Aop _team; // AOP´úÀí·ÃÎÊ
+    private readonly TeamViewModel _teamData;
 
     private void Click0(object sender, RoutedEventArgs e)
     {
-        if (_team.Members.Count > 0) _team.Members.RemoveAt(0);
+        var team = _teamData.Aop();
+        if (team.Members.Count > 0) team.Members.RemoveAt(0);
     }
 
     private void Click1(object sender, RoutedEventArgs e)
     {
-        _team.Members.Add(new MemberViewModel() { Name = "Jack" });
+        _teamData.Aop().Members.Add(new MemberViewModel() { Name = "Jack" });
     }
 
     private void Click2(object sender, RoutedEventArgs e)
     {
-        _ = _team.Name;
+        _ = _teamData.Aop().Name;
     }
 
     private void Click3(object sender, RoutedEventArgs e)
     {
-        _team.Name = "New Team Name";
+        _teamData.Aop().Name = "New Team Name";
     }
 
     private void Click4(object sender, RoutedEventArgs e)
     {
-        _team.Reset();
+        _teamData.Aop().Reset();
     }
 
-    /* ÎÒÃÇ²»ĞèÒªĞŞ¸Ä ViewModel µÄÈÎºÎÔ´Âë£¬ÏÖÔÚ£¬ËüµÄÒ»Ğ©³ÉÔ±ÒÑ¾­Ö§³Ö AOP */
-    private TeamViewModel_Demo_ViewModels_Aop ConfigureAOP(TeamViewModel data)
+    /* æ— éœ€ä¿®æ”¹ ViewModel æºç  â€” Aop() è‡ªåŠ¨ç¼“å­˜å¹¶è¿”å› AOP ä»£ç† */
+    private void ConfigureAOP(TeamViewModel data)
     {
-        /* Ç°ÖÃ¹³×Ó£º Team µÄ Name ±»¶ÁÈ¡[Ç°] */
-        data.Proxy.SetProxy(ProxyMembers.Getter,
+        var p = data.Aop();
+
+        /* å‰ç½®é’©å­ï¼šName è¢«è¯»å–[å‰] */
+        p.SetProxy(ProxyMembers.Getter,
             nameof(TeamViewModel.Name),
-            (p, r) =>
-            {
-                _manager.Show(new Notification("Message", $"a read operation happened at [{DateTime.Now}]"));
-                return null;
-            },
+            (_, _) => { _manager.Show(new Notification("Message", $"a read operation happened at [{DateTime.Now}]")); return null; },
             null,
             null);
 
-        /* ºóÖÃ¹³×Ó£º Team µÄ Name ±»¸ü¸Ä[ºó] */
-        data.Proxy.SetProxy(ProxyMembers.Setter,
+        /* åç½®é’©å­ï¼šName è¢«æ›´æ”¹[å] */
+        p.SetProxy(ProxyMembers.Setter,
             nameof(TeamViewModel.Name),
             null,
             null,
-            (p, r) =>
-            {
-                _manager.Show(new Notification("Message", $"the name of team has been changed to {p?[0]}"));
-                return null;
-            });
+            (p, _) => { _manager.Show(new Notification("Message", $"the name of team has been changed to {p?[0]}")); return null; });
 
-        /* ¸²Ğ´Ô­Âß¼­£º Team µÄ Reset ·½·¨±»µ÷ÓÃ[Ê±] */
-        data.Proxy.SetProxy(ProxyMembers.Method,
+        /* è¦†å†™åŸé€»è¾‘ï¼šReset() è¢«è°ƒç”¨[æ—¶] */
+        p.SetProxy(ProxyMembers.Method,
             nameof(TeamViewModel.Reset),
             null,
-            (p, r) =>
-            {
-                _manager.Show(new Notification("Message", $"the default Reset() has been cancle"));
-                return null;
-            },
+            (_, _) => { _manager.Show(new Notification("Message", $"the default Reset() has been cancelled")); return null; },
             null);
 
-        /* À©Õ¹£º Team µÄ Members¼¯ºÏ ÓĞ³ÉÔ±±»Ìí¼ÓÊ± */
-        data.Proxy.SetProxy(ProxyMembers.Method,
+        /* æ‰©å±•ï¼šMembers æœ‰æˆå‘˜è¢«æ·»åŠ æ—¶ */
+        p.SetProxy(ProxyMembers.Method,
             nameof(TeamViewModel.AOP_OnMemberAdded),
             null,
             null,
-            (p, r) =>
+            (p, _) =>
             {
                 if (p?[1] is not NotifyCollectionChangedEventArgs e || e.NewItems is null) return null;
                 foreach (MemberViewModel member in e.NewItems)
-                {
                     _manager.Show(new Notification("Message", $"a member named [{member.Name}] has been added"));
-                }
                 return null;
             });
 
-        /* À©Õ¹£º Team µÄ Members¼¯ºÏ ÓĞ³ÉÔ±±»ÒÆ³ıÊ± */
-        data.Proxy.SetProxy(ProxyMembers.Method,
+        /* æ‰©å±•ï¼šMembers æœ‰æˆå‘˜è¢«ç§»é™¤æ—¶ */
+        p.SetProxy(ProxyMembers.Method,
             nameof(TeamViewModel.AOP_OnMemberRemoved),
             null,
             null,
-            (p, r) =>
+            (p, _) =>
             {
                 if (p?[1] is not NotifyCollectionChangedEventArgs e || e.OldItems is null) return null;
                 foreach (MemberViewModel member in e.OldItems)
-                {
                     _manager.Show(new Notification("Message", $"a member named [{member.Name}] has been removed"));
-                }
                 return null;
             });
-
-        return data.Proxy;
-
-        /* ½âÊÍ£ºSetProxyµÄºóÈı¸ö²ÎÊı·Ö±ğÊÇ¡¾Ç°ÖÃ¹³×Ó¡¿¡¾¸²Ğ´¹³×Ó¡¿¡¾ºóÖÃ¹³×Ó¡¿*/
-        /* ½âÊÍ£º
-         ¹³×ÓµÚÒ»¸ö²ÎÊı±íÊ¾´Ë·½·¨±»µ÷ÓÃÊ±½ÓÊÕµ½µÄ²ÎÊı
-         ¹³×ÓµÚ¶ş¸ö²ÎÊı±íÊ¾ÉÏÒ»¸ö¹³×Ó»òÕßÔ­Ê¼Âß¼­µÄÖ´ĞĞ·µ»ØÖµ
-         */
     }
 }

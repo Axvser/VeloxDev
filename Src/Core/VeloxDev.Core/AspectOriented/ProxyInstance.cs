@@ -7,15 +7,14 @@ namespace VeloxDev.AspectOriented
 
     public class ProxyInstance : DispatchProxy
     {
-        internal static int _id = 0;
-        public static Dictionary<int, ProxyInstance> ProxyInstances { get; internal set; } = [];
-        public static Dictionary<object, int> ProxyIDs { get; internal set; } = [];
+        public static Dictionary<Guid, ProxyInstance> ProxyInstances { get; internal set; } = [];
+        public static Dictionary<object, Guid> ProxyIDs { get; internal set; } = [];
 
-        public ProxyInstance() { _localid = _id; _id++; ProxyInstances.Add(_localid, this); }
+        public ProxyInstance() { _localid = Guid.NewGuid(); ProxyInstances.Add(_localid, this); }
 
         internal object? _target = null;
         internal Type? _targetType = null;
-        internal int _localid = 0;
+        internal Guid _localid = Guid.Empty;
 
         internal Dictionary<string, Tuple<ProxyHandler?, ProxyHandler?, ProxyHandler?>> GetterActions { get; set; } = [];
         internal Dictionary<string, Tuple<ProxyHandler?, ProxyHandler?, ProxyHandler?>> SetterActions { get; set; } = [];
