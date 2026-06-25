@@ -123,11 +123,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             T(GetFullTopology, nameof(GetFullTopology)),
         };
 
-        // ── Interaction (only registered when handlers are configured) ──
-        if (_scope.SelectionHandler != null)
-            tools.Add(T(RequestSelection, nameof(RequestSelection)));
-        if (_scope.ConfirmationHandler != null)
-            tools.Add(T(RequestConfirmation, nameof(RequestConfirmation)));
+        // ── Interaction (only registered when handlers are configured AND level > 0) ──
+        if (_scope.IsInteractionAllowed)
+        {
+            if (_scope.SelectionHandler != null)
+                tools.Add(T(RequestSelection, nameof(RequestSelection)));
+            if (_scope.ConfirmationHandler != null)
+                tools.Add(T(RequestConfirmation, nameof(RequestConfirmation)));
+        }
 
         // Merge developer-registered custom tools
         foreach (var tool in _scope.CustomTools)
@@ -147,12 +150,21 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         protected override async ValueTask<object?> InvokeCoreAsync(
             AIFunctionArguments arguments, CancellationToken cancellationToken)
         {
-            var result = await base.InvokeCoreAsync(arguments, cancellationToken);
-            var resultText = result?.ToString() ?? string.Empty;
-            await _toolkit.TrackAsync(Name, resultText);
-            if (_toolkit._scope.MaxToolCalls.HasValue && _toolkit._toolCallCount > _toolkit._scope.MaxToolCalls.Value)
-                return WorkflowAgentToolkit.Error($"Tool call limit ({_toolkit._scope.MaxToolCalls.Value}) exceeded.");
-            return result;
+            // ── Pre-flight: reject if call limit would be exceeded ──
+            if (_toolkit._scope.MaxToolCalls.HasValue && _toolkit._toolCallCount >= _toolkit._scope.MaxToolCalls.Value)
+                return WorkflowAgentToolkit.Error($"Tool call limit ({_toolkit._scope.MaxToolCalls.Value}) exceeded. No further tool calls are allowed.");
+
+            try
+            {
+                var result = await base.InvokeCoreAsync(arguments, cancellationToken);
+                var resultText = result?.ToString() ?? string.Empty;
+                await _toolkit.TrackAsync(Name, resultText);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                return WorkflowAgentToolkit.Error($"Tool '{Name}' threw an unhandled exception: {ex.Message}");
+            }
         }
     }
 
@@ -176,7 +188,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// </summary>
     private async Task TrackAsync(string toolName, string result)
     {
-        _toolCallCount++;
+        Interlocked.Increment(ref _toolCallCount);
         await _scope.RaiseToolCalledAsync(toolName, result, _toolCallCount);
         if (_scope.AutoMarkDirty && !QueryToolNames.Contains(toolName))
             Tree.GetHelper().MarkDirty();
@@ -511,7 +523,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         [Description("JSON patch object, e.g. '{\"Title\":\"New\"}'.")] string jsonPatch)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        var result = ComponentPatcher.ApplyPatchWithUndo(node!, jsonPatch, Tree);
+        var result = ComponentPatcher.ApplyPatch(node!, jsonPatch);
         NudgeIfEnumSlotNode(node!);
         return result;
     }
@@ -523,7 +535,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     {
         var component = FindComponentById(runtimeId);
         if (component == null) return Error($"Component '{runtimeId}' not found.");
-        var result = ComponentPatcher.ApplyPatchWithUndo(component, jsonPatch, Tree);
+        var result = ComponentPatcher.ApplyPatch(component, jsonPatch);
         if (component is IWorkflowNodeViewModel patchedNode)
             NudgeIfEnumSlotNode(patchedNode);
         return result;
@@ -1816,7 +1828,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!string.IsNullOrEmpty(receiverCondition))
         {
             // Receiver is also a SlotEnumerator slot — resolve by condition value.
-            var receiverResult = GetEnumSlotByValue(receiverNodeIndex, receiverSlot, receiverCondition);
+            var receiverResult = GetEnumSlotByValue(receiverNodeIndex, receiverSlot, receiverCondition!);
             var receiverParsed = JObject.Parse(receiverResult);
             if (receiverParsed["ok"]?.Value<bool>() != true) return receiverResult;
             var receiverSlotId = receiverParsed["slotId"]?.ToString();
@@ -1933,7 +1945,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 errors.Add($"Index {idx} out of range.");
                 continue;
             }
-            var r = ComponentPatcher.ApplyPatchWithUndo(Tree.Nodes[idx], jsonPatch, Tree);
+            var r = ComponentPatcher.ApplyPatch(Tree.Nodes[idx], jsonPatch);
             if (r.Contains("error"))
                 errors.Add($"Node {idx}: {r}");
             else

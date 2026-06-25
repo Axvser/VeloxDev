@@ -74,9 +74,20 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
         protected override async ValueTask<object?> InvokeCoreAsync(
             AIFunctionArguments arguments, CancellationToken cancellationToken)
         {
-            var result = await base.InvokeCoreAsync(arguments, cancellationToken);
-            _toolkit.Track(Name, result?.ToString() ?? string.Empty);
-            return result;
+            // ── Pre-flight: reject if call limit would be exceeded ──
+            if (_toolkit.MaxToolCalls.HasValue && _toolkit._toolCallCount >= _toolkit.MaxToolCalls.Value)
+                return JsonConvert.SerializeObject(new { status = "error", message = $"Tool call limit ({_toolkit.MaxToolCalls.Value}) exceeded. No further tool calls are allowed." });
+
+            try
+            {
+                var result = await base.InvokeCoreAsync(arguments, cancellationToken);
+                _toolkit.Track(Name, result?.ToString() ?? string.Empty);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                return JsonConvert.SerializeObject(new { status = "error", message = $"Tool '{Name}' threw an unhandled exception: {ex.Message}" });
+            }
         }
     }
 

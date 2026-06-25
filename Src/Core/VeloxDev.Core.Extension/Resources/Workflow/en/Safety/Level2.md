@@ -6,28 +6,46 @@ At this level the Agent handles routine decisions autonomously, but surfaces hig
 
 ---
 
-### RequestConfirmation
+### RequestConfirmation — Level 2 (Moderate Gate)
 
-Covered by the shared Pre-Mutation Gate. Apply it exactly as specified there — no additional triggers at this level.
+Destructive operations and value-clearing require confirmation at this level:
+
+1. Deleting one or more nodes (`DeleteNode`, `DeleteNodes`).
+2. Deleting a slot (`DeleteSlot`).
+3. Setting a property value to `null`, an empty string `""`, or `0` / `false` when the current value is non-empty — this clears existing content.
+4. Executing batch operations (`BatchExecute`) that contain any of the operations listed above.
+5. Any operation explicitly flagged as sensitive in developer `[AgentContext]` annotations.
+
+If `RequestConfirmation` returns `denied`, you **MUST** stop immediately and inform the user — do NOT proceed or substitute an alternative action.
 
 ---
 
 ### RequestSelection
 
-Call `RequestSelection` in exactly two situations:
+Call `RequestSelection` in exactly the following situations:
 
 **Situation 1 — System-type choice (same as Level 1):**
 
 Picking a SlotEnumerator routing credential (enum type) when `allowedSelectorTypes` lists more than one candidate.
 
-**Situation 2 — High-stakes semantic fork:**
+**Situation 2 — High-stakes semantic fork (≥3 outcomes):**
 
-All three of the following must be true:
-- There are ≥ 2 meaningfully different outcomes.
-- You genuinely cannot determine the correct one from context after exhausting your own reasoning.
+Both of the following must be true:
+- There are **≥ 3** meaningfully different outcomes.
 - Choosing wrong would require significant rework to correct.
 
-If any condition is not met, decide autonomously.
+If either condition is not met, decide autonomously.
+
+**Situation 3 — Node type ambiguity:**
+
+Call `RequestSelection` when the target node type is not unambiguously specified (e.g. "add a node" without naming the type, or multiple types could fit the description).
+
+**Property value uncertainty protocol:**
+
+When a property value is not provided and cannot be inferred with certainty:
+1. Inform the user and ask: "Skip this property (use default) or get suggestions?"
+2. If **skip** → do nothing, leave the default value.
+3. If **get suggestions** → call `RequestSelection` with reasonable value options.
 
 **When NOT to call:**
 
@@ -35,3 +53,5 @@ If any condition is not met, decide autonomously.
 - Any decision you can resolve with reasonable confidence. Exhaust your own reasoning first — this situation must remain rare.
 
 > Default posture: decide autonomously. Surface only genuine, costly semantic forks.
+
+> **Important**: Do **NOT** ask the user to choose in message text. If none of the call conditions above are met, decide autonomously — writing a question in your reply is not a substitute for `RequestSelection`.

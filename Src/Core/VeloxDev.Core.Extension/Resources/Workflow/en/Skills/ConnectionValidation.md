@@ -8,6 +8,7 @@ The framework may **silently reject** a connection attempt. All Connect tools ve
 2. **Same-node connection**: Sender and receiver belong to the same node — always rejected.
 3. **Developer `ValidateConnection` rule**: The tree's helper has custom validation logic. This is opaque. If rejected for this reason, inform the user.
 4. **Channel capacity limit**: One-target/one-source channels may already be at capacity. You may need to disconnect the existing connection first.
+5. **Same-direction connection dedup**: When connecting two nodes that already have an existing connection in the same direction, the framework **silently deletes the old connection first**. The result is a replacement, not a parallel connection. This happens automatically — you do NOT need to call `DisconnectSlots` before `ConnectSlots` for the same node pair.
 
 ### Recovery Strategy
 

@@ -14,9 +14,9 @@ namespace Demo.ViewModels.Workflow.Helper;
 
 public class AgentHelper() : TreeHelper<TreeViewModel>(200)
 {
-    private const string EnvironmentVariableName = "API_KEY_QWEN";
-    private const string Endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1";
-    private const string Model = "qwen-plus";
+    private const string EnvironmentVariableName = "API_KEY_DEEPSEEK";
+    private const string Endpoint = "https://api.deepseek.com";
+    private const string Model = "deepseek-v4-flash";
 
     public ChatClientAgent? Agent;
     public AgentSession? Session;
@@ -84,7 +84,9 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         var scope = tree.AsAgentScope()
             .WithPromptLanguage(AgentLanguages.English)   // 默认提示词语言
             .WithOutputLanguage(AgentLanguages.Chinese)   // 默认输出语言
-            .WithAutoDiscovery(assemblyName: "Lib") // 从程序集自动发现组件
+            // 从程序集自动发现组件
+            .WithAutoDiscovery(assemblyName: "VeloxDev.Core")
+            .WithAutoDiscovery(assemblyName: "Lib") 
             .WithAutoMarkDirty(false)               // 视图是否自动标记为脏
             .WithMaxToolCalls(200)                  // 最大工具调用数
             .WithToolCallCallback(args =>           // 工具调用回调

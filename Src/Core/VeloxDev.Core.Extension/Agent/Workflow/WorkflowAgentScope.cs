@@ -43,6 +43,12 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerData = [];
 
+    /// <summary>
+    /// Tracks types already discovered by <see cref="WithAutoDiscovery"/> across all languages.
+    /// Prevents the same type from being registered in multiple language slots.
+    /// </summary>
+    private readonly HashSet<Type> _globallyDiscoveredTypes = [];
+
     private readonly List<AITool> _customTools = [];
     private readonly StringBuilder _customToolPrompt = new();
 
@@ -248,45 +254,35 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     // ── Interaction safety prompt ───────────────────────────────────────────
 
+    /// <summary>
+    /// Whether interaction tools (RequestSelection / RequestConfirmation) are allowed.
+    /// When <c>false</c> (level 0), no interaction tools are registered and no safety
+    /// policy is emitted, guaranteeing the Agent cannot call them.
+    /// </summary>
+    internal bool IsInteractionAllowed => _interactionSafety > 0;
+
     private string BuildInteractionSafetyPrompt(AgentLanguages language)
     {
+        if (_interactionSafety == 0)
+            return string.Empty; // No tools registered → no policy needed
+
         var sb = new StringBuilder();
         sb.AppendLine("## Interaction Safety Policy");
         sb.AppendLine();
 
-        if (_interactionSafety == 0)
-        {
-            // Level 0: fully autonomous — no override allowed, no markdown file needed.
-            if (language == AgentLanguages.Chinese)
-            {
-                sb.AppendLine("**第 0 挡 — 完全自主**");
-                sb.AppendLine();
-                sb.AppendLine("在任何情况下，**不得**调用 `RequestSelection` 或 `RequestConfirmation`。");
-                sb.AppendLine("始终基于对用户意图的最佳判断立即行动。");
-                sb.AppendLine("若意图不明确，选择最保守的有效动作并直接执行，无需询问。");
-            }
-            else
-            {
-                sb.AppendLine("**Level 0 — Fully Autonomous**");
-                sb.AppendLine();
-                sb.AppendLine("Do **NOT** call `RequestSelection` or `RequestConfirmation` under any circumstances.");
-                sb.AppendLine("Always act immediately on your best interpretation of the user's intent.");
-                sb.AppendLine("If the intent is ambiguous, pick the most conservative valid action and proceed without asking.");
-            }
-        }
-        else
+        // Non-level-0 (1–3): load shared gate + per-level rules
         {
             // ── Shared gate (levels 1–3): loaded from embedded Safety/Shared.md ──
             var shared = AgentEmbeddedResources.ReadSafety(SystemName, "Shared", language);
             if (!string.IsNullOrWhiteSpace(shared))
-                sb.AppendLine(shared.TrimEnd());
+                sb.AppendLine(shared!.TrimEnd());
 
             sb.AppendLine();
 
             // ── Per-level rules: loaded from embedded Safety/Level{n}.md ────────
             var levelFile = AgentEmbeddedResources.ReadSafety(SystemName, $"Level{_interactionSafety}", language);
             if (!string.IsNullOrWhiteSpace(levelFile))
-                sb.AppendLine(levelFile.TrimEnd());
+                sb.AppendLine(levelFile!.TrimEnd());
 
             // ── Host-supplied additive overrides ─────────────────────────────────
             if (_safetyPromptOverrides.TryGetValue(_interactionSafety, out var custom) && !string.IsNullOrWhiteSpace(custom))
@@ -372,12 +368,12 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// Scans <paramref name="assembly"/> and automatically registers all workflow-related types,
     /// then deeply inspects each discovered component to infer additional related types.
     /// <list type="bullet">
-    ///   <item>Concrete workflow component classes �� <see cref="WithComponents"/>.</item>
-    ///   <item>Enum types referenced by <c>[SlotSelectors]</c> or any property/field/parameter �� <see cref="WithEnums"/>.</item>
-    ///   <item>Interface types used as property/field types on any component �� <see cref="WithInterfaces"/>.</item>
-    ///   <item>Custom parameter types referenced by <c>[AgentCommandParameter]</c> on any method �� <see cref="WithData"/>.</item>
-    ///   <item>Non-workflow classes/structs decorated with <c>[AgentContext]</c> �� <see cref="WithData"/>.</item>
-    ///   <item>Non-primitive value-object structs found on component properties �� <see cref="WithData"/>.</item>
+    ///   <item>Concrete workflow component classes → <see cref="WithComponents"/>.</item>
+    ///   <item>Enum types referenced by <c>[SlotSelectors]</c> or any property/field/parameter → <see cref="WithEnums"/>.</item>
+    ///   <item>Interface types used as property/field types on any component → <see cref="WithInterfaces"/>.</item>
+    ///   <item>Custom parameter types referenced by <c>[AgentCommandParameter]</c> on any method → <see cref="WithData"/>.</item>
+    ///   <item>Non-workflow classes/structs decorated with <c>[AgentContext]</c> → <see cref="WithData"/>.</item>
+    ///   <item>Non-primitive value-object structs found on component properties → <see cref="WithData"/>.</item>
     /// </list>
     /// Already-registered types and framework built-in types are never re-added.
     /// </summary>
@@ -398,6 +394,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         foreach (var type in assembly.GetTypes())
         {
             if (type.IsAbstract || type.IsInterface) continue;
+            if (!_globallyDiscoveredTypes.Add(type)) continue; // already discovered by a prior call
 
             bool isWorkflowComponent = nodeBase.IsAssignableFrom(type)
                 || slotBase.IsAssignableFrom(type)
@@ -457,8 +454,12 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
             CollectSlotSelectorTypes(selAttr, lang);
             if (paramAttr?.ParameterType is { } ppt)
+            {
                 TryRegisterData(ppt, lang, workflowBase);
+                RegisterGenericTypeArguments(ppt, lang, workflowBase);
+            }
             TryRegisterMemberType(prop.PropertyType, lang, workflowBase);
+            RegisterGenericTypeArguments(prop.PropertyType, lang, workflowBase);
         }
 
         // --- Fields (backing fields of [VeloxProperty]; attributes allowed there too) ---
@@ -466,17 +467,27 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         {
             CollectSlotSelectorTypes(field.GetCustomAttribute<SlotSelectorsAttribute>(), lang);
             if (field.GetCustomAttribute<AgentCommandParameterAttribute>()?.ParameterType is { } fpt)
+            {
                 TryRegisterData(fpt, lang, workflowBase);
+                RegisterGenericTypeArguments(fpt, lang, workflowBase);
+            }
             TryRegisterMemberType(field.FieldType, lang, workflowBase);
+            RegisterGenericTypeArguments(field.FieldType, lang, workflowBase);
         }
 
         // --- Methods: [AgentCommandParameter] + declared parameter types ---
         foreach (var method in type.GetMethods(allInstance))
         {
             if (method.GetCustomAttribute<AgentCommandParameterAttribute>()?.ParameterType is { } mpt)
+            {
                 TryRegisterData(mpt, lang, workflowBase);
+                RegisterGenericTypeArguments(mpt, lang, workflowBase);
+            }
             foreach (var p in method.GetParameters())
+            {
                 TryRegisterMemberType(p.ParameterType, lang, workflowBase);
+                RegisterGenericTypeArguments(p.ParameterType, lang, workflowBase);
+            }
         }
     }
 
@@ -515,7 +526,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         if (type.IsInterface) { TryRegisterInterface(type, lang);           return; }
         if (type.IsValueType) { TryRegisterData(type, lang, workflowBase); return; }
 
-        // Reference class carrying [AgentContext] �� Data
+        // Reference class carrying [AgentContext] → Data
         if (type.GetCustomAttributes<AgentContextAttribute>().Any())
             TryRegisterData(type, lang, workflowBase);
     }
@@ -556,10 +567,27 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return ns.StartsWith("System") || ns.StartsWith("Microsoft") || ns.StartsWith("VeloxDev.WorkflowSystem");
     }
 
+    /// <summary>
+    /// Recursively extracts all generic type arguments from a type and registers them.
+    /// Handles multi-parameter generics (e.g. Dictionary&lt;string, MyEnum&gt;) that
+    /// <see cref="UnwrapGeneric"/> cannot fully unwrap.
+    /// </summary>
+    private void RegisterGenericTypeArguments(Type type, AgentLanguages lang, Type workflowBase)
+    {
+        if (!type.IsGenericType) return;
+        foreach (var arg in type.GetGenericArguments())
+        {
+            TryRegisterMemberType(arg, lang, workflowBase);
+            // Recurse in case the argument itself is generic (e.g. List&lt;Dictionary&lt;string, MyEnum&gt;&gt;)
+            RegisterGenericTypeArguments(arg, lang, workflowBase);
+        }
+    }
+
     private void TryRegisterEnum(Type type, AgentLanguages lang)
     {
         if (!type.IsEnum || IsFrameworkBuiltin(type)) return;
         if (CustomerEnums.TryGetValue(lang, out var set) && set.Contains(type)) return;
+        if (!_globallyDiscoveredTypes.Add(type)) return; // already registered under a different language
         WithEnums([type], lang);
     }
 
@@ -567,6 +595,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     {
         if (!type.IsInterface || IsFrameworkBuiltin(type)) return;
         if (CustomerInterfaces.TryGetValue(lang, out var set) && set.Contains(type)) return;
+        if (!_globallyDiscoveredTypes.Add(type)) return; // already registered under a different language
         WithInterfaces([type], lang);
     }
 
@@ -577,6 +606,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         if (workflowBase.IsAssignableFrom(type)) return;
         if (CustomerComponents.TryGetValue(lang, out var cs) && cs.Contains(type)) return;
         if (CustomerData.TryGetValue(lang, out var ds) && ds.Contains(type)) return;
+        if (!_globallyDiscoveredTypes.Add(type)) return; // already registered under a different language
         WithData([type], lang);
     }
 
@@ -642,6 +672,56 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("# Workflow Agent Context (Progressive)");
         result.AppendLine();
         result.AppendLine("> You are an Agent that fully operates a visual workflow editor via tools.");
+        result.AppendLine();
+
+        // ── Global Behavioral Constraints ──
+        result.AppendLine("## ⚠ Critical Behavioral Constraints");
+        result.AppendLine();
+        result.AppendLine("These constraints apply to ALL operations. Violations cause SILENT failures (no error, no effect).");
+        result.AppendLine();
+        result.AppendLine("### 1. Mount-before-operate");
+        result.AppendLine("Nodes MUST be added to the Tree (via `CreateNode` / `CloneNodes`) before any operation on their internals.");
+        result.AppendLine("Operating on an unmounted node (`Parent == null`) results in " + (language == AgentLanguages.Chinese ? "**静默无操作**——框架不报错，操作不生效" : "**silent no-op** — the framework returns without error and the operation has no effect") + ".");
+        result.AppendLine("Always use a `nodeIndex` or `runtimeId` obtained from `ListNodes` / `CreateNode` to reference nodes.");
+        result.AppendLine();
+        result.AppendLine("### 2. Delete cascading (do NOT pre-clean)");
+        result.AppendLine("Deleting a node (`DeleteNode`) triggers `StandardDelete` which performs an **atomic 4-phase cascade** wrapped in a single undoable action:");
+        result.AppendLine("**Phase 1** — Collect all valid links (both endpoints in the same Tree) via `LinksMap` lookup. Deduplicates them.");
+        result.AppendLine("**Phase 2** — Remove every link: delete from `LinksMap`, `Links`, `Sender.Targets`, `Receiver.Sources`, set `IsVisible = false`.");
+        result.AppendLine("**Phase 3** — Null every slot's `Parent`, then remove node from `tree.Nodes` and null `node.Parent`.");
+        result.AppendLine("**Phase 4** — Batch-update affected slot states via `UpdateState()`.");
+        result.AppendLine("You do NOT need to call `DisconnectSlots` or `DeleteSlot` before `DeleteNode`. The cascade is complete and atomic.");
+        result.AppendLine();
+        result.AppendLine("Deleting a slot (`DeleteSlot`) triggers `StandardDelete` which:");
+        result.AppendLine("**1** — Collects all links touching this slot (both as sender and as receiver) via `LinksMap`.");
+        result.AppendLine("**2** — Delegates to each link's `link.GetHelper().Delete()` (which removes from all 6 collections and calls `UpdateState()` on both endpoints).");
+        result.AppendLine("**3** — Removes the slot from `parent.Slots` and nulls `slot.Parent`. (Undoable when the node is in a Tree; direct removal otherwise.)");
+        result.AppendLine("You do NOT need to manually disconnect slot connections before `DeleteSlot`.");
+        result.AppendLine();
+        result.AppendLine("### 3. Connection auto-dedup");
+        result.AppendLine("When connecting two nodes that already share a same-direction connection, the framework silently replaces the old connection.");
+        result.AppendLine("You do NOT need to call `DisconnectSlots` before `ConnectSlots` for the same node pair.");
+        result.AppendLine();
+        result.AppendLine("### 4. Reference integrity");
+        result.AppendLine("Node indices shift after `CreateNode`, `DeleteNode`, `DeleteSlot`, `CloneNodes`. Always refresh after structural changes.");
+        result.AppendLine("Runtime IDs are stable for the lifetime of a component, except SlotEnumerator slots which are rebuilt on selector change.");
+        result.AppendLine();
+        result.AppendLine("### 5. Patch restrictions");
+        result.AppendLine("NEVER patch: `Parent`, `Nodes`, `Links`, `Slots`, `Targets`, `Sources`, `State`, `RuntimeId`, `Helper`.");
+        result.AppendLine("Properties backed by commands (Anchor → SetAnchorCommand) must use dedicated tools (`SetNodePosition`, `ResizeNode`, `SetSlotChannel`).");
+        result.AppendLine("Slot-typed properties are auto-created by the source generator — do NOT assign or patch them.");
+        result.AppendLine("`[SlotSelectors]`-marked properties must use `SetEnumSlotCollection`, not `PatchNodeProperties`.");
+        result.AppendLine();
+        result.AppendLine("### 6. Prefer mutate in-place; fall back to delete+recreate when needed");
+        result.AppendLine("ALWAYS prefer in-place mutation over delete+recreate. Deleting a node destroys its identity, all slots, and all connections.");
+        result.AppendLine("The following changes are all possible **without** deleting the node:");
+        result.AppendLine("- Change properties → `PatchNodeProperties` / `PatchComponentById`");
+        result.AppendLine("- Change SlotEnumerator selector type → `SetEnumSlotCollection` (on the existing node)");
+        result.AppendLine("- Add/remove slots → `AddSlotToCollection` / `RemoveSlotFromCollection` / `CreateSlotOnNode`");
+        result.AppendLine("- Resize → `ResizeNode`");
+        result.AppendLine("- Reposition → `SetNodePosition` / `MoveNode`");
+        result.AppendLine("- Reconnect → `ConnectSlots` / `DisconnectSlots` / `ReplaceConnection`");
+        result.AppendLine("Only use `DeleteNode` / `DeleteNodes` when the user explicitly asks to remove a node, or when in-place mutation is genuinely impossible (e.g. the node type itself must change). If a patch is rejected, first try the suggested alternative tool; if that also fails, delete+recreate is acceptable as a last resort.");
         result.AppendLine();
 
         // ── Built-in References ──

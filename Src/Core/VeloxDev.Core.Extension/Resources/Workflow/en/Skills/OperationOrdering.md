@@ -26,6 +26,18 @@ You MUST follow this lifecycle ordering — the same order a human developer use
 | SetEnumSlotCollection before CreateNode | OutputSlots are created but OnWorkflowSlotAdded cannot register them |
 | ExecuteWork before connections | Work produces no downstream effects |
 
+### ⚠ Silent Skip Warning
+
+If you violate the ordering above, the framework's extension methods will **silently return without executing anything and without reporting any error**. You will see `status: "ok"` but the operation had **no effect**.
+
+| Violation | Actual consequence |
+|---|---|
+| Operate on a node that has NOT been added to the Tree (`Parent == null`) | `DeleteNode` / `SetSlotChannel` / `DisconnectAllFromSlot` → **silent no-op**. `CreateSlotOnNode` → adds slot **without undo registration** |
+| Operate on a slot whose `Parent == null` | `DeleteSlot` → **silent no-op** |
+| Operate on a link whose `Sender?.Parent?.Parent == null` | `DeleteCommand` → **silent no-op** |
+
+**Always** obtain a valid `nodeIndex` or `runtimeId` from `ListNodes` / `CreateNode` before operating on a node's internals. Never assume a node exists unless you just created it or queried it.
+
 ### BatchExecute Ordering
 
 Operations inside a **BatchExecute** call are executed **sequentially in array order**. You MUST list them in the correct lifecycle order: CreateNode → Patch → Slot → Connect → Execute.

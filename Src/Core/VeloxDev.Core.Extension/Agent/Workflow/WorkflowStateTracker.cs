@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Threading;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.AI.Workflow;
@@ -31,7 +32,7 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
     {
         var snapshot = BuildSnapshot();
         _lastSnapshot = snapshot;
-        _version++;
+        Interlocked.Increment(ref _version);
         return snapshot.ToString(Formatting.Indented);
     }
 
@@ -47,7 +48,7 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
         if (_lastSnapshot == null)
         {
             _lastSnapshot = current;
-            _version++;
+            Interlocked.Increment(ref _version);
             return JsonConvert.SerializeObject(new
             {
                 status = "full",
@@ -59,7 +60,7 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
 
         var diff = ComputeDiff(_lastSnapshot, current);
         _lastSnapshot = current;
-        _version++;
+        Interlocked.Increment(ref _version);
 
         return JsonConvert.SerializeObject(new
         {

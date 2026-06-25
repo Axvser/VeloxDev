@@ -26,6 +26,18 @@
 | SetEnumSlotCollection 在 CreateNode 之前 | OutputSlots 被创建但 OnWorkflowSlotAdded 无法在树中注册它们 |
 | ExecuteWork 在连接建立之前 | 工作产生无下游效果 |
 
+### ⚠ 静默跳过警告
+
+如果违反以上顺序，框架的扩展方法将**静默返回，不执行任何操作，也不报告任何错误**。你会看到 `status: "ok"`，但实际上操作**没有任何效果**。
+
+| 违规操作 | 实际后果 |
+|---|---|
+| 在**未添加到 Tree** 的节点上操作（`Parent == null`） | `DeleteNode` / `SetSlotChannel` / `DisconnectAllFromSlot` → **静默无操作**。`CreateSlotOnNode` → 添加插槽但**无撤销注册** |
+| 在 `Parent == null` 的插槽上操作 | `DeleteSlot` → **静默无操作** |
+| 在 `Sender?.Parent?.Parent == null` 的连接上操作 | `DeleteCommand` → **静默无操作** |
+
+**始终**通过 `ListNodes` / `CreateNode` 获取有效的 `nodeIndex` 或 `runtimeId` 后再操作节点内部。除非你刚刚创建或查询了节点，否则不要假设节点存在。
+
 ### BatchExecute 顺序规则
 
 **BatchExecute** 调用中的操作按**数组顺序依次执行**。  
