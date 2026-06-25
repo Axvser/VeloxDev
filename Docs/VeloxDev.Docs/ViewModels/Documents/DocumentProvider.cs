@@ -58,9 +58,9 @@ public partial class DocumentProvider : IWikiElement
         new("fa", "🌐 فارسی"),
     ];
 
-    /// <summary>Top 5 languages shown in the document-language selector on the left toolbar.</summary>
+    /// <summary>Top 2 languages shown in the document-language selector on the left toolbar.</summary>
     public static IReadOnlyList<LanguageOption> TopLanguages { get; } =
-        [.. AvailableLanguages.Take(5)];
+        [.. AvailableLanguages.Take(2)];
 
     [VeloxProperty] private IWikiElement? parent = null;
     [VeloxProperty][Newtonsoft.Json.JsonIgnore] public partial ObservableCollection<IWikiElement> Children { get; set; }

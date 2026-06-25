@@ -12,9 +12,9 @@ namespace VeloxDev.Docs.Translation;
 /// </summary>
 public static class WikiTranslatorSettings
 {
-    private const string EnvironmentVariableName = "DASHSCOPE_API_KEY";
-    private const string DefaultEndpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1";
-    private const string DefaultModel = "qwen-plus";
+    private const string EnvironmentVariableName = "API_KEY_DEEPSEEK";
+    private const string DefaultEndpoint = "https://api.deepseek.com";
+    private const string DefaultModel = "deepseek-v4-flash";
 
     // Per-user key file: %APPDATA%\VeloxDev\Docs\dashscope.key  (or ~/.config/... on Linux/macOS)
     private static readonly string _keyFilePath = Path.Combine(
