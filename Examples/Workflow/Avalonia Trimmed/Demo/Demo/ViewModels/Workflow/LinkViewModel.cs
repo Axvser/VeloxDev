@@ -1,9 +1,7 @@
-﻿using VeloxDev.AOT;
-using VeloxDev.WorkflowSystem;
+﻿using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels.Workflow
 {
-    [AOTReflection]
     [WorkflowBuilder.Link<LinkHelper>]
     internal partial class LinkViewModel
     {

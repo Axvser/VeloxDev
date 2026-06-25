@@ -1,11 +1,8 @@
-﻿using VeloxDev.AI;
-using VeloxDev.AOT;
-using VeloxDev.MVVM;
+﻿using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels.Workflow
 {
-    [AOTReflection]
     [WorkflowBuilder.Node<NodeHelper>]
     internal partial class NodeViewModel
     {

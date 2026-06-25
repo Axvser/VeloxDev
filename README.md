@@ -33,7 +33,6 @@ The workflow system is the core. Everything else exists to make workflows **more
 | 🎨 **Theme** | Runtime theme switching with animated transitions — instant visual identity for your editor | ✔ |
 | 🌀 **AOP** | Compile-time aspect proxies — intercept node execution, add logging or validation without modifying business logic | ❌ |
 | ⚙️ **MonoBehaviour** | Frame-driven lifecycle loop — tick-based node simulation or real-time graph execution | ❌ |
-| 📦 **AOT Reflection** | Source-generated reflection preservation — keeps workflow introspection working after trimming and AOT compilation | ❌ |
 
 ---
 
@@ -49,7 +48,6 @@ Pick the adapter for your GUI framework and you get everything — workflow, age
 | Avalonia | `VeloxDev.Avalonia` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Avalonia?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Avalonia/) |
 | WinUI | `VeloxDev.WinUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinUI/) |
 | MAUI | `VeloxDev.MAUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) |
-| WinForms | `VeloxDev.WinForms` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinForms?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinForms/) |
 
 ### Build a WPF workflow view suite with the CLI
 
