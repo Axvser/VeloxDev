@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using VeloxDev.Generators.Base;
 using static VeloxDev.Generators.Base.Analizer;
 
 namespace VeloxDev.Generators.Writers
@@ -37,8 +38,59 @@ namespace VeloxDev.Generators.Writers
             ReadAutoProperties(namedTypeSymbol);
         }
 
+        // ── Framework-aware detection ──
+        private SetterMode DetectSetterMode(INamedTypeSymbol symbol)
+        {
+            // Check for CommunityToolkit.Mvvm (ObservableObject / ObservableValidator / [ObservableObject])
+            if (HasAttributeInHierarchy(symbol, "global::CommunityToolkit.Mvvm.ComponentModel.ObservableObjectAttribute"))
+                return SetterMode.FrameworkSetProperty;
+
+            // Check for Prism (BindableBase)
+            if (ImplementsInterface(symbol, "global::System.ComponentModel.INotifyPropertyChanged"))
+            {
+                // BindableBase has SetProperty<T>(ref T, T, string) — check via method presence
+                var bindableBase = symbol.BaseType;
+                while (bindableBase != null && bindableBase.SpecialType != SpecialType.System_Object)
+                {
+                    var fullName = bindableBase.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    if (fullName == "global::Prism.Mvvm.BindableBase")
+                        return SetterMode.FrameworkSetProperty;
+                    
+                    // Also match generic pattern: any base with SetProperty(ref T, T, string)
+                    var hasSetProp = bindableBase.GetMembers("SetProperty")
+                        .OfType<IMethodSymbol>()
+                        .Any(m => !m.IsStatic && m.Parameters.Length >= 2 &&
+                                  m.Parameters[0].RefKind == RefKind.Ref);
+                    if (hasSetProp)
+                        return SetterMode.FrameworkSetProperty;
+
+                    bindableBase = bindableBase.BaseType;
+                }
+            }
+
+            // Check for ReactiveUI (ReactiveObject)
+            if (ImplementsInterface(symbol, "global::ReactiveUI.IReactiveObject"))
+                return SetterMode.FrameworkRaiseAndSet;
+
+            // Check for Caliburn.Micro (PropertyChangedBase)
+            var baseType = symbol.BaseType;
+            while (baseType != null && baseType.SpecialType != SpecialType.System_Object)
+            {
+                var hasNotifyOf = baseType.GetMembers("NotifyOfPropertyChange")
+                    .OfType<IMethodSymbol>()
+                    .Any(m => !m.IsStatic && m.Parameters.Length == 1 &&
+                              m.Parameters[0].Type.SpecialType == SpecialType.System_String);
+                if (hasNotifyOf)
+                    return SetterMode.FrameworkNotifyOfPropertyChange;
+                baseType = baseType.BaseType;
+            }
+
+            return SetterMode.Default;
+        }
+
         private void ReadMVVMConfig(INamedTypeSymbol symbol)
         {
+            var setterMode = DetectSetterMode(symbol);
             MVVMProperties =
             [
                 .. symbol.GetMembers()
@@ -52,6 +104,7 @@ namespace VeloxDev.Generators.Writers
                         var analizer = new MVVMFieldAnalizer(field);
                         var factory = new MVVMPropertyFactory(analizer, "public", false)
                         {
+                            FrameworkSetterMode = setterMode,
                             SetteringBody = [$"OnPropertyChanging(nameof({analizer.PropertyName}));"],
                             SetteredBody = [$"OnPropertyChanged(nameof({analizer.PropertyName}));"],
                         };
@@ -63,6 +116,7 @@ namespace VeloxDev.Generators.Writers
 
         private void ReadAutoProperties(INamedTypeSymbol symbol)
         {
+            var setterMode = DetectSetterMode(symbol);
             AutoProperties =
             [
                 .. symbol.GetMembers()
@@ -76,6 +130,7 @@ namespace VeloxDev.Generators.Writers
                         var analizer = new MVVMPropertyAnalizer(property);
                         var factory = new MVVMPropertyFactory(analizer, "public", false)
                         {
+                            FrameworkSetterMode = setterMode,
                             SetteringBody = analizer.HasSetter ? [$"OnPropertyChanging(nameof({analizer.PropertyName}));"] : [],
                             SetteredBody = analizer.HasSetter ? [$"OnPropertyChanged(nameof({analizer.PropertyName}));"] : [],
                         };
@@ -273,9 +328,10 @@ namespace VeloxDev.Generators.Writers
 
             var methodName = isChanging ? "OnPropertyChanging" : "OnPropertyChanged";
             var eventArgsMethod = FindMethodInHierarchy(symbol, methodName, eventArgsType);
-            if (eventArgsMethod != null)
-                return $"{methodName}(new {eventArgsType}(propertyName));";
 
+            // Check framework-specific forwarding names FIRST.
+            // For Caliburn.Micro: prefer NotifyOfPropertyChange over OnPropertyChanged(PropertyChangedEventArgs)
+            // to respect IsNotifying check. For Prism: prefer RaisePropertyChanged for consistency.
             var forwardingNames = isChanging
                 ? new[] { "RaisePropertyChanging", "NotifyOfPropertyChanging" }
                 : new[] { "RaisePropertyChanged", "NotifyOfPropertyChange" };
@@ -285,6 +341,11 @@ namespace VeloxDev.Generators.Writers
                     return $"{forwardingName}(propertyName);";
             }
 
+            // Fall back to EventArgs-based method if available (e.g. CommunityToolkit.Mvvm ObservableObject)
+            if (eventArgsMethod != null)
+                return $"{methodName}(new {eventArgsType}(propertyName));";
+
+            // ReactiveUI uses extension methods
             if (ImplementsInterface(symbol, "global::ReactiveUI.IReactiveObject"))
             {
                 var extensionMethod = isChanging ? "RaisePropertyChanging" : "RaisePropertyChanged";

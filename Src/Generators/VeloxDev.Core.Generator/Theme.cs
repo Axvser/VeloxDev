@@ -102,10 +102,13 @@ namespace VeloxDev.Generators
             });
         }
 
+        private const string ThemeCacheFullName = "global::VeloxDev.DynamicTheme.ThemeCache";
+
         private string GenerateThemeConfigClass(INamedTypeSymbol classSymbol, IEnumerable<AttributeData> attributes)
         {
             var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
             var className = classSymbol.Name;
+            var classFullTypeName = $"global::{classSymbol.ToDisplayString()}";
             var isPartial = classSymbol.DeclaringSyntaxReferences
                 .Any(r => ((ClassDeclarationSyntax)r.GetSyntax()).Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)));
 
@@ -114,33 +117,62 @@ namespace VeloxDev.Generators
                 return string.Empty;
             }
 
-            var converterInstances = new Dictionary<string, string>();
-            var propertyConverters = new Dictionary<string, string>();
-            var propertyInfos = new Dictionary<string, string>();
-            var themeCache = new Dictionary<string, Dictionary<string, Dictionary<string, string>>>();
+            // ── Detect if base type already implements IThemeObject ──
+            bool baseHasIThemeObject = false;
+            bool baseHasOurThemeConfig = false;
+            if (classSymbol.BaseType != null && classSymbol.BaseType.SpecialType != SpecialType.System_Object)
+            {
+                baseHasIThemeObject = classSymbol.BaseType.AllInterfaces.Any(i =>
+                    i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == IThemeObjectFullName);
 
-            var converterTypeToKey = new Dictionary<string, string>(StringComparer.Ordinal);
-            int converterIndex = 0;
+                // Check if any ancestor has ThemeConfigAttribute (meaning our generator handles it)
+                var checkType = classSymbol.BaseType;
+                while (checkType != null && checkType.SpecialType != SpecialType.System_Object)
+                {
+                    if (checkType.GetAttributes().Any(attr =>
+                            attr.AttributeClass?.Name.StartsWith("ThemeConfigAttribute") == true))
+                    {
+                        baseHasOurThemeConfig = true;
+                        break;
+                    }
+                    checkType = checkType.BaseType;
+                }
+            }
+
+            bool isSealed = classSymbol.IsSealed;
+            string methodModifier;
+            if (isSealed)
+                methodModifier = "";
+            else if (baseHasOurThemeConfig)
+                methodModifier = "override ";
+            else
+                methodModifier = "virtual ";
+
+            string baseCallInit = baseHasIThemeObject ? "base.InitializeTheme();" : "";
+            string baseCallChanging = baseHasIThemeObject ? "base.ExecuteThemeChanging(oldValue, newValue);" : "";
+            string baseCallChanged = baseHasIThemeObject ? "base.ExecuteThemeChanged(oldValue, newValue);" : "";
+            string addInterface = baseHasIThemeObject ? "" : $" : {IThemeObjectFullName}";
+
+            // Collect property configurations for ThemeCache registration
+            var configRegistrations = new List<string>();
+            var propertyNamesForInit = new List<string>();
 
             foreach (var attribute in attributes)
             {
-                // 1. 安全获取属性名（第一个构造函数参数）
                 var propertyName = attribute.ConstructorArguments[0].Value?.ToString();
                 if (string.IsNullOrEmpty(propertyName))
                     continue;
 
-                // 2. 获取转换器类型（第一个泛型参数）
                 var converterType = attribute.AttributeClass?.TypeArguments[0];
                 if (converterType == null)
                     continue;
                 var converterTypeName = converterType.ToDisplayString();
 
-                // 3. 获取属性符号（支持继承链查找）
+                // Find property symbol (walk inheritance chain)
                 var propertySymbol = classSymbol.GetMembers(propertyName!)
                     .OfType<IPropertySymbol>()
                     .FirstOrDefault();
 
-                // 递归查找基类属性
                 var baseType = classSymbol.BaseType;
                 while (propertySymbol == null && baseType != null)
                 {
@@ -151,31 +183,14 @@ namespace VeloxDev.Generators
                 }
 
                 if (propertySymbol == null)
-                {
-                    // 可以在此处添加诊断警告
                     continue;
-                }
 
-                // 4. 获取属性的完整类型信息（支持泛型、数组等）
                 var propertyTypeName = propertySymbol.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-                // 5. 处理转换器实例缓存
-                if (!converterTypeToKey.TryGetValue(converterTypeName, out var converterKey))
-                {
-                    converterKey = $"{converterTypeName.Replace(".", "_")}__Converter__{converterIndex++}";
-                    converterTypeToKey[converterTypeName] = converterKey;
+                // Build converter key (only placeholder—converter created inline)
+                var converterKey = $"__velox_conv_{converterTypeName.GetHashCode()}_{propertyName}__";
 
-                    converterInstances[converterKey] =
-                        $"private static readonly {IThemeValueConverterFullName} {converterKey} = " +
-                        $"({IThemeValueConverterFullName})global::System.Activator.CreateInstance(typeof(global::{converterTypeName}))!;";
-                }
-
-                // 6. 收集属性元数据
-                propertyConverters[propertyName!] = converterKey;
-                propertyInfos[propertyName!] =
-                    $"{{ nameof({propertyName}), typeof(global::{classSymbol.ToDisplayString()}).GetProperty(nameof({propertyName}))! }}";
-
-                // 7. 处理主题上下文参数（从第二个构造函数参数开始）
+                // Process theme context parameters
                 var themeContexts = new List<string>();
                 for (int i = 1; i < attribute.ConstructorArguments.Length; i++)
                 {
@@ -202,7 +217,7 @@ namespace VeloxDev.Generators
                     themeContexts.Add($"[{string.Join(", ", contextElements)}]");
                 }
 
-                // 8. 获取主题类型（从第二个泛型参数开始）
+                // Get theme types
                 var themeTypes = new List<string>();
                 for (int i = 1; i < attribute.AttributeClass?.TypeArguments.Length; i++)
                 {
@@ -213,31 +228,42 @@ namespace VeloxDev.Generators
                     }
                 }
 
-                // 9. 初始化三层字典结构
-                if (!themeCache.TryGetValue(propertyName!, out var propertyCache))
-                {
-                    propertyCache = [];
-                    themeCache[propertyName!] = propertyCache;
-                }
-
-                if (!propertyCache.TryGetValue(propertyName!, out var typeCache))
-                {
-                    typeCache = [];
-                    propertyCache[propertyName!] = typeCache;
-                }
-
-                // 10. 为每个主题类型添加转换值
+                // Build theme value expressions
+                var themeValueExprs = new List<string>();
                 for (int i = 0; i < Math.Min(themeTypes.Count, themeContexts.Count); i++)
                 {
-                    typeCache[themeTypes[i]] =
-                        $"{converterKey}.Convert(typeof({propertyTypeName}), nameof({propertyName}), {themeContexts[i]})";
+                    var convertExpr =
+                        $"(({IThemeValueConverterFullName})global::System.Activator.CreateInstance(typeof(global::{converterTypeName}))!).Convert(typeof({propertyTypeName}), nameof({propertyName}), {themeContexts[i]})";
+                    themeValueExprs.Add(
+                        $"                            {{ typeof(global::{themeTypes[i]}), {convertExpr} }},");
                 }
+
+                var propertyExpr = $"typeof({classFullTypeName}).GetProperty(nameof({propertyName}))!";
+
+                // Build registration string for this property (used in InitializeTheme)
+                var themeDictEntries = string.Join("\n", themeValueExprs);
+                var regEntry = $$"""
+                                {
+                                    nameof({{propertyName}}),
+                                    (
+                                        {{propertyExpr}},
+                                        new global::System.Collections.Generic.Dictionary<global::System.Type, object?>()
+                                        {
+                            {{themeDictEntries}}
+                                        }
+                                    )
+                                },
+                    """;
+                configRegistrations.Add(regEntry);
+                propertyNamesForInit.Add(propertyName!);
             }
 
-            if (!propertyConverters.Any())
+            if (configRegistrations.Count == 0)
             {
                 return string.Empty;
             }
+
+            var registrationDict = string.Join("", configRegistrations);
 
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
@@ -246,167 +272,145 @@ namespace VeloxDev.Generators
             sb.AppendLine();
             sb.AppendLine($"namespace {namespaceName}");
             sb.AppendLine("{");
-            sb.AppendLine($"    public partial class {className} : {IThemeObjectFullName}");
+            sb.AppendLine($"    public partial class {className}{addInterface}");
             sb.AppendLine("    {");
 
-            foreach (var converter in converterInstances.Values)
-            {
-                sb.AppendLine($"        {converter}");
-            }
-            sb.AppendLine();
-
-            sb.AppendLine($"        private static readonly global::System.Collections.Generic.Dictionary<global::System.String, {IThemeValueConverterFullName}> __velox__Converters__ = new()");
+            // ── ExecuteThemeChanging ──
+            sb.AppendLine($"        public {methodModifier}void ExecuteThemeChanging(global::System.Type? oldValue, global::System.Type? newValue)");
             sb.AppendLine("        {");
-            foreach (var kvp in propertyConverters)
-            {
-                sb.AppendLine($"            {{ nameof({kvp.Key}), {kvp.Value} }},");
-            }
-            sb.AppendLine("        };");
-            sb.AppendLine();
-
-            sb.AppendLine("        public static readonly global::System.Collections.Generic.Dictionary<global::System.String, global::System.Reflection.PropertyInfo> __velox_Theme__Props__ = new()");
-            sb.AppendLine("        {");
-            foreach (var kvp in propertyInfos)
-            {
-                sb.AppendLine($"            {kvp.Value},");
-            }
-            sb.AppendLine("        };");
-            sb.AppendLine();
-
-            sb.AppendLine("        public static readonly global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>> __velox__Def__ThemeCache__ = new()");
-            sb.AppendLine("        {");
-            foreach (var propertyEntry in themeCache)
-            {
-                sb.AppendLine($"            {{");
-                sb.AppendLine($"                nameof({propertyEntry.Key}),");
-                sb.AppendLine($"                new global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>()");
-                sb.AppendLine($"                {{");
-                sb.AppendLine($"                    {{");
-                sb.AppendLine($"                        __velox_Theme__Props__[nameof({propertyEntry.Key})],");
-                sb.AppendLine($"                        new global::System.Collections.Generic.Dictionary<global::System.Type, object?>()");
-                sb.AppendLine($"                        {{");
-
-                foreach (var themeEntry in propertyEntry.Value[propertyEntry.Key])
-                {
-                    sb.AppendLine($"                            {{ typeof(global::{themeEntry.Key}), {themeEntry.Value} }},");
-                }
-
-                sb.AppendLine($"                        }}");
-                sb.AppendLine($"                    }}");
-                sb.AppendLine($"                }}");
-                sb.AppendLine($"            }},");
-            }
-            sb.AppendLine("        };");
-            sb.AppendLine();
-
-            sb.AppendLine("        public global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>> __velox__Act__ThemeCache__ = new global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>>();");
-            sb.AppendLine();
-
-            sb.AppendLine("        public void ExecuteThemeChanging(global::System.Type? oldValue, global::System.Type? newValue)");
-            sb.AppendLine("        {");
+            if (!string.IsNullOrEmpty(baseCallChanging))
+                sb.AppendLine($"            {baseCallChanging}");
             sb.AppendLine("            OnThemeChanging(oldValue, newValue);");
             sb.AppendLine("        }");
             sb.AppendLine();
 
-            sb.AppendLine("        public void ExecuteThemeChanged(global::System.Type? oldValue, global::System.Type? newValue)");
+            // ── ExecuteThemeChanged ──
+            sb.AppendLine($"        public {methodModifier}void ExecuteThemeChanged(global::System.Type? oldValue, global::System.Type? newValue)");
             sb.AppendLine("        {");
+            if (!string.IsNullOrEmpty(baseCallChanged))
+                sb.AppendLine($"            {baseCallChanged}");
             sb.AppendLine("            OnThemeChanged(oldValue, newValue);");
             sb.AppendLine("        }");
             sb.AppendLine();
 
+            // ── Partial methods ──
             sb.AppendLine("        partial void OnThemeChanging(global::System.Type? oldValue, global::System.Type? newValue);");
             sb.AppendLine("        partial void OnThemeChanged(global::System.Type? oldValue, global::System.Type? newValue);");
             sb.AppendLine();
 
-            sb.AppendLine($"        public void SetThemeValue<T>(global::System.String propertyName, object? newValue) where T : {IThemeFullName}");
+            // ── SetThemeValue ──
+            sb.AppendLine($"        public {methodModifier}void SetThemeValue<T>(global::System.String propertyName, object? newValue) where T : {IThemeFullName}");
             sb.AppendLine("        {");
-            sb.AppendLine("            if (__velox__Act__ThemeCache__.TryGetValue(propertyName, out var propertyCache) &&");
-            sb.AppendLine("                propertyCache.TryGetValue(__velox_Theme__Props__[propertyName], out var typeCache))");
+            sb.AppendLine($"            var cache = {ThemeCacheFullName}.GetOrCreateActiveEntry(this);");
+            sb.AppendLine("            if (!cache.Overrides.TryGetValue(propertyName, out var propertyCache))");
             sb.AppendLine("            {");
-            sb.AppendLine("                typeCache[typeof(T)] = newValue;");
+            sb.AppendLine("                propertyCache = new global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>();");
+            sb.AppendLine("                cache.Overrides[propertyName] = propertyCache;");
             sb.AppendLine("            }");
-            sb.AppendLine("            else");
+            sb.AppendLine("            var propertyInfo = typeof(" + classFullTypeName + ").GetProperty(propertyName)!;");
+            sb.AppendLine("            if (!propertyCache.TryGetValue(propertyInfo, out var typeCache))");
             sb.AppendLine("            {");
-            sb.AppendLine("                if (!__velox__Act__ThemeCache__.TryGetValue(propertyName, out global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>? value))");
-            sb.AppendLine("                {");
-            sb.AppendLine("                    value = new global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>();");
-            sb.AppendLine("                    __velox__Act__ThemeCache__[propertyName] = value;");
-            sb.AppendLine("                }");
-            sb.AppendLine();
-
-            sb.AppendLine("                value[__velox_Theme__Props__[propertyName]] = new global::System.Collections.Generic.Dictionary<global::System.Type, object?> { { typeof(T), newValue } };");
+            sb.AppendLine("                typeCache = new global::System.Collections.Generic.Dictionary<global::System.Type, object?>();");
+            sb.AppendLine("                propertyCache[propertyInfo] = typeCache;");
             sb.AppendLine("            }");
+            sb.AppendLine("            typeCache[typeof(T)] = newValue;");
             sb.AppendLine("            UpdatePropertyToCurrentTheme(propertyName);");
             sb.AppendLine("        }");
             sb.AppendLine();
 
-            sb.AppendLine($"        public void RestoreThemeValue<T>(global::System.String propertyName) where T : {IThemeFullName}");
+            // ── RestoreThemeValue ──
+            sb.AppendLine($"        public {methodModifier}void RestoreThemeValue<T>(global::System.String propertyName) where T : {IThemeFullName}");
             sb.AppendLine("        {");
-            sb.AppendLine($"           __velox__Act__ThemeCache__.Remove(propertyName);");
+            sb.AppendLine($"            var cache = {ThemeCacheFullName}.TryGetActiveEntry(this);");
+            sb.AppendLine("            cache?.Overrides.Remove(propertyName);");
             sb.AppendLine("            UpdatePropertyToCurrentTheme(propertyName);");
             sb.AppendLine("        }");
             sb.AppendLine();
 
-            sb.AppendLine("        public global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>> GetStaticThemeCache() => __velox__Def__ThemeCache__;");
-            sb.AppendLine("        public global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>> GetActiveThemeCache() => __velox__Act__ThemeCache__;");
+            // ── GetStaticThemeCache ──
+            sb.AppendLine($"        public {methodModifier}global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>> GetStaticThemeCache()");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            return {ThemeCacheFullName}.GetStaticForType(this.GetType());");
+            sb.AppendLine("        }");
             sb.AppendLine();
 
-            sb.AppendLine("        public void UpdatePropertyToCurrentTheme(global::System.String propertyName)");
+            // ── GetActiveThemeCache ──
+            sb.AppendLine($"        public {methodModifier}global::System.Collections.Generic.Dictionary<global::System.String, global::System.Collections.Generic.Dictionary<global::System.Reflection.PropertyInfo, global::System.Collections.Generic.Dictionary<global::System.Type, object?>>> GetActiveThemeCache()");
             sb.AppendLine("        {");
-            sb.AppendLine("            if (!__velox_Theme__Props__.TryGetValue(propertyName, out var propertyInfo) || propertyInfo == null)");
-            sb.AppendLine("            {");
-            sb.AppendLine("                return;");
-            sb.AppendLine("            }");
-            sb.AppendLine("            ");
+            sb.AppendLine($"            return {ThemeCacheFullName}.GetOrCreateActiveEntry(this).Overrides;");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+
+            // ── UpdatePropertyToCurrentTheme ──
+            sb.AppendLine($"        public {methodModifier}void UpdatePropertyToCurrentTheme(global::System.String propertyName)");
+            sb.AppendLine("        {");
             sb.AppendLine("            var currentThemeType = " + ThemeManagerFullName + ".Current;");
-            sb.AppendLine("            if (currentThemeType == null)");
-            sb.AppendLine("            {");
-            sb.AppendLine("                return;");
-            sb.AppendLine("            }");
-            sb.AppendLine("            ");
+            sb.AppendLine("            if (currentThemeType == null) return;");
+            sb.AppendLine();
             sb.AppendLine("            object? value = null;");
-            sb.AppendLine("            ");
-            sb.AppendLine("            if (__velox__Act__ThemeCache__.TryGetValue(propertyName, out var propertyCache) &&");
-            sb.AppendLine("                propertyCache.TryGetValue(propertyInfo, out var typeCache) &&");
-            sb.AppendLine("                typeCache.TryGetValue(currentThemeType, out value))");
+            sb.AppendLine("            var found = false;");
+            sb.AppendLine();
+            sb.AppendLine($"            var activeEntry = {ThemeCacheFullName}.TryGetActiveEntry(this);");
+            sb.AppendLine("            if (activeEntry != null && activeEntry.Overrides.TryGetValue(propertyName, out var propCache))");
             sb.AppendLine("            {");
+            sb.AppendLine("                var pi = global::System.Linq.Enumerable.FirstOrDefault(propCache.Keys);");
+            sb.AppendLine("                if (pi != null && propCache[pi].TryGetValue(currentThemeType, out value))");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    found = true;");
+            sb.AppendLine("                }");
             sb.AppendLine("            }");
-            sb.AppendLine("            else if (__velox__Def__ThemeCache__.TryGetValue(propertyName, out var staticPropertyCache) &&");
-            sb.AppendLine("                     staticPropertyCache.TryGetValue(propertyInfo, out var staticTypeCache) &&");
-            sb.AppendLine("                     staticTypeCache.TryGetValue(currentThemeType, out value))");
+            sb.AppendLine();
+            sb.AppendLine("            if (!found)");
             sb.AppendLine("            {");
+            sb.AppendLine($"                found = {ThemeCacheFullName}.TryGetDefaultValue(this.GetType(), propertyName, currentThemeType, out value);");
             sb.AppendLine("            }");
-            sb.AppendLine("            else");
-            sb.AppendLine("            {");
-            sb.AppendLine("                return;");
-            sb.AppendLine("            }");
-            sb.AppendLine("            ");
-            sb.AppendLine("            try");
-            sb.AppendLine("            {");
-            sb.AppendLine("                propertyInfo.SetValue(this, value);");
-            sb.AppendLine("            }");
-            sb.AppendLine("            catch");
-            sb.AppendLine("            {");
-            sb.AppendLine("            }");
+            sb.AppendLine();
+            sb.AppendLine("            if (!found) return;");
+            sb.AppendLine();
+            sb.AppendLine("            var propertyInfo = typeof(" + classFullTypeName + ").GetProperty(propertyName);");
+            sb.AppendLine("            if (propertyInfo == null) return;");
+            sb.AppendLine("            try { propertyInfo.SetValue(this, value); } catch { }");
             sb.AppendLine("        }");
             sb.AppendLine();
 
-            sb.AppendLine("        public void UpdateAllPropertiesToCurrentTheme()");
+            // ── UpdateAllPropertiesToCurrentTheme ──
+            sb.AppendLine($"        public {methodModifier}void UpdateAllPropertiesToCurrentTheme()");
             sb.AppendLine("        {");
-            sb.AppendLine("            foreach (var propertyName in __velox_Theme__Props__.Keys)");
+            sb.AppendLine($"            var staticCache = {ThemeCacheFullName}.GetStaticForType(this.GetType());");
+            sb.AppendLine("            foreach (var propertyName in staticCache.Keys)");
             sb.AppendLine("            {");
             sb.AppendLine("                UpdatePropertyToCurrentTheme(propertyName);");
             sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine();
 
-            sb.AppendLine("        public void InitializeTheme()");
+            // ── InitializeTheme (with lazy registration) ──
+            sb.AppendLine($"        public {methodModifier}void InitializeTheme()");
             sb.AppendLine("        {");
+            // Lazy registration: only register if this type hasn't been registered yet
+            sb.AppendLine($"            if (!{ThemeCacheFullName}.IsTypeRegistered(typeof({classFullTypeName})))");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                {ThemeCacheFullName}.RegisterType(typeof({classFullTypeName}), new global::System.Collections.Generic.Dictionary<global::System.String, (global::System.Reflection.PropertyInfo Property, global::System.Collections.Generic.Dictionary<global::System.Type, object?> Values)>");
+            sb.AppendLine("                {");
+            sb.Append(registrationDict);
+            sb.AppendLine("                });");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+            // Call base initialization first (if applicable)
+            if (!string.IsNullOrEmpty(baseCallInit))
+                sb.AppendLine($"            {baseCallInit}");
+            // Register with ThemeManager and apply current theme values
             sb.AppendLine($"            {ThemeManagerFullName}.Register(this);");
-            foreach (var propertyName in propertyInfos.Keys)
-            {
-                sb.AppendLine($"            __velox_Theme__Props__[nameof({propertyName})].SetValue(this, __velox__Def__ThemeCache__[nameof({propertyName})][__velox_Theme__Props__[nameof({propertyName})]][{ThemeManagerFullName}.Current]);");
-            }
+            sb.AppendLine($"            var staticCache = {ThemeCacheFullName}.GetStaticForType(this.GetType());");
+            sb.AppendLine("            var currentTheme = " + ThemeManagerFullName + ".Current;");
+            sb.AppendLine("            foreach (var kvp in staticCache)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var pi = global::System.Linq.Enumerable.FirstOrDefault(kvp.Value.Keys);");
+            sb.AppendLine("                if (pi != null && kvp.Value[pi].TryGetValue(currentTheme, out var initialValue))");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    try { pi.SetValue(this, initialValue); } catch { }");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine();
 

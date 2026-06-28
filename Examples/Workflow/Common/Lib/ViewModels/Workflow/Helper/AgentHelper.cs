@@ -129,7 +129,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             new OpenAIClientOptions
             {
                 Endpoint = new Uri(Endpoint)
-            }).GetChatClient(string.IsNullOrWhiteSpace(Model) ? "qwen-plus" : Model)
+            }).GetChatClient(string.IsNullOrWhiteSpace(Model) ? "deepseek-v4-flash" : Model)
               .AsIChatClient();
 
         var agent = chatClient.AsAIAgent(

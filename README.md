@@ -27,7 +27,7 @@ The workflow system is the core. Everything else exists to make workflows **more
 | Layer | What it provides | Adapter needed? |
 |-------|-----------------|:---------------:|
 | ⛓️ **Workflow** | Tree / Node / Slot / Link templates with full undo-redo, spatial indexing, and a serialization model | ❌ |
-| 🤖 **Workflow Agent** | 30+ Function Calling tools — an AI can create nodes, wire slots, patch properties, and manage routing at runtime via natural language | ✔ Extension |
+| 🤖 **Workflow Agent** | 60+ Function Calling tools — an AI can create nodes, wire slots, patch properties, and manage routing at runtime via natural language. Supports **MCP (Model Context Protocol)** for connecting to external tools and data sources. | ✔ Extension |
 | 🪶 **MVVM** | Source Generator for observable properties and async, cancellable commands — the glue that keeps node ViewModels lightweight | ❌ |
 | 🎞️ **Transition** | Cross-platform interpolation animation with easing & Fluent API — smooth visual feedback for workflow state changes | ✔ |
 | 🎨 **Theme** | Runtime theme switching with animated transitions — instant visual identity for your editor | ✔ |
@@ -133,6 +133,35 @@ var agent = chatClient.AsAIAgent(
 ```
 
 The agent can then create nodes, wire slots, change routing credentials, and patch properties — all through natural-language instructions, with full undo/redo support.
+
+### Connect MCP servers for external tooling
+
+```csharp
+// Load external tools via Model Context Protocol (stdio transport).
+// Supports Node (npm install + node), Npx (npx -y), and Uvx (uvx) modes.
+var mcpTools = await new McpScope()
+    .WithMcpRoot(".evn/mcp")
+    .LoadAsync(new[]
+    {
+        new McpServerConfiguration
+        {
+            Name = "Filesystem",
+            RunMode = McpServerRunMode.Npx,
+            NpmPackage = "@modelcontextprotocol/server-filesystem",
+        },
+        new McpServerConfiguration
+        {
+            Name = "Git",
+            RunMode = McpServerRunMode.Npx,
+            NpmPackage = "@modelcontextprotocol/server-git",
+        },
+    });
+
+// Merge MCP tools into your workflow agent
+var allTools = scope.ProvideTools().Concat(mcpTools).ToArray();
+```
+
+The `McpScope` handles npm package installation (idempotent, thread-safe) and stdio transport management automatically. Failed servers are reported via the `ServerError` event without blocking remaining servers.
 
 ---
 

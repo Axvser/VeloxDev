@@ -268,12 +268,106 @@ namespace VeloxDev.Generators.Base
             public bool UseWorkflowSlotCollectionLifecycle { get; set; }
             public bool UseSlotEnumeratorLifecycle { get; set; }
 
+            /// <summary>
+            /// Controls how the setter body is generated:
+            /// <see cref="SetterMode.Default"/> — direct field set with Object.Equals check.
+            /// <see cref="SetterMode.FrameworkSetProperty"/> — delegates to <c>SetProperty(ref T, T, string)</c>.
+            /// <see cref="SetterMode.FrameworkRaiseAndSet"/> — ReactiveUI's <c>RaiseAndSetIfChanged(ref T, T, string)</c>.
+            /// </summary>
+            public SetterMode FrameworkSetterMode { get; set; } = SetterMode.Default;
+
             public List<string> SetteringBody { get; set; } = [];
             public List<string> SetteredBody { get; set; } = [];
 
             private bool IsView { get; set; }
 
-            private string NonNullableFullTypeName => FullTypeName.EndsWith("?") ? FullTypeName.Substring(0, FullTypeName.Length - 1) : FullTypeName;
+            /// <summary>
+        /// The full setter body lines, resolved according to <see cref="FrameworkSetterMode"/>.
+        /// </summary>
+        public List<string> GetSetterBodyLines()
+        {
+            var equalityComparison = $"global::System.Object.Equals({SourceName}, value)";
+
+            if (FrameworkSetterMode == SetterMode.Default)
+            {
+                return
+                [
+                    $"if({equalityComparison}) return;",
+                    $"var old = {SourceName};",
+                    .. GetWorkflowSlotBeforeAssignmentLines(),
+                    .. SetteringBody,
+                    $"On{PropertyName}Changing(old, value);",
+                    .. GetCollectionBeforeAssignmentLines(),
+                    $"{SourceName} = value;",
+                    .. GetWorkflowSlotAfterAssignmentLines(),
+                    .. GetCollectionAfterAssignmentLines(),
+                    $"On{PropertyName}Changed(old, value);",
+                    .. SetteredBody,
+                ];
+            }
+            else if (FrameworkSetterMode == SetterMode.FrameworkSetProperty)
+            {
+                // Delegates to the host MVVM framework's SetProperty<T>(ref T, T, string) method.
+                // This is accessible from the generated partial class because SetProperty is
+                // a protected method in CommunityToolkit.Mvvm's ObservableObject / ObservableValidator
+                // and Prism's BindableBase.
+                // Note: SetteredBody (OnPropertyChanged) is intentionally excluded because
+                // SetProperty already fires PropertyChanged internally. The partial OnXxxChanged
+                // is still called to maintain VeloxDev's own API contract.
+                return
+                [
+                    $"var old = {SourceName};",
+                    .. GetWorkflowSlotBeforeAssignmentLines(),
+                    .. SetteringBody,
+                    $"On{PropertyName}Changing(old, value);",
+                    .. GetCollectionBeforeAssignmentLines(),
+                    $"if (SetProperty(ref {SourceName}, value, nameof({PropertyName})))",
+                    "{",
+                    .. GetWorkflowSlotAfterAssignmentLines().Select(l => $"    {l}"),
+                    .. GetCollectionAfterAssignmentLines().Select(l => $"    {l}"),
+                    $"    On{PropertyName}Changed(old, {SourceName});",
+                    "}",
+                ];
+            }
+            else if (FrameworkSetterMode == SetterMode.FrameworkRaiseAndSet)
+            {
+                // ReactiveUI's this.RaiseAndSetIfChanged<T>(ref T, T, string)
+                return
+                [
+                    $"var old = {SourceName};",
+                    .. GetWorkflowSlotBeforeAssignmentLines(),
+                    .. SetteringBody,
+                    $"this.RaiseAndSetIfChanged(ref {SourceName}, value, nameof({PropertyName}));",
+                    .. GetWorkflowSlotAfterAssignmentLines(),
+                    .. GetCollectionAfterAssignmentLines(),
+                    $"On{PropertyName}Changed(old, {SourceName});",
+                    .. SetteredBody,
+                ];
+            }
+            else if (FrameworkSetterMode == SetterMode.FrameworkNotifyOfPropertyChange)
+            {
+                // Caliburn.Micro: NotifyOfPropertyChange handles the changed notification
+                return
+                [
+                    $"if(global::System.Object.Equals({SourceName}, value)) return;",
+                    $"var old = {SourceName};",
+                    .. GetWorkflowSlotBeforeAssignmentLines(),
+                    .. SetteringBody,
+                    $"On{PropertyName}Changing(old, value);",
+                    .. GetCollectionBeforeAssignmentLines(),
+                    $"{SourceName} = value;",
+                    $"NotifyOfPropertyChange(nameof({PropertyName}));",
+                    .. GetWorkflowSlotAfterAssignmentLines(),
+                    .. GetCollectionAfterAssignmentLines(),
+                    $"On{PropertyName}Changed(old, value);",
+                    .. SetteredBody,
+                ];
+            }
+
+            return [];
+        }
+
+        private string NonNullableFullTypeName => FullTypeName.EndsWith("?") ? FullTypeName.Substring(0, FullTypeName.Length - 1) : FullTypeName;
 
             public string GenerateFieldDeclaration()
             {
@@ -302,8 +396,6 @@ namespace VeloxDev.Generators.Base
 
             public string GenerateViewModel()
             {
-                var equalityComparison = $"global::System.Object.Equals({SourceName}, value)";
-
                 // 生成属性访问器，完全保留用户写的修饰符
                 var getter = HasGetter ? GenerateGetter() : string.Empty;
 
@@ -311,21 +403,7 @@ namespace VeloxDev.Generators.Base
                 if (HasSetter)
                 {
                     var setterAccessModifier = !string.IsNullOrEmpty(SetterAccessModifier) ? SetterAccessModifier + " " : "";
-                    List<string> setterLines =
-                    [
-                        $"if({equalityComparison}) return;",
-                        $"var old = {SourceName};",
-                        .. GetWorkflowSlotBeforeAssignmentLines(),
-                        .. SetteringBody,
-                        $"On{PropertyName}Changing(old, value);",
-                        .. GetCollectionBeforeAssignmentLines(),
-                        $"{SourceName} = value;",
-                        .. GetWorkflowSlotAfterAssignmentLines(),
-                        .. GetCollectionAfterAssignmentLines(),
-                        $"On{PropertyName}Changed(old, value);",
-                        .. SetteredBody,
-                    ];
-
+                    var setterLines = GetSetterBodyLines();
                     var setterBody = BuildMethodBody(setterLines);
                     setter = $$"""
                         {{RETRACT}}    {{setterAccessModifier}}set
@@ -701,5 +779,20 @@ namespace VeloxDev.Generators.Base
             var classDeclaration = (ClassDeclarationSyntax)context.Node;
             return classDeclaration;
         }
+    }
+
+    /// <summary>
+    /// Controls how generated property setters delegate to the host MVVM framework's native mechanism.
+    /// </summary>
+    public enum SetterMode
+    {
+        /// <summary>Direct field assignment with <c>Object.Equals</c> equality check.</summary>
+        Default,
+        /// <summary>Delegates to <c>SetProperty&lt;T&gt;(ref T, T, string)</c> (CommunityToolkit.Mvvm, Prism).</summary>
+        FrameworkSetProperty,
+        /// <summary>Delegates to <c>this.RaiseAndSetIfChanged&lt;T&gt;(ref T, T, string)</c> (ReactiveUI).</summary>
+        FrameworkRaiseAndSet,
+        /// <summary>Uses <c>NotifyOfPropertyChange(string)</c> for the changed notification (Caliburn.Micro).</summary>
+        FrameworkNotifyOfPropertyChange,
     }
 }

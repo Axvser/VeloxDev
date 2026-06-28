@@ -140,6 +140,9 @@ namespace VeloxDev.TimeLine
             private Task? _updateTask;
             private Task? _fixedUpdateTask;
 
+            // 按通道独立覆盖 UseAsyncLoop，为 null 时回退到 MonoBehaviourManager.UseAsyncLoop
+            private bool? _useAsyncLoopOverride;
+
             private readonly ObjectPool<FrameEventArgs> _frameEventArgsPool = new(DEFAULT_OBJECT_POOL_SIZE);
             private readonly ObjectPool<ConfigChangeRequest> _configRequestPool = new(DEFAULT_OBJECT_POOL_SIZE);
             private readonly ObjectPool<BehaviorWrapper> _wrapperPool = new(DEFAULT_OBJECT_POOL_SIZE);
@@ -208,6 +211,33 @@ namespace VeloxDev.TimeLine
 
             public void ExecuteOnMainThread(Action action) => _mainThreadQueue.Enqueue(action);
 
+            /// <summary>
+            /// 设置当前通道是否使用 async/await 替代原生 Thread 驱动帧循环。
+            /// 为 null 时回退到全局 <see cref="MonoBehaviourManager.UseAsyncLoop"/>。
+            /// </summary>
+            /// <exception cref="InvalidOperationException">通道已启动时调用会抛出异常。</exception>
+            public void SetUseAsyncLoop(bool useAsyncLoop)
+            {
+                if (_isRunning)
+                    throw new InvalidOperationException(
+                        $"Cannot change UseAsyncLoop while channel '{Name}' is running. Stop the channel first.");
+                _useAsyncLoopOverride = useAsyncLoop;
+            }
+
+            /// <summary>
+            /// 清除当前通道的独立覆盖配置，回退到全局 <see cref="MonoBehaviourManager.UseAsyncLoop"/>。
+            /// </summary>
+            /// <exception cref="InvalidOperationException">通道已启动时调用会抛出异常。</exception>
+            public void ClearUseAsyncLoopOverride()
+            {
+                if (_isRunning)
+                    throw new InvalidOperationException(
+                        $"Cannot clear UseAsyncLoop override while channel '{Name}' is running. Stop the channel first.");
+                _useAsyncLoopOverride = null;
+            }
+
+            private bool EffectiveUseAsyncLoop => _useAsyncLoopOverride ?? MonoBehaviourManager.UseAsyncLoop;
+
             #endregion
 
             #region 生命周期
@@ -232,7 +262,7 @@ namespace VeloxDev.TimeLine
 
                 var token = _cts.Token;
 
-                if (MonoBehaviourManager.UseAsyncLoop)
+                if (EffectiveUseAsyncLoop)
                 {
                     _fixedUpdateTask = FixedUpdateLoopAsync(token);
                     _updateTask = UpdateLoopAsync(token);
@@ -274,7 +304,7 @@ namespace VeloxDev.TimeLine
 
                 try
                 {
-                    if (MonoBehaviourManager.UseAsyncLoop)
+                    if (EffectiveUseAsyncLoop)
                     {
                         var pending = new System.Collections.Generic.List<Task>(2);
                         if (_updateTask != null) pending.Add(_updateTask);
@@ -1017,6 +1047,21 @@ namespace VeloxDev.TimeLine
 
         public static void ExecuteOnMainThread(Action action, string channel = DEFAULT_CHANNEL)
             => GetOrCreateChannel(channel).ExecuteOnMainThread(action);
+
+        /// <summary>
+        /// 设置指定通道是否使用 async/await 替代原生 Thread 驱动帧循环。
+        /// 覆盖全局 <see cref="UseAsyncLoop"/> 设置。
+        /// </summary>
+        /// <exception cref="InvalidOperationException">通道已启动时调用会抛出异常。</exception>
+        public static void SetUseAsyncLoop(bool useAsyncLoop, string channel = DEFAULT_CHANNEL)
+            => GetOrCreateChannel(channel).SetUseAsyncLoop(useAsyncLoop);
+
+        /// <summary>
+        /// 清除指定通道的独立覆盖配置，回退到全局 <see cref="UseAsyncLoop"/>。
+        /// </summary>
+        /// <exception cref="InvalidOperationException">通道已启动时调用会抛出异常。</exception>
+        public static void ClearUseAsyncLoopOverride(string channel = DEFAULT_CHANNEL)
+            => GetOrCreateChannel(channel).ClearUseAsyncLoopOverride();
 
         #endregion
 
