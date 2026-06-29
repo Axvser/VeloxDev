@@ -8,38 +8,45 @@ namespace VeloxDev.AI.MCP;
 public enum McpServerRunMode
 {
     /// <summary>
-    /// <b>Node.js</b> — npm install + node {modulePath} {args}.
+    /// <b>npm</b> — npm install + node {modulePath} {args}.
     /// Package installed to <c>.evn/mcp/node/{package}/</c>.
-    /// Requires <see cref="McpServerConfiguration.NpmPackage"/> and <see cref="McpServerConfiguration.ServerModulePath"/>.
+    /// Requires <see cref="McpServerConfiguration.Package"/>.
     /// </summary>
-    Node,
+    Npm,
 
     /// <summary>
-    /// <b>Node.js</b> — npx -y {package} {args} (temporary download, no install).
-    /// Uses <see cref="McpServerConfiguration.NpmPackage"/> as the package name.
+    /// <b>npx</b> — npx -y {package} {args} (temporary download, no install).
+    /// Uses <see cref="McpServerConfiguration.Package"/> as the package name.
     /// </summary>
     Npx,
 
     /// <summary>
     /// <b>Python (uv)</b> — uvx {package} {args}.
     /// uv provides its own isolated environment; no extra venv needed.
-    /// Uses <see cref="McpServerConfiguration.NpmPackage"/> as the package name.
+    /// Uses <see cref="McpServerConfiguration.Package"/> as the package name.
     /// </summary>
     Uvx,
 
     /// <summary>
     /// <b>.NET</b> — dotnet {dll} {args}.
-    /// User pre-publishes to <c>.evn/mcp/dotnet/{package}/{ServerModulePath}</c>.
-    /// <see cref="McpServerConfiguration.NpmPackage"/> is the subdirectory name,
-    /// <see cref="McpServerConfiguration.ServerModulePath"/> is the .dll file name.
+    /// User pre-publishes to <c>.evn/mcp/dotnet/{package}</c>.
+    /// <see cref="McpServerConfiguration.Package"/> is the DLL path relative to <c>dotnet/</c>,
+    /// e.g. <c>"sharp-email-mcp/SharpEmailMcp.dll"</c>.
     /// </summary>
     Dotnet,
 
     /// <summary>
     /// <b>Python (pip + venv)</b> — creates an isolated venv → pip install → python -m {module} {args}.
-    /// The venv lives at <c>.evn/mcp/py/venvs/{package}/</c>, never touches the global Python environment.
-    /// <see cref="McpServerConfiguration.NpmPackage"/> is the PyPI package name,
-    /// <see cref="McpServerConfiguration.ServerModulePath"/> is the entry module (defaults to the package name).
+    /// The venv lives at <c>.evn/mcp/py/venvs/{package}/</c>.
+    /// <see cref="McpServerConfiguration.Package"/> is the PyPI package name.
     /// </summary>
     Pip,
+
+    /// <summary>
+    /// <b>Any executable</b> — directly executes the file at <c>.evn/mcp/exe/{Package}</c>.
+    /// Tech-agnostic: works for native binaries (.exe, ELF), shell scripts (.sh, .bat),
+    /// scripts with shebang, and self-contained executables.
+    /// The file must have execute permission (Unix) or be a recognized executable (Windows).
+    /// </summary>
+    Exe,
 }

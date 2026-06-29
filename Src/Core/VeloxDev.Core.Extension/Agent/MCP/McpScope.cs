@@ -19,10 +19,13 @@ namespace VeloxDev.AI.MCP;
 /// to install MCP server packages and connect via stdio.
 /// </para>
 /// <para>
-/// Packages are isolated by runtime:
-/// <c>{root}/node/{package}/</c> (npm),
-/// <c>{root}/py/venvs/{package}/</c> (pip),
-/// <c>{root}/dotnet/{package}/</c> (.NET).
+/// The <see cref="McpServerConfiguration.Package"/> is a runtime-relative path:
+/// <c>{root}/node/{Package}</c> (npm),
+/// <c>{root}/py/{Package}</c> (Python),
+/// <c>{root}/dotnet/{Package}</c> (.NET),
+/// <c>{root}/exe/{Package}</c> (any executable).
+/// For Dotnet mode, Package includes the DLL name, e.g. "sharp-email-mcp/SharpEmailMcp.dll".
+/// For Exe mode, Package is the path to any executable, e.g. "tools/my-tool.exe".
 /// </para>
 /// </summary>
 public class McpScope
@@ -70,10 +73,10 @@ public class McpScope
 
             try
             {
-                if (config.RunMode == McpServerRunMode.Node)
-                    await EnsureNpmPackageAsync(config.NpmPackage, config.NpmVersion, mcpRoot, ct);
+                if (config.RunMode == McpServerRunMode.Npm)
+                    await EnsureNpmPackageAsync(config.Package, config.Version, mcpRoot, ct);
                 else if (config.RunMode == McpServerRunMode.Pip)
-                    await EnsurePipPackageAsync(config.NpmPackage, config.NpmVersion, mcpRoot, ct);
+                    await EnsurePipPackageAsync(config.Package, config.Version, mcpRoot, ct);
 
                 var tools = await ConnectServerAsync(config, mcpRoot, ct);
                 allTools.AddRange(tools);
@@ -90,22 +93,27 @@ public class McpScope
     // ── Runtime directory helpers ──────────────────────────────────────────
 
     /// <summary>Returns the runtime-specific subdirectory name for a run mode.</summary>
-    private static string GetRuntimePrefix(McpServerRunMode mode) => mode switch
+    private static string GetRuntimeDir(McpServerRunMode mode) => mode switch
     {
-        McpServerRunMode.Node or McpServerRunMode.Npx => "node",
+        McpServerRunMode.Npm or McpServerRunMode.Npx => "node",
         McpServerRunMode.Pip or McpServerRunMode.Uvx  => "py",
         McpServerRunMode.Dotnet                       => "dotnet",
+        McpServerRunMode.Exe                           => "exe",
         _ => "node",
     };
 
     /// <summary>
-    /// Gets the package directory for a config under <c>{mcpRoot}/{runtime}/{package}/</c>.
-    /// For <see cref="McpServerRunMode.Node"/> this is also the npm working directory.
-    /// For <see cref="McpServerRunMode.Pip"/> the venv lives under here.
-    /// For <see cref="McpServerRunMode.Dotnet"/> the published files live here.
+    /// Gets the working/installation directory for a configuration.
+    /// <c>{mcpRoot}/{runtime}/{Package}</c>. If Package includes a filename
+    /// (e.g. "sharp-email-mcp/SharpEmailMcp.dll"), uses the directory part.
     /// </summary>
     private static string GetPackageDir(McpServerConfiguration config, string mcpRoot)
-        => Path.Combine(mcpRoot, GetRuntimePrefix(config.RunMode), config.NpmPackage);
+    {
+        var fullPath = Path.Combine(mcpRoot, GetRuntimeDir(config.RunMode), config.Package);
+        return Path.HasExtension(fullPath)
+            ? Path.GetDirectoryName(fullPath)!
+            : fullPath;
+    }
 
     // ── npm install (Node.js, isolated per package) ────────────────────────
 
@@ -200,7 +208,8 @@ public class McpScope
             McpServerRunMode.Uvx    => BuildUvxArgs(config),
             McpServerRunMode.Dotnet => BuildDotnetArgs(config, mcpRoot),
             McpServerRunMode.Pip    => BuildPipArgs(config, mcpRoot),
-            _                       => BuildNodeArgs(config, mcpRoot),
+            McpServerRunMode.Exe    => BuildExeArgs(config, mcpRoot),
+            _                       => BuildNpmArgs(config, mcpRoot),
         };
 
         var client = await McpClient.CreateAsync(new StdioClientTransport(
@@ -215,47 +224,81 @@ public class McpScope
         return [.. tools.Cast<AITool>()];
     }
 
-    // ── Node.js: npm install + node ────────────────────────────────────────
+    // ── npm: npm install + node ────────────────────────────────────────────
 
-    private static (string cmd, List<string> args) BuildNodeArgs(
+    private static (string cmd, List<string> args) BuildNpmArgs(
         McpServerConfiguration config, string mcpRoot)
     {
-        var pkgDir = Path.Combine(mcpRoot, "node", config.NpmPackage);
-        var serverJs = Path.Combine(pkgDir, "node_modules", config.NpmPackage, config.ServerModulePath);
+        var pkgDir = Path.Combine(mcpRoot, "node", config.Package);
+        var npmName = config.Package;
+        var entry = npmName;
+        var pkgJson = Path.Combine(pkgDir, "node_modules", npmName, "package.json");
+        if (File.Exists(pkgJson))
+        {
+            var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(pkgJson));
+            entry = doc.RootElement.TryGetProperty("main", out var main)
+                ? main.GetString()
+                : (doc.RootElement.TryGetProperty("bin", out var bin)
+                    ? (bin.ValueKind == System.Text.Json.JsonValueKind.String
+                        ? bin.GetString()
+                        : bin.EnumerateObject().First().Value.GetString())
+                    : null);
+        }
 
+        if (string.IsNullOrWhiteSpace(entry))
+            throw new FileNotFoundException(
+                "MCP server entry not found. Ensure package.json has 'main' or 'bin' field. Package dir: " + pkgDir);
+
+        var serverJs = Path.Combine(pkgDir, "node_modules", npmName, entry);
         if (!File.Exists(serverJs))
             throw new FileNotFoundException(
                 "MCP server entry not found: " + serverJs +
                 ". Run npm install first in: " + pkgDir);
 
-        return ("node", BuildArgs(serverJs, config.ServerArguments));
+        return ("node", BuildArgs(serverJs, config.Arguments));
     }
 
     // ── Node.js: npx ───────────────────────────────────────────────────────
 
     private static (string cmd, List<string> args) BuildNpxArgs(
         McpServerConfiguration config)
-        => ("npx", BuildArgs("-y", config.NpmPackage, config.ServerArguments));
+        => ("npx", BuildArgs("-y", config.Package, config.Arguments));
 
     // ── Python: uvx ────────────────────────────────────────────────────────
 
     private static (string cmd, List<string> args) BuildUvxArgs(
         McpServerConfiguration config)
-        => ("uvx", BuildArgs(config.NpmPackage, config.ServerArguments));
+        => ("uvx", BuildArgs(config.Package, config.Arguments));
 
     // ── .NET: dotnet ───────────────────────────────────────────────────────
 
     private static (string cmd, List<string> args) BuildDotnetArgs(
         McpServerConfiguration config, string mcpRoot)
     {
-        var dllPath = Path.Combine(mcpRoot, "dotnet", config.NpmPackage, config.ServerModulePath);
+        var dllPath = Path.Combine(mcpRoot, "dotnet", config.Package);
 
         if (!File.Exists(dllPath))
             throw new FileNotFoundException(
                 "MCP server DLL not found: " + dllPath +
                 ". Publish the project to: " + Path.GetDirectoryName(dllPath));
 
-        return ("dotnet", BuildArgs(dllPath, config.ServerArguments));
+        return ("dotnet", BuildArgs(dllPath, config.Arguments));
+    }
+
+    // ── Any executable: direct execution ──────────────────────────────────
+
+    private static (string cmd, List<string> args) BuildExeArgs(
+        McpServerConfiguration config, string mcpRoot)
+    {
+        var exePath = Path.Combine(mcpRoot, "exe", config.Package);
+
+        if (!File.Exists(exePath))
+            throw new FileNotFoundException(
+                "Executable not found: " + exePath +
+                ". Place it under: " + Path.GetDirectoryName(exePath));
+
+        // Command is the executable path itself; no interpreter prefix
+        return (exePath, config.Arguments?.ToList() ?? []);
     }
 
     // ── Python: pip + venv ─────────────────────────────────────────────────
@@ -263,13 +306,11 @@ public class McpScope
     private static (string cmd, List<string> args) BuildPipArgs(
         McpServerConfiguration config, string mcpRoot)
     {
-        var venvDir = Path.Combine(mcpRoot, "py", "venvs", config.NpmPackage);
+        var venvDir = Path.Combine(mcpRoot, "py", "venvs", config.Package);
         var pythonExe = GetVenvPythonExe(venvDir);
-        var module = !string.IsNullOrWhiteSpace(config.ServerModulePath)
-            ? config.ServerModulePath
-            : config.NpmPackage;
+        var module = config.Package.Replace("-", "_");
 
-        return (pythonExe, BuildArgs("-m", module, config.ServerArguments));
+        return (pythonExe, BuildArgs("-m", module, config.Arguments));
     }
 
     // ── Args helper ────────────────────────────────────────────────────────
