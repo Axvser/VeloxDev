@@ -24,15 +24,16 @@ public sealed class WorkflowDemoSession
 
         var helper = tree.GetHelper();
         var nodeSize = new Size(300, 260);
-        var controllerSize = new Size(220, 170);
+        var controllerSize = new Size(220, 340);
 
-        NodeViewModel CreateNode(string title, int delayMilliseconds, double left, double top)
+        NodeViewModel CreateNode(string title, int delayMilliseconds, double left, double top, int priority = 0)
             => new()
             {
                 Title = title,
                 DelayMilliseconds = delayMilliseconds,
                 Size = nodeSize,
                 Anchor = new Anchor(left, top, 0),
+                CompilePriority = priority,
             };
 
         var controller = new ControllerViewModel
@@ -43,8 +44,8 @@ public sealed class WorkflowDemoSession
         };
 
         // Row 1: initial fan-out
-        var loadSeed = CreateNode("Load Seed", 900, 340, 120);
-        var warmCache = CreateNode("Warm Cache", 1400, 340, 620);
+        var loadSeed = CreateNode("Load Seed", 900, 340, 120, priority: 1);
+        var warmCache = CreateNode("Warm Cache", 1400, 340, 620, priority: 2);
 
         // Row 2: Bool selector routes warmCache output
         var boolSelector = new BoolSelectorNodeViewModel
@@ -56,15 +57,15 @@ public sealed class WorkflowDemoSession
         };
 
         // Row 2: loadSeed fan-out
-        var branchA = CreateNode("Branch A", 2200, 700, 20);
-        var branchB = CreateNode("Branch B", 1200, 700, 280);
+        var branchA = CreateNode("Branch A", 2200, 700, 20, priority: 1);
+        var branchB = CreateNode("Branch B", 1200, 700, 280, priority: 2);
 
         // Row 3: bool selector targets
-        var joinHot = CreateNode("Hot Path", 800, 1020, 520);
-        var joinCold = CreateNode("Cold Path", 2000, 1020, 780);
+        var joinHot = CreateNode("Hot Path", 800, 1020, 520, priority: 1);
+        var joinCold = CreateNode("Cold Path", 2000, 1020, 780, priority: 2);
 
         // Row 4: aggregate all branches
-        var aggregate = CreateNode("Aggregate", 2600, 1380, 360);
+        var aggregate = CreateNode("Aggregate", 2600, 1380, 360, priority: 0);
 
         // Row 5: Enum selector routes aggregate output by HTTP method
         var enumSelector = new EnumSelectorNodeViewModel
@@ -76,13 +77,13 @@ public sealed class WorkflowDemoSession
         enumSelector.SelectedValue = NetworkRequestMethod.Get;
 
         // Row 6: enum selector targets — one node per method to showcase routing
-        var handleGet = CreateNode("GET Handler", 600, 2100, 20);
-        var handlePost = CreateNode("POST Handler", 900, 2100, 300);
-        var handlePut = CreateNode("PUT Handler", 700, 2100, 580);
-        var handleDelete = CreateNode("DELETE Handler", 500, 2100, 860);
+        var handleGet = CreateNode("GET Handler", 600, 2100, 20, priority: 1);
+        var handlePost = CreateNode("POST Handler", 900, 2100, 300, priority: 2);
+        var handlePut = CreateNode("PUT Handler", 700, 2100, 580, priority: 3);
+        var handleDelete = CreateNode("DELETE Handler", 500, 2100, 860, priority: 4);
 
         // Row 7: final merge
-        var finalize = CreateNode("Finalize", 700, 2480, 360);
+        var finalize = CreateNode("Finalize", 700, 2480, 360, priority: 0);
 
         foreach (var node in new IWorkflowNodeViewModel[]
         {

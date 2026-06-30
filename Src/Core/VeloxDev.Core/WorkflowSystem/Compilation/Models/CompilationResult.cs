@@ -50,11 +50,13 @@ public sealed class CompilationResult
     /// Execute all items in deterministic order.
     ///
     /// For each item:
-    ///   1. Subscribe to WorkCommand.Failed for error redirect / retry.
+    ///   1. Subscribe to WorkCommand.Failed for error capture.
     ///   2. Notify <see cref="ICompileTimeSink"/> (BeforeExecute).
     ///   3. Execute WorkCommand and wait for actual completion via Exited event.
     ///   4. Read <see cref="IWorkflowNodeViewModel.WorkResult"/> and forward it to the next item.
-    ///   5. Notify <see cref="ICompileTimeSink"/> (AfterExecute).
+    ///   5. On failure: notify OnError, then if <see cref="CompiledItem.ErrorRedirectId"/> is set,
+    ///      execute the target node asynchronously and chain its WorkResult.
+    ///   6. Notify <see cref="ICompileTimeSink"/> (AfterExecute).
     ///
     /// Because <see cref="IVeloxCommand.ExecuteAsync"/> dispatches the command
     /// asynchronously (fire-and-forget internally), this method hooks the
@@ -64,18 +66,17 @@ public sealed class CompilationResult
     /// so that downstream helpers can access the original object — e.g.
     /// <c>NetworkFlowContext.From(parameter)</c> works without unwrapping.
     ///
-    /// When Allow mode is active and a loop is detected, consecutive loop iterations
-    /// are tracked. If the loop tail jumps back to the loop entry consecutively,
-    /// a counter increments; if MaxLoopCount is exceeded, the circuit breaker fires.
+    /// Note: graph-level cycles do not produce runtime loops because each compiled
+    /// item appears exactly once in the ordered list. <see cref="CycleHandling.Allow"/>
+    /// merely preserves cycle metadata for informational purposes.
     ///
     /// <returns>The last node's result, or the initial parameter if no node produced a result.</returns>
     /// </summary>
     public async Task<object?> ExecuteAsync(object? parameter = null, CancellationToken ct = default)
     {
         object? currentParam = parameter;
-        int consecutiveLoopCount = 0;
-        CompiledItem? lastExecuted = null;
         var skippedItems = new HashSet<int>(); // 未选中分支的独占项 ID
+        var totalCount = _items.Count;
 
         foreach (var item in _items)
         {
@@ -84,92 +85,87 @@ public sealed class CompilationResult
             // 跳过被路由分支排除的项
             if (skippedItems.Contains(item.Id))
             {
-                // 仍然发送 AfterExecute 通知以维持生命周期一致性
-                NotifyExecutionSink(item, currentParam, ExecutionEvent.AfterExecute);
+                NotifyExecutionSink(item, currentParam, ExecutionEvent.BeforeExecute, totalCount);
+                NotifyExecutionSink(item, currentParam, ExecutionEvent.AfterExecute, totalCount);
                 continue;
             }
 
-            // 环路追踪：检测连续回跳
-            if (CycleHandling == CycleHandling.Allow && HasCycle && lastExecuted is not null)
-            {
-                if (item.IsLoopEntry && lastExecuted.Id == item.LoopTailId)
-                {
-                    consecutiveLoopCount++;
-                    if (item.MaxLoopCount > 0 && consecutiveLoopCount > item.MaxLoopCount)
-                    {
-                        if (item.CircuitBreaker is not null)
-                        {
-                            item.CircuitBreaker(item);
-                            continue;
-                        }
-                        throw new InvalidOperationException(
-                            $"Loop exceeded maximum consecutive count ({item.MaxLoopCount}) " +
-                            $"at item #{item.Id} (loop entry). Circuit breaker not registered.");
-                    }
-                }
-                else
-                {
-                    consecutiveLoopCount = 0;
-                }
-            }
-
-            item.SubscribeError(onFailed: (failedItem, exception) =>
-            {
-                // 通知失败的节点
-                NotifyExecutionSink(failedItem, currentParam, ExecutionEvent.OnError);
-
-                if (failedItem.ErrorRedirectId.HasValue)
-                {
-                    var target = _items.FirstOrDefault(i => i.Id == failedItem.ErrorRedirectId.Value);
-                    var errorCtx = new ErrorContext(
-                        failedItem.Id, exception, currentParam, currentParam);
-                    var redirectCtx = new WorkContext(errorCtx);
-                    target?.Node.WorkCommand.Execute(redirectCtx);
-                }
-            });
+            // 订阅 Failed 事件（捕获异常，不在此同步处理）
+            item.SubscribeError();
 
             // 通知：执行前
-            NotifyExecutionSink(item, currentParam, ExecutionEvent.BeforeExecute);
+            NotifyExecutionSink(item, currentParam, ExecutionEvent.BeforeExecute, totalCount);
 
             try
             {
                 // 执行并等待真正完成
                 await ExecuteItemAsync(item, currentParam, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // 取消信号：立即中止整条执行链，不再处理后续节点
+                item.UnsubscribeError();
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // 执行中抛出的其他异常转储到 FailureException，统一走后面的错误处理路径
+                item.FailureException = ex;
+            }
 
-                // 结果链传递：将节点输出传给下一个
-                if (item.Node.WorkResult is not null)
-                    currentParam = item.Node.WorkResult;
+            // 错误处理：如果节点失败，检查是否需要重定向
+            if (item.FailureException is not null)
+            {
+                NotifyExecutionSink(item, currentParam, ExecutionEvent.OnError, totalCount);
 
-                // 路由分支排除：如果当前节点是路由器，根据选中的 key 跳过未选分支的独占项
-                if (item.BranchExclusiveItems is not null &&
-                    item.Node is ICompileTimeRouter router)
+                if (item.ErrorRedirectId.HasValue)
                 {
-                    var chosenKey = router.GetCurrentRouteKey();
-                    foreach (var kv in item.BranchExclusiveItems)
+                    var target = _items.FirstOrDefault(i => i.Id == item.ErrorRedirectId.Value);
+                    if (target is not null)
                     {
-                        // 未选中的分支 → 其独占项全部跳过
-                        if (!Equals(kv.Key, chosenKey))
-                        {
-                            foreach (var skipId in kv.Value)
-                                skippedItems.Add(skipId);
-                        }
+                        var errorCtx = new ErrorContext(
+                            item.Id, item.FailureException, currentParam, currentParam);
+                        // 异步执行重定向目标
+                        await ExecuteItemAsync(target, new WorkContext(errorCtx), ct);
+                        // 链入重定向目标的输出
+                        if (target.Node.WorkResult is not null)
+                            currentParam = target.Node.WorkResult;
+                        // 标记重定向目标，防止在主循环中被重复执行
+                        if (!skippedItems.Contains(target.Id))
+                            skippedItems.Add(target.Id);
                     }
                 }
             }
-            catch
+            else
             {
-                // 错误已由 Failed 事件处理
+                // 结果链传递：将节点输出传给下一个
+                if (item.Node.WorkResult is not null)
+                    currentParam = item.Node.WorkResult;
             }
-            finally
+
+            // 路由分支排除：如果当前节点是路由器，根据选中的 key 跳过未选分支的独占项
+            if (item.FailureException is null &&
+                item.BranchExclusiveItems is not null &&
+                item.Node is ICompileTimeRouter router)
             {
-                NotifyExecutionSink(item, currentParam, ExecutionEvent.AfterExecute);
-                item.UnsubscribeError();
-                lastExecuted = item;
+                var chosenKey = router.GetCurrentRouteKey();
+                foreach (var kv in item.BranchExclusiveItems)
+                {
+                    // 未选中的分支 → 其独占项全部跳过
+                    if (!Equals(kv.Key, chosenKey))
+                    {
+                        foreach (var skipId in kv.Value)
+                            skippedItems.Add(skipId);
+                    }
+                }
             }
+
+            NotifyExecutionSink(item, currentParam, ExecutionEvent.AfterExecute, totalCount);
+            item.UnsubscribeError();
         }
 
         // 通知：全链执行完毕
-        NotifyAllExecutionSinks(currentParam, ExecutionEvent.OnCompleted);
+        NotifyAllExecutionSinks(currentParam, ExecutionEvent.OnCompleted, totalCount);
 
         return currentParam;
     }
@@ -209,12 +205,12 @@ public sealed class CompilationResult
     /// notify it of the current execution event.
     /// </summary>
     private static void NotifyExecutionSink(CompiledItem item,
-        object? parameter, ExecutionEvent @event)
+        object? parameter, ExecutionEvent @event, int totalCount)
     {
         if (item.Node is ICompileTimeSink sink)
         {
             var ctx = new ExecutionContext(
-                item.Order, 0, parameter, @event, item);
+                item.Order, totalCount, parameter, @event, item);
             sink.OnExecutionEvent(ctx);
         }
     }
@@ -223,9 +219,9 @@ public sealed class CompilationResult
     /// Notify all items that implement <see cref="ICompileTimeSink"/>.
     /// Used for chain-level events where no single item is responsible.
     /// </summary>
-    private void NotifyAllExecutionSinks(object? parameter, ExecutionEvent @event)
+    private void NotifyAllExecutionSinks(object? parameter, ExecutionEvent @event, int totalCount)
     {
         foreach (var item in _items)
-            NotifyExecutionSink(item, parameter, @event);
+            NotifyExecutionSink(item, parameter, @event, totalCount);
     }
 }

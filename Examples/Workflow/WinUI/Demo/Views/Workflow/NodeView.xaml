@@ -107,6 +107,19 @@
                             <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
+                        <TextBlock Text="Priority" Foreground="#DCDCDC" VerticalAlignment="Center" />
+                        <NumberBox Grid.Column="1"
+                                   Minimum="-10"
+                                   Maximum="10"
+                                   SmallChange="1"
+                                   Value="{Binding CompilePriority, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
                         <TextBlock Text="Title" Foreground="#DCDCDC" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1" Text="{Binding Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>

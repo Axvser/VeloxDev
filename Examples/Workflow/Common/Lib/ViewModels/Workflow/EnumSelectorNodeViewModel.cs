@@ -69,6 +69,23 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter
         }
     }
 
+    // 执行序列号（手动实现，生成器暂未覆盖）
+    private int lastExecutionOrder;
+    public int LastExecutionOrder
+    {
+        get => lastExecutionOrder;
+        set
+        {
+            if (lastExecutionOrder == value) return;
+            lastExecutionOrder = value;
+            OnPropertyChanged(nameof(LastExecutionOrder));
+            OnPropertyChanged(nameof(HasExecutionOrder));
+            OnPropertyChanged(nameof(ExecutionOrderText));
+        }
+    }
+    public bool HasExecutionOrder => LastExecutionOrder > 0;
+    public string ExecutionOrderText => LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
+
     public bool HasInputSlot => _inputSlot is not null;
 
     public Type? EnumType => OutputSlots?.SelectorType;

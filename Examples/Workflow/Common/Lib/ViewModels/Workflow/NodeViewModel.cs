@@ -2,6 +2,7 @@
 using VeloxDev.AI;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.Compilation;
 
 namespace Demo.ViewModels;
 
@@ -10,7 +11,7 @@ namespace Demo.ViewModels;
 [WorkflowBuilder.Node
     <HttpHelper<NodeViewModel>>
     (workSemaphore: 5)]
-public partial class NodeViewModel
+public partial class NodeViewModel : ICompileTimePriority
 {
     public NodeViewModel() => InitializeWorkflow();
 
@@ -56,6 +57,18 @@ public partial class NodeViewModel
     [VeloxProperty] private string lastExecutionTrace = "未执行";
     [VeloxProperty] private int runCount = 0;
     [VeloxProperty] private int waitCount = 0;
+    [VeloxProperty] private int compilePriority = 0;
+
+    public int CompilePriority
+    {
+        get => compilePriority;
+        set
+        {
+            if (compilePriority == value) return;
+            compilePriority = value;
+            OnPropertyChanged(nameof(CompilePriority));
+        }
+    }
 
     public bool HasInputSlot => _inputSlot is not null;
     public bool HasOutputSlot => _outputSlot is not null;

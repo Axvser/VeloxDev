@@ -20,6 +20,14 @@ public sealed class CompiledItem
     public int Order { get; internal set; }
 
     /// <summary>
+    /// BFS/DFS depth level from the traversal start point.
+    /// <see cref="ICompileTimeRouter"/> nodes do NOT increment the depth —
+    /// their children inherit the router's depth level, making branch depth
+    /// intuitively consistent with the logical graph topology.
+    /// </summary>
+    public int Depth { get; internal set; }
+
+    /// <summary>
     /// When set, on node failure the execution will redirect to the item with this ID.
     /// Similar to a catch block — the target node will be executed instead.
     /// </summary>
@@ -28,22 +36,29 @@ public sealed class CompiledItem
     /// <summary>Maximum retry attempts on failure (0 = no retry).</summary>
     public int MaxRetries { get; set; }
 
-    // ── Loop support (only set when CycleHandling = Allow and a cycle exists) ──
-
-    /// <summary>Whether this item is the entry point of a detected loop (the node where execution re-enters the cycle).</summary>
-    public bool IsLoopEntry { get; internal set; }
-
-    /// <summary>The item ID that closes the loop (the last node before jumping back to the loop entry). Only meaningful on the loop entry item.</summary>
-    public int? LoopTailId { get; internal set; }
-
-    /// <summary>Maximum consecutive loop iterations before an exception is thrown. 0 = unlimited.</summary>
-    public int MaxLoopCount { get; set; }
+    // ── Failure info ────────────────────────────────────────────────────
 
     /// <summary>
-    /// Optional circuit breaker invoked when the loop exceeds <see cref="MaxLoopCount"/> consecutive iterations.
-    /// If null, a default <see cref="InvalidOperationException"/> is thrown.
+    /// Set by <see cref="SubscribeError"/> when the node's WorkCommand fires
+    /// its <c>Failed</c> event. The executor checks this after
+    /// <see cref="CompilationResult.ExecuteAsync"/> to decide whether to redirect.
     /// </summary>
-    public Action<CompiledItem>? CircuitBreaker { get; set; }
+    internal Exception? FailureException { get; set; }
+
+    // ── Loop metadata (only set when CycleHandling = Allow and a cycle exists) ──
+
+    /// <summary>
+    /// Informational: set by the compiler when <c>CycleHandling.Allow</c> is active
+    /// and a graph cycle is detected. Marks the node where execution re-enters the cycle.
+    /// Not used by the executor at runtime — each compiled item appears exactly once.
+    /// </summary>
+    public bool IsLoopEntry { get; internal set; }
+
+    /// <summary>
+    /// Informational: the item ID that closes the loop (the last node before
+    /// jumping back to the loop entry). Set alongside <see cref="IsLoopEntry"/>.
+    /// </summary>
+    public int? LoopTailId { get; internal set; }
 
     // ── Compile-time slot routing ───────────────────────────────────────
 
@@ -72,22 +87,23 @@ public sealed class CompiledItem
     }
 
     /// <summary>
-    /// Temporarily subscribe to the node's WorkCommand.Failed event to handle errors.
-    /// The subscription is automatically disposed when the callback completes or when
-    /// <see cref="UnsubscribeError"/> is called.
+    /// Subscribe to the node's WorkCommand.Failed event.
+    /// When the command fails, stores the exception in <see cref="FailureException"/>
+    /// for the executor to handle asynchronously in the main loop.
+    /// The subscription is automatically disposed when <see cref="UnsubscribeError"/> is called.
     /// </summary>
-    public void SubscribeError(Action<CompiledItem, Exception> onFailed)
+    public void SubscribeError()
     {
         UnsubscribeError();
+        FailureException = null;
         var weakItem = new WeakReference<CompiledItem>(this);
-        var weakAction = new WeakReference<Action<CompiledItem, Exception>>(onFailed);
 
         CommandEventHandler handler = null!;
         handler = e =>
         {
-            if (weakItem.TryGetTarget(out var item) && weakAction.TryGetTarget(out var action))
+            if (weakItem.TryGetTarget(out var item))
             {
-                action(item, e.Exception ?? new InvalidOperationException("Node execution failed"));
+                item.FailureException = e.Exception ?? new InvalidOperationException("Node execution failed");
             }
         };
 

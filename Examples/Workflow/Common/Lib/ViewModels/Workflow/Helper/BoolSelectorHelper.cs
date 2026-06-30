@@ -15,6 +15,8 @@ public class BoolSelectorHelper : NodeHelper<BoolSelectorNodeViewModel>
             : Component.Condition;
 
         Component.LastRouted = condition ? "→ True" : "→ False";
+        context.RecordExecution(Component.LastRouted, out var order);
+        Component.LastExecutionOrder = order;
         Component.WorkResult = parameter; // 编译执行中直接透传数据
         return Task.CompletedTask;
     }

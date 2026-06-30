@@ -10,11 +10,14 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
 {
     /// <summary>
     /// Compile the workflow graph starting from <paramref name="startNode"/>.
+    /// For <see cref="CompileScope.FromNode"/> returns a single-element list.
+    /// For <see cref="CompileScope.Omni"/> returns one result per discovered
+    /// boundary node, each representing an independent subgraph.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// Cross-domain node detected, or cycle found with <see cref="CycleHandling.Throw"/>.
     /// </exception>
-    public CompilationResult Compile(IWorkflowNodeViewModel startNode, CompileMode mode,
+    public IReadOnlyList<CompilationResult> Compile(IWorkflowNodeViewModel startNode, CompileMode mode,
         CompileDirection direction = CompileDirection.Forward,
         CompileScope scope = CompileScope.FromNode,
         CycleHandling cycleHandling = CycleHandling.Throw)
@@ -35,9 +38,9 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
             _ => BuildForwardAdjacency(allNodes),
         };
 
-        // 检测环路
-        var cycleInfo = DetectCycle(allNodes, adj);
-        if (cycleInfo.HasCycle && cycleHandling == CycleHandling.Throw)
+        // 检测环路（基于全图，一次检测供所有入口使用）
+        var globalCycleInfo = DetectCycle(allNodes, adj);
+        if (globalCycleInfo.HasCycle && cycleHandling == CycleHandling.Throw)
             throw new InvalidOperationException(
                 $"Cycle detected in workflow graph. " +
                 $"Start node '{startNode.GetType().Name}' belongs to a graph with {allNodes.Length} nodes.");
@@ -46,13 +49,16 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         var startIndices = scope switch
         {
             CompileScope.Omni => direction == CompileDirection.Reverse
-                ? FindOmniExits(allNodes)    // 全反向：找终结点 (out-degree = 0)
-                : FindOmniEntries(allNodes), // 全正向：找始发点 (in-degree = 0)
-            _ => [startIdx],                 // FromNode：从选中节点开始
+                ? FindOmniExits(allNodes)
+                : FindOmniEntries(allNodes),
+            _ => [startIdx],
         };
 
-        // 遍历并收集结果
-        var allOrdered = new List<int>();
+        if (startIndices.Count == 0)
+            return Array.Empty<CompilationResult>();
+
+		// 每个起点独立构建可执行计划
+        var results = new List<CompilationResult>(startIndices.Count);
         var globalVisited = new HashSet<int>();
 
         foreach (var si in startIndices)
@@ -60,39 +66,41 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
             var segment = mode == CompileMode.BFS
                 ? TraverseBfsFrom(si, allNodes, adj, globalVisited)
                 : TraverseDfsFrom(si, allNodes, adj, globalVisited);
-            allOrdered.AddRange(segment);
+
+            if (segment.Indices.Count == 0) continue;
+
+            // 跨域检查
+            foreach (var idx in segment.Indices)
+            {
+                if (allNodes[idx].Parent != tree)
+                    throw new InvalidOperationException(
+                        $"Cross-domain node detected: node at index {idx} belongs to a different Tree.");
+            }
+
+            // 构建 Item
+            int idCounter = 0;
+            var items = segment.Indices.Select(idx =>
+                new CompiledItem(idCounter++, allNodes[idx], 0)
+            ).ToList();
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                items[i].Order = i;
+                items[i].Depth = segment.Depth[segment.Indices[i]];
+            }
+
+            // 环路标记（每个入口独立处理）
+            if (cycleHandling == CycleHandling.Allow && globalCycleInfo.HasCycle)
+                MarkLoopEntry(items, allNodes, adj, globalCycleInfo);
+
+            CollectSlotRoutes(items);
+            ComputeBranchExclusives(items, allNodes);
+
+            results.Add(new CompilationResult(items.AsReadOnly(), mode, direction, scope,
+                globalCycleInfo.HasCycle, cycleHandling));
         }
 
-        // 跨域检查：验证每个访问节点的 Parent 一致
-        var startTree = startNode.Parent;
-        foreach (var idx in allOrdered)
-        {
-            if (allNodes[idx].Parent != startTree)
-                throw new InvalidOperationException(
-                    $"Cross-domain node detected: node at index {idx} belongs to a different Tree " +
-                    $"than the start node. All nodes must share the same Parent.");
-        }
-
-        // 构建 Item
-        int idCounter = 0;
-        var items = allOrdered.Select(idx =>
-            new CompiledItem(idCounter++, allNodes[idx], 0)
-        ).ToList();
-
-        for (int i = 0; i < items.Count; i++)
-            items[i].Order = i;
-
-        if (cycleHandling == CycleHandling.Allow && cycleInfo.HasCycle)
-            MarkLoopEntry(items, allNodes, adj, cycleInfo);
-
-        // 收集编译时 Slot 路由表
-        CollectSlotRoutes(items);
-
-        // 计算分支独占项（路由器节点的独占下游）
-        ComputeBranchExclusives(items, allNodes);
-
-        return new CompilationResult(items.AsReadOnly(), mode, direction, scope,
-            cycleInfo.HasCycle, cycleHandling);
+        return results.AsReadOnly();
     }
 
     // ── Adjacency ──────────────────────────────────────────────────────────
@@ -186,18 +194,25 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
 
     // ── BFS ────────────────────────────────────────────────────────────────
 
-    private static List<int> TraverseBfsFrom(int start, IWorkflowNodeViewModel[] nodes,
+    private static (List<int> Indices, int[] Depth) TraverseBfsFrom(int start, IWorkflowNodeViewModel[] nodes,
         List<int>[] adj, HashSet<int> globalVisited)
     {
         var result = new List<int>();
-        var queue = new Queue<int>();
-        queue.Enqueue(start);
+        var depth = new int[nodes.Length];
+        // 使用 LinkedList 支持路由子节点插队到队首
+        var queue = new LinkedList<int>();
+        queue.AddLast(start);
+        depth[start] = 0;
 
         while (queue.Count > 0)
         {
-            var u = queue.Dequeue();
+            var u = queue.First!.Value;
+            queue.RemoveFirst();
             if (!globalVisited.Add(u)) continue;
             result.Add(u);
+
+            var isRouter = nodes[u] is ICompileTimeRouter;
+            var childDepth = isRouter ? depth[u] : depth[u] + 1;
 
             // 按优先级排序同层邻居
             var neighbors = adj[u]
@@ -205,22 +220,37 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
                 .OrderBy(v => GetPriority(nodes[v]))
                 .ToList();
 
+            // 路由节点的子节点插到队首（它们有效深度 = 路由深度，应优先于同层其他节点）
             foreach (var v in neighbors)
-                queue.Enqueue(v);
+            {
+                depth[v] = childDepth;
+                if (isRouter)
+                    queue.AddFirst(v);
+                else
+                    queue.AddLast(v);
+            }
         }
-        return result;
+        return (result, depth);
     }
 
     // ── DFS ────────────────────────────────────────────────────────────────
 
-    private static List<int> TraverseDfsFrom(int start, IWorkflowNodeViewModel[] nodes,
+    private static (List<int> Indices, int[] Depth) TraverseDfsFrom(int start, IWorkflowNodeViewModel[] nodes,
         List<int>[] adj, HashSet<int> globalVisited)
     {
         var result = new List<int>();
+        var depth = new int[nodes.Length];
 
-        void Dfs(int u)
+        void Dfs(int u, int currentDepth)
         {
             if (!globalVisited.Add(u)) return;
+
+            // 前序遍历：父节点优先进入结果
+            result.Add(u);
+            depth[u] = currentDepth;
+
+            var isRouter = nodes[u] is ICompileTimeRouter;
+            var childDepth = isRouter ? currentDepth : currentDepth + 1;
 
             // 按优先级排序子节点
             var children = adj[u]
@@ -229,13 +259,11 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
                 .ToList();
 
             foreach (var v in children)
-                Dfs(v);
-
-            result.Add(u);
+                Dfs(v, childDepth);
         }
 
-        Dfs(start);
-        return result;
+        Dfs(start, 0);
+        return (result, depth);
     }
 
     /// <summary>

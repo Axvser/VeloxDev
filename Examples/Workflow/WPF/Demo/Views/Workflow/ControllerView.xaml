@@ -3,11 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+              xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
               xmlns:local="clr-namespace:Demo.Views.Workflow"
               xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
              mc:Ignorable="d"
              ClipToBounds="False"
-             d:DesignHeight="170" d:DesignWidth="220"
+             d:DesignHeight="340" d:DesignWidth="220"
               behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
               behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
               behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
@@ -41,16 +42,34 @@
 
         <Border Grid.Row="1"
                 Background="#252525"
-                Padding="16">
+                Padding="12">
+            <ScrollViewer>
             <StackPanel>
-                <TextBlock Text="种子负载" Foreground="#DCDCDC" />
-                <TextBox Margin="0,8,0,0"
+                <TextBlock Text="Seed" Foreground="#DCDCDC" FontSize="11" />
+                <TextBox Margin="0,4,0,0" FontSize="11"
                          Text="{Binding SeedPayload, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBlock Margin="0,8,0,0"
-                           Text="控制器节点只负责把初始上下文送入工作流。后续节点是否继续广播，仅由节点自身决定。"
-                           Foreground="#BDBDBD"
-                           TextWrapping="Wrap" />
+
+                <TextBlock Margin="0,6,0,0" Text="Mode" Foreground="#DCDCDC" FontSize="11" />
+                <ComboBox Margin="0,2,0,0" FontSize="11"
+                          ItemsSource="{Binding CompileModeOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          SelectedItem="{Binding CompileMode}" />
+
+                <TextBlock Margin="0,6,0,0" Text="Direction" Foreground="#DCDCDC" FontSize="11" />
+                <ComboBox Margin="0,2,0,0" FontSize="11"
+                          ItemsSource="{Binding CompileDirectionOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          SelectedItem="{Binding CompileDirection}" />
+
+                <TextBlock Margin="0,6,0,0" Text="Scope" Foreground="#DCDCDC" FontSize="11" />
+                <ComboBox Margin="0,2,0,0" FontSize="11"
+                          ItemsSource="{Binding CompileScopeOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          SelectedItem="{Binding CompileScope}" />
+
+                <TextBlock Margin="0,6,0,0" Text="Cycle" Foreground="#DCDCDC" FontSize="11" />
+                <ComboBox Margin="0,2,0,0" FontSize="11"
+                          ItemsSource="{Binding CycleHandlingOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          SelectedItem="{Binding CycleHandling}" />
             </StackPanel>
+            </ScrollViewer>
         </Border>
 
         <Border Grid.Row="2"

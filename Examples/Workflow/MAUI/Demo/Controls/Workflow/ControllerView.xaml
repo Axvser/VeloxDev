@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Demo.ViewModels;assembly=Lib"
              xmlns:controls="clr-namespace:Demo.Controls"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="Demo.Controls.ControllerView"
@@ -25,13 +26,29 @@
                    TextColor="White" />
         </Border>
 
-        <Border Grid.Row="1" BackgroundColor="#252525" Padding="16">
-            <VerticalStackLayout Spacing="10">
-                <Label Text="Seed Payload" TextColor="#DCDCDC" />
-                <Entry Text="{Binding SeedPayload}" />
-                <Label Text="The controller only pushes the initial context into the workflow. Subsequent broadcasting is decided by each node."
-                       TextColor="#BDBDBD" />
+        <Border Grid.Row="1" BackgroundColor="#252525" Padding="12">
+            <ScrollView>
+            <VerticalStackLayout Spacing="4">
+                <Label Text="Seed" TextColor="#DCDCDC" FontSize="11" />
+                <Entry Text="{Binding SeedPayload}" FontSize="11" />
+
+                <Label Text="Mode" TextColor="#DCDCDC" FontSize="11" />
+                <Picker ItemsSource="{Binding CompileModeOptions}"
+                        SelectedItem="{Binding CompileMode}" FontSize="11" />
+
+                <Label Text="Direction" TextColor="#DCDCDC" FontSize="11" />
+                <Picker ItemsSource="{Binding CompileDirectionOptions}"
+                        SelectedItem="{Binding CompileDirection}" FontSize="11" />
+
+                <Label Text="Scope" TextColor="#DCDCDC" FontSize="11" />
+                <Picker ItemsSource="{Binding CompileScopeOptions}"
+                        SelectedItem="{Binding CompileScope}" FontSize="11" />
+
+                <Label Text="Cycle" TextColor="#DCDCDC" FontSize="11" />
+                <Picker ItemsSource="{Binding CycleHandlingOptions}"
+                        SelectedItem="{Binding CycleHandling}" FontSize="11" />
             </VerticalStackLayout>
+            </ScrollView>
         </Border>
 
         <Border Grid.Row="2" BackgroundColor="#2D2D2D" StrokeShape="RoundRectangle 0,0,5,5" Padding="8">

@@ -46,6 +46,7 @@
 				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
 			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
 				<TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
+				<TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold" VerticalAlignment="Center"/>
 				<Border Background="#1f3d1f" BorderBrush="#7bd97b" BorderThickness="1" CornerRadius="10" Padding="6,1">
 					<TextBlock Text="{Binding LastRouted}" Foreground="#c8ffc8" FontWeight="Bold"/>
 				</Border>

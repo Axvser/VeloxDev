@@ -103,14 +103,14 @@
 								   Increment="100"
 								   Value="{Binding DelayMilliseconds, Mode=TwoWay}"/>
 					</Grid>
-
                     <Grid ColumnDefinitions="110,*">
-						<TextBlock Text="Title" Foreground="#dcdcdc" VerticalAlignment="Center"/>
-						<TextBox Grid.Column="1" Text="{Binding Title, Mode=TwoWay}"/>
+                      <TextBlock Text="Priority" Foreground="#dcdcdc" VerticalAlignment="Center"/>
+						<NumericUpDown Grid.Column="1"
+								   Minimum="-10"
+								   Maximum="10"
+								   Increment="1"
+								   Value="{Binding CompilePriority, Mode=TwoWay}"/>
 					</Grid>
-
-                    <CheckBox IsChecked="{Binding AutoBroadcast, Mode=TwoWay}" Content="执行完成后自动广播到下游" Foreground="#dcdcdc"/>
-
                     <Border Background="{Binding ExecutionBackground}" BorderBrush="{Binding ExecutionBorderBrush}" BorderThickness="1.5" CornerRadius="4" Padding="10">
 						<StackPanel Spacing="4">
 							<TextBlock Text="Execution" Foreground="#7ec8ff" FontWeight="Bold"/>

@@ -100,6 +100,10 @@
                         <Entry Grid.Column="1" Text="{Binding DelayMilliseconds}" Keyboard="Numeric" />
                     </Grid>
                     <Grid ColumnDefinitions="110,*">
+                        <Label Text="Priority" TextColor="#DCDCDC" VerticalTextAlignment="Center" />
+                        <Entry Grid.Column="1" Text="{Binding CompilePriority}" Keyboard="Numeric" />
+                    </Grid>
+                    <Grid ColumnDefinitions="110,*">
                         <Label Text="Title" TextColor="#DCDCDC" VerticalTextAlignment="Center" />
                         <Entry Grid.Column="1" Text="{Binding Title}" />
                     </Grid>

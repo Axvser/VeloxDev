@@ -32,14 +32,29 @@
 					   Foreground="White"/>
 		</Border>
 
-        <Border Grid.Row="1" Background="#252525" Padding="16">
-			<StackPanel Spacing="10">
-               <TextBlock Text="种子负载" Foreground="#dcdcdc"/>
-				<TextBox Text="{Binding SeedPayload, Mode=TwoWay}" Watermark="用于初始化链路的上下文种子"/>
-             <TextBlock Text="控制器节点只负责把初始上下文送入工作流。后续节点是否继续广播，仅由节点自身决定。"
-						   Foreground="#bdbdbd"
-						   TextWrapping="Wrap"/>
+        <Border Grid.Row="1" Background="#252525" Padding="12">
+			<ScrollViewer>
+			<StackPanel Spacing="6">
+               <TextBlock Text="Seed" Foreground="#dcdcdc" FontSize="11"/>
+				<TextBox Text="{Binding SeedPayload, Mode=TwoWay}" Watermark="payload" FontSize="11"/>
+
+               <TextBlock Text="Mode" Foreground="#dcdcdc" FontSize="11"/>
+				<ComboBox ItemsSource="{Binding CompileModeOptions}"
+						  SelectedItem="{Binding CompileMode}" FontSize="11"/>
+
+               <TextBlock Text="Direction" Foreground="#dcdcdc" FontSize="11"/>
+				<ComboBox ItemsSource="{Binding CompileDirectionOptions}"
+						  SelectedItem="{Binding CompileDirection}" FontSize="11"/>
+
+               <TextBlock Text="Scope" Foreground="#dcdcdc" FontSize="11"/>
+				<ComboBox ItemsSource="{Binding CompileScopeOptions}"
+						  SelectedItem="{Binding CompileScope}" FontSize="11"/>
+
+               <TextBlock Text="Cycle" Foreground="#dcdcdc" FontSize="11"/>
+				<ComboBox ItemsSource="{Binding CycleHandlingOptions}"
+						  SelectedItem="{Binding CycleHandling}" FontSize="11"/>
 			</StackPanel>
+			</ScrollViewer>
 		</Border>
 
 		<Border Grid.Row="2" Background="#2d2d2d" CornerRadius="0,0,5,5" Padding="8">

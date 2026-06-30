@@ -106,6 +106,15 @@
                             <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
+                        <TextBlock Text="Priority" Foreground="#DCDCDC" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding CompilePriority, UpdateSourceTrigger=PropertyChanged}" />
+                    </Grid>
+
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
                         <TextBlock Text="Title" Foreground="#DCDCDC" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
