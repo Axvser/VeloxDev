@@ -1,12 +1,16 @@
+using VeloxDev.MVVM;
+
 namespace VeloxDev.WorkflowSystem.Compilation;
 
 /// <summary>
 /// The compiled output: a read-only ordered list of items.
 /// Call <see cref="ExecuteAsync"/> to run them in sequence.
-/// Lock/UnLock is used to prevent nodes from self-propagating
-/// during compiled execution — each node is locked before the run
-/// so that any broadcast attempts inside WorkAsync are queued,
-/// then unlocked after all nodes complete.
+///
+/// Execution model (compiled mode):
+/// The compiler's <see cref="CompilationResult"/> owns the execution order.
+/// Helper classes (<c>WorkAsync</c>) should NOT self-propagate via broadcast
+/// when running inside a compiled chain — instead they set <see cref="IWorkflowNodeViewModel.WorkResult"/>
+/// and the compiler forwards it to the next item automatically.
 /// </summary>
 public sealed class CompilationResult
 {
@@ -43,118 +47,137 @@ public sealed class CompilationResult
     }
 
     /// <summary>
-    /// Execute all items in order using the Lock/UnLock mechanism.
+    /// Execute all items in deterministic order.
     ///
     /// For each item:
-    ///   1. Lock — broadcast attempts inside WorkAsync are queued.
-    ///   2. Subscribe to WorkCommand.Failed for error redirect / retry.
-    ///   3. Execute WorkCommand.
-    ///   4. Unlock.
+    ///   1. Subscribe to WorkCommand.Failed for error redirect / retry.
+    ///   2. Notify <see cref="ICompileTimeSink"/> (BeforeExecute).
+    ///   3. Execute WorkCommand and wait for actual completion via Exited event.
+    ///   4. Read <see cref="IWorkflowNodeViewModel.WorkResult"/> and forward it to the next item.
+    ///   5. Notify <see cref="ICompileTimeSink"/> (AfterExecute).
+    ///
+    /// Because <see cref="IVeloxCommand.ExecuteAsync"/> dispatches the command
+    /// asynchronously (fire-and-forget internally), this method hooks the
+    /// <see cref="IVeloxCommand.Exited"/> event to wait for genuine completion.
+    ///
+    /// The parameter is passed directly (NOT wrapped in <see cref="WorkContext"/>)
+    /// so that downstream helpers can access the original object — e.g.
+    /// <c>NetworkFlowContext.From(parameter)</c> works without unwrapping.
     ///
     /// When Allow mode is active and a loop is detected, consecutive loop iterations
     /// are tracked. If the loop tail jumps back to the loop entry consecutively,
     /// a counter increments; if MaxLoopCount is exceeded, the circuit breaker fires.
     ///
-    /// After all items complete, all nodes are unlocked so queued commands can drain.
     /// <returns>The last node's result, or the initial parameter if no node produced a result.</returns>
     /// </summary>
     public async Task<object?> ExecuteAsync(object? parameter = null, CancellationToken ct = default)
     {
-        // 第一阶段：锁定所有节点，防止 WorkAsync 内自行广播
+        object? currentParam = parameter;
+        int consecutiveLoopCount = 0;
+        CompiledItem? lastExecuted = null;
+
         foreach (var item in _items)
         {
             ct.ThrowIfCancellationRequested();
-            item.Node.WorkCommand.Lock();
-        }
 
-        object? currentParam = parameter;
-
-        try
-        {
-            int consecutiveLoopCount = 0;
-            CompiledItem? lastExecuted = null;
-
-            foreach (var item in _items)
+            // 环路追踪：检测连续回跳
+            if (CycleHandling == CycleHandling.Allow && HasCycle && lastExecuted is not null)
             {
-                ct.ThrowIfCancellationRequested();
-
-                // 环路追踪：检测连续回跳
-                if (CycleHandling == CycleHandling.Allow && HasCycle && lastExecuted is not null)
+                if (item.IsLoopEntry && lastExecuted.Id == item.LoopTailId)
                 {
-                    if (item.IsLoopEntry && lastExecuted.Id == item.LoopTailId)
+                    consecutiveLoopCount++;
+                    if (item.MaxLoopCount > 0 && consecutiveLoopCount > item.MaxLoopCount)
                     {
-                        consecutiveLoopCount++;
-                        if (item.MaxLoopCount > 0 && consecutiveLoopCount > item.MaxLoopCount)
+                        if (item.CircuitBreaker is not null)
                         {
-                            if (item.CircuitBreaker is not null)
-                            {
-                                item.CircuitBreaker(item);
-                                continue;
-                            }
-                            throw new InvalidOperationException(
-                                $"Loop exceeded maximum consecutive count ({item.MaxLoopCount}) " +
-                                $"at item #{item.Id} (loop entry). Circuit breaker not registered.");
+                            item.CircuitBreaker(item);
+                            continue;
                         }
-                    }
-                    else
-                    {
-                        consecutiveLoopCount = 0;
+                        throw new InvalidOperationException(
+                            $"Loop exceeded maximum consecutive count ({item.MaxLoopCount}) " +
+                            $"at item #{item.Id} (loop entry). Circuit breaker not registered.");
                     }
                 }
-
-                item.SubscribeError(onFailed: (failedItem, exception) =>
+                else
                 {
-                    // 通知失败的节点
-                    NotifyExecutionSink(failedItem, currentParam, ExecutionEvent.OnError);
-
-                    if (failedItem.ErrorRedirectId.HasValue)
-                    {
-                        var target = _items.FirstOrDefault(i => i.Id == failedItem.ErrorRedirectId.Value);
-                        var errorCtx = new ErrorContext(
-                            failedItem.Id, exception, currentParam, currentParam);
-                        var redirectCtx = new WorkContext(errorCtx);
-                        target?.Node.WorkCommand.Execute(redirectCtx);
-                    }
-                });
-
-                // 通知：执行前
-                NotifyExecutionSink(item, currentParam, ExecutionEvent.BeforeExecute);
-
-                // 执行，传入链式参数
-                var ctx = new WorkContext(currentParam);
-
-                try
-                {
-                    await item.Node.WorkCommand.ExecuteAsync(ctx);
-
-                    // 结果链传递：将节点输出传给下一个
-                    if (item.Node.WorkResult is not null)
-                        currentParam = item.Node.WorkResult;
-                }
-                catch
-                {
-                    // 错误已由 Failed 事件处理
-                }
-                finally
-                {
-                    // 通知：执行后（无论成功还是失败）
-                    NotifyExecutionSink(item, currentParam, ExecutionEvent.AfterExecute);
-                    item.UnsubscribeError();
-                    lastExecuted = item;
+                    consecutiveLoopCount = 0;
                 }
             }
 
-            // 通知：全链执行完毕
-            NotifyAllExecutionSinks(currentParam, ExecutionEvent.OnCompleted);
-
-            return currentParam;
-        }
-        finally
-        {
-            // 第二阶段：解锁所有节点，排队广播开始释放
-            foreach (var item in _items)
+            item.SubscribeError(onFailed: (failedItem, exception) =>
             {
-                item.Node.WorkCommand.UnLock();
+                // 通知失败的节点
+                NotifyExecutionSink(failedItem, currentParam, ExecutionEvent.OnError);
+
+                if (failedItem.ErrorRedirectId.HasValue)
+                {
+                    var target = _items.FirstOrDefault(i => i.Id == failedItem.ErrorRedirectId.Value);
+                    var errorCtx = new ErrorContext(
+                        failedItem.Id, exception, currentParam, currentParam);
+                    var redirectCtx = new WorkContext(errorCtx);
+                    target?.Node.WorkCommand.Execute(redirectCtx);
+                }
+            });
+
+            // 通知：执行前
+            NotifyExecutionSink(item, currentParam, ExecutionEvent.BeforeExecute);
+
+            try
+            {
+                // 执行并等待真正完成
+                // 注意：参数直接传递（不包 WorkContext），
+                // 以便 helper 的 NetworkFlowContext.From 能正确识别共享实例
+                await ExecuteItemAsync(item, currentParam, ct);
+
+                // 结果链传递：将节点输出传给下一个
+                if (item.Node.WorkResult is not null)
+                    currentParam = item.Node.WorkResult;
+            }
+            catch
+            {
+                // 错误已由 Failed 事件处理
+            }
+            finally
+            {
+                // 通知：执行后（无论成功还是失败）
+                NotifyExecutionSink(item, currentParam, ExecutionEvent.AfterExecute);
+                item.UnsubscribeError();
+                lastExecuted = item;
+            }
+        }
+
+        // 通知：全链执行完毕
+        NotifyAllExecutionSinks(currentParam, ExecutionEvent.OnCompleted);
+
+        return currentParam;
+    }
+
+    /// <summary>
+    /// 执行单个 CompiledItem 并等待其真正完成。
+    ///
+    /// VeloxCommand.ExecuteAsync 内部使用 fire-and-forget 调度命令，
+    /// 返回的 Task 在调度完成后即完成，不等待命令实际执行完毕。
+    /// 此方法通过订阅 Exited 事件来等待真正的执行结束。
+    /// </summary>
+    private static async Task ExecuteItemAsync(CompiledItem item, object? parameter, CancellationToken ct)
+    {
+        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        using (ct.Register(() => tcs.TrySetCanceled()))
+        {
+            void OnExited(CommandEventArgs e) => tcs.TrySetResult(null);
+
+            item.Node.WorkCommand.Exited += OnExited;
+            try
+            {
+                // 调度执行（fire-and-forget）
+                await item.Node.WorkCommand.ExecuteAsync(parameter).ConfigureAwait(false);
+                // 等待 Exited 事件确认执行完毕
+                await tcs.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                item.Node.WorkCommand.Exited -= OnExited;
             }
         }
     }

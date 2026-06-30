@@ -28,7 +28,8 @@ file sealed class StubCommand : IVeloxCommand
     public event CommandEventHandler? Dequeued;
 
     public bool CanExecute(object? parameter) => true;
-    public void Execute(object? parameter) { ExecuteCount++; Parameters.Add(parameter); AfterExecute?.Invoke(parameter); }
+    public void Execute(object? parameter) { ExecuteCount++; Parameters.Add(parameter); AfterExecute?.Invoke(parameter); RaiseExited(); }
+    private void RaiseExited() => Exited?.Invoke(new CommandEventArgs(null!, CommandEventType.Exited));
     public void Lock() { LockCount++; }
     public void UnLock() { UnLockCount++; }
     public void Notify() { }
@@ -329,21 +330,17 @@ public class WorkflowCompilerTests
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // 6. Lock / UnLock
+    // 6. Execution
     // ═══════════════════════════════════════════════════════════════════════
 
     [TestMethod]
-    public async Task ExecuteAsync_LocksThenUnlocks()
+    public async Task ExecuteAsync_AllNodesExecuted()
     {
         var (t, n) = GraphBuilder.BuildLinearChain();
         var r = _compiler.Compile(n[0], CompileMode.BFS);
         await r.ExecuteAsync();
         foreach (var node in n.Cast<StubNode>())
-        {
-            Assert.AreEqual(1, node.TrackedCommand.LockCount);
-            Assert.AreEqual(1, node.TrackedCommand.UnLockCount);
             Assert.AreEqual(1, node.TrackedCommand.ExecuteCount);
-        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
