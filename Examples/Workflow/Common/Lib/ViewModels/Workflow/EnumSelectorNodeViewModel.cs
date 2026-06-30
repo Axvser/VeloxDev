@@ -3,13 +3,14 @@ using System.ComponentModel;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.Compilation;
 
 namespace Demo.ViewModels;
 
 [AgentContext(AgentLanguages.Chinese, "枚举选择器节点，可将输入按枚举成员路由到多个执行路径。默认大小为 280×380。")]
 [AgentContext(AgentLanguages.English, "Enum selector node that routes input to multiple execution paths based on enum members. Default size: 280×380.")]
 [WorkflowBuilder.Node<EnumSelectorHelper>(workSemaphore: 1)]
-public partial class EnumSelectorNodeViewModel
+public partial class EnumSelectorNodeViewModel : ICompileTimeRouter
 {
     public EnumSelectorNodeViewModel()
     {
@@ -55,6 +56,19 @@ public partial class EnumSelectorNodeViewModel
 
     [VeloxProperty] private string lastRouted = "-";
 
+    // WorkResult（生成器 NuGet 暂未生成该属性，手动实现）
+    private object? workResult;
+    public object? WorkResult
+    {
+        get => workResult;
+        set
+        {
+            if (Equals(workResult, value)) return;
+            workResult = value;
+            OnPropertyChanged(nameof(WorkResult));
+        }
+    }
+
     public bool HasInputSlot => _inputSlot is not null;
 
     public Type? EnumType => OutputSlots?.SelectorType;
@@ -81,5 +95,25 @@ public partial class EnumSelectorNodeViewModel
         var items = OutputSlots?.Items;
         if (items == null || index < 0 || index >= items.Count) return "?";
         return items[index].Slot?.ToString() ?? "?";
+    }
+
+    /// <summary>
+    /// 编译时路由表：枚举值 → 对应的下游节点
+    /// </summary>
+    public IReadOnlyDictionary<object, IWorkflowNodeViewModel> GetRouteTable()
+    {
+        var dict = new Dictionary<object, IWorkflowNodeViewModel>();
+        if (OutputSlots is null) return dict;
+
+        foreach (var item in OutputSlots.Items)
+        {
+            var slot = item.Slot;
+            foreach (var target in slot.Targets)
+            {
+                if (target.Parent is not null && item.Value is not null)
+                    dict[item.Value] = target.Parent;
+            }
+        }
+        return dict;
     }
 }

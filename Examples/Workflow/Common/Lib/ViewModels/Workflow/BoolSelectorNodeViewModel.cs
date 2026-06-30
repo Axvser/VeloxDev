@@ -2,6 +2,7 @@ using Demo.ViewModels.Workflow.Helper;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.Compilation;
 
 namespace Demo.ViewModels;
 
@@ -16,7 +17,7 @@ public partial class TestNode : BoolSelectorNodeViewModel
 [AgentContext(AgentLanguages.Chinese, "布尔选择器节点，将输入路由到 True 或 False 输出口。默认大小为 260*200")]
 [AgentContext(AgentLanguages.English, "Bool selector node that routes input to True or False output slot based on Condition. Default size: 260×200")]
 [WorkflowBuilder.Node<BoolSelectorHelper>(workSemaphore: 1)]
-public partial class BoolSelectorNodeViewModel
+public partial class BoolSelectorNodeViewModel : ICompileTimeRouter
 {
     public BoolSelectorNodeViewModel()
     {
@@ -44,8 +45,42 @@ public partial class BoolSelectorNodeViewModel
 
     [VeloxProperty] private string lastRouted = "-";
 
+    // WorkResult（生成器 NuGet 暂未生成该属性，手动实现）
+    private object? workResult;
+    public object? WorkResult
+    {
+        get => workResult;
+        set
+        {
+            if (Equals(workResult, value)) return;
+            workResult = value;
+            OnPropertyChanged(nameof(WorkResult));
+        }
+    }
+
     public bool HasInputSlot => _inputSlot is not null;
 
     public SlotViewModel? TrueSlot => OutputSlots?.TrySelect(true, out var s) == true ? s : null;
     public SlotViewModel? FalseSlot => OutputSlots?.TrySelect(false, out var s) == true ? s : null;
+
+    /// <summary>
+    /// 编译时路由表：true → TrueSlot 的后续节点，false → FalseSlot 的后续节点
+    /// </summary>
+    public IReadOnlyDictionary<object, IWorkflowNodeViewModel> GetRouteTable()
+    {
+        var dict = new Dictionary<object, IWorkflowNodeViewModel>();
+        if (TrueSlot is not null)
+        {
+            foreach (var target in TrueSlot.Targets)
+                if (target.Parent is not null)
+                    dict[true] = target.Parent;
+        }
+        if (FalseSlot is not null)
+        {
+            foreach (var target in FalseSlot.Targets)
+                if (target.Parent is not null)
+                    dict[false] = target.Parent;
+        }
+        return dict;
+    }
 }

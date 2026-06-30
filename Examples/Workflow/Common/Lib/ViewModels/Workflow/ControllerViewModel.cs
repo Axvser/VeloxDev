@@ -1,6 +1,7 @@
 ﻿using VeloxDev.AI;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.Compilation;
 using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace Demo.ViewModels;
@@ -24,8 +25,21 @@ public partial class ControllerViewModel
     [AgentContext(AgentLanguages.English, "Initial payload string injected into the workflow context when execution starts.")]
     [VeloxProperty] private string seedPayload = "demo-request-chain";
 
-    [AgentContext(AgentLanguages.Chinese, "启动工作流，向下游广播种子负载")]
-    [AgentContext(AgentLanguages.English, "Starts the workflow: broadcasts SeedPayload to all connected downstream nodes.")]
+    // WorkResult（生成器 NuGet 暂未生成该属性，手动实现）
+    private object? workResult;
+    public object? WorkResult
+    {
+        get => workResult;
+        set
+        {
+            if (Equals(workResult, value)) return;
+            workResult = value;
+            OnPropertyChanged(nameof(WorkResult));
+        }
+    }
+
+    [AgentContext(AgentLanguages.Chinese, "启动工作流，编译拓扑后按序执行")]
+    [AgentContext(AgentLanguages.English, "Compiles the workflow graph, then executes nodes in deterministic order using the CompilationResult.")]
     [VeloxCommand]
     private async Task OpenWorkflow(object? parameters, CancellationToken ct)
     {
@@ -34,8 +48,15 @@ public partial class ControllerViewModel
 
         try
         {
+            var compiler = new WorkflowCompiler();
             var context = NetworkFlowContext.Create(SeedPayload);
-            await this.StandardBroadcastAsync(context, ct);
+
+            // 编译整个工作流图（BFS + 正向 + 全范围）
+            var result = compiler.Compile(this, CompileMode.BFS,
+                CompileDirection.Forward, CompileScope.Omni);
+
+            // 按编译顺序执行，结果链自动传递
+            await result.ExecuteAsync(context, ct);
         }
         catch
         {

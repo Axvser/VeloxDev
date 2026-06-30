@@ -34,6 +34,19 @@ public partial class NodeViewModel
     [AgentContext(AgentLanguages.English, "When true, the node automatically forwards the result to all connected downstream nodes after execution.")]
     [VeloxProperty] private bool autoBroadcast = true;
 
+    // WorkResult（生成器 NuGet 暂未生成该属性，手动实现）
+    private object? workResult;
+    public object? WorkResult
+    {
+        get => workResult;
+        set
+        {
+            if (Equals(workResult, value)) return;
+            workResult = value;
+            OnPropertyChanged(nameof(WorkResult));
+        }
+    }
+
     [VeloxProperty] private bool isRunning = false;
     [VeloxProperty] private string lastStatus = "Idle";
     [VeloxProperty] private string lastDuration = "-";
