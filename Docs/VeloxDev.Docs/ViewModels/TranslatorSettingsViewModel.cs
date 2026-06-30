@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using System;
 using System.Collections.Generic;
 using VeloxDev.Docs.Translation;
 
@@ -20,14 +21,18 @@ public sealed partial class TranslatorSettingsViewModel : ObservableObject
     private string _endpoint = WikiTranslatorSettings.Endpoint;
 
     [ObservableProperty]
+    private int _maxConcurrency = WikiTranslatorSettings.MaxConcurrency;
+
+    [ObservableProperty]
     private WikiTranslationModeOption _selectedMode;
 
     /// <summary>All available translation modes exposed to the UI.</summary>
     public IReadOnlyList<WikiTranslationModeOption> TranslationModes { get; } =
     [
-        new(WikiTranslationMode.CurrentPage,                "Current Page",                       "仅翻译当前页，不修改文档语言"),
-        new(WikiTranslationMode.FullDocument,               "Full Document",                      "翻译全部页面，不修改文档语言"),
-        new(WikiTranslationMode.FullDocumentAndUpdateLanguage, "Full Document + Update Language", "翻译全部页面，并将文档语言切换为目标语言"),
+        new(WikiTranslationMode.CurrentPage,                           "Current Page",              "仅翻译当前页，不修改文档语言"),
+        new(WikiTranslationMode.CurrentPageAndChildrenAndUpdateLanguage, "Current Page + Children",   "翻译当前页及其子页，并将文档语言切换为目标语言（增量翻译）"),
+        new(WikiTranslationMode.FullDocument,                          "Full Document",             "翻译全部页面，不修改文档语言"),
+        new(WikiTranslationMode.FullDocumentAndUpdateLanguage,          "Full Document + Language",  "翻译全部页面，并将文档语言切换为目标语言"),
     ];
 
     public TranslatorSettingsViewModel()
@@ -48,6 +53,7 @@ public sealed partial class TranslatorSettingsViewModel : ObservableObject
             ? "https://dashscope.aliyuncs.com/compatible-mode/v1"
             : Endpoint.Trim();
         WikiTranslatorSettings.TranslationMode = SelectedMode?.Mode ?? WikiTranslationMode.CurrentPage;
+        WikiTranslatorSettings.MaxConcurrency = Math.Clamp(MaxConcurrency, 1, 32);
     }
 
     /// <summary>Resets fields to what <see cref="WikiTranslatorSettings"/> currently holds.</summary>
@@ -59,6 +65,7 @@ public sealed partial class TranslatorSettingsViewModel : ObservableObject
         SelectedMode = TranslationModes
             .FirstOrMatchingMode(WikiTranslatorSettings.TranslationMode)
             ?? TranslationModes[0];
+        MaxConcurrency = WikiTranslatorSettings.MaxConcurrency;
     }
 }
 

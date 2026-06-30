@@ -403,6 +403,17 @@ public partial class DocumentProvider : IWikiElement
                         await translator.TranslateNodeAsync(currentNode, target, progress, _translationCts.Token).ConfigureAwait(true);
                     break;
 
+                case WikiTranslationMode.CurrentPageAndChildrenAndUpdateLanguage:
+                    if (SelectedNode is { } currentNodeWithChildren)
+                    {
+                        await translator.TranslateNodeAsync(currentNodeWithChildren, target, progress, _translationCts.Token).ConfigureAwait(true);
+                        // Update language metadata without triggering full document reload
+                        _suppressReload = true;
+                        try { Language = target; }
+                        finally { _suppressReload = false; }
+                    }
+                    break;
+
                 case WikiTranslationMode.FullDocument:
                     await translator.TranslateDocumentAsync(this, target, progress, _translationCts.Token).ConfigureAwait(true);
                     break;

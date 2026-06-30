@@ -3,6 +3,7 @@ using OpenAI;
 using System;
 using System.ClientModel;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.Docs.ViewModels;
@@ -128,24 +129,40 @@ public sealed class WikiTranslator
         CancellationToken cancellationToken)
     {
         var totalWorkItems = GetTotalWorkItems(jobs);
+        var concurrency = Math.Clamp(WikiTranslatorSettings.MaxConcurrency, 1, 32);
+        var semaphore = new SemaphoreSlim(concurrency, concurrency);
         var completedWorkItems = 0;
         var failedCount = 0;
+        var completedLock = new object();
 
-        for (int i = 0; i < jobs.Count; i++)
+        // Capture UI SynchronizationContext before any async work
+        var uiContext = SynchronizationContext.Current;
+
+        // Start all async operations concurrently — no Task.Run needed.
+        // Each state machine runs synchronously up to its first await (WaitAsync),
+        // then the HTTP I/O is truly async (no thread blocked).
+        var tasks = jobs.Select(async job =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var job = jobs[i];
-            // ConfigureAwait(true): HTTP work runs off-thread inside TranslateJobAsync,
-            // but the continuation (Apply) is marshalled back to the calling sync context
-            // (UI thread) so that property setters can safely mutate Avalonia objects.
+            await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var translated = await TranslateJobAsync(job, targetLanguage, cancellationToken).ConfigureAwait(true);
-                job.Apply(translated);
-                job.Complete(true);
-                completedWorkItems += job.WorkItemCount;
-                progress?.Report(new WikiTranslationProgress(completedWorkItems, totalWorkItems, job, true, failedCount, null));
+                // Pure async I/O — no thread pool thread consumed
+                var translated = await TranslateJobAsync(job, targetLanguage, cancellationToken)
+                    .ConfigureAwait(false);
+
+                // Now on ThreadPool. Marshal Apply back to UI thread.
+                uiContext?.Post(_ =>
+                {
+                    job.Apply(translated);
+                    job.Complete(true);
+                }, null);
+
+                lock (completedLock)
+                {
+                    completedWorkItems += job.WorkItemCount;
+                }
+                progress?.Report(new WikiTranslationProgress(
+                    completedWorkItems, totalWorkItems, job, true, failedCount, null));
             }
             catch (OperationCanceledException)
             {
@@ -155,11 +172,21 @@ public sealed class WikiTranslator
             catch (Exception ex)
             {
                 job.Complete(false);
-                failedCount++;
-                completedWorkItems += job.WorkItemCount;
-                progress?.Report(new WikiTranslationProgress(completedWorkItems, totalWorkItems, job, false, failedCount, ex.Message));
+                lock (completedLock)
+                {
+                    failedCount++;
+                    completedWorkItems += job.WorkItemCount;
+                }
+                progress?.Report(new WikiTranslationProgress(
+                    completedWorkItems, totalWorkItems, job, false, failedCount, ex.Message));
             }
-        }
+            finally
+            {
+                semaphore.Release();
+            }
+        }).ToList();
+
+        await Task.WhenAll(tasks).ConfigureAwait(true);
     }
 
     /// <summary>

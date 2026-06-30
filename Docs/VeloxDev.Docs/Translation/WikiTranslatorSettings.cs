@@ -62,6 +62,13 @@ public static class WikiTranslatorSettings
     public static WikiTranslationMode TranslationMode { get; set; } = WikiTranslationMode.CurrentPage;
 
     /// <summary>
+    /// Maximum number of concurrent LLM translation requests.
+    /// Higher values speed up large documents but may hit API rate limits.
+    /// Defaults to 1 (sequential). Recommended range: 1-10.
+    /// </summary>
+    public static int MaxConcurrency { get; set; } = 1;
+
+    /// <summary>
     /// Creates a configured <see cref="WikiTranslator"/> using the current settings.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when no API key is configured.</exception>
