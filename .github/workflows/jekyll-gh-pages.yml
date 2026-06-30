@@ -3,6 +3,8 @@ name: Deploy Avalonia Browser to GitHub Pages
 on:
   push:
     branches: ["master"]
+    paths:
+      - "Docs/**"
   workflow_dispatch:
 
 permissions:
