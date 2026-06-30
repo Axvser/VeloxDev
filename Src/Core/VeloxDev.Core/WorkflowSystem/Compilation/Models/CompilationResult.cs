@@ -75,10 +75,19 @@ public sealed class CompilationResult
         object? currentParam = parameter;
         int consecutiveLoopCount = 0;
         CompiledItem? lastExecuted = null;
+        var skippedItems = new HashSet<int>(); // 未选中分支的独占项 ID
 
         foreach (var item in _items)
         {
             ct.ThrowIfCancellationRequested();
+
+            // 跳过被路由分支排除的项
+            if (skippedItems.Contains(item.Id))
+            {
+                // 仍然发送 AfterExecute 通知以维持生命周期一致性
+                NotifyExecutionSink(item, currentParam, ExecutionEvent.AfterExecute);
+                continue;
+            }
 
             // 环路追踪：检测连续回跳
             if (CycleHandling == CycleHandling.Allow && HasCycle && lastExecuted is not null)
@@ -125,13 +134,27 @@ public sealed class CompilationResult
             try
             {
                 // 执行并等待真正完成
-                // 注意：参数直接传递（不包 WorkContext），
-                // 以便 helper 的 NetworkFlowContext.From 能正确识别共享实例
                 await ExecuteItemAsync(item, currentParam, ct);
 
                 // 结果链传递：将节点输出传给下一个
                 if (item.Node.WorkResult is not null)
                     currentParam = item.Node.WorkResult;
+
+                // 路由分支排除：如果当前节点是路由器，根据选中的 key 跳过未选分支的独占项
+                if (item.BranchExclusiveItems is not null &&
+                    item.Node is ICompileTimeRouter router)
+                {
+                    var chosenKey = router.GetCurrentRouteKey();
+                    foreach (var kv in item.BranchExclusiveItems)
+                    {
+                        // 未选中的分支 → 其独占项全部跳过
+                        if (!Equals(kv.Key, chosenKey))
+                        {
+                            foreach (var skipId in kv.Value)
+                                skippedItems.Add(skipId);
+                        }
+                    }
+                }
             }
             catch
             {
@@ -139,7 +162,6 @@ public sealed class CompilationResult
             }
             finally
             {
-                // 通知：执行后（无论成功还是失败）
                 NotifyExecutionSink(item, currentParam, ExecutionEvent.AfterExecute);
                 item.UnsubscribeError();
                 lastExecuted = item;

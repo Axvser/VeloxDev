@@ -56,6 +56,14 @@ public sealed class CompiledItem
     /// </summary>
     public IReadOnlyDictionary<object, IWorkflowNodeViewModel>? RouteTable { get; internal set; }
 
+    /// <summary>
+    /// For router nodes (those with <see cref="RouteTable"/>), maps each route key
+    /// to the set of item IDs that are exclusively reachable via that branch.
+    /// Items in unchosen branches are skipped during execution.
+    /// Null if the node is not a router or has no exclusive descendants.
+    /// </summary>
+    public Dictionary<object, HashSet<int>>? BranchExclusiveItems { get; internal set; }
+
     internal CompiledItem(int id, IWorkflowNodeViewModel node, int order)
     {
         Id = id;

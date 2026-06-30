@@ -128,7 +128,10 @@ file sealed class RoutingNode : StubNode, ICompileTimeRouter
     public IReadOnlyDictionary<object, IWorkflowNodeViewModel> RouteTable { get; set; }
         = new Dictionary<object, IWorkflowNodeViewModel>();
 
+    public object? CurrentRouteKey { get; set; }
+
     public IReadOnlyDictionary<object, IWorkflowNodeViewModel> GetRouteTable() => RouteTable;
+    public object? GetCurrentRouteKey() => CurrentRouteKey;
 }
 
 // ── Stub with ICompileTimeSink ──────────────────────────────────────────────
@@ -591,7 +594,78 @@ public class WorkflowCompilerTests
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // 12. Edge cases
+    // 12. Branch exclusive (routing)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    [TestMethod]
+    public async Task BranchExclusive_ChosenBranchExecutes_OtherSkipped()
+    {
+        // 钻石图：n0(router) → n1, n2 → n3
+        // n1 独占 true 分支，n2 独占 false 分支，n3 非独占
+        var t = new StubTree();
+        var n0 = new RoutingNode { Parent = t, CurrentRouteKey = true };
+        var n1 = new StubNode { Parent = t };
+        var n2 = new StubNode { Parent = t };
+        var n3 = new StubNode { Parent = t };
+        n0.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        {
+            [true] = n1,
+            [false] = n2,
+        };
+        var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3} };
+        n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]); n3.Slots.Add(s[3]);
+        GraphBuilder.Connect(s[0], s[1]); GraphBuilder.Connect(s[0], s[2]);
+        GraphBuilder.Connect(s[1], s[3]); GraphBuilder.Connect(s[2], s[3]);
+        t.Nodes.Add(n0); t.Nodes.Add(n1); t.Nodes.Add(n2); t.Nodes.Add(n3);
+
+        var r = _compiler.Compile(n0, CompileMode.BFS);
+        Assert.IsNotNull(r.Items[0].BranchExclusiveItems);
+
+        await r.ExecuteAsync();
+
+        Assert.AreEqual(1, ((StubNode)n0).TrackedCommand.ExecuteCount);
+        Assert.AreEqual(1, n1.TrackedCommand.ExecuteCount, "n1 on chosen (true) branch");
+        Assert.AreEqual(0, n2.TrackedCommand.ExecuteCount, "n2 on unchosen (false) branch — skipped");
+        Assert.AreEqual(1, n3.TrackedCommand.ExecuteCount, "n3 reachable from both — executed");
+    }
+
+    [TestMethod]
+    public async Task BranchExclusive_OtherBranchChosen()
+    {
+        var t = new StubTree();
+        var n0 = new RoutingNode { Parent = t, CurrentRouteKey = false };
+        var n1 = new StubNode { Parent = t };
+        var n2 = new StubNode { Parent = t };
+        var n3 = new StubNode { Parent = t };
+        n0.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        {
+            [true] = n1,
+            [false] = n2,
+        };
+        var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3} };
+        n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]); n3.Slots.Add(s[3]);
+        GraphBuilder.Connect(s[0], s[1]); GraphBuilder.Connect(s[0], s[2]);
+        GraphBuilder.Connect(s[1], s[3]); GraphBuilder.Connect(s[2], s[3]);
+        t.Nodes.Add(n0); t.Nodes.Add(n1); t.Nodes.Add(n2); t.Nodes.Add(n3);
+
+        var r = _compiler.Compile(n0, CompileMode.BFS);
+        await r.ExecuteAsync();
+
+        Assert.AreEqual(0, n1.TrackedCommand.ExecuteCount, "n1 on true — skipped (chose false)");
+        Assert.AreEqual(1, n2.TrackedCommand.ExecuteCount, "n2 on false — executed");
+        Assert.AreEqual(1, n3.TrackedCommand.ExecuteCount);
+    }
+
+    [TestMethod]
+    public void BranchExclusive_NonRouter_HasNull()
+    {
+        var (t, n) = GraphBuilder.BuildSingleNode();
+        var r = _compiler.Compile(n[0], CompileMode.BFS);
+        Assert.IsNull(r.Items[0].BranchExclusiveItems);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 13. Edge cases
     // ═══════════════════════════════════════════════════════════════════════
 
     [TestMethod]

@@ -88,6 +88,9 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         // 收集编译时 Slot 路由表
         CollectSlotRoutes(items);
 
+        // 计算分支独占项（路由器节点的独占下游）
+        ComputeBranchExclusives(items, allNodes);
+
         return new CompilationResult(items.AsReadOnly(), mode, direction, scope,
             cycleInfo.HasCycle, cycleHandling);
     }
@@ -322,6 +325,89 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
             {
                 item.RouteTable = router.GetRouteTable();
             }
+        }
+    }
+
+    // ── Branch exclusive computation ─────────────────────────────────────
+
+    /// <summary>
+    /// 为每个路由器节点计算分支独占项。
+    /// 对 RouteTable 中的每个分支做 BFS，找出仅通过该分支可达的节点，
+    /// 存入 <see cref="CompiledItem.BranchExclusiveItems"/>。
+    /// 执行时，未选中分支的独占项将被跳过。
+    /// </summary>
+    private static void ComputeBranchExclusives(
+        List<CompiledItem> items, IWorkflowNodeViewModel[] nodes)
+    {
+        var forwardAdj = BuildForwardAdjacency(nodes);
+        var nodeToItemId = new Dictionary<IWorkflowNodeViewModel, int>();
+        foreach (var item in items)
+            nodeToItemId[item.Node] = item.Id;
+
+        foreach (var item in items)
+        {
+            if (item.RouteTable is null || item.RouteTable.Count == 0)
+                continue;
+
+            var routerIdx = Array.IndexOf(nodes, item.Node);
+            if (routerIdx < 0) continue;
+
+            // 1) 收集每个分支的所有下游节点
+            var branchDescendants = new Dictionary<object, HashSet<int>>();
+            foreach (var kv in item.RouteTable)
+            {
+                var targetIdx = Array.IndexOf(nodes, kv.Value);
+                if (targetIdx < 0) continue;
+
+                var descendants = new HashSet<int>();
+                var queue = new Queue<int>();
+                queue.Enqueue(targetIdx);
+                while (queue.Count > 0)
+                {
+                    var u = queue.Dequeue();
+                    if (!descendants.Add(u)) continue;
+                    foreach (var v in forwardAdj[u])
+                        queue.Enqueue(v);
+                }
+                branchDescendants[kv.Key] = descendants;
+            }
+
+            // 2) 对每个分支，找出仅属于该分支的节点（不在其他分支的下游集合中）
+            var allKeys = branchDescendants.Keys.ToArray();
+            var exclusive = new Dictionary<object, HashSet<int>>();
+
+            foreach (var kv1 in branchDescendants)
+            {
+                // 收集所有其他分支的节点
+                var otherNodes = new HashSet<int>();
+                foreach (var kv2 in branchDescendants)
+                {
+                    if (Equals(kv2.Key, kv1.Key)) continue;
+                    otherNodes.UnionWith(kv2.Value);
+                }
+
+                // 本分支中不在其他分支里的节点 = 独占节点
+                var exclusiveNodes = new HashSet<int>();
+                foreach (var idx in kv1.Value)
+                {
+                    if (!otherNodes.Contains(idx))
+                        exclusiveNodes.Add(idx);
+                }
+
+                // 将节点索引映射为 Item ID
+                var exclusiveItemIds = new HashSet<int>();
+                foreach (var idx in exclusiveNodes)
+                {
+                    if (nodeToItemId.TryGetValue(nodes[idx], out var id))
+                        exclusiveItemIds.Add(id);
+                }
+
+                if (exclusiveItemIds.Count > 0)
+                    exclusive[kv1.Key] = exclusiveItemIds;
+            }
+
+            if (exclusive.Count > 0)
+                item.BranchExclusiveItems = exclusive;
         }
     }
 }

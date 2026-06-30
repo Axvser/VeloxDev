@@ -26,4 +26,14 @@ public interface ICompileTimeRouter
     ///   { "yes" → yesNode, "no" → noNode }
     /// </summary>
     IReadOnlyDictionary<object, IWorkflowNodeViewModel> GetRouteTable();
+
+    /// <summary>
+    /// Called at execution time after <see cref="GetRouteTable"/> was collected.
+    /// Returns the currently selected route key, which the executor uses to
+    /// skip items exclusively reachable via unchosen branches.
+    ///
+    /// Example — a BoolSelector with <c>Condition = true</c> returns <c>true</c>,
+    /// so items exclusive to the <c>false</c> branch are skipped.
+    /// </summary>
+    object? GetCurrentRouteKey();
 }

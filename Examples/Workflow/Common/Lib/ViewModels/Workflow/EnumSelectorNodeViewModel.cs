@@ -97,6 +97,8 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter
         return items[index].Slot?.ToString() ?? "?";
     }
 
+    public object? GetCurrentRouteKey() => SelectedValue;
+
     /// <summary>
     /// 编译时路由表：枚举值 → 对应的下游节点
     /// </summary>

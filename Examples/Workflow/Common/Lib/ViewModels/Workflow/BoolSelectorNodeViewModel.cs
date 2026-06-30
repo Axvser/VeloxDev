@@ -63,6 +63,8 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter
     public SlotViewModel? TrueSlot => OutputSlots?.TrySelect(true, out var s) == true ? s : null;
     public SlotViewModel? FalseSlot => OutputSlots?.TrySelect(false, out var s) == true ? s : null;
 
+    public object? GetCurrentRouteKey() => Condition ? (object)true : (object)false;
+
     /// <summary>
     /// 编译时路由表：true → TrueSlot 的后续节点，false → FalseSlot 的后续节点
     /// </summary>
