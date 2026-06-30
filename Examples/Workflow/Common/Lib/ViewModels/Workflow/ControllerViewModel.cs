@@ -25,13 +25,6 @@ public partial class ControllerViewModel
     [AgentContext(AgentLanguages.English, "Initial payload string injected into the workflow context when execution starts.")]
     [VeloxProperty] private string seedPayload = "demo-request-chain";
 
-    // ── 编译参数（可在不同 Demo 链中配置不同模式）──
-
-    [VeloxProperty] private CompileMode compileMode = CompileMode.BFS;
-    [VeloxProperty] private CompileDirection compileDirection = CompileDirection.Forward;
-    [VeloxProperty] private CompileScope compileScope = CompileScope.Omni;
-    [VeloxProperty] private CycleHandling cycleHandling = CycleHandling.Throw;
-
     // WorkResult（生成器 NuGet 暂未生成该属性，手动实现）
     private object? workResult;
     public object? WorkResult
@@ -58,10 +51,11 @@ public partial class ControllerViewModel
             var compiler = new WorkflowCompiler();
             var context = NetworkFlowContext.Create(SeedPayload);
 
-            // 使用当前编译参数执行
-            var result = compiler.Compile(this, CompileMode,
-                CompileDirection, CompileScope, CycleHandling);
+            // 编译整个工作流图（BFS + 正向 + 全范围）
+            var result = compiler.Compile(this, CompileMode.BFS,
+                CompileDirection.Forward, CompileScope.Omni);
 
+            // 按编译顺序执行，结果链自动传递
             await result.ExecuteAsync(context, ct);
         }
         catch
