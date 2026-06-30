@@ -58,6 +58,12 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper
         object? parameter,
         CancellationToken ct)
         => Task.CompletedTask;
+    public virtual Task<object?> ReceiveAsync(
+        object? parameter,
+        IWorkflowSlotViewModel sender,
+        IWorkflowSlotViewModel receiver,
+        CancellationToken ct)
+        => Task.FromResult<object?>(null);
     public virtual Task<bool> ValidateBroadcastAsync(
         IWorkflowSlotViewModel sender,
         IWorkflowSlotViewModel receiver,

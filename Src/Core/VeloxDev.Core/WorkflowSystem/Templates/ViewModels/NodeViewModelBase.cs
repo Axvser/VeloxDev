@@ -29,6 +29,19 @@ public sealed partial class NodeViewModelBase : IWorkflowNodeViewModel, IWorkflo
     [VeloxProperty] private Anchor anchor = new();
     [VeloxProperty] private Size size = new();
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> slots = [];
+    private object? workResult = null;
+
+    public object? WorkResult
+    {
+        get => workResult;
+        set
+        {
+            if (Equals(workResult, value)) return;
+            OnPropertyChanging(nameof(WorkResult));
+            workResult = value;
+            OnPropertyChanged(nameof(WorkResult));
+        }
+    }
 
     [VeloxCommand]
     private Task Move(object? parameter, CancellationToken ct)
@@ -67,7 +80,15 @@ public sealed partial class NodeViewModelBase : IWorkflowNodeViewModel, IWorkflo
     [VeloxCommand]
     private async Task Work(object? parameter, CancellationToken ct)
     {
-        await Helper.WorkAsync(parameter, ct);
+        if (parameter is WorkContext ctx && ctx.Sender is not null && ctx.Receiver is not null)
+        {
+            WorkResult = await Helper.ReceiveAsync(ctx.Parameter, ctx.Sender, ctx.Receiver, ct);
+        }
+        else
+        {
+            await Helper.WorkAsync(parameter, ct);
+            WorkResult = null;
+        }
     }
     [VeloxCommand]
     private async Task Broadcast(object? parameter, CancellationToken ct)

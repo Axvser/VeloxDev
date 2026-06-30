@@ -54,6 +54,10 @@ public interface IWorkflowNodeViewModel : IWorkflowViewModel
     [AgentCommandParameter]
     public IVeloxCommand WorkCommand { get; }
 
+    [AgentContext(AgentLanguages.Chinese, "上次执行的结果返回值，Compiler 用于链式传递。")]
+    [AgentContext(AgentLanguages.English, "Result from the last execution. Used by the Compiler for result chaining.")]
+    public object? WorkResult { get; set; }
+
     [AgentContext(AgentLanguages.Chinese, "正向广播数据，参数为Nullable")]
     [AgentContext(AgentLanguages.English, "Broadcast data forward, parameter is Nullable")]
     [AgentCommandParameter]
@@ -82,6 +86,22 @@ public interface IWorkflowNodeViewModelHelper : IWorkflowHelper
     public void SetSize(Size newValue);
 
     public Task WorkAsync(object? parameter, CancellationToken ct);
+
+    /// <summary>
+    /// Called when this node receives data from an upstream connection.
+    /// The source generator unpacks <see cref="WorkContext"/> and forwards
+    /// the slot pair so the helper knows which connection triggered it.
+    /// Returning a non-null value allows the Compiler to chain results.
+    /// </summary>
+    /// <param name="parameter">The incoming payload or context.</param>
+    /// <param name="sender">The output slot of the upstream node.</param>
+    /// <param name="receiver">This node's input slot that received the data.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public Task<object?> ReceiveAsync(object? parameter,
+        IWorkflowSlotViewModel sender,
+        IWorkflowSlotViewModel receiver,
+        CancellationToken ct);
+
     public Task BroadcastAsync(object? parameter, CancellationToken ct);
     public Task ReverseBroadcastAsync(object? parameter, CancellationToken ct);
     public Task<bool> ValidateBroadcastAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, object? parameter, CancellationToken ct);

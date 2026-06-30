@@ -76,7 +76,7 @@ public static class WorkflowNodeEx
     {
         var helper = component?.GetHelper() ?? throw new ArgumentException($"Failed to obtain the Helper instance.");
 
-        List<IWorkflowNodeViewModel> nodes = [];
+        List<(IWorkflowNodeViewModel Node, IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver)> nodes = [];
         foreach (var sender in component.Slots.ToArray())
         {
             ct.ThrowIfCancellationRequested();
@@ -86,24 +86,20 @@ public static class WorkflowNodeEx
                 ct.ThrowIfCancellationRequested();
 
                 var receiverNode = receiver.Parent;
-                if (receiverNode is null)
-                {
-                    continue;
-                }
+                if (receiverNode is null) continue;
 
                 if (!await helper.ValidateBroadcastAsync(sender, receiver, parameter, ct).ConfigureAwait(false))
-                {
                     continue;
-                }
 
-                nodes.Add(receiverNode);
+                nodes.Add((receiverNode, sender, receiver));
             }
         }
 
-        foreach (var node in nodes)
+        foreach (var (node, sender, receiver) in nodes)
         {
             ct.ThrowIfCancellationRequested();
-            node.WorkCommand.Execute(parameter);
+            var ctx = new WorkContext(parameter, sender, receiver);
+            node.WorkCommand.Execute(ctx);
         }
     }
 
@@ -111,7 +107,7 @@ public static class WorkflowNodeEx
     {
         var helper = component?.GetHelper() ?? throw new ArgumentException($"Failed to obtain the Helper instance.");
 
-        List<IWorkflowNodeViewModel> nodes = [];
+        List<(IWorkflowNodeViewModel Node, IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver)> nodes = [];
         foreach (var receiver in component.Slots.ToArray())
         {
             ct.ThrowIfCancellationRequested();
@@ -121,24 +117,20 @@ public static class WorkflowNodeEx
                 ct.ThrowIfCancellationRequested();
 
                 var senderNode = sender.Parent;
-                if (senderNode is null)
-                {
-                    continue;
-                }
+                if (senderNode is null) continue;
 
                 if (!await helper.ValidateBroadcastAsync(sender, receiver, parameter, ct).ConfigureAwait(false))
-                {
                     continue;
-                }
 
-                nodes.Add(senderNode);
+                nodes.Add((senderNode, sender, receiver));
             }
         }
 
-        foreach (var node in nodes)
+        foreach (var (node, sender, receiver) in nodes)
         {
             ct.ThrowIfCancellationRequested();
-            node.WorkCommand.Execute(parameter);
+            var ctx = new WorkContext(parameter, sender, receiver);
+            node.WorkCommand.Execute(ctx);
         }
     }
 

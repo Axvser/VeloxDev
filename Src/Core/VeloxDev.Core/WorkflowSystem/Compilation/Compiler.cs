@@ -1,0 +1,327 @@
+namespace VeloxDev.WorkflowSystem.Compilation;
+
+/// <summary>
+/// Workflow compiler.
+/// Traverses the graph topology from a start node and produces an ordered list
+/// of CompiledItem. Supports BFS and DFS traversal, cross-domain detection,
+/// and three cycle-handling strategies (Throw / Trim / Allow).
+/// </summary>
+public sealed class WorkflowCompiler : IWorkflowCompiler
+{
+    /// <summary>
+    /// Compile the workflow graph starting from <paramref name="startNode"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Cross-domain node detected, or cycle found with <see cref="CycleHandling.Throw"/>.
+    /// </exception>
+    public CompilationResult Compile(IWorkflowNodeViewModel startNode, CompileMode mode,
+        CompileDirection direction = CompileDirection.Forward,
+        CompileScope scope = CompileScope.FromNode,
+        CycleHandling cycleHandling = CycleHandling.Throw)
+    {
+        var tree = startNode.Parent
+            ?? throw new InvalidOperationException("Start node has no Parent (Tree) assigned.");
+
+        var allNodes = tree.Nodes.ToArray();
+        var nodeToIndex = allNodes.Select((n, i) => (n, i)).ToDictionary(x => x.n, x => x.i);
+
+        if (!nodeToIndex.TryGetValue(startNode, out var startIdx))
+            throw new InvalidOperationException("Start node is not a member of its Parent Tree.");
+
+        // 根据方向构建邻接表
+        var adj = direction switch
+        {
+            CompileDirection.Reverse => BuildReverseAdjacency(allNodes),
+            _ => BuildForwardAdjacency(allNodes),
+        };
+
+        // 检测环路
+        var cycleInfo = DetectCycle(allNodes, adj);
+        if (cycleInfo.HasCycle && cycleHandling == CycleHandling.Throw)
+            throw new InvalidOperationException(
+                $"Cycle detected in workflow graph. " +
+                $"Start node '{startNode.GetType().Name}' belongs to a graph with {allNodes.Length} nodes.");
+
+        // 根据范围确定遍历起点
+        var startIndices = scope switch
+        {
+            CompileScope.Omni => direction == CompileDirection.Reverse
+                ? FindOmniExits(allNodes)    // 全反向：找终结点 (out-degree = 0)
+                : FindOmniEntries(allNodes), // 全正向：找始发点 (in-degree = 0)
+            _ => [startIdx],                 // FromNode：从选中节点开始
+        };
+
+        // 遍历并收集结果
+        var allOrdered = new List<int>();
+        var globalVisited = new HashSet<int>();
+
+        foreach (var si in startIndices)
+        {
+            var segment = mode == CompileMode.BFS
+                ? TraverseBfsFrom(si, allNodes, adj, globalVisited)
+                : TraverseDfsFrom(si, allNodes, adj, globalVisited);
+            allOrdered.AddRange(segment);
+        }
+
+        // 跨域检查：验证每个访问节点的 Parent 一致
+        var startTree = startNode.Parent;
+        foreach (var idx in allOrdered)
+        {
+            if (allNodes[idx].Parent != startTree)
+                throw new InvalidOperationException(
+                    $"Cross-domain node detected: node at index {idx} belongs to a different Tree " +
+                    $"than the start node. All nodes must share the same Parent.");
+        }
+
+        // 构建 Item
+        int idCounter = 0;
+        var items = allOrdered.Select(idx =>
+            new CompiledItem(idCounter++, allNodes[idx], 0)
+        ).ToList();
+
+        for (int i = 0; i < items.Count; i++)
+            items[i].Order = i;
+
+        if (cycleHandling == CycleHandling.Allow && cycleInfo.HasCycle)
+            MarkLoopEntry(items, allNodes, adj, cycleInfo);
+
+        // 收集编译时 Slot 路由表
+        CollectSlotRoutes(items);
+
+        return new CompilationResult(items.AsReadOnly(), mode, direction, scope,
+            cycleInfo.HasCycle, cycleHandling);
+    }
+
+    // ── Adjacency ──────────────────────────────────────────────────────────
+
+    private static List<int>[] BuildForwardAdjacency(IWorkflowNodeViewModel[] nodes)
+    {
+        var adj = new List<int>[nodes.Length];
+        for (int i = 0; i < nodes.Length; i++) adj[i] = [];
+
+        for (int i = 0; i < nodes.Length; i++)
+        {
+            foreach (var slot in nodes[i].Slots)
+            {
+                foreach (var target in slot.Targets)
+                {
+                    if (target.Parent is null) continue;
+                    var j = Array.IndexOf(nodes, target.Parent);
+                    if (j >= 0) adj[i].Add(j);
+                }
+            }
+        }
+        return adj;
+    }
+
+    private static List<int>[] BuildReverseAdjacency(IWorkflowNodeViewModel[] nodes)
+    {
+        var adj = new List<int>[nodes.Length];
+        for (int i = 0; i < nodes.Length; i++) adj[i] = [];
+
+        for (int i = 0; i < nodes.Length; i++)
+        {
+            foreach (var slot in nodes[i].Slots)
+            {
+                foreach (var source in slot.Sources)
+                {
+                    if (source.Parent is null) continue;
+                    var j = Array.IndexOf(nodes, source.Parent);
+                    if (j >= 0) adj[i].Add(j);
+                }
+            }
+        }
+        return adj;
+    }
+
+    /// <summary>
+    /// Find all true entry points (in-degree = 0) in the graph.
+    /// For Forward + Omni: these are natural starting nodes.
+    /// </summary>
+    private static List<int> FindOmniEntries(IWorkflowNodeViewModel[] nodes)
+    {
+        var inDegree = new int[nodes.Length];
+        for (int i = 0; i < nodes.Length; i++)
+        {
+            foreach (var slot in nodes[i].Slots)
+            {
+                foreach (var target in slot.Targets)
+                {
+                    if (target.Parent is null) continue;
+                    var j = Array.IndexOf(nodes, target.Parent);
+                    if (j >= 0) inDegree[j]++;
+                }
+            }
+        }
+
+        var entries = new List<int>();
+        for (int i = 0; i < inDegree.Length; i++)
+            if (inDegree[i] == 0) entries.Add(i);
+        return entries;
+    }
+
+    /// <summary>
+    /// Find all true exit points (out-degree = 0) in the graph.
+    /// For Reverse + Omni: these are natural ending nodes to start reverse traversal from.
+    /// </summary>
+    private static List<int> FindOmniExits(IWorkflowNodeViewModel[] nodes)
+    {
+        var outDegree = new int[nodes.Length];
+        for (int i = 0; i < nodes.Length; i++)
+        {
+            foreach (var slot in nodes[i].Slots)
+            {
+                outDegree[i] += slot.Targets.Count;
+            }
+        }
+
+        var exits = new List<int>();
+        for (int i = 0; i < outDegree.Length; i++)
+            if (outDegree[i] == 0) exits.Add(i);
+        return exits;
+    }
+
+    // ── BFS ────────────────────────────────────────────────────────────────
+
+    private static List<int> TraverseBfsFrom(int start, IWorkflowNodeViewModel[] nodes,
+        List<int>[] adj, HashSet<int> globalVisited)
+    {
+        var result = new List<int>();
+        var queue = new Queue<int>();
+        queue.Enqueue(start);
+
+        while (queue.Count > 0)
+        {
+            var u = queue.Dequeue();
+            if (!globalVisited.Add(u)) continue;
+            result.Add(u);
+
+            // 按优先级排序同层邻居
+            var neighbors = adj[u]
+                .Where(v => !globalVisited.Contains(v))
+                .OrderBy(v => GetPriority(nodes[v]))
+                .ToList();
+
+            foreach (var v in neighbors)
+                queue.Enqueue(v);
+        }
+        return result;
+    }
+
+    // ── DFS ────────────────────────────────────────────────────────────────
+
+    private static List<int> TraverseDfsFrom(int start, IWorkflowNodeViewModel[] nodes,
+        List<int>[] adj, HashSet<int> globalVisited)
+    {
+        var result = new List<int>();
+
+        void Dfs(int u)
+        {
+            if (!globalVisited.Add(u)) return;
+
+            // 按优先级排序子节点
+            var children = adj[u]
+                .Where(v => !globalVisited.Contains(v))
+                .OrderBy(v => GetPriority(nodes[v]))
+                .ToList();
+
+            foreach (var v in children)
+                Dfs(v);
+
+            result.Add(u);
+        }
+
+        Dfs(start);
+        return result;
+    }
+
+    /// <summary>
+    /// 获取节点的编译优先级。未实现 ICompileTimePriority 的节点默认返回 0。
+    /// </summary>
+    private static int GetPriority(IWorkflowNodeViewModel node)
+        => node is ICompileTimePriority p ? p.CompilePriority : 0;
+
+    // ── Cycle detection ────────────────────────────────────────────────────
+
+    private sealed class CycleDetectionResult
+    {
+        public bool HasCycle;
+        public int LoopEntryIndex = -1;
+        public int LoopTailIndex = -1;
+    }
+
+    private static CycleDetectionResult DetectCycle(IWorkflowNodeViewModel[] nodes, List<int>[] adj)
+    {
+        var state = new byte[nodes.Length];
+        var parent = new int[nodes.Length];
+        for (int i = 0; i < parent.Length; i++) parent[i] = -1;
+        var result = new CycleDetectionResult();
+
+        for (int i = 0; i < nodes.Length; i++)
+            if (state[i] == 0 && DfsFindCycle(i, adj, state, parent, result))
+                break;
+
+        return result;
+    }
+
+    private static bool DfsFindCycle(int u, List<int>[] adj, byte[] state,
+        int[] parent, CycleDetectionResult result)
+    {
+        state[u] = 1;
+        foreach (var v in adj[u])
+        {
+            if (state[v] == 1)
+            {
+                result.HasCycle = true;
+                result.LoopEntryIndex = v;
+                result.LoopTailIndex = u;
+                return true;
+            }
+            if (state[v] == 0)
+            {
+                parent[v] = u;
+                if (DfsFindCycle(v, adj, state, parent, result))
+                    return true;
+            }
+        }
+        state[u] = 2;
+        return false;
+    }
+
+    // ── Loop marking ───────────────────────────────────────────────────────
+
+    private static void MarkLoopEntry(
+        List<CompiledItem> items, IWorkflowNodeViewModel[] nodes,
+        List<int>[] adj, CycleDetectionResult cycleInfo)
+    {
+        if (cycleInfo.LoopEntryIndex < 0 || cycleInfo.LoopTailIndex < 0) return;
+
+        var entryNode = nodes[cycleInfo.LoopEntryIndex];
+        var tailNode = nodes[cycleInfo.LoopTailIndex];
+        var entryItem = items.FirstOrDefault(i => i.Node == entryNode);
+        var tailItem = items.FirstOrDefault(i => i.Node == tailNode);
+
+        if (entryItem is not null)
+        {
+            entryItem.IsLoopEntry = true;
+            entryItem.LoopTailId = tailItem?.Id;
+        }
+    }
+
+    // ── Slot route collection ──────────────────────────────────────────────
+
+    /// <summary>
+    /// 收集实现了 <see cref="ICompileTimeRouter"/> 的节点的路由表，
+    /// 并将路由表挂到对应的 <see cref="CompiledItem.RouteTable"/> 上。
+    /// </summary>
+    private static void CollectSlotRoutes(List<CompiledItem> items)
+    {
+        foreach (var item in items)
+        {
+            if (item.Node is ICompileTimeRouter router)
+            {
+                item.RouteTable = router.GetRouteTable();
+            }
+        }
+    }
+}
