@@ -49,19 +49,6 @@ public partial class ControllerViewModel
     public CompileScope[] CompileScopeOptions => [CompileScope.FromNode, CompileScope.Omni];
     public CycleHandling[] CycleHandlingOptions => [CycleHandling.Throw, CycleHandling.Trim, CycleHandling.Allow];
 
-    // WorkResult（生成器 NuGet 暂未生成该属性，手动实现）
-    private object? workResult;
-    public object? WorkResult
-    {
-        get => workResult;
-        set
-        {
-            if (Equals(workResult, value)) return;
-            workResult = value;
-            OnPropertyChanged(nameof(WorkResult));
-        }
-    }
-
     // ── ComboBox 数据源（跨平台 XAML 绑定用） ──────────────────────────
 
     public static CompileMode[] CompileModeValues => [CompileMode.BFS, CompileMode.DFS];

@@ -9,8 +9,8 @@ namespace VeloxDev.WorkflowSystem.Compilation;
 /// Execution model (compiled mode):
 /// The compiler's <see cref="CompilationResult"/> owns the execution order.
 /// Helper classes (<c>WorkAsync</c>) should NOT self-propagate via broadcast
-/// when running inside a compiled chain — instead they set <see cref="IWorkflowNodeViewModel.WorkResult"/>
-/// and the compiler forwards it to the next item automatically.
+/// when running inside a compiled chain — instead they mutate the parameter
+/// in-place and the compiler passes <c>currentParam</c> to the next item.
 /// </summary>
 public sealed class CompilationResult
 {
@@ -53,9 +53,9 @@ public sealed class CompilationResult
     ///   1. Subscribe to WorkCommand.Failed for error capture.
     ///   2. Notify <see cref="ICompileTimeSink"/> (BeforeExecute).
     ///   3. Execute WorkCommand and wait for actual completion via Exited event.
-    ///   4. Read <see cref="IWorkflowNodeViewModel.WorkResult"/> and forward it to the next item.
+    ///   4. Forward <c>currentParam</c> to the next item (helpers mutate the parameter in-place).
     ///   5. On failure: notify OnError, then if <see cref="CompiledItem.ErrorRedirectId"/> is set,
-    ///      execute the target node asynchronously and chain its WorkResult.
+    ///      execute the target node asynchronously and pass through its result.
     ///   6. Notify <see cref="ICompileTimeSink"/> (AfterExecute).
     ///
     /// Because <see cref="IVeloxCommand.ExecuteAsync"/> dispatches the command
@@ -127,21 +127,13 @@ public sealed class CompilationResult
                             item.Id, item.FailureException, currentParam, currentParam);
                         // 异步执行重定向目标
                         await ExecuteItemAsync(target, new WorkContext(errorCtx), ct);
-                        // 链入重定向目标的输出
-                        if (target.Node.WorkResult is not null)
-                            currentParam = target.Node.WorkResult;
                         // 标记重定向目标，防止在主循环中被重复执行
                         if (!skippedItems.Contains(target.Id))
                             skippedItems.Add(target.Id);
                     }
                 }
             }
-            else
-            {
-                // 结果链传递：将节点输出传给下一个
-                if (item.Node.WorkResult is not null)
-                    currentParam = item.Node.WorkResult;
-            }
+            // else: 结果通过 currentParam 透传—Helper 原地修改参数对象
 
             // 路由分支排除：如果当前节点是路由器，根据选中的 key 跳过未选分支的独占项
             if (item.FailureException is null &&

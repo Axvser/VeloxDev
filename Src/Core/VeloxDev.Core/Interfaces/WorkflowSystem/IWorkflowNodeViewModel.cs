@@ -54,10 +54,6 @@ public interface IWorkflowNodeViewModel : IWorkflowViewModel
     [AgentCommandParameter]
     public IVeloxCommand WorkCommand { get; }
 
-    [AgentContext(AgentLanguages.Chinese, "上次执行的结果返回值，Compiler 用于链式传递。")]
-    [AgentContext(AgentLanguages.English, "Result from the last execution. Used by the Compiler for result chaining.")]
-    public object? WorkResult { get; set; }
-
     [AgentContext(AgentLanguages.Chinese, "正向广播数据，参数为Nullable")]
     [AgentContext(AgentLanguages.English, "Broadcast data forward, parameter is Nullable")]
     [AgentCommandParameter]

@@ -45,19 +45,6 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter
 
     [VeloxProperty] private string lastRouted = "-";
 
-    // WorkResult（生成器 NuGet 暂未生成该属性，手动实现）
-    private object? workResult;
-    public object? WorkResult
-    {
-        get => workResult;
-        set
-        {
-            if (Equals(workResult, value)) return;
-            workResult = value;
-            OnPropertyChanged(nameof(WorkResult));
-        }
-    }
-
     // 执行序列号（手动实现，生成器暂未覆盖）
     private int lastExecutionOrder;
     public int LastExecutionOrder

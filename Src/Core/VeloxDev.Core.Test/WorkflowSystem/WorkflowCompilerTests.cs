@@ -89,7 +89,6 @@ file class StubNode : IWorkflowNodeViewModel
     public Anchor Anchor { get; set; } = new();
     public Size Size { get; set; } = new();
     public ObservableCollection<IWorkflowSlotViewModel> Slots { get; set; } = [];
-    public object? WorkResult { get; set; }
 
     public IVeloxCommand MoveCommand { get; } = new StubCommand();
     public IVeloxCommand SetAnchorCommand { get; } = new StubCommand();
@@ -366,27 +365,12 @@ public class WorkflowCompilerTests
     // ═══════════════════════════════════════════════════════════════════════
 
     [TestMethod]
-    public async Task ResultChaining_ReturnsLastWorkResult()
+    public async Task ResultChaining_PassesCurrentParamThrough()
     {
         var (t, n) = GraphBuilder.BuildLinearChain();
-        var s = n.Cast<StubNode>().ToArray();
-        // 在每个节点执行后设置 WorkResult 以模拟链式传递
-        s[0].TrackedCommand.AfterExecute = _ => n[0].WorkResult = "r0";
-        s[1].TrackedCommand.AfterExecute = _ => n[1].WorkResult = "r1";
-        s[2].TrackedCommand.AfterExecute = _ => n[2].WorkResult = "r2";
-
         var r = _compiler.Compile(n[0], CompileMode.BFS)[0];
         var result = await r.ExecuteAsync("start");
-        Assert.AreEqual("r2", result);
-    }
-
-    [TestMethod]
-    public async Task ResultChaining_NoWorkResult_ReturnsInitialParam()
-    {
-        var (t, n) = GraphBuilder.BuildLinearChain();
-        var r = _compiler.Compile(n[0], CompileMode.BFS)[0];
-        var result = await r.ExecuteAsync("hello");
-        Assert.AreEqual("hello", result);
+        Assert.AreEqual("start", result);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -399,7 +383,6 @@ public class WorkflowCompilerTests
         var (t, n) = GraphBuilder.BuildLinearChain();
         // n[0] 会失败，重定向到 n[2]
         n[0].TrackedCommand.FailOnExecute = true;
-        n[2].TrackedCommand.AfterExecute = _ => n[2].WorkResult = "redirected";
 
         var r = _compiler.Compile(n[0], CompileMode.BFS)[0];
         r.Items[0].ErrorRedirectId = 2;
@@ -409,7 +392,7 @@ public class WorkflowCompilerTests
         Assert.AreEqual(1, n[0].TrackedCommand.ExecuteCount, "failed node executes once");
         Assert.AreEqual(1, n[1].TrackedCommand.ExecuteCount, "middle node executes normally");
         Assert.AreEqual(1, n[2].TrackedCommand.ExecuteCount, "redirect target executes once (not twice)");
-        Assert.AreEqual("redirected", result, "result chains from redirect target");
+        Assert.AreEqual("start", result, "result passes through as initial param");
     }
 
     [TestMethod]
@@ -893,32 +876,24 @@ public class WorkflowCompilerTests
     // ═══════════════════════════════════════════════════════════════════════
 
     [TestMethod]
-    public async Task Execute_BFS_Chain_ResultChaining()
+    public async Task Execute_BFS_Chain_ResultPassThrough()
     {
         var (t, n) = GraphBuilder.BuildLinearChain();
-        n[0].TrackedCommand.AfterExecute = _ => n[0].WorkResult = "a";
-        n[1].TrackedCommand.AfterExecute = _ => n[1].WorkResult = "b";
-        n[2].TrackedCommand.AfterExecute = _ => n[2].WorkResult = "c";
-
         var r = _compiler.Compile(n[0], CompileMode.BFS)[0];
         var result = await r.ExecuteAsync("init");
 
-        Assert.AreEqual("c", result, "BFS chains results end-to-end");
+        Assert.AreEqual("init", result, "BFS passes through initial param");
     }
 
     [TestMethod]
-    public async Task Execute_DFS_Chain_ResultChaining_PreOrder()
+    public async Task Execute_DFS_Chain_ResultPassThrough()
     {
         // 前序 DFS: [n0, n1, n2]，执行顺序 n0→n1→n2
         var (t, n) = GraphBuilder.BuildLinearChain();
-        n[0].TrackedCommand.AfterExecute = _ => n[0].WorkResult = "a";
-        n[1].TrackedCommand.AfterExecute = _ => n[1].WorkResult = "b";
-        n[2].TrackedCommand.AfterExecute = _ => n[2].WorkResult = "c";
-
         var r = _compiler.Compile(n[0], CompileMode.DFS)[0];
         var result = await r.ExecuteAsync("init");
 
-        Assert.AreEqual("c", result, "DFS pre-order chains results end-to-end");
+        Assert.AreEqual("init", result, "DFS pre-order passes through initial param");
     }
 
     [TestMethod]
@@ -937,15 +912,10 @@ public class WorkflowCompilerTests
     {
         var (t, n) = GraphBuilder.BuildLinearChain();
         // Reverse+BFS: [n2, n1, n0]
-        n[2].TrackedCommand.AfterExecute = _ => n[2].WorkResult = "fromEnd";
-        n[1].TrackedCommand.AfterExecute = _ => n[1].WorkResult = "fromMid";
-        n[0].TrackedCommand.AfterExecute = _ => n[0].WorkResult = "fromStart";
-
         var r = _compiler.Compile(n[2], CompileMode.BFS, CompileDirection.Reverse)[0];
         var result = await r.ExecuteAsync("init");
 
-        // n2 最先执行，输出 "fromEnd" → n1 接收 → 输出 "fromMid" → n0 接收 → 输出 "fromStart"
-        Assert.AreEqual("fromStart", result, "Reverse execution chains correctly");
+        Assert.AreEqual("init", result, "Reverse execution passes through initial param");
     }
 
     // ═══════════════════════════════════════════════════════════════════════

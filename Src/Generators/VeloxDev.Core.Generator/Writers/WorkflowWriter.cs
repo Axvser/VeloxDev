@@ -721,7 +721,6 @@ namespace VeloxDev.Generators.Writers
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
                     private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> slots = [];
-                    private {{ObjectFullName}}? workResult = null;
 
                     protected virtual {{TaskFullName}} Move({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
@@ -756,8 +755,7 @@ namespace VeloxDev.Generators.Writers
                     {
                         if (parameter is {{NAMESPACE_VELOX_WORKFLOW}}.IWorkContext ctx && ctx.Sender is not null && ctx.Receiver is not null)
                         {
-                            var result = await Helper.ReceiveAsync(ctx.Parameter, ctx.Sender, ctx.Receiver, ct);
-                            if (result is not null) WorkResult = result;
+                            await Helper.ReceiveAsync(ctx.Parameter, ctx.Sender, ctx.Receiver, ct);
                         }
                         else
                         {
@@ -843,17 +841,6 @@ namespace VeloxDev.Generators.Writers
                     }
                     partial void OnSlotsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
                     partial void OnSlotsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-                    public {{ObjectFullName}}? WorkResult
-                    {
-                        get => workResult;
-                        set
-                        {
-                           if(global::System.Object.Equals(workResult,value)) return;
-                           OnPropertyChanging(nameof(WorkResult));
-                           workResult = value;
-                           OnPropertyChanged(nameof(WorkResult));
-                        }
-                    }
                     public virtual T CreateWorkflowSlot<T>() where T : class, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel
                     {
                         try

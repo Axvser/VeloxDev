@@ -52,7 +52,7 @@ file sealed class StubSlot : IWorkflowSlotViewModel
     public IVeloxCommand SendConnectionCommand { get; } = new StubCommand();
     public IVeloxCommand ReceiveConnectionCommand { get; } = new StubCommand();
     public IVeloxCommand DeleteCommand { get; } = new StubCommand();
-    public IVeloxCommand CloseCommand { get; } = new StubCommand();    public object? WorkResult { get; set; }
+    public IVeloxCommand CloseCommand { get; } = new StubCommand();
     public event PropertyChangingEventHandler? PropertyChanging;
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -116,7 +116,6 @@ file sealed class StubNode : IWorkflowNodeViewModel
     public IVeloxCommand BroadcastCommand { get; } = new StubCommand();
     public IVeloxCommand ReverseBroadcastCommand { get; } = new StubCommand();
     public IVeloxCommand CloseCommand { get; } = new StubCommand();
-    public object? WorkResult { get; set; }
 
     public event PropertyChangingEventHandler? PropertyChanging;
     public event PropertyChangedEventHandler? PropertyChanged;

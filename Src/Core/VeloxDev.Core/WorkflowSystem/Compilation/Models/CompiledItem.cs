@@ -36,6 +36,15 @@ public sealed class CompiledItem
     /// <summary>Maximum retry attempts on failure (0 = no retry).</summary>
     public int MaxRetries { get; set; }
 
+    // ── Execution result ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Result produced by this item's execution.
+    /// Set by <see cref="CompilationResult"/> after the node's WorkCommand completes.
+    /// Used as the input parameter for the next item in the chain.
+    /// </summary>
+    public object? Result { get; set; }
+
     // ── Failure info ────────────────────────────────────────────────────
 
     /// <summary>

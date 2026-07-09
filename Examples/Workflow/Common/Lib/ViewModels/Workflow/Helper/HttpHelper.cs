@@ -146,8 +146,7 @@ namespace Demo.ViewModels.Workflow.Helper
                 context.Set("last.node", _viewModel.Title);
                 context.Set("last.duration", stopwatch.ElapsedMilliseconds.ToString());
 
-                // 编译执行模式下，Compiler 负责链式传递，此处只设置 WorkResult
-                _viewModel.WorkResult = context;
+                // 编译执行模式下，Compiler 负责链式传递，此处原地修改参数对象
 
                 await UpdateViewModelStateAsync(
                     status: "Completed",
