@@ -80,7 +80,7 @@ public sealed partial class NodeViewModelBase : IWorkflowNodeViewModel, IWorkflo
     [VeloxCommand]
     private async Task Work(object? parameter, CancellationToken ct)
     {
-        if (parameter is WorkContext ctx && ctx.Sender is not null && ctx.Receiver is not null)
+        if (parameter is IWorkContext ctx && ctx.Sender is not null && ctx.Receiver is not null)
         {
             WorkResult = await Helper.ReceiveAsync(ctx.Parameter, ctx.Sender, ctx.Receiver, ct);
         }

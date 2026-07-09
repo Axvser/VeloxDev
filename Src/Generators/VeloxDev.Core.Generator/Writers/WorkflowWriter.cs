@@ -754,7 +754,7 @@ namespace VeloxDev.Generators.Writers
                     }
                     protected virtual async {{TaskFullName}} Work({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
-                        if (parameter is {{NAMESPACE_VELOX_WORKFLOW}}.WorkContext ctx && ctx.Sender is not null && ctx.Receiver is not null)
+                        if (parameter is {{NAMESPACE_VELOX_WORKFLOW}}.IWorkContext ctx && ctx.Sender is not null && ctx.Receiver is not null)
                         {
                             var result = await Helper.ReceiveAsync(ctx.Parameter, ctx.Sender, ctx.Receiver, ct);
                             if (result is not null) WorkResult = result;

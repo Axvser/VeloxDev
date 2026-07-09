@@ -8,7 +8,7 @@ namespace VeloxDev.WorkflowSystem;
 /// The source generator's service redirection logic unpacks this struct and
 /// forwards its members to <see cref="IWorkflowNodeViewModelHelper.WorkAsync"/>.
 /// </summary>
-public readonly struct WorkContext
+public readonly struct WorkContext : IWorkContext
 {
     /// <summary>The original user parameter or context object.</summary>
     public object? Parameter { get; }
