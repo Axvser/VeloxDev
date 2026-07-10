@@ -15,6 +15,9 @@ public sealed class WorkflowSpatialManager : IDisposable
     private readonly double _cellSize;
     private bool _disposed;
 
+    /// <summary>Gets the minimal viewport that covers all indexed nodes and links.</summary>
+    public Viewport GlobalBounds => Viewport.Union(_nodeMap.Bounds, _linkMap.Bounds);
+
     public WorkflowSpatialManager(IWorkflowTreeViewModel tree, double cellSize)
     {
         _tree = tree ?? throw new ArgumentNullException(nameof(tree));

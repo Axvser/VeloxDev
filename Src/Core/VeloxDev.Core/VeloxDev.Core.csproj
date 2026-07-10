@@ -10,7 +10,7 @@
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Core</Title>
-		<Version>5.8.0</Version>
+		<Version>6.0.0-preview1</Version>
 		<Authors>Axvser</Authors>
 		<Description>Build modern, AI-controllable workflow editors on any .NET GUI — WPF, Avalonia, WinUI, MAUI ...</Description>
         <PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -24,7 +24,7 @@
 	
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="5.8.0" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="6.0.0-preview1" />
 	</ItemGroup>
 
 	<ItemGroup>

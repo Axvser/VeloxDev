@@ -5,6 +5,7 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>
 /// A generic spatial hash map that supports any type implementing <see cref="ISpatialBoundsProvider"/>.
 /// Automatically tracks bounds changes and updates the spatial index accordingly.
+/// Also tracks the minimal bounds covering all registered items via <see cref="Bounds"/>.
 /// </summary>
 /// <typeparam name="T">The type of elements to store, must implement <see cref="ISpatialBoundsProvider"/>.</typeparam>
 public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
@@ -13,6 +14,40 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
     private readonly Dictionary<CellKey, HashSet<T>> _grid = [];
     private readonly Dictionary<T, Viewport> _trackedItems = [];
     private readonly double _cellSize = Math.Max(1d, cellSize);
+    private Viewport _bounds;
+    private bool _boundsDirty;
+
+    public Viewport Bounds
+    {
+        get
+        {
+            EnsureBounds();
+            return _bounds;
+        }
+    }
+
+    private void EnsureBounds()
+    {
+        if (!_boundsDirty) return;
+        _boundsDirty = false;
+
+        if (_trackedItems.Count == 0)
+        {
+            _bounds = Viewport.Empty;
+            return;
+        }
+
+        var union = Viewport.Empty;
+        foreach (var b in _trackedItems.Values)
+            union = Viewport.Union(union, b);
+        _bounds = union;
+    }
+
+    private void InvalidateBounds()
+    {
+        _boundsDirty = true;
+        EnsureBounds();
+    }
 
     public void Insert(T item)
     {
@@ -20,18 +55,20 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
 
         if (_trackedItems.ContainsKey(item)) return;
 
-        var bounds = item.Bounds;
-        RegisterItem(item, bounds);
-        IndexItem(item, bounds);
+        var b = item.Bounds;
+        RegisterItem(item, b);
+        IndexItem(item, b);
+        InvalidateBounds();
     }
 
     public void Remove(T item)
     {
-        if (item == null || !_trackedItems.TryGetValue(item, out var bounds)) return;
+        if (item == null || !_trackedItems.TryGetValue(item, out var b)) return;
 
         UnregisterItem(item);
-        DeindexItem(item, bounds);
+        DeindexItem(item, b);
         _trackedItems.Remove(item);
+        InvalidateBounds();
     }
 
     public IEnumerable<T> Query(Viewport viewport)
@@ -66,6 +103,8 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
             UnregisterItem(item);
         _trackedItems.Clear();
         _grid.Clear();
+        _bounds = Viewport.Empty;
+        _boundsDirty = false;
     }
 
     private void RegisterItem(T item, Viewport initialBounds)
@@ -94,6 +133,7 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         DeindexItem(item, oldBounds);
         IndexItem(item, newBounds);
         _trackedItems[item] = newBounds;
+        InvalidateBounds();
     }
 
     private void IndexItem(T item, Viewport bounds)

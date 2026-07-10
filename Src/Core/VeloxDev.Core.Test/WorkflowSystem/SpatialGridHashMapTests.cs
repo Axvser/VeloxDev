@@ -125,4 +125,66 @@ public class SpatialGridHashMapTests
         var map = new SpatialGridHashMap<FakeSpatialItem>(100);
         map.Insert(null!);
     }
-}
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Bounds
+    // ═══════════════════════════════════════════════════════════════════════
+
+    [TestMethod]
+    public void Bounds_Empty_ReturnsEmpty()
+    {
+        var map = new SpatialGridHashMap<FakeSpatialItem>(100);
+        Assert.IsTrue(map.Bounds.IsEmpty);
+    }
+
+    [TestMethod]
+    public void Bounds_SingleItem_MatchesItemBounds()
+    {
+        var map = new SpatialGridHashMap<FakeSpatialItem>(100);
+        var item = new FakeSpatialItem { Bounds = new Viewport(10, 20, 100, 200) };
+        map.Insert(item);
+        Assert.AreEqual(item.Bounds, map.Bounds);
+    }
+
+    [TestMethod]
+    public void Bounds_MultipleItems_ReturnsUnion()
+    {
+        var map = new SpatialGridHashMap<FakeSpatialItem>(100);
+        map.Insert(new FakeSpatialItem { Bounds = new Viewport(0, 0, 50, 50) });
+        map.Insert(new FakeSpatialItem { Bounds = new Viewport(100, 200, 80, 60) });
+        var expected = new Viewport(0, 0, 180, 260);
+        Assert.AreEqual(expected, map.Bounds);
+    }
+
+    [TestMethod]
+    public void Bounds_AfterRemove_Shrinks()
+    {
+        var map = new SpatialGridHashMap<FakeSpatialItem>(100);
+        var far = new FakeSpatialItem { Bounds = new Viewport(500, 500, 50, 50) };
+        var near = new FakeSpatialItem { Bounds = new Viewport(10, 10, 50, 50) };
+        map.Insert(far);
+        map.Insert(near);
+        map.Remove(far);
+        Assert.AreEqual(near.Bounds, map.Bounds);
+    }
+
+    [TestMethod]
+    public void Bounds_AfterItemMoves_Updates()
+    {
+        var map = new SpatialGridHashMap<FakeSpatialItem>(100);
+        var item = new FakeSpatialItem { Bounds = new Viewport(10, 10, 50, 50) };
+        map.Insert(item);
+        item.Bounds = new Viewport(200, 200, 100, 100);
+        Assert.AreEqual(item.Bounds, map.Bounds);
+    }
+
+    [TestMethod]
+    public void Bounds_AfterClear_ReturnsEmpty()
+    {
+        var map = new SpatialGridHashMap<FakeSpatialItem>(100);
+        map.Insert(new FakeSpatialItem { Bounds = new Viewport(10, 10, 50, 50) });
+        map.Clear();
+        Assert.IsTrue(map.Bounds.IsEmpty);
+    }
+
+    }

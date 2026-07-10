@@ -246,7 +246,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (e.ChangedButton != MouseButton.Middle)
+        if (e.ChangedButton != MouseButton.Left)
+        {
+            return;
+        }
+
+        // 仅当点击在空白背景上（而非节点/Slot/Link 等交互元素）时启动画布平移
+        if (e.OriginalSource is not DependencyObject originalSource
+            || !IsSurfaceBlankInteraction(originalSource, state))
         {
             return;
         }
@@ -357,7 +364,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (e.MiddleButton != MouseButtonState.Pressed)
+        if (e.LeftButton != MouseButtonState.Pressed)
         {
             state.IsPanning = false;
             if (Mouse.Captured is not null)

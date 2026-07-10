@@ -444,7 +444,23 @@ namespace VeloxDev.Generators.Base
             private string GenerateGetter()
             {
                 var getterAccessModifier = !string.IsNullOrEmpty(GetterAccessModifier) ? GetterAccessModifier + " " : string.Empty;
-                return $"{RETRACT}    {getterAccessModifier}get => {SourceName};";
+
+                if (!IsNotifyCollectionChanged)
+                {
+                    return $"{RETRACT}    {getterAccessModifier}get => {SourceName};";
+                }
+
+                // ObservableCollection: 在 getter 中惰性订阅 CollectionChanged。
+                // 字段初始化器 = [] 直接赋值字段不走 setter，此处的 tracker 调用
+                // 确保订阅始终激活（仅首次真正订阅，后续 O(1) 空操作）。
+                var handlerName = $"On{PropertyName}CollectionChanged";
+                return $$"""
+                    {{RETRACT}}    {{getterAccessModifier}}get
+                    {{RETRACT}}    {
+                    {{RETRACT}}        global::VeloxDev.MVVM.ObservableCollectionTracker.EnsureSubscribed({{SourceName}}, {{handlerName}});
+                    {{RETRACT}}        return {{SourceName}};
+                    {{RETRACT}}    }
+                    """;
             }
 
             private string BuildMethodBody(IEnumerable<string> lines)
@@ -474,10 +490,7 @@ namespace VeloxDev.Generators.Base
                     yield break;
                 }
 
-                yield return $"if (old is global::System.Collections.Specialized.INotifyCollectionChanged oldCollection)";
-                yield return "{";
-                yield return $"    oldCollection.CollectionChanged -= On{PropertyName}CollectionChanged;";
-                yield return "}";
+                yield return $"global::VeloxDev.MVVM.ObservableCollectionTracker.Unsubscribe(old, On{PropertyName}CollectionChanged);";
                 yield return "if (old is not null)";
                 yield return "{";
                 if (UseWorkflowSlotCollectionLifecycle)
@@ -498,10 +511,7 @@ namespace VeloxDev.Generators.Base
                     yield break;
                 }
 
-                yield return $"if (value is global::System.Collections.Specialized.INotifyCollectionChanged newCollection)";
-                yield return "{";
-                yield return $"    newCollection.CollectionChanged += On{PropertyName}CollectionChanged;";
-                yield return "}";
+                yield return $"global::VeloxDev.MVVM.ObservableCollectionTracker.EnsureSubscribed(value, On{PropertyName}CollectionChanged);";
                 yield return "if (value is not null)";
                 yield return "{";
                 if (UseWorkflowSlotCollectionLifecycle)

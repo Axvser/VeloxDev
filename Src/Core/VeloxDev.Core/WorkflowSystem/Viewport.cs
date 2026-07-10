@@ -2,6 +2,8 @@
 
 public readonly struct Viewport(double left, double top, double width, double height) : IEquatable<Viewport>
 {
+    public static Viewport Empty => default;
+
     public readonly double Horizontal = left;
     public readonly double Vertical = top;
     public readonly double Width = width;
@@ -27,6 +29,19 @@ public readonly struct Viewport(double left, double top, double width, double he
                other.Vertical >= Vertical &&
                other.Bottom < Bottom;
     }
+
+    /// <summary>Returns the minimal viewport that covers both <paramref name="a"/> and <paramref name="b"/>.</summary>
+    public static Viewport Union(Viewport a, Viewport b)
+    {
+        if (a.IsEmpty) return b;
+        if (b.IsEmpty) return a;
+        var left = Math.Min(a.Horizontal, b.Horizontal);
+        var top = Math.Min(a.Vertical, b.Vertical);
+        var right = Math.Max(a.Right, b.Right);
+        var bottom = Math.Max(a.Bottom, b.Bottom);
+        return new Viewport(left, top, right - left, bottom - top);
+    }
+
     public bool Equals(Viewport other) =>
         Horizontal.Equals(other.Horizontal) &&
         Vertical.Equals(other.Vertical) &&

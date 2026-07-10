@@ -34,4 +34,11 @@ public interface ISpatialMap<T> where T : class, ISpatialBoundsProvider
     /// Clears all elements from the spatial index.
     /// </summary>
     void Clear();
+
+    /// <summary>
+    /// Gets the minimal viewport that covers all currently indexed elements.
+    /// Returns <see cref="Viewport.Empty"/> when no elements are registered.
+    /// </summary>
+    Viewport Bounds { get; }
+
 }
