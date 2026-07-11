@@ -25,6 +25,7 @@ public static class WorkflowNodeEx
         if (component.Parent is null)
         {
             slot.Parent = newParent;
+            if (!component.Slots.Contains(slot))
                 component.Slots.Add(slot);
             return;
         }
@@ -32,6 +33,7 @@ public static class WorkflowNodeEx
             () =>
             {
                 slot.Parent = newParent;
+                if (!component.Slots.Contains(slot))
                     component.Slots.Add(slot);
             },
             () =>

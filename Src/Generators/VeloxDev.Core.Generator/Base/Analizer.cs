@@ -554,7 +554,7 @@ namespace VeloxDev.Generators.Base
                 {
                     yield return "if (value is not null)";
                     yield return "{";
-                    yield return "    value.Install(this);";
+                    yield return $"    value.Install(this, \"{PropertyName}\");";
                     yield return "}";
                     yield break;
                 }

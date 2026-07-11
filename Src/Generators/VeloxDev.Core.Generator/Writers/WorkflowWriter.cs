@@ -1444,7 +1444,7 @@ namespace VeloxDev.Generators.Writers
                         concreteType = m.FullTypeName.TrimEnd('?');
                     }
                     sb.AppendLine($"if ({m.FieldName} is null) {m.PropertyName} = new {concreteType}();");
-                    sb.AppendLine($"{m.FieldName}.Install(this);");
+                    sb.AppendLine($"{m.FieldName}.Install(this, \"{m.PropertyName}\");");
                 }
                 else if (m.IsWorkflowSlot)
                 {

@@ -19,18 +19,18 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
     private bool _isDeduplicating = false;
     private bool _isApplyingState = false;
+    private string _memberName = string.Empty;
+    private readonly List<ConditionalSlot<TSlot>> _deferredRemovals = [];
 
     [VeloxProperty] public partial Type? SelectorType { get; protected set; }
     [VeloxProperty] public partial ObservableCollection<ConditionalSlot<TSlot>> Items { get; set; }
-    public int Count => Items.Count;
-    public TSlot this[int index] => Items[index].Slot;
+    public int Count { get { FlushDeferredRemovals(); return Items.Count; } }
+    public TSlot this[int index] { get { FlushDeferredRemovals(); return Items[index].Slot; } }
 
     partial void OnItemAddedToItems(IEnumerable<ConditionalSlot<TSlot>> items)
     {
         if (_isApplyingState)
             return;
-
-        List<ConditionalSlot<TSlot>>? stale = null;
 
         foreach (var item in items)
         {
@@ -41,14 +41,13 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
             if (normalizedValue is not null && conditionMap.ContainsKey(normalizedValue))
             {
+                // Defer removal of the old ConditionalSlot from Items to avoid
+                // ObservableCollection.CheckReentrancy() when called from within
+                // a CollectionChanged event (e.g. JSON deserialization import).
                 var staleEntry = Items.FirstOrDefault(
                     c => c != item && Equals(c.Value, normalizedValue));
-
                 if (staleEntry is not null)
-                {
-                    stale ??= [];
-                    stale.Add(staleEntry);
-                }
+                    _deferredRemovals.Add(staleEntry);
 
                 conditionMap[normalizedValue] = item.Slot;
             }
@@ -59,20 +58,6 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
             }
 
             Parent?.CreateSlotCommand.Execute(item.Slot);
-        }
-
-        if (stale is not null)
-        {
-            _isDeduplicating = true;
-            try
-            {
-                foreach (var s in stale)
-                    Items.Remove(s);
-            }
-            finally
-            {
-                _isDeduplicating = false;
-            }
         }
     }
 
@@ -122,6 +107,24 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
         }
     }
 
+    private void FlushDeferredRemovals()
+    {
+        if (_deferredRemovals.Count == 0)
+            return;
+
+        _isDeduplicating = true;
+        try
+        {
+            foreach (var s in _deferredRemovals)
+                Items.Remove(s);
+        }
+        finally
+        {
+            _deferredRemovals.Clear();
+            _isDeduplicating = false;
+        }
+    }
+
     public bool TrySelect(object value, out TSlot? slot)
     {
         return conditionMap.TryGetValue(value, out slot);
@@ -129,6 +132,8 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
     public void SetSelector(object? selector)
     {
+        FlushDeferredRemovals();
+
         if (Parent is null)
         {
             return;
@@ -230,6 +235,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
     private void ApplyDetachedState(SelectorState state)
     {
+        FlushDeferredRemovals();
         SelectorTypeName = state.TypeName;
         SelectorType = state.Type;
         ConditionMap.Clear();
@@ -240,6 +246,8 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
     private void ApplyAttachedState(IWorkflowTreeViewModel tree, SelectorState state)
     {
+        FlushDeferredRemovals();
+
         if (Parent is null)
             return;
 
@@ -264,13 +272,14 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
             SelectorTypeName = state.TypeName;
             SelectorType = state.Type;
             ConditionMap.Clear();
-            Items.Clear();
-            foreach (var item in state.Items)
+
+            var newItems = new ObservableCollection<ConditionalSlot<TSlot>>(state.Items);
+            foreach (var item in newItems)
             {
-                Items.Add(item);
                 if (item.Value is not null)
                     ConditionMap[item.Value] = item.Slot;
             }
+            Items = newItems;
         }
         finally
         {
@@ -286,6 +295,11 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
         foreach (var link in state.Links)
             RestoreLink(tree, link);
+
+        // Notify the parent node that the slot collection was reset,
+        // so the adapter triggers a full position recalculation.
+        if (!string.IsNullOrEmpty(_memberName) && Parent is IWorkflowViewModel viewModel)
+            viewModel.OnPropertyChanged(_memberName);
     }
 
     private static void RemoveLink(IWorkflowTreeViewModel tree, IWorkflowLinkViewModel link)
@@ -343,13 +357,15 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
         public IReadOnlyList<IWorkflowLinkViewModel> Links { get; } = links;
     }
 
-    public void Install(IWorkflowNodeViewModel parent)
+    public void Install(IWorkflowNodeViewModel parent, string memberName)
     {
         Parent = parent;
+        _memberName = memberName;
     }
 
     public void Uninstall()
     {
+        FlushDeferredRemovals();
         Parent = null;
         conditionMap.Clear();
         for (int i = Items.Count - 1; i >= 0; i--)

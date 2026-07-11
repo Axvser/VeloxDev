@@ -11,6 +11,6 @@ public interface IConditionalSlotProvider<TSlot> : IEnumerable<TSlot>
 
     public bool TrySelect(object value, out TSlot? slot);
     public void SetSelector(object? selector);
-    public void Install(IWorkflowNodeViewModel parent);
+    public void Install(IWorkflowNodeViewModel parent, string memberName);
     public void Uninstall();
 }

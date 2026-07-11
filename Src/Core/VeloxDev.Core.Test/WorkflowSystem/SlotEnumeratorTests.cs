@@ -155,7 +155,7 @@ public class SlotEnumeratorTests
         tree.GetHelper().CreateNode(senderNode);
         tree.GetHelper().CreateNode(receiverNode);
         receiverNode.GetHelper().CreateSlot(receiverSlot);
-        enumerator.Install(senderNode);
+        enumerator.Install(senderNode, "OutputSlots");
         enumerator.SetSelector(typeof(BranchKind));
 
         var originalItems = enumerator.Items.ToArray();
@@ -201,7 +201,7 @@ public class SlotEnumeratorTests
     {
         var node = new StubNode();
         var enumerator = new SlotEnumerator<StubSlot>();
-        enumerator.Install(node);
+        enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(BranchKind));
 
         int initialCount = Enum.GetValues(typeof(BranchKind)).Length; // 2
@@ -233,7 +233,7 @@ public class SlotEnumeratorTests
     {
         var node = new StubNode();
         var enumerator = new SlotEnumerator<StubSlot>();
-        enumerator.Install(node);
+        enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(BranchKind));
 
         Assert.IsTrue(enumerator.TrySelect(BranchKind.Yes, out var yes) && yes is not null);
@@ -251,7 +251,7 @@ public class SlotEnumeratorTests
     {
         var node = new StubNode();
         var enumerator = new SlotEnumerator<StubSlot>();
-        enumerator.Install(node);
+        enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(BranchKind));
 
         // These are the stale constructor-created placeholders.
@@ -293,7 +293,7 @@ public class SlotEnumeratorTests
     {
         var node = new StubNode();
         var enumerator = new SlotEnumerator<StubSlot>();
-        enumerator.Install(node);
+        enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(BranchKind));
 
         var jsonYes = new StubSlot();
@@ -328,7 +328,7 @@ public class SlotEnumeratorTests
     {
         var node = new StubNode();
         var enumerator = new SlotEnumerator<StubSlot>();
-        enumerator.Install(node);
+        enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(BranchKind));
 
         var jsonYes = new StubSlot();
@@ -355,7 +355,7 @@ public class SlotEnumeratorTests
     {
         var node = new StubNode();
         var enumerator = new SlotEnumerator<StubSlot>();
-        enumerator.Install(node);
+        enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(bool));
 
         Assert.HasCount(2, enumerator.Items);
@@ -368,7 +368,7 @@ public class SlotEnumeratorTests
     {
         var node = new StubNode();
         var enumerator = new SlotEnumerator<StubSlot>();
-        enumerator.Install(node);
+        enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(BranchKind));
         enumerator.Uninstall();
 
@@ -393,7 +393,7 @@ public class SlotEnumeratorTests
     {
         var node = new StubNode();
         var enumerator = new SlotEnumerator<StubSlot>();
-        enumerator.Install(node);
+        enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(BranchKind));
 
         int expectedCount = Enum.GetValues(typeof(BranchKind)).Length; // 2
@@ -425,7 +425,7 @@ public class SlotEnumeratorTests
     {
         var node = new StubNode();
         var enumerator = new SlotEnumerator<StubSlot>();
-        enumerator.Install(node);
+        enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(BranchKind));
 
         var jsonYes = new StubSlot();
@@ -458,7 +458,7 @@ public class SlotEnumeratorTests
     {
         var node = new StubNode();
         var enumerator = new SlotEnumerator<StubSlot>();
-        enumerator.Install(node);
+        enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(BranchKind));
 
         var snapshot = enumerator.Items.ToList();

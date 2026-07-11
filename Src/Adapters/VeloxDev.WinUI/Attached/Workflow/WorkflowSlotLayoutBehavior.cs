@@ -255,18 +255,39 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             return;
         }
 
+        bool anyMissing = false;
         for (var i = 0; i < itemsControl.Items.Count; i++)
         {
             if (itemsControl.ContainerFromIndex(i) is not DependencyObject container)
             {
+                anyMissing = true;
                 continue;
             }
 
             var slotView = FindDescendantWithSlotDataContext(container);
-            if (slotView is not null)
+            if (slotView is null)
             {
-                SyncSlot(host, coordinateHost, slotView, node);
+                anyMissing = true;
+                continue;
             }
+
+            // Container exists but not yet measured - retry later.
+            if (slotView.ActualWidth <= 0 || slotView.ActualHeight <= 0)
+            {
+                anyMissing = true;
+                continue;
+            }
+
+            SyncSlot(host, coordinateHost, slotView, node);
+        }
+
+        // Containers not yet generated or measured - retry after layout completes.
+        if (anyMissing)
+        {
+            parentHost.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                SyncSlotEnumerator(parentHost, host, coordinateHost, node, enumeratorName);
+            });
         }
     }
 
