@@ -8,8 +8,42 @@ namespace VeloxDev.WorkflowSystem.Compilation;
 /// </summary>
 public sealed class WorkflowCompiler : IWorkflowCompiler
 {
+    private readonly IDiagnosticLogger? _logger;
+    private Guid _machineId;
+
     /// <summary>
-    /// Compile the workflow graph starting from <paramref name="startNode"/>.
+    /// Creates a compiler with optional debug diagnostics.
+    /// </summary>
+    /// <param name="logger">Optional diagnostic logger for tracing compilation steps.</param>
+    public WorkflowCompiler(IDiagnosticLogger logger)
+    {
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Creates a compiler without diagnostic logging.
+    /// Pass a logger to <see cref="WorkflowCompiler(IDiagnosticLogger)"/> or use
+    /// <see cref="CompilationResult.ExecuteAsync(object?, System.IO.TextWriter?, System.Threading.CancellationToken)"/>
+    /// for execution-phase debug output.
+    /// </summary>
+    public WorkflowCompiler()
+    {
+        _logger = null;
+    }
+
+// ── DiagnosticContext helpers ─────────────────────────────────────────
+
+    private DiagnosticContext Ctx(string contentType, string message) =>
+        new(DateTimeOffset.UtcNow, _machineId, contentType, "Info", message);
+
+    private DiagnosticContext CtxWarn(string contentType, string message) =>
+        new(DateTimeOffset.UtcNow, _machineId, contentType, "Warning", message);
+
+    private DiagnosticContext CtxErr(string contentType, string message) =>
+        new(DateTimeOffset.UtcNow, _machineId, contentType, "Error", message);
+
+    /// <summary>
+    /// Compile
     /// For <see cref="CompileScope.FromNode"/> returns a single-element list.
     /// For <see cref="CompileScope.Omni"/> returns one result per discovered
     /// boundary node, each representing an independent subgraph.
@@ -22,8 +56,12 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         CompileScope scope = CompileScope.FromNode,
         CycleHandling cycleHandling = CycleHandling.Throw)
     {
+        _machineId = Guid.NewGuid();
+
         var tree = startNode.Parent
             ?? throw new InvalidOperationException("Start node has no Parent (Tree) assigned.");
+
+        _logger?.Log(Ctx("Compiler", $"{startNode.GetType().Name} {mode} {direction} {scope} {cycleHandling}"));
 
         var allNodes = tree.Nodes.ToArray();
         var nodeToIndex = allNodes.Select((n, i) => (n, i)).ToDictionary(x => x.n, x => x.i);
@@ -41,9 +79,14 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         // 检测环路（基于全图，一次检测供所有入口使用）
         var globalCycleInfo = DetectCycle(allNodes, adj);
         if (globalCycleInfo.HasCycle && cycleHandling == CycleHandling.Throw)
+        {
+            _logger?.LogError(CtxErr("Cycle", $"cycle {startNode.GetType().Name} ({allNodes.Length})"));
             throw new InvalidOperationException(
                 $"Cycle detected in workflow graph. " +
                 $"Start node '{startNode.GetType().Name}' belongs to a graph with {allNodes.Length} nodes.");
+        }
+
+        _logger?.Log(Ctx("Cycle", $"{(globalCycleInfo.HasCycle ? "cycle" : "ok")} ({allNodes.Length})"));
 
         // 根据范围确定遍历起点
         var startIndices = scope switch
@@ -55,7 +98,7 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         };
 
         if (startIndices.Count == 0)
-            return Array.Empty<CompilationResult>();
+            return [];
 
 		// 每个起点独立构建可执行计划
         var results = new List<CompilationResult>(startIndices.Count);
@@ -63,14 +106,14 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
 
         foreach (var si in startIndices)
         {
-            var segment = mode == CompileMode.BFS
+            var (Indices, Depth) = mode == CompileMode.BFS
                 ? TraverseBfsFrom(si, allNodes, adj, globalVisited)
                 : TraverseDfsFrom(si, allNodes, adj, globalVisited);
 
-            if (segment.Indices.Count == 0) continue;
+            if (Indices.Count == 0) continue;
 
             // 跨域检查
-            foreach (var idx in segment.Indices)
+            foreach (var idx in Indices)
             {
                 if (allNodes[idx].Parent != tree)
                     throw new InvalidOperationException(
@@ -79,37 +122,40 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
 
             // 构建 Item
             int idCounter = 0;
-            var items = segment.Indices.Select(idx =>
+            var items = Indices.Select(idx =>
                 new CompiledItem(idCounter++, allNodes[idx], 0)
             ).ToList();
 
             for (int i = 0; i < items.Count; i++)
             {
                 items[i].Order = i;
-                items[i].Depth = segment.Depth[segment.Indices[i]];
+                items[i].Depth = Depth[Indices[i]];
             }
 
             // 环路标记（每个入口独立处理）
             if (cycleHandling == CycleHandling.Allow && globalCycleInfo.HasCycle)
-                MarkLoopEntry(items, allNodes, adj, globalCycleInfo);
+                MarkLoopEntry(items, allNodes, globalCycleInfo);
 
             CollectSlotRoutes(items);
             ComputeBranchExclusives(items, allNodes);
 
             results.Add(new CompilationResult(items.AsReadOnly(), mode, direction, scope,
-                globalCycleInfo.HasCycle, cycleHandling));
+                globalCycleInfo.HasCycle, cycleHandling, _logger, _machineId));
         }
+
+        _logger?.Log(Ctx("Compiler", $"done {results.Count}r {results.Sum(r => r.Items.Count)}i"));
 
         return results.AsReadOnly();
     }
 
     // ── Adjacency ──────────────────────────────────────────────────────────
 
-    private static List<int>[] BuildForwardAdjacency(IWorkflowNodeViewModel[] nodes)
+    private List<int>[] BuildForwardAdjacency(IWorkflowNodeViewModel[] nodes)
     {
         var adj = new List<int>[nodes.Length];
         for (int i = 0; i < nodes.Length; i++) adj[i] = [];
 
+        int edgeCount = 0;
         for (int i = 0; i < nodes.Length; i++)
         {
             foreach (var slot in nodes[i].Slots)
@@ -118,18 +164,21 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
                 {
                     if (target.Parent is null) continue;
                     var j = Array.IndexOf(nodes, target.Parent);
-                    if (j >= 0) adj[i].Add(j);
+                    if (j >= 0) { adj[i].Add(j); edgeCount++; }
                 }
             }
         }
+
+        _logger?.Log(Ctx("Adjacency", $"fwd {nodes.Length}n {edgeCount}e"));
         return adj;
     }
 
-    private static List<int>[] BuildReverseAdjacency(IWorkflowNodeViewModel[] nodes)
+    private List<int>[] BuildReverseAdjacency(IWorkflowNodeViewModel[] nodes)
     {
         var adj = new List<int>[nodes.Length];
         for (int i = 0; i < nodes.Length; i++) adj[i] = [];
 
+        int edgeCount = 0;
         for (int i = 0; i < nodes.Length; i++)
         {
             foreach (var slot in nodes[i].Slots)
@@ -138,10 +187,12 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
                 {
                     if (source.Parent is null) continue;
                     var j = Array.IndexOf(nodes, source.Parent);
-                    if (j >= 0) adj[i].Add(j);
+                    if (j >= 0) { adj[i].Add(j); edgeCount++; }
                 }
             }
         }
+
+        _logger?.Log(Ctx("Adjacency", $"rev {nodes.Length}n {edgeCount}e"));
         return adj;
     }
 
@@ -149,7 +200,7 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
     /// Find all true entry points (in-degree = 0) in the graph.
     /// For Forward + Omni: these are natural starting nodes.
     /// </summary>
-    private static List<int> FindOmniEntries(IWorkflowNodeViewModel[] nodes)
+    private List<int> FindOmniEntries(IWorkflowNodeViewModel[] nodes)
     {
         var inDegree = new int[nodes.Length];
         for (int i = 0; i < nodes.Length; i++)
@@ -168,6 +219,8 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         var entries = new List<int>();
         for (int i = 0; i < inDegree.Length; i++)
             if (inDegree[i] == 0) entries.Add(i);
+
+        _logger?.Log(Ctx("Omni", $"entries {entries.Count}"));
         return entries;
     }
 
@@ -175,7 +228,7 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
     /// Find all true exit points (out-degree = 0) in the graph.
     /// For Reverse + Omni: these are natural ending nodes to start reverse traversal from.
     /// </summary>
-    private static List<int> FindOmniExits(IWorkflowNodeViewModel[] nodes)
+    private List<int> FindOmniExits(IWorkflowNodeViewModel[] nodes)
     {
         var outDegree = new int[nodes.Length];
         for (int i = 0; i < nodes.Length; i++)
@@ -189,12 +242,14 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         var exits = new List<int>();
         for (int i = 0; i < outDegree.Length; i++)
             if (outDegree[i] == 0) exits.Add(i);
+
+        _logger?.Log(Ctx("Omni", $"exits {exits.Count}"));
         return exits;
     }
 
     // ── BFS ────────────────────────────────────────────────────────────────
 
-    private static (List<int> Indices, int[] Depth) TraverseBfsFrom(int start, IWorkflowNodeViewModel[] nodes,
+    private (List<int> Indices, int[] Depth) TraverseBfsFrom(int start, IWorkflowNodeViewModel[] nodes,
         List<int>[] adj, HashSet<int> globalVisited)
     {
         var result = new List<int>();
@@ -203,6 +258,8 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         var queue = new LinkedList<int>();
         queue.AddLast(start);
         depth[start] = 0;
+
+        _logger?.Log(Ctx("BFS", $"start [{start}]"));
 
         while (queue.Count > 0)
         {
@@ -220,6 +277,9 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
                 .OrderBy(v => GetPriority(nodes[v]))
                 .ToList();
 
+            if (neighbors.Count > 0)
+                _logger?.Log(Ctx("BFS", $"[{u}] {neighbors.Count}nb d{depth[u]} r{isRouter}"));
+
             // 路由节点的子节点插到队首（它们有效深度 = 路由深度，应优先于同层其他节点）
             foreach (var v in neighbors)
             {
@@ -230,16 +290,20 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
                     queue.AddLast(v);
             }
         }
+
+        _logger?.Log(Ctx("BFS", $"done {result.Count}n"));
         return (result, depth);
     }
 
     // ── DFS ────────────────────────────────────────────────────────────────
 
-    private static (List<int> Indices, int[] Depth) TraverseDfsFrom(int start, IWorkflowNodeViewModel[] nodes,
+    private (List<int> Indices, int[] Depth) TraverseDfsFrom(int start, IWorkflowNodeViewModel[] nodes,
         List<int>[] adj, HashSet<int> globalVisited)
     {
         var result = new List<int>();
         var depth = new int[nodes.Length];
+
+        _logger?.Log(Ctx("DFS", $"start [{start}]"));
 
         void Dfs(int u, int currentDepth)
         {
@@ -258,11 +322,16 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
                 .OrderBy(v => GetPriority(nodes[v]))
                 .ToList();
 
+            if (children.Count > 0)
+                _logger?.Log(Ctx("DFS", $"[{u}] {children.Count}ch d{currentDepth} r{isRouter}"));
+
             foreach (var v in children)
                 Dfs(v, childDepth);
         }
 
         Dfs(start, 0);
+
+        _logger?.Log(Ctx("DFS", $"done {result.Count}n"));
         return (result, depth);
     }
 
@@ -321,9 +390,9 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
 
     // ── Loop marking ───────────────────────────────────────────────────────
 
-    private static void MarkLoopEntry(
+    private void MarkLoopEntry(
         List<CompiledItem> items, IWorkflowNodeViewModel[] nodes,
-        List<int>[] adj, CycleDetectionResult cycleInfo)
+        CycleDetectionResult cycleInfo)
     {
         if (cycleInfo.LoopEntryIndex < 0 || cycleInfo.LoopTailIndex < 0) return;
 
@@ -336,6 +405,7 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         {
             entryItem.IsLoopEntry = true;
             entryItem.LoopTailId = tailItem?.Id;
+            _logger?.Log(Ctx("Loop", $"entry[{entryItem.Id}] tail[{tailItem?.Id}]"));
         }
     }
 
@@ -345,15 +415,19 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
     /// 收集实现了 <see cref="ICompileTimeRouter"/> 的节点的路由表，
     /// 并将路由表挂到对应的 <see cref="CompiledItem.RouteTable"/> 上。
     /// </summary>
-    private static void CollectSlotRoutes(List<CompiledItem> items)
+    private void CollectSlotRoutes(List<CompiledItem> items)
     {
+        int routerCount = 0;
         foreach (var item in items)
         {
             if (item.Node is ICompileTimeRouter router)
             {
                 item.RouteTable = router.GetRouteTable();
+                routerCount++;
             }
         }
+
+        _logger?.Log(Ctx("Routes", $"{routerCount}r"));
     }
 
     // ── Branch exclusive computation ─────────────────────────────────────
@@ -364,7 +438,7 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
     /// 存入 <see cref="CompiledItem.BranchExclusiveItems"/>。
     /// 执行时，未选中分支的独占项将被跳过。
     /// </summary>
-    private static void ComputeBranchExclusives(
+    private void ComputeBranchExclusives(
         List<CompiledItem> items, IWorkflowNodeViewModel[] nodes)
     {
         var forwardAdj = BuildForwardAdjacency(nodes);
@@ -372,6 +446,7 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         foreach (var item in items)
             nodeToItemId[item.Node] = item.Id;
 
+        int routerWithExclusiveCount = 0;
         foreach (var item in items)
         {
             if (item.RouteTable is null || item.RouteTable.Count == 0)
@@ -435,7 +510,12 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
             }
 
             if (exclusive.Count > 0)
+            {
                 item.BranchExclusiveItems = exclusive;
+                routerWithExclusiveCount++;
+            }
         }
+
+        _logger?.Log(Ctx("Exclusive", $"{routerWithExclusiveCount}r"));
     }
 }

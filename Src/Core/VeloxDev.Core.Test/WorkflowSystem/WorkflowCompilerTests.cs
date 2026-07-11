@@ -242,6 +242,27 @@ public class WorkflowCompilerTests
 {
     private readonly WorkflowCompiler _compiler = new();
 
+    /// <summary>
+    /// MSTest TestContext — automatically injected by the framework.
+    /// Used to resolve diagnostic output paths under the test run directory.
+    /// </summary>
+    public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>
+    /// Creates a deterministic file path under the test assembly output directory
+    /// for storing diagnostic log output. The file name includes the test
+    /// method name for easy correlation.
+    /// Uses <see cref="AppContext.BaseDirectory"/> (the test assembly directory)
+    /// which persists after the test run — unlike <see cref="TestContext.ResultsDirectory"/>
+    /// which gets cleaned up by the test host.
+    /// </summary>
+    private string GetDiagnosticFilePath(string suffix)
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, "Diagnostics");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, $"{TestContext.TestName}_{suffix}.txt");
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // 1. CompileMode — BFS / DFS
     // ═══════════════════════════════════════════════════════════════════════
@@ -1500,5 +1521,525 @@ public class WorkflowCompilerTests
         Assert.IsTrue(entryNodes.Contains(router), "router is entry");
         Assert.IsTrue(entryNodes.Contains(downstream1), "disconnected d1 is entry");
         Assert.IsTrue(entryNodes.Contains(downstream2), "disconnected d2 is entry");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 7. Diagnostic Logger
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Creates a <see cref="WorkflowCompiler"/> backed by a <see cref="DebugDiagnosticLogger"/>
+    /// that writes to an in-memory <see cref="StringWriter"/>. The returned
+    /// <see cref="IDisposable"/> must be disposed (e.g. via <c>using</c>) before
+    /// reading <paramref name="log"/> to guarantee all buffered messages are flushed.
+    /// </summary>
+    private static IDisposable CreateCompilerWithLogger(out StringWriter log, out WorkflowCompiler compiler)
+    {
+        log = new StringWriter();
+        var logger = new DebugDiagnosticLogger(log, writeLine: false);
+        compiler = new WorkflowCompiler(logger);
+        return logger;
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_CapturesStartMessage()
+    {
+        StringWriter log;
+        using (CreateCompilerWithLogger(out log, out var compiler))
+        {
+            compiler.Compile(GraphBuilder.BuildLinearChain().Nodes[0], CompileMode.BFS);
+        }
+
+        StringAssert.Contains(log.ToString(), "[ Info ]  ",
+            "Logger should capture Info-level messages.");
+        StringAssert.Contains(log.ToString(), "BFS",
+            "Logger should contain the compile mode.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_CapturesCycleDetection()
+    {
+        StringWriter log;
+        using (CreateCompilerWithLogger(out log, out var compiler))
+        {
+            compiler.Compile(GraphBuilder.BuildCycle().Nodes[0], CompileMode.BFS,
+                cycleHandling: CycleHandling.Allow);
+        }
+
+        StringAssert.Contains(log.ToString(), "cycle",
+            "Logger should report cycle detection.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_CapturesCycleError_OnThrow()
+    {
+        StringWriter log;
+        using (CreateCompilerWithLogger(out log, out var compiler))
+        {
+            try
+            {
+                compiler.Compile(GraphBuilder.BuildCycle().Nodes[0], CompileMode.BFS,
+                    cycleHandling: CycleHandling.Throw);
+            }
+            catch (InvalidOperationException)
+            {
+                // Expected — verify the error was logged before throwing.
+            }
+        }
+
+        StringAssert.Contains(log.ToString(), "[ Error ]  cycle",
+            "Logger should emit an [Error] message when CycleHandling.Throw is set.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_CapturesCompleteSummary()
+    {
+        StringWriter log;
+        using (CreateCompilerWithLogger(out log, out var compiler))
+        {
+            compiler.Compile(GraphBuilder.BuildDiamond().Nodes[0], CompileMode.BFS);
+        }
+
+        StringAssert.Contains(log.ToString(), "[ Info ]  done",
+            "Logger should capture the summary line.");
+        StringAssert.Contains(log.ToString(), "4i",
+            "Diamond graph should report 4 compiled items.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_CapturesWarningMessage()
+    {
+        var log = new StringWriter();
+        var logger = new DebugDiagnosticLogger(log, writeLine: false);
+        logger.LogWarning(new DiagnosticContext(
+            DateTimeOffset.UtcNow, Guid.Empty, "Test", "Warning", "test warning"));
+
+        // Flush manually by disposing the logger.
+        logger.Dispose();
+
+        StringAssert.Contains(log.ToString(), "[ Warning ]  test warning",
+            "Warning messages should appear in the log output.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_CapturesErrorMessage()
+    {
+        var log = new StringWriter();
+        var logger = new DebugDiagnosticLogger(log, writeLine: false);
+        logger.LogError(new DiagnosticContext(
+            DateTimeOffset.UtcNow, Guid.Empty, "Test", "Error", "test error"));
+
+        logger.Dispose();
+
+        StringAssert.Contains(log.ToString(), "[ Error ]  test error",
+            "Error messages should appear in the log output.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_NoLogger_DoesNotThrow()
+    {
+        // The parameterless constructor should produce a no-op logger.
+        var compiler = new WorkflowCompiler();
+        var r = compiler.Compile(GraphBuilder.BuildLinearChain().Nodes[0], CompileMode.BFS);
+        Assert.AreEqual(3, r[0].Items.Count, "Compilation succeeds without a logger.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_FileBased_WritesAndReadsContent()
+    {
+        // Arrange: 使用 MSTest TestContext.ResultsDirectory 定位输出文件
+        var tempFile = GetDiagnosticFilePath("baseline");
+
+        // 使用 WorkflowCompiler 无参构造（编译阶段无日志），
+        // 然后通过 ExecuteAsync(string, CancellationToken) 重载写入执行阶段日志
+        var compiler = new WorkflowCompiler();
+
+        // Act: 编译一个线性链图（3个节点）
+        var (t, n) = GraphBuilder.BuildLinearChain();
+        var results = compiler.Compile(n[0], CompileMode.BFS);
+
+        Assert.AreEqual(1, results.Count, "Should produce one result.");
+        Assert.AreEqual(3, results[0].Items.Count, "Linear chain should have 3 items.");
+
+        // 执行并写入调试文件（新 API：文件路径，自动创建 SynchronousFileLogger）
+        var execResult = results[0].ExecuteAsync("test", tempFile).GetAwaiter().GetResult();
+        Assert.AreEqual("test", execResult, "Execution should pass through the parameter.");
+
+        // Assert: 验证文件已创建且包含诊断内容
+        Assert.IsTrue(File.Exists(tempFile), "Diagnostic file should exist.");
+        var content = File.ReadAllText(tempFile);
+        Console.WriteLine($"File content ({content.Length} chars):{Environment.NewLine}{content}");
+
+        Assert.IsFalse(string.IsNullOrWhiteSpace(content), "File content should not be empty.");
+
+        // 文件只包含执行阶段日志（编译阶段没有传入 logger）
+        StringAssert.Contains(content, "[ Info ]  start",
+                "Should contain execution messages.");
+
+            // 验证文件行数
+        var lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        Assert.IsTrue(lines.Length >= 4,
+            $"File should have at least 4 diagnostic lines, but got {lines.Length}.");
+
+        Console.WriteLine($"Diagnostic file preserved at: {tempFile}");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_TextWriter_CapturesBothPhases()
+    {
+        // 验证 TextWriter 重载可以同时捕获编译和执行阶段日志
+        var log = new StringWriter();
+
+        // 编译器阶段: 传入 StringWriter，using 确保结束后 drain
+        using (var logger = new DebugDiagnosticLogger(log, writeLine: false))
+        {
+            var compiler = new WorkflowCompiler(logger);
+            var (t, n) = GraphBuilder.BuildLinearChain();
+            var results = compiler.Compile(n[0], CompileMode.BFS);
+
+            // 执行阶段: 传入一个独立的 StringWriter
+            var diagnosticLog = new StringWriter();
+            var execResult = results[0].ExecuteAsync("test", debugOutput: diagnosticLog).GetAwaiter().GetResult();
+            Assert.AreEqual("test", execResult);
+
+            // 执行阶段日志（SynchronousFileLogger 同步写入，无需 dispose）
+            var execOutput = diagnosticLog.ToString();
+            StringAssert.Contains(execOutput, "[ Info ]  start",
+                "Execute phase should contain [Info] messages.");
+            StringAssert.Contains(execOutput, "[0] exec",
+                "Execute phase should contain item execution messages.");
+        }
+
+        // 编译阶段日志（DebugDiagnosticLogger，dispose 后 drain）
+        var compileOutput = log.ToString();
+        StringAssert.Contains(compileOutput, "[ Info ]  ",
+            "Compile phase should contain Info messages.");
+        StringAssert.Contains(compileOutput, "BFS",
+            "Compile phase should contain BFS traversal.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_File_CapturesNodeFailureAndRedirect()
+    {
+        // Arrange: 使用 MSTest TestContext.ResultsDirectory 定位输出文件
+        var tempFile = GetDiagnosticFilePath("failureAndRedirect");
+
+        // 构造：3节点线性链，首节点会失败并重定向到尾节点
+        var (t, n) = GraphBuilder.BuildLinearChain();
+        n[0].TrackedCommand.FailOnExecute = true; // 首节点触发 Failed 事件
+
+        var compiler = new WorkflowCompiler();
+        var r = compiler.Compile(n[0], CompileMode.BFS)[0];
+        r.Items[0].ErrorRedirectId = 2; // 失败时跳转到 n[2]
+
+        // Act: 执行，输出到文件
+        var result = r.ExecuteAsync("start", tempFile).GetAwaiter().GetResult();
+        Assert.AreEqual("start", result);
+
+        // Assert
+        Assert.IsTrue(File.Exists(tempFile), "Diagnostic file should exist.");
+        var content = File.ReadAllText(tempFile);
+        Console.WriteLine($"Failure redirect log ({content.Length} chars):{Environment.NewLine}{content}");
+
+        // 验证记录了失败节点
+        StringAssert.Contains(content, "[0] exec",
+            "Should log the start of the failing node.");
+        StringAssert.Contains(content, "fail r=2",
+            "Should log the failure and redirect target.");
+        StringAssert.Contains(content, "[0] -> [2]",
+            "Should log the redirect action.");
+        // 验证后续节点
+        StringAssert.Contains(content, "[1] exec",
+            "Should log the middle node execution.");
+        StringAssert.Contains(content, "[2] skip",
+            "Redirect target should be skipped in main loop.");
+
+        Console.WriteLine($"Diagnostic file preserved at: {tempFile}");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_File_CapturesTimedNodeExecutions()
+    {
+        // Arrange: 使用 MSTest TestContext.ResultsDirectory 定位输出文件
+        var tempFile = GetDiagnosticFilePath("timed");
+
+        // 构造：2节点链，首节点有 50ms 延迟
+        var t = new StubTree();
+        var n0 = new StubNode { Parent = t };
+        var n1 = new StubNode { Parent = t };
+        var s0 = new StubSlot { Parent = n0 }; n0.Slots.Add(s0);
+        var s1 = new StubSlot { Parent = n1 }; n1.Slots.Add(s1);
+        GraphBuilder.Connect(s0, s1);
+        t.Nodes.Add(n0);
+        t.Nodes.Add(n1);
+
+        // 首节点模拟耗时任务：AfterExecute 中等待 50ms
+        n0.TrackedCommand.AfterExecute = _ =>
+        {
+            Thread.Sleep(100);
+        };
+
+        var compiler = new WorkflowCompiler();
+        var r = compiler.Compile(n0, CompileMode.BFS)[0];
+
+        // Act: 执行，输出到文件
+        var result = r.ExecuteAsync("timed", tempFile).GetAwaiter().GetResult();
+        Assert.AreEqual("timed", result);
+
+        // Assert
+        Assert.IsTrue(File.Exists(tempFile), "Diagnostic file should exist.");
+        var content = File.ReadAllText(tempFile);
+        Console.WriteLine($"Timed execution log ({content.Length} chars):{Environment.NewLine}{content}");
+
+        var lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+        // 验证基本执行记录
+        StringAssert.Contains(content, "[0] exec",
+            "Should log node 0 execution start.");
+        StringAssert.Contains(content, "[1] exec",
+            "Should log node 1 execution start.");
+
+        // 验证至少 4 行（start + item0 + item1 + complete）
+        Assert.IsTrue(lines.Length >= 4,
+            $"Timed execution should produce at least 4 log lines, got {lines.Length}.");
+
+        // 验证时间戳先后顺序：逐行解析时间戳，确保严格递增
+        var timestamps = new List<DateTime>();
+        foreach (var line in lines)
+        {
+            // 格式: [ 2026-07-11 17:17:12.326 ] [ ... ] [ Info ]  ...
+            var match = System.Text.RegularExpressions.Regex.Match(line,
+                @"^\[ (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \]");
+            if (match.Success)
+            {
+                timestamps.Add(DateTime.ParseExact(match.Groups[1].Value,
+                    "yyyy-MM-dd HH:mm:ss.fff",
+                    System.Globalization.CultureInfo.InvariantCulture));
+            }
+        }
+
+        // 时间戳数量 >= 日志行数
+        Assert.IsTrue(timestamps.Count >= 4,
+            $"Should have parsed at least 4 timestamps, got {timestamps.Count}.");
+
+        // 验证严格递增
+        for (int i = 1; i < timestamps.Count; i++)
+        {
+            Assert.IsTrue(timestamps[i] >= timestamps[i - 1],
+                $"Timestamps must be non-decreasing. Index {i - 1}={timestamps[i - 1]:O} > index {i}={timestamps[i]:O}");
+        }
+
+        // 验证 node0 和 node1 的时间戳之间有显著间隔（>= 10ms），因为 node0 的耗时
+        var item0Time = DateTime.MinValue;
+        var item1Time = DateTime.MinValue;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Contains("[0] exec")) item0Time = timestamps[i];
+            if (lines[i].Contains("[1] exec")) item1Time = timestamps[i];
+        }
+
+        var gap = (item1Time - item0Time).TotalMilliseconds;
+        Assert.IsTrue(gap >= 10,
+            $"Item0->Item1 timestamp gap should be >= 10ms due to the simulated 100ms delay, but was {gap:F1}ms.");
+
+        Console.WriteLine($"Diagnostic file preserved at: {tempFile}");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_File_CapturesAllCompilerPhases()
+    {
+        // Arrange: 将 DebugDiagnosticLogger attach 到 compiler，输出到文件
+        var tempFile = GetDiagnosticFilePath("compilerPhases");
+        var log = new StringWriter();
+
+        using (var logger = new DebugDiagnosticLogger(log, writeLine: false))
+        {
+            var compiler = new WorkflowCompiler(logger);
+
+            // Act: 编译和验证都用同一个 graph
+            var (t, n) = GraphBuilder.BuildLinearChain();
+            var results = compiler.Compile(n[0], CompileMode.BFS);
+            Assert.AreEqual(1, results.Count);
+            Assert.AreEqual(3, results[0].Items.Count);
+
+            // 执行阶段写到文件
+            results[0].ExecuteAsync("test", tempFile).GetAwaiter().GetResult();
+        }
+
+        // Assert: 编译阶段所有 Info 消息都在 StringWriter 中
+        var compileOutput = log.ToString();
+        StringAssert.Contains(compileOutput, "[ Info ]  ",
+            "Compile phase must emit Info messages.");
+        StringAssert.Contains(compileOutput, "fwd 3n 2e",
+            "Compile phase must contain adjacency info.");
+        StringAssert.Contains(compileOutput, "ok ",
+            "Compile phase must contain cycle detection info.");
+        StringAssert.Contains(compileOutput, "done 3n",
+            "Compile phase must contain BFS traversal info.");
+        StringAssert.Contains(compileOutput, "0r",
+            "Compile phase must contain routes/exclusive info.");
+
+        // Assert: 文件包含执行阶段消息
+        var fileContent = File.ReadAllText(tempFile);
+        StringAssert.Contains(fileContent, "[ Info ]  start",
+            "File must contain [Info] messages from execution phase.");
+        StringAssert.Contains(fileContent, "[0] exec",
+            "File must contain Item execution messages.");
+
+        Console.WriteLine($"Diagnostic file preserved at: {tempFile}");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_File_CapturesCycleError()
+    {
+        // Arrange: compiler + logger，编译有环的图，CycleHandling.Throw
+        var log = new StringWriter();
+
+        using (var logger = new DebugDiagnosticLogger(log, writeLine: false))
+        {
+            var compiler = new WorkflowCompiler(logger);
+
+            // Act: 编译环路 → 抛出异常
+            try
+            {
+                compiler.Compile(GraphBuilder.BuildCycle().Nodes[0], CompileMode.BFS,
+                    cycleHandling: CycleHandling.Throw);
+                Assert.Fail("Should have thrown InvalidOperationException.");
+            }
+            catch (InvalidOperationException)
+            {
+                // Expected
+            }
+        }
+
+        // Assert: Log 包含 Error 消息
+        var output = log.ToString();
+        StringAssert.Contains(output, "[ Error ]  cycle",
+            "Must contain [Error] level message.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_File_CapturesCycleAllowLogs()
+    {
+        // Arrange: CycleHandling.Allow 也会输出 cycle found 消息
+        var log = new StringWriter();
+
+        using (var logger = new DebugDiagnosticLogger(log, writeLine: false))
+        {
+            var compiler = new WorkflowCompiler(logger);
+
+            // Act: 编译环路但不抛异常
+            var results = compiler.Compile(GraphBuilder.BuildCycle().Nodes[0], CompileMode.BFS,
+                cycleHandling: CycleHandling.Allow);
+            Assert.AreEqual(1, results.Count, "Allow mode should produce a result.");
+        }
+
+        // Assert: 包含 cycle 信息
+        var output = log.ToString();
+        StringAssert.Contains(output, "cycle",
+            "Allow mode must contain 'cycle' message.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_File_OmniForward_LogsOmniPhase()
+    {
+        // Arrange
+        var log = new StringWriter();
+
+        using (var logger = new DebugDiagnosticLogger(log, writeLine: false))
+        {
+            var compiler = new WorkflowCompiler(logger);
+
+            // Act: Omni scope
+            var (t, n) = GraphBuilder.BuildLinearChain();
+            var results = compiler.Compile(n[0], CompileMode.BFS,
+                CompileDirection.Forward, CompileScope.Omni);
+            Assert.AreEqual(1, results.Count);
+        }
+
+        // Assert: Omni 阶段的日志
+        var output = log.ToString();
+        StringAssert.Contains(output, "entries 1",
+            "Omni mode must log entry point count.");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_File_CapturesExecutionException()
+    {
+        // Arrange: AfterExecute 直接抛异常 → 触发 catch (Exception ex) 路径中的 LogError
+        var tempFile = GetDiagnosticFilePath("exceptionThrown");
+
+        var (t, n) = GraphBuilder.BuildLinearChain();
+        n[0].TrackedCommand.AfterExecute = _ =>
+            throw new InvalidOperationException("simulated crash in node 0");
+
+        var compiler = new WorkflowCompiler();
+        var r = compiler.Compile(n[0], CompileMode.BFS)[0];
+
+        // Act
+        var result = r.ExecuteAsync("param", tempFile).GetAwaiter().GetResult();
+        // 异常不会中止整条链，后续节点继续执行
+        Assert.AreEqual("param", result);
+
+        // Assert
+        var content = File.ReadAllText(tempFile);
+        Console.WriteLine($"Exception log ({content.Length} chars):{Environment.NewLine}{content}");
+
+        // 节点 0 抛异常
+        StringAssert.Contains(content, "[0] exec",
+            "Should log node 0 execution start.");
+        StringAssert.Contains(content, "simulated crash in node 0",
+            "LogError must capture the exception message.");
+        StringAssert.Contains(content, "fail r=",
+            "Should log failure after the exception.");
+
+        // 后续节点仍正常执行
+        StringAssert.Contains(content, "[1] exec",
+            "Should log node 1 execution despite node 0 failure.");
+        StringAssert.Contains(content, "[2] exec",
+            "Should log node 2 execution despite node 0 failure.");
+
+        Console.WriteLine($"Diagnostic file preserved at: {tempFile}");
+    }
+
+    [TestMethod]
+    public void DiagnosticLogger_File_CapturesExecutionExceptionWithRedirect()
+    {
+        // Arrange: AfterExecute 抛异常 + ErrorRedirect → 验证 threw + redirect 两条路径
+        var tempFile = GetDiagnosticFilePath("exceptionRedirect");
+
+        var (t, n) = GraphBuilder.BuildLinearChain();
+        n[0].TrackedCommand.AfterExecute = _ =>
+            throw new InvalidOperationException("redirect-from-0");
+
+        var compiler = new WorkflowCompiler();
+        var r = compiler.Compile(n[0], CompileMode.BFS)[0];
+        r.Items[0].ErrorRedirectId = 2; // 失败时跳转到 n[2]
+
+        // Act
+        var result = r.ExecuteAsync("start", tempFile).GetAwaiter().GetResult();
+        Assert.AreEqual("start", result);
+
+        // Assert
+        var content = File.ReadAllText(tempFile);
+        Console.WriteLine($"Exception+redirect log ({content.Length} chars):{Environment.NewLine}{content}");
+
+        // 异常路径
+        StringAssert.Contains(content, "redirect-from-0",
+            "LogError must capture the thrown exception message.");
+        StringAssert.Contains(content, "fail r=2",
+            "Should log failure with redirect target.");
+
+        // 重定向路径
+        StringAssert.Contains(content, "[0] -> [2]",
+            "Should log the redirect action.");
+
+        // 后续节点执行
+        StringAssert.Contains(content, "[1] exec",
+            "Should log node 1 execution.");
+        StringAssert.Contains(content, "[2] skip",
+            "Redirect target must be skipped in main loop.");
+
+        Console.WriteLine($"Diagnostic file preserved at: {tempFile}");
     }
 }
