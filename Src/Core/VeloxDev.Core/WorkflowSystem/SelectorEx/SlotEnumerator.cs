@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Threading;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
@@ -273,13 +274,13 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
             SelectorType = state.Type;
             ConditionMap.Clear();
 
-            var newItems = new ObservableCollection<ConditionalSlot<TSlot>>(state.Items);
-            foreach (var item in newItems)
+            Items.Clear();
+            foreach (var item in state.Items)
             {
                 if (item.Value is not null)
                     ConditionMap[item.Value] = item.Slot;
+                Items.Add(item);
             }
-            Items = newItems;
         }
         finally
         {
@@ -298,8 +299,21 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
         // Notify the parent node that the slot collection was reset,
         // so the adapter triggers a full position recalculation.
+        //
+        // Defer via SynchronizationContext.Post so the notification
+        // fires after the UI binding engine has processed the collection
+        // changes and generated containers. Firing synchronously would
+        // race against container generation, causing adapters to find
+        // missing or unmeasured containers and slot anchors falling
+        // back to (0,0).
         if (!string.IsNullOrEmpty(_memberName) && Parent is IWorkflowViewModel viewModel)
-            viewModel.OnPropertyChanged(_memberName);
+        {
+            var context = SynchronizationContext.Current;
+            if (context is not null)
+                context.Post(_ => viewModel.OnPropertyChanged(_memberName), null);
+            else
+                viewModel.OnPropertyChanged(_memberName);
+        }
     }
 
     private static void RemoveLink(IWorkflowTreeViewModel tree, IWorkflowLinkViewModel link)
