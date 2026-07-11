@@ -1,11 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace Demo;
 
 /// <summary>
 /// 供 AgentHelper.SelectionHandler 使用的深色风格选择对话框。
+/// 支持单选框、多选框以及自由文本输入。
 /// </summary>
 internal sealed class AgentSelectionDialog : Form
 {
@@ -18,15 +21,27 @@ internal sealed class AgentSelectionDialog : Form
     private static readonly Color CancelBg = Color.FromArgb(0x2a, 0x2a, 0x3e);
     private static readonly Color CancelBorder = Color.FromArgb(0x44, 0x44, 0x44);
 
+    // ── Results ──────────────────────────────────────────────────────────
+
+    /// <summary>For single-select: the chosen option.</summary>
     public string? ChosenOption { get; private set; }
 
-    public AgentSelectionDialog(string prompt, string[] options)
+    /// <summary>For multi-select: the chosen options.</summary>
+    public IReadOnlyList<string> ChosenOptions { get; private set; } = [];
+
+    /// <summary>Free-text response typed by the user.</summary>
+    public string? FreeTextResponse { get; private set; }
+
+    // ── Constructor ──────────────────────────────────────────────────────
+
+    public AgentSelectionDialog(string prompt, string[] options,
+        string freeTextPrompt, bool allowMultiSelect = false)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         SuspendLayout();
 
-        Text = "Agent · 请选择";
+        Text = allowMultiSelect ? "Agent · 请多选" : "Agent · 请选择";
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -49,7 +64,7 @@ internal sealed class AgentSelectionDialog : Form
 
         var titleLabel = new Label
         {
-            Text = "🤖  Agent · 请选择",
+            Text = allowMultiSelect ? "☑️  Agent · 请多选" : "🤖  Agent · 请选择",
             ForeColor = AccentBlue,
             Font = new Font("Segoe UI", 11f, FontStyle.Bold, GraphicsUnit.Point),
             AutoSize = true,
@@ -82,7 +97,7 @@ internal sealed class AgentSelectionDialog : Form
         headerFlow.Controls.Add(promptLabel);
         header.Controls.Add(headerFlow);
 
-        // ── Options ───────────────────────────────────────────────────────
+        // ── Options area ──────────────────────────────────────────────────
         var optionsFlow = new FlowLayoutPanel
         {
             FlowDirection = FlowDirection.TopDown,
@@ -94,33 +109,150 @@ internal sealed class AgentSelectionDialog : Form
             WrapContents = false,
         };
 
+        // Track checkboxes for multi-select
+        List<CheckBox>? checkBoxes = allowMultiSelect ? [] : null;
+        var freeTextBox = new TextBox
+        {
+            BackColor = Color.FromArgb(0x2d, 0x2d, 0x2d),
+            ForeColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            Width = 420,
+            Height = 30,
+            Font = new Font("Segoe UI", 10f, FontStyle.Regular, GraphicsUnit.Point),
+        };
+
         foreach (var opt in options)
         {
-            var captured = opt;
-            var btn = MakeOptionButton(opt, BtnBg, TextMain, AccentBlue);
-            btn.Click += (_, _) => { ChosenOption = captured; DialogResult = DialogResult.OK; Close(); };
-            optionsFlow.Controls.Add(btn);
+            if (allowMultiSelect)
+            {
+                var cb = new CheckBox
+                {
+                    Text = opt,
+                    ForeColor = TextMain,
+                    Font = new Font("Segoe UI", 10f, FontStyle.Regular, GraphicsUnit.Point),
+                    Width = 420,
+                    Height = 32,
+                    Margin = new Padding(0, 0, 0, 4),
+                    Padding = new Padding(8, 0, 0, 0),
+                    BackColor = BgDeep,
+                };
+                checkBoxes!.Add(cb);
+                optionsFlow.Controls.Add(cb);
+            }
+            else
+            {
+                var captured = opt;
+                var btn = MakeOptionButton(opt, BtnBg, TextMain, AccentBlue);
+                btn.Click += (_, _) =>
+                {
+                    ChosenOption = captured;
+                    ReadFreeText(freeTextBox);
+                    DialogResult = DialogResult.OK;
+                    Close();
+                };
+                optionsFlow.Controls.Add(btn);
+            }
         }
 
-        var cancelBtn = MakeOptionButton("取消（不选择）", CancelBg, TextDim, CancelBorder);
-        cancelBtn.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-        optionsFlow.Controls.Add(cancelBtn);
+        // ── Free text input (always shown) ───────────────────────────────
+        optionsFlow.Controls.Add(new Label
+        {
+            Text = freeTextPrompt,
+            ForeColor = Color.FromArgb(0xb0, 0xb0, 0xb0),
+            Font = new Font("Segoe UI", 9f, FontStyle.Regular, GraphicsUnit.Point),
+            AutoSize = true,
+            Margin = new Padding(0, 6, 0, 2),
+            BackColor = BgDeep,
+        });
+        optionsFlow.Controls.Add(freeTextBox);
+
+        // ── Confirm / Cancel buttons ─────────────────────────────────────
+        if (allowMultiSelect)
+        {
+            var btnRow = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.RightToLeft,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(0, 8, 0, 0),
+                BackColor = BgDeep,
+            };
+
+            var confirmBtn = new Button
+            {
+                Text = "✓  确认选择",
+                FlatStyle = FlatStyle.Flat,
+                BackColor = BtnBg,
+                ForeColor = AccentBlue,
+                Font = new Font("Segoe UI", 10f, FontStyle.Regular, GraphicsUnit.Point),
+                Width = 110,
+                Height = 34,
+                Margin = new Padding(0, 0, 6, 0),
+                Cursor = Cursors.Hand,
+            };
+            confirmBtn.FlatAppearance.BorderColor = AccentBlue;
+            confirmBtn.FlatAppearance.BorderSize = 1;
+            confirmBtn.Click += (_, _) =>
+            {
+                ChosenOptions = checkBoxes!
+                    .Where(cb => cb.Checked)
+                    .Select(cb => cb.Text)
+                    .ToList();
+                ReadFreeText(freeTextBox);
+                DialogResult = DialogResult.OK;
+                Close();
+            };
+            btnRow.Controls.Add(confirmBtn);
+
+            var cancelBtnMulti = new Button
+            {
+                Text = "取消",
+                FlatStyle = FlatStyle.Flat,
+                BackColor = CancelBg,
+                ForeColor = TextDim,
+                Font = new Font("Segoe UI", 10f, FontStyle.Regular, GraphicsUnit.Point),
+                Width = 80,
+                Height = 34,
+                Cursor = Cursors.Hand,
+            };
+            cancelBtnMulti.FlatAppearance.BorderColor = CancelBorder;
+            cancelBtnMulti.FlatAppearance.BorderSize = 1;
+            cancelBtnMulti.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
+            btnRow.Controls.Add(cancelBtnMulti);
+
+            optionsFlow.Controls.Add(btnRow);
+        }
+        else
+        {
+            var cancelBtn = MakeOptionButton("取消（不选择）", CancelBg, TextDim, CancelBorder);
+            cancelBtn.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
+            optionsFlow.Controls.Add(cancelBtn);
+        }
 
         // ── Layout ────────────────────────────────────────────────────────
-        var wrapper = new Panel
+        var scroller = new Panel
         {
             Dock = DockStyle.Fill,
             BackColor = BgDeep,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
-        wrapper.Controls.Add(optionsFlow);
+        scroller.Controls.Add(optionsFlow);
 
-        Controls.Add(wrapper);
+        Controls.Add(scroller);
         Controls.Add(header);
 
         ResumeLayout(false);
         PerformLayout();
+    }
+
+    private void ReadFreeText(TextBox? freeTextBox)
+    {
+        if (freeTextBox is not null)
+        {
+            var text = freeTextBox.Text?.Trim();
+            FreeTextResponse = string.IsNullOrWhiteSpace(text) ? null : text;
+        }
     }
 
     private static Button MakeOptionButton(string text, Color bg, Color fg, Color border)

@@ -2417,10 +2417,12 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Interaction Tools ──────────────────────────
 
-    [Description("Presents a single-choice selection to the user and waits for their answer. Use this tool when there are multiple plausible options and you need the user to pick one before proceeding. Returns the chosen option string, or an error if the user rejected the selection.")]
+    [Description("Presents a selection to the user and waits for their answer. Supports single-choice (default) and multi-choice mode. A free-text input field is always shown below the options so the user can type a custom response. Returns a JSON object with status, and depending on mode: 'chosen' (single) or 'chosenList' (multi), plus 'freeText'.")]
     private async Task<string> RequestSelection(
         [Description("A clear, concise prompt describing what the user needs to choose.")] string prompt,
-        [Description("JSON array of option strings the user can pick from, e.g. [\"Option A\",\"Option B\"].")] string optionsJson)
+        [Description("JSON array of option strings the user can pick from, e.g. [\"Option A\",\"Option B\"].")] string optionsJson,
+        [Description("Label shown above the free-text input field. Provide this in the user's configured output language.")] string freeTextPrompt,
+        [Description("When true, the user may select MULTIPLE options (checkboxes). When false (default), the user selects exactly one option (radio-buttons).")] bool allowMultiSelect = false)
     {
         string[] options;
         try { options = JsonConvert.DeserializeObject<string[]>(optionsJson) ?? []; }
@@ -2429,11 +2431,34 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (options.Length == 0) return Error("No options provided.");
         if (_scope.SelectionHandler == null) return Error("No SelectionHandler registered on WorkflowAgentScope.");
 
-        var chosen = await _scope.SelectionHandler(prompt, options);
-        if (chosen == null)
+        var result = await _scope.SelectionHandler(prompt, options, freeTextPrompt, allowMultiSelect);
+        if (result == null)
             return Error("User rejected the selection.");
 
-        return JsonConvert.SerializeObject(new { status = "ok", chosen }, Formatting.None);
+        if (allowMultiSelect)
+        {
+            var selected = result.SelectedOptions?.Where(s => !string.IsNullOrWhiteSpace(s)).ToList() ?? [];
+            var freeText = result.FreeTextResponse;
+            return JsonConvert.SerializeObject(new
+            {
+                status = selected.Count > 0 || !string.IsNullOrWhiteSpace(freeText) ? "ok" : "cancelled",
+                chosenList = selected,
+                freeText,
+            }, Formatting.None);
+        }
+        else
+        {
+            var chosen = result.SelectedOption;
+            if (chosen == null && string.IsNullOrWhiteSpace(result.FreeTextResponse))
+                return Error("User rejected the selection.");
+
+            return JsonConvert.SerializeObject(new
+            {
+                status = "ok",
+                chosen = chosen ?? result.FreeTextResponse,
+                freeText = result.FreeTextResponse,
+            }, Formatting.None);
+        }
     }
 
     [Description("Requests explicit user confirmation before performing a dangerous or sensitive operation (e.g. deleting nodes, bulk mutations). The user can allow once, allow always for this session, or deny. Do NOT proceed with the operation if this tool returns denied.")]

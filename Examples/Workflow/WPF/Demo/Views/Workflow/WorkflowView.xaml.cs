@@ -169,27 +169,27 @@ public partial class WorkflowView : UserControl
 
     private async Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
     {
-        var chosen = await Dispatcher.InvokeAsync<string?>(() =>
+        var result = await Dispatcher.InvokeAsync<SelectionDialogResult>(() =>
         {
             var prompt = args.Prompt;
             var options = args.Options;
+            var isMulti = args.AllowMultiSelect;
             var win = new System.Windows.Window
             {
-                Title = "Agent · 请选择",
-                Width = 440,
+                Title = isMulti ? "Agent · 请多选" : "Agent · 请选择",
+                Width = 460,
                 SizeToContent = System.Windows.SizeToContent.Height,
+                MaxHeight = 620,
                 WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
                 ResizeMode = System.Windows.ResizeMode.NoResize,
                 Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1a1a2e")),
             };
 
-            string? chosen = null;
-
-            // Header
+            // ── Header ──
             var headerStack = new StackPanel { Margin = new Thickness(18, 14, 18, 14) };
             headerStack.Children.Add(new TextBlock
             {
-                Text = "🤖  Agent · 请选择",
+                Text = isMulti ? "☑️  Agent · 请多选" : "🤖  Agent · 请选择",
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
                 FontSize = 13,
                 FontWeight = FontWeights.Bold,
@@ -208,42 +208,132 @@ public partial class WorkflowView : UserControl
                 Child = headerStack,
             };
 
-            // Options
+            // ── Options area ──
             var optionStack = new StackPanel { Margin = new Thickness(16, 12, 16, 12) };
+
+            // Track UI controls for reading state on submit
+            List<CheckBox>? checkBoxes = isMulti ? [] : null;
+            string? singleChoice = null;
+
             foreach (var opt in options)
             {
-                var captured = opt;
-                var btn = new System.Windows.Controls.Button
+                if (isMulti)
                 {
-                    Content = opt,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Left,
-                    Padding = new Thickness(14, 10, 14, 10),
-                    FontSize = 12,
-                    Margin = new Thickness(0, 0, 0, 6),
-                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0f3460")),
-                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e0e0e0")),
-                    BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
-                    BorderThickness = new Thickness(1),
-                };
-                btn.Click += (_, _) => { chosen = captured; win.Close(); };
-                optionStack.Children.Add(btn);
+                    var cb = new CheckBox
+                    {
+                        Content = opt,
+                        IsChecked = false,
+                        Margin = new Thickness(0, 0, 0, 6),
+                        Padding = new Thickness(8, 6, 8, 6),
+                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e0e0e0")),
+                        Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0f3460")),
+                        BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
+                        BorderThickness = new Thickness(1),
+                        FontSize = 12,
+                    };
+                    checkBoxes!.Add(cb);
+                    optionStack.Children.Add(cb);
+                }
+                else
+                {
+                    var captured = opt;
+                    var btn = new System.Windows.Controls.Button
+                    {
+                        Content = opt,
+                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                        HorizontalContentAlignment = HorizontalAlignment.Left,
+                        Padding = new Thickness(14, 10, 14, 10),
+                        FontSize = 12,
+                        Margin = new Thickness(0, 0, 0, 6),
+                        Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0f3460")),
+                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e0e0e0")),
+                        BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
+                        BorderThickness = new Thickness(1),
+                        Cursor = Cursors.Hand,
+                    };
+                    btn.Click += (_, _) => { singleChoice = captured; win.Close(); };
+                    optionStack.Children.Add(btn);
+                }
             }
 
-            var cancelBtn = new System.Windows.Controls.Button
+            // ── Free text input (always shown) ──
+            optionStack.Children.Add(new TextBlock
             {
-                Content = "取消（不选择）",
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Center,
-                Padding = new Thickness(14, 8, 14, 8),
+                Text = args.FreeTextPrompt,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#b0b0b0")),
                 FontSize = 11,
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2a2a3e")),
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888")),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#444444")),
+                Margin = new Thickness(0, 6, 0, 4),
+            });
+            var freeTextBox = new TextBox
+            {
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2d2d2d")),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#555555")),
                 BorderThickness = new Thickness(1),
+                Padding = new Thickness(8, 6, 8, 6),
+                FontSize = 12,
+                AcceptsReturn = false,
+                MinHeight = 30,
             };
-            cancelBtn.Click += (_, _) => win.Close();
-            optionStack.Children.Add(cancelBtn);
+            optionStack.Children.Add(freeTextBox);
+
+            // ── Confirm / Cancel buttons ──
+            if (isMulti)
+            {
+                var btnRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Margin = new Thickness(0, 10, 0, 0),
+                };
+                var cancelBtn = new System.Windows.Controls.Button
+                {
+                    Content = "取消",
+                    Padding = new Thickness(14, 8, 14, 8),
+                    FontSize = 11,
+                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2a2a3e")),
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888")),
+                    BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#444444")),
+                    BorderThickness = new Thickness(1),
+                    Cursor = Cursors.Hand,
+                    Margin = new Thickness(0, 0, 6, 0),
+                };
+                cancelBtn.Click += (_, _) => win.Close();
+                btnRow.Children.Add(cancelBtn);
+
+                var confirmBtn = new System.Windows.Controls.Button
+                {
+                    Content = "✓  确认选择",
+                    Padding = new Thickness(14, 8, 14, 8),
+                    FontSize = 11,
+                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0f3460")),
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
+                    BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
+                    BorderThickness = new Thickness(1),
+                    Cursor = Cursors.Hand,
+                };
+                confirmBtn.Click += (_, _) => win.Close();
+                btnRow.Children.Add(confirmBtn);
+                optionStack.Children.Add(btnRow);
+            }
+            else
+            {
+                var cancelBtn = new System.Windows.Controls.Button
+                {
+                    Content = "取消（不选择）",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Padding = new Thickness(14, 8, 14, 8),
+                    FontSize = 11,
+                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2a2a3e")),
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888")),
+                    BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#444444")),
+                    BorderThickness = new Thickness(1),
+                    Cursor = Cursors.Hand,
+                };
+                cancelBtn.Click += (_, _) => win.Close();
+                optionStack.Children.Add(cancelBtn);
+            }
 
             var scroll = new System.Windows.Controls.ScrollViewer
             {
@@ -263,9 +353,34 @@ public partial class WorkflowView : UserControl
             var owner = System.Windows.Application.Current?.MainWindow;
             if (owner is not null) win.Owner = owner;
             win.ShowDialog();
-            return chosen;
+
+            // Collect results
+            List<string>? selectedOptions = isMulti
+                ? checkBoxes!.Where(cb => cb.IsChecked == true).Select(cb => (string)cb.Content).ToList()
+                : null;
+            var selectedSingle = isMulti ? null : singleChoice;
+            var freeText = freeTextBox?.Text?.Trim();
+            return new SelectionDialogResult
+            {
+                SelectedOption = selectedSingle,
+                SelectedOptions = selectedOptions,
+                FreeTextResponse = string.IsNullOrWhiteSpace(freeText) ? null : freeText,
+            };
         });
-        args.SelectedOption = chosen;
+
+        args.SelectedOption = result.SelectedOption;
+        args.SelectedOptions = result.SelectedOptions;
+        args.FreeTextResponse = result.FreeTextResponse;
+    }
+
+    /// <summary>
+    /// Internal helper to carry selection dialog results out of the Dispatcher call.
+    /// </summary>
+    private sealed class SelectionDialogResult
+    {
+        public string? SelectedOption { get; init; }
+        public IReadOnlyList<string>? SelectedOptions { get; init; }
+        public string? FreeTextResponse { get; init; }
     }
 
     private async Task ShowConfirmationDialogAsync(AgentConfirmationEventArgs args)

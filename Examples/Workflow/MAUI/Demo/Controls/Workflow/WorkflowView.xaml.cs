@@ -116,10 +116,165 @@ public partial class WorkflowView : ContentView
         var tcs = new TaskCompletionSource();
         MainThread.BeginInvokeOnMainThread(async () =>
         {
-            var result = await Application.Current!.MainPage!.DisplayActionSheet(
-                args.Prompt, "取消（不选择）", null, [.. args.Options]);
-            args.SelectedOption = result == "取消（不选择）" ? null : result;
-            tcs.TrySetResult();
+            var isMulti = args.AllowMultiSelect;
+
+            var page = new ContentPage
+            {
+                BackgroundColor = Color.FromArgb("#1a1a2e"),
+                Title = isMulti ? "☑️  Agent · 请多选" : "🤖  Agent · 请选择",
+            };
+
+            var stack = new VerticalStackLayout
+            {
+                Spacing = 8,
+                Padding = new Thickness(20),
+            };
+
+            var promptLabel = new Label
+            {
+                Text = args.Prompt,
+                TextColor = Color.FromArgb("#e0e0e0"),
+                FontSize = 14,
+                Margin = new Thickness(0, 0, 0, 8),
+            };
+            stack.Children.Add(promptLabel);
+
+            List<CheckBox>? checkBoxes = isMulti ? [] : null;
+            var freeTextEntry = new Entry
+            {
+                BackgroundColor = Color.FromArgb("#2d2d2d"),
+                TextColor = Colors.White,
+                Placeholder = args.FreeTextPrompt,
+                PlaceholderColor = Color.FromArgb("#666666"),
+            };
+
+            foreach (var opt in args.Options)
+            {
+                if (isMulti)
+                {
+                    var cb = new CheckBox
+                    {
+                        Color = Color.FromArgb("#7ec8ff"),
+                    };
+                    var label = new Label
+                    {
+                        Text = opt,
+                        TextColor = Color.FromArgb("#e0e0e0"),
+                        FontSize = 13,
+                        VerticalOptions = LayoutOptions.Center,
+                    };
+                    var row = new HorizontalStackLayout { Spacing = 8 };
+                    row.Children.Add(cb);
+                    row.Children.Add(label);
+                    checkBoxes!.Add(cb);
+                    stack.Children.Add(row);
+                }
+                else
+                {
+                    var captured = opt;
+                    var btn = new Button
+                    {
+                        Text = opt,
+                        BackgroundColor = Color.FromArgb("#0f3460"),
+                        TextColor = Color.FromArgb("#e0e0e0"),
+                        BorderColor = Color.FromArgb("#7ec8ff"),
+                        BorderWidth = 1,
+                        CornerRadius = 6,
+                        HeightRequest = 40,
+                        HorizontalOptions = LayoutOptions.Fill,
+                        Margin = new Thickness(0, 0, 0, 4),
+                    };
+                    btn.Clicked += (_, _) =>
+                    {
+                        args.SelectedOption = captured;
+                        args.FreeTextResponse = freeTextEntry.Text?.Trim();
+                        args.FreeTextResponse = string.IsNullOrWhiteSpace(args.FreeTextResponse) ? null : args.FreeTextResponse;
+                        tcs.TrySetResult();
+                        Application.Current!.MainPage!.Navigation.PopModalAsync(true);
+                    };
+                    stack.Children.Add(btn);
+                }
+            }
+
+            // ── Free text input (always shown) ──
+            stack.Children.Add(new Label
+            {
+                Text = args.FreeTextPrompt,
+                TextColor = Color.FromArgb("#b0b0b0"),
+                FontSize = 11,
+                Margin = new Thickness(0, 6, 0, 2),
+            });
+            stack.Children.Add(freeTextEntry);
+
+            if (isMulti)
+            {
+                var confirmBtn = new Button
+                {
+                    Text = "✓  确认选择",
+                    BackgroundColor = Color.FromArgb("#0f3460"),
+                    TextColor = Color.FromArgb("#7ec8ff"),
+                    BorderColor = Color.FromArgb("#7ec8ff"),
+                    BorderWidth = 1,
+                    CornerRadius = 6,
+                    HeightRequest = 40,
+                    Margin = new Thickness(0, 10, 0, 0),
+                };
+                confirmBtn.Clicked += (_, _) =>
+                {
+                    args.SelectedOptions = checkBoxes!
+                        .Where(cb => cb.IsChecked)
+                        .Select(cb => (string)((Label)((HorizontalStackLayout)cb.Parent).Children[1]).Text)
+                        .ToList();
+                    args.FreeTextResponse = freeTextEntry?.Text?.Trim();
+                    args.FreeTextResponse = string.IsNullOrWhiteSpace(args.FreeTextResponse) ? null : args.FreeTextResponse;
+                    tcs.TrySetResult();
+                    Application.Current!.MainPage!.Navigation.PopModalAsync(true);
+                };
+                stack.Children.Add(confirmBtn);
+
+                var cancelBtn = new Button
+                {
+                    Text = "取消",
+                    BackgroundColor = Color.FromArgb("#2a2a3e"),
+                    TextColor = Color.FromArgb("#888888"),
+                    BorderColor = Color.FromArgb("#444444"),
+                    BorderWidth = 1,
+                    CornerRadius = 6,
+                    HeightRequest = 36,
+                };
+                cancelBtn.Clicked += (_, _) =>
+                {
+                    tcs.TrySetResult();
+                    Application.Current!.MainPage!.Navigation.PopModalAsync(true);
+                };
+                stack.Children.Add(cancelBtn);
+            }
+            else
+            {
+                var cancelBtn = new Button
+                {
+                    Text = "取消（不选择）",
+                    BackgroundColor = Color.FromArgb("#2a2a3e"),
+                    TextColor = Color.FromArgb("#888888"),
+                    BorderColor = Color.FromArgb("#444444"),
+                    BorderWidth = 1,
+                    CornerRadius = 6,
+                    HeightRequest = 36,
+                    Margin = new Thickness(0, 8, 0, 0),
+                };
+                cancelBtn.Clicked += (_, _) =>
+                {
+                    args.SelectedOption = null;
+                    args.FreeTextResponse = freeTextEntry?.Text?.Trim();
+                    args.FreeTextResponse = string.IsNullOrWhiteSpace(args.FreeTextResponse) ? null : args.FreeTextResponse;
+                    tcs.TrySetResult();
+                    Application.Current!.MainPage!.Navigation.PopModalAsync(true);
+                };
+                stack.Children.Add(cancelBtn);
+            }
+
+            page.Content = new ScrollView { Content = stack };
+            await Application.Current!.MainPage!.Navigation.PushModalAsync(page, true);
         });
         return tcs.Task;
     }

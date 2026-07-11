@@ -163,9 +163,15 @@ namespace Demo
             if (InvokeRequired)
                 return (Task)Invoke(() => ShowSelectionDialogAsync(args));
 
-            using var dlg = new AgentSelectionDialog(args.Prompt, [.. args.Options]);
+            using var dlg = new AgentSelectionDialog(
+                args.Prompt,
+                [.. args.Options],
+                args.FreeTextPrompt,
+                args.AllowMultiSelect);
             dlg.ShowDialog(this);
             args.SelectedOption = dlg.ChosenOption;
+            args.SelectedOptions = dlg.ChosenOptions;
+            args.FreeTextResponse = dlg.FreeTextResponse;
             return Task.CompletedTask;
         }
 

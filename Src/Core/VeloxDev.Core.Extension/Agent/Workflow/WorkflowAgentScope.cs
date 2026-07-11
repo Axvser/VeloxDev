@@ -133,9 +133,42 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     // ── Interactive handlers ────────────────────────────────────────────────
 
+    /// <summary>
+    /// Carries the result of a user interaction involving selection and/or free text.
+    /// Returned by the host UI layer and consumed by <c>WorkflowAgentToolkit.RequestSelection</c>.
+    /// </summary>
+    public sealed class SelectionResult
+    {
+        /// <summary>For single-select: the chosen option. <c>null</c> if cancelled.</summary>
+        public string? SelectedOption { get; set; }
+
+        /// <summary>For multi-select: the chosen options. Empty if none selected.</summary>
+        public IReadOnlyList<string> SelectedOptions { get; set; } = [];
+
+        /// <summary>Free-text response typed by the user. <c>null</c> or empty if not provided.</summary>
+        public string? FreeTextResponse { get; set; }
+
+        /// <summary>
+        /// Creates a single-select result.
+        /// </summary>
+        public static SelectionResult Single(string? option) => new() { SelectedOption = option };
+
+        /// <summary>
+        /// Creates a multi-select result.
+        /// </summary>
+        public static SelectionResult Multi(IReadOnlyList<string> options, string? freeText = null)
+            => new() { SelectedOptions = options ?? [], FreeTextResponse = freeText };
+
+        /// <summary>
+        /// Creates a free-text-only result (no predefined options selected).
+        /// </summary>
+        public static SelectionResult FreeText(string text) => new() { FreeTextResponse = text };
+    }
+
     // Low-level Func delegates consumed by WorkflowAgentToolkit.
     // null means the tool is not available (tool won't be registered).
-    internal Func<string, string[], Task<string?>>? SelectionHandler { get; private set; }
+    // Args: prompt, options, freeTextPrompt, allowMultiSelect → result
+    internal Func<string, string[], string, bool, Task<SelectionResult?>>? SelectionHandler { get; private set; }
     internal Func<string, string, Task<AgentConfirmationResult>>? ConfirmationHandler { get; private set; }
 
     /// <summary>
@@ -193,16 +226,27 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// <summary>
     /// Registers an asynchronous handler for the <c>RequestSelection</c> tool.
     /// The handler receives an <see cref="AgentSelectionEventArgs"/> describing the prompt and options,
-    /// and must set <see cref="AgentSelectionEventArgs.SelectedOption"/> before completing.
+    /// and must set <see cref="AgentSelectionEventArgs.SelectedOption"/> (single-select),
+    /// <see cref="AgentSelectionEventArgs.SelectedOptions"/> (multi-select), and/or
+    /// <see cref="AgentSelectionEventArgs.FreeTextResponse"/> before completing.
     /// When <c>null</c>, the <c>RequestSelection</c> tool is not registered.
     /// </summary>
     public WorkflowAgentScope WithSelectionHandler(Func<AgentSelectionEventArgs, Task> handler)
     {
-        SelectionHandler = handler is null ? null : async (prompt, options) =>
+        SelectionHandler = handler is null ? null : async (prompt, options, freeTextPrompt, allowMultiSelect) =>
         {
-            var args = new AgentSelectionEventArgs(prompt, options);
+            var args = new AgentSelectionEventArgs(prompt, options)
+            {
+                AllowMultiSelect = allowMultiSelect,
+                FreeTextPrompt = freeTextPrompt,
+            };
             await handler(args);
-            return args.SelectedOption;
+            return new SelectionResult
+            {
+                SelectedOption = args.SelectedOption,
+                SelectedOptions = args.SelectedOptions ?? [],
+                FreeTextResponse = args.FreeTextResponse,
+            };
         };
         return this;
     }

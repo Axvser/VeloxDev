@@ -6,7 +6,9 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -240,13 +242,13 @@ namespace Demo.Views
 
         private async Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
         {
-            var tcs = new TaskCompletionSource<string?>();
+            var tcs = new TaskCompletionSource<SelectionDialogResult>();
 
             DispatcherQueue.TryEnqueue(async () =>
             {
-                string? chosen = null;
                 var prompt = args.Prompt;
                 var options = args.Options;
+                var isMulti = args.AllowMultiSelect;
 
                 var optionStack = new StackPanel { Spacing = 6 };
                 optionStack.Children.Add(new TextBlock
@@ -256,27 +258,60 @@ namespace Demo.Views
                     Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 8),
                 });
 
-                ContentDialog dialog = new()
+                // Track controls
+                List<CheckBox>? checkBoxes = isMulti ? [] : null;
+                string? singleChoice = null;
+                var freeTextBox = new TextBox
                 {
-                    Title = "🤖  Agent · 请选择",
-                    PrimaryButtonText = "取消",
-                    XamlRoot = this.XamlRoot,
-                    DefaultButton = ContentDialogButton.None,
+                    PlaceholderText = args.FreeTextPrompt,
+                    Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 8),
                 };
 
                 foreach (var opt in options)
                 {
-                    var captured = opt;
-                    var btn = new Button
+                    if (isMulti)
                     {
-                        Content = opt,
-                        HorizontalAlignment = HorizontalAlignment.Stretch,
-                        HorizontalContentAlignment = HorizontalAlignment.Left,
-                        Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4),
-                    };
-                    btn.Click += (_, _) => { chosen = captured; dialog.Hide(); };
-                    optionStack.Children.Add(btn);
+                        var cb = new CheckBox
+                        {
+                            Content = opt,
+                            Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4),
+                        };
+                        checkBoxes!.Add(cb);
+                        optionStack.Children.Add(cb);
+                    }
+                    else
+                    {
+                        var captured = opt;
+                        var btn = new Button
+                        {
+                            Content = opt,
+                            HorizontalAlignment = HorizontalAlignment.Stretch,
+                            HorizontalContentAlignment = HorizontalAlignment.Left,
+                            Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4),
+                        };
+                        btn.Click += (_, _) =>
+                        {
+                            singleChoice = captured;
+                            tcs.TrySetResult(new SelectionDialogResult
+                            {
+                                SelectedOption = singleChoice,
+                                FreeTextResponse = freeTextBox.Text?.Trim(),
+                            });
+                        };
+                        optionStack.Children.Add(btn);
+                    }
                 }
+
+                // ── Free text input (always shown) ──
+                optionStack.Children.Add(new TextBlock
+                {
+                    Text = args.FreeTextPrompt,
+                    Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                        Microsoft.UI.Colors.Gray),
+                    FontSize = 11,
+                    Margin = new Microsoft.UI.Xaml.Thickness(0, 6, 0, 4),
+                });
+                optionStack.Children.Add(freeTextBox);
 
                 var scroller = new ScrollViewer
                 {
@@ -284,13 +319,97 @@ namespace Demo.Views
                     VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                     Content = optionStack,
                 };
-                dialog.Content = scroller;
 
-                await dialog.ShowAsync();
-                tcs.TrySetResult(chosen);
+                if (isMulti)
+                {
+                    // Multi-select mode: ContentDialog with confirm/cancel
+                    var dialog = new ContentDialog
+                    {
+                        Title = "☑️  Agent · 请多选",
+                        PrimaryButtonText = "✓  确认选择",
+                        CloseButtonText = "取消",
+                        DefaultButton = ContentDialogButton.Primary,
+                        Content = scroller,
+                        XamlRoot = this.XamlRoot,
+                    };
+                    var result = await dialog.ShowAsync();
+                    if (result == ContentDialogResult.Primary)
+                    {
+                        tcs.TrySetResult(new SelectionDialogResult
+                        {
+                            SelectedOptions = checkBoxes!
+                                .Where(cb => cb.IsChecked == true)
+                                .Select(cb => (string)cb.Content)
+                                .ToList(),
+                            FreeTextResponse = freeTextBox?.Text?.Trim(),
+                        });
+                    }
+                    else
+                    {
+                        tcs.TrySetResult(new SelectionDialogResult());
+                    }
+                }
+                else
+                {
+                    // Single-select mode: inline buttons call dialog.Hide()
+                    ContentDialog dialog = new()
+                    {
+                        Title = "🤖  Agent · 请选择",
+                        PrimaryButtonText = "取消",
+                        XamlRoot = this.XamlRoot,
+                        DefaultButton = ContentDialogButton.None,
+                    };
+
+                    string? chosen = null;
+
+                    foreach (var opt in options)
+                    {
+                        var captured = opt;
+                        var btn = new Button
+                        {
+                            Content = opt,
+                            HorizontalAlignment = HorizontalAlignment.Stretch,
+                            HorizontalContentAlignment = HorizontalAlignment.Left,
+                            Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4),
+                        };
+                        btn.Click += (_, _) =>
+                        {
+                            chosen = captured;
+                            tcs.TrySetResult(new SelectionDialogResult
+                            {
+                                SelectedOption = chosen,
+                                FreeTextResponse = freeTextBox?.Text?.Trim(),
+                            });
+                            dialog.Hide();
+                        };
+                        optionStack.Children.Add(btn);
+                    }
+
+                    dialog.Content = scroller;
+                    await dialog.ShowAsync();
+
+                    // If not set yet (dismissed via ESC/backdrop/close btn)
+                    tcs.TrySetResult(new SelectionDialogResult
+                    {
+                        FreeTextResponse = freeTextBox?.Text?.Trim(),
+                    });
+                }
             });
 
-            args.SelectedOption = await tcs.Task;
+            var result = await tcs.Task;
+            args.SelectedOption = result.SelectedOption;
+            args.SelectedOptions = result.SelectedOptions;
+            args.FreeTextResponse = string.IsNullOrWhiteSpace(result.FreeTextResponse) ? null : result.FreeTextResponse;
+        }
+
+        /// <summary>
+        /// Internal helper to carry selection dialog results.
+        /// </summary>
+        private sealed class SelectionDialogResult
+        {
+            public string? SelectedOption { get; init; }
+            public IReadOnlyList<string>? SelectedOptions { get; init; }
+            public string? FreeTextResponse { get; init; }
         }
 
         private async Task ShowConfirmationDialogAsync(AgentConfirmationEventArgs args)

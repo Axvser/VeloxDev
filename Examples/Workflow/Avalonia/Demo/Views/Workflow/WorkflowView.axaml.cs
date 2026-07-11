@@ -1,4 +1,6 @@
-﻿using Avalonia;
+﻿using System.Collections.Generic;
+using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
 using Avalonia.Interactivity;
@@ -181,15 +183,15 @@ public partial class WorkflowView : UserControl
 
     private async Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
     {
-        string? chosen = null;
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
             var prompt = args.Prompt;
             var options = args.Options;
+            var isMulti = args.AllowMultiSelect;
 
             var dialog = new Window
             {
-                Title = "Agent · 请选择",
+                Title = isMulti ? "Agent · 请多选" : "Agent · 请选择",
                 Width = 440,
                 MinHeight = 160,
                 SizeToContent = SizeToContent.Height,
@@ -202,7 +204,7 @@ public partial class WorkflowView : UserControl
             var headerPanel = new StackPanel { Spacing = 4, Margin = new Thickness(18, 14) };
             headerPanel.Children.Add(new TextBlock
             {
-                Text = "🤖  Agent · 请选择",
+                Text = isMulti ? "☑️  Agent · 请多选" : "🤖  Agent · 请选择",
                 Foreground = new SolidColorBrush(Color.Parse("#7ec8ff")),
                 FontSize = 13,
                 FontWeight = FontWeight.Bold,
@@ -222,43 +224,131 @@ public partial class WorkflowView : UserControl
 
             // ── Options ───────────────────────────────────────────────────
             var optionsPanel = new StackPanel { Spacing = 6, Margin = new Thickness(16, 12) };
+
+            List<CheckBox>? checkBoxes = isMulti ? [] : null;
+            var freeTextBox = new TextBox
+            {
+                Background = new SolidColorBrush(Color.Parse("#2d2d2d")),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.Parse("#555555")),
+                Padding = new Thickness(8, 6),
+                FontSize = 12,
+            };
+
             foreach (var opt in options)
             {
-                var captured = opt;
-                var btn = new Button
+                if (isMulti)
                 {
-                    Content = opt,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Left,
-                    Padding = new Thickness(14, 10),
+                    var cb = new CheckBox
+                    {
+                        Content = opt,
+                        Foreground = new SolidColorBrush(Color.Parse("#e0e0e0")),
+                        FontSize = 12,
+                        Margin = new Thickness(0, 0, 0, 2),
+                    };
+                    checkBoxes!.Add(cb);
+                    optionsPanel.Children.Add(cb);
+                }
+                else
+                {
+                    var captured = opt;
+                    var btn = new Button
+                    {
+                        Content = opt,
+                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                        HorizontalContentAlignment = HorizontalAlignment.Left,
+                        Padding = new Thickness(14, 10),
+                        FontSize = 12,
+                        Background = new SolidColorBrush(Color.Parse("#0f3460")),
+                        Foreground = new SolidColorBrush(Color.Parse("#e0e0e0")),
+                        BorderThickness = new Thickness(1),
+                        BorderBrush = new SolidColorBrush(Color.Parse("#7ec8ff")),
+                        CornerRadius = new CornerRadius(6),
+                    };
+                    btn.Click += (_, _) =>
+                    {
+                        args.SelectedOption = captured;
+                        args.FreeTextResponse = freeTextBox.Text?.Trim();
+                        args.FreeTextResponse = string.IsNullOrWhiteSpace(args.FreeTextResponse) ? null : args.FreeTextResponse;
+                        dialog.Close();
+                    };
+                    optionsPanel.Children.Add(btn);
+                }
+            }
+
+            // ── Free text input (always shown) ───────────────────────────
+            optionsPanel.Children.Add(new TextBlock
+            {
+                Text = args.FreeTextPrompt,
+                Foreground = new SolidColorBrush(Color.Parse("#b0b0b0")),
+                FontSize = 11,
+                Margin = new Thickness(0, 6, 0, 2),
+            });
+            optionsPanel.Children.Add(freeTextBox);
+
+            // ── Confirm / Cancel ──────────────────────────────────────────
+            if (isMulti)
+            {
+                var confirmBtn = new Button
+                {
+                    Content = "✓  确认选择",
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Padding = new Thickness(16, 9),
                     FontSize = 12,
+                    Margin = new Thickness(0, 8, 0, 0),
                     Background = new SolidColorBrush(Color.Parse("#0f3460")),
-                    Foreground = new SolidColorBrush(Color.Parse("#e0e0e0")),
+                    Foreground = new SolidColorBrush(Color.Parse("#7ec8ff")),
                     BorderThickness = new Thickness(1),
                     BorderBrush = new SolidColorBrush(Color.Parse("#7ec8ff")),
                     CornerRadius = new CornerRadius(6),
                 };
-                btn.Click += (_, _) => { chosen = captured; dialog.Close(); };
-                optionsPanel.Children.Add(btn);
-            }
+                confirmBtn.Click += (_, _) =>
+                {
+                    args.SelectedOptions = checkBoxes!
+                        .Where(cb => cb.IsChecked == true)
+                        .Select(cb => (string)cb.Content!)
+                        .ToList();
+                    args.FreeTextResponse = freeTextBox?.Text?.Trim();
+                    args.FreeTextResponse = string.IsNullOrWhiteSpace(args.FreeTextResponse) ? null : args.FreeTextResponse;
+                    dialog.Close();
+                };
+                optionsPanel.Children.Add(confirmBtn);
 
-            // ── Cancel ────────────────────────────────────────────────────
-            var cancelBtn = new Button
+                var cancelBtn = new Button
+                {
+                    Content = "取消",
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Padding = new Thickness(14, 8),
+                    FontSize = 11,
+                    Background = new SolidColorBrush(Color.Parse("#2a2a3e")),
+                    Foreground = new SolidColorBrush(Color.Parse("#888888")),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = new SolidColorBrush(Color.Parse("#444444")),
+                    CornerRadius = new CornerRadius(6),
+                };
+                cancelBtn.Click += (_, _) => dialog.Close();
+                optionsPanel.Children.Add(cancelBtn);
+            }
+            else
             {
-                Content = "取消（不选择）",
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Center,
-                Padding = new Thickness(14, 8),
-                FontSize = 11,
-                Margin = new Thickness(0, 4, 0, 0),
-                Background = new SolidColorBrush(Color.Parse("#2a2a3e")),
-                Foreground = new SolidColorBrush(Color.Parse("#888888")),
-                BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(Color.Parse("#444444")),
-                CornerRadius = new CornerRadius(6),
-            };
-            cancelBtn.Click += (_, _) => dialog.Close();
-            optionsPanel.Children.Add(cancelBtn);
+                var cancelBtn = new Button
+                {
+                    Content = "取消（不选择）",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Padding = new Thickness(14, 8),
+                    FontSize = 11,
+                    Margin = new Thickness(0, 4, 0, 0),
+                    Background = new SolidColorBrush(Color.Parse("#2a2a3e")),
+                    Foreground = new SolidColorBrush(Color.Parse("#888888")),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = new SolidColorBrush(Color.Parse("#444444")),
+                    CornerRadius = new CornerRadius(6),
+                };
+                cancelBtn.Click += (_, _) => dialog.Close();
+                optionsPanel.Children.Add(cancelBtn);
+            }
 
             dialog.Content = new StackPanel
             {
@@ -280,10 +370,8 @@ public partial class WorkflowView : UserControl
                 await dialog.ShowDialog(owner);
             else
                 dialog.Show();
-
-            return;
         });
-        args.SelectedOption = chosen;
+        // Note: args properties are set inline in button handlers before dialog.Close()
     }
 
     private async Task ShowConfirmationDialogAsync(AgentConfirmationEventArgs args)
