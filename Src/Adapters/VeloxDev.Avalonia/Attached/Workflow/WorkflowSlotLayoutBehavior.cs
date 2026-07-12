@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using VeloxDev.WorkflowSystem;
@@ -15,6 +16,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
     {
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
         public bool SyncPending { get; set; }
+        public HashSet<string> SlotPropertyNames { get; } = [];
     }
 
     public static readonly AttachedProperty<bool> IsEnabledProperty =
@@ -137,11 +139,8 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         if (sender is not StyledElement element)
             return;
 
-        if (e.PropertyName is not nameof(IWorkflowNodeViewModel.Anchor)
-            and not nameof(IWorkflowNodeViewModel.Size)
-            and not "InputSlot"
-            and not "OutputSlot"
-            and not "OutputSlots")
+        if (element.GetValue(StateProperty) is not LayoutState state
+            || !state.SlotPropertyNames.Contains(e.PropertyName))
             return;
 
         var control = element as UserControl;
@@ -193,11 +192,41 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
 
         var parentHost = control;
         var coordinateHost = ResolveCoordinateHost(control, parentHost);
+        var slotNames = GetAllSlotNames(control);
+        var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-        foreach (var slotName in GetAllSlotNames(control))
+        // Rebuild the set of property names that should trigger ScheduleSync on change.
+        if (control.GetValue(StateProperty) is LayoutState state)
+        {
+            state.SlotPropertyNames.Clear();
+            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
+            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
+            // Control names (e.g. "PART_OutputSlots") differ from ViewModel property
+            // names ("OutputSlots"). Add both the full control name and the
+            // PART_-stripped form so OnPropertyChanged("OutputSlots") is matched.
+            foreach (var name in slotNames)
+            {
+                state.SlotPropertyNames.Add(name);
+                if (name.StartsWith("PART_"))
+                    state.SlotPropertyNames.Add(name.Substring(5));
+            }
+            foreach (var name in enumeratorNames)
+            {
+                state.SlotPropertyNames.Add(name);
+                if (name.StartsWith("PART_"))
+                    state.SlotPropertyNames.Add(name.Substring(5));
+            }
+            // Always include fallback defaults for standard property names,
+            // covering both direct ViewModel properties and SlotEnumerator members.
+            state.SlotPropertyNames.Add("InputSlot");
+            state.SlotPropertyNames.Add("OutputSlot");
+            state.SlotPropertyNames.Add("OutputSlots");
+        }
+
+        foreach (var slotName in slotNames)
             SyncNamedSlot(parentHost, control, coordinateHost, node, slotName);
 
-        foreach (var enumeratorName in GetAllSlotEnumeratorNames(control))
+        foreach (var enumeratorName in enumeratorNames)
             SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName);
     }
 
@@ -206,7 +235,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         if (string.IsNullOrWhiteSpace(controlName))
             return;
 
-        var slotControl = parentHost.FindControl<Control>(controlName);
+        var slotControl = parentHost.FindControl<Control>(controlName!);
         if (slotControl is not null)
             SyncSlot(host, coordinateHost, slotControl, node);
     }
@@ -272,8 +301,11 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             .FirstOrDefault(x => hostType.IsAssignableFrom(x.GetType()));
     }
 
-    private static Control? ResolveNamedHost(Control control, string hostName)
+    private static Control? ResolveNamedHost(Control control, string? hostName)
     {
+        if (hostName is null)
+            return null;
+
         if (control.Name == hostName)
             return control;
 
@@ -294,7 +326,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
     private static string[] EnumerateConfiguredNames(string? names)
         => string.IsNullOrWhiteSpace(names)
             ? []
-            : names.Split(',')
+            : names!.Split(',')
                 .Select(static x => x.Trim())
                 .Where(static x => x.Length > 0)
                 .ToArray();

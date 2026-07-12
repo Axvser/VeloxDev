@@ -37,7 +37,7 @@ namespace Demo
         {
             private int _updateCount = 0;
             private int _keyPressCount = 0;
-            private readonly HashSet<Key> _currentKeys = new();
+            private readonly HashSet<Key> _currentKeys = [];
 
             public InputComponent() => InitializeMonoBehaviour();
 
@@ -82,9 +82,9 @@ namespace Demo
         }
 
         // Component instances
-        private PhysicsComponent _physics;
-        private InputComponent _input;
-        private RenderComponent _render;
+        private PhysicsComponent _physics = null!;
+        private InputComponent _input = null!;
+        private RenderComponent _render = null!;
 
         // Window statistics
         private int _windowUpdateCount = 0;

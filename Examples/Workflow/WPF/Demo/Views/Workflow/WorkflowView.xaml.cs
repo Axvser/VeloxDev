@@ -54,7 +54,7 @@ public partial class WorkflowView : UserControl
                 DataContext = _workflowViewModel;
                 SubscribeAutoScroll(_workflowViewModel);
                 WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-                Dispatcher.InvokeAsync(() =>
+                _ = Dispatcher.InvokeAsync(() =>
                 {
                     var sv = this.FindName("PART_ScrollViewer") as System.Windows.Controls.ScrollViewer;
                     if (sv is not null)

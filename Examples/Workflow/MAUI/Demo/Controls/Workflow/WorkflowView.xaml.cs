@@ -3,7 +3,6 @@ using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.Diagnostics;
 using VeloxDev.AI;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -15,12 +14,13 @@ public partial class WorkflowView : ContentView
     private TreeViewModel _workflowViewModel = new();
     private DataTemplateSelector? _nodeSelector;
     private readonly ObservableCollection<IWorkflowViewModel> _canvasItems = [];
+    private bool _layoutRefreshPending;
+    private Page MainPage => Application.Current?.Windows[0].Page ?? throw new InvalidOperationException();
 
     public WorkflowView()
     {
         InitializeComponent();
         _nodeSelector = Resources.TryGetValue("NodeSelector", out var selector) ? selector as DataTemplateSelector : null;
-        Log($"ctor: selector={_nodeSelector?.GetType().Name ?? "null"}, canvas={PART_Canvas is null}, resources={Resources.Count}");
         if (_nodeSelector is not null)
         {
             WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, _nodeSelector);
@@ -48,7 +48,6 @@ public partial class WorkflowView : ContentView
 
     private void AttachSession(WorkflowDemoSession? oldSession, WorkflowDemoSession? newSession)
     {
-        Log($"AttachSession: old={(oldSession is null ? "null" : oldSession.Tree.Nodes.Count.ToString())}, new={(newSession is null ? "null" : newSession.Tree.Nodes.Count.ToString())}");
         if (oldSession is not null)
         {
             UnsubscribeAutoScroll(oldSession.Tree);
@@ -62,13 +61,9 @@ public partial class WorkflowView : ContentView
         PART_GridDecorator.BindingContext = _workflowViewModel;
         PART_ScrollViewer.BindingContext = _workflowViewModel;
         PART_Canvas.BindingContext = _workflowViewModel;
-        if (_nodeSelector is not null)
-        {
-            WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, _nodeSelector);
-        }
+
         RebuildCanvasItems(_workflowViewModel);
         WorkflowBehaviors.ViewPool.SetItemsSource(PART_Canvas, _canvasItems);
-        Log($"AttachSession.afterBind: nodes={_workflowViewModel.Nodes.Count}, links={_workflowViewModel.Links.Count}, canvasItems={_canvasItems.Count}, canvasChildren={PART_Canvas.Children.Count}");
 
         if (newSession is not null)
         {
@@ -77,12 +72,9 @@ public partial class WorkflowView : ContentView
             newSession.Tree.Layout.UpdateCommand.Execute(null);
         }
 
+        // Delay refresh to after layout settles
         MainThread.BeginInvokeOnMainThread(() =>
-        {
-            Log($"AttachSession.refresh(before): canvasChildren={PART_Canvas.Children.Count}, canvasSize={PART_Canvas.Width}x{PART_Canvas.Height}, request={PART_Canvas.WidthRequest}x{PART_Canvas.HeightRequest}");
-            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-            Log($"AttachSession.refresh(after): canvasChildren={PART_Canvas.Children.Count}, canvasSize={PART_Canvas.Width}x{PART_Canvas.Height}, request={PART_Canvas.WidthRequest}x{PART_Canvas.HeightRequest}");
-        });
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
     }
 
     private void SubscribeAutoScroll(TreeViewModel vm)
@@ -112,9 +104,7 @@ public partial class WorkflowView : ContentView
     }
 
     private Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
-    {
-        var tcs = new TaskCompletionSource();
-        MainThread.BeginInvokeOnMainThread(async () =>
+        => MainThread.InvokeOnMainThreadAsync(async () =>
         {
             var isMulti = args.AllowMultiSelect;
 
@@ -152,17 +142,8 @@ public partial class WorkflowView : ContentView
             {
                 if (isMulti)
                 {
-                    var cb = new CheckBox
-                    {
-                        Color = Color.FromArgb("#7ec8ff"),
-                    };
-                    var label = new Label
-                    {
-                        Text = opt,
-                        TextColor = Color.FromArgb("#e0e0e0"),
-                        FontSize = 13,
-                        VerticalOptions = LayoutOptions.Center,
-                    };
+                    var cb = new CheckBox { Color = Color.FromArgb("#7ec8ff") };
+                    var label = new Label { Text = opt, TextColor = Color.FromArgb("#e0e0e0"), FontSize = 13, VerticalOptions = LayoutOptions.Center };
                     var row = new HorizontalStackLayout { Spacing = 8 };
                     row.Children.Add(cb);
                     row.Children.Add(label);
@@ -178,32 +159,20 @@ public partial class WorkflowView : ContentView
                         BackgroundColor = Color.FromArgb("#0f3460"),
                         TextColor = Color.FromArgb("#e0e0e0"),
                         BorderColor = Color.FromArgb("#7ec8ff"),
-                        BorderWidth = 1,
-                        CornerRadius = 6,
-                        HeightRequest = 40,
+                        BorderWidth = 1, CornerRadius = 6, HeightRequest = 40,
                         HorizontalOptions = LayoutOptions.Fill,
-                        Margin = new Thickness(0, 0, 0, 4),
                     };
                     btn.Clicked += (_, _) =>
                     {
                         args.SelectedOption = captured;
-                        args.FreeTextResponse = freeTextEntry.Text?.Trim();
-                        args.FreeTextResponse = string.IsNullOrWhiteSpace(args.FreeTextResponse) ? null : args.FreeTextResponse;
-                        tcs.TrySetResult();
-                        Application.Current!.MainPage!.Navigation.PopModalAsync(true);
+                        args.FreeTextResponse = string.IsNullOrWhiteSpace(freeTextEntry.Text?.Trim()) ? null : freeTextEntry.Text.Trim();
+                        _ = MainPage.Navigation.PopModalAsync(true);
                     };
                     stack.Children.Add(btn);
                 }
             }
 
-            // ── Free text input (always shown) ──
-            stack.Children.Add(new Label
-            {
-                Text = args.FreeTextPrompt,
-                TextColor = Color.FromArgb("#b0b0b0"),
-                FontSize = 11,
-                Margin = new Thickness(0, 6, 0, 2),
-            });
+            stack.Children.Add(new Label { Text = args.FreeTextPrompt, TextColor = Color.FromArgb("#b0b0b0"), FontSize = 11, Margin = new Thickness(0, 6, 0, 2) });
             stack.Children.Add(freeTextEntry);
 
             if (isMulti)
@@ -214,131 +183,86 @@ public partial class WorkflowView : ContentView
                     BackgroundColor = Color.FromArgb("#0f3460"),
                     TextColor = Color.FromArgb("#7ec8ff"),
                     BorderColor = Color.FromArgb("#7ec8ff"),
-                    BorderWidth = 1,
-                    CornerRadius = 6,
-                    HeightRequest = 40,
-                    Margin = new Thickness(0, 10, 0, 0),
+                    BorderWidth = 1, CornerRadius = 6, HeightRequest = 40, Margin = new Thickness(0, 10, 0, 0),
                 };
                 confirmBtn.Clicked += (_, _) =>
                 {
-                    args.SelectedOptions = checkBoxes!
-                        .Where(cb => cb.IsChecked)
-                        .Select(cb => (string)((Label)((HorizontalStackLayout)cb.Parent).Children[1]).Text)
-                        .ToList();
-                    args.FreeTextResponse = freeTextEntry?.Text?.Trim();
-                    args.FreeTextResponse = string.IsNullOrWhiteSpace(args.FreeTextResponse) ? null : args.FreeTextResponse;
-                    tcs.TrySetResult();
-                    Application.Current!.MainPage!.Navigation.PopModalAsync(true);
+                    args.SelectedOptions = checkBoxes!.Where(cb => cb.IsChecked)
+                        .Select(cb => (string)((Label)((HorizontalStackLayout)cb.Parent).Children[1]).Text).ToList();
+                    args.FreeTextResponse = string.IsNullOrWhiteSpace(freeTextEntry.Text?.Trim()) ? null : freeTextEntry.Text.Trim();
+                    _ = MainPage.Navigation.PopModalAsync(true);
                 };
                 stack.Children.Add(confirmBtn);
 
-                var cancelBtn = new Button
-                {
-                    Text = "取消",
-                    BackgroundColor = Color.FromArgb("#2a2a3e"),
-                    TextColor = Color.FromArgb("#888888"),
-                    BorderColor = Color.FromArgb("#444444"),
-                    BorderWidth = 1,
-                    CornerRadius = 6,
-                    HeightRequest = 36,
-                };
-                cancelBtn.Clicked += (_, _) =>
-                {
-                    tcs.TrySetResult();
-                    Application.Current!.MainPage!.Navigation.PopModalAsync(true);
-                };
+                var cancelBtn = new Button { Text = "取消", BackgroundColor = Color.FromArgb("#2a2a3e"), TextColor = Color.FromArgb("#888888"), BorderColor = Color.FromArgb("#444444"), BorderWidth = 1, CornerRadius = 6, HeightRequest = 36 };
+                cancelBtn.Clicked += (_, _) => _ = MainPage.Navigation.PopModalAsync(true);
                 stack.Children.Add(cancelBtn);
             }
             else
             {
-                var cancelBtn = new Button
-                {
-                    Text = "取消（不选择）",
-                    BackgroundColor = Color.FromArgb("#2a2a3e"),
-                    TextColor = Color.FromArgb("#888888"),
-                    BorderColor = Color.FromArgb("#444444"),
-                    BorderWidth = 1,
-                    CornerRadius = 6,
-                    HeightRequest = 36,
-                    Margin = new Thickness(0, 8, 0, 0),
-                };
+                var cancelBtn = new Button { Text = "取消（不选择）", BackgroundColor = Color.FromArgb("#2a2a3e"), TextColor = Color.FromArgb("#888888"), BorderColor = Color.FromArgb("#444444"), BorderWidth = 1, CornerRadius = 6, HeightRequest = 36, Margin = new Thickness(0, 8, 0, 0) };
                 cancelBtn.Clicked += (_, _) =>
                 {
                     args.SelectedOption = null;
-                    args.FreeTextResponse = freeTextEntry?.Text?.Trim();
-                    args.FreeTextResponse = string.IsNullOrWhiteSpace(args.FreeTextResponse) ? null : args.FreeTextResponse;
-                    tcs.TrySetResult();
-                    Application.Current!.MainPage!.Navigation.PopModalAsync(true);
+                    args.FreeTextResponse = string.IsNullOrWhiteSpace(freeTextEntry.Text?.Trim()) ? null : freeTextEntry.Text.Trim();
+                    _ = MainPage.Navigation.PopModalAsync(true);
                 };
                 stack.Children.Add(cancelBtn);
             }
 
             page.Content = new ScrollView { Content = stack };
-            await Application.Current!.MainPage!.Navigation.PushModalAsync(page, true);
+            await MainPage.Navigation.PushModalAsync(page, true);
         });
-        return tcs.Task;
-    }
 
     private Task ShowConfirmationDialogAsync(AgentConfirmationEventArgs args)
-    {
-        var tcs = new TaskCompletionSource();
-        MainThread.BeginInvokeOnMainThread(async () =>
+        => MainThread.InvokeOnMainThreadAsync(async () =>
         {
-            var allow = await Application.Current!.MainPage!.DisplayAlert(
-                "⚠️ Agent · 操作确认",
-                $"[操作] {args.OperationKey}\n\n{args.Description}",
-                "允许", "拒绝");
+            var allow = await MainPage.DisplayAlertAsync(
+                "⚠️ Agent · 操作确认", $"[操作] {args.OperationKey}\n\n{args.Description}", "允许", "拒绝");
 
-            if (!allow)
-            {
-                args.Result = AgentConfirmationResult.Deny;
-                tcs.TrySetResult();
-                return;
-            }
+            if (!allow) { args.Result = AgentConfirmationResult.Deny; return; }
 
-            var always = await Application.Current!.MainPage!.DisplayAlert(
-                "⚠️ Agent · 授权范围",
-                "是否在本次会话中始终允许该操作？",
-                "始终允许", "仅同意一次");
-
-            args.Result = always ? AgentConfirmationResult.AllowAlways : AgentConfirmationResult.AllowOnce;
-            tcs.TrySetResult();
+            args.Result = await MainPage.DisplayAlertAsync(
+                "⚠️ Agent · 授权范围", "是否在本次会话中始终允许该操作？", "始终允许", "仅同意一次")
+                ? AgentConfirmationResult.AllowAlways : AgentConfirmationResult.AllowOnce;
         });
-        return tcs.Task;
+
+    private void OnAgentToolCalled() => ScheduleRefresh();
+    private void OnVisualRefreshRequested() => ScheduleRefresh();
+
+    private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => ScheduleRefresh();
+    private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => ScheduleRefresh();
+
+    /// <summary>
+    /// Debounces layout refreshes to avoid flooding MAUI's layout system.
+    /// MAUI layout passes are expensive — batch them.
+    /// </summary>
+    private void ScheduleRefresh()
+    {
+        if (_layoutRefreshPending) return;
+        _layoutRefreshPending = true;
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            _layoutRefreshPending = false;
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        });
     }
-
-    private void OnAgentToolCalled() => MainThread.BeginInvokeOnMainThread(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
-
-    private void OnVisualRefreshRequested() => MainThread.BeginInvokeOnMainThread(RefreshNodeLayouts);
-
-    private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => MainThread.BeginInvokeOnMainThread(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
-
-    private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => MainThread.BeginInvokeOnMainThread(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
 
     private void SubscribeCanvasItems(TreeViewModel vm)
     {
-        vm.Nodes.CollectionChanged += OnCanvasNodesChanged;
-        vm.Links.CollectionChanged += OnCanvasLinksChanged;
+        vm.Nodes.CollectionChanged += OnCanvasItemsChanged;
+        vm.Links.CollectionChanged += OnCanvasItemsChanged;
     }
 
     private void UnsubscribeCanvasItems(TreeViewModel vm)
     {
-        vm.Nodes.CollectionChanged -= OnCanvasNodesChanged;
-        vm.Links.CollectionChanged -= OnCanvasLinksChanged;
+        vm.Nodes.CollectionChanged -= OnCanvasItemsChanged;
+        vm.Links.CollectionChanged -= OnCanvasItemsChanged;
     }
 
-    private void OnCanvasNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void OnCanvasItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        var viewportX = PART_ScrollViewer.ScrollX - _workflowViewModel.Layout.ActualOffset.Horizontal;
-        var viewportY = PART_ScrollViewer.ScrollY - _workflowViewModel.Layout.ActualOffset.Vertical;
-        MainThread.BeginInvokeOnMainThread(() => SyncCanvasItems(e, viewportX, viewportY));
-    }
-
-    private void OnCanvasLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        var viewportX = PART_ScrollViewer.ScrollX - _workflowViewModel.Layout.ActualOffset.Horizontal;
-        var viewportY = PART_ScrollViewer.ScrollY - _workflowViewModel.Layout.ActualOffset.Vertical;
-        MainThread.BeginInvokeOnMainThread(() => SyncCanvasItems(e, viewportX, viewportY));
+        MainThread.BeginInvokeOnMainThread(() => SyncCanvasItems(e));
     }
 
     private void RebuildCanvasItems(TreeViewModel tree)
@@ -346,68 +270,31 @@ public partial class WorkflowView : ContentView
         _canvasItems.Clear();
 
         foreach (var link in tree.Links)
-        {
             _canvasItems.Add(link);
-        }
-
         foreach (var node in tree.Nodes)
-        {
             _canvasItems.Add(node);
-        }
-
-        Log($"RebuildCanvasItems: nodes={tree.Nodes.Count}, links={tree.Links.Count}, canvasItems={_canvasItems.Count}, sample={string.Join(",", _canvasItems.Take(6).Select(x => x.GetType().Name))}");
     }
 
-    private void SyncCanvasItems(NotifyCollectionChangedEventArgs e, double viewportX, double viewportY)
+    private void SyncCanvasItems(NotifyCollectionChangedEventArgs e)
     {
         switch (e.Action)
         {
             case NotifyCollectionChangedAction.Add:
-                if (e.NewItems is null)
-                {
-                    return;
-                }
-
+                if (e.NewItems is null) return;
                 foreach (var item in e.NewItems.OfType<IWorkflowViewModel>())
                 {
                     if (!_canvasItems.Contains(item))
-                    {
                         _canvasItems.Add(item);
-                    }
                 }
                 break;
             case NotifyCollectionChangedAction.Remove:
-                if (e.OldItems is null)
-                {
-                    return;
-                }
-
+                if (e.OldItems is null) return;
                 foreach (var item in e.OldItems.OfType<IWorkflowViewModel>())
-                {
                     _canvasItems.Remove(item);
-                }
                 break;
             default:
                 RebuildCanvasItems(_workflowViewModel);
                 break;
         }
-
-        Log($"SyncCanvasItems: action={e.Action}, canvasItems={_canvasItems.Count}, canvasChildren={PART_Canvas.Children.Count}");
-        RefreshNodeLayouts();
-        WorkflowBehaviors.WorkflowSurfaceBehavior.RequestViewportRestore(this, viewportX, viewportY);
     }
-
-    private void RefreshNodeLayouts()
-    {
-        foreach (var child in PART_Canvas.Children.OfType<ContentView>())
-        {
-            WorkflowBehaviors.WorkflowSlotLayoutBehavior.Refresh(child);
-        }
-
-        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-    }
-
-    private static void Log(string message)
-        => Debug.WriteLine($"[WorkflowView] {message}");
-
 }

@@ -177,8 +177,9 @@ public sealed class ViewManager(Panel panel)
         _activeViews.Add(new ControlItem { ViewModel = viewModel, View = view });
     }
 
-    private void HideViewFor(object viewModel)
+    private void HideViewFor(object? viewModel)
     {
+        if (viewModel is null) return;
         var item = _activeViews.FirstOrDefault(x => ReferenceEquals(x.ViewModel, viewModel));
         if (item?.View is { } view)
         {

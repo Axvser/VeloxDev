@@ -98,19 +98,19 @@
 	</UserControl.DataTemplates>
 
 	<Grid ColumnDefinitions="2*,auto,8*">
-		<!-- 渲染节点编辑器 ( 虚拟化支持 ) -->
-		<Grid Grid.Column="2">
-            <Border x:Name="PART_SurfaceBorder" BorderBrush="White" BorderThickness="1" CornerRadius="3">
-               <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
-                  <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                 x:Name="PART_ScrollViewer">
+		<!-- 渲染节点编辑器 ( 虚拟化支持 + Minimap 缩略图 ) -->
+		<Grid Grid.Column="2" x:Name="WorkflowContainer">
+			<Border x:Name="PART_SurfaceBorder" BorderBrush="White" BorderThickness="1" CornerRadius="3">
+			   <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+				  <ScrollViewer HorizontalScrollBarVisibility="Auto"
+								 x:Name="PART_ScrollViewer">
 						<Canvas x:DataType="vm:TreeViewModel"
-                                x:Name="PART_Canvas"
+								x:Name="PART_Canvas"
 								Width="{Binding Layout.ActualSize.Width}"
 								Height="{Binding Layout.ActualSize.Height}"
 								HorizontalAlignment="Left"
 								VerticalAlignment="Top"
-                             behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}">
+							 behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}">
 							<Canvas.DataTemplates>
 								<!-- 依照优先级寻找数据模板 >> Self > Parent > App -->
 							</Canvas.DataTemplates>
@@ -118,6 +118,20 @@
 					</ScrollViewer>
 				</local:WorkflowGridDecorator>
 			</Border>
+			<!-- Minimap: positioned below ruler, with equal gap from ruler & right edge -->
+			<behaviors:WorkflowMinimapOverlay x:Name="PART_MinimapOverlay"
+											  HorizontalAlignment="Right"
+											  VerticalAlignment="Top"
+											  Margin="0,36,8,0"
+											  ScrollViewerName="PART_ScrollViewer"
+											  IsHitTestVisible="True"
+											  WorkflowTree="{Binding}"
+											  ScrollOffsetX="{Binding ScrollOffsetX, ElementName=PART_GridDecorator}"
+											  ScrollOffsetY="{Binding ScrollOffsetY, ElementName=PART_GridDecorator}"
+											  ContentOffsetX="{Binding ContentOffsetX, ElementName=PART_GridDecorator}"
+											  ContentOffsetY="{Binding ContentOffsetY, ElementName=PART_GridDecorator}"
+											  ViewportWidth="{Binding Bounds.Width, ElementName=WorkflowContainer}"
+											  ViewportHeight="{Binding Bounds.Height, ElementName=WorkflowContainer}"/>
 		</Grid>
 
 		<!-- 功能按键 ( 测试用 ) -->
@@ -135,6 +149,12 @@
 						<TextBlock Text="{Binding Nodes.Count}"/>
 						<TextBlock Text="可见组件数：( Node / Link )" />
 						<TextBlock Text="{Binding Helper.VisibleItems.Count}" />
+						<!-- Minmap toggle -->
+						<Grid Margin="0,6,0,0" ColumnDefinitions="*,Auto">
+							<TextBlock Text="小地图" VerticalAlignment="Center"/>
+							<ToggleSwitch Grid.Column="1"
+										  IsChecked="{Binding IsMinimapVisible, ElementName=PART_MinimapOverlay}"/>
+						</Grid>
 						<!-- Agent 对话 -->
 						<Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
 							<StackPanel Spacing="6">

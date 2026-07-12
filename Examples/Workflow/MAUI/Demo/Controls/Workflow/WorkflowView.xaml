@@ -67,51 +67,65 @@
                                          LinkTemplate="{StaticResource LinkTemplate}" />
     </ContentView.Resources>
 
-    <Border x:Name="PART_SurfaceBorder"
-            Margin="0"
-            Stroke="White"
-            StrokeThickness="1"
-            StrokeShape="RoundRectangle 3"
-            BackgroundColor="#0B1120">
-        <controls:WorkflowGridDecorator x:Name="PART_GridDecorator">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
+    <Grid>
+        <Border x:Name="PART_SurfaceBorder"
+                Margin="0"
+                Stroke="White"
+                StrokeThickness="1"
+                StrokeShape="RoundRectangle 3"
+                BackgroundColor="#0B1120">
+            <controls:WorkflowGridDecorator x:Name="PART_GridDecorator">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
 
-                <ScrollView x:Name="PART_ScrollViewer"
-                            Grid.Row="1"
-                            Grid.Column="1"
-                            Orientation="Both"
-                            BackgroundColor="Transparent">
-                    <AbsoluteLayout x:Name="PART_Canvas"
-                                    WidthRequest="{Binding Layout.ActualSize.Width}"
-                                    HeightRequest="{Binding Layout.ActualSize.Height}"
-                                    BackgroundColor="Transparent">
-                            <Grid BindingContext="{Binding VirtualLink}"
-                                  AbsoluteLayout.LayoutBounds="0,0,-1,-1"
-                                  AbsoluteLayout.LayoutFlags="None">
-                                <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                                            StartTop="{Binding Sender.Anchor.Vertical}"
-                                                            EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                                            EndTop="{Binding Receiver.Anchor.Vertical}"
-                                                            ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}"
-                                                            ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}"
-                                                            CanRender="{Binding IsVisible}"
-                                                            WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}"
-                                                            HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}"
-                                                            LineColor="#E2E8F0"
-                                                            IsVirtual="True"
-                                                            ZIndex="-1" />
-                        </Grid>
-                    </AbsoluteLayout>
-                </ScrollView>
-            </Grid>
-        </controls:WorkflowGridDecorator>
-    </Border>
+                    <ScrollView x:Name="PART_ScrollViewer"
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                Orientation="Both"
+                                BackgroundColor="Transparent">
+                        <AbsoluteLayout x:Name="PART_Canvas"
+                                        WidthRequest="{Binding Layout.ActualSize.Width}"
+                                        HeightRequest="{Binding Layout.ActualSize.Height}"
+                                        BackgroundColor="Transparent">
+                                <Grid BindingContext="{Binding VirtualLink}"
+                                      AbsoluteLayout.LayoutBounds="0,0,-1,-1"
+                                      AbsoluteLayout.LayoutFlags="None">
+                                    <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                                                                StartTop="{Binding Sender.Anchor.Vertical}"
+                                                                EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                                                                EndTop="{Binding Receiver.Anchor.Vertical}"
+                                                                ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}"
+                                                                ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}"
+                                                                CanRender="{Binding IsVisible}"
+                                                                WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}"
+                                                                HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}"
+                                                                LineColor="#E2E8F0"
+                                                                IsVirtual="True"
+                                                                ZIndex="-1" />
+                            </Grid>
+                        </AbsoluteLayout>
+                    </ScrollView>
+                </Grid>
+            </controls:WorkflowGridDecorator>
+        </Border>
+        <!-- Minimap overlay -->
+        <behaviors:WorkflowMinimapOverlay HorizontalOptions="End"
+                                          VerticalOptions="Start"
+                                          Margin="0,36,8,0"
+                                          ScrollViewerName="PART_ScrollViewer"
+                                          WorkflowTree="{Binding Source={x:Reference PART_SurfaceBorder}, Path=BindingContext}"
+                                          ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                          ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                          ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                          ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                          ViewportWidth="{Binding Width, Source={x:Reference PART_SurfaceBorder}}"
+                                          ViewportHeight="{Binding Height, Source={x:Reference PART_SurfaceBorder}}"/>
+    </Grid>
 </ContentView>

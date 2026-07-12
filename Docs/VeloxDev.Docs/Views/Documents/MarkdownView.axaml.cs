@@ -971,7 +971,7 @@ public partial class MarkdownView : WikiElementViewBase
 
     private static TextBlock CreateFlowTextBlock(string? text, InlineRenderStyle style, double fontSize)
     {
-        return new TextBlock
+        var block = new TextBlock
         {
             Text = text ?? string.Empty,
             FontSize = fontSize,
@@ -980,14 +980,18 @@ public partial class MarkdownView : WikiElementViewBase
             LineHeight = style.LineHeight > 0 ? style.LineHeight : double.NaN,
             FontWeight = style.FontWeight,
             FontStyle = style.FontStyle,
-            FontFamily = style.IsCode ? MonospaceFontFamily : null,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top
         };
+
+        if (style.IsCode)
+            block.FontFamily = MonospaceFontFamily;
+
+        return block;
     }
 
     private static TextBlock CreateLinkTextBlock(string? text, InlineRenderStyle style)
     {
-        return new TextBlock
+        var block = new TextBlock
         {
             Text = text ?? string.Empty,
             TextWrapping = TextWrapping.Wrap,
@@ -996,9 +1000,13 @@ public partial class MarkdownView : WikiElementViewBase
             LineHeight = style.LineHeight > 0 ? style.LineHeight : double.NaN,
             FontWeight = style.FontWeight,
             FontStyle = style.FontStyle,
-            FontFamily = style.IsCode ? MonospaceFontFamily : null,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top
         };
+
+        if (style.IsCode)
+            block.FontFamily = MonospaceFontFamily;
+
+        return block;
     }
 
     private List<Control> CreateInlineContentControls(MdInline? inline, InlineRenderStyle style)

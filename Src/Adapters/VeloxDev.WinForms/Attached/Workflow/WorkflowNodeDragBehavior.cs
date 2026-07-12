@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
@@ -300,7 +301,7 @@ public sealed class WorkflowNodeDragBehavior
     {
         HookControl(owner, control);
 
-        foreach (Control child in control.Controls)
+        foreach (var child in control.Controls.OfType<Control>())
         {
             HookControlTree(owner, child);
         }
@@ -331,7 +332,7 @@ public sealed class WorkflowNodeDragBehavior
 
     private static void UnhookControlTree(Control control, DragState state)
     {
-        foreach (Control child in control.Controls)
+        foreach (var child in control.Controls.OfType<Control>())
         {
             UnhookControlTree(child, state);
         }
@@ -379,7 +380,7 @@ public sealed class WorkflowNodeDragBehavior
         var hostName = GetCoordinateHostName(control);
         if (!string.IsNullOrWhiteSpace(hostName))
         {
-            var namedHost = ResolveNamedHost(control, hostName);
+            var namedHost = ResolveNamedHost(control, hostName!);
             if (namedHost is not null)
             {
                 return namedHost;

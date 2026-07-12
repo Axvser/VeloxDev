@@ -59,7 +59,7 @@ public sealed class ViewManager(Panel panel)
             case NotifyCollectionChangedAction.Add:
                 if (e.NewItems != null)
                 {
-                    foreach (object item in e.NewItems)
+                    foreach (var item in e.NewItems.OfType<object>())
                     {
                         _pendingViews.RemoveAll(x => ReferenceEquals(x, item));
                         _pendingViews.Add(item);
@@ -71,7 +71,7 @@ public sealed class ViewManager(Panel panel)
             case NotifyCollectionChangedAction.Remove:
                 if (e.OldItems != null)
                 {
-                    foreach (object item in e.OldItems)
+                    foreach (var item in e.OldItems.OfType<object>())
                     {
                         _pendingViews.RemoveAll(x => ReferenceEquals(x, item));
                         HideViewFor(item);

@@ -14,7 +14,11 @@ public partial class ImageView : WikiElementViewBase
         InitializeComponent();
         InitializeEditChrome(ChromeBorder, DisplayPanel, EditPanel);
         DataContextChanged += (_, _) => AttachProvider();
-        SizeChanged += (_, _) => ApplyScale(_provider);
+        SizeChanged += (_, _) =>
+        {
+            if (_provider is { } provider)
+                ApplyScale(provider);
+        };
         ResizeThumb.DragDelta += (_, e) =>
         {
             if (DataContext is not ImageProvider image)
@@ -38,15 +42,16 @@ public partial class ImageView : WikiElementViewBase
         _provider = DataContext as ImageProvider;
         if (_provider is not null)
         {
-            _provider.PropertyChanged += ProviderPropertyChanged;
-            ApplyScale(_provider);
-            _ = _provider.EnsureLoadedAsync();
+            var provider = _provider;
+            provider.PropertyChanged += ProviderPropertyChanged;
+            ApplyScale(provider);
+            _ = provider.EnsureLoadedAsync();
         }
     }
 
     private void ProviderPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_provider is null)
+        if (_provider is not { } provider)
             return;
 
         if (e.PropertyName == nameof(ImageProvider.ScaleX) ||
@@ -57,7 +62,7 @@ public partial class ImageView : WikiElementViewBase
             e.PropertyName == nameof(ImageProvider.SizeMode) ||
             e.PropertyName == nameof(ImageProvider.Alignment) ||
             e.PropertyName == nameof(ImageProvider.KeepAspectRatio))
-            ApplyScale(_provider);
+            ApplyScale(provider);
     }
 
     private void ApplyScale(ImageProvider image)

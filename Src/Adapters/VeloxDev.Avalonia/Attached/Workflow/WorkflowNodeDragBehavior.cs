@@ -147,8 +147,11 @@ public sealed class WorkflowNodeDragBehavior : AvaloniaObject
             .FirstOrDefault(x => hostType.IsAssignableFrom(x.GetType()));
     }
 
-    private static Control? ResolveNamedHost(Control control, string hostName)
+    private static Control? ResolveNamedHost(Control control, string? hostName)
     {
+        if (hostName is null)
+            return null;
+
         if (control.Name == hostName)
             return control;
 

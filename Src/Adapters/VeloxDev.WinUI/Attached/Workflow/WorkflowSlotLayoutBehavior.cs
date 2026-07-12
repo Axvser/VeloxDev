@@ -16,6 +16,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
         public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
         public bool SyncPending { get; set; }
+        public HashSet<string> SlotPropertyNames { get; } = [];
     }
 
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
@@ -160,11 +161,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
     private static void OnNodePropertyChanged(UserControl control, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is not nameof(IWorkflowNodeViewModel.Anchor)
-            and not nameof(IWorkflowNodeViewModel.Size)
-            and not "InputSlot"
-            and not "OutputSlot"
-            and not "OutputSlots")
+        if (control.GetValue(StateProperty) is not LayoutState state
+            || !state.SlotPropertyNames.Contains(e.PropertyName))
         {
             return;
         }
@@ -223,13 +221,43 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
         var parentHost = control;
         var coordinateHost = ResolveCoordinateHost(control, parentHost);
+        var slotNames = GetAllSlotNames(control);
+        var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-        foreach (var slotName in GetAllSlotNames(control))
+        // Rebuild the set of property names that should trigger ScheduleSync on change.
+        if (control.GetValue(StateProperty) is LayoutState state)
+        {
+            state.SlotPropertyNames.Clear();
+            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
+            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
+            // Control names (e.g. "PART_OutputSlots") differ from ViewModel property
+            // names ("OutputSlots"). Add both the full control name and the
+            // PART_-stripped form so OnPropertyChanged("OutputSlots") is matched.
+            foreach (var name in slotNames)
+            {
+                state.SlotPropertyNames.Add(name);
+                if (name.StartsWith("PART_"))
+                    state.SlotPropertyNames.Add(name.Substring(5));
+            }
+            foreach (var name in enumeratorNames)
+            {
+                state.SlotPropertyNames.Add(name);
+                if (name.StartsWith("PART_"))
+                    state.SlotPropertyNames.Add(name.Substring(5));
+            }
+            // Always include fallback defaults for standard property names,
+            // covering both direct ViewModel properties and SlotEnumerator members.
+            state.SlotPropertyNames.Add("InputSlot");
+            state.SlotPropertyNames.Add("OutputSlot");
+            state.SlotPropertyNames.Add("OutputSlots");
+        }
+
+        foreach (var slotName in slotNames)
         {
             SyncNamedSlot(parentHost, control, coordinateHost, node, slotName);
         }
 
-        foreach (var enumeratorName in GetAllSlotEnumeratorNames(control))
+        foreach (var enumeratorName in enumeratorNames)
         {
             SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName);
         }
@@ -331,7 +359,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         return EnumerateSelfAndAncestors(parentHost).OfType<FrameworkElement>().FirstOrDefault(x => hostType.IsAssignableFrom(x.GetType()));
     }
 
-    private static FrameworkElement? ResolveNamedHost(DependencyObject source, string hostName)
+    private static FrameworkElement? ResolveNamedHost(DependencyObject source, string? hostName)
     {
         return EnumerateSelfAndAncestors(source)
             .OfType<FrameworkElement>()

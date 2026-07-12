@@ -43,11 +43,13 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// </summary>
     public event Action? ToolCalled;
 
+    #pragma warning disable CS0067 // 外部订阅者使用
     /// <summary>
     /// Raised when the Agent calls the <c>RefreshVisualSlotAnchors</c> tool.
     /// Subscribe from the View layer to force all visible node views to re-sync slot anchor positions.
     /// </summary>
     public event Action? VisualRefreshRequested;
+#pragma warning restore CS0067
 
     /// <summary>
     /// Set by the View layer to handle <c>RequestSelection</c> tool calls.

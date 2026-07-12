@@ -121,6 +121,17 @@
                     </ScrollViewer>
                 </local:WorkflowGridDecorator>
             </Border>
+            <behaviors:WorkflowMinimapOverlay HorizontalAlignment="Right"
+                                              VerticalAlignment="Top"
+                                              Margin="0,56,45,0"
+                                              ScrollViewerName="PART_ScrollViewer"
+                                              WorkflowTree="{Binding}"
+                                              ScrollOffsetX="{Binding ScrollOffsetX, ElementName=PART_GridDecorator}"
+                                              ScrollOffsetY="{Binding ScrollOffsetY, ElementName=PART_GridDecorator}"
+                                              ContentOffsetX="{Binding ContentOffsetX, ElementName=PART_GridDecorator}"
+                                              ContentOffsetY="{Binding ContentOffsetY, ElementName=PART_GridDecorator}"
+                                              ViewportWidth="{Binding ActualWidth, ElementName=PART_SurfaceBorder}"
+                                              ViewportHeight="{Binding ActualHeight, ElementName=PART_SurfaceBorder}"/>
         </Grid>
 
         <Grid Grid.Column="0" Margin="20,20,0,20">

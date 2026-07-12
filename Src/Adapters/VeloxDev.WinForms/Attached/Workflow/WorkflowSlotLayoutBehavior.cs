@@ -27,6 +27,7 @@ public sealed class WorkflowSlotLayoutBehavior
         public string? ParentHostName { get; set; }
         public string? LayoutPropertyName { get; set; } = "Layout";
         public string? ActualOffsetPropertyName { get; set; } = "ActualOffset";
+        public HashSet<string> SlotPropertyNames { get; } = [];
     }
 
     private static readonly ConditionalWeakTable<Control, LayoutState> States = new();
@@ -359,11 +360,8 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static void OnNodePropertyChanged(Control control, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is not nameof(IWorkflowNodeViewModel.Anchor)
-            and not nameof(IWorkflowNodeViewModel.Size)
-            and not "InputSlot"
-            and not "OutputSlot"
-            and not "OutputSlots")
+        if (!States.TryGetValue(control, out var state)
+            || !state.SlotPropertyNames.Contains(e.PropertyName))
         {
             return;
         }
@@ -431,6 +429,35 @@ public sealed class WorkflowSlotLayoutBehavior
 
         var slotNames = GetAllSlotNames(control);
         var enumeratorNames = GetAllSlotEnumeratorNames(control);
+
+        // Rebuild the set of property names that should trigger ScheduleSync on change.
+        if (States.TryGetValue(control, out var state))
+        {
+            state.SlotPropertyNames.Clear();
+            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
+            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
+            // Control names (e.g. "PART_OutputSlots") differ from ViewModel property
+            // names ("OutputSlots"). Add both the full control name and the
+            // PART_-stripped form so OnPropertyChanged("OutputSlots") is matched.
+            foreach (var name in slotNames)
+            {
+                state.SlotPropertyNames.Add(name);
+                if (name.StartsWith("PART_"))
+                    state.SlotPropertyNames.Add(name.Substring(5));
+            }
+            foreach (var name in enumeratorNames)
+            {
+                state.SlotPropertyNames.Add(name);
+                if (name.StartsWith("PART_"))
+                    state.SlotPropertyNames.Add(name.Substring(5));
+            }
+            // Always include fallback defaults for standard property names,
+            // covering both direct ViewModel properties and SlotEnumerator members.
+            state.SlotPropertyNames.Add("InputSlot");
+            state.SlotPropertyNames.Add("OutputSlot");
+            state.SlotPropertyNames.Add("OutputSlots");
+        }
+
         if (slotNames.Length == 0 && enumeratorNames.Length == 0)
         {
             foreach (var slotView in EnumerateDescendants(control).Where(x => ResolveSlot(x) is not null))
@@ -509,7 +536,7 @@ public sealed class WorkflowSlotLayoutBehavior
         var hostName = GetCoordinateHostName(control);
         if (!string.IsNullOrWhiteSpace(hostName))
         {
-            var namedHost = FindControlByName(parentHost, hostName);
+            var namedHost = FindControlByName(parentHost, hostName!);
             if (namedHost is not null)
             {
                 return namedHost;
@@ -539,7 +566,7 @@ public sealed class WorkflowSlotLayoutBehavior
             return control;
         }
 
-        return FindControlByName(control, hostName) ?? control;
+        return FindControlByName(control, hostName!) ?? control;
     }
 
     private static string[] GetAllSlotNames(Control control)
@@ -555,7 +582,7 @@ public sealed class WorkflowSlotLayoutBehavior
             return Enumerable.Empty<string>();
         }
 
-        return names.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0);
+        return names!.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0);
     }
 
     private static Control? FindControlByName(Control root, string name)
@@ -582,7 +609,7 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static IEnumerable<Control> EnumerateDescendants(Control root)
     {
-        foreach (Control child in root.Controls)
+        foreach (var child in root.Controls.OfType<Control>())
         {
             yield return child;
             foreach (var descendant in EnumerateDescendants(child))
@@ -596,7 +623,7 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (control.DataBindings.Count > 0)
         {
-            foreach (Binding binding in control.DataBindings)
+            foreach (var binding in control.DataBindings.OfType<Binding>())
             {
                 if (binding.DataSource is not null)
                 {

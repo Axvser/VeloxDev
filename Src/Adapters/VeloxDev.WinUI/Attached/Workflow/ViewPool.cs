@@ -23,7 +23,7 @@ public sealed class ViewPool : DependencyObject
         typeof(ViewPool),
         new PropertyMetadata(null, OnTemplateSelectorChanged));
 
-    private static readonly ConditionalWeakTable<Panel, ViewManager> Managers = new();
+    private static readonly ConditionalWeakTable<Panel, ViewManager> Managers = [];
 
     public static INotifyCollectionChanged? GetItemsSource(Panel element)
         => (INotifyCollectionChanged?)element.GetValue(ItemsSourceProperty);

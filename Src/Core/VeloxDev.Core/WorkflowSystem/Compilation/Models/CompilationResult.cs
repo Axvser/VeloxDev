@@ -5,7 +5,7 @@ namespace VeloxDev.WorkflowSystem.Compilation;
 
 /// <summary>
 /// The compiled output: a read-only ordered list of items.
-/// Call <see cref="ExecuteAsync"/> to run them in sequence.
+/// Call <see cref="ExecuteAsync(object?, System.Threading.CancellationToken)"/> to run them in sequence.
 ///
 /// Execution model (compiled mode):
 /// The compiler's <see cref="CompilationResult"/> owns the execution order.
@@ -152,7 +152,7 @@ public sealed class CompilationResult
     }
 
     /// <summary>
-    /// Core execution loop shared by all <see cref="ExecuteAsync"/> overloads.
+    /// Core execution loop shared by all <see cref="ExecuteAsync(object?, System.Threading.CancellationToken)"/> overloads.
     /// </summary>
     private async Task<object?> ExecuteCoreAsync(object? parameter, IDiagnosticLogger? logger, CancellationToken ct)
     {

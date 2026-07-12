@@ -152,7 +152,7 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
         var hostName = GetCoordinateHostName(control);
         if (!string.IsNullOrWhiteSpace(hostName))
         {
-            var namedHost = ResolveNamedHost(control, hostName);
+            var namedHost = ResolveNamedHost(control, hostName!);
             if (namedHost is not null)
             {
                 return namedHost;

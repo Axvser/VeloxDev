@@ -146,19 +146,19 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         var scrollViewerName = GetScrollViewerName(control);
         if (!string.IsNullOrWhiteSpace(scrollViewerName))
-            state.ScrollViewer = control.FindControl<ScrollViewer>(scrollViewerName);
+            state.ScrollViewer = control.FindControl<ScrollViewer>(scrollViewerName!);
 
         var canvasName = GetCanvasName(control);
         if (!string.IsNullOrWhiteSpace(canvasName))
-            state.Canvas = control.FindControl<Canvas>(canvasName);
+            state.Canvas = control.FindControl<Canvas>(canvasName!);
 
         var gridDecoratorName = GetGridDecoratorName(control);
         if (!string.IsNullOrWhiteSpace(gridDecoratorName))
-            state.GridDecorator = control.FindControl<Control>(gridDecoratorName);
+            state.GridDecorator = control.FindControl<Control>(gridDecoratorName!);
 
         var pointerPressSourceName = GetPointerPressSourceName(control);
         if (!string.IsNullOrWhiteSpace(pointerPressSourceName))
-            state.PointerPressSource = control.FindControl<Control>(pointerPressSourceName);
+            state.PointerPressSource = control.FindControl<Control>(pointerPressSourceName!);
 
         if (state.PointerPressSource is not null)
             state.PointerPressSource.PointerPressed += OnPointerPressed;

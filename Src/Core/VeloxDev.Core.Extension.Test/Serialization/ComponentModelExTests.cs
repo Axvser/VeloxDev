@@ -162,7 +162,7 @@ public class ComponentModelExTests
     {
         var model = new TestModel { Name = null, Count = 0 };
         var json = model.Serialize();
-        Assert.IsTrue(json.Contains("null"));
+        Assert.Contains("null", json);
     }
 
     [TestMethod]

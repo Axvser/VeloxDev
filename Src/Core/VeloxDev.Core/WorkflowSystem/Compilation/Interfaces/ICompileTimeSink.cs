@@ -11,7 +11,7 @@ namespace VeloxDev.WorkflowSystem.Compilation;
 public interface ICompileTimeSink
 {
     /// <summary>
-    /// Called by <see cref="CompilationResult.ExecuteAsync"/> at each stage
+    /// Called by <see cref="CompilationResult.ExecuteAsync(object?, System.Threading.CancellationToken)"/> at each stage
     /// of the execution chain. Implement this to react to state transitions.
     /// </summary>
     void OnExecutionEvent(ExecutionContext context);

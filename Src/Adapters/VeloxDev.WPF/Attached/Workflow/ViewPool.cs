@@ -65,7 +65,7 @@ public sealed class ViewPool : DependencyObject
 
     private static void CleanupManager(Panel panel)
     {
-        if (_managers.TryGetValue(panel, out var manager))
+        if (_managers.TryGetValue(panel, out var manager) && manager is not null)
         {
             manager.Detach();
             _managers.Remove(panel);

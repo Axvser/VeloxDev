@@ -452,9 +452,10 @@ public class WorkflowCompilerTests
         t.Nodes.Add(targetB);
 
         var r = _compiler.Compile(router, CompileMode.BFS)[0];
-        Assert.IsNotNull(r.Items[0].RouteTable);
-        Assert.AreSame(targetA, r.Items[0].RouteTable["a"]);
-        Assert.AreSame(targetB, r.Items[0].RouteTable["b"]);
+        var routeTable = r.Items[0].RouteTable;
+        Assert.IsNotNull(routeTable);
+        Assert.AreSame(targetA, routeTable!["a"]);
+        Assert.AreSame(targetB, routeTable!["b"]);
     }
 
     [TestMethod]
@@ -1154,9 +1155,10 @@ public class WorkflowCompilerTests
         Assert.AreSame(router, r.Items[0].Node);
 
         // RouteTable 依然被收集
-        Assert.IsNotNull(r.Items[0].RouteTable);
-        Assert.AreEqual(1, r.Items[0].RouteTable.Count);
-        Assert.AreSame(downstream, r.Items[0].RouteTable["target"]);
+        var routeTable = r.Items[0].RouteTable;
+        Assert.IsNotNull(routeTable);
+        Assert.AreEqual(1, routeTable!.Count);
+        Assert.AreSame(downstream, routeTable!["target"]);
 
         // BranchExclusiveItems 应为 null — 下游不在 items 中，ComputeBranchExclusives 无法建立映射
         Assert.IsNull(r.Items[0].BranchExclusiveItems);
@@ -1250,8 +1252,9 @@ public class WorkflowCompilerTests
         var r2 = _compiler.Compile(router, CompileMode.BFS, CompileDirection.Forward, CompileScope.FromNode)[0];
         Assert.AreEqual(1, r2.Items.Count, "Only router after disconnect — downstream NOT reachable");
         Assert.AreSame(router, r2.Items[0].Node);
-        Assert.IsNotNull(r2.Items[0].RouteTable);
-        Assert.AreEqual(0, r2.Items[0].RouteTable.Count, "RouteTable should be empty");
+        var routeTable = r2.Items[0].RouteTable;
+        Assert.IsNotNull(routeTable);
+        Assert.AreEqual(0, routeTable!.Count, "RouteTable should be empty");
     }
 
     [TestMethod]

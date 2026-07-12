@@ -344,11 +344,11 @@ public sealed class ViewManager
             return selected;
         }
 
-        if (TryFindTemplateByResourceKey(context, out selected))
+        if (TryFindTemplateByResourceKey(context, out var resourceTemplate) && resourceTemplate is not null)
         {
-            _templateMap[contextType] = selected;
-            Log($"FindDataTemplate.resource: vm={contextType.Name}, template={selected?.GetType().Name ?? "null"}");
-            return selected;
+            _templateMap[contextType] = resourceTemplate;
+            Log($"FindDataTemplate.resource: vm={contextType.Name}, template={resourceTemplate.GetType().Name}");
+            return resourceTemplate;
         }
 
         Log($"FindDataTemplate.miss: vm={contextType.Name}");

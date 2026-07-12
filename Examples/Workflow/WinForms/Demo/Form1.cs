@@ -11,7 +11,7 @@ namespace Demo
 {
     public partial class Form1 : Form
     {
-        private readonly BindingSource _controllerBindingSource = new();
+        private readonly BindingSource _controllerBindingSource = [];
         private WorkflowDemoSession? _demo;
 
         public Form1()

@@ -50,7 +50,7 @@ public sealed class CompiledItem
     /// <summary>
     /// Set by <see cref="SubscribeError"/> when the node's WorkCommand fires
     /// its <c>Failed</c> event. The executor checks this after
-    /// <see cref="CompilationResult.ExecuteAsync"/> to decide whether to redirect.
+    /// <see cref="CompilationResult.ExecuteAsync(object?, System.Threading.CancellationToken)"/> to decide whether to redirect.
     /// </summary>
     internal Exception? FailureException { get; set; }
 
