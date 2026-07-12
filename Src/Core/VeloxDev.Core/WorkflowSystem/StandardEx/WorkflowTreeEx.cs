@@ -545,6 +545,100 @@ public static class WorkflowTreeEx
     }
     #endregion
 
+    #region Degree & Topology Queries
+
+    /// <summary>
+    /// Returns the in-degree (number of incoming connections) for the node at the given index.
+    /// </summary>
+    public static int GetNodeInDegree(this IWorkflowTreeViewModel tree, int nodeIndex)
+    {
+        if (tree is null) throw new ArgumentNullException(nameof(tree));
+        if (nodeIndex < 0 || nodeIndex >= tree.Nodes.Count)
+            throw new ArgumentOutOfRangeException(nameof(nodeIndex));
+
+        var node = tree.Nodes[nodeIndex];
+        int degree = 0;
+        foreach (var slot in node.Slots)
+            degree += slot.Sources.Count;
+        return degree;
+    }
+
+    /// <summary>
+    /// Returns the out-degree (number of outgoing connections) for the node at the given index.
+    /// </summary>
+    public static int GetNodeOutDegree(this IWorkflowTreeViewModel tree, int nodeIndex)
+    {
+        if (tree is null) throw new ArgumentNullException(nameof(tree));
+        if (nodeIndex < 0 || nodeIndex >= tree.Nodes.Count)
+            throw new ArgumentOutOfRangeException(nameof(nodeIndex));
+
+        var node = tree.Nodes[nodeIndex];
+        int degree = 0;
+        foreach (var slot in node.Slots)
+            degree += slot.Targets.Count;
+        return degree;
+    }
+
+    /// <summary>
+    /// Finds all entry nodes (in-degree = 0) in the tree. These are natural starting
+    /// points for forward traversal.
+    /// </summary>
+    public static IReadOnlyList<int> FindEntryNodeIndices(this IWorkflowTreeViewModel tree)
+    {
+        if (tree is null) throw new ArgumentNullException(nameof(tree));
+
+        var entries = new List<int>();
+        for (int i = 0; i < tree.Nodes.Count; i++)
+            if (GetNodeInDegree(tree, i) == 0)
+                entries.Add(i);
+        return entries;
+    }
+
+    /// <summary>
+    /// Finds all exit nodes (out-degree = 0) in the tree. These are natural ending
+    /// points for forward traversal, or starting points for reverse traversal.
+    /// </summary>
+    public static IReadOnlyList<int> FindExitNodeIndices(this IWorkflowTreeViewModel tree)
+    {
+        if (tree is null) throw new ArgumentNullException(nameof(tree));
+
+        var exits = new List<int>();
+        for (int i = 0; i < tree.Nodes.Count; i++)
+            if (GetNodeOutDegree(tree, i) == 0)
+                exits.Add(i);
+        return exits;
+    }
+
+    /// <summary>
+    /// Finds all nodes whose in-degree equals the specified value.
+    /// </summary>
+    public static IReadOnlyList<int> FindNodesByInDegree(this IWorkflowTreeViewModel tree, int degree)
+    {
+        if (tree is null) throw new ArgumentNullException(nameof(tree));
+
+        var result = new List<int>();
+        for (int i = 0; i < tree.Nodes.Count; i++)
+            if (GetNodeInDegree(tree, i) == degree)
+                result.Add(i);
+        return result;
+    }
+
+    /// <summary>
+    /// Finds all nodes whose out-degree equals the specified value.
+    /// </summary>
+    public static IReadOnlyList<int> FindNodesByOutDegree(this IWorkflowTreeViewModel tree, int degree)
+    {
+        if (tree is null) throw new ArgumentNullException(nameof(tree));
+
+        var result = new List<int>();
+        for (int i = 0; i < tree.Nodes.Count; i++)
+            if (GetNodeOutDegree(tree, i) == degree)
+                result.Add(i);
+        return result;
+    }
+
+    #endregion
+
     #region Cache Management
     private class TreeCache
     {

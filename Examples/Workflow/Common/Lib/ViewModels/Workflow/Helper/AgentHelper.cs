@@ -85,7 +85,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         // 创建独立的工作空间
         var scope = tree.AsAgentScope()
             .WithPromptLanguage(AgentLanguages.English)   // 默认提示词语言
-            .WithOutputLanguage(AgentLanguages.Persian)   // 默认输出语言
+            .WithOutputLanguage(AgentLanguages.Chinese)   // 默认输出语言
             // 从程序集自动发现组件
             .WithAutoDiscovery(assemblyName: "VeloxDev.Core")
             .WithAutoDiscovery(assemblyName: "Lib") 
