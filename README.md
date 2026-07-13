@@ -63,13 +63,14 @@ dotnet new wpf-v-node -n NodeView -ns MyApp.Views -o Views
 dotnet new wpf-v-link -n LinkView -ns MyApp.Views -o Views
 dotnet new wpf-v-selector -n TemplateSelector -ns MyApp.Views -o Views
 dotnet new wpf-v-decorator -n GridDecorator -ns MyApp.Views -o Views
+dotnet new wpf-v-minimap -n MinimapOverlay -ns MyApp.Views -o Views
 dotnet new wpf-v-tree -n TreeView -ns MyApp.Views -o Views
 
 dotnet build
 ```
 
 The template package contains the Node, Slot, Link, Tree, template selector,
-and grid decorator views. Each view template generates its XAML and code-behind
+grid decorator, and minimap overlay views. Each view template generates its
 files with the required VeloxDev workflow behaviors already connected.
 
 The Avalonia, WPF, WinUI, and MAUI template suites expose the same style
@@ -82,6 +83,7 @@ options. Common short aliases include:
 | Link | `-lc` line color, `-lt` line thickness |
 | Tree | `-bg` background, `-bb` border brush, `-bt` border thickness, `-cr` corner radius |
 | Grid decorator | `-bg` background, `-mic` minor color, `-mac` major color, `-ac` axis color, `-gs` spacing, `-mle` major interval |
+| Minimap overlay | `-bg` background, `-bdr` border, `-nf` node fill, `-vs` viewport stroke |
 
 All templates use `-ns` for the generated namespace.
 

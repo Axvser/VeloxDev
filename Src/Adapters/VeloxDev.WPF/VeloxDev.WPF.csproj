@@ -11,7 +11,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WPF</Title>
-		<Version>5.2.1</Version>
+		<Version>6.0.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WPF</Description>
 	 <PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -29,7 +29,7 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="VeloxDev.Core" Version="5.2.1" />
+		<PackageReference Include="VeloxDev.Core" Version="6.0.1" />
 	</ItemGroup>
 
 </Project>

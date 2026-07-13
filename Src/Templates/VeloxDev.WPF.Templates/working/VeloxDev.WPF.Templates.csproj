@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>VeloxDev.WPF.Templates</PackageId>
-    <Version>5.0.3</Version>
+    <Version>6.0.0</Version>
     <Authors>Axvser</Authors>
     <Title>VeloxDev WPF templates</Title>
     <Description>Item templates for building VeloxDev workflow views with WPF.</Description>
