@@ -12,6 +12,7 @@ public sealed class LinkBoundsProvider : ISpatialBoundsProvider, IDisposable
     private Viewport _cachedBounds;
     private IWorkflowSlotViewModel? _trackedSender;
     private IWorkflowSlotViewModel? _trackedReceiver;
+    private bool _endpointsEverDiffered;
     private bool _disposed;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -105,6 +106,7 @@ public sealed class LinkBoundsProvider : ISpatialBoundsProvider, IDisposable
     {
         if (e.PropertyName == nameof(IWorkflowSlotViewModel.Anchor))
         {
+            _endpointsEverDiffered = true;
             UpdateBounds();
         }
     }
@@ -129,6 +131,17 @@ public sealed class LinkBoundsProvider : ISpatialBoundsProvider, IDisposable
         var maxX = Math.Max(senderAnchor.Horizontal, receiverAnchor.Horizontal);
         var maxY = Math.Max(senderAnchor.Vertical, receiverAnchor.Vertical);
 
+        // If both endpoints are at the same position and have never diverged,
+        // the slots have not yet been positioned by the GUI framework.
+        // Return empty bounds so the link is not indexed in the spatial grid
+        // until actual positions are available, preventing a flood of all links
+        // being treated as visible at the origin on initial load.
+        if (!_endpointsEverDiffered && minX == maxX && minY == maxY)
+        {
+            return Viewport.Empty;
+        }
+
+        _endpointsEverDiffered = true;
         var width = Math.Max(maxX - minX, 1.0);
         var height = Math.Max(maxY - minY, 1.0);
 

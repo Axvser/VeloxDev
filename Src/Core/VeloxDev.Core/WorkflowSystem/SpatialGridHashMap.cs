@@ -57,7 +57,10 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
 
         var b = item.Bounds;
         RegisterItem(item, b);
-        IndexItem(item, b);
+        // Items with empty bounds (e.g. links whose slots haven't been positioned by GUI yet)
+        // are registered for change tracking but NOT indexed until bounds become meaningful.
+        if (!b.IsEmpty)
+            IndexItem(item, b);
         InvalidateBounds();
     }
 
@@ -66,7 +69,8 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         if (item == null || !_trackedItems.TryGetValue(item, out var b)) return;
 
         UnregisterItem(item);
-        DeindexItem(item, b);
+        if (!b.IsEmpty)
+            DeindexItem(item, b);
         _trackedItems.Remove(item);
         InvalidateBounds();
     }
@@ -130,8 +134,24 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         var newBounds = item.Bounds;
         if (oldBounds.Equals(newBounds)) return;
 
-        DeindexItem(item, oldBounds);
-        IndexItem(item, newBounds);
+        // Gracefully handle transitions between empty and non-empty bounds.
+        // Items with empty bounds (e.g. links whose slots haven't been positioned)
+        // are tracked but not indexed; when their bounds become real, index them.
+        if (oldBounds.IsEmpty)
+        {
+            if (!newBounds.IsEmpty)
+                IndexItem(item, newBounds);
+        }
+        else if (newBounds.IsEmpty)
+        {
+            DeindexItem(item, oldBounds);
+        }
+        else
+        {
+            DeindexItem(item, oldBounds);
+            IndexItem(item, newBounds);
+        }
+
         _trackedItems[item] = newBounds;
         InvalidateBounds();
     }
