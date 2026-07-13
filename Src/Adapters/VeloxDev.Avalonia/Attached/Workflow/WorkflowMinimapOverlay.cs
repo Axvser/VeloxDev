@@ -19,7 +19,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// the rulers or coordinate grid.
 /// Supports toggling visibility and dragging the viewport indicator rectangle.
 /// </summary>
-public class WorkflowMinimapOverlay : Control
+public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
 {
     // ── Styled properties ────────────────────────────────────────────────────
 
@@ -181,7 +181,6 @@ public class WorkflowMinimapOverlay : Control
 
     private BoundsRect _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
-    private readonly List<(double X1, double Y1, double X2, double Y2)> _lastLinkEndpoints = [];
     private BoundsRect _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
@@ -428,12 +427,6 @@ public class WorkflowMinimapOverlay : Control
 
         _lastGlobalBounds = globalBounds;
 
-        _lastLinkEndpoints.Clear();
-        if (tree.Links is not null)
-            foreach (var link in tree.Links)
-                if (link.Sender?.Anchor is Anchor sa && link.Receiver?.Anchor is Anchor ra)
-                    _lastLinkEndpoints.Add((sa.Horizontal, sa.Vertical, ra.Horizontal, ra.Vertical));
-
         // Viewport in world coordinates — use bindable ViewportWidth/Height
         var vw = Math.Max(1, ViewportWidth);
         var vh = Math.Max(1, ViewportHeight);
@@ -443,7 +436,6 @@ public class WorkflowMinimapOverlay : Control
     private void ClearCache()
     {
         _lastNodeRects.Clear();
-        _lastLinkEndpoints.Clear();
         _lastGlobalBounds = default;
         _lastViewport = default;
     }
@@ -619,16 +611,6 @@ public class WorkflowMinimapOverlay : Control
 
         using (context.PushClip(mmRect))
         {
-            // Links (under nodes) — wider stroke for better visibility
-            if (LinkBrush is not null && _lastLinkEndpoints.Count > 0)
-            {
-                var lp = new Pen(LinkBrush, LinkStrokeThickness);
-                foreach (var (x1, y1, x2, y2) in _lastLinkEndpoints)
-                    context.DrawLine(lp,
-                        new Point(ox + (x1 - gb.Left) * sc, oy + (y1 - gb.Top) * sc),
-                        new Point(ox + (x2 - gb.Left) * sc, oy + (y2 - gb.Top) * sc));
-            }
-
             // Nodes
             if (NodeBrush is not null)
             {

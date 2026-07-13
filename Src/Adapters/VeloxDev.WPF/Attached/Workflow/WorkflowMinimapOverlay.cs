@@ -16,7 +16,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// links, and the visible viewport in the top-right corner.
 /// Only the viewport indicator rectangle can be dragged to navigate.
 /// </summary>
-public class WorkflowMinimapOverlay : FrameworkElement
+public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 {
     // ── Dependency Properties ────────────────────────────────────────────────
 
@@ -178,7 +178,6 @@ public class WorkflowMinimapOverlay : FrameworkElement
 
     private BoundsRect _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
-    private readonly List<(double X1, double Y1, double X2, double Y2)> _lastLinkEndpoints = [];
     private BoundsRect _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
@@ -343,12 +342,6 @@ public class WorkflowMinimapOverlay : FrameworkElement
 
         _lastGlobalBounds = globalBounds;
 
-        _lastLinkEndpoints.Clear();
-        if (tree.Links is not null)
-            foreach (var link in tree.Links)
-                if (link.Sender?.Anchor is Anchor sa && link.Receiver?.Anchor is Anchor ra)
-                    _lastLinkEndpoints.Add((sa.Horizontal, sa.Vertical, ra.Horizontal, ra.Vertical));
-
         var vw = Math.Max(1, ViewportWidth);
         var vh = Math.Max(1, ViewportHeight);
         _lastViewport = BoundsRect.FromNode(ScrollOffsetX - ContentOffsetX, ScrollOffsetY - ContentOffsetY, vw, vh);
@@ -357,7 +350,6 @@ public class WorkflowMinimapOverlay : FrameworkElement
     private void ClearCache()
     {
         _lastNodeRects.Clear();
-        _lastLinkEndpoints.Clear();
         _lastGlobalBounds = default;
         _lastViewport = default;
     }
@@ -521,16 +513,6 @@ public class WorkflowMinimapOverlay : FrameworkElement
         dc.PushClip(clipGeometry);
         try
         {
-            // Links
-            if (LinkBrush is not null)
-            {
-                var lp = new Pen(LinkBrush, LinkStrokeThickness);
-                foreach (var (x1, y1, x2, y2) in _lastLinkEndpoints)
-                    dc.DrawLine(lp,
-                        new Point(ox + (x1 - gb.Left) * sc, oy + (y1 - gb.Top) * sc),
-                        new Point(ox + (x2 - gb.Left) * sc, oy + (y2 - gb.Top) * sc));
-            }
-
             // Nodes
             if (NodeBrush is not null)
             {

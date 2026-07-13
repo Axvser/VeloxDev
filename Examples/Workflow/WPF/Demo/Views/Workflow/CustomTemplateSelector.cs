@@ -2,7 +2,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.CSharp;
 
 namespace Demo.Views.Workflow
 {
@@ -12,7 +11,6 @@ namespace Demo.Views.Workflow
         public DataTemplate? Simulator { get; set; }
         public DataTemplate? BoolSelector { get; set; }
         public DataTemplate? EnumSelector { get; set; }
-        public DataTemplate? CSharpObjectTemplate { get; set; }
         public DataTemplate? Link { get; set; }
 
         public override DataTemplate SelectTemplate(object item, DependencyObject container)
@@ -22,7 +20,6 @@ namespace Demo.Views.Workflow
                 ControllerViewModel => Controller ?? throw new ArgumentNullException($"Failed to find the [ {Controller} ] template"),
                 BoolSelectorNodeViewModel => BoolSelector ?? throw new ArgumentNullException($"Failed to find the [ {BoolSelector} ] template"),
                 EnumSelectorNodeViewModel => EnumSelector ?? throw new ArgumentNullException($"Failed to find the [ {EnumSelector} ] template"),
-                CSharpObject => CSharpObjectTemplate ?? throw new ArgumentNullException($"Failed to find the [ {CSharpObjectTemplate} ] template"),
                 NodeViewModel => Simulator ?? throw new ArgumentNullException($"Failed to find the [ {Simulator} ] template"),
                 IWorkflowLinkViewModel => Link ?? throw new ArgumentNullException($"Failed to find the [ {Link} ] template"),
                 _ => throw new InvalidOperationException("Unknown Data Type")

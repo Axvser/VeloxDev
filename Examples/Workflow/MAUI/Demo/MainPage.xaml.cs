@@ -30,15 +30,6 @@ namespace Demo
         private async void ReloadDemoAsync(object? sender, EventArgs e)
             => await ExecuteAsync(ReloadDemoInternalAsync, "重置示例失败");
 
-        private void AddCSharpObject(object? sender, EventArgs e)
-        {
-            CSharpObjectDemo.AddNextPipeline(Tree);
-            Tree.Layout.UpdateCommand.Execute(null);
-        }
-
-        private void RunCSharpPipeline(object? sender, EventArgs e)
-            => CSharpObjectDemo.RunLatestPipeline(Tree);
-
         protected override void OnDisappearing()
         {
             base.OnDisappearing();

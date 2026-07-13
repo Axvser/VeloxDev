@@ -3,7 +3,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.CSharp;
 
 namespace Demo.Views;
 
@@ -13,7 +12,6 @@ public partial class CustomTemplateSelector : DataTemplateSelector
     public DataTemplate? ControllerTemplate { get; set; }
     public DataTemplate? BoolSelectorTemplate { get; set; }
     public DataTemplate? EnumSelectorTemplate { get; set; }
-    public DataTemplate? CSharpObjectTemplate { get; set; }
     public DataTemplate? LinkTemplate { get; set; }
 
     protected override DataTemplate SelectTemplateCore(object item)
@@ -26,8 +24,6 @@ public partial class CustomTemplateSelector : DataTemplateSelector
                 throw new InvalidOperationException("BoolSelectorTemplate is not set"),
             EnumSelectorNodeViewModel => EnumSelectorTemplate ??
                 throw new InvalidOperationException("EnumSelectorTemplate is not set"),
-            CSharpObject => CSharpObjectTemplate ??
-                throw new InvalidOperationException("CSharpObjectTemplate is not set"),
             NodeViewModel => NodeTemplate ??
                 throw new InvalidOperationException("NodeTemplate is not set"),
             IWorkflowLinkViewModel => LinkTemplate ??

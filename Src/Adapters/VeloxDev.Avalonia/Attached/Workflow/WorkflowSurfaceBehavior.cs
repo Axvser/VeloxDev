@@ -23,6 +23,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public Canvas? Canvas { get; set; }
         public Control? GridDecorator { get; set; }
         public Control? PointerPressSource { get; set; }
+        public Control? MinimapOverlay { get; set; }
     }
 
     public static readonly AttachedProperty<bool> IsEnabledProperty =
@@ -39,6 +40,9 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
     public static readonly AttachedProperty<string?> PointerPressSourceNameProperty =
         AvaloniaProperty.RegisterAttached<WorkflowSurfaceBehavior, UserControl, string?>("PointerPressSourceName");
+
+    public static readonly AttachedProperty<string?> MinimapOverlayNameProperty =
+        AvaloniaProperty.RegisterAttached<WorkflowSurfaceBehavior, UserControl, string?>("MinimapOverlayName");
 
     private static readonly AttachedProperty<SurfaceState?> StateProperty =
         AvaloniaProperty.RegisterAttached<WorkflowSurfaceBehavior, UserControl, SurfaceState?>("State");
@@ -67,6 +71,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     public static string? GetPointerPressSourceName(AvaloniaObject element) => element.GetValue(PointerPressSourceNameProperty);
 
     public static void SetPointerPressSourceName(AvaloniaObject element, string? value) => element.SetValue(PointerPressSourceNameProperty, value);
+
+    public static string? GetMinimapOverlayName(AvaloniaObject element) => element.GetValue(MinimapOverlayNameProperty);
+
+    public static void SetMinimapOverlayName(AvaloniaObject element, string? value) => element.SetValue(MinimapOverlayNameProperty, value);
 
     public static void Refresh(UserControl host)
     {
@@ -156,6 +164,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (!string.IsNullOrWhiteSpace(gridDecoratorName))
             state.GridDecorator = control.FindControl<Control>(gridDecoratorName!);
 
+        var minimapOverlayName = GetMinimapOverlayName(control);
+        if (!string.IsNullOrWhiteSpace(minimapOverlayName))
+            state.MinimapOverlay = control.FindControl<Control>(minimapOverlayName!);
+
         var pointerPressSourceName = GetPointerPressSourceName(control);
         if (!string.IsNullOrWhiteSpace(pointerPressSourceName))
             state.PointerPressSource = control.FindControl<Control>(pointerPressSourceName!);
@@ -189,6 +201,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         state.ScrollViewer = null;
         state.Canvas = null;
         state.GridDecorator = null;
+        state.MinimapOverlay = null;
     }
 
     private static void OnPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -376,6 +389,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         WorkflowCanvasTransformBehavior.Apply(host, transform);
 
         UpdateGridDecorator(viewModel, state);
+        UpdateMinimapOverlay(viewModel, state);
     }
 
     private static void UpdateVisibleRegion(UserControl host, SurfaceState state)
@@ -384,6 +398,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
 
         UpdateGridDecorator(viewModel, state);
+        UpdateMinimapOverlay(viewModel, state);
         viewModel.GetHelper().Viewport = new Viewport(
             state.ScrollViewer.Offset.X - viewModel.Layout.ActualOffset.Horizontal,
             state.ScrollViewer.Offset.Y - viewModel.Layout.ActualOffset.Vertical,
@@ -400,6 +415,20 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         decorator.ScrollOffsetY = state.ScrollViewer.Offset.Y;
         decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
+    }
+
+    private static void UpdateMinimapOverlay(IWorkflowTreeViewModel viewModel, SurfaceState state)
+    {
+        if (state.MinimapOverlay is not IWorkflowMinimapOverlay minimap || state.ScrollViewer is null)
+            return;
+
+        minimap.ScrollOffsetX = state.ScrollViewer.Offset.X;
+        minimap.ScrollOffsetY = state.ScrollViewer.Offset.Y;
+        minimap.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
+        minimap.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
+        minimap.ViewportWidth = state.ScrollViewer.Viewport.Width;
+        minimap.ViewportHeight = state.ScrollViewer.Viewport.Height;
+        minimap.WorkflowTree = viewModel;
     }
 
     private static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)

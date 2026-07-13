@@ -12,7 +12,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// A minimap overlay for MAUI that renders a thumbnail overview of all nodes,
 /// links, and the visible viewport in the top-right corner.
 /// </summary>
-public class WorkflowMinimapOverlay : GraphicsView, IDrawable
+public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapOverlay
 {
     // ── Bindable Properties ──────────────────────────────────────────────────
 
@@ -103,7 +103,6 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable
 
     private BoundsRect _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
-    private readonly List<(double X1, double Y1, double X2, double Y2)> _lastLinkEndpoints = [];
     private BoundsRect _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
@@ -246,12 +245,6 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable
             }
         _lastGlobalBounds = gb;
 
-        _lastLinkEndpoints.Clear();
-        if (tree.Links is not null)
-            foreach (var link in tree.Links)
-                if (link.Sender?.Anchor is WfAnchor sa && link.Receiver?.Anchor is WfAnchor ra)
-                    _lastLinkEndpoints.Add((sa.Horizontal, sa.Vertical, ra.Horizontal, ra.Vertical));
-
         _lastViewport = BoundsRect.FromNode(ScrollOffsetX - ContentOffsetX, ScrollOffsetY - ContentOffsetY,
             Math.Max(1, ViewportWidth), Math.Max(1, ViewportHeight));
     }
@@ -259,7 +252,6 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable
     private void ClearCache()
     {
         _lastNodeRects.Clear();
-        _lastLinkEndpoints.Clear();
         _lastGlobalBounds = default;
         _lastViewport = default;
     }
@@ -457,20 +449,6 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable
         canvas.ClipRectangle(0, 0, _mmW, _mmH);
         try
         {
-            // Links
-            if (LinkStrokeColor is not null)
-            {
-                canvas.StrokeColor = LinkStrokeColor;
-                canvas.StrokeSize = (float)LinkStrokeThickness;
-                canvas.StrokeLineCap = LineCap.Round;
-                foreach (var (x1, y1, x2, y2) in _lastLinkEndpoints)
-                    canvas.DrawLine(
-                        _ox + (float)((x1 - gb.Left) * _sc),
-                        _oy + (float)((y1 - gb.Top) * _sc),
-                        _ox + (float)((x2 - gb.Left) * _sc),
-                        _oy + (float)((y2 - gb.Top) * _sc));
-            }
-
             // Nodes
             if (NodeFillColor is not null)
             {

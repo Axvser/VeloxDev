@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [ "VeloxDev", "Workflow", "Avalonia", "Code" ],
+  "identity": "VeloxDev.Avalonia.WorkflowMinimapOverlay",
+  "name": "VeloxDev Avalonia Workflow Minimap Overlay",
+  "description": "An Avalonia minimap overlay implementing IWorkflowMinimapOverlay.",
+  "shortName": "ava-v-minimap",
+  "sourceName": "TemplateClass",
+  "defaultName": "MinimapOverlay",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated minimap overlay.",
+      "defaultValue": "MyApp.Views",
+      "replaces": "TemplateNamespace"
+    },
+    "minimapBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minimap background color.",
+      "defaultValue": "#D2141922",
+      "replaces": "TemplateMinimapBackground"
+    },
+    "minimapBorder": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minimap border color.",
+      "defaultValue": "#DC94A3B8",
+      "replaces": "TemplateMinimapBorder"
+    },
+    "nodeFill": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node rectangle fill color.",
+      "defaultValue": "#DC38BDF8",
+      "replaces": "TemplateNodeFill"
+    },
+    "viewportStroke": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Viewport indicator stroke color.",
+      "defaultValue": "#F0FFFFFF",
+      "replaces": "TemplateViewportStroke"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "TemplateClass.cs" }
+  ]
+}

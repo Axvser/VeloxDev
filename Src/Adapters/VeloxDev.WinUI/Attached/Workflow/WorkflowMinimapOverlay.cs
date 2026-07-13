@@ -18,7 +18,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// links, and the visible viewport in the top-right corner.
 /// Uses XAML shapes (Rectangle, Line) for rendering.
 /// </summary>
-public class WorkflowMinimapOverlay : Canvas
+public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 {
     // ── Dependency Properties ────────────────────────────────────────────────
 
@@ -176,7 +176,6 @@ public class WorkflowMinimapOverlay : Canvas
 
     private BoundsRect _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
-    private readonly List<(double X1, double Y1, double X2, double Y2)> _lastLinkEndpoints = [];
     private BoundsRect _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
@@ -187,7 +186,6 @@ public class WorkflowMinimapOverlay : Canvas
     private ScrollViewer? _scrollViewer;
 
     // Shape pools
-    private readonly List<Line> _linkLines = [];
     private readonly List<Rectangle> _nodeRects = [];
     private Rectangle? _viewportRect;
     private Rectangle? _bgRect;
@@ -363,12 +361,6 @@ public class WorkflowMinimapOverlay : Canvas
 
         _lastGlobalBounds = globalBounds;
 
-        _lastLinkEndpoints.Clear();
-        if (tree.Links is not null)
-            foreach (var link in tree.Links)
-                if (link.Sender?.Anchor is WfAnchor sa && link.Receiver?.Anchor is WfAnchor ra)
-                    _lastLinkEndpoints.Add((sa.Horizontal, sa.Vertical, ra.Horizontal, ra.Vertical));
-
         var vw = Math.Max(1, ViewportWidth);
         var vh = Math.Max(1, ViewportHeight);
         _lastViewport = BoundsRect.FromNode(ScrollOffsetX - ContentOffsetX, ScrollOffsetY - ContentOffsetY, vw, vh);
@@ -377,7 +369,6 @@ public class WorkflowMinimapOverlay : Canvas
     private void ClearCache()
     {
         _lastNodeRects.Clear();
-        _lastLinkEndpoints.Clear();
         _lastGlobalBounds = default;
         _lastViewport = default;
     }
@@ -508,7 +499,6 @@ public class WorkflowMinimapOverlay : Canvas
         if (!IsMinimapVisible)
         {
             Children.Clear();
-            _linkLines.Clear();
             _nodeRects.Clear();
             _viewportRect = _bgRect = _borderRect = null;
             return;
@@ -549,40 +539,12 @@ public class WorkflowMinimapOverlay : Canvas
 
         if (!hasData || WorkflowTree?.Nodes is null || WorkflowTree.Nodes.Count == 0)
         {
-            foreach (var l in _linkLines) l.Visibility = Visibility.Collapsed;
             foreach (var r in _nodeRects) r.Visibility = Visibility.Collapsed;
             _viewportRect?.Visibility = Visibility.Collapsed;
             return;
         }
 
         var (ox, oy, _, _, sc) = ComputeTransform(gb);
-
-        // Links
-        while (_linkLines.Count < _lastLinkEndpoints.Count)
-        {
-            var line = new Line();
-            _linkLines.Add(line);
-            Children.Add(line);
-        }
-        for (int i = 0; i < _linkLines.Count; i++)
-        {
-            var line = _linkLines[i];
-            if (i < _lastLinkEndpoints.Count)
-            {
-                var (x1, y1, x2, y2) = _lastLinkEndpoints[i];
-                line.X1 = ox + (x1 - gb.Left) * sc;
-                line.Y1 = oy + (y1 - gb.Top) * sc;
-                line.X2 = ox + (x2 - gb.Left) * sc;
-                line.Y2 = oy + (y2 - gb.Top) * sc;
-                line.Stroke = LinkBrush;
-                line.StrokeThickness = LinkStrokeThickness;
-                line.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                line.Visibility = Visibility.Collapsed;
-            }
-        }
 
         // Nodes
         var ncr = Math.Max(0, NodeCornerRadius);

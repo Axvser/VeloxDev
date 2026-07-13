@@ -119,7 +119,9 @@ public static class WorkflowSpatialEx
             AddDesiredItem(desiredItems, desiredSet, link);
         }
 
-        // Also add links connected to visible nodes (for nodes that are in viewport)
+        // Catch links between two visible nodes that might have temporarily empty
+        // spatial bounds (e.g. during layout recalculation). Links from a visible
+        // node to an off-screen neighbor are already handled by visibleLinks above.
         foreach (var node in visibleNodes)
         {
             foreach (var slot in node.Slots)
@@ -128,6 +130,7 @@ public static class WorkflowSpatialEx
                 {
                     if (slot.Parent is not null &&
                         target.Parent is not null &&
+                        visibleNodes.Contains(target.Parent) &&
                         tree.LinksMap.TryGetValue(slot, out var targets) &&
                         targets.TryGetValue(target, out var link))
                     {
@@ -139,6 +142,7 @@ public static class WorkflowSpatialEx
                 {
                     if (source.Parent is not null &&
                         slot.Parent is not null &&
+                        visibleNodes.Contains(source.Parent) &&
                         tree.LinksMap.TryGetValue(source, out var targets) &&
                         targets.TryGetValue(slot, out var link))
                     {
@@ -319,7 +323,9 @@ public static class WorkflowSpatialEx
     {
         var hydratedNodes = new HashSet<IWorkflowNodeViewModel>(visibleNodes, WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
 
-        // Add nodes from visible links (for links that span distant nodes)
+        // Add nodes from visible links (for links that span distant nodes).
+        // Only links that spatially intersect the viewport are in visibleLinks,
+        // so only genuinely visible-spanning neighbor nodes are hydrated.
         foreach (var link in visibleLinks)
         {
             if (link.Sender?.Parent is IWorkflowNodeViewModel senderNode)
@@ -329,33 +335,6 @@ public static class WorkflowSpatialEx
             if (link.Receiver?.Parent is IWorkflowNodeViewModel receiverNode)
             {
                 hydratedNodes.Add(receiverNode);
-            }
-        }
-
-        // Also add neighbor nodes connected to visible nodes
-        foreach (var node in visibleNodes)
-        {
-            foreach (var slot in node.Slots)
-            {
-                foreach (var target in slot.Targets)
-                {
-                    if (target.Parent is IWorkflowNodeViewModel targetNode &&
-                        tree.LinksMap.TryGetValue(slot, out var targets) &&
-                        targets.ContainsKey(target))
-                    {
-                        hydratedNodes.Add(targetNode);
-                    }
-                }
-
-                foreach (var source in slot.Sources)
-                {
-                    if (source.Parent is IWorkflowNodeViewModel sourceNode &&
-                        tree.LinksMap.TryGetValue(source, out var targets) &&
-                        targets.ContainsKey(slot))
-                    {
-                        hydratedNodes.Add(sourceNode);
-                    }
-                }
             }
         }
 

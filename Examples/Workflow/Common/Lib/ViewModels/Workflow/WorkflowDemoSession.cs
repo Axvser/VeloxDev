@@ -191,7 +191,6 @@ public sealed class WorkflowDemoSession
         Connect(tree, handlePut.OutputSlot!, finalize.InputSlot!);
         Connect(tree, handleDelete.OutputSlot!, finalize.InputSlot!);
 
-        CSharpObjectDemo.AddPipeline(tree);
         enumSelector.OutputSlots.SetSelector(typeof(VoltageRange));
         //helper.ClearHistory();
         return new WorkflowDemoSession(tree, controller,

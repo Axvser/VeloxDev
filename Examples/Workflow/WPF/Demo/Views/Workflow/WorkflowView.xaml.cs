@@ -94,16 +94,6 @@ public partial class WorkflowView : UserControl
         InitializeNetworkDemo();
     }
 
-    private void AddCSharpObject(object sender, RoutedEventArgs e)
-    {
-        CSharpObjectDemo.AddNextPipeline(_workflowViewModel);
-        _workflowViewModel.Layout.UpdateCommand.Execute(null);
-        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-    }
-
-    private void RunCSharpPipeline(object sender, RoutedEventArgs e)
-        => CSharpObjectDemo.RunLatestPipeline(_workflowViewModel);
-
     private void InitializeNetworkDemo()
     {
         UnsubscribeAutoScroll(_workflowViewModel);

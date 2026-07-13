@@ -11,6 +11,7 @@ public sealed class WorkflowSurfaceBehavior
         public ScrollView? ScrollViewer { get; set; }
         public AbsoluteLayout? Canvas { get; set; }
         public View? GridDecorator { get; set; }
+        public View? MinimapOverlay { get; set; }
         public View? PointerPressSource { get; set; }
         public PanGestureRecognizer? PanGesture { get; set; }
         public INotifyPropertyChanged? LayoutNotifier { get; set; }
@@ -54,6 +55,12 @@ public sealed class WorkflowSurfaceBehavior
         typeof(WorkflowSurfaceBehavior),
         null);
 
+    public static readonly BindableProperty MinimapOverlayNameProperty = BindableProperty.CreateAttached(
+        "MinimapOverlayName",
+        typeof(string),
+        typeof(WorkflowSurfaceBehavior),
+        null);
+
     private static readonly BindableProperty StateProperty = BindableProperty.CreateAttached(
         "State",
         typeof(SurfaceState),
@@ -70,6 +77,8 @@ public sealed class WorkflowSurfaceBehavior
     public static void SetGridDecoratorName(BindableObject element, string? value) => element.SetValue(GridDecoratorNameProperty, value);
     public static string? GetPointerPressSourceName(BindableObject element) => (string?)element.GetValue(PointerPressSourceNameProperty);
     public static void SetPointerPressSourceName(BindableObject element, string? value) => element.SetValue(PointerPressSourceNameProperty, value);
+    public static string? GetMinimapOverlayName(BindableObject element) => (string?)element.GetValue(MinimapOverlayNameProperty);
+    public static void SetMinimapOverlayName(BindableObject element, string? value) => element.SetValue(MinimapOverlayNameProperty, value);
 
     public static void Refresh(ContentView host)
     {
@@ -247,6 +256,12 @@ public sealed class WorkflowSurfaceBehavior
             state.GridDecorator = control.FindByName<View>(gridDecoratorName);
         }
 
+        var minimapOverlayName = GetMinimapOverlayName(control);
+        if (!string.IsNullOrWhiteSpace(minimapOverlayName))
+        {
+            state.MinimapOverlay = control.FindByName<View>(minimapOverlayName);
+        }
+
         if (!string.IsNullOrWhiteSpace(pointerPressSourceName))
         {
             state.PointerPressSource = control.FindByName<View>(pointerPressSourceName);
@@ -288,6 +303,7 @@ public sealed class WorkflowSurfaceBehavior
         state.ScrollViewer = null;
         state.Canvas = null;
         state.GridDecorator = null;
+        state.MinimapOverlay = null;
         state.PointerPressSource = null;
         state.PanGesture = null;
     }
@@ -404,6 +420,7 @@ public sealed class WorkflowSurfaceBehavior
         state.Canvas.HeightRequest = Math.Max(1, actualSize.Height + actualOffset.Vertical);
 
         UpdateGridDecorator(viewModel, state);
+        UpdateMinimapOverlay(viewModel, state);
     }
 
     private static async void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
@@ -523,6 +540,7 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         UpdateGridDecorator(viewModel, state);
+        UpdateMinimapOverlay(viewModel, state);
         viewModel.GetHelper().Viewport = new Viewport(
             state.ScrollViewer.ScrollX - viewModel.Layout.ActualOffset.Horizontal,
             state.ScrollViewer.ScrollY - viewModel.Layout.ActualOffset.Vertical,
@@ -541,6 +559,22 @@ public sealed class WorkflowSurfaceBehavior
         decorator.ScrollOffsetY = state.ScrollViewer.ScrollY;
         decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
+    }
+
+    private static void UpdateMinimapOverlay(IWorkflowTreeViewModel viewModel, SurfaceState state)
+    {
+        if (state.MinimapOverlay is not IWorkflowMinimapOverlay minimap || state.ScrollViewer is null)
+        {
+            return;
+        }
+
+        minimap.ScrollOffsetX = state.ScrollViewer.ScrollX;
+        minimap.ScrollOffsetY = state.ScrollViewer.ScrollY;
+        minimap.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
+        minimap.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
+        minimap.ViewportWidth = state.ScrollViewer.Width;
+        minimap.ViewportHeight = state.ScrollViewer.Height;
+        minimap.WorkflowTree = viewModel;
     }
 
     private static void ApplyPendingScrollRestore(ContentView host, SurfaceState state)
