@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+		<TargetFrameworks>net8.0-windows10.0.19041.0;net10.0-windows10.0.19041.0</TargetFrameworks>
 		<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
 		<RootNamespace>VeloxDev.WinUI</RootNamespace>
 		<RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
@@ -8,6 +8,7 @@
 		<UseWinUI>true</UseWinUI>
 		<Nullable>enable</Nullable>
 		<WinUISDKReferences>false</WinUISDKReferences>
+		<EnableCoreMrtTooling>false</EnableCoreMrtTooling>
 		<LangVersion>latest</LangVersion>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -24,9 +25,10 @@
 	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
-		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.0.0" />
+		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.241114003" />
 		<PackageReference Include="VeloxDev.Core" Version="6.0.2">
-			<SetTargetFramework>TargetFramework=net5.0</SetTargetFramework>
+			<SetTargetFramework Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">TargetFramework=net5.0</SetTargetFramework>
+			<SetTargetFramework Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">TargetFramework=net5.0</SetTargetFramework>
 		</PackageReference>
 	</ItemGroup>
 
