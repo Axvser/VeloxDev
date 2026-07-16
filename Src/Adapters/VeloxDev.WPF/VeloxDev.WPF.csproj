@@ -25,11 +25,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="NuGet.Build.Tasks.Pack" Version="6.14.0">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		<PackageReference Include="VeloxDev.Core" Version="6.0.2">
+			<SetTargetFramework Condition="'$(TargetFramework)' == 'net5.0-windows'">TargetFramework=net5.0</SetTargetFramework>
 		</PackageReference>
-		<PackageReference Include="VeloxDev.Core" Version="6.0.1" />
 	</ItemGroup>
 
 </Project>

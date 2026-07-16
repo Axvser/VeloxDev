@@ -162,7 +162,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     private static void OnNodePropertyChanged(UserControl control, PropertyChangedEventArgs e)
     {
         if (control.GetValue(StateProperty) is not LayoutState state
-            || !state.SlotPropertyNames.Contains(e.PropertyName))
+            ||
+           (e.PropertyName is not null && !state.SlotPropertyNames.Contains(e.PropertyName)))
         {
             return;
         }

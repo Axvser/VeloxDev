@@ -32,8 +32,6 @@ public partial class MainWindow : Window
     }
 }
 
-[ThemeConfig<ObjectConverter, Dark, Light>(nameof(Background), ["#1e1e1e"], ["#ffffff"])]
-[ThemeConfig<ObjectConverter, Dark, Light>(nameof(Foreground), ["#ffffff"], ["#1e1e1e"])]
 public partial class MainWindow
 {
     private void LoadTheme()

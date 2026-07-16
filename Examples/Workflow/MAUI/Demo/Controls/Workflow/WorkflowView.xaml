@@ -58,7 +58,8 @@
                                          NodeTemplate="{StaticResource NodeTemplate}"
                                          BoolSelectorTemplate="{StaticResource BoolSelectorTemplate}"
                                          EnumSelectorTemplate="{StaticResource EnumSelectorTemplate}"
-                                         LinkTemplate="{StaticResource LinkTemplate}" />
+                                         LinkTemplate="{StaticResource LinkTemplate}"
+                                         VirtualLinkTemplate="{StaticResource VirtualLinkTemplate}" />
     </ContentView.Resources>
 
     <Grid>
@@ -87,23 +88,9 @@
                         <AbsoluteLayout x:Name="PART_Canvas"
                                         WidthRequest="{Binding Layout.ActualSize.Width}"
                                         HeightRequest="{Binding Layout.ActualSize.Height}"
-                                        BackgroundColor="Transparent">
-                                <Grid BindingContext="{Binding VirtualLink}"
-                                      AbsoluteLayout.LayoutBounds="0,0,-1,-1"
-                                      AbsoluteLayout.LayoutFlags="None">
-                                    <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                                                StartTop="{Binding Sender.Anchor.Vertical}"
-                                                                EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                                                EndTop="{Binding Receiver.Anchor.Vertical}"
-                                                                ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}"
-                                                                ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}"
-                                                                CanRender="{Binding IsVisible}"
-                                                                WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}"
-                                                                HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}"
-                                                                LineColor="#E2E8F0"
-                                                                IsVirtual="True"
-                                                                ZIndex="-1" />
-                            </Grid>
+                                        BackgroundColor="Transparent"
+                                        behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                                        behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}">
                         </AbsoluteLayout>
                     </ScrollView>
                 </Grid>

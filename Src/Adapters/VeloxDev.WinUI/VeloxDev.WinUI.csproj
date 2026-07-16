@@ -25,7 +25,9 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.0.0" />
-		<PackageReference Include="VeloxDev.Core" Version="6.0.1" />
+		<PackageReference Include="VeloxDev.Core" Version="6.0.2">
+			<SetTargetFramework>TargetFramework=net5.0</SetTargetFramework>
+		</PackageReference>
 	</ItemGroup>
 
 </Project>

@@ -22,7 +22,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="VeloxDev.Core" Version="6.0.1" />
+		<PackageReference Include="VeloxDev.Core" Version="6.0.2">
+			<SetTargetFramework Condition="'$(TargetFramework)' == 'net5.0-windows'">TargetFramework=net5.0</SetTargetFramework>
+		</PackageReference>
 	</ItemGroup>
 
 </Project>

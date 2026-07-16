@@ -140,7 +140,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             return;
 
         if (element.GetValue(StateProperty) is not LayoutState state
-            || !state.SlotPropertyNames.Contains(e.PropertyName))
+            || (e.PropertyName is null || !state.SlotPropertyNames.Contains(e.PropertyName)))
             return;
 
         var control = element as UserControl;

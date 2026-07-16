@@ -1,10 +1,8 @@
 using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
-using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using VeloxDev.AI;
-using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
@@ -12,19 +10,12 @@ namespace Demo.Controls;
 public partial class WorkflowView : ContentView
 {
     private TreeViewModel _workflowViewModel = new();
-    private DataTemplateSelector? _nodeSelector;
-    private readonly ObservableCollection<IWorkflowViewModel> _canvasItems = [];
     private bool _layoutRefreshPending;
     private Page MainPage => Application.Current?.Windows[0].Page ?? throw new InvalidOperationException();
 
     public WorkflowView()
     {
         InitializeComponent();
-        _nodeSelector = Resources.TryGetValue("NodeSelector", out var selector) ? selector as DataTemplateSelector : null;
-        if (_nodeSelector is not null)
-        {
-            WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, _nodeSelector);
-        }
     }
 
     public static readonly BindableProperty SessionProperty = BindableProperty.Create(
@@ -49,12 +40,7 @@ public partial class WorkflowView : ContentView
     private void AttachSession(WorkflowDemoSession? oldSession, WorkflowDemoSession? newSession)
     {
         if (oldSession is not null)
-        {
             UnsubscribeAutoScroll(oldSession.Tree);
-            UnsubscribeCanvasItems(oldSession.Tree);
-        }
-
-        WorkflowBehaviors.ViewPool.SetItemsSource(PART_Canvas, null);
 
         _workflowViewModel = newSession?.Tree ?? new TreeViewModel();
         PART_SurfaceBorder.BindingContext = _workflowViewModel;
@@ -62,13 +48,9 @@ public partial class WorkflowView : ContentView
         PART_ScrollViewer.BindingContext = _workflowViewModel;
         PART_Canvas.BindingContext = _workflowViewModel;
 
-        RebuildCanvasItems(_workflowViewModel);
-        WorkflowBehaviors.ViewPool.SetItemsSource(PART_Canvas, _canvasItems);
-
         if (newSession is not null)
         {
             SubscribeAutoScroll(newSession.Tree);
-            SubscribeCanvasItems(newSession.Tree);
             newSession.Tree.Layout.UpdateCommand.Execute(null);
         }
 
@@ -248,53 +230,4 @@ public partial class WorkflowView : ContentView
         });
     }
 
-    private void SubscribeCanvasItems(TreeViewModel vm)
-    {
-        vm.Nodes.CollectionChanged += OnCanvasItemsChanged;
-        vm.Links.CollectionChanged += OnCanvasItemsChanged;
     }
-
-    private void UnsubscribeCanvasItems(TreeViewModel vm)
-    {
-        vm.Nodes.CollectionChanged -= OnCanvasItemsChanged;
-        vm.Links.CollectionChanged -= OnCanvasItemsChanged;
-    }
-
-    private void OnCanvasItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        MainThread.BeginInvokeOnMainThread(() => SyncCanvasItems(e));
-    }
-
-    private void RebuildCanvasItems(TreeViewModel tree)
-    {
-        _canvasItems.Clear();
-
-        foreach (var link in tree.Links)
-            _canvasItems.Add(link);
-        foreach (var node in tree.Nodes)
-            _canvasItems.Add(node);
-    }
-
-    private void SyncCanvasItems(NotifyCollectionChangedEventArgs e)
-    {
-        switch (e.Action)
-        {
-            case NotifyCollectionChangedAction.Add:
-                if (e.NewItems is null) return;
-                foreach (var item in e.NewItems.OfType<IWorkflowViewModel>())
-                {
-                    if (!_canvasItems.Contains(item))
-                        _canvasItems.Add(item);
-                }
-                break;
-            case NotifyCollectionChangedAction.Remove:
-                if (e.OldItems is null) return;
-                foreach (var item in e.OldItems.OfType<IWorkflowViewModel>())
-                    _canvasItems.Remove(item);
-                break;
-            default:
-                RebuildCanvasItems(_workflowViewModel);
-                break;
-        }
-    }
-}

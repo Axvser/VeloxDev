@@ -186,7 +186,7 @@ public sealed class WorkflowSlotLayoutBehavior
             // the visual tree from the sender to find the associated view.
             PropertyChangedEventHandler handler = (_, e) =>
             {
-                if (state.SlotPropertyNames.Contains(e.PropertyName))
+                if (e.PropertyName is not null && state.SlotPropertyNames.Contains(e.PropertyName))
                 {
                     ScheduleSync(control);
                 }

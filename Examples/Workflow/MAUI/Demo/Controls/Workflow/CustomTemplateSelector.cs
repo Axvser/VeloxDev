@@ -10,6 +10,7 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
     public DataTemplate? BoolSelectorTemplate { get; set; }
     public DataTemplate? EnumSelectorTemplate { get; set; }
     public DataTemplate? LinkTemplate { get; set; }
+    public DataTemplate? VirtualLinkTemplate { get; set; }
 
     protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
         => item switch
@@ -18,6 +19,9 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
             BoolSelectorNodeViewModel => BoolSelectorTemplate ?? throw new InvalidOperationException("BoolSelectorTemplate is not set."),
             EnumSelectorNodeViewModel => EnumSelectorTemplate ?? throw new InvalidOperationException("EnumSelectorTemplate is not set."),
             NodeViewModel => NodeTemplate ?? throw new InvalidOperationException("NodeTemplate is not set."),
+            // VirtualLink's slots have no parent node — use that to distinguish from regular links
+            IWorkflowLinkViewModel link when link.Sender.Parent is null || link.Receiver.Parent is null
+                => VirtualLinkTemplate ?? throw new InvalidOperationException("VirtualLinkTemplate is not set."),
             IWorkflowLinkViewModel => LinkTemplate ?? throw new InvalidOperationException("LinkTemplate is not set."),
             _ => throw new InvalidOperationException($"Unknown data type: {item?.GetType().Name}")
         };

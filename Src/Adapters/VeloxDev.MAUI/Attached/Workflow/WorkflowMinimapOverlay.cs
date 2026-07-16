@@ -4,6 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+#if WINDOWS
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Input;
+#endif
 using WfAnchor = VeloxDev.WorkflowSystem.Anchor;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -107,6 +111,14 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private bool _pendingRefresh = true;
     private bool _isDragging;
     private float _dragOffsetX, _dragOffsetY;
+    private ContentView? _parentView;
+#if WINDOWS
+    private PointerEventHandler? _nativeMovedHandler;
+    private PointerEventHandler? _nativeReleasedHandler;
+    private bool _nativeDragSubscribed;
+    private bool _nativePointerCaptured;
+#endif
+    private PointerGestureRecognizer? _parentPointerRecognizer;
     private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
     private readonly HashSet<IWorkflowLinkViewModel> _subscribedLinks = [];
     private IWorkflowTreeViewModel? _subscribedTree;
@@ -130,14 +142,16 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     private void OnLoaded(object? s, EventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(ScrollViewerName)) return;
-        // Walk up parent hierarchy to the ContentView, then FindByName for the ScrollView
+        // Walk up parent hierarchy to find the root ContentView (WorkflowView).
+        // Used for ScrollView lookup and drag-outside-bounds pointer tracking.
         Element? el = this;
         while (el is not null)
         {
             if (el is ContentView cv)
             {
-                _scrollView = cv.FindByName<ScrollView>(ScrollViewerName);
+                if (_parentView is null) _parentView = cv;
+                if (!string.IsNullOrWhiteSpace(ScrollViewerName) && _scrollView is null)
+                    _scrollView = cv.FindByName<ScrollView>(ScrollViewerName);
                 break;
             }
             el = el.Parent;
@@ -277,19 +291,29 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     // ── Touch input ──────────────────────────────────────────────────────────
 
-    private bool GetViewportHitTest(float px, float py)
+    /// <summary>
+    /// Returns the viewport rectangle's render position in minimap coordinates,
+    /// clamped so it always stays within the minimap's visible area.
+    /// This is the position used for drawing AND hit testing.
+    /// </summary>
+    private (float X, float Y, float W, float H) GetClampedViewportRect()
     {
         var vp = _lastViewport;
         var gb = _lastGlobalBounds;
-        if (vp.IsEmpty || gb.IsEmpty || _sc <= 0) return false;
+        if (vp.IsEmpty || gb.IsEmpty || _sc <= 0)
+            return (0, 0, 0, 0);
 
-        var l = _ox + (float)((vp.Left - gb.Left) * _sc);
-        var t = _oy + (float)((vp.Top - gb.Top) * _sc);
         var w = Math.Max(2f, (float)(vp.Width * _sc));
         var h = Math.Max(2f, (float)(vp.Height * _sc));
-        l = Math.Max(0, Math.Min(_mmW - w, l));
-        t = Math.Max(0, Math.Min(_mmH - h, t));
-        return px >= l && px <= l + w && py >= t && py <= t + h;
+        var x = Math.Max(0, Math.Min(_mmW - w, _ox + (float)((vp.Left - gb.Left) * _sc)));
+        var y = Math.Max(0, Math.Min(_mmH - h, _oy + (float)((vp.Top - gb.Top) * _sc)));
+        return (x, y, w, h);
+    }
+
+    private bool GetViewportHitTest(float px, float py)
+    {
+        var (l, t, w, h) = GetClampedViewportRect();
+        return w > 0 && h > 0 && px >= l && px <= l + w && py >= t && py <= t + h;
     }
 
     private void OnStartInteraction(object? sender, TouchEventArgs e)
@@ -303,14 +327,17 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         var pt = e.Touches[0];
         if (!GetViewportHitTest(pt.X, pt.Y)) return;
 
-        var vp = _lastViewport;
-        var gb = _lastGlobalBounds;
-        var cx = _ox + (float)((vp.Left + vp.Width / 2 - gb.Left) * _sc);
-        var cy = _oy + (float)((vp.Top + vp.Height / 2 - gb.Top) * _sc);
-        _dragOffsetX = pt.X - cx;
-        _dragOffsetY = pt.Y - cy;
+        // Use the CLAMPED rendering position for drag offset calculation,
+        // so dragging the rectangle at the minimap edge works correctly.
+        var (l, t, w, h) = GetClampedViewportRect();
+        _dragOffsetX = pt.X - (l + w / 2);
+        _dragOffsetY = pt.Y - (t + h / 2);
         NavigateToWorld(pt.X - _dragOffsetX, pt.Y - _dragOffsetY);
         _isDragging = true;
+
+        // Subscribe to pointer events on the Page (covers full window)
+        // so drag continues even when the pointer leaves the minimap.
+        SubscribeDragCapture();
     }
 
     private void OnDragInteraction(object? sender, TouchEventArgs e)
@@ -320,9 +347,128 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         NavigateToWorld(pt.X - _dragOffsetX, pt.Y - _dragOffsetY);
     }
 
-    private void OnEndInteraction(object? sender, TouchEventArgs e) => _isDragging = false;
+    private void OnEndInteraction(object? sender, TouchEventArgs e)
+    {
+        _isDragging = false;
+        UnsubscribeDragCapture();
+    }
+
+    private void SubscribeDragCapture()
+    {
+#if WINDOWS
+        SubscribeNativeDragCapture();
+#else
+        SubscribeParentGestureCapture();
+#endif
+    }
+
+    private void UnsubscribeDragCapture()
+    {
+#if WINDOWS
+        UnsubscribeNativeDragCapture();
+#else
+        UnsubscribeParentGestureCapture();
+#endif
+    }
+
+#if WINDOWS
+    private void SubscribeNativeDragCapture()
+    {
+        if (_parentView?.Handler?.PlatformView is not FrameworkElement fe) return;
+        if (_nativeDragSubscribed) return;
+        _nativeDragSubscribed = true;
+        _nativePointerCaptured = false;
+
+        _nativeMovedHandler = (s, e) =>
+        {
+            if (!_isDragging) return;
+
+            // Capture pointer on first move so tracking continues outside bounds.
+            if (!_nativePointerCaptured)
+            {
+                fe.CapturePointer(e.Pointer);
+                _nativePointerCaptured = true;
+            }
+
+            var parentPt = e.GetCurrentPoint(fe).Position;
+
+            if (this.Handler?.PlatformView is UIElement mmElement)
+            {
+                var transform = mmElement.TransformToVisual(fe);
+                var mmOrigin = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                var mmRelX = parentPt.X - mmOrigin.X;
+                var mmRelY = parentPt.Y - mmOrigin.Y;
+                NavigateToWorld((float)mmRelX - _dragOffsetX, (float)mmRelY - _dragOffsetY);
+            }
+        };
+
+        _nativeReleasedHandler = (s, e) =>
+        {
+            _isDragging = false;
+            UnsubscribeNativeDragCapture();
+        };
+
+        // handledEventsToo:true ensures we get pointer events even when the
+        // minimap GraphicsView (child) handles the interaction first.
+        fe.AddHandler(UIElement.PointerMovedEvent, _nativeMovedHandler, true);
+        fe.AddHandler(UIElement.PointerReleasedEvent, _nativeReleasedHandler, true);
+        fe.AddHandler(UIElement.PointerCanceledEvent, _nativeReleasedHandler, true);
+        fe.AddHandler(UIElement.PointerCaptureLostEvent, _nativeReleasedHandler, true);
+    }
+
+    private void UnsubscribeNativeDragCapture()
+    {
+        if (_parentView?.Handler?.PlatformView is not FrameworkElement fe) return;
+        _nativeDragSubscribed = false;
+        _nativePointerCaptured = false;
+
+        if (_nativeMovedHandler is not null)
+        {
+            fe.RemoveHandler(UIElement.PointerMovedEvent, _nativeMovedHandler);
+            fe.RemoveHandler(UIElement.PointerReleasedEvent, _nativeReleasedHandler);
+            fe.RemoveHandler(UIElement.PointerCanceledEvent, _nativeReleasedHandler);
+            fe.RemoveHandler(UIElement.PointerCaptureLostEvent, _nativeReleasedHandler);
+            _nativeMovedHandler = null;
+            _nativeReleasedHandler = null;
+        }
+    }
+#endif
+
+    private void SubscribeParentGestureCapture()
+    {
+        if (_parentView is null || _parentPointerRecognizer is not null) return;
+        _parentPointerRecognizer = new PointerGestureRecognizer();
+        _parentPointerRecognizer.PointerMoved += OnParentPointerMoved;
+        _parentPointerRecognizer.PointerReleased += OnParentPointerReleased;
+        _parentView.GestureRecognizers.Add(_parentPointerRecognizer);
+    }
+
+    private void UnsubscribeParentGestureCapture()
+    {
+        if (_parentPointerRecognizer is null || _parentView is null) return;
+        _parentView.GestureRecognizers.Remove(_parentPointerRecognizer);
+        _parentPointerRecognizer.PointerMoved -= OnParentPointerMoved;
+        _parentPointerRecognizer.PointerReleased -= OnParentPointerReleased;
+        _parentPointerRecognizer = null;
+    }
+
+    private void OnParentPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_isDragging) return;
+        var pos = e.GetPosition(this);
+        if (pos is null) return;
+        NavigateToWorld((float)pos.Value.X - _dragOffsetX, (float)pos.Value.Y - _dragOffsetY);
+    }
+
+    private void OnParentPointerReleased(object? sender, PointerEventArgs e)
+    {
+        _isDragging = false;
+        UnsubscribeDragCapture();
+    }
 
     private CancellationTokenSource? _scrollCts;
+    private float _lastScrollX = float.MinValue;
+    private float _lastScrollY = float.MinValue;
 
     private void NavigateToWorld(float adjX, float adjY)
     {
@@ -391,6 +537,17 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         var clampedX = Math.Max(0, Math.Min(scrollX, maxH));
         var clampedY = Math.Max(0, Math.Min(scrollY, maxV));
 
+        // Throttle: skip ScrollToAsync if the target position hasn't changed
+        // meaningfully since the last call. This avoids flooding MAUI's layout
+        // system during continuous minimap drag.
+        if (!layoutChanged &&
+            Math.Abs(clampedX - _lastScrollX) < 2f &&
+            Math.Abs(clampedY - _lastScrollY) < 2f)
+            return;
+
+        _lastScrollX = (float)clampedX;
+        _lastScrollY = (float)clampedY;
+
         if (layoutChanged)
         {
             // When canvas expanded, wait for layout to settle then scroll
@@ -408,7 +565,6 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         }
         else
         {
-            // Normal drag: direct scroll, no layout expansion
             _ = _scrollView.ScrollToAsync(clampedX, clampedY, false);
         }
     }
@@ -462,16 +618,11 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
                         Math.Max(2f, (float)(nh * _sc)), ncr);
             }
 
-            // Viewport indicator
-            var vp = _lastViewport;
-            if (!vp.IsEmpty)
+            // Viewport indicator — use GetClampedViewportRect for consistency
+            // with hit testing and drag interaction.
+            var (vpx, vpy, vpw, vph) = GetClampedViewportRect();
+            if (vpw > 0 && vph > 0)
             {
-                var vpx = _ox + (float)((vp.Left - gb.Left) * _sc);
-                var vpy = _oy + (float)((vp.Top - gb.Top) * _sc);
-                var vpw = Math.Max(2f, (float)(vp.Width * _sc));
-                var vph = Math.Max(2f, (float)(vp.Height * _sc));
-                vpx = Math.Max(0, Math.Min(_mmW - vpw, vpx));
-                vpy = Math.Max(0, Math.Min(_mmH - vph, vpy));
                 var ncr = Math.Max(0, (float)NodeCornerRadius);
 
                 if (ViewportFillColor is not null)

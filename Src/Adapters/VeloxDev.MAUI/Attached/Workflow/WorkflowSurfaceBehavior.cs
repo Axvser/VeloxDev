@@ -20,6 +20,7 @@ public sealed class WorkflowSurfaceBehavior
         public double LastPanTotalY { get; set; }
         public bool HasPendingScrollRestore { get; set; }
         public bool IsApplyingPendingScrollRestore { get; set; }
+        public bool IsVisibleRegionUpdateQueued { get; set; }
         public double PendingViewportX { get; set; }
         public double PendingViewportY { get; set; }
     }
@@ -416,8 +417,10 @@ public sealed class WorkflowSurfaceBehavior
         state.Canvas.Margin = new Thickness(0);
         state.Canvas.TranslationX = actualOffset.Horizontal;
         state.Canvas.TranslationY = actualOffset.Vertical;
-        state.Canvas.WidthRequest = Math.Max(1, actualSize.Width + actualOffset.Horizontal);
-        state.Canvas.HeightRequest = Math.Max(1, actualSize.Height + actualOffset.Vertical);
+        // Use actualSize only — it already includes all offset extents.
+        // Adding actualOffset would double-count and cause runaway growth.
+        state.Canvas.WidthRequest = Math.Max(1, actualSize.Width);
+        state.Canvas.HeightRequest = Math.Max(1, actualSize.Height);
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
@@ -475,8 +478,8 @@ public sealed class WorkflowSurfaceBehavior
 
         var newOffsetX = state.ScrollViewer.ScrollX - deltaX;
         var newOffsetY = state.ScrollViewer.ScrollY - deltaY;
-        var maxH = GetHorizontalScrollMaximum(state.ScrollViewer);
-        var maxV = GetVerticalScrollMaximum(state.ScrollViewer);
+        var maxH = GetHorizontalScrollMaximum(state);
+        var maxV = GetVerticalScrollMaximum(state);
         var layoutChanged = false;
 
         if (newOffsetX < 0)
@@ -508,8 +511,10 @@ public sealed class WorkflowSurfaceBehavior
         if (layoutChanged)
         {
             ApplyLayout(host, state);
-            maxH = GetHorizontalScrollMaximum(state.ScrollViewer);
-            maxV = GetVerticalScrollMaximum(state.ScrollViewer);
+            // Recompute max from model — canvas size was just updated via ApplyLayout
+            // but MAUI layout is async so ScrollViewer.ContentSize is stale.
+            maxH = GetHorizontalScrollMaximum(state);
+            maxV = GetVerticalScrollMaximum(state);
         }
 
         var appliedOffsetX = Math.Max(0, Math.Min(newOffsetX, maxH));
@@ -518,11 +523,21 @@ public sealed class WorkflowSurfaceBehavior
         UpdateVisibleRegion(host, state);
     }
 
-    private static double GetHorizontalScrollMaximum(ScrollView viewer)
-        => Math.Max(0, viewer.ContentSize.Width - viewer.Width);
+    private static double GetHorizontalScrollMaximum(SurfaceState state)
+    {
+        // MAUI layout is async — ContentSize may be stale after ApplyLayout.
+        // Compute max scroll from the layout model directly instead.
+        var viewModel = ResolveTreeViewModel(state.Host!, state);
+        if (viewModel is null || state.ScrollViewer is null) return 0;
+        return Math.Max(0, viewModel.Layout.ActualSize.Width - state.ScrollViewer.Width);
+    }
 
-    private static double GetVerticalScrollMaximum(ScrollView viewer)
-        => Math.Max(0, viewer.ContentSize.Height - viewer.Height);
+    private static double GetVerticalScrollMaximum(SurfaceState state)
+    {
+        var viewModel = ResolveTreeViewModel(state.Host!, state);
+        if (viewModel is null || state.ScrollViewer is null) return 0;
+        return Math.Max(0, viewModel.Layout.ActualSize.Height - state.ScrollViewer.Height);
+    }
 
     private static IWorkflowTreeViewModel? ResolveTreeViewModel(ContentView host, SurfaceState state)
         => host.BindingContext as IWorkflowTreeViewModel
@@ -532,6 +547,28 @@ public sealed class WorkflowSurfaceBehavior
             ?? state.PointerPressSource?.BindingContext as IWorkflowTreeViewModel;
 
     private static void UpdateVisibleRegion(ContentView host, SurfaceState state)
+    {
+        if (state.IsVisibleRegionUpdateQueued)
+        {
+            return;
+        }
+
+        state.IsVisibleRegionUpdateQueued = true;
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            if (!GetIsEnabled(host)
+                || host.GetValue(StateProperty) is not SurfaceState currentState
+                || !ReferenceEquals(currentState, state))
+            {
+                return;
+            }
+
+            state.IsVisibleRegionUpdateQueued = false;
+            ApplyVisibleRegion(host, state);
+        });
+    }
+
+    private static void ApplyVisibleRegion(ContentView host, SurfaceState state)
     {
         var viewModel = ResolveTreeViewModel(host, state);
         if (viewModel is null || state.ScrollViewer is null)
@@ -604,8 +641,8 @@ public sealed class WorkflowSurfaceBehavior
 
                 var targetX = state.PendingViewportX + viewModel.Layout.ActualOffset.Horizontal;
                 var targetY = state.PendingViewportY + viewModel.Layout.ActualOffset.Vertical;
-                targetX = Math.Max(0, Math.Min(targetX, GetHorizontalScrollMaximum(state.ScrollViewer)));
-                targetY = Math.Max(0, Math.Min(targetY, GetVerticalScrollMaximum(state.ScrollViewer)));
+                targetX = Math.Max(0, Math.Min(targetX, GetHorizontalScrollMaximum(state)));
+                targetY = Math.Max(0, Math.Min(targetY, GetVerticalScrollMaximum(state)));
                 if (Math.Abs(state.ScrollViewer.ScrollX - targetX) > 0.5 || Math.Abs(state.ScrollViewer.ScrollY - targetY) > 0.5)
                 {
                     await state.ScrollViewer.ScrollToAsync(targetX, targetY, false);

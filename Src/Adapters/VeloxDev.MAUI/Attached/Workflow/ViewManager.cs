@@ -188,6 +188,11 @@ public sealed class ViewManager
             _layout.Children.Add(view);
             Log($"AddOrReuseView.added: vm={viewModel.GetType().Name}, children={_layout.Children.Count}");
         }
+        else
+        {
+            // Re-add to layout when pulled from pool (removed on hide)
+            _layout.Children.Add(view);
+        }
 
         view.BindingContext = viewModel;
         view.IsVisible = true;
@@ -212,6 +217,7 @@ public sealed class ViewManager
         item.View.IsVisible = false;
         item.View.BindingContext = null;
         UnsubscribeFromLayoutChanges(item);
+        _layout.Children.Remove(item.View);
         Log($"HideViewFor: vm={viewModel.GetType().Name}, view={item.View.GetType().Name}");
 
         if (!_viewPool.TryGetValue(viewModel.GetType(), out var pool))
@@ -231,6 +237,7 @@ public sealed class ViewManager
             item.View.IsVisible = false;
             item.View.BindingContext = null;
             UnsubscribeFromLayoutChanges(item);
+            _layout.Children.Remove(item.View);
 
             if (!_viewPool.TryGetValue(item.ViewModel.GetType(), out var pool))
             {

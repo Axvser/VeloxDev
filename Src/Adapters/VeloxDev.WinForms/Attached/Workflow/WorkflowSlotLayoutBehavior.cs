@@ -361,7 +361,8 @@ public sealed class WorkflowSlotLayoutBehavior
     private static void OnNodePropertyChanged(Control control, PropertyChangedEventArgs e)
     {
         if (!States.TryGetValue(control, out var state)
-            || !state.SlotPropertyNames.Contains(e.PropertyName))
+            ||
+           (e.PropertyName is not null && !state.SlotPropertyNames.Contains(e.PropertyName)))
         {
             return;
         }
