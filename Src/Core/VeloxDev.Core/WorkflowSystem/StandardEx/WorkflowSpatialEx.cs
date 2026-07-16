@@ -92,37 +92,59 @@ public static class WorkflowSpatialEx
         if (!SpatialManagers.TryGetValue(tree, out var manager) || !Observables.TryGetValue(tree, out var collection) || collection is not Collection<IWorkflowViewModel> observable)
             throw new ArgumentNullException("The workflow must first successfully enable the spatial map before it can be virtualized.");
 
-        // Query nodes from spatial index
-        HashSet<IWorkflowNodeViewModel> visibleNodes = [.. manager.QueryNodes(viewport)];
+        // 1. Collect all spatially visible nodes
+        var visibleNodes = new HashSet<IWorkflowNodeViewModel>(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        foreach (var node in manager.QueryNodes(viewport))
+            visibleNodes.Add(node);
 
-        // Query links directly from spatial index - this correctly handles links spanning distant nodes
-        HashSet<IWorkflowLinkViewModel> visibleLinks = [.. manager.QueryLinks(viewport)];
+        // 2. For each visible node, hydrate one-hop neighbor nodes via Targets and Sources
+        //    (no further recursion into those neighbors' own connections)
+        var expandedNodes = new HashSet<IWorkflowNodeViewModel>(visibleNodes, WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        foreach (var node in visibleNodes)
+        {
+            foreach (var slot in node.Slots)
+            {
+                foreach (var target in slot.Targets)
+                {
+                    if (target.Parent is not null)
+                        expandedNodes.Add(target.Parent);
+                }
+                foreach (var source in slot.Sources)
+                {
+                    if (source.Parent is not null)
+                        expandedNodes.Add(source.Parent);
+                }
+            }
+        }
 
-        // Expand to include neighbor nodes that have visible links
-        HashSet<IWorkflowNodeViewModel> hydratedNodes = ExpandVisibleNodesWithNeighbors(tree, visibleNodes, visibleLinks);
-
+        // 3. Build desired items: VirtualLink + all expanded nodes first, then all links
         List<IWorkflowViewModel> desiredItems = [tree.VirtualLink];
-        HashSet<IWorkflowViewModel> desiredSet = new(WorkflowReferenceEqualityComparer<IWorkflowViewModel>.Instance)
+        var desiredSet = new HashSet<IWorkflowViewModel>(WorkflowReferenceEqualityComparer<IWorkflowViewModel>.Instance)
         {
             tree.VirtualLink
         };
 
-        // Add all hydrated nodes
-        foreach (var node in hydratedNodes)
-        {
+        foreach (var node in expandedNodes)
             AddDesiredItem(desiredItems, desiredSet, node);
-        }
 
-        // Add all visible links (from spatial query)
-        foreach (var link in visibleLinks)
-        {
-            AddDesiredItem(desiredItems, desiredSet, link);
-        }
-
-        // Catch links between two visible nodes that might have temporarily empty
-        // spatial bounds (e.g. during layout recalculation). Links from a visible
-        // node to an off-screen neighbor are already handled by visibleLinks above.
-        foreach (var node in visibleNodes)
+        // 4. Derive links from topology where at least one endpoint is spatially visible.
+        //    Include the link when either side is visible and the other side is in expandedNodes.
+        //    This correctly handles both:
+        //      - A visible → B expanded (TARGETS: slot.Parent ∈ visible, target.Parent ∈ expanded)
+        //      - B visible → A expanded (SOURCES: slot.Parent ∈ expanded, source.Parent ∈ visible)
+        //      - A visible → B visible (both in visibleNodes — rare but fine)
+        //
+        //    Skip links where the off-screen neighbor's slot anchor is at (0,0) — that
+        //    means the slot hasn't been positioned by the view yet, and including the
+        //    link would render its endpoint at the origin for one frame (origin flicker).
+        //
+        //    Timing: on initial load all slot anchors are (0,0) because the view layer
+        //    hasn't measured anything yet. If we skip and never re-check, links that
+        //    bridge visible→off-screen nodes are permanently invisible. MarkDirty
+        //    schedules a re-Virtualize on the next Update frame — by then MAUI layout
+        //    has positioned the slots, anchors are real, and the links appear cleanly.
+        bool postponedLinks = false;
+        foreach (var node in expandedNodes)
         {
             foreach (var slot in node.Slots)
             {
@@ -130,27 +152,67 @@ public static class WorkflowSpatialEx
                 {
                     if (slot.Parent is not null &&
                         target.Parent is not null &&
-                        visibleNodes.Contains(target.Parent) &&
+                        expandedNodes.Contains(target.Parent) &&
+                        (visibleNodes.Contains(slot.Parent) || visibleNodes.Contains(target.Parent)) &&
                         tree.LinksMap.TryGetValue(slot, out var targets) &&
                         targets.TryGetValue(target, out var link))
                     {
+                        // Off-screen side is target.Parent
+                        if (!visibleNodes.Contains(target.Parent) &&
+                            target.Anchor.Horizontal == 0d && target.Anchor.Vertical == 0d)
+                        {
+                            postponedLinks = true;
+                            continue;
+                        }
+
+                        // Off-screen side is slot.Parent
+                        if (!visibleNodes.Contains(slot.Parent) &&
+                            slot.Anchor.Horizontal == 0d && slot.Anchor.Vertical == 0d)
+                        {
+                            postponedLinks = true;
+                            continue;
+                        }
+
                         AddDesiredItem(desiredItems, desiredSet, link);
                     }
                 }
 
                 foreach (var source in slot.Sources)
                 {
-                    if (source.Parent is not null &&
-                        slot.Parent is not null &&
-                        visibleNodes.Contains(source.Parent) &&
+                    if (slot.Parent is not null &&
+                        source.Parent is not null &&
+                        expandedNodes.Contains(source.Parent) &&
+                        (visibleNodes.Contains(slot.Parent) || visibleNodes.Contains(source.Parent)) &&
                         tree.LinksMap.TryGetValue(source, out var targets) &&
                         targets.TryGetValue(slot, out var link))
                     {
+                        // Off-screen side is source.Parent
+                        if (!visibleNodes.Contains(source.Parent) &&
+                            source.Anchor.Horizontal == 0d && source.Anchor.Vertical == 0d)
+                        {
+                            postponedLinks = true;
+                            continue;
+                        }
+
+                        // Off-screen side is slot.Parent
+                        if (!visibleNodes.Contains(slot.Parent) &&
+                            slot.Anchor.Horizontal == 0d && slot.Anchor.Vertical == 0d)
+                        {
+                            postponedLinks = true;
+                            continue;
+                        }
+
                         AddDesiredItem(desiredItems, desiredSet, link);
                     }
                 }
             }
         }
+
+        // Schedule re-Virtualize if any link was postponed due to unpositioned slots.
+        // After the first MAUI layout pass the slot anchors will be set, and the
+        // next Update frame picks them up naturally — no origin flicker.
+        if (postponedLinks)
+            tree.GetHelper().MarkDirty();
 
         foreach (var item in observable.OfType<IWorkflowViewModel>().ToArray())
         {
@@ -314,31 +376,6 @@ public static class WorkflowSpatialEx
         {
             desiredItems.Add(item);
         }
-    }
-
-    private static HashSet<IWorkflowNodeViewModel> ExpandVisibleNodesWithNeighbors(
-        IWorkflowTreeViewModel tree,
-        HashSet<IWorkflowNodeViewModel> visibleNodes,
-        HashSet<IWorkflowLinkViewModel> visibleLinks)
-    {
-        var hydratedNodes = new HashSet<IWorkflowNodeViewModel>(visibleNodes, WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
-
-        // Add nodes from visible links (for links that span distant nodes).
-        // Only links that spatially intersect the viewport are in visibleLinks,
-        // so only genuinely visible-spanning neighbor nodes are hydrated.
-        foreach (var link in visibleLinks)
-        {
-            if (link.Sender?.Parent is IWorkflowNodeViewModel senderNode)
-            {
-                hydratedNodes.Add(senderNode);
-            }
-            if (link.Receiver?.Parent is IWorkflowNodeViewModel receiverNode)
-            {
-                hydratedNodes.Add(receiverNode);
-            }
-        }
-
-        return hydratedNodes;
     }
 
     private static void RemoveAll(Collection<IWorkflowViewModel> observable, IWorkflowViewModel item)
