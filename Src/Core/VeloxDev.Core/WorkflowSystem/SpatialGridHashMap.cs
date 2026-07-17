@@ -14,6 +14,7 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
     private readonly Dictionary<CellKey, HashSet<T>> _grid = [];
     private readonly Dictionary<T, Viewport> _trackedItems = [];
     private readonly double _cellSize = Math.Max(1d, cellSize);
+    private readonly HashSet<T> _queryScratch = [];
     private Viewport _bounds;
     private bool _boundsDirty;
 
@@ -79,14 +80,14 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
     {
         if (viewport.IsEmpty) yield break;
 
-        var seen = new HashSet<T>();
+        _queryScratch.Clear();
         foreach (var cell in GetCells(viewport))
         {
             if (_grid.TryGetValue(cell, out var set))
             {
                 foreach (var item in set)
                 {
-                    if (!seen.Add(item)) continue;
+                    if (!_queryScratch.Add(item)) continue;
 
                     var itemBounds = item.Bounds;
                     // Zero-size items (e.g. nodes not yet measured by the view) are tested
@@ -103,10 +104,14 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
 
     public void Clear()
     {
-        foreach (var item in _trackedItems.Keys.ToArray())
+        // Iterate over a snapshot (Keys copy) because UnregisterItem only
+        // unsubscribes events without modifying the dictionary, so this is safe.
+        // But use ToArray to guarantee robustness if the caller pattern changes.
+        foreach (var item in _trackedItems.Keys)
             UnregisterItem(item);
         _trackedItems.Clear();
         _grid.Clear();
+        _queryScratch.Clear();
         _bounds = Viewport.Empty;
         _boundsDirty = false;
     }
@@ -181,27 +186,71 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         }
     }
 
-    private IEnumerable<CellKey> GetCells(Viewport bounds)
+    private CellEnumerable GetCells(Viewport bounds) => new(bounds, _cellSize);
+
+    private readonly struct CellEnumerable
     {
-        // Zero-size bounds (e.g. a node that has not yet been measured by the view layer)
-        // must still be indexed so that Virtualize can include them in VisibleItems and
-        // allow the view to render and measure the node.  Index the single cell that
-        // contains the node's anchor point.
-        if (bounds.IsEmpty)
+        private readonly Viewport _bounds;
+        private readonly double _cellSize;
+
+        internal CellEnumerable(Viewport bounds, double cellSize)
         {
-            yield return new CellKey(
-                (int)Math.Floor(bounds.Horizontal / _cellSize),
-                (int)Math.Floor(bounds.Vertical / _cellSize));
-            yield break;
+            _bounds = bounds;
+            _cellSize = cellSize;
         }
 
-        int minX = (int)Math.Floor(bounds.Horizontal / _cellSize);
-        int maxX = (int)Math.Ceiling(bounds.Right / _cellSize);
-        int minY = (int)Math.Floor(bounds.Vertical / _cellSize);
-        int maxY = (int)Math.Ceiling(bounds.Bottom / _cellSize);
+        public CellEnumerator GetEnumerator() => new(_bounds, _cellSize);
+    }
 
-        for (int x = minX; x < maxX; x++)
-            for (int y = minY; y < maxY; y++)
-                yield return new CellKey(x, y);
+    private struct CellEnumerator
+    {
+        private readonly int _minX;
+        private readonly int _maxX;
+        private readonly int _minY;
+        private readonly int _maxY;
+        private int _x;
+        private int _y;
+        private bool _started;
+
+        internal CellEnumerator(Viewport bounds, double cellSize)
+        {
+            if (bounds.IsEmpty)
+            {
+                // Zero-size bounds: just the single cell containing the anchor point.
+                _minX = (int)Math.Floor(bounds.Horizontal / cellSize);
+                _minY = (int)Math.Floor(bounds.Vertical / cellSize);
+                _maxX = _minX + 1;
+                _maxY = _minY + 1;
+            }
+            else
+            {
+                _minX = (int)Math.Floor(bounds.Horizontal / cellSize);
+                _maxX = (int)Math.Ceiling(bounds.Right / cellSize);
+                _minY = (int)Math.Floor(bounds.Vertical / cellSize);
+                _maxY = (int)Math.Ceiling(bounds.Bottom / cellSize);
+            }
+            _x = _minX;
+            _y = _minY;
+            _started = false;
+        }
+
+        public CellKey Current => new(_x, _y);
+
+        public bool MoveNext()
+        {
+            if (!_started)
+            {
+                _started = true;
+                return _x < _maxX && _y < _maxY;
+            }
+
+            _x++;
+            if (_x >= _maxX)
+            {
+                _x = _minX;
+                _y++;
+            }
+            return _y < _maxY;
+        }
     }
 }
