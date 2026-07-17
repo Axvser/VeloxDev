@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Runtime.Serialization;
 using System.Threading;
 using VeloxDev.MVVM;
 
@@ -20,6 +21,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
     private bool _isDeduplicating = false;
     private bool _isApplyingState = false;
+    private bool _isDeserializing = false;
     private string _memberName = string.Empty;
     private readonly List<ConditionalSlot<TSlot>> _deferredRemovals = [];
 
@@ -58,7 +60,8 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
                     conditionMap[normalizedValue] = item.Slot;
             }
 
-            Parent?.CreateSlotCommand.Execute(item.Slot);
+            if (!_isDeserializing)
+                Parent?.CreateSlotCommand.Execute(item.Slot);
         }
     }
 
@@ -93,7 +96,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
 
     partial void OnItemRemovedFromItems(IEnumerable<ConditionalSlot<TSlot>> items)
     {
-        if (_isApplyingState)
+        if (_isApplyingState || _isDeserializing)
             return;
 
         foreach (var item in items)
@@ -384,6 +387,26 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
         conditionMap.Clear();
         for (int i = Items.Count - 1; i >= 0; i--)
             Items.RemoveAt(i);
+    }
+
+    [OnDeserializing]
+    private void OnDeserializing(StreamingContext context)
+    {
+        _isDeserializing = true;
+
+        // The constructor may have called SetSelector (e.g. via an owning
+        // ViewModel's constructor), pre-populating Items with the default
+        // selector's slots.  JSON.NET appends deserialized items to the
+        // *existing* collection rather than replacing it, so we must clear
+        // both Items and ConditionMap before the serializer populates them.
+        ConditionMap.Clear();
+        Items.Clear();
+    }
+
+    [OnDeserialized]
+    private void OnDeserialized(StreamingContext context)
+    {
+        _isDeserializing = false;
     }
 
     public IEnumerator<TSlot> GetEnumerator()
