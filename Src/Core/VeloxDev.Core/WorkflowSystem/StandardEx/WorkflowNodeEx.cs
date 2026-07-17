@@ -1,4 +1,5 @@
-﻿using VeloxDev.MVVM;
+﻿using System.Linq;
+using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem.StandardEx;
 
@@ -25,7 +26,9 @@ public static class WorkflowNodeEx
         if (component.Parent is null)
         {
             slot.Parent = newParent;
-            if (!component.Slots.Contains(slot))
+            // Use reference-equality check instead of EqualityComparer<T>.Default
+            // to guarantee no duplicate entries even if slot types override Equals.
+            if (!component.Slots.Any(s => ReferenceEquals(s, slot)))
                 component.Slots.Add(slot);
             return;
         }
@@ -33,7 +36,7 @@ public static class WorkflowNodeEx
             () =>
             {
                 slot.Parent = newParent;
-                if (!component.Slots.Contains(slot))
+                if (!component.Slots.Any(s => ReferenceEquals(s, slot)))
                     component.Slots.Add(slot);
             },
             () =>

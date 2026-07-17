@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+﻿using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
 
@@ -10,6 +11,11 @@ public static class WorkflowSpatialEx
 {
     private static readonly ConditionalWeakTable<object, WorkflowSpatialManager> SpatialManagers = new();
     private static readonly ConditionalWeakTable<object, object> Observables = new();
+    // Re-entrancy guard: keyed by the tree, tracks whether Virtualize is currently in progress.
+    // If OnViewportChanged triggers a nested Virtualize call (e.g. because updating VisibleItems
+    // fires CollectionChanged → event handler → Viewport changes again), we bail early — the
+    // outer call already computes the correct final state.
+    private static readonly ConcurrentDictionary<object, byte> Virtualizing = new();
 
     /// <summary>
     /// Enables spatial virtualization for the specified workflow tree view model by creating or retrieving a spatial
@@ -89,6 +95,26 @@ public static class WorkflowSpatialEx
         if (viewport.Width <= 0 || viewport.Height <= 0)
             return;
 
+        // Re-entrancy guard: suppress nested Virtualize calls that arise when
+        // updating VisibleItems fires CollectionChanged → event handler → Viewport change
+        // → another Virtualize.  The outermost call already reaches the correct final state.
+        if (!Virtualizing.TryAdd(tree, 0))
+            return;
+        try
+        {
+            VirtualizeCore(tree, viewport);
+        }
+        finally
+        {
+            Virtualizing.TryRemove(tree, out _);
+        }
+    }
+
+    private static void VirtualizeCore(IWorkflowTreeViewModel tree, Viewport viewport)
+    {
+        if (viewport.Width <= 0 || viewport.Height <= 0)
+            return;
+
         if (!SpatialManagers.TryGetValue(tree, out var manager) || !Observables.TryGetValue(tree, out var collection) || collection is not Collection<IWorkflowViewModel> observable)
             throw new ArgumentNullException("The workflow must first successfully enable the spatial map before it can be virtualized.");
 
@@ -117,14 +143,14 @@ public static class WorkflowSpatialEx
             }
         }
 
-        // 3. Build desired items: VirtualLink + all expanded nodes first, then all links
+        // 3. Build desired items: VirtualLink + all spatially visible nodes first, then links
         List<IWorkflowViewModel> desiredItems = [tree.VirtualLink];
         var desiredSet = new HashSet<IWorkflowViewModel>(WorkflowReferenceEqualityComparer<IWorkflowViewModel>.Instance)
         {
             tree.VirtualLink
         };
 
-        foreach (var node in expandedNodes)
+        foreach (var node in visibleNodes)
             AddDesiredItem(desiredItems, desiredSet, node);
 
         // 4. Derive links from topology where at least one endpoint is spatially visible.
@@ -161,6 +187,11 @@ public static class WorkflowSpatialEx
                         if (!visibleNodes.Contains(target.Parent) &&
                             target.Anchor.Horizontal == 0d && target.Anchor.Vertical == 0d)
                         {
+                            // The off-screen node was never laid out (slot at origin).
+                            // Add it into desiredSet as an invisible stub so the layout
+                            // engine positions its slots.  Next frame the anchors will
+                            // have real coordinates and the link can render cleanly.
+                            AddDesiredItem(desiredItems, desiredSet, target.Parent);
                             postponedLinks = true;
                             continue;
                         }
@@ -169,6 +200,7 @@ public static class WorkflowSpatialEx
                         if (!visibleNodes.Contains(slot.Parent) &&
                             slot.Anchor.Horizontal == 0d && slot.Anchor.Vertical == 0d)
                         {
+                            AddDesiredItem(desiredItems, desiredSet, slot.Parent);
                             postponedLinks = true;
                             continue;
                         }
@@ -190,6 +222,7 @@ public static class WorkflowSpatialEx
                         if (!visibleNodes.Contains(source.Parent) &&
                             source.Anchor.Horizontal == 0d && source.Anchor.Vertical == 0d)
                         {
+                            AddDesiredItem(desiredItems, desiredSet, source.Parent);
                             postponedLinks = true;
                             continue;
                         }
@@ -198,6 +231,7 @@ public static class WorkflowSpatialEx
                         if (!visibleNodes.Contains(slot.Parent) &&
                             slot.Anchor.Horizontal == 0d && slot.Anchor.Vertical == 0d)
                         {
+                            AddDesiredItem(desiredItems, desiredSet, slot.Parent);
                             postponedLinks = true;
                             continue;
                         }
