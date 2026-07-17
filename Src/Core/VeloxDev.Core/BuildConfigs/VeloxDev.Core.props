@@ -2,4 +2,12 @@
 	<PropertyGroup>
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Prevent the IL linker from stripping reflection metadata
+			 from VeloxDev.Core, which relies heavily on
+			 Newtonsoft.Json, source-generator partial methods, and
+			 runtime type resolution. -->
+		<TrimmerRootAssembly Include="VeloxDev.Core" />
+	</ItemGroup>
 </Project>

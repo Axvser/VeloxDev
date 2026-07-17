@@ -9,8 +9,9 @@
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<IsTrimmable>false</IsTrimmable>
 		<Title>VeloxDev.Core</Title>
-		<Version>6.0.2</Version>
+		<Version>6.0.3</Version>
 		<Authors>Axvser</Authors>
 		<Description>Build modern, AI-controllable workflow editors on any .NET GUI — WPF, Avalonia, WinUI, MAUI ...</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -42,7 +43,7 @@
 		</None>
 		<None Include="BuildConfigs\VeloxDev.Core.props">
 			<Pack>True</Pack>
-			<PackagePath>\</PackagePath>
+			<PackagePath>buildTransitive\</PackagePath>
 		</None>
 	</ItemGroup>
 
