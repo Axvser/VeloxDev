@@ -104,6 +104,17 @@ public partial class WorkflowView : UserControl
         _manager.Show(new Notification("OK", "Workflow demo loaded."));
     }
 
+    private void LoadPerformanceTest(object? sender, RoutedEventArgs e)
+    {
+        UnsubscribeAutoScroll(_workflowViewModel);
+        _workflowViewModel = PerformanceTestSession.Create().Tree;
+        DataContext = _workflowViewModel;
+        SubscribeAutoScroll(_workflowViewModel);
+        _workflowViewModel.Layout.UpdateCommand.Execute(null);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        _manager.Show(new Notification("OK", "1000-node performance test loaded."));
+    }
+
     private void InitializeNetworkDemo()
     {
         UnsubscribeAutoScroll(_workflowViewModel);
