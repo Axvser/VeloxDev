@@ -127,6 +127,16 @@ namespace Demo.Views
             InitializeNetworkDemo();
         }
 
+        private void LoadPerformanceTest(object sender, RoutedEventArgs e)
+        {
+            UnsubscribeAutoScroll(ViewModel);
+            ViewModel = PerformanceTestSession.Create().Tree;
+            DataContext = ViewModel;
+            SubscribeAutoScroll(ViewModel);
+            ViewModel.Layout.UpdateCommand.Execute(null);
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        }
+
         private void InitializeNetworkDemo()
         {
             UnsubscribeAutoScroll(ViewModel);

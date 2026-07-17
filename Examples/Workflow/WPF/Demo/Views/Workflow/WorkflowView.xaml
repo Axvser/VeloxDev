@@ -132,6 +132,7 @@
                     <Button Content="Save" Width="100" Height="50" Margin="0,8,0,0" Click="SaveWorkflow" />
                     <Button Content="Select" Width="100" Height="50" Margin="0,8,0,0" Click="SelectWorkflow" />
                     <Button Content="Load Workflow Demo" Width="140" Height="50" Margin="0,8,0,0" Click="LoadNetworkDemo" />
+                    <Button Content="性能测试 (1000节点)" Width="140" Height="50" Margin="0,8,0,0" Click="LoadPerformanceTest" />
                     <TextBlock Margin="0,12,0,0" Text="节点总数：" Foreground="White" />
                     <TextBlock Text="{Binding Nodes.Count}" Foreground="White" />
                     <TextBlock Margin="0,8,0,0" Text="可见组件数：( Node / Link )" Foreground="White" />

@@ -18,6 +18,19 @@ public partial class WorkflowView : ContentView
         InitializeComponent();
     }
 
+    public void LoadPerformanceTest()
+    {
+        // Set session from PerformanceTestSession tree
+        var perf = PerformanceTestSession.Create().Tree;
+        var session = WorkflowDemoSession.FromTree(perf);
+        Session = session;
+    }
+
+    private void OnLoadPerformanceTestClicked(object? sender, EventArgs e)
+    {
+        LoadPerformanceTest();
+    }
+
     public static readonly BindableProperty SessionProperty = BindableProperty.Create(
         nameof(Session),
         typeof(WorkflowDemoSession),

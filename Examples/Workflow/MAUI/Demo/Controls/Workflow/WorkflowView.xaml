@@ -96,6 +96,9 @@
                 </Grid>
             </controls:WorkflowGridDecorator>
         </Border>
+        <StackLayout HorizontalOptions="Start" VerticalOptions="Start" Padding="8">
+            <Button Text="性能测试 (1000节点)" Clicked="OnLoadPerformanceTestClicked" />
+        </StackLayout>
         <!-- Minimap overlay -->
         <behaviors:WorkflowMinimapOverlay HorizontalOptions="End"
                                           VerticalOptions="Start"

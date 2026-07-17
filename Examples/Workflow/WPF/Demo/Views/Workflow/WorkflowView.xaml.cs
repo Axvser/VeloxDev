@@ -94,6 +94,16 @@ public partial class WorkflowView : UserControl
         InitializeNetworkDemo();
     }
 
+    private void LoadPerformanceTest(object sender, RoutedEventArgs e)
+    {
+        UnsubscribeAutoScroll(_workflowViewModel);
+        _workflowViewModel = PerformanceTestSession.Create().Tree;
+        DataContext = _workflowViewModel;
+        SubscribeAutoScroll(_workflowViewModel);
+        _workflowViewModel.Layout.UpdateCommand.Execute(null);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+    }
+
     private void InitializeNetworkDemo()
     {
         UnsubscribeAutoScroll(_workflowViewModel);
