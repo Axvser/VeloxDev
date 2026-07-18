@@ -8,6 +8,8 @@ namespace VeloxDev.WorkflowSystem;
 /// </summary>
 internal sealed class NodeBoundsProvider : ISpatialBoundsProvider, IDisposable
 {
+    private static readonly PropertyChangedEventArgs BoundsChangedEventArgs = new(nameof(Bounds));
+
     private readonly IWorkflowNodeViewModel _node;
     private Viewport _cachedBounds;
     private bool _disposed;
@@ -60,12 +62,24 @@ internal sealed class NodeBoundsProvider : ISpatialBoundsProvider, IDisposable
         if (!_cachedBounds.Equals(newBounds))
         {
             _cachedBounds = newBounds;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Bounds)));
+            PropertyChanged?.Invoke(this, BoundsChangedEventArgs);
         }
     }
 
     private Viewport GetCurrentBounds()
-        => new(_node.Anchor.Horizontal, _node.Anchor.Vertical, _node.Size.Width, _node.Size.Height);
+    {
+        var h = _node.Anchor.Horizontal;
+        var v = _node.Anchor.Vertical;
+        // Anchor defaults to NaN before the view layer positions the node.
+        // Return empty bounds so the spatial grid places this in the pending
+        // queue rather than indexing at NaN coordinates.
+        if (double.IsNaN(h) || double.IsNaN(v) ||
+            double.IsInfinity(h) || double.IsInfinity(v))
+        {
+            return Viewport.Empty;
+        }
+        return new Viewport(h, v, _node.Size.Width, _node.Size.Height);
+    }
 
     public void Dispose()
     {

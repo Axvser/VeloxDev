@@ -1,24 +1,26 @@
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
-/// Manages spatial indexing for both nodes and links in a workflow tree.
-/// This class provides unified spatial queries that can correctly handle 
-/// links spanning across distant nodes.
+/// Manages spatial indexing for nodes via AgentBounds (NodePairBoundsProvider).
+/// Links are derived from AgentBounds — querying the spatial grid for intersecting
+/// node pairs yields both endpoint nodes and their connecting link.
 /// </summary>
 public sealed class WorkflowSpatialManager : IDisposable
 {
     private readonly IWorkflowTreeViewModel _tree;
     private readonly SpatialGridHashMap<NodeBoundsProvider> _nodeMap;
-    private readonly SpatialGridHashMap<LinkBoundsProvider> _linkMap;
     private readonly SpatialGridHashMap<NodePairBoundsProvider> _nodePairMap;
     private readonly Dictionary<IWorkflowNodeViewModel, NodeBoundsProvider> _nodeProviders = [];
-    private readonly Dictionary<IWorkflowLinkViewModel, LinkBoundsProvider> _linkProviders = [];
     private readonly Dictionary<IWorkflowLinkViewModel, NodePairBoundsProvider> _nodePairProviders = [];
+    private readonly Dictionary<NodePairBoundsProvider, IWorkflowLinkViewModel> _pairToLink = [];
+    // Reverse index: for each node, all NodePairBoundsProviders that have it as an endpoint.
+    // Used by depth-expanded AgentBounds queries to walk the connection graph.
+    private readonly Dictionary<IWorkflowNodeViewModel, List<NodePairBoundsProvider>> _nodeToPairs = [];
     private readonly double _cellSize;
     private bool _disposed;
 
-    /// <summary>Gets the minimal viewport that covers all indexed nodes, links, and node pairs.</summary>
-    public Viewport GlobalBounds => Viewport.Union(Viewport.Union(_nodeMap.Bounds, _linkMap.Bounds), _nodePairMap.Bounds);
+    /// <summary>Gets the minimal viewport that covers all indexed nodes and node pairs.</summary>
+    public Viewport GlobalBounds => Viewport.Union(_nodeMap.Bounds, _nodePairMap.Bounds);
 
     public WorkflowSpatialManager(IWorkflowTreeViewModel tree, double cellSize)
     {
@@ -26,7 +28,6 @@ public sealed class WorkflowSpatialManager : IDisposable
         _cellSize = Math.Max(1d, cellSize);
 
         _nodeMap = new SpatialGridHashMap<NodeBoundsProvider>(_cellSize);
-        _linkMap = new SpatialGridHashMap<LinkBoundsProvider>(_cellSize);
         _nodePairMap = new SpatialGridHashMap<NodePairBoundsProvider>(_cellSize);
 
         Initialize();
@@ -61,88 +62,90 @@ public sealed class WorkflowSpatialManager : IDisposable
     }
 
     /// <summary>
-    /// Queries all nodes that intersect with the specified viewport.
-    /// Also includes nodes brought into view by visible link connections,
-    /// i.e. nodes whose combined bounds with a connected node intersect
-    /// the viewport even if neither node individually does.
+    /// Queries all AgentBounds (node pair providers) that intersect with the specified viewport,
+    /// then expands outward through the connection graph by the specified depth.
+    /// </summary>
+    /// <param name="viewport">The visible region.</param>
+    /// <param name="expansionDepth">
+    /// Number of extra hops beyond directly visible pairs. Depth 0 = only pairs intersecting
+    /// the viewport. Depth 1 = visible pairs plus pairs connected to their endpoint nodes.
+    /// Default is 1, which ensures that when a node is brought in via one link, all its other
+    /// connections are also included (preventing link flicker when the node becomes fully visible).
+    /// </param>
+    internal IEnumerable<NodePairBoundsProvider> QueryAgentBounds(Viewport viewport, int expansionDepth = 1)
+    {
+        if (viewport.IsEmpty) yield break;
+
+        // 1. Collect directly visible pairs from spatial grid
+        var seenPairs = new HashSet<NodePairBoundsProvider>();
+        var seenNodes = new HashSet<IWorkflowNodeViewModel>();
+        var directPairs = new List<NodePairBoundsProvider>();
+        var frontier = new List<IWorkflowNodeViewModel>();
+
+        foreach (var provider in _nodePairMap.Query(viewport))
+        {
+            if (!seenPairs.Add(provider)) continue;
+            directPairs.Add(provider);
+            yield return provider;
+
+            if (seenNodes.Add(provider.NodeA)) frontier.Add(provider.NodeA);
+            if (seenNodes.Add(provider.NodeB)) frontier.Add(provider.NodeB);
+        }
+
+        // 2. Expand by depth: walk connected pairs via reverse index
+        for (int d = 0; d < expansionDepth && frontier.Count > 0; d++)
+        {
+            var nextFrontier = new List<IWorkflowNodeViewModel>();
+            foreach (var node in frontier)
+            {
+                if (!_nodeToPairs.TryGetValue(node, out var connectedPairs)) continue;
+
+                foreach (var pair in connectedPairs)
+                {
+                    if (!seenPairs.Add(pair)) continue;
+                    yield return pair;
+
+                    // Add the opposite endpoint for the next depth level
+                    var other = ReferenceEquals(pair.NodeA, node) ? pair.NodeB : pair.NodeA;
+                    if (seenNodes.Add(other))
+                        nextFrontier.Add(other);
+                }
+            }
+            frontier = nextFrontier;
+        }
+    }
+
+    /// <summary>
+    /// Queries all individually visible nodes that intersect with the specified viewport.
+    /// Isolated nodes (not connected by any link) are surfaced here.
     /// </summary>
     public IEnumerable<IWorkflowNodeViewModel> QueryNodes(Viewport viewport)
     {
         if (viewport.IsEmpty) yield break;
 
-        var seen = new HashSet<IWorkflowNodeViewModel>();
-
         foreach (var provider in _nodeMap.Query(viewport))
-        {
-            if (seen.Add(provider.Node))
-                yield return provider.Node;
-        }
-
-        foreach (var pairProvider in _nodePairMap.Query(viewport))
-        {
-            bool aSeen = seen.Contains(pairProvider.NodeA);
-            bool bSeen = seen.Contains(pairProvider.NodeB);
-
-            // Both nodes are already individually visible — nothing to add.
-            if (aSeen && bSeen) continue;
-
-            // At least one node is individually visible — the other endpoint
-            // will be pulled in by Virtualize step 4 (link derivation) via
-            // the 1-hop expandedNodes set.  No need to surface it here.
-            if (aSeen || bSeen) continue;
-
-            // Neither node is individually visible, yet the NodePair union
-            // bounds intersect the viewport — a link crosses the viewport
-            // with both endpoints outside.  Surface both so the link can render.
-            seen.Add(pairProvider.NodeA);
-            yield return pairProvider.NodeA;
-            seen.Add(pairProvider.NodeB);
-            yield return pairProvider.NodeB;
-        }
+            yield return provider.Node;
     }
 
     /// <summary>
-    /// Queries all links that intersect with the specified viewport.
-    /// This correctly handles links that span across distant nodes.
+    /// Returns the links corresponding to the specified AgentBounds (node pairs).
     /// </summary>
-    public IEnumerable<IWorkflowLinkViewModel> QueryLinks(Viewport viewport)
+    internal IEnumerable<IWorkflowLinkViewModel> ResolveLinksFromPairs(IEnumerable<NodePairBoundsProvider> pairs)
     {
-        if (viewport.IsEmpty) yield break;
-
-        foreach (var provider in _linkMap.Query(viewport))
+        foreach (var pair in pairs)
         {
-            yield return provider.Link;
-        }
-    }
-
-    /// <summary>
-    /// Queries all workflow view models (nodes and links) that intersect with the specified viewport.
-    /// </summary>
-    public IEnumerable<IWorkflowViewModel> QueryAll(Viewport viewport)
-    {
-        foreach (var node in QueryNodes(viewport))
-        {
-            yield return node;
-        }
-
-        foreach (var link in QueryLinks(viewport))
-        {
-            yield return link;
+            if (_pairToLink.TryGetValue(pair, out var link))
+                yield return link;
         }
     }
 
     private void InsertLink(IWorkflowLinkViewModel link)
     {
-        if (link == null || _linkProviders.ContainsKey(link)) return;
+        if (link == null || _nodePairProviders.ContainsKey(link)) return;
 
-        var provider = new LinkBoundsProvider(link);
-        _linkProviders[link] = provider;
-        _linkMap.Insert(provider);
-
-        // Insert a node-pair proxy so the spatial grid can detect that both
-        // endpoints should be considered visible even when neither node's own
-        // bounds intersect the viewport (e.g. a long link crossing the viewport
-        // with both endpoints outside it).
+        // Insert an AgentBounds proxy so the spatial grid can detect that both
+        // endpoints should be considered visible when their combined bounds
+        // intersect the viewport (e.g. a long link crossing the viewport).
         if (link.Sender?.Parent is IWorkflowNodeViewModel nodeA &&
             link.Receiver?.Parent is IWorkflowNodeViewModel nodeB &&
             nodeA != nodeB &&
@@ -151,23 +154,50 @@ public sealed class WorkflowSpatialManager : IDisposable
         {
             var pairProvider = new NodePairBoundsProvider(nodeA, nodeB, providerA, providerB);
             _nodePairProviders[link] = pairProvider;
+            _pairToLink[pairProvider] = link;
             _nodePairMap.Insert(pairProvider);
+
+            // Build reverse index for graph-traversal queries
+            AddToNodeIndex(nodeA, pairProvider);
+            AddToNodeIndex(nodeB, pairProvider);
         }
     }
 
     private void RemoveLink(IWorkflowLinkViewModel link)
     {
-        if (link == null || !_linkProviders.TryGetValue(link, out var provider)) return;
-
-        _linkMap.Remove(provider);
-        provider.Dispose();
-        _linkProviders.Remove(link);
+        if (link == null) return;
 
         if (_nodePairProviders.TryGetValue(link, out var pairProvider))
         {
             _nodePairMap.Remove(pairProvider);
+            _pairToLink.Remove(pairProvider);
+            RemoveFromNodeIndex(pairProvider);
             pairProvider.Dispose();
             _nodePairProviders.Remove(link);
+        }
+    }
+
+    private void AddToNodeIndex(IWorkflowNodeViewModel node, NodePairBoundsProvider pair)
+    {
+        if (!_nodeToPairs.TryGetValue(node, out var list))
+        {
+            list = [];
+            _nodeToPairs[node] = list;
+        }
+        list.Add(pair);
+    }
+
+    private void RemoveFromNodeIndex(NodePairBoundsProvider pair)
+    {
+        if (_nodeToPairs.TryGetValue(pair.NodeA, out var listA))
+        {
+            listA.Remove(pair);
+            if (listA.Count == 0) _nodeToPairs.Remove(pair.NodeA);
+        }
+        if (_nodeToPairs.TryGetValue(pair.NodeB, out var listB))
+        {
+            listB.Remove(pair);
+            if (listB.Count == 0) _nodeToPairs.Remove(pair.NodeB);
         }
     }
 
@@ -227,18 +257,13 @@ public sealed class WorkflowSpatialManager : IDisposable
         _nodeProviders.Clear();
         _nodeMap.Clear();
 
-        foreach (var provider in _linkProviders.Values)
-        {
-            provider.Dispose();
-        }
-        _linkProviders.Clear();
-        _linkMap.Clear();
-
         foreach (var provider in _nodePairProviders.Values)
         {
             provider.Dispose();
         }
         _nodePairProviders.Clear();
+        _pairToLink.Clear();
+        _nodeToPairs.Clear();
         _nodePairMap.Clear();
     }
 }

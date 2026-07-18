@@ -58,8 +58,9 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
 
         var b = item.Bounds;
         RegisterItem(item, b);
-        // Items with empty bounds (e.g. links whose slots haven't been positioned by GUI yet)
-        // are registered for change tracking but NOT indexed until bounds become meaningful.
+        // Items with empty/NaN bounds are registered for change tracking but NOT indexed
+        // until bounds become meaningful. OnItemPropertyChanged handles the transition
+        // when PropertyChanged fires after the view layer positions the item.
         if (!b.IsEmpty)
             IndexItem(item, b);
         InvalidateBounds();
@@ -140,8 +141,8 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         if (oldBounds.Equals(newBounds)) return;
 
         // Gracefully handle transitions between empty and non-empty bounds.
-        // Items with empty bounds (e.g. links whose slots haven't been positioned)
-        // are tracked but not indexed; when their bounds become real, index them.
+        // Items with empty/NaN bounds are tracked but not indexed; when their
+        // bounds become real, index them (PropertyChanged is reliable after view layout).
         if (oldBounds.IsEmpty)
         {
             if (!newBounds.IsEmpty)

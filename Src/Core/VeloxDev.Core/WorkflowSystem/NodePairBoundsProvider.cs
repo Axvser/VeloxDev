@@ -13,6 +13,8 @@ namespace VeloxDev.WorkflowSystem;
 /// </summary>
 internal sealed class NodePairBoundsProvider : ISpatialBoundsProvider, IDisposable
 {
+    private static readonly PropertyChangedEventArgs BoundsChangedEventArgs = new(nameof(Bounds));
+
     private readonly IWorkflowNodeViewModel _nodeA;
     private readonly IWorkflowNodeViewModel _nodeB;
     private readonly ISpatialBoundsProvider _providerA;
@@ -56,12 +58,23 @@ internal sealed class NodePairBoundsProvider : ISpatialBoundsProvider, IDisposab
         if (!_cachedBounds.Equals(newBounds))
         {
             _cachedBounds = newBounds;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Bounds)));
+            PropertyChanged?.Invoke(this, BoundsChangedEventArgs);
         }
     }
 
     private Viewport CalculateBounds()
-        => Viewport.Union(_providerA.Bounds, _providerB.Bounds);
+    {
+        var bA = _providerA.Bounds;
+        var bB = _providerB.Bounds;
+
+        // If either endpoint hasn't been positioned yet (NaN anchor → Empty bounds),
+        // return Empty so the node pair is tracked but not indexed in the spatial grid.
+        // OnNodeBoundsChanged will promote it when both endpoints have real coordinates.
+        if (bA.IsEmpty || bB.IsEmpty)
+            return Viewport.Empty;
+
+        return Viewport.Union(bA, bB);
+    }
 
     public void Dispose()
     {

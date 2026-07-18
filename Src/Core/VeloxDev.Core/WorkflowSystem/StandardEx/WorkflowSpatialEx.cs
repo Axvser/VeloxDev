@@ -115,37 +115,37 @@ public static class WorkflowSpatialEx
         if (viewport.Width <= 0 || viewport.Height <= 0)
             return;
 
-        if (!SpatialManagers.TryGetValue(tree, out var manager) || !Observables.TryGetValue(tree, out var collection) || collection is not Collection<IWorkflowViewModel> observable)
-            throw new ArgumentNullException("The workflow must first successfully enable the spatial map before it can be virtualized.");
+        if (!SpatialManagers.TryGetValue(tree, out var manager) ||
+            !Observables.TryGetValue(tree, out var collection) ||
+            collection is not Collection<IWorkflowViewModel> observable)
+        {
+            throw new ArgumentNullException(
+                "The workflow must first successfully enable the spatial map before it can be virtualized.");
+        }
 
-        // 1. Collect all spatially visible nodes
-        var visibleNodes = new HashSet<IWorkflowNodeViewModel>(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        // 1. Query AgentBounds
+        //    E.g. A visible → A↔B brought in → B↔C, B↔D, B↔E also included
+        //    so that when B becomes fully visible, all its connections are ready
+        //    without flicker.
+        var agentBounds = manager.QueryAgentBounds(viewport, expansionDepth: 1).ToArray();
+
+        // 2. Collect unique nodes from both ends of each AgentBounds
+        var visibleNodes = new HashSet<IWorkflowNodeViewModel>(
+            WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        foreach (var pair in agentBounds)
+        {
+            visibleNodes.Add(pair.NodeA);
+            visibleNodes.Add(pair.NodeB);
+        }
+
+        // 3. Also collect individually visible nodes (isolated nodes with no links)
         foreach (var node in manager.QueryNodes(viewport))
             visibleNodes.Add(node);
 
-        // 2. For each visible node, hydrate one-hop neighbor nodes via Targets and Sources
-        //    (no further recursion into those neighbors' own connections)
-        var expandedNodes = new HashSet<IWorkflowNodeViewModel>(visibleNodes, WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
-        foreach (var node in visibleNodes)
-        {
-            foreach (var slot in node.Slots)
-            {
-                foreach (var target in slot.Targets)
-                {
-                    if (target.Parent is not null)
-                        expandedNodes.Add(target.Parent);
-                }
-                foreach (var source in slot.Sources)
-                {
-                    if (source.Parent is not null)
-                        expandedNodes.Add(source.Parent);
-                }
-            }
-        }
-
-        // 3. Build desired items: VirtualLink + all spatially visible nodes first, then links
+        // 4. Build desired items: VirtualLink + all nodes + all links, in one pass
         List<IWorkflowViewModel> desiredItems = [tree.VirtualLink];
-        var desiredSet = new HashSet<IWorkflowViewModel>(WorkflowReferenceEqualityComparer<IWorkflowViewModel>.Instance)
+        var desiredSet = new HashSet<IWorkflowViewModel>(
+            WorkflowReferenceEqualityComparer<IWorkflowViewModel>.Instance)
         {
             tree.VirtualLink
         };
@@ -153,113 +153,19 @@ public static class WorkflowSpatialEx
         foreach (var node in visibleNodes)
             AddDesiredItem(desiredItems, desiredSet, node);
 
-        // 4. Derive links from topology where at least one endpoint is spatially visible.
-        //    Include the link when either side is visible and the other side is in expandedNodes.
-        //    This correctly handles both:
-        //      - A visible → B expanded (TARGETS: slot.Parent ∈ visible, target.Parent ∈ expanded)
-        //      - B visible → A expanded (SOURCES: slot.Parent ∈ expanded, source.Parent ∈ visible)
-        //      - A visible → B visible (both in visibleNodes — rare but fine)
-        //
-        //    Skip links where the off-screen neighbor's slot anchor is at (0,0) — that
-        //    means the slot hasn't been positioned by the view yet, and including the
-        //    link would render its endpoint at the origin for one frame (origin flicker).
-        //
-        //    Timing: on initial load all slot anchors are (0,0) because the view layer
-        //    hasn't measured anything yet. If we skip and never re-check, links that
-        //    bridge visible→off-screen nodes are permanently invisible. MarkDirty
-        //    schedules a re-Virtualize on the next Update frame — by then MAUI layout
-        //    has positioned the slots, anchors are real, and the links appear cleanly.
-        bool postponedLinks = false;
-        foreach (var node in expandedNodes)
-        {
-            foreach (var slot in node.Slots)
-            {
-                foreach (var target in slot.Targets)
-                {
-                    if (slot.Parent is not null &&
-                        target.Parent is not null &&
-                        expandedNodes.Contains(target.Parent) &&
-                        (visibleNodes.Contains(slot.Parent) || visibleNodes.Contains(target.Parent)) &&
-                        tree.LinksMap.TryGetValue(slot, out var targets) &&
-                        targets.TryGetValue(target, out var link))
-                    {
-                        // Off-screen side is target.Parent
-                        if (!visibleNodes.Contains(target.Parent) &&
-                            target.Anchor.Horizontal == 0d && target.Anchor.Vertical == 0d)
-                        {
-                            // The off-screen node was never laid out (slot at origin).
-                            // Add it into desiredSet as an invisible stub so the layout
-                            // engine positions its slots.  Next frame the anchors will
-                            // have real coordinates and the link can render cleanly.
-                            AddDesiredItem(desiredItems, desiredSet, target.Parent);
-                            postponedLinks = true;
-                            continue;
-                        }
+        foreach (var link in manager.ResolveLinksFromPairs(agentBounds))
+            AddDesiredItem(desiredItems, desiredSet, link);
 
-                        // Off-screen side is slot.Parent
-                        if (!visibleNodes.Contains(slot.Parent) &&
-                            slot.Anchor.Horizontal == 0d && slot.Anchor.Vertical == 0d)
-                        {
-                            AddDesiredItem(desiredItems, desiredSet, slot.Parent);
-                            postponedLinks = true;
-                            continue;
-                        }
-
-                        AddDesiredItem(desiredItems, desiredSet, link);
-                    }
-                }
-
-                foreach (var source in slot.Sources)
-                {
-                    if (slot.Parent is not null &&
-                        source.Parent is not null &&
-                        expandedNodes.Contains(source.Parent) &&
-                        (visibleNodes.Contains(slot.Parent) || visibleNodes.Contains(source.Parent)) &&
-                        tree.LinksMap.TryGetValue(source, out var targets) &&
-                        targets.TryGetValue(slot, out var link))
-                    {
-                        // Off-screen side is source.Parent
-                        if (!visibleNodes.Contains(source.Parent) &&
-                            source.Anchor.Horizontal == 0d && source.Anchor.Vertical == 0d)
-                        {
-                            AddDesiredItem(desiredItems, desiredSet, source.Parent);
-                            postponedLinks = true;
-                            continue;
-                        }
-
-                        // Off-screen side is slot.Parent
-                        if (!visibleNodes.Contains(slot.Parent) &&
-                            slot.Anchor.Horizontal == 0d && slot.Anchor.Vertical == 0d)
-                        {
-                            AddDesiredItem(desiredItems, desiredSet, slot.Parent);
-                            postponedLinks = true;
-                            continue;
-                        }
-
-                        AddDesiredItem(desiredItems, desiredSet, link);
-                    }
-                }
-            }
-        }
-
-        // Schedule re-Virtualize if any link was postponed due to unpositioned slots.
-        // After the first MAUI layout pass the slot anchors will be set, and the
-        // next Update frame picks them up naturally — no origin flicker.
-        if (postponedLinks)
-            tree.GetHelper().MarkDirty();
-
+        // 5. Remove stale items from observable
         foreach (var item in observable.OfType<IWorkflowViewModel>().ToArray())
         {
             if (!desiredSet.Contains(item))
-            {
                 RemoveAll(observable, item);
-            }
         }
 
+        // 6. Add desired items (nodes + links, no deferral)
         foreach (var item in desiredItems)
-        {
             AddIfMissing(observable, item);
-        }
     }
 
     /// <summary>
@@ -328,72 +234,6 @@ public static class WorkflowSpatialEx
                 "The workflow must first successfully enable the spatial map before it can be selected.");
 
         return manager.QueryNodes(viewport);
-    }
-
-    /// <summary>
-    /// Selects and returns all workflow links that intersect with the specified viewport.
-    /// This method correctly handles links that span across distant nodes by using
-    /// the link's own bounding box for spatial queries.
-    /// </summary>
-    /// 
-    /// <param name="tree">
-    /// The workflow tree view model containing the links.
-    /// </param>
-    /// 
-    /// <param name="viewport">
-    /// The rectangular region to query for intersecting links.
-    /// </param>
-    /// 
-    /// <returns>
-    /// An enumerable collection of <see cref="IWorkflowLinkViewModel"/> instances
-    /// that intersect with the specified viewport.
-    /// </returns>
-    /// 
-    /// <exception cref="ArgumentNullException">
-    /// Thrown if the spatial map has not been enabled for the workflow tree.
-    /// </exception>
-    public static IEnumerable<IWorkflowLinkViewModel> QueryLinks(this IWorkflowTreeViewModel tree, Viewport viewport)
-    {
-        if (viewport.Width <= 0 || viewport.Height <= 0)
-            return [];
-
-        if (!SpatialManagers.TryGetValue(tree, out var manager))
-            throw new ArgumentNullException(nameof(tree),
-                "The workflow must first successfully enable the spatial map before it can be selected.");
-
-        return manager.QueryLinks(viewport);
-    }
-
-    /// <summary>
-    /// Selects and returns all workflow view models (nodes and links) that intersect with the specified viewport.
-    /// </summary>
-    /// 
-    /// <param name="tree">
-    /// The workflow tree view model containing the elements.
-    /// </param>
-    /// 
-    /// <param name="viewport">
-    /// The rectangular region to query for intersecting elements.
-    /// </param>
-    /// 
-    /// <returns>
-    /// An enumerable collection of <see cref="IWorkflowViewModel"/> instances
-    /// that intersect with the specified viewport.
-    /// </returns>
-    /// 
-    /// <exception cref="ArgumentNullException">
-    /// Thrown if the spatial map has not been enabled for the workflow tree.
-    /// </exception>
-    public static IEnumerable<IWorkflowViewModel> QueryAll(this IWorkflowTreeViewModel tree, Viewport viewport)
-    {
-        if (viewport.Width <= 0 || viewport.Height <= 0)
-            return [];
-
-        if (!SpatialManagers.TryGetValue(tree, out var manager))
-            throw new ArgumentNullException(nameof(tree),
-                "The workflow must first successfully enable the spatial map before it can be selected.");
-
-        return manager.QueryAll(viewport);
     }
 
     private static void AddIfMissing(Collection<IWorkflowViewModel> observable, IWorkflowViewModel item)
