@@ -399,11 +399,15 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
+        var viewportX = state.ScrollViewer.Offset.X - viewModel.Layout.ActualOffset.Horizontal;
+        var viewportY = state.ScrollViewer.Offset.Y - viewModel.Layout.ActualOffset.Vertical;
         viewModel.GetHelper().Viewport = new Viewport(
-            state.ScrollViewer.Offset.X - viewModel.Layout.ActualOffset.Horizontal,
-            state.ScrollViewer.Offset.Y - viewModel.Layout.ActualOffset.Vertical,
+            viewportX, viewportY,
             state.ScrollViewer.Viewport.Width,
             state.ScrollViewer.Viewport.Height);
+
+        // Persist the viewport position so it survives serialization round-trip.
+        viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
     }
 
     private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state)

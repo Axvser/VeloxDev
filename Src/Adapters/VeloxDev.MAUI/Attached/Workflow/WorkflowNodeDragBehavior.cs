@@ -18,7 +18,6 @@ public sealed class WorkflowNodeDragBehavior
     private sealed class DragState
     {
         public bool IsDragging { get; set; }
-        public PointerGestureRecognizer? PointerGesture { get; set; }
         public PanGestureRecognizer? PanGesture { get; set; }
         public ButtonsMask ActiveButton { get; set; }
         public double LastX { get; set; }
@@ -91,20 +90,17 @@ public sealed class WorkflowNodeDragBehavior
         view.HandlerChanged += OnHandlerChanged;
         HookPlatformEvents(view, state);
 #else
-        var pointer = new PointerGestureRecognizer();
-        pointer.Buttons = ButtonsMask.Primary | ButtonsMask.Secondary;
-        pointer.PointerPressed += OnPointerPressed;
-        pointer.PointerMoved += OnPointerMoved;
-        pointer.PointerReleased += OnPointerReleased;
-        pointer.PointerExited += OnPointerReleased;
-
+        // On non-Windows platforms, PanGestureRecognizer is the primary drag
+        // mechanism. MAUI's PanGestureRecognizer reliably tracks TotalX/TotalY
+        // deltas across Android, iOS, and MacCatalyst. The PointerGestureRecognizer
+        // is omitted because its PointerMoved/Released events race with Pan's
+        // lifecycle and add no value — Pan handles start/running/end cleanly.
         var pan = new PanGestureRecognizer();
         pan.PanUpdated += OnPanUpdated;
 
-        view.GestureRecognizers.Add(pointer);
         view.GestureRecognizers.Add(pan);
 
-        view.SetValue(StateProperty, new DragState { PointerGesture = pointer, PanGesture = pan, OwnerView = view });
+        view.SetValue(StateProperty, new DragState { PanGesture = pan, OwnerView = view });
 #endif
     }
 
@@ -119,15 +115,6 @@ public sealed class WorkflowNodeDragBehavior
 #else
         if (view.GetValue(StateProperty) is DragState state)
         {
-            if (state.PointerGesture is not null)
-            {
-                state.PointerGesture.PointerPressed -= OnPointerPressed;
-                state.PointerGesture.PointerMoved -= OnPointerMoved;
-                state.PointerGesture.PointerReleased -= OnPointerReleased;
-                state.PointerGesture.PointerExited -= OnPointerReleased;
-                view.GestureRecognizers.Remove(state.PointerGesture);
-            }
-
             if (state.PanGesture is not null)
             {
                 state.PanGesture.PanUpdated -= OnPanUpdated;
@@ -271,77 +258,24 @@ public sealed class WorkflowNodeDragBehavior
 
     private static void OnPointerPressed(object? sender, PointerEventArgs e)
     {
-#if WINDOWS
-        return;
-#else
-        if (sender is View view && view.GetValue(StateProperty) is DragState state)
-        {
-            state.ActiveButton = e.Button;
-            if (state.ActiveButton != ButtonsMask.Primary)
-            {
-                state.IsDragging = false;
-                state.CoordinateHost = null;
-                return;
-            }
-
-            var coordinateHost = ResolveCoordinateHost(view);
-            var position = e.GetPosition(coordinateHost);
-            if (coordinateHost is null || position is null)
-            {
-                state.IsDragging = false;
-                state.CoordinateHost = null;
-                return;
-            }
-
-            state.CoordinateHost = coordinateHost;
-            state.LastX = position.Value.X;
-            state.LastY = position.Value.Y;
-            state.LastPanX = 0d;
-            state.LastPanY = 0d;
-            state.IsDragging = true;
-            IsDraggingNode = true;
-            TryCapturePointer(view, e);
-        }
-#endif
+        // No-op: PointerGestureRecognizer is only used on Windows via platform hooks.
+        // On non-Windows, PanGestureRecognizer handles the full drag lifecycle.
     }
 
     private static void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-#if WINDOWS
-        return;
-#else
-        if (sender is not View view || view.GetValue(StateProperty) is not DragState state || !state.IsDragging || state.CoordinateHost is null)
-        {
-            return;
-        }
-
-        var position = e.GetPosition(state.CoordinateHost);
-        if (position is not null)
-        {
-            state.LastX = position.Value.X;
-            state.LastY = position.Value.Y;
-        }
-#endif
+        // No-op: see OnPointerPressed.
     }
 
     private static void OnPointerReleased(object? sender, PointerEventArgs e)
     {
-#if WINDOWS
-        return;
-#else
-        if (sender is View view && view.GetValue(StateProperty) is DragState state)
-        {
-            TryReleasePointer(view, e);
-            ResetDragState(state);
-        }
-#endif
+        // No-op: see OnPointerPressed.
     }
 
     private static void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
     {
-#if WINDOWS
-        return;
-#else
+        // This handler is only subscribed on non-Windows platforms.
+        // On Windows, native PointerRoutedEvents handle node dragging.
         if (sender is not View view || view.GetValue(StateProperty) is not DragState state)
         {
             return;
@@ -357,6 +291,10 @@ public sealed class WorkflowNodeDragBehavior
                 IsDraggingNode = true;
                 break;
             case GestureStatus.Running:
+                // PanGestureRecognizer always fires Started first, so the
+                // !state.IsDragging branch below is defensive only — it
+                // handles the theoretical case where Running fires without
+                // a preceding Started event on some MAUI platforms.
                 if (!state.IsDragging)
                 {
                     state.CoordinateHost ??= ResolveCoordinateHost(view);
@@ -390,7 +328,6 @@ public sealed class WorkflowNodeDragBehavior
                 ResetDragState(state);
                 break;
         }
-#endif
     }
 
 #if WINDOWS

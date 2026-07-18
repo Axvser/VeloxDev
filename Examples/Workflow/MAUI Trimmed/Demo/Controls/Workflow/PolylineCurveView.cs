@@ -1,6 +1,8 @@
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
+
 namespace Demo.Controls;
 
-public sealed class PolylineCurveView : GraphicsView
+public sealed class PolylineCurveView : GraphicsView, IWorkflowLinkRenderView
 {
     public static readonly BindableProperty StartLeftProperty = BindableProperty.Create(nameof(StartLeft), typeof(double), typeof(PolylineCurveView), 0d, propertyChanged: OnInvalidateRequested);
     public static readonly BindableProperty StartTopProperty = BindableProperty.Create(nameof(StartTop), typeof(double), typeof(PolylineCurveView), 0d, propertyChanged: OnInvalidateRequested);

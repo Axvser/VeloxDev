@@ -99,4 +99,71 @@ public class CanvasLayoutTests
         Assert.AreEqual(3000d, layout.ActualSize.Width);
         Assert.AreEqual(2000d, layout.ActualSize.Height);
     }
+
+    [TestMethod]
+    public void ViewportOffset_DefaultIsZero()
+    {
+        var layout = new CanvasLayout();
+        Assert.AreEqual(0d, layout.ViewportOffset.Horizontal);
+        Assert.AreEqual(0d, layout.ViewportOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void ViewportOffset_CanBeSet()
+    {
+        var layout = new CanvasLayout();
+        layout.ViewportOffset = new Offset(150, 300);
+        Assert.AreEqual(150d, layout.ViewportOffset.Horizontal);
+        Assert.AreEqual(300d, layout.ViewportOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void ViewportOffset_DoesNotAffectActualSize()
+    {
+        var layout = new CanvasLayout();
+        layout.ViewportOffset = new Offset(200, 400);
+        Assert.AreEqual(1920d, layout.ActualSize.Width);
+        Assert.AreEqual(1080d, layout.ActualSize.Height);
+    }
+
+    [TestMethod]
+    public void ViewportOffset_DoesNotAffectActualOffset()
+    {
+        var layout = new CanvasLayout();
+        layout.NegativeOffset = new Offset(50, 30);
+        layout.ViewportOffset = new Offset(200, 400);
+        Assert.AreEqual(50d, layout.ActualOffset.Horizontal);
+        Assert.AreEqual(30d, layout.ActualOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void Clone_PreservesViewportOffset()
+    {
+        var layout = new CanvasLayout
+        {
+            OriginSize = new Size(800, 600),
+            PositiveOffset = new Offset(10, 20),
+            NegativeOffset = new Offset(30, 40),
+            ViewportOffset = new Offset(100, 200)
+        };
+        var clone = (CanvasLayout)layout.Clone();
+        Assert.AreEqual(100d, clone.ViewportOffset.Horizontal);
+        Assert.AreEqual(200d, clone.ViewportOffset.Vertical);
+
+        clone.ViewportOffset = new Offset(300, 400);
+        Assert.AreEqual(100d, layout.ViewportOffset.Horizontal);
+        Assert.AreEqual(200d, layout.ViewportOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void AdaptTo_PreservesViewportOffset()
+    {
+        var layout = new CanvasLayout
+        {
+            ViewportOffset = new Offset(100, 200)
+        };
+        var adapted = layout.AdaptTo(new Size(3000, 2000));
+        Assert.AreEqual(100d, adapted.ViewportOffset.Horizontal);
+        Assert.AreEqual(200d, adapted.ViewportOffset.Vertical);
+    }
 }

@@ -11,6 +11,13 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
     [VeloxProperty] private Size actualSize = new(1920, 1080);
     [VeloxProperty] private Offset actualOffset = new(0, 0);
 
+    /// <summary>
+    /// Last known viewport top-left position relative to the origin content area.
+    /// Updated by the adapter whenever the visible region changes (scroll, pan, or resize).
+    /// Used on deserialization to restore the user's previous viewing position.
+    /// </summary>
+    [VeloxProperty] private Offset viewportOffset = new(0, 0);
+
     public CanvasLayout AdaptTo(
         Size targetOriginSize,
         out double suggestedViewportX,
@@ -21,6 +28,7 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
             OriginSize     = new Size(targetOriginSize.Width, targetOriginSize.Height),
             PositiveOffset = new Offset(PositiveOffset.Horizontal, PositiveOffset.Vertical),
             NegativeOffset = new Offset(NegativeOffset.Horizontal, NegativeOffset.Vertical),
+            ViewportOffset = new Offset(ViewportOffset.Horizontal, ViewportOffset.Vertical),
         };
 
         var newActualWidth  = targetOriginSize.Width  + PositiveOffset.Horizontal + NegativeOffset.Horizontal;
@@ -45,7 +53,8 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
     {
         OriginSize = new Size(this.OriginSize.Width, this.OriginSize.Height),
         PositiveOffset = new Offset(this.PositiveOffset.Horizontal, this.PositiveOffset.Vertical),
-        NegativeOffset = new Offset(this.NegativeOffset.Horizontal, this.NegativeOffset.Vertical)
+        NegativeOffset = new Offset(this.NegativeOffset.Horizontal, this.NegativeOffset.Vertical),
+        ViewportOffset = new Offset(this.ViewportOffset.Horizontal, this.ViewportOffset.Vertical),
     };
 
     public override bool Equals(object? obj)

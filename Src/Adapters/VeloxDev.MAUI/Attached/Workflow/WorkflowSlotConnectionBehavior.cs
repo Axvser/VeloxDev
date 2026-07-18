@@ -315,7 +315,11 @@ public sealed class WorkflowSlotConnectionBehavior
 
     private static IWorkflowSlotViewModel? FindReceiver(ActiveConnection active)
     {
-        if (active.CoordinateHost is not Element host)
+        // Iterate canvas children directly (they are node ContentViews) rather than
+        // using recursive FindDescendants over the entire visual tree. Slot views
+        // live inside node ContentViews, so we only need to descend one level into
+        // each node's content to find Views with WorkflowSlotConnectionBehavior.
+        if (active.CoordinateHost is not AbsoluteLayout canvas)
         {
             return null;
         }
@@ -324,30 +328,80 @@ public sealed class WorkflowSlotConnectionBehavior
         IWorkflowSlotViewModel? receiver = null;
         var nearestDistance = double.MaxValue;
 
-        foreach (var view in FindDescendants<View>(host))
+        foreach (var child in canvas.Children)
         {
-            if (!GetIsEnabled(view)
-                || !view.IsVisible
-                || view.BindingContext is not IWorkflowSlotViewModel slot
-                || ReferenceEquals(slot, active.SourceSlot)
-                || !ReferenceEquals(slot.Parent?.Parent, active.Tree)
-                || !SynchronizeSlotAnchor(view, active.CoordinateHost, slot))
+            if (child is not View nodeView)
             {
                 continue;
             }
 
-            var dx = slot.Anchor.Horizontal - active.Pointer.Horizontal;
-            var dy = slot.Anchor.Vertical - active.Pointer.Vertical;
-            var distance = (dx * dx) + (dy * dy);
-            var radius = Math.Max(minimumRadius, Math.Max(view.Width, view.Height));
-            if (distance <= radius * radius && distance < nearestDistance)
+            if (GetIsEnabled(nodeView) && nodeView.BindingContext is IWorkflowSlotViewModel directSlot)
             {
-                receiver = slot;
-                nearestDistance = distance;
+                // Slot view is a direct child of the canvas (unusual but supported).
+                TryMatchSlot(nodeView, directSlot, active, minimumRadius,
+                    ref receiver, ref nearestDistance);
+            }
+            else
+            {
+                // Walk into the node's subtree to find slot views.
+                FindSlotInSubtree(nodeView, active, minimumRadius,
+                    ref receiver, ref nearestDistance);
             }
         }
 
         return receiver;
+    }
+
+    private static void FindSlotInSubtree(
+        Element root,
+        ActiveConnection active,
+        double minimumRadius,
+        ref IWorkflowSlotViewModel? receiver,
+        ref double nearestDistance)
+    {
+        foreach (var next in EnumerateChildren(root))
+        {
+            if (next is View view
+                && GetIsEnabled(view)
+                && view.BindingContext is IWorkflowSlotViewModel slot)
+            {
+                TryMatchSlot(view, slot, active, minimumRadius,
+                    ref receiver, ref nearestDistance);
+            }
+
+            if (next is Element child)
+            {
+                FindSlotInSubtree(child, active, minimumRadius,
+                    ref receiver, ref nearestDistance);
+            }
+        }
+    }
+
+    private static void TryMatchSlot(
+        View view,
+        IWorkflowSlotViewModel slot,
+        ActiveConnection active,
+        double minimumRadius,
+        ref IWorkflowSlotViewModel? receiver,
+        ref double nearestDistance)
+    {
+        if (!view.IsVisible
+            || ReferenceEquals(slot, active.SourceSlot)
+            || !ReferenceEquals(slot.Parent?.Parent, active.Tree)
+            || !SynchronizeSlotAnchor(view, active.CoordinateHost, slot))
+        {
+            return;
+        }
+
+        var dx = slot.Anchor.Horizontal - active.Pointer.Horizontal;
+        var dy = slot.Anchor.Vertical - active.Pointer.Vertical;
+        var distance = (dx * dx) + (dy * dy);
+        var radius = Math.Max(minimumRadius, Math.Max(view.Width, view.Height));
+        if (distance <= radius * radius && distance < nearestDistance)
+        {
+            receiver = slot;
+            nearestDistance = distance;
+        }
     }
 
     private static void CancelActiveConnection()

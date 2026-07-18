@@ -18,7 +18,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.MAUI</Title>
-		<Version>6.0.0</Version>
+		<Version>6.0.3</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + MAUI</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -32,7 +32,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.0" />
-		<PackageReference Include="VeloxDev.Core" Version="6.0.2" />
+		<PackageReference Include="VeloxDev.Core" Version="6.0.3" />
 	</ItemGroup>
 
 </Project>

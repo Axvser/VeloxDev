@@ -12,6 +12,13 @@ public sealed class WorkflowSlotLayoutBehavior
         public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
         public bool SyncPending { get; set; }
         public HashSet<string> SlotPropertyNames { get; } = [];
+
+        /// <summary>
+        /// Coalescing timer that fires once per frame after layout settles.
+        /// Replaces nested BeginInvoke which had fragile ordering dependencies
+        /// on the dispatcher queue across different MAUI platforms.
+        /// </summary>
+        public IDispatcherTimer? SyncTimer { get; set; }
     }
 
     public static readonly BindableProperty IsEnabledProperty = BindableProperty.CreateAttached(
@@ -87,8 +94,6 @@ public sealed class WorkflowSlotLayoutBehavior
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.BindingContextChanged += OnBindingContextChanged;
-        control.PropertyChanged += OnControlPropertyChanged;
-        control.SizeChanged += OnSizeChanged;
         UpdatePropertyChangedSubscription(control);
         ScheduleSync(control);
     }
@@ -98,14 +103,20 @@ public sealed class WorkflowSlotLayoutBehavior
         control.Loaded -= OnLoaded;
         control.Unloaded -= OnUnloaded;
         control.BindingContextChanged -= OnBindingContextChanged;
-        control.PropertyChanged -= OnControlPropertyChanged;
-        control.SizeChanged -= OnSizeChanged;
 
-        if (control.GetValue(StateProperty) is LayoutState state
-            && state.PropertyChangedSource is not null
-            && state.PropertyChangedHandler is not null)
+        if (control.GetValue(StateProperty) is LayoutState state)
         {
-            state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
+            if (state.SyncTimer is not null)
+            {
+                state.SyncTimer.Stop();
+                state.SyncTimer = null;
+            }
+
+            if (state.PropertyChangedSource is not null
+                && state.PropertyChangedHandler is not null)
+            {
+                state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
+            }
         }
 
         control.ClearValue(StateProperty);
@@ -124,6 +135,10 @@ public sealed class WorkflowSlotLayoutBehavior
         if (sender is ContentView control && control.GetValue(StateProperty) is LayoutState state)
         {
             state.SyncPending = false;
+            if (state.SyncTimer is not null)
+            {
+                state.SyncTimer.Stop();
+            }
         }
     }
 
@@ -136,33 +151,6 @@ public sealed class WorkflowSlotLayoutBehavior
 
         UpdatePropertyChangedSubscription(control);
         ScheduleSync(control);
-    }
-
-    private static void OnSizeChanged(object? sender, EventArgs e)
-    {
-        if (sender is ContentView control)
-        {
-            ScheduleSync(control);
-        }
-    }
-
-    private static void OnControlPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (sender is not ContentView control)
-        {
-            return;
-        }
-
-        if (e.PropertyName is nameof(VisualElement.X)
-            or nameof(VisualElement.Y)
-            or nameof(VisualElement.Width)
-            or nameof(VisualElement.Height)
-            or nameof(VisualElement.TranslationX)
-            or nameof(VisualElement.TranslationY)
-            or nameof(VisualElement.IsVisible))
-        {
-            ScheduleSync(control);
-        }
     }
 
     private static void UpdatePropertyChangedSubscription(ContentView control)
@@ -206,27 +194,42 @@ public sealed class WorkflowSlotLayoutBehavior
 
         state.SyncPending = true;
 
-        // Two-level dispatch is required to fix a MAUI-specific race condition:
-        // WorkflowSlotLayoutBehavior and ViewManager both subscribe to node.PropertyChanged.
-        // SlotLayoutBehavior subscribes first (via BindingContextChanged), so its
-        // BeginInvokeOnMainThread(Sync) is queued before ViewManager's
-        // BeginInvokeOnMainThread(ApplyLayout/SetLayoutBounds).
-        // The outer dispatch joins the current queue; the inner dispatch runs only after
-        // ApplyLayout has already updated AbsoluteLayout.LayoutBounds, so GetLocationOnScreen
-        // reads the correct (new) position rather than the stale element.X/Y.
-        MainThread.BeginInvokeOnMainThread(() =>
+        // Use an IDispatcherTimer (≈1-frame delay) instead of nested BeginInvoke.
+        // MAUI lacks WPF's DispatcherPriority.Render, so the original two-level
+        // dispatch was a fragile ordering hack that depended on queue ordering.
+        // A per-control coalescing timer:
+        //   • Naturally waits for the layout pass between ticks
+        //   • Eliminates race with ViewManager.ApplyLayout (SetLayoutBounds)
+        //   • Works consistently across Android/iOS/Windows
+        //   • Multiple rapid requests coalesce into a single Sync call
+        // The closure is short-lived (single-shot timer), so allocation impact is
+        // negligible compared to the performance gain from eliminating the race.
+        var timer = control.Dispatcher.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(16);  // ≈1 frame
+        timer.IsRepeating = false;
+        timer.Tick += (s, e) =>
         {
-            MainThread.BeginInvokeOnMainThread(() =>
+            try
             {
+                timer.Stop();
                 if (control.GetValue(StateProperty) is not LayoutState currentState)
-                {
                     return;
-                }
 
                 currentState.SyncPending = false;
+                currentState.SyncTimer = null;
                 Sync(control);
-            });
-        });
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // IDispatcherTimer.Tick exceptions are NOT caught by MAUI
+                // and bubble unhandled to WinUI's UnhandledException event.
+                // This is a known MAUI/WinUI gap (dotnet/maui #12245, #10341).
+                System.Diagnostics.Debug.WriteLine(
+                    $"[WorkflowSlotLayout] Sync error: {ex.Message}");
+            }
+        };
+        timer.Start();
+        state.SyncTimer = timer;
     }
 
     private static void Sync(ContentView control)
@@ -313,6 +316,7 @@ public sealed class WorkflowSlotLayoutBehavior
             return;
         }
 
+        double newX, newY;
         if (coordinateHost is not null)
         {
             var centerOnCanvas = GetCenterRelativeTo(control, coordinateHost);
@@ -321,23 +325,29 @@ public sealed class WorkflowSlotLayoutBehavior
                 return;
             }
 
-            slot.Anchor = new Anchor(
-                centerOnCanvas.Value.X,
-                centerOnCanvas.Value.Y,
-                slot.Anchor.Layer);
-            return;
+            newX = centerOnCanvas.Value.X;
+            newY = centerOnCanvas.Value.Y;
         }
-
-        var center = GetCenterRelativeTo(control, host);
-        if (center is null)
+        else
         {
-            return;
+            var center = GetCenterRelativeTo(control, host);
+            if (center is null)
+            {
+                return;
+            }
+
+            newX = node.Anchor.Horizontal + center.Value.X;
+            newY = node.Anchor.Vertical + center.Value.Y;
         }
 
-        slot.Anchor = new Anchor(
-            node.Anchor.Horizontal + center.Value.X,
-            node.Anchor.Vertical + center.Value.Y,
-            slot.Anchor.Layer);
+        // Dirty check: skip if the anchor value hasn't changed.
+        // This prevents the infinite cycle:
+        //   SyncSlot → slot.Anchor setter → PropertyChanged → ApplyLayout
+        //   → MAUI layout → SizeChanged/X/Y → ScheduleSync → SyncSlot ...
+        if (slot.Anchor.Horizontal == newX && slot.Anchor.Vertical == newY)
+            return;
+
+        slot.Anchor = new Anchor(newX, newY, slot.Anchor.Layer);
     }
 
     private static VisualElement? ResolveCoordinateHost(ContentView control, ContentView parentHost)

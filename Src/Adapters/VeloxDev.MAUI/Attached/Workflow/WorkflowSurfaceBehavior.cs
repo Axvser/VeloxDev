@@ -18,11 +18,21 @@ public sealed class WorkflowSurfaceBehavior
         public PropertyChangedEventHandler? LayoutChangedHandler { get; set; }
         public double LastPanTotalX { get; set; }
         public double LastPanTotalY { get; set; }
+        /// <summary>Tracked expected scroll position during a pan gesture.
+        /// Never read from ScrollViewer.ScrollX during running to avoid
+        /// stale intermediate positions from async ScrollToAsync.</summary>
+        public double PanAccumulatedX { get; set; }
+        /// <summary>Tracked expected scroll position during a pan gesture.</summary>
+        public double PanAccumulatedY { get; set; }
         public bool HasPendingScrollRestore { get; set; }
-        public bool IsApplyingPendingScrollRestore { get; set; }
+        public bool IsRefreshing { get; set; }
         public bool IsVisibleRegionUpdateQueued { get; set; }
         public double PendingViewportX { get; set; }
         public double PendingViewportY { get; set; }
+
+        /// <summary>Cancels the previous in-flight ScrollToAsync on each new pan delta,
+        /// preventing stack-up of outdated scroll operations.</summary>
+        public CancellationTokenSource? PanCts { get; set; }
     }
 
     public static readonly BindableProperty IsEnabledProperty = BindableProperty.CreateAttached(
@@ -96,9 +106,26 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        ApplyLayout(host, state);
-        UpdateVisibleRegion(host, state);
-        ApplyPendingScrollRestore(host, state);
+        // Re-entrancy guard: prevent cascading Refresh cycles when canvas expansion
+        // during ApplyLayout triggers Scrolled/SizeChanged which call Refresh again.
+        // Without this guard, each canvas expansion cascades 2-3 Refresh calls,
+        // compounding into a positive-feedback slowdown spiral.
+        if (state.IsRefreshing)
+        {
+            return;
+        }
+
+        state.IsRefreshing = true;
+        try
+        {
+            ApplyLayout(host, state);
+            UpdateVisibleRegion(host, state);
+            ApplyPendingScrollRestore(host, state);
+        }
+        finally
+        {
+            state.IsRefreshing = false;
+        }
     }
 
     public static void RequestViewportRestore(ContentView host, double viewportX, double viewportY)
@@ -301,6 +328,8 @@ public sealed class WorkflowSurfaceBehavior
             state.PointerPressSource.GestureRecognizers.Remove(state.PanGesture);
         }
 
+        state.PanCts?.Cancel();
+        state.PanCts = null;
         state.ScrollViewer = null;
         state.Canvas = null;
         state.GridDecorator = null;
@@ -320,7 +349,24 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         state.LayoutNotifier = notifier;
-        state.LayoutChangedHandler = (_, _) => Refresh(control);
+        state.LayoutChangedHandler = (_, e) =>
+        {
+            // Only react to OriginSize changes which can happen outside of
+            // scroll/pan (e.g. AdaptTo, programmatic resize).  During pan,
+            // PositiveOffset/NegativeOffset change on every frame but those
+            // are already handled by ApplyPanAsync calling ApplyLayout +
+            // UpdateVisibleRegion directly.  Reacting to them here would
+            // triple the work per pan frame (LayoutChangedHandler fires,
+            // then OnScrolled fires from ScrollToAsync), causing cascading
+            // slowdown.
+            // ViewportOffset is also filtered to avoid the circular update
+            // where ApplyVisibleRegion sets ViewportOffset which would
+            // trigger another Refresh.
+            if (e.PropertyName is nameof(CanvasLayout.OriginSize))
+            {
+                Refresh(control);
+            }
+        };
         notifier.PropertyChanged += state.LayoutChangedHandler;
     }
 
@@ -415,12 +461,22 @@ public sealed class WorkflowSurfaceBehavior
         var actualSize = viewModel.Layout.ActualSize;
 
         state.Canvas.Margin = new Thickness(0);
+        // Canvas-level TranslationX shifts ALL children simultaneously, keeping
+        // nodes, links, and grid in perfect sync on every frame.
+        // Per-child TranslationX (tried previously) causes frame-level desync
+        // between decorator updates and child transforms.
+        // WidthRequest is set in the SAME call from model data (not XAML binding
+        // which adds async lag), avoiding the clipping that motivated the per-child
+        // experiment.
         state.Canvas.TranslationX = actualOffset.Horizontal;
         state.Canvas.TranslationY = actualOffset.Vertical;
-        // Use actualSize only â€” it already includes all offset extents.
-        // Adding actualOffset would double-count and cause runaway growth.
-        state.Canvas.WidthRequest = Math.Max(1, actualSize.Width);
-        state.Canvas.HeightRequest = Math.Max(1, actualSize.Height);
+
+        if (state.Canvas.WidthRequest < actualSize.Width ||
+            double.IsNaN(state.Canvas.WidthRequest))
+            state.Canvas.WidthRequest = Math.Max(1, actualSize.Width);
+        if (state.Canvas.HeightRequest < actualSize.Height ||
+            double.IsNaN(state.Canvas.HeightRequest))
+            state.Canvas.HeightRequest = Math.Max(1, actualSize.Height);
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
@@ -428,38 +484,53 @@ public sealed class WorkflowSurfaceBehavior
 
     private static async void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
     {
-        if (sender is not BindableObject bindable)
+        try
         {
-            return;
-        }
+            if (sender is not BindableObject bindable)
+            {
+                return;
+            }
 
-        var host = FindAncestorContentView(bindable);
-        if (host is null || host.GetValue(StateProperty) is not SurfaceState state || state.ScrollViewer is null)
-        {
-            return;
-        }
+            var host = FindAncestorContentView(bindable);
+            if (host is null || host.GetValue(StateProperty) is not SurfaceState state || state.ScrollViewer is null)
+            {
+                return;
+            }
 
-        switch (e.StatusType)
-        {
-            case GestureStatus.Started:
-                state.LastPanTotalX = 0;
-                state.LastPanTotalY = 0;
-                break;
-            case GestureStatus.Running:
-                if (WorkflowNodeDragBehavior.IsDraggingNode || WorkflowSlotConnectionBehavior.IsDraggingConnection)
-                {
-                    state.LastPanTotalX = e.TotalX;
-                    state.LastPanTotalY = e.TotalY;
+            switch (e.StatusType)
+            {
+                case GestureStatus.Started:
+                    state.LastPanTotalX = 0;
+                    state.LastPanTotalY = 0;
+                    state.PanAccumulatedX = state.ScrollViewer.ScrollX;
+                    state.PanAccumulatedY = state.ScrollViewer.ScrollY;
                     break;
-                }
+                case GestureStatus.Running:
+                    if (WorkflowNodeDragBehavior.IsDraggingNode || WorkflowSlotConnectionBehavior.IsDraggingConnection)
+                    {
+                        state.LastPanTotalX = e.TotalX;
+                        state.LastPanTotalY = e.TotalY;
+                        state.PanAccumulatedX = state.ScrollViewer.ScrollX;
+                        state.PanAccumulatedY = state.ScrollViewer.ScrollY;
+                        break;
+                    }
 
-                await ApplyPanAsync(host, state, e).ConfigureAwait(false);
-                break;
-            case GestureStatus.Canceled:
-            case GestureStatus.Completed:
-                state.LastPanTotalX = 0;
-                state.LastPanTotalY = 0;
-                break;
+                    await ApplyPanAsync(host, state, e);
+                    break;
+                case GestureStatus.Canceled:
+                case GestureStatus.Completed:
+                    state.LastPanTotalX = 0;
+                    state.LastPanTotalY = 0;
+                    state.PanAccumulatedX = 0;
+                    state.PanAccumulatedY = 0;
+                    state.PanCts?.Cancel();
+                    state.PanCts = null;
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[WorkflowSurfaceBehavior] Pan error: {ex.Message}");
         }
     }
 
@@ -471,16 +542,30 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
+        // Cancel any previous in-flight ScrollToAsync to prevent cascading.
+        state.PanCts?.Cancel();
+        state.PanCts = new CancellationTokenSource();
+        var ct = state.PanCts.Token;
+
         var deltaX = e.TotalX - state.LastPanTotalX;
         var deltaY = e.TotalY - state.LastPanTotalY;
         state.LastPanTotalX = e.TotalX;
         state.LastPanTotalY = e.TotalY;
 
-        var newOffsetX = state.ScrollViewer.ScrollX - deltaX;
-        var newOffsetY = state.ScrollViewer.ScrollY - deltaY;
+        // Use tracked accumulated position instead of reading ScrollViewer.ScrollX
+        // directly. ScrollToAsync is async and ScrollX may be at an intermediate
+        // position during the gesture, causing the next delta calculation to be
+        // based on a stale scroll position ¡ª which manifests as a visual flash-back.
+        var newOffsetX = state.PanAccumulatedX - deltaX;
+        var newOffsetY = state.PanAccumulatedY - deltaY;
         var maxH = GetHorizontalScrollMaximum(state);
         var maxV = GetVerticalScrollMaximum(state);
         var layoutChanged = false;
+
+        // ©¤©¤ Expand canvas when pan reaches edge ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+        // Expansion IS the correct behavior (matching WPF).  The original crash
+        // was caused by a cascade: expansion ¡ú Refresh ¡ú more expansion.
+        // The IsRefreshing guard in Refresh() breaks this cycle.
 
         if (newOffsetX < 0)
         {
@@ -511,32 +596,60 @@ public sealed class WorkflowSurfaceBehavior
         if (layoutChanged)
         {
             ApplyLayout(host, state);
-            // Recompute max from model â€” canvas size was just updated via ApplyLayout
+            // Recompute max from model ¡ª canvas size was just updated via ApplyLayout
             // but MAUI layout is async so ScrollViewer.ContentSize is stale.
             maxH = GetHorizontalScrollMaximum(state);
             maxV = GetVerticalScrollMaximum(state);
         }
 
+        // Guard against NaN from ScrollViewer.Width/Height during async layout.
+        // Math.Max(0, NaN) = NaN, which would crash ScrollToAsync.
+        if (!double.IsFinite(maxH)) maxH = 0;
+        if (!double.IsFinite(maxV)) maxV = 0;
+
         var appliedOffsetX = Math.Max(0, Math.Min(newOffsetX, maxH));
         var appliedOffsetY = Math.Max(0, Math.Min(newOffsetY, maxV));
-        await state.ScrollViewer.ScrollToAsync(appliedOffsetX, appliedOffsetY, false).ConfigureAwait(false);
-        UpdateVisibleRegion(host, state);
+
+        // Update tracked position so the next delta calculation is correct.
+        state.PanAccumulatedX = appliedOffsetX;
+        state.PanAccumulatedY = appliedOffsetY;
+
+        try
+        {
+            await state.ScrollViewer.ScrollToAsync(appliedOffsetX, appliedOffsetY, false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Previous scroll was superseded by a newer pan delta ¡ª expected.
+            return;
+        }
+
+        if (!ct.IsCancellationRequested)
+        {
+            UpdateVisibleRegion(host, state);
+        }
     }
+
+
 
     private static double GetHorizontalScrollMaximum(SurfaceState state)
     {
-        // MAUI layout is async â€” ContentSize may be stale after ApplyLayout.
-        // Compute max scroll from the layout model directly instead.
+        // Compute max scroll from the layout model.  Canvas size is driven
+        // by ViewModel binding (Layout.ActualSize).  The ScrollView content
+        // is the AbsoluteLayout which follows ActualSize from the binding,
+        // so ActualSize - viewportWidth gives the correct scroll extent.
         var viewModel = ResolveTreeViewModel(state.Host!, state);
         if (viewModel is null || state.ScrollViewer is null) return 0;
-        return Math.Max(0, viewModel.Layout.ActualSize.Width - state.ScrollViewer.Width);
+        var w = viewModel.Layout.ActualSize.Width - state.ScrollViewer.Width;
+        return double.IsNaN(w) || w < 0 ? 0 : w;
     }
 
     private static double GetVerticalScrollMaximum(SurfaceState state)
     {
         var viewModel = ResolveTreeViewModel(state.Host!, state);
         if (viewModel is null || state.ScrollViewer is null) return 0;
-        return Math.Max(0, viewModel.Layout.ActualSize.Height - state.ScrollViewer.Height);
+        var h = viewModel.Layout.ActualSize.Height - state.ScrollViewer.Height;
+        return double.IsNaN(h) || h < 0 ? 0 : h;
     }
 
     private static IWorkflowTreeViewModel? ResolveTreeViewModel(ContentView host, SurfaceState state)
@@ -578,11 +691,15 @@ public sealed class WorkflowSurfaceBehavior
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
+        var viewportX = state.ScrollViewer.ScrollX - viewModel.Layout.ActualOffset.Horizontal;
+        var viewportY = state.ScrollViewer.ScrollY - viewModel.Layout.ActualOffset.Vertical;
         viewModel.GetHelper().Viewport = new Viewport(
-            state.ScrollViewer.ScrollX - viewModel.Layout.ActualOffset.Horizontal,
-            state.ScrollViewer.ScrollY - viewModel.Layout.ActualOffset.Vertical,
+            viewportX, viewportY,
             state.ScrollViewer.Width,
             state.ScrollViewer.Height);
+
+        // Persist the viewport position so it survives serialization round-trip.
+        viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
     }
 
     private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state)
@@ -616,45 +733,54 @@ public sealed class WorkflowSurfaceBehavior
 
     private static void ApplyPendingScrollRestore(ContentView host, SurfaceState state)
     {
-        if (!state.HasPendingScrollRestore || state.IsApplyingPendingScrollRestore || state.ScrollViewer is null)
+        if (!state.HasPendingScrollRestore || state.ScrollViewer is null)
         {
             return;
         }
 
-        state.IsApplyingPendingScrollRestore = true;
-        MainThread.BeginInvokeOnMainThread(async () =>
+        state.HasPendingScrollRestore = false;
+
+        // Dispatch async restoration via IDispatcher to avoid async void.
+        // The Task is fire-and-forget but will not silently swallow exceptions.
+        _ = host.Dispatcher.DispatchAsync(() => ApplyPendingScrollRestoreCore(host, state));
+    }
+
+    private static async Task ApplyPendingScrollRestoreCore(ContentView host, SurfaceState state)
+    {
+        try
         {
-            try
+            if (state.ScrollViewer is null)
             {
-                await Task.Yield();
-
-                if (state.ScrollViewer is null)
-                {
-                    return;
-                }
-
-                var viewModel = ResolveTreeViewModel(host, state);
-                if (viewModel is null)
-                {
-                    return;
-                }
-
-                var targetX = state.PendingViewportX + viewModel.Layout.ActualOffset.Horizontal;
-                var targetY = state.PendingViewportY + viewModel.Layout.ActualOffset.Vertical;
-                targetX = Math.Max(0, Math.Min(targetX, GetHorizontalScrollMaximum(state)));
-                targetY = Math.Max(0, Math.Min(targetY, GetVerticalScrollMaximum(state)));
-                if (Math.Abs(state.ScrollViewer.ScrollX - targetX) > 0.5 || Math.Abs(state.ScrollViewer.ScrollY - targetY) > 0.5)
-                {
-                    await state.ScrollViewer.ScrollToAsync(targetX, targetY, false);
-                }
-
-                UpdateVisibleRegion(host, state);
+                return;
             }
-            finally
+
+            // Yield once so that any pending layout pass (from ApplyLayout called
+            // before this method) settles, ensuring ActualOffset is up-to-date.
+            await Task.Yield();
+
+            var viewModel = ResolveTreeViewModel(host, state);
+            if (viewModel is null)
             {
-                state.HasPendingScrollRestore = false;
-                state.IsApplyingPendingScrollRestore = false;
+                return;
             }
-        });
+
+            var targetX = state.PendingViewportX + viewModel.Layout.ActualOffset.Horizontal;
+            var targetY = state.PendingViewportY + viewModel.Layout.ActualOffset.Vertical;
+            targetX = Math.Max(0, Math.Min(targetX, GetHorizontalScrollMaximum(state)));
+            targetY = Math.Max(0, Math.Min(targetY, GetVerticalScrollMaximum(state)));
+
+            if (Math.Abs(state.ScrollViewer.ScrollX - targetX) > 0.5
+                || Math.Abs(state.ScrollViewer.ScrollY - targetY) > 0.5)
+            {
+                await state.ScrollViewer.ScrollToAsync(targetX, targetY, false);
+            }
+
+            UpdateVisibleRegion(host, state);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[WorkflowSurfaceBehavior] ScrollRestore error: {ex.Message}");
+        }
     }
 }

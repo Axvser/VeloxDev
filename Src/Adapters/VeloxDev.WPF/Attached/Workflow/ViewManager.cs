@@ -61,7 +61,7 @@ public sealed class ViewManager(Panel panel)
                 {
                     foreach (var item in e.NewItems.OfType<object>())
                     {
-                        _pendingViews.RemoveAll(x => ReferenceEquals(x, item));
+                        RemoveReference(_pendingViews, item);
                         _pendingViews.Add(item);
                     }
                     ScheduleNextBatchRender();
@@ -73,7 +73,7 @@ public sealed class ViewManager(Panel panel)
                 {
                     foreach (var item in e.OldItems.OfType<object>())
                     {
-                        _pendingViews.RemoveAll(x => ReferenceEquals(x, item));
+                        RemoveReference(_pendingViews, item);
                         HideViewFor(item);
                     }
                 }
@@ -101,6 +101,15 @@ public sealed class ViewManager(Panel panel)
         public static readonly ReferenceEqualityComparer Instance = new();
         public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
         public int GetHashCode(object obj) => RuntimeHelpers.GetHashCode(obj);
+    }
+
+    private static void RemoveReference(List<object> list, object item)
+    {
+        for (int i = list.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(list[i], item))
+                list.RemoveAt(i);
+        }
     }
 
     private void ScheduleNextBatchRender()

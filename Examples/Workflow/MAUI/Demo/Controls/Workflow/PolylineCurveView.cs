@@ -1,6 +1,8 @@
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
+
 namespace Demo.Controls;
 
-public sealed class PolylineCurveView : GraphicsView
+public sealed class PolylineCurveView : GraphicsView, IWorkflowLinkRenderView
 {
     public static readonly BindableProperty StartLeftProperty = BindableProperty.Create(nameof(StartLeft), typeof(double), typeof(PolylineCurveView), 0d, propertyChanged: OnInvalidateRequested);
     public static readonly BindableProperty StartTopProperty = BindableProperty.Create(nameof(StartTop), typeof(double), typeof(PolylineCurveView), 0d, propertyChanged: OnInvalidateRequested);
@@ -41,9 +43,7 @@ public sealed class PolylineCurveView : GraphicsView
     {
         TranslationX = -ContentOffsetX;
         TranslationY = -ContentOffsetY;
-    }
-
-    private sealed class PolylineDrawable(PolylineCurveView owner) : IDrawable
+    }    private sealed class PolylineDrawable(PolylineCurveView owner) : IDrawable
     {
         public void Draw(ICanvas canvas, RectF dirtyRect)
         {

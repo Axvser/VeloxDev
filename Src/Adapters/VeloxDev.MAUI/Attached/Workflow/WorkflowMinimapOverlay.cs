@@ -252,15 +252,22 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         if (tree.Nodes is not null)
             foreach (var node in tree.Nodes)
             {
-                var (nx, ny, nw, nh) = (node.Anchor.Horizontal, node.Anchor.Vertical, node.Size.Width, node.Size.Height);
+                var (nx, ny, nw, nh) = (
+                    double.IsNaN(node.Anchor.Horizontal) ? 0 : node.Anchor.Horizontal,
+                    double.IsNaN(node.Anchor.Vertical) ? 0 : node.Anchor.Vertical,
+                    Math.Max(1, node.Size.Width),
+                    Math.Max(1, node.Size.Height));
                 _lastNodeRects.Add((nx, ny, nw, nh));
                 var nr = BoundsRect.FromNode(nx, ny, nw, nh);
                 if (first) { gb = nr; first = false; } else gb = BoundsRect.Union(gb, nr);
             }
         _lastGlobalBounds = gb;
 
-        _lastViewport = BoundsRect.FromNode(ScrollOffsetX - ContentOffsetX, ScrollOffsetY - ContentOffsetY,
-            Math.Max(1, ViewportWidth), Math.Max(1, ViewportHeight));
+        var vpX = double.IsNaN(ScrollOffsetX - ContentOffsetX) ? 0 : ScrollOffsetX - ContentOffsetX;
+        var vpY = double.IsNaN(ScrollOffsetY - ContentOffsetY) ? 0 : ScrollOffsetY - ContentOffsetY;
+        var vpW = double.IsNaN(ViewportWidth) ? 1 : Math.Max(1, ViewportWidth);
+        var vpH = double.IsNaN(ViewportHeight) ? 1 : Math.Max(1, ViewportHeight);
+        _lastViewport = BoundsRect.FromNode(vpX, vpY, vpW, vpH);
     }
 
     private void ClearCache()
@@ -277,16 +284,38 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         var gb = _lastGlobalBounds;
         _drawGb = gb;
         var minSz = Math.Max(1f, (float)MinimapMinSize);
+
+        // availWidth/Height can be NaN from WidthRequest during layout transitions.
+        if (float.IsNaN(availWidth) || float.IsNaN(availHeight))
+        {
+            _mmW = minSz;
+            _mmH = minSz;
+            _sc = 1f;
+            _ox = 0f;
+            _oy = 0f;
+            return;
+        }
+
         _mmW = Math.Max(minSz, Math.Min((float)MinimapWidth, availWidth));
         _mmH = Math.Max(minSz, Math.Min((float)MinimapHeight, availHeight));
         var pad = (float)Math.Max(0, ContentPadding);
         var drawW = _mmW - pad * 2;
         var drawH = _mmH - pad * 2;
-        _sc = Math.Min(drawW / Math.Max(1, (float)gb.Width), drawH / Math.Max(1, (float)gb.Height));
+
+        // Guard against NaN from BoundsRect values that may not be initialized.
+        var scW = drawW / Math.Max(1f, (float)gb.Width);
+        var scH = drawH / Math.Max(1f, (float)gb.Height);
+        _sc = float.IsNaN(scW) || float.IsNaN(scH) || float.IsInfinity(scW) || float.IsInfinity(scH)
+            ? 1f : Math.Min(scW, scH);
+
         var sw = (float)gb.Width * _sc;
         var sh = (float)gb.Height * _sc;
         _ox = pad + (drawW - sw) / 2;
         _oy = pad + (drawH - sh) / 2;
+
+        // Final NaN guard for _ox/_oy — if they're NaN all hit-testing breaks.
+        if (float.IsNaN(_ox)) _ox = 0f;
+        if (float.IsNaN(_oy)) _oy = 0f;
     }
 
     // ── Touch input ──────────────────────────────────────────────────────────
@@ -295,20 +324,37 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     /// Returns the viewport rectangle's render position in minimap coordinates,
     /// clamped so it always stays within the minimap's visible area.
     /// This is the position used for drawing AND hit testing.
+    /// All return values are guaranteed non-NaN.
     /// </summary>
     private (float X, float Y, float W, float H) GetClampedViewportRect()
     {
         var vp = _lastViewport;
         var gb = _lastGlobalBounds;
-        if (vp.IsEmpty || gb.IsEmpty || _sc <= 0)
+        if (vp.IsEmpty || gb.IsEmpty || _sc <= 0 || float.IsNaN(_sc))
             return (0, 0, 0, 0);
 
-        var w = Math.Max(2f, (float)(vp.Width * _sc));
-        var h = Math.Max(2f, (float)(vp.Height * _sc));
-        var x = Math.Max(0, Math.Min(_mmW - w, _ox + (float)((vp.Left - gb.Left) * _sc)));
-        var y = Math.Max(0, Math.Min(_mmH - h, _oy + (float)((vp.Top - gb.Top) * _sc)));
-        return (x, y, w, h);
+        var w = Math.Max(2f, SafeFloatMul(vp.Width, _sc));
+        var h = Math.Max(2f, SafeFloatMul(vp.Height, _sc));
+        if (float.IsNaN(w) || float.IsNaN(h))
+            return (0, 0, 0, 0);
+
+        var rawX = _ox + (float)((vp.Left - gb.Left) * _sc);
+        var rawY = _oy + (float)((vp.Top - gb.Top) * _sc);
+        if (float.IsNaN(rawX) || float.IsNaN(rawY))
+            return (0, 0, 0, 0);
+
+        var x = Math.Max(0f, Math.Min(_mmW - w, rawX));
+        var y = Math.Max(0f, Math.Min(_mmH - h, rawY));
+        return (float.IsNaN(x) ? 0f : x, float.IsNaN(y) ? 0f : y, w, h);
     }
+
+    /// <summary>Safe float multiplication guarding against NaN.</summary>
+    private static float SafeFloatMul(double a, double b)
+        => double.IsNaN(a) || double.IsNaN(b) ? 0f : (float)(a * b);
+
+    /// <summary>Returns a safe dimension value, guarding against NaN and <=0.</summary>
+    private static double SafeDim(double value, double fallback)
+        => double.IsNaN(value) || value <= 0 ? fallback : value;
 
     private bool GetViewportHitTest(float px, float py)
     {
@@ -318,39 +364,60 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     private void OnStartInteraction(object? sender, TouchEventArgs e)
     {
-        if (_isDragging) return;
-        if (_pendingRefresh) RefreshMinimapData();
-        var aw = (float)Math.Max(WidthRequest, 1);
-        var ah = (float)Math.Max(HeightRequest, 1);
-        ComputeDrawing(aw, ah);
+        try
+        {
+            if (_isDragging) return;
+            if (_pendingRefresh) RefreshMinimapData();
+            var aw = (float)SafeDim(WidthRequest, 1);
+            var ah = (float)SafeDim(HeightRequest, 1);
+            ComputeDrawing(aw, ah);
 
-        var pt = e.Touches[0];
-        if (!GetViewportHitTest(pt.X, pt.Y)) return;
+            if (e.Touches is null || e.Touches.Length == 0) return;
+            var pt = e.Touches[0];
+            if (!GetViewportHitTest(pt.X, pt.Y)) return;
 
-        // Use the CLAMPED rendering position for drag offset calculation,
-        // so dragging the rectangle at the minimap edge works correctly.
-        var (l, t, w, h) = GetClampedViewportRect();
-        _dragOffsetX = pt.X - (l + w / 2);
-        _dragOffsetY = pt.Y - (t + h / 2);
-        NavigateToWorld(pt.X - _dragOffsetX, pt.Y - _dragOffsetY);
-        _isDragging = true;
+            var (l, t, w, h) = GetClampedViewportRect();
+            _dragOffsetX = pt.X - (l + w / 2);
+            _dragOffsetY = pt.Y - (t + h / 2);
+            NavigateToWorld(pt.X - _dragOffsetX, pt.Y - _dragOffsetY);
+            _isDragging = true;
 
-        // Subscribe to pointer events on the Page (covers full window)
-        // so drag continues even when the pointer leaves the minimap.
-        SubscribeDragCapture();
+            SubscribeDragCapture();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // GraphicsView touch events can fire with stale/empty Touches on WinUI
+            // (dotnet/maui #13452).  This is non-fatal.
+            System.Diagnostics.Debug.WriteLine($"[Minimap] StartInteraction error: {ex.Message}");
+        }
     }
 
     private void OnDragInteraction(object? sender, TouchEventArgs e)
     {
-        if (!_isDragging) return;
-        var pt = e.Touches[0];
-        NavigateToWorld(pt.X - _dragOffsetX, pt.Y - _dragOffsetY);
+        try
+        {
+            if (!_isDragging) return;
+            if (e.Touches is null || e.Touches.Length == 0) return;
+            var pt = e.Touches[0];
+            NavigateToWorld(pt.X - _dragOffsetX, pt.Y - _dragOffsetY);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Minimap] DragInteraction error: {ex.Message}");
+        }
     }
 
     private void OnEndInteraction(object? sender, TouchEventArgs e)
     {
-        _isDragging = false;
-        UnsubscribeDragCapture();
+        try
+        {
+            _isDragging = false;
+            UnsubscribeDragCapture();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Minimap] EndInteraction error: {ex.Message}");
+        }
     }
 
     private void SubscribeDragCapture()
@@ -466,10 +533,19 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         UnsubscribeDragCapture();
     }
 
-    private CancellationTokenSource? _scrollCts;
+    // ── Input / drag ─────────────────────────────────────────────────────────
+
     private float _lastScrollX = float.MinValue;
     private float _lastScrollY = float.MinValue;
 
+    /// <summary>
+    /// Navigate the main workflow viewport to world coordinates (adjX, adjY).
+    /// When the target scroll position exceeds the current canvas bounds, the
+    /// canvas model expands (PositiveOffset/NegativeOffset) and ApplyLayout
+    /// translates the content accordingly.  The IsRefreshing guard in
+    /// WorkflowSurfaceBehavior prevents the cascade that caused the original
+    /// crash — expansion is safe now.
+    /// </summary>
     private void NavigateToWorld(float adjX, float adjY)
     {
         if (_drawGb.IsEmpty || _sc <= 0) return;
@@ -479,9 +555,18 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         var scrollY = (wcy - (float)ViewportHeight / 2) + (float)ContentOffsetY;
         if (_scrollView is null || WorkflowTree?.Layout is not { } layout) return;
 
-        var maxH = (float)Math.Max(0, _scrollView.ContentSize.Width - _scrollView.Width);
-        var maxV = (float)Math.Max(0, _scrollView.ContentSize.Height - _scrollView.Height);
+        var contentW = _scrollView.ContentSize.Width;
+        var contentH = _scrollView.ContentSize.Height;
+        var svW = _scrollView.Width;
+        var svH = _scrollView.Height;
+
+        // Expand canvas model when drag reaches edge.  The binding
+        // {Binding Layout.ActualSize.Width} picks up the change and
+        // triggers a MAUI layout pass — one per expansion is acceptable.
         bool layoutChanged = false;
+
+        var maxH = ComputeMaxScroll(contentW, svW);
+        var maxV = ComputeMaxScroll(contentH, svH);
 
         if (scrollX < 0)
         {
@@ -533,39 +618,70 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             }
         }
 
-        // Only scroll when there's meaningful change or layout was expanded
-        var clampedX = Math.Max(0, Math.Min(scrollX, maxH));
-        var clampedY = Math.Max(0, Math.Min(scrollY, maxV));
+        // Recompute max after expansion (model just grew).
+        if (layoutChanged)
+        {
+            maxH = ComputeMaxScroll(
+                _scrollView.ContentSize.Width, _scrollView.Width);
+            maxV = ComputeMaxScroll(
+                _scrollView.ContentSize.Height, _scrollView.Height);
+        }
 
-        // Throttle: skip ScrollToAsync if the target position hasn't changed
-        // meaningfully since the last call. This avoids flooding MAUI's layout
-        // system during continuous minimap drag.
-        if (!layoutChanged &&
-            Math.Abs(clampedX - _lastScrollX) < 2f &&
+        var clampedX = SafeClamp(scrollX, maxH);
+        var clampedY = SafeClamp(scrollY, maxV);
+
+        // Throttle: skip ScrollToAsync if the target hasn't changed meaningfully.
+        if (Math.Abs(clampedX - _lastScrollX) < 2f &&
             Math.Abs(clampedY - _lastScrollY) < 2f)
             return;
 
-        _lastScrollX = (float)clampedX;
-        _lastScrollY = (float)clampedY;
+        _lastScrollX = clampedX;
+        _lastScrollY = clampedY;
 
-        if (layoutChanged)
+        SafeScrollTo(_scrollView, clampedX, clampedY);
+    }
+
+    /// <summary>
+    /// Compute max scroll offset from content and viewport dimensions,
+    /// fully guarded against NaN/zero/infinity from async MAUI layout.
+    /// </summary>
+    private static float ComputeMaxScroll(double content, double viewport)
+    {
+        if (double.IsNaN(content) || content <= 0 ||
+            double.IsNaN(viewport) || viewport <= 0)
+            return 0f;
+        return (float)Math.Max(0, content - viewport);
+    }
+
+    /// <summary>
+    /// Clamp scroll offset within valid range, guarding against NaN/Infinity
+    /// that may propagate from intermediate layout state.
+    /// </summary>
+    private static float SafeClamp(double value, double max)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value)) return 0f;
+        if (double.IsNaN(max) || double.IsInfinity(max)) return 0f;
+        return (float)Math.Max(0, Math.Min(value, max));
+    }
+
+    /// <summary>
+    /// Call ScrollToAsync with exception protection.  NaN/Infinity values
+    /// cause ArgumentException crashes in the native scroll viewer.
+    /// </summary>
+    private static void SafeScrollTo(ScrollView? sv, float x, float y)
+    {
+        if (sv is null) return;
+        if (float.IsNaN(x) || float.IsInfinity(x) ||
+            float.IsNaN(y) || float.IsInfinity(y))
+            return;
+        try
         {
-            // When canvas expanded, wait for layout to settle then scroll
-            _scrollCts?.Cancel();
-            _scrollCts = new CancellationTokenSource();
-            var ct = _scrollCts.Token;
-            _ = Task.Delay(16, ct).ContinueWith(async _ =>
-            {
-                if (!ct.IsCancellationRequested)
-                {
-                    await MainThread.InvokeOnMainThreadAsync(
-                        () => _scrollView?.ScrollToAsync(clampedX, clampedY, false));
-                }
-            }, ct);
+            _ = sv.ScrollToAsync(x, y, false);
         }
-        else
+        catch (ObjectDisposedException) { }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            _ = _scrollView.ScrollToAsync(clampedX, clampedY, false);
+            System.Diagnostics.Debug.WriteLine($"[Minimap] Scroll error: {ex.Message}");
         }
     }
 
@@ -573,71 +689,83 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     void IDrawable.Draw(ICanvas canvas, RectF dirtyRect)
     {
-        if (!IsMinimapVisible) return;
-        if (_pendingRefresh) RefreshMinimapData();
-
-        // Use dirtyRect for actual drawing area; fall back to WidthRequest if layout not ready
-        var w = dirtyRect.Width > 0 ? dirtyRect.Width : (float)Math.Max(WidthRequest, 1);
-        var h = dirtyRect.Height > 0 ? dirtyRect.Height : (float)Math.Max(HeightRequest, 1);
-        if (w <= 0 || h <= 0) return;
-        if (WorkflowTree?.Nodes is null || WorkflowTree.Nodes.Count == 0) return;
-
-        ComputeDrawing(w, h);
-        var gb = _drawGb;
-        if (gb.IsEmpty || gb.Width <= 0 || gb.Height <= 0 || _sc <= 0) return;
-
-        var cr = Math.Max(0, (float)MinimapCornerRadius);
-
-        // Background
-        if (MinimapBackgroundColor is not null)
-        {
-            canvas.FillColor = MinimapBackgroundColor;
-            canvas.FillRoundedRectangle(0, 0, _mmW, _mmH, cr);
-        }
-        if (MinimapBorderColor is not null)
-        {
-            canvas.StrokeColor = MinimapBorderColor;
-            canvas.StrokeSize = (float)MinimapBorderThickness;
-            canvas.DrawRoundedRectangle(0, 0, _mmW, _mmH, cr);
-        }
-
-        canvas.SaveState();
-        canvas.ClipRectangle(0, 0, _mmW, _mmH);
         try
         {
-            // Nodes
-            if (NodeFillColor is not null)
+            // MAUI GraphicsView 的 Draw 回调在 WinUI 上无异常保护
+            // (dotnet/maui #14567)。 渲染调用若抛出（例如 NaN 坐标），
+            // 异常会直接泄漏到 WinUI UnhandledException。
+            if (!IsMinimapVisible) return;
+            if (_pendingRefresh) RefreshMinimapData();
+
+            // dirtyRect.Width/Height 可能为 NaN（已知 MAUI WinUI 问题）。
+            // float/double.IsNaN 是必需的：NaN > 0 返回 false, NaN <= 0 也返回 false.
+            var dw = dirtyRect.Width;
+            var dh = dirtyRect.Height;
+            var w = (!float.IsNaN(dw) && dw > 0)
+                ? dw : (float)SafeDim(WidthRequest, 1);
+            var h = (!float.IsNaN(dh) && dh > 0)
+                ? dh : (float)SafeDim(HeightRequest, 1);
+            if (w <= 0 || h <= 0) return;
+            if (WorkflowTree?.Nodes is null || WorkflowTree.Nodes.Count == 0) return;
+
+            ComputeDrawing(w, h);
+            var gb = _drawGb;
+            if (gb.IsEmpty || gb.Width <= 0 || gb.Height <= 0 || _sc <= 0) return;
+
+            var cr = Math.Max(0, (float)MinimapCornerRadius);
+
+            if (MinimapBackgroundColor is not null)
             {
-                canvas.FillColor = NodeFillColor;
-                var ncr = Math.Max(0, (float)NodeCornerRadius);
-                foreach (var (nx, ny, nw, nh) in _lastNodeRects)
-                    canvas.FillRoundedRectangle(
-                        _ox + (float)((nx - gb.Left) * _sc),
-                        _oy + (float)((ny - gb.Top) * _sc),
-                        Math.Max(2f, (float)(nw * _sc)),
-                        Math.Max(2f, (float)(nh * _sc)), ncr);
+                canvas.FillColor = MinimapBackgroundColor;
+                canvas.FillRoundedRectangle(0, 0, _mmW, _mmH, cr);
+            }
+            if (MinimapBorderColor is not null)
+            {
+                canvas.StrokeColor = MinimapBorderColor;
+                canvas.StrokeSize = (float)MinimapBorderThickness;
+                canvas.DrawRoundedRectangle(0, 0, _mmW, _mmH, cr);
             }
 
-            // Viewport indicator — use GetClampedViewportRect for consistency
-            // with hit testing and drag interaction.
-            var (vpx, vpy, vpw, vph) = GetClampedViewportRect();
-            if (vpw > 0 && vph > 0)
+            canvas.SaveState();
+            canvas.ClipRectangle(0, 0, _mmW, _mmH);
+            try
             {
-                var ncr = Math.Max(0, (float)NodeCornerRadius);
-
-                if (ViewportFillColor is not null)
+                if (NodeFillColor is not null)
                 {
-                    canvas.FillColor = ViewportFillColor;
-                    canvas.FillRoundedRectangle(vpx, vpy, vpw, vph, ncr);
+                    canvas.FillColor = NodeFillColor;
+                    var ncr = Math.Max(0, (float)NodeCornerRadius);
+                    foreach (var (nx, ny, nw, nh) in _lastNodeRects)
+                        canvas.FillRoundedRectangle(
+                            _ox + (float)((nx - gb.Left) * _sc),
+                            _oy + (float)((ny - gb.Top) * _sc),
+                            Math.Max(2f, (float)(nw * _sc)),
+                            Math.Max(2f, (float)(nh * _sc)), ncr);
                 }
-                if (ViewportStrokeColor is not null)
+
+                var (vpx, vpy, vpw, vph) = GetClampedViewportRect();
+                if (vpw > 0 && vph > 0 && !float.IsNaN(vpx) && !float.IsNaN(vpy))
                 {
-                    canvas.StrokeColor = ViewportStrokeColor;
-                    canvas.StrokeSize = (float)ViewportStrokeThickness;
-                    canvas.DrawRoundedRectangle(vpx, vpy, vpw, vph, ncr);
+                    var ncr = Math.Max(0, (float)NodeCornerRadius);
+
+                    if (ViewportFillColor is not null)
+                    {
+                        canvas.FillColor = ViewportFillColor;
+                        canvas.FillRoundedRectangle(vpx, vpy, vpw, vph, ncr);
+                    }
+                    if (ViewportStrokeColor is not null)
+                    {
+                        canvas.StrokeColor = ViewportStrokeColor;
+                        canvas.StrokeSize = (float)ViewportStrokeThickness;
+                        canvas.DrawRoundedRectangle(vpx, vpy, vpw, vph, ncr);
+                    }
                 }
             }
+            finally { canvas.RestoreState(); }
         }
-        finally { canvas.RestoreState(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Minimap] Draw error: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 }

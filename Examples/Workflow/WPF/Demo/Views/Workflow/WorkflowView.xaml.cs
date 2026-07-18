@@ -45,9 +45,10 @@ public partial class WorkflowView : UserControl
                 using var reader = new StreamReader(stream);
                 var json = await reader.ReadToEndAsync();
                 var result = json.Deserialize<TreeViewModel>();
-                result.Layout = result.Layout.AdaptTo(
-                    new VeloxDev.WorkflowSystem.Size(1920, 1080),
-                    out double vpX, out double vpY);
+                // Preserve the saved OriginSize and viewport position.
+                result.Layout.UpdateCommand.Execute(null);
+                var vpX = result.Layout.ViewportOffset.Horizontal;
+                var vpY = result.Layout.ViewportOffset.Vertical;
 
                 UnsubscribeAutoScroll(_workflowViewModel);
                 _workflowViewModel = result;
@@ -60,8 +61,19 @@ public partial class WorkflowView : UserControl
                     if (sv is not null)
                     {
                         var offset = _workflowViewModel.Layout.ActualOffset;
-                        sv.ScrollToHorizontalOffset(vpX + offset.Horizontal);
-                        sv.ScrollToVerticalOffset(vpY + offset.Vertical);
+                        if (vpX > 0 || vpY > 0)
+                        {
+                            sv.ScrollToHorizontalOffset(Math.Max(0, vpX + offset.Horizontal));
+                            sv.ScrollToVerticalOffset(Math.Max(0, vpY + offset.Vertical));
+                        }
+                        else
+                        {
+                            var layout = _workflowViewModel.Layout;
+                            var centerX = layout.ActualSize.Width / 2.0;
+                            var centerY = layout.ActualSize.Height / 2.0;
+                            sv.ScrollToHorizontalOffset(Math.Max(0, centerX - sv.ViewportWidth / 2.0));
+                            sv.ScrollToVerticalOffset(Math.Max(0, centerY - sv.ViewportHeight / 2.0));
+                        }
                     }
                 }, System.Windows.Threading.DispatcherPriority.Loaded);
 

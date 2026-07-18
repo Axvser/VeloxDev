@@ -101,7 +101,6 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         control.DataContextChanged += OnDataContextChanged;
         control.IsVisibleChanged += OnIsVisibleChanged;
         control.LayoutUpdated += OnLayoutUpdated;
-        control.SizeChanged += OnSizeChanged;
         UpdatePropertyChangedSubscription(control);
         ScheduleSync(control);
     }
@@ -113,7 +112,6 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         control.DataContextChanged -= OnDataContextChanged;
         control.IsVisibleChanged -= OnIsVisibleChanged;
         control.LayoutUpdated -= OnLayoutUpdated;
-        control.SizeChanged -= OnSizeChanged;
 
         if (control.GetValue(StateProperty) is LayoutState state && state.PropertyChangedSource is not null)
         {
@@ -159,14 +157,6 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     }
 
     private static void OnLayoutUpdated(object? sender, EventArgs e)
-    {
-        if (sender is UserControl control)
-        {
-            ScheduleSync(control);
-        }
-    }
-
-    private static void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (sender is UserControl control)
         {

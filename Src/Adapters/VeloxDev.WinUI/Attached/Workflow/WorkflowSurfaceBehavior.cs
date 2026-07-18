@@ -410,6 +410,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             Y = viewModel.Layout.ActualOffset.Vertical
         };
 
+        // WinUI children (unlike WPF) do not bind RenderTransform to
+        // CanvasTransformBehavior.Transform; apply the offset directly to
+        // the canvas via composition transform (the layout-aware approach).
         state.Canvas.Translation = new System.Numerics.Vector3(
             (float)viewModel.Layout.ActualOffset.Horizontal,
             (float)viewModel.Layout.ActualOffset.Vertical,
@@ -453,11 +456,15 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
+        var viewportX = state.ScrollViewer.HorizontalOffset - viewModel.Layout.ActualOffset.Horizontal;
+        var viewportY = state.ScrollViewer.VerticalOffset - viewModel.Layout.ActualOffset.Vertical;
         viewModel.GetHelper().Viewport = new Viewport(
-            state.ScrollViewer.HorizontalOffset - viewModel.Layout.ActualOffset.Horizontal,
-            state.ScrollViewer.VerticalOffset - viewModel.Layout.ActualOffset.Vertical,
+            viewportX, viewportY,
             state.ScrollViewer.ViewportWidth,
             state.ScrollViewer.ViewportHeight);
+
+        // Persist the viewport position so it survives serialization round-trip.
+        viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
     }
 
     private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state)

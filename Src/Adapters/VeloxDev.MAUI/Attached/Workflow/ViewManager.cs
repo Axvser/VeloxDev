@@ -18,15 +18,18 @@ public sealed class ViewManager
     private IEnumerable<object>? _currentEnumerable;
     private bool _isSchedulingRender;
 
+    /// <summary>Maximum views to create per batch tick. Matches WPF's incremental
+    /// rendering strategy to avoid long UI freezes during initial load.</summary>
+    private const int BatchSize = 8;
+
+    /// <summary>Timer for incremental batch rendering on platforms without
+    /// DispatcherPriority.Background (all MAUI targets).</summary>
+    private IDispatcherTimer? _batchTimer;
+
     public ViewManager(Layout layout)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _layout.SizeChanged += OnLayoutSizeChanged;
-
-        if (_layout is VisualElement visualElement)
-        {
-            visualElement.PropertyChanged += OnLayoutPropertyChanged;
-        }
     }
 
     public void Attach(INotifyCollectionChanged collection)
@@ -58,10 +61,8 @@ public sealed class ViewManager
     {
         _layout.SizeChanged -= OnLayoutSizeChanged;
 
-        if (_layout is VisualElement visualElement)
-        {
-            visualElement.PropertyChanged -= OnLayoutPropertyChanged;
-        }
+        _batchTimer?.Stop();
+        _batchTimer = null;
 
         if (_currentCollection is not null)
         {
@@ -70,20 +71,20 @@ public sealed class ViewManager
             _currentEnumerable = null;
         }
 
+        _layoutApplyQueued.Clear();
         ClearAllViews();
     }
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        Log($"CollectionChanged: action={e.Action}, new={e.NewItems?.Count ?? 0}, old={e.OldItems?.Count ?? 0}, active={_activeViews.Count}, pending={_pendingViews.Count}");
         switch (e.Action)
         {
             case NotifyCollectionChangedAction.Add:
                 if (e.NewItems is not null)
                 {
-                    foreach (var item in e.NewItems.Cast<object>())
+                    foreach (object item in e.NewItems)
                     {
-                        _pendingViews.RemoveAll(x => ReferenceEquals(x, item));
+                        RemoveReference(_pendingViews, item);
                         _pendingViews.Add(item);
                     }
 
@@ -93,9 +94,9 @@ public sealed class ViewManager
             case NotifyCollectionChangedAction.Remove:
                 if (e.OldItems is not null)
                 {
-                    foreach (var item in e.OldItems.Cast<object>())
+                    foreach (object item in e.OldItems)
                     {
-                        _pendingViews.RemoveAll(x => ReferenceEquals(x, item));
+                        RemoveReference(_pendingViews, item);
                         HideViewFor(item);
                     }
                 }
@@ -128,44 +129,98 @@ public sealed class ViewManager
         }
 
         _isSchedulingRender = true;
-        MainThread.BeginInvokeOnMainThread(ProcessNextBatch);
+
+        // Use a dispatcher timer for incremental rendering instead of processing
+        // all pending views in one batch. MAUI lacks WPF's DispatcherPriority.Background,
+        // so a per-frame timer spreads view creation across multiple frames.
+        // This prevents UI freezes when loading 100+ workflow nodes.
+        _batchTimer?.Stop();
+        _batchTimer = _layout.Dispatcher.CreateTimer();
+        _batchTimer.Interval = TimeSpan.FromMilliseconds(16); // ≈1 frame
+        _batchTimer.IsRepeating = false;
+        _batchTimer.Tick += OnBatchTimerTick;
+        _batchTimer.Start();
     }
 
-    private void ProcessNextBatch()
+    private void OnBatchTimerTick(object? sender, EventArgs e)
     {
-        _isSchedulingRender = false;
-        const int batchSize = 3;
-        var processed = 0;
-
-        while (processed < batchSize && _pendingViews.Count > 0)
+        try
         {
-            var viewModel = _pendingViews[0];
-            _pendingViews.RemoveAt(0);
+            _batchTimer?.Stop();
+            _batchTimer = null;
+            _isSchedulingRender = false;
 
-            try
+            var processed = 0;
+            while (processed < BatchSize && _pendingViews.Count > 0)
             {
-                AddOrReuseView(viewModel);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Failed to create view for {viewModel.GetType()}: {ex}");
+                var viewModel = _pendingViews[0];
+                _pendingViews.RemoveAt(0);
+
+                try
+                {
+                    AddOrReuseView(viewModel);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ViewManager] Failed to create view for {viewModel.GetType()}: {ex}");
+                }
+
+                processed++;
             }
 
-            processed++;
+            if (_pendingViews.Count > 0)
+            {
+                // More views to create — schedule the next batch.
+                ScheduleNextBatchRender();
+            }
+            else if (!_slotSyncQueued)
+            {
+                // All views created — schedule a single deferred pass to sync
+                // node slot layouts (equivalent to WPF's LayoutUpdated).
+                // This avoids the per-node SizeChanged cascade that MAUI triggers.
+                _slotSyncQueued = true;
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    _slotSyncQueued = false;
+                    BatchSyncNodeSlots();
+                });
+            }
         }
-
-        if (_pendingViews.Count > 0)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            ScheduleNextBatchRender();
+            // IDispatcherTimer.Tick exceptions escape to WinUI's UnhandledException
+            // if not caught.  This is a known MAUI/WinUI limitation (dotnet/maui #12245).
+            System.Diagnostics.Debug.WriteLine($"[ViewManager] Batch error: {ex.Message}");
+        }
+    }
+
+    private void BatchSyncNodeSlots()
+    {
+        foreach (var item in _activeViews)
+        {
+            if (item.ViewModel is IWorkflowNodeViewModel
+                && item.View is ContentView nodeView)
+            {
+                WorkflowSlotLayoutBehavior.Refresh(nodeView);
+            }
         }
     }
 
     private void AddOrReuseView(object viewModel)
     {
-        if (_activeViews.Any(x => ReferenceEquals(x.ViewModel, viewModel)))
+        // Use HashSet-style lookup for O(1) duplicate check.
+        // _activeViews is a List, so we scan — but LinkBuilder deduplicates,
+        // and the pending queue filters duplicates, so this is rarely triggered.
+        if (_activeViews.Count > 0)
         {
-            Log($"AddOrReuseView.skip: {viewModel.GetType().Name}");
-            return;
+            for (int i = 0; i < _activeViews.Count; i++)
+            {
+                if (ReferenceEquals(_activeViews[i].ViewModel, viewModel))
+                {
+                    Log($"AddOrReuseView.skip: {viewModel.GetType().Name}");
+                    return;
+                }
+            }
         }
 
         var viewType = viewModel.GetType();
@@ -180,45 +235,53 @@ public sealed class ViewManager
         {
             var template = FindDataTemplate(viewModel)
                 ?? throw new InvalidOperationException($"No DataTemplate found for type: {viewType.FullName}");
-            Log($"AddOrReuseView.template: vm={viewModel.GetType().Name}, template={template.GetType().Name}");
+
             view = (View?)template.CreateContent()
                 ?? throw new InvalidOperationException($"DataTemplate returned null for {viewType.FullName}");
-            Log($"AddOrReuseView.templateContent: vm={viewModel.GetType().Name}, view={view.GetType().Name}");
 
+            view.ZIndex = viewModel is IWorkflowLinkViewModel ? -1 : 1;
             _layout.Children.Add(view);
-            Log($"AddOrReuseView.added: vm={viewModel.GetType().Name}, children={_layout.Children.Count}");
         }
         else
         {
-            // Re-add to layout when pulled from pool (removed on hide)
-            _layout.Children.Add(view);
+            // Pooled view is still a child of _layout (we don't remove on hide).
+            // Just make it visible again and re-apply the data context.
+            // Also clean any stale deferred-layout entry from its previous life.
+            _layoutApplyQueued.Remove(view);
+            view.IsVisible = true;
         }
 
         view.BindingContext = viewModel;
-        view.IsVisible = true;
         ApplyLayout(viewModel, view);
-        if (viewModel is IWorkflowNodeViewModel && view is ContentView nodeView)
-        {
-            WorkflowSlotLayoutBehavior.Refresh(nodeView);
-        }
-        view.ZIndex = viewModel is IWorkflowLinkViewModel ? -1 : 1;
+
         _activeViews.Add(new ControlItem(viewModel, view, SubscribeToLayoutChanges(viewModel, view)));
-        Log($"AddOrReuseView.bound: vm={viewModel.GetType().Name}, view={view.GetType().Name}, bounds={AbsoluteLayout.GetLayoutBounds(view)}, active={_activeViews.Count}");
     }
 
     private void HideViewFor(object viewModel)
     {
-        var item = _activeViews.FirstOrDefault(x => ReferenceEquals(x.ViewModel, viewModel));
-        if (item is null)
+        ControlItem? item = null;
+        for (int i = 0; i < _activeViews.Count; i++)
         {
-            return;
+            if (ReferenceEquals(_activeViews[i].ViewModel, viewModel))
+            {
+                item = _activeViews[i];
+                _activeViews.RemoveAt(i);
+                break;
+            }
         }
 
-        item.View.IsVisible = false;
+        if (item is null) return;
+
+        // Clean up stale deferred-layout entries so the dictionary doesn't
+        // accumulate View references over the lifetime of the workflow surface.
+        _layoutApplyQueued.Remove(item.View);
+
+        // Keep the view in _layout.Children (do NOT remove) to avoid
+        // expensive MAUI layout recalculations. Just hide and unbind.
         item.View.BindingContext = null;
+        item.View.IsVisible = false;
+        item.View.ZIndex = -100;
         UnsubscribeFromLayoutChanges(item);
-        _layout.Children.Remove(item.View);
-        Log($"HideViewFor: vm={viewModel.GetType().Name}, view={item.View.GetType().Name}");
 
         if (!_viewPool.TryGetValue(viewModel.GetType(), out var pool))
         {
@@ -227,17 +290,19 @@ public sealed class ViewManager
         }
 
         pool.Enqueue(item.View);
-        _activeViews.RemoveAll(x => ReferenceEquals(x.ViewModel, viewModel));
     }
 
     private void ResetAllViews()
     {
         foreach (var item in _activeViews)
         {
-            item.View.IsVisible = false;
+            // Clean up stale deferred-layout entries.
+            _layoutApplyQueued.Remove(item.View);
+
             item.View.BindingContext = null;
+            item.View.IsVisible = false;
+            item.View.ZIndex = -100;
             UnsubscribeFromLayoutChanges(item);
-            _layout.Children.Remove(item.View);
 
             if (!_viewPool.TryGetValue(item.ViewModel.GetType(), out var pool))
             {
@@ -257,23 +322,25 @@ public sealed class ViewManager
         _pendingViews.Clear();
     }
 
+    private bool _isLayoutApplying; // re-entrancy guard for SizeChanged cycle
+    private readonly Dictionary<View, bool> _layoutApplyQueued = [];
+    private bool _slotSyncQueued;
+
     private void OnLayoutSizeChanged(object? sender, EventArgs e)
     {
-        foreach (var item in _activeViews)
+        if (_isLayoutApplying) return;
+        _isLayoutApplying = true;
+        try
         {
-            ApplyLayout(item.ViewModel, item.View);
+            foreach (var item in _activeViews)
+            {
+                ApplyLayout(item.ViewModel, item.View);
+            }
         }
-    }
-
-    private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is not nameof(VisualElement.WidthRequest)
-            and not nameof(VisualElement.HeightRequest))
+        finally
         {
-            return;
+            _isLayoutApplying = false;
         }
-
-        OnLayoutSizeChanged(sender, EventArgs.Empty);
     }
 
     private PropertyChangedEventHandler? SubscribeToLayoutChanges(object viewModel, View view)
@@ -291,7 +358,17 @@ public sealed class ViewManager
                 or nameof(IWorkflowLinkViewModel.Receiver)
                 or nameof(IWorkflowSlotViewModel.Anchor))
             {
-                MainThread.BeginInvokeOnMainThread(() => ApplyLayout(viewModel, view));
+                // Coalesce: only dispatch ApplyLayout once per view per frame,
+                // preventing runaway cascade when layout changes trigger more
+                // PropertyChanged events which trigger more layout changes...
+                if (_layoutApplyQueued.TryGetValue(view, out var queued) && queued)
+                    return;
+                _layoutApplyQueued[view] = true;
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    _layoutApplyQueued[view] = false;
+                    ApplyLayout(viewModel, view);
+                });
             }
         };
 
@@ -323,6 +400,10 @@ public sealed class ViewManager
             case IWorkflowLinkViewModel:
                 AbsoluteLayout.SetLayoutFlags(view, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
                 AbsoluteLayout.SetLayoutBounds(view, new Rect(0, 0, Math.Max(1, GetCanvasExtent(canvas.WidthRequest, canvas.Width)), Math.Max(1, GetCanvasExtent(canvas.HeightRequest, canvas.Height))));
+                // ContentOffset cancels out Canvas.TranslationX in the link's
+                // draw math.  Setting it here avoids {x:Reference} bindings in
+                // XAML DataTemplate which cause WinUI binding exceptions.
+                SyncLinkContentOffset(view);
                 break;
             default:
                 AbsoluteLayout.SetLayoutFlags(view, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
@@ -330,6 +411,35 @@ public sealed class ViewManager
                 break;
         }
     }
+
+    /// <summary>
+    /// Synchronizes ContentOffsetX/Y on link views to match the canvas offset,
+    /// so the link's draw coordinates match the node positions after TranslationX.
+    /// Without this, links draw at world coordinates while nodes are shifted by
+    /// Canvas.TranslationX, causing a visual offset = partial clipping.
+    /// </summary>
+    private static void SyncLinkContentOffset(View view)
+    {
+        Element? current = view;
+        while (current is not null)
+        {
+            if (current.BindingContext is IWorkflowTreeViewModel tree)
+            {
+                var offset = tree.Layout.ActualOffset;
+                // PolylineCurveView uses ContentOffsetX/Y in its draw math AND
+                // sets TranslationX = -ContentOffsetX for visual offset.
+                // For GraphicsView subclasses, set via BindableProperty.
+                if (view is IWorkflowLinkRenderView linkView)
+                {
+                    linkView.ContentOffsetX = offset.Horizontal;
+                    linkView.ContentOffsetY = offset.Vertical;
+                }
+                return;
+            }
+            current = current.Parent;
+        }
+    }
+
 
     private static double GetCanvasExtent(double requested, double actual)
         => requested > 0 ? requested : actual;
@@ -395,6 +505,16 @@ public sealed class ViewManager
         return false;
     }
 
+    private static void RemoveReference(List<object> list, object item)
+    {
+        for (int i = list.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(list[i], item))
+                list.RemoveAt(i);
+        }
+    }
+
+    [Conditional("DEBUG")]
     private static void Log(string message)
         => Debug.WriteLine($"[ViewManager] {message}");
 

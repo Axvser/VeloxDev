@@ -2,7 +2,12 @@ using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
 using System.Collections.Specialized;
+using System.IO;
+using System.Windows.Input;
 using VeloxDev.AI;
+using VeloxDev.MVVM;
+using VeloxDev.MVVM.Serialization;
+using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
@@ -24,6 +29,72 @@ public partial class WorkflowView : ContentView
         var perf = PerformanceTestSession.Create().Tree;
         var session = WorkflowDemoSession.FromTree(perf);
         Session = session;
+    }
+
+    private void LoadNetworkDemo()
+    {
+        var session = WorkflowDemoSession.Create();
+        Session = session;
+    }
+
+    private async void OnSelectClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            var result = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "选择工作流文件",
+                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+                {
+                    { DevicePlatform.WinUI, [".json"] },
+                    { DevicePlatform.Android, ["application/json"] },
+                    { DevicePlatform.iOS, ["public.json"] },
+                    { DevicePlatform.MacCatalyst, ["public.json"] },
+                }),
+            });
+
+            if (result is null) return;
+
+            using var stream = await result.OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+            var success = json.TryDeserialize<TreeViewModel>(out var tree);
+
+            if (!success || tree is null)
+            {
+                await MainPage.DisplayAlert("加载失败", "文件格式不正确或解析失败。", "确定");
+                return;
+            }
+
+            tree.Layout.UpdateCommand.Execute(null);
+
+            var session = WorkflowDemoSession.FromTree(tree);
+            Session = session;
+        }
+        catch (Exception ex)
+        {
+            await MainPage.DisplayAlert("错误", $"加载文件失败：{ex.Message}", "确定");
+        }
+    }
+
+    private async void OnSaveClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            var filePath = Path.Combine(FileSystem.AppDataDirectory, "Workflow.json");
+            if (_workflowViewModel.SaveCommand is ICommand cmd)
+                cmd.Execute(filePath);
+            await MainPage.DisplayAlert("保存成功", $"工作流已保存到：{filePath}", "确定");
+        }
+        catch (Exception ex)
+        {
+            await MainPage.DisplayAlert("错误", $"保存文件失败：{ex.Message}", "确定");
+        }
+    }
+
+    private void OnLoadNetworkDemoClicked(object? sender, EventArgs e)
+    {
+        LoadNetworkDemo();
     }
 
     private void OnLoadPerformanceTestClicked(object? sender, EventArgs e)
@@ -55,11 +126,24 @@ public partial class WorkflowView : ContentView
         if (oldSession is not null)
             UnsubscribeAutoScroll(oldSession.Tree);
 
+        // Capture ViewportOffset BEFORE setting BindingContext, because
+        // BindingContext change triggers OnBindingContextChanged →
+        // Refresh → UpdateVisibleRegion, which overwrites ViewportOffset
+        // to the current (pre-restore, 0,0) scroll position.
+        var savedVpX = 0d;
+        var savedVpY = 0d;
+        if (newSession is not null)
+        {
+            savedVpX = newSession.Tree.Layout.ViewportOffset.Horizontal;
+            savedVpY = newSession.Tree.Layout.ViewportOffset.Vertical;
+        }
+
         _workflowViewModel = newSession?.Tree ?? new TreeViewModel();
-        PART_SurfaceBorder.BindingContext = _workflowViewModel;
-        PART_GridDecorator.BindingContext = _workflowViewModel;
-        PART_ScrollViewer.BindingContext = _workflowViewModel;
-        PART_Canvas.BindingContext = _workflowViewModel;
+        // MAUI propagates BindingContext through the visual tree automatically,
+        // so setting it on the ContentView root is sufficient. Do NOT set
+        // BindingContext on individual child elements — that breaks the natural
+        // inheritance chain and can cause missed binding updates.
+        BindingContext = _workflowViewModel;
 
         if (newSession is not null)
         {
@@ -67,9 +151,36 @@ public partial class WorkflowView : ContentView
             newSession.Tree.Layout.UpdateCommand.Execute(null);
         }
 
-        // Delay refresh to after layout settles
+        // Delay refresh to after layout settles, then restore the saved viewport
+        // position (or center the content if no saved position exists).
         MainThread.BeginInvokeOnMainThread(() =>
-            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
+        {
+            if (newSession is not null)
+            {
+                if (savedVpX > 0 || savedVpY > 0)
+                {
+                    // RequestViewportRestore internally calls Refresh then queues
+                    // a deferred scroll via ApplyPendingScrollRestore. The deferred
+                    // scroll uses await Task.Yield() which gives MAUI time to finish
+                    // the layout pass before scrolling.  This is more reliable than
+                    // calling ScrollToAsync directly while layout is still pending.
+                    WorkflowBehaviors.WorkflowSurfaceBehavior.RequestViewportRestore(this, savedVpX, savedVpY);
+                }
+                else
+                {
+                    // First load — center the content.
+                    WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+                    var layout = newSession.Tree.Layout;
+                    var centerX = layout.ActualSize.Width / 2.0;
+                    var centerY = layout.ActualSize.Height / 2.0;
+                    var vpW = PART_ScrollViewer.Width > 0 ? PART_ScrollViewer.Width : 100;
+                    var vpH = PART_ScrollViewer.Height > 0 ? PART_ScrollViewer.Height : 100;
+                    PART_ScrollViewer.ScrollToAsync(
+                        Math.Max(0, centerX - vpW / 2.0),
+                        Math.Max(0, centerY - vpH / 2.0), false);
+                }
+            }
+        });
     }
 
     private void SubscribeAutoScroll(TreeViewModel vm)
@@ -95,6 +206,26 @@ public partial class WorkflowView : ContentView
             helper.ConfirmationHandler = null;
             helper.ToolCalled -= OnAgentToolCalled;
             helper.VisualRefreshRequested -= OnVisualRefreshRequested;
+        }
+    }
+
+    private async void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        try
+        {
+            await Task.Yield();
+            if (_workflowViewModel.AgentLog is { Count: > 0 } log)
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    try { AgentLogScroller?.ScrollTo(log.Count - 1, position: ScrollToPosition.End, animate: false); }
+                    catch { /* UI exceptions from auto-scroll are non-fatal */ }
+                });
+            }
+        }
+        catch
+        {
+            // Swallow cross-thread setup exceptions.
         }
     }
 
@@ -225,7 +356,6 @@ public partial class WorkflowView : ContentView
     private void OnAgentToolCalled() => ScheduleRefresh();
     private void OnVisualRefreshRequested() => ScheduleRefresh();
 
-    private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => ScheduleRefresh();
     private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => ScheduleRefresh();
 
     /// <summary>
@@ -238,9 +368,41 @@ public partial class WorkflowView : ContentView
         _layoutRefreshPending = true;
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            _layoutRefreshPending = false;
-            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+            try
+            {
+                _layoutRefreshPending = false;
+                WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+            }
+            catch
+            {
+                // Swallow layout refresh exceptions during active processing.
+            }
         });
     }
 
+    // ── Agent Chat ──────────────────────────────────────────────────────────
+
+    private async void OnSendToAgent(object? sender, EventArgs e)
+    {
+        var text = AgentInput?.Text?.Trim();
+        if (string.IsNullOrEmpty(text)) return;
+        AgentInput!.Text = string.Empty;
+
+        try
+        {
+            if (_workflowViewModel.AskCommand is IVeloxCommand cmd)
+                await cmd.ExecuteAsync(text);
+            else
+                _workflowViewModel.AskCommand.Execute(text);
+        }
+        catch (Exception ex)
+        {
+            _workflowViewModel.AppendAgentLog($"❌ 发送失败：{ex.Message}");
+        }
     }
+
+    private void OnAgentInputCompleted(object? sender, EventArgs e)
+    {
+        OnSendToAgent(sender, e);
+    }
+}

@@ -76,9 +76,10 @@ public partial class WorkflowView : UserControl
         var success = json.TryDeserialize<TreeViewModel>(out var result);
         if (success && result is not null)
         {
-            result.Layout = result.Layout.AdaptTo(
-                new VeloxDev.WorkflowSystem.Size(1920, 1080),
-                out double vpX, out double vpY);
+            // Preserve the saved OriginSize and viewport position.
+            result.Layout.UpdateCommand.Execute(null);
+            var vpX = result.Layout.ViewportOffset.Horizontal;
+            var vpY = result.Layout.ViewportOffset.Vertical;
 
             UnsubscribeAutoScroll(_workflowViewModel);
             _workflowViewModel = result;
@@ -91,7 +92,21 @@ public partial class WorkflowView : UserControl
                 if (sv is not null)
                 {
                     var offset = _workflowViewModel.Layout.ActualOffset;
-                    sv.Offset = new Avalonia.Vector(vpX + offset.Horizontal, vpY + offset.Vertical);
+                    if (vpX > 0 || vpY > 0)
+                    {
+                        sv.Offset = new Avalonia.Vector(
+                            Math.Max(0, vpX + offset.Horizontal),
+                            Math.Max(0, vpY + offset.Vertical));
+                    }
+                    else
+                    {
+                        var layout = _workflowViewModel.Layout;
+                        var centerX = layout.ActualSize.Width / 2.0;
+                        var centerY = layout.ActualSize.Height / 2.0;
+                        sv.Offset = new Avalonia.Vector(
+                            Math.Max(0, centerX - sv.Viewport.Width / 2.0),
+                            Math.Max(0, centerY - sv.Viewport.Height / 2.0));
+                    }
                 }
             }, Avalonia.Threading.DispatcherPriority.Loaded);
             _manager.Show(new Notification("OK", $"Workflow Loaded From {path}"));

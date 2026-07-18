@@ -34,22 +34,14 @@
                                         StartTop="{Binding Sender.Anchor.Vertical}"
                                         EndLeft="{Binding Receiver.Anchor.Horizontal}"
                                         EndTop="{Binding Receiver.Anchor.Vertical}"
-                                        ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}"
-                                        ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}"
-                                        CanRender="{Binding IsVisible}"
-                                        WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}"
-                                        HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}" />
+                                        CanRender="{Binding IsVisible}" />
         </DataTemplate>
         <DataTemplate x:Key="VirtualLinkTemplate" x:DataType="workflow:IWorkflowLinkViewModel">
             <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
                                         StartTop="{Binding Sender.Anchor.Vertical}"
                                         EndLeft="{Binding Receiver.Anchor.Horizontal}"
                                         EndTop="{Binding Receiver.Anchor.Vertical}"
-                                        ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}"
-                                        ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}"
                                         CanRender="{Binding IsVisible}"
-                                        WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}"
-                                        HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}"
                                         LineColor="#E2E8F0"
                                         IsVirtual="True" />
         </DataTemplate>
@@ -62,54 +54,156 @@
                                          VirtualLinkTemplate="{StaticResource VirtualLinkTemplate}" />
     </ContentView.Resources>
 
-    <Grid>
-        <Border x:Name="PART_SurfaceBorder"
-                Margin="0"
-                Stroke="White"
-                StrokeThickness="1"
-                StrokeShape="RoundRectangle 3"
-                BackgroundColor="#0B1120">
-            <controls:WorkflowGridDecorator x:Name="PART_GridDecorator">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <ScrollView x:Name="PART_ScrollViewer"
-                                Grid.Row="1"
-                                Grid.Column="1"
-                                Orientation="Both"
-                                BackgroundColor="Transparent">
-                        <AbsoluteLayout x:Name="PART_Canvas"
-                                        WidthRequest="{Binding Layout.ActualSize.Width}"
-                                        HeightRequest="{Binding Layout.ActualSize.Height}"
-                                        BackgroundColor="Transparent"
-                                        behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
-                                        behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}">
-                        </AbsoluteLayout>
-                    </ScrollView>
+    <Grid ColumnDefinitions="Auto,*">
+        <!-- Sidebar -->
+        <ScrollView Grid.Column="0"
+                    BackgroundColor="#1a1a2e"
+                    Padding="8">
+            <VerticalStackLayout Spacing="6"
+                                 WidthRequest="140">
+                <Button Text="Undo"
+                        HeightRequest="40"
+                        BackgroundColor="#0f3460"
+                        TextColor="White"
+                        Command="{Binding UndoCommand}" />
+                <Button Text="Redo"
+                        HeightRequest="40"
+                        BackgroundColor="#0f3460"
+                        TextColor="White"
+                        Command="{Binding RedoCommand}" />
+                <BoxView HeightRequest="1"
+                         Color="#333344" />
+                <Button Text="Save"
+                        HeightRequest="40"
+                        BackgroundColor="#0f3460"
+                        TextColor="White"
+                        Clicked="OnSaveClicked" />
+                <Button Text="Select"
+                        HeightRequest="40"
+                        BackgroundColor="#0f3460"
+                        TextColor="White"
+                        Clicked="OnSelectClicked" />
+                <BoxView HeightRequest="1"
+                         Color="#333344" />
+                <Button Text="Load Workflow Demo"
+                        HeightRequest="40"
+                        BackgroundColor="#0f3460"
+                        TextColor="White"
+                        Clicked="OnLoadNetworkDemoClicked" />
+                <Button Text="性能测试 (1000节点)"
+                        HeightRequest="40"
+                        BackgroundColor="#0f3460"
+                        TextColor="White"
+                        Clicked="OnLoadPerformanceTestClicked" />
+                <BoxView HeightRequest="1"
+                         Color="#333344" />
+                <Label Text="节点总数："
+                       TextColor="#b0b0b0"
+                       FontSize="11"
+                       Margin="0,6,0,0" />
+                <Label Text="{Binding Nodes.Count}"
+                       TextColor="White"
+                       FontSize="13" />
+                <Label Text="可见组件数："
+                       TextColor="#b0b0b0"
+                       FontSize="11"
+                       Margin="0,6,0,0" />
+                <Label Text="{Binding Helper.VisibleItems.Count}"
+                       TextColor="White"
+                       FontSize="13" />
+                <BoxView HeightRequest="1"
+                         Color="#333344" />
+                <!-- Agent Chat -->
+                <Label Text="Agent 对话"
+                       FontAttributes="Bold"
+                       FontSize="14"
+                       TextColor="#7EC8FF"
+                       Margin="0,4,0,0" />
+                <HorizontalStackLayout Spacing="4">
+                    <Label Text="流式"
+                           TextColor="#CBD5E1"
+                           FontSize="11"
+                           VerticalTextAlignment="Center" />
+                    <Switch IsToggled="{Binding UseStreamingAgentResponse}"
+                            Scale="0.7" />
+                </HorizontalStackLayout>
+                <CollectionView x:Name="AgentLogScroller"
+                                HeightRequest="120"
+                                VerticalScrollBarVisibility="Always"
+                                ItemsSource="{Binding AgentLog}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Label Text="{Binding .}"
+                                   TextColor="#D8D8D8"
+                                   FontSize="10"
+                                   Margin="0,1" />
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                    <Entry x:Name="AgentInput"
+                           Placeholder="输入消息..."
+                           BackgroundColor="#2D2D2D"
+                           TextColor="White"
+                           FontSize="12"
+                           HeightRequest="32"
+                           Completed="OnAgentInputCompleted" />
+                    <Button Grid.Column="1"
+                            Text="发送"
+                            FontSize="12"
+                            HeightRequest="32"
+                            BackgroundColor="#0f3460"
+                            TextColor="White"
+                            Clicked="OnSendToAgent" />
                 </Grid>
-            </controls:WorkflowGridDecorator>
-        </Border>
-        <StackLayout HorizontalOptions="Start" VerticalOptions="Start" Padding="8">
-            <Button Text="性能测试 (1000节点)" Clicked="OnLoadPerformanceTestClicked" />
-        </StackLayout>
-        <!-- Minimap overlay -->
-        <behaviors:WorkflowMinimapOverlay HorizontalOptions="End"
-                                          VerticalOptions="Start"
-                                          Margin="0,36,8,0"
-                                          ScrollViewerName="PART_ScrollViewer"
-                                          WorkflowTree="{Binding Source={x:Reference PART_SurfaceBorder}, Path=BindingContext}"
-                                          ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
-                                          ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
-                                          ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
-                                          ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
-                                          ViewportWidth="{Binding Width, Source={x:Reference PART_SurfaceBorder}}"
-                                          ViewportHeight="{Binding Height, Source={x:Reference PART_SurfaceBorder}}"/>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Workflow surface -->
+        <Grid Grid.Column="1">
+            <Border x:Name="PART_SurfaceBorder"
+                    Margin="0"
+                    Stroke="White"
+                    StrokeThickness="1"
+                    StrokeShape="RoundRectangle 3"
+                    BackgroundColor="#0B1120">
+                <controls:WorkflowGridDecorator x:Name="PART_GridDecorator">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <ScrollView x:Name="PART_ScrollViewer"
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Orientation="Both"
+                                    BackgroundColor="Transparent">
+                            <AbsoluteLayout x:Name="PART_Canvas"
+                                            BackgroundColor="Transparent"
+                                            behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                                            behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}">
+                            </AbsoluteLayout>
+                        </ScrollView>
+                    </Grid>
+                </controls:WorkflowGridDecorator>
+            </Border>
+            <!-- Minimap overlay -->
+            <behaviors:WorkflowMinimapOverlay HorizontalOptions="End"
+                                              VerticalOptions="Start"
+                                              Margin="0,8,8,0"
+                                              ScrollViewerName="PART_ScrollViewer"
+                                              WorkflowTree="{Binding Source={x:Reference PART_SurfaceBorder}, Path=BindingContext}"
+                                              ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                              ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                              ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                              ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                              ViewportWidth="{Binding Width, Source={x:Reference PART_SurfaceBorder}}"
+                                              ViewportHeight="{Binding Height, Source={x:Reference PART_SurfaceBorder}}"/>
+        </Grid>
     </Grid>
 </ContentView>

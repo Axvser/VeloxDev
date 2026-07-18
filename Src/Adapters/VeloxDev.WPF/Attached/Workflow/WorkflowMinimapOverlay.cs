@@ -194,6 +194,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         IsHitTestVisible = true;
         Focusable = true;
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     protected override HitTestResult? HitTestCore(PointHitTestParameters hitTestParameters)
@@ -225,6 +226,15 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         }
     }
 
+    private void OnUnloaded(object? s, RoutedEventArgs e)
+    {
+        // Prevent memory leak: unsubscribe from all tree events and clear
+        // strong references to ViewModel objects when the overlay is removed
+        // from the visual tree (e.g. closing a tab).
+        UnsubscribeFromTree();
+        _scrollViewer = null;
+    }
+
     // ── Tree change / subscription ──────────────────────────────────────────
 
     private void OnTreeChanged(IWorkflowTreeViewModel? newTree)
@@ -251,12 +261,14 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     private void UnsubscribeFromTree()
     {
-        if (_subscribedTree is null) return;
-        if (_subscribedTree.Nodes is INotifyCollectionChanged nc) nc.CollectionChanged -= OnNodesChanged;
+        if (_subscribedTree is not null)
+        {
+            if (_subscribedTree.Nodes is INotifyCollectionChanged nc) nc.CollectionChanged -= OnNodesChanged;
+            if (_subscribedTree.Links is INotifyCollectionChanged lc) lc.CollectionChanged -= OnLinksChanged;
+        }
         foreach (var n in _subscribedNodes) if (n is INotifyPropertyChanged npc) npc.PropertyChanged -= OnNodePropChanged;
         _subscribedNodes.Clear();
 
-        if (_subscribedTree.Links is INotifyCollectionChanged lc) lc.CollectionChanged -= OnLinksChanged;
         foreach (var l in _subscribedLinks)
         {
             if (l.Sender is INotifyPropertyChanged s) s.PropertyChanged -= OnSlotPropChanged;
