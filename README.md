@@ -82,7 +82,7 @@ options. Common short aliases include:
 | Slot | `-bg` background, `-sc` standby color, `-bc` border color, `-sp` SVG path data |
 | Link | `-lc` line color, `-lt` line thickness |
 | Tree | `-bg` background, `-bb` border brush, `-bt` border thickness, `-cr` corner radius |
-| Grid decorator | `-bg` background, `-mic` minor color, `-mac` major color, `-ac` axis color, `-gs` spacing, `-mle` major interval |
+| Grid decorator | `-bg` background, `-mic` minor color, `-mac` major color, `-ac` axis color, `-gs` spacing, `-mle` major interval, `-rb` ruler background, `-rtc` ruler tick color, `-rlc` ruler label color, `-rdc` ruler divider color |
 | Minimap overlay | `-bg` background, `-bdr` border, `-nf` node fill, `-vs` viewport stroke |
 
 All templates use `-ns` for the generated namespace.

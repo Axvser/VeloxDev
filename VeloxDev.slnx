@@ -55,7 +55,7 @@
   </Folder>
   <Folder Name="/Examples/Transition/MAUI/">
     <Project Path="Examples/Transition/MAUI/Demo/Demo.csproj">
-      <Deploy Solution="Release|Any CPU" />
+      <Deploy Solution="*|Any CPU" />
     </Project>
   </Folder>
   <Folder Name="/Examples/Transition/WinForms/">
@@ -95,6 +95,10 @@
     <Project Path="Examples/Workflow/MAUI/Demo/Demo.csproj">
       <Deploy Solution="Release|Any CPU" />
     </Project>
+  </Folder>
+  <Folder Name="/Examples/Workflow/Blazor/">
+    <Project Path="Examples/Workflow/Blazor/Demo/Demo.Client/Demo.Client.csproj" />
+    <Project Path="Examples/Workflow/Blazor/Demo/Demo/Demo.csproj" />
   </Folder>
   <Folder Name="/Examples/Workflow/MAUI Trimmed/">
     <Project Path="Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj">

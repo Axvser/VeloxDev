@@ -1,0 +1,161 @@
+@page "/"
+@page "/workflow"
+@rendermode RenderMode.InteractiveServer
+@using Demo.ViewModels
+@using System.Collections.Specialized
+@using System.ComponentModel
+@implements IDisposable
+
+<PageTitle>VeloxDev Workflow — Blazor Demo</PageTitle>
+
+<div class="wf-app">
+    <!-- Sidebar -->
+    <aside class="wf-sidebar">
+        <button class="sb-btn" title="Undo" @onclick="Undo" disabled="@(_session?.Tree?.UndoCommand?.CanExecute(null) != true)">
+            ↩ Undo
+        </button>
+        <button class="sb-btn" title="Redo" @onclick="Redo" disabled="@(_session?.Tree?.RedoCommand?.CanExecute(null) != true)">
+            ↪ Redo
+        </button>
+        <button class="sb-btn" title="Save workflow as JSON" @onclick="SaveWorkflow">
+            💾 Save
+        </button>
+        <button class="sb-btn" title="Load workflow from JSON" @onclick="LoadWorkflow">
+            📂 Load
+        </button>
+        <button class="sb-btn" title="Load Performance Test (1000 nodes)" @onclick="LoadPerformanceTest">
+            🚀 Perf Test
+        </button>
+
+        <div class="sb-divider"></div>
+
+        <div class="sb-info">
+            <span>节点总数: <strong>@(_session?.Tree?.Nodes.Count ?? 0)</strong></span>
+            <span>连接数: <strong>@(_session?.Tree?.Links.Count ?? 0)</strong></span>
+        </div>
+
+        <div class="sb-divider"></div>
+
+        <!-- Agent Chat Panel -->
+        <div class="sb-panel">
+            <div class="sb-panel-header">
+                <span>Agent 对话</span>
+                <label class="sb-toggle">
+                    <input type="checkbox" checked="@_useStreaming" @onchange="OnStreamingToggle" />
+                    流式
+                </label>
+            </div>
+            <div class="sb-agent-log" @ref="_agentLogRef">
+                @if (_session?.Tree?.AgentLog is { } log)
+                {
+                    @foreach (var entry in log)
+                    {
+                        <div class="sb-log-entry">@entry</div>
+                    }
+                }
+            </div>
+            <div class="sb-agent-input-row">
+                <input class="sb-agent-input" type="text" @bind="_agentMessage"
+                       @onkeydown="OnAgentKeyDown" placeholder="输入消息..." />
+                <button class="sb-agent-send" @onclick="SendToAgent" disabled="@string.IsNullOrWhiteSpace(_agentMessage)">
+                    发送
+                </button>
+            </div>
+        </div>
+
+        <div class="sb-divider"></div>
+
+        <!-- Execution Log Panel -->
+        <div class="sb-panel">
+            <div class="sb-panel-header">
+                <span>实际执行顺序</span>
+            </div>
+            <div class="sb-exec-log" @ref="_execLogRef">
+                @if (_session?.Tree?.ExecutionLog is { } execLog)
+                {
+                    <div class="sb-log-entry">已记录: @execLog.Count</div>
+                    @foreach (var entry in execLog)
+                    {
+                        <div class="sb-log-entry">@entry</div>
+                    }
+                }
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Canvas Area -->
+    <main class="wf-main">
+        <div class="wf-toolbar">
+            <button class="tb-btn tb-run" @onclick="RunWorkflow" disabled="@(_session?.Controller?.IsActive == true)">
+                ▶ Run Flow
+            </button>
+            <button class="tb-btn tb-close" @onclick="StopWorkflow" disabled="@(_session?.Controller?.IsActive != true)">
+                ■ Close Tree
+            </button>
+            <button class="tb-btn tb-reset" @onclick="ResetDemo">
+                ↩ Reset
+            </button>
+        </div>
+
+        <div class="wf-canvas-scroll" @ref="_canvasScrollRef">
+            <div class="wf-canvas" style="width:@_canvasWidth;height:@_canvasHeight" @ref="_canvasRef">
+                <!-- Grid background via CSS -->
+                <div class="wf-grid-bg"></div>
+
+                <!-- Links layer (SVG) -->
+                <svg class="wf-links-svg"
+                     width="@_canvasWidth" height="@_canvasHeight"
+                     viewBox="0 0 @(_canvasW) @(_canvasH)">
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                                refX="9" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#60a5fa" />
+                        </marker>
+                    </defs>
+                    @if (_session?.Tree?.Links is { } links)
+                    {
+                        @foreach (var link in links)
+                        {
+                            var pts = BuildLinkPoints(link);
+                            <polyline class="wf-link-line"
+                                      points="@pts"
+                                      marker-end="url(#arrowhead)" />
+                        }
+                    }
+                </svg>
+
+                <!-- Nodes layer -->
+                @if (_session?.Tree?.Nodes is { } nodes)
+                {
+                    @foreach (var node in nodes)
+                    {
+                        var ns = GetNodeStyle(node);
+                        <div class="wf-node" style="@ns">
+                            @switch (node)
+                            {
+                                case ControllerViewModel c:
+                                    <WorkflowControllerView Controller="c" />
+                                    break;
+                                case NodeViewModel w:
+                                    <WorkflowNodeView Node="w" />
+                                    break;
+                                case BoolSelectorNodeViewModel b:
+                                    <WorkflowBoolSelectorView Selector="b" />
+                                    break;
+                                case EnumSelectorNodeViewModel e:
+                                    <WorkflowEnumSelectorView Selector="e" />
+                                    break;
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        <!-- Bottom status bar -->
+        <div class="wf-statusbar">
+            <span>Layout: @_canvasLayoutSize</span>
+            <span>@(_session?.Controller?.IsActive == true ? "● Running" : "○ Idle")</span>
+        </div>
+    </main>
+</div>

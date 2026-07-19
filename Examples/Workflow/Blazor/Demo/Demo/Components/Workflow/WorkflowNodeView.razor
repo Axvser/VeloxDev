@@ -1,0 +1,31 @@
+@using Demo.ViewModels
+@using System.ComponentModel
+@implements IDisposable
+
+<div class="node-root" style="@GetBorderStyle()">
+    <div class="node-header" style="@GetHeaderStyle()">
+        <span class="node-title">@_title</span>
+        @if (HasOrderBadge)
+        {
+            <span class="badge-order">@_orderText</span>
+        }
+        @if (HasLoadBadge)
+        {
+            <span class="badge-load">@_loadText</span>
+        }
+        <span class="node-duration" style="@GetDurationStyle()">@_duration</span>
+    </div>
+
+    <div class="node-body">
+        <label class="node-label">Delay (ms)</label>
+        <input class="node-input" type="number" value="@_delayMs" @onchange="OnDelayChanged" />
+
+        <label class="node-label">Title</label>
+        <input class="node-input" type="text" value="@_title" @onchange="OnTitleChanged" />
+
+        <label class="node-label">
+            <input type="checkbox" checked="@_autoBroadcast" @onchange="OnAutoBroadcastChanged" />
+            执行完成后自动广播到下游
+        </label>
+    </div>
+</div>

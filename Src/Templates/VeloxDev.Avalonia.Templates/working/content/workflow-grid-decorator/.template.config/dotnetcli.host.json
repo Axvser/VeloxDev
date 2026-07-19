@@ -7,6 +7,10 @@
     "majorGridColor": { "longName": "major-grid-color", "shortName": "mac" },
     "axisColor": { "longName": "axis-color", "shortName": "ac" },
     "gridSpacing": { "longName": "grid-spacing", "shortName": "gs" },
-    "majorLineEvery": { "longName": "major-line-every", "shortName": "mle" }
+    "majorLineEvery": { "longName": "major-line-every", "shortName": "mle" },
+    "rulerBackground": { "longName": "ruler-background", "shortName": "rb" },
+    "rulerTickColor": { "longName": "ruler-tick-color", "shortName": "rtc" },
+    "rulerLabelColor": { "longName": "ruler-label-color", "shortName": "rlc" },
+    "rulerDividerColor": { "longName": "ruler-divider-color", "shortName": "rdc" }
   }
 }

@@ -1,0 +1,33 @@
+@using Demo.ViewModels
+@using System.ComponentModel
+@implements IDisposable
+
+<div class="ctrl-root" style="@GetBorderStyle()">
+    <div class="ctrl-header">
+        <span>Network Flow Controller</span>
+    </div>
+    <div class="ctrl-body">
+        <label class="ctrl-label">Seed</label>
+        <input class="ctrl-input" type="text" value="@_seedValue" @onchange="OnSeedChanged" />
+        <label class="ctrl-label">Mode</label>
+        <select class="ctrl-select" @onchange="OnModeChanged">
+            @foreach (var opt in _modeOptions) { <option value="@opt" selected="@(opt == _selectedMode)">@opt</option> }
+        </select>
+        <label class="ctrl-label">Direction</label>
+        <select class="ctrl-select" @onchange="OnDirectionChanged">
+            @foreach (var opt in _directionOptions) { <option value="@opt" selected="@(opt == _selectedDirection)">@opt</option> }
+        </select>
+        <label class="ctrl-label">Scope</label>
+        <select class="ctrl-select" @onchange="OnScopeChanged">
+            @foreach (var opt in _scopeOptions) { <option value="@opt" selected="@(opt == _selectedScope)">@opt</option> }
+        </select>
+        <label class="ctrl-label">Cycle</label>
+        <select class="ctrl-select" @onchange="OnCycleChanged">
+            @foreach (var opt in _cycleOptions) { <option value="@opt" selected="@(opt == _selectedCycle)">@opt</option> }
+        </select>
+    </div>
+    <div class="ctrl-footer">
+        <button class="btn-ctrl btn-run" @onclick="RunFlow">Run Flow</button>
+        <button class="btn-ctrl btn-close" @onclick="CloseFlow">Close Tree</button>
+    </div>
+</div>

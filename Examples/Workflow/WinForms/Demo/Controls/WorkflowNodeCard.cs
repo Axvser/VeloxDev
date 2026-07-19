@@ -4,6 +4,7 @@ using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Reflection;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.Compilation;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
@@ -46,6 +47,10 @@ internal sealed class WorkflowNodeCard : UserControl
     private Label? _errorLabel;
     private Label? _responseLabel;
     private TextBox? _seedBox;
+    private ComboBox? _modeCombo;
+    private ComboBox? _directionCombo;
+    private ComboBox? _scopeCombo;
+    private ComboBox? _cycleCombo;
     private Label? _controllerDesc;
     private CheckBox? _conditionCheck;
     private ComboBox? _enumCombo;
@@ -465,23 +470,49 @@ internal sealed class WorkflowNodeCard : UserControl
         _titleLabel.Dock = DockStyle.Fill;
         _headerPanel.Controls.Add(_titleLabel);
 
+        var bodyHost = new Panel
+        {
+            Dock = DockStyle.Fill, AutoScroll = true,
+            BackColor = DarkBody, Padding = new Padding(12),
+        };
         var bodyTlp = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
-            Margin = Padding.Empty, Padding = new Padding(16), BackColor = DarkBody,
+            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1, RowCount = 11,
+            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = DarkBody,
         };
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        // Row 0-1: Seed Payload
         bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Seed Payload"), 0, 0);
         _seedBox = MakeTextBox();
         _seedBox.TextChanged += OnSeedTextChanged;
         bodyTlp.Controls.Add(_seedBox, 0, 1);
+        // Row 2-3: Mode
+        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Mode"), 0, 2);
+        _modeCombo = MakeComboBox();
+        _modeCombo.SelectedIndexChanged += OnModeChanged;
+        bodyTlp.Controls.Add(_modeCombo, 0, 3);
+        // Row 4-5: Direction
+        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Direction"), 0, 4);
+        _directionCombo = MakeComboBox();
+        _directionCombo.SelectedIndexChanged += OnDirectionChanged;
+        bodyTlp.Controls.Add(_directionCombo, 0, 5);
+        // Row 6-7: Scope
+        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Scope"), 0, 6);
+        _scopeCombo = MakeComboBox();
+        _scopeCombo.SelectedIndexChanged += OnScopeChanged;
+        bodyTlp.Controls.Add(_scopeCombo, 0, 7);
+        // Row 8-9: Cycle
+        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Cycle"), 0, 8);
+        _cycleCombo = MakeComboBox();
+        _cycleCombo.SelectedIndexChanged += OnCycleChanged;
+        bodyTlp.Controls.Add(_cycleCombo, 0, 9);
+        // Row 10: Description
         _controllerDesc = MakeLabel(Color.FromArgb(189, 189, 189), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.TopLeft);
         _controllerDesc.Dock = DockStyle.Fill;
-        bodyTlp.Controls.Add(_controllerDesc, 0, 2);
-        _bodyPanel.Controls.Add(bodyTlp);
+        bodyTlp.Controls.Add(_controllerDesc, 0, 10);
+        bodyHost.Controls.Add(bodyTlp);
+        _bodyPanel.Controls.Add(bodyHost);
 
         var footerTlp = new TableLayoutPanel
         {
@@ -619,6 +650,12 @@ internal sealed class WorkflowNodeCard : UserControl
     private void ApplyController(ControllerViewModel c)
     {
         SetText(_seedBox, c.SeedPayload);
+
+        PopulateCombo(_modeCombo, c.CompileModeOptions, c.CompileMode);
+        PopulateCombo(_directionCombo, c.CompileDirectionOptions, c.CompileDirection);
+        PopulateCombo(_scopeCombo, c.CompileScopeOptions, c.CompileScope);
+        PopulateCombo(_cycleCombo, c.CycleHandlingOptions, c.CycleHandling);
+
         if (_controllerDesc is not null)
         {
             _controllerDesc.Text = c.IsActive
@@ -627,6 +664,15 @@ internal sealed class WorkflowNodeCard : UserControl
         }
 
         OutputSlotButton?.Bind(c.OutputSlot);
+    }
+
+    private static void PopulateCombo<T>(ComboBox? combo, T[] items, T selected)
+    {
+        if (combo is null) return;
+        combo.Items.Clear();
+        foreach (var item in items)
+            _ = combo.Items.Add(item);
+        combo.SelectedItem = selected;
     }
 
     private void ApplyBoolSelector(BoolSelectorNodeViewModel b)
@@ -775,6 +821,34 @@ internal sealed class WorkflowNodeCard : UserControl
             c.SeedPayload = _seedBox.Text;
     }
 
+    private void OnModeChanged(object? sender, EventArgs e)
+    {
+        if (_updatingFromVm || _node is not ControllerViewModel c || _modeCombo is null) return;
+        if (_modeCombo.SelectedItem is CompileMode mode && c.CompileMode != mode)
+            c.CompileMode = mode;
+    }
+
+    private void OnDirectionChanged(object? sender, EventArgs e)
+    {
+        if (_updatingFromVm || _node is not ControllerViewModel c || _directionCombo is null) return;
+        if (_directionCombo.SelectedItem is CompileDirection dir && c.CompileDirection != dir)
+            c.CompileDirection = dir;
+    }
+
+    private void OnScopeChanged(object? sender, EventArgs e)
+    {
+        if (_updatingFromVm || _node is not ControllerViewModel c || _scopeCombo is null) return;
+        if (_scopeCombo.SelectedItem is CompileScope scope && c.CompileScope != scope)
+            c.CompileScope = scope;
+    }
+
+    private void OnCycleChanged(object? sender, EventArgs e)
+    {
+        if (_updatingFromVm || _node is not ControllerViewModel c || _cycleCombo is null) return;
+        if (_cycleCombo.SelectedItem is CycleHandling cycle && c.CycleHandling != cycle)
+            c.CycleHandling = cycle;
+    }
+
     private void OnConditionChanged(object? sender, EventArgs e)
     {
         if (_updatingFromVm || _node is not BoolSelectorNodeViewModel node || _conditionCheck is null) return;
@@ -834,6 +908,7 @@ internal sealed class WorkflowNodeCard : UserControl
         _delayBox = _titleBox = _seedBox = null;
         _autoBroadcastCheck = _conditionCheck = null;
         _enumCombo = null;
+        _modeCombo = _directionCombo = _scopeCombo = _cycleCombo = null;
         _runCountLabel = _waitCountLabel = _traceLabel = _statusLabel = _bodyDuration = null;
         _errorLabel = _responseLabel = _controllerDesc = null;
         _outputSlotsLayout = null;

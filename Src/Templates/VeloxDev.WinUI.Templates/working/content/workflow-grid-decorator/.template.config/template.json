@@ -62,6 +62,34 @@
       "description": "Number of minor cells between major lines.",
       "defaultValue": "5",
       "replaces": "TemplateMajorLineEvery"
+    },
+    "rulerBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Ruler area background color.",
+      "defaultValue": "#252526",
+      "replaces": "TemplateRulerBackground"
+    },
+    "rulerTickColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Ruler tick mark color.",
+      "defaultValue": "#555555",
+      "replaces": "TemplateRulerTickColor"
+    },
+    "rulerLabelColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Ruler label text color.",
+      "defaultValue": "#888888",
+      "replaces": "TemplateRulerLabelColor"
+    },
+    "rulerDividerColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Divider line between ruler and content area.",
+      "defaultValue": "#3A3D40",
+      "replaces": "TemplateRulerDividerColor"
     }
   },
   "primaryOutputs": [

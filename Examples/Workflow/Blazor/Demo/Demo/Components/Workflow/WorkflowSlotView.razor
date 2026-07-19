@@ -1,0 +1,17 @@
+@using VeloxDev.WorkflowSystem
+
+@if (Slot is not null)
+{
+    <div class="wf-slot @GetStateClass()"
+         data-slot-id="@GetSlotId()">
+        <svg width="16" height="16" viewBox="0 0 20 20">
+            <circle cx="10" cy="10" r="7"
+                    fill="@GetFillColor()"
+                    stroke="@GetStrokeColor()"
+                    stroke-width="1.5" />
+            <circle cx="10" cy="10" r="3"
+                    fill="@GetInnerColor()"
+                    stroke="none" />
+        </svg>
+    </div>
+}

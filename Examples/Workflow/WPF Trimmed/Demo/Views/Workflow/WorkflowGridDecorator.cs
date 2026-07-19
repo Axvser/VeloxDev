@@ -11,14 +11,14 @@ public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 
-    private static readonly Brush SurfaceBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#141922"));
-    private static readonly Brush RulerBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1C2330"));
-    private static readonly Brush LabelBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#94A3B8"));
-    private static readonly Pen MinorGridPen = CreateFrozenPen("#223043", 1);
-    private static readonly Pen MajorGridPen = CreateFrozenPen("#31445C", 1);
-    private static readonly Pen AxisPen = CreateFrozenPen("#38BDF8", 1.2);
-    private static readonly Pen TickPen = CreateFrozenPen("#64748B", 1);
-    private static readonly Pen DividerPen = CreateFrozenPen("#475569", 1);
+    private static readonly Brush SurfaceBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E1E1E"));
+    private static readonly Brush RulerBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252526"));
+    private static readonly Brush LabelBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888"));
+    private static readonly Pen MinorGridPen = CreateFrozenPen("#2A2D2E", 1);
+    private static readonly Pen MajorGridPen = CreateFrozenPen("#3A3D40", 1);
+    private static readonly Pen AxisPen = CreateFrozenPen("#4D4D4D", 1.2);
+    private static readonly Pen TickPen = CreateFrozenPen("#555555", 1);
+    private static readonly Pen DividerPen = CreateFrozenPen("#3A3D40", 1);
     private static readonly Typeface LabelTypeface = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
 
     public static readonly DependencyProperty RulerThicknessProperty =
@@ -241,7 +241,7 @@ public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
 
     private static void DrawLabel(DrawingContext context, double value, Point point)
     {
-        var text = Math.Round(value).ToString(CultureInfo.InvariantCulture);
+        var text = FormatGridValue(value);
         var formattedText = new FormattedText(
             text,
             CultureInfo.InvariantCulture,
@@ -252,6 +252,22 @@ public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
             1.0);
 
         context.DrawText(formattedText, point);
+    }
+
+    private static string FormatGridValue(double value)
+    {
+        var abs = Math.Abs(value);
+        if (abs < 10000)
+        {
+            return Math.Round(value).ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (abs < 1000000)
+        {
+            return Math.Round(value / 1000d, 1).ToString(CultureInfo.InvariantCulture) + "K";
+        }
+
+        return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
     }
 
     private static bool IsMajorLine(double value, double majorStep)

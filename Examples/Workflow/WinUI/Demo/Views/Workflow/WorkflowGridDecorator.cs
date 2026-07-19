@@ -296,7 +296,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
             if (isMajor)
             {
-                AddLabel(_topRulerLayer, Math.Round(value).ToString(CultureInfo.InvariantCulture), x + 3, 2);
+                AddLabel(_topRulerLayer, Math.Round(value).ToString(CultureInfo.InvariantCulture), x + 3, (ruler - 10) / 2);
             }
         }
 

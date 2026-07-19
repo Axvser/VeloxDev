@@ -67,7 +67,14 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             canvas.FillRectangle(0, 0, (float)ruler, dirtyRect.Height);
 
             var contentRect = new RectF((float)ruler, (float)ruler, Math.Max(0, dirtyRect.Width - (float)ruler), Math.Max(0, dirtyRect.Height - (float)ruler));
-            DrawGrid(canvas, contentRect);
+            if (contentRect.Width > 0 && contentRect.Height > 0)
+            {
+                canvas.SaveState();
+                canvas.ClipRectangle(contentRect);
+                DrawGrid(canvas, contentRect);
+                canvas.RestoreState();
+            }
+
             DrawRulers(canvas, dirtyRect, contentRect, ruler);
             canvas.RestoreState();
         }
@@ -114,6 +121,8 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             canvas.DrawLine((float)ruler, 0, (float)ruler, bounds.Height);
             canvas.DrawLine(0, (float)ruler, bounds.Width, (float)ruler);
 
+            canvas.SaveState();
+            canvas.ClipRectangle(new RectF((float)ruler, 0, contentRect.Width, (float)ruler));
             var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
@@ -124,10 +133,13 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
                 canvas.DrawLine(x, (float)ruler, x, (float)(ruler - tickLength));
                 if (isMajor)
                 {
-                    DrawLabel(canvas, value, x + 3, 2);
+                    DrawLabel(canvas, value, x + 3, 10f);
                 }
             }
+            canvas.RestoreState();
 
+            canvas.SaveState();
+            canvas.ClipRectangle(new RectF(0, (float)ruler, (float)ruler, contentRect.Height));
             var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
@@ -141,19 +153,38 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
                     DrawLabel(canvas, value, 3, y + 2);
                 }
             }
+            canvas.RestoreState();
         }
 
         private static void DrawLabel(ICanvas canvas, double value, float x, float y)
         {
             canvas.FontSize = 10;
             canvas.FontColor = Color.FromArgb("#94A3B8");
-            canvas.DrawString(Math.Round(value).ToString(CultureInfo.InvariantCulture), x, y, HorizontalAlignment.Left);
+            canvas.DrawString(FormatGridValue(value), x, y, HorizontalAlignment.Left);
+        }
+
+        private static string FormatGridValue(double value)
+        {
+            var abs = Math.Abs(value);
+            if (abs < 10000)
+            {
+                return Math.Round(value).ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (abs < 1000000)
+            {
+                return Math.Round(value / 1000d, 1).ToString(CultureInfo.InvariantCulture) + "K";
+            }
+
+            return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
         }
 
         private static bool IsMajorLine(double value, double majorStep)
-            => majorStep > 0 && Math.Abs(value % majorStep) <= MajorLineEpsilon;
+            => majorStep > 0 && (Math.Abs(value % majorStep) < MajorLineEpsilon
+                || Math.Abs(value % majorStep - majorStep) < MajorLineEpsilon
+                || Math.Abs(value % majorStep + majorStep) < MajorLineEpsilon);
 
         private static bool IsNearZero(double value)
-            => Math.Abs(value) <= MajorLineEpsilon;
+            => Math.Abs(value) < MajorLineEpsilon;
     }
 }

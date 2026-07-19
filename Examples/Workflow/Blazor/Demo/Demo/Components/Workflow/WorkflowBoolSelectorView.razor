@@ -1,0 +1,15 @@
+@using Demo.ViewModels
+@using System.ComponentModel
+@implements IDisposable
+
+<div class="bool-root">
+    <div class="bool-header">
+        <span>@_title</span>
+    </div>
+    <div class="bool-body">
+        <label class="bool-label">
+            <input type="checkbox" checked="@_condition" @onchange="OnConditionChanged" />
+            Condition = True
+        </label>
+    </div>
+</div>

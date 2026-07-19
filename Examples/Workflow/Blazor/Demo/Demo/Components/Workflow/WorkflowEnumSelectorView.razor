@@ -1,0 +1,18 @@
+@using Demo.ViewModels
+@using System.ComponentModel
+@implements IDisposable
+
+<div class="enum-root">
+    <div class="enum-header">
+        <span>@_title</span>
+    </div>
+    <div class="enum-body">
+        <label class="enum-label">Selected Method</label>
+        <select class="enum-select" @onchange="OnValueChanged">
+            @foreach (var opt in _items)
+            {
+                <option value="@opt" selected="@(opt == _selectedValue)">@opt</option>
+            }
+        </select>
+    </div>
+</div>

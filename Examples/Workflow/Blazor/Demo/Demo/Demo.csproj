@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+	<TargetFramework>net10.0</TargetFramework>
+	<Nullable>enable</Nullable>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<ProjectReference Include="..\Demo.Client\Demo.Client.csproj" />
+	<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+	<ProjectReference Include="..\..\..\Common\Lib\Lib.csproj" />
+	<ProjectReference Include="..\..\..\..\..\Src\Adapters\VeloxDev.Razor\VeloxDev.Razor.csproj" />
+  </ItemGroup>
+
+</Project>

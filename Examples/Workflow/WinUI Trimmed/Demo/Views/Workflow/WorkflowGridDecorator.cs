@@ -16,14 +16,14 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 
-    private static readonly SolidColorBrush SurfaceBackgroundBrush = CreateBrush("#141922");
-    private static readonly SolidColorBrush RulerBackgroundBrush = CreateBrush("#1C2330");
-    private static readonly SolidColorBrush LabelBrush = CreateBrush("#94A3B8");
-    private static readonly SolidColorBrush MinorGridBrush = CreateBrush("#223043");
-    private static readonly SolidColorBrush MajorGridBrush = CreateBrush("#31445C");
-    private static readonly SolidColorBrush AxisBrush = CreateBrush("#38BDF8");
-    private static readonly SolidColorBrush TickBrush = CreateBrush("#64748B");
-    private static readonly SolidColorBrush DividerBrush = CreateBrush("#475569");
+    private static readonly SolidColorBrush SurfaceBackgroundBrush = CreateBrush("#1E1E1E");
+    private static readonly SolidColorBrush RulerBackgroundBrush = CreateBrush("#252526");
+    private static readonly SolidColorBrush LabelBrush = CreateBrush("#888888");
+    private static readonly SolidColorBrush MinorGridBrush = CreateBrush("#2A2D2E");
+    private static readonly SolidColorBrush MajorGridBrush = CreateBrush("#3A3D40");
+    private static readonly SolidColorBrush AxisBrush = CreateBrush("#4D4D4D");
+    private static readonly SolidColorBrush TickBrush = CreateBrush("#555555");
+    private static readonly SolidColorBrush DividerBrush = CreateBrush("#3A3D40");
 
     private readonly Canvas _contentLayer;
     private readonly Canvas _topRulerLayer;
@@ -296,7 +296,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
             if (isMajor)
             {
-                AddLabel(_topRulerLayer, Math.Round(value).ToString(CultureInfo.InvariantCulture), x + 3, 2);
+                AddLabel(_topRulerLayer, value, x + 3, 2);
             }
         }
 
@@ -311,7 +311,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
             if (isMajor)
             {
-                AddLabel(_leftRulerLayer, Math.Round(value).ToString(CultureInfo.InvariantCulture), 3, y + 2);
+                AddLabel(_leftRulerLayer, value, 3, y + 2);
             }
         }
     }
@@ -329,11 +329,11 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         });
     }
 
-    private static void AddLabel(Canvas canvas, string text, double left, double top)
+    private static void AddLabel(Canvas canvas, double value, double left, double top)
     {
         var label = new TextBlock
         {
-            Text = text,
+            Text = FormatGridValue(value),
             Foreground = LabelBrush,
             FontSize = 10,
             FontWeight = FontWeights.Normal
@@ -341,6 +341,22 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         Canvas.SetLeft(label, left);
         Canvas.SetTop(label, top);
         canvas.Children.Add(label);
+    }
+
+    private static string FormatGridValue(double value)
+    {
+        var abs = Math.Abs(value);
+        if (abs < 10000)
+        {
+            return Math.Round(value).ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (abs < 1000000)
+        {
+            return Math.Round(value / 1000d, 1).ToString(CultureInfo.InvariantCulture) + "K";
+        }
+
+        return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
     }
 
     private static SolidColorBrush CreateBrush(string hex)

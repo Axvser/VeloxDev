@@ -216,7 +216,7 @@ public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
 
             if (isMajor)
             {
-                DrawLabel(context, value, new Point(x + 3, 2));
+                DrawLabel(context, value, new Point(x + 3, (ruler - 10) / 2));
             }
         }
         context.Pop();
