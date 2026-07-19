@@ -1,3 +1,4 @@
+// VeloxDev customization: Adjust drawing and hit testing here while preserving the bindable endpoint properties.
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -5,6 +6,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
+using System.Globalization;
 using VeloxDev.WorkflowSystem;
 using Windows.Foundation;
 
@@ -14,13 +16,13 @@ namespace Demo.Views.Workflow;
 /// Orthogonal (polyline) connection with golden-ratio stubs.
 /// Hover to highlight, Delete to remove.
 /// </summary>
-public sealed partial class PolylineCurveView : UserControl
+public sealed partial class LinkView : UserControl
 {
     private static readonly DoubleCollection VirtualStrokeDashArray = [4, 2];
 
     private readonly Path _path;
     private readonly Path _arrowPath;
-    private readonly SolidColorBrush _strokeBrush = new(Colors.Cyan);
+    private readonly SolidColorBrush _strokeBrush = new(ParseColor("#DDFFFFFF"));
     private readonly PathGeometry _pathGeometry = new();
     private readonly PathFigure _pathFigure = new() { IsClosed = false };
     private readonly PathGeometry _arrowGeometry = new();
@@ -31,7 +33,7 @@ public sealed partial class PolylineCurveView : UserControl
     private bool _updatePending;
     private bool _isLoaded;
 
-    public PolylineCurveView()
+    public LinkView()
     {
         InitializeComponent();
         Canvas.SetZIndex(this, -100);
@@ -48,27 +50,32 @@ public sealed partial class PolylineCurveView : UserControl
         PointerEntered += (_, _) => { IsHighlighted = true; Focus(FocusState.Pointer); };
         PointerExited += (_, _) => IsHighlighted = false;
         PointerMoved += OnHoverPointerMoved;
+        DataContextChanged += (_, _) =>
+        {
+            UpdateInteractivity();
+            ScheduleUpdate();
+        };
         UpdateInteractivity();
     }
 
     #region Dependency properties
 
     public static readonly DependencyProperty StartLeftProperty =
-        DependencyProperty.Register(nameof(StartLeft), typeof(double), typeof(PolylineCurveView), new PropertyMetadata(0d, OnChanged));
+        DependencyProperty.Register(nameof(StartLeft), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnChanged));
     public static readonly DependencyProperty StartTopProperty =
-        DependencyProperty.Register(nameof(StartTop), typeof(double), typeof(PolylineCurveView), new PropertyMetadata(0d, OnChanged));
+        DependencyProperty.Register(nameof(StartTop), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnChanged));
     public static readonly DependencyProperty EndLeftProperty =
-        DependencyProperty.Register(nameof(EndLeft), typeof(double), typeof(PolylineCurveView), new PropertyMetadata(0d, OnChanged));
+        DependencyProperty.Register(nameof(EndLeft), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnChanged));
     public static readonly DependencyProperty EndTopProperty =
-        DependencyProperty.Register(nameof(EndTop), typeof(double), typeof(PolylineCurveView), new PropertyMetadata(0d, OnChanged));
+        DependencyProperty.Register(nameof(EndTop), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnChanged));
     public static readonly DependencyProperty CanRenderProperty =
-        DependencyProperty.Register(nameof(CanRender), typeof(bool), typeof(PolylineCurveView), new PropertyMetadata(true, OnChanged));
+        DependencyProperty.Register(nameof(CanRender), typeof(bool), typeof(LinkView), new PropertyMetadata(true, OnChanged));
     public static readonly DependencyProperty IsVirtualProperty =
-        DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(PolylineCurveView), new PropertyMetadata(false, OnChanged));
+        DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnChanged));
     public static readonly DependencyProperty LineColorProperty =
-        DependencyProperty.Register(nameof(LineColor), typeof(Windows.UI.Color), typeof(PolylineCurveView), new PropertyMetadata(Colors.Cyan, OnChanged));
+        DependencyProperty.Register(nameof(LineColor), typeof(Windows.UI.Color), typeof(LinkView), new PropertyMetadata(ParseColor("#DDFFFFFF"), OnChanged));
     public static readonly DependencyProperty IsHighlightedProperty =
-        DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(PolylineCurveView), new PropertyMetadata(false, OnChanged));
+        DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnChanged));
 
     public double StartLeft { get => (double)GetValue(StartLeftProperty); set => SetValue(StartLeftProperty, value); }
     public double StartTop { get => (double)GetValue(StartTopProperty); set => SetValue(StartTopProperty, value); }
@@ -81,16 +88,24 @@ public sealed partial class PolylineCurveView : UserControl
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        var control = (PolylineCurveView)d;
+        var control = (LinkView)d;
         control.UpdateInteractivity();
         control.ScheduleUpdate();
     }
 
     private void UpdateInteractivity()
     {
-        IsHitTestVisible = !IsVirtual;
-        IsTabStop = !IsVirtual;
+        IsHitTestVisible = !IsVirtualLink;
+        IsTabStop = !IsVirtualLink;
     }
+
+    private bool IsVirtualLink
+        => IsVirtual
+            || DataContext is IWorkflowLinkViewModel
+            {
+                Sender.Parent: null,
+                Receiver.Parent: null
+            };
 
     #endregion
 
@@ -163,11 +178,11 @@ public sealed partial class PolylineCurveView : UserControl
 
         BuildPoints();
         var color = IsHighlighted ? Microsoft.UI.Colors.OrangeRed : LineColor;
-        var thickness = IsHighlighted ? 3.5 : 2.0;
+        var thickness = IsHighlighted ? 3.5 : 2;
         _strokeBrush.Color = color;
         _path.StrokeThickness = thickness;
 
-        if (IsVirtual)
+        if (IsVirtualLink)
             _path.StrokeDashArray = VirtualStrokeDashArray;
         else
             _path.StrokeDashArray = null;
@@ -181,7 +196,7 @@ public sealed partial class PolylineCurveView : UserControl
         _path.Data = _pathGeometry;
 
         // Arrowhead
-        if (!IsVirtual)
+        if (!IsVirtualLink)
         {
             var from = _points[^2];
             var tip = _points[^1];
@@ -258,6 +273,23 @@ public sealed partial class PolylineCurveView : UserControl
         double t = Math.Clamp(((p.X - a.X) * abx + (p.Y - a.Y) * aby) / len2, 0, 1);
         double px = a.X + t * abx - p.X, py = a.Y + t * aby - p.Y;
         return Math.Sqrt(px * px + py * py);
+    }
+
+    private static Windows.UI.Color ParseColor(string hex)
+    {
+        hex = hex.TrimStart('#');
+        var value = uint.Parse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        return hex.Length == 8
+            ? Windows.UI.Color.FromArgb(
+                (byte)(value >> 24),
+                (byte)(value >> 16),
+                (byte)(value >> 8),
+                (byte)value)
+            : Windows.UI.Color.FromArgb(
+                0xFF,
+                (byte)(value >> 16),
+                (byte)(value >> 8),
+                (byte)value);
     }
 
     #endregion

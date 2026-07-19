@@ -16,8 +16,8 @@
                                HeightRequest="{Binding Size.Height}" />
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
-            <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                        StartTop="{Binding Sender.Anchor.Vertical}"
+            <controls:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                               StartTop="{Binding Sender.Anchor.Vertical}"
                                         EndLeft="{Binding Receiver.Anchor.Horizontal}"
                                         EndTop="{Binding Receiver.Anchor.Vertical}"
                                         CanRender="{Binding IsVisible}" />

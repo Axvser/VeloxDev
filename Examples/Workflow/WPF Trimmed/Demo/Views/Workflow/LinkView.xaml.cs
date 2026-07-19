@@ -1,3 +1,6 @@
+// VeloxDev customization: Adjust drawing and hit testing here while preserving the bindable endpoint properties.
+using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -10,9 +13,9 @@ namespace Demo.Views.Workflow;
 /// Orthogonal (polyline) connection with golden-ratio stubs.
 /// Hover to highlight, Delete to remove.
 /// </summary>
-public partial class PolylineCurveView : UserControl
+public partial class LinkView : UserControl
 {
-    public PolylineCurveView()
+    public LinkView()
     {
         InitializeComponent();
         IsHitTestVisible = true;
@@ -22,26 +25,31 @@ public partial class PolylineCurveView : UserControl
         MouseEnter += (_, _) => { IsHighlighted = true; Focus(); };
         MouseLeave += (_, _) => IsHighlighted = false;
         MouseMove += OnHoverMouseMove;
+        DataContextChanged += (_, _) =>
+        {
+            UpdateInteractivity();
+            InvalidateVisual();
+        };
     }
 
     #region Dependency properties
 
     public static readonly DependencyProperty StartLeftProperty =
-        DependencyProperty.Register(nameof(StartLeft), typeof(double), typeof(PolylineCurveView), new PropertyMetadata(0d, OnRenderChanged));
+        DependencyProperty.Register(nameof(StartLeft), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnRenderChanged));
     public static readonly DependencyProperty StartTopProperty =
-        DependencyProperty.Register(nameof(StartTop), typeof(double), typeof(PolylineCurveView), new PropertyMetadata(0d, OnRenderChanged));
+        DependencyProperty.Register(nameof(StartTop), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnRenderChanged));
     public static readonly DependencyProperty EndLeftProperty =
-        DependencyProperty.Register(nameof(EndLeft), typeof(double), typeof(PolylineCurveView), new PropertyMetadata(0d, OnRenderChanged));
+        DependencyProperty.Register(nameof(EndLeft), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnRenderChanged));
     public static readonly DependencyProperty EndTopProperty =
-        DependencyProperty.Register(nameof(EndTop), typeof(double), typeof(PolylineCurveView), new PropertyMetadata(0d, OnRenderChanged));
+        DependencyProperty.Register(nameof(EndTop), typeof(double), typeof(LinkView), new PropertyMetadata(0d, OnRenderChanged));
     public static readonly DependencyProperty CanRenderProperty =
-        DependencyProperty.Register(nameof(CanRender), typeof(bool), typeof(PolylineCurveView), new PropertyMetadata(true, OnRenderChanged));
+        DependencyProperty.Register(nameof(CanRender), typeof(bool), typeof(LinkView), new PropertyMetadata(true, OnRenderChanged));
     public static readonly DependencyProperty IsVirtualProperty =
-        DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(PolylineCurveView), new PropertyMetadata(false, OnRenderChanged));
+        DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnRenderChanged));
     public static readonly DependencyProperty LineColorProperty =
-        DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(PolylineCurveView), new PropertyMetadata(Colors.Cyan, OnRenderChanged));
+        DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(LinkView), new PropertyMetadata((Color)ColorConverter.ConvertFromString("#DDFFFFFF"), OnRenderChanged));
     public static readonly DependencyProperty IsHighlightedProperty =
-        DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(PolylineCurveView), new PropertyMetadata(false, OnRenderChanged));
+        DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnRenderChanged));
 
     public double StartLeft { get => (double)GetValue(StartLeftProperty); set => SetValue(StartLeftProperty, value); }
     public double StartTop { get => (double)GetValue(StartTopProperty); set => SetValue(StartTopProperty, value); }
@@ -54,16 +62,24 @@ public partial class PolylineCurveView : UserControl
 
     private static void OnRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        var control = (PolylineCurveView)d;
+        var control = (LinkView)d;
         control.UpdateInteractivity();
         control.InvalidateVisual();
     }
 
     private void UpdateInteractivity()
     {
-        IsHitTestVisible = !IsVirtual;
-        Focusable = !IsVirtual;
+        IsHitTestVisible = !IsVirtualLink;
+        Focusable = !IsVirtualLink;
     }
+
+    private bool IsVirtualLink
+        => IsVirtual
+            || DataContext is IWorkflowLinkViewModel
+            {
+                Sender.Parent: null,
+                Receiver.Parent: null
+            };
 
     #endregion
 
@@ -78,10 +94,10 @@ public partial class PolylineCurveView : UserControl
         if (points.Count < 2) return;
 
         var color = IsHighlighted ? Colors.OrangeRed : LineColor;
-        var thickness = IsHighlighted ? 3.5 : 2.0;
+        var thickness = IsHighlighted ? 3.5 : 2;
         var brush = new SolidColorBrush(color);
 
-        var pen = IsVirtual
+        var pen = IsVirtualLink
             ? new Pen(brush, thickness) { DashStyle = new DashStyle(new double[] { 4, 2 }, 0) }
             : new Pen(brush, thickness);
 
@@ -95,7 +111,7 @@ public partial class PolylineCurveView : UserControl
         for (int i = 0; i < points.Count - 1; i++)
             ctx.DrawLine(pen, points[i], points[i + 1]);
 
-        if (!IsVirtual)
+        if (!IsVirtualLink)
             DrawArrowhead(ctx, points[^2], points[^1], brush, thickness);
     }
 
