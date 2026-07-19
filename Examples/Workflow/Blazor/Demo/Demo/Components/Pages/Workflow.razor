@@ -95,67 +95,81 @@
             <button class="tb-btn tb-reset" @onclick="ResetDemo">
                 ↩ Reset
             </button>
+            <span class="tb-status">@(_session?.Controller?.IsActive == true ? "● Running" : "○ Idle")</span>
+            <span class="tb-layout">Layout: @_canvasLayoutSize</span>
         </div>
 
-        <div class="wf-canvas-scroll" @ref="_canvasScrollRef">
-            <div class="wf-canvas" style="width:@_canvasWidth;height:@_canvasHeight" @ref="_canvasRef">
-                <!-- Grid background via CSS -->
-                <div class="wf-grid-bg"></div>
-
-                <!-- Links layer (SVG) -->
-                <svg class="wf-links-svg"
-                     width="@_canvasWidth" height="@_canvasHeight"
-                     viewBox="0 0 @(_canvasW) @(_canvasH)">
-                    <defs>
-                        <marker id="arrowhead" markerWidth="10" markerHeight="7"
-                                refX="9" refY="3.5" orient="auto">
-                            <polygon points="0 0, 10 3.5, 0 7" fill="#60a5fa" />
-                        </marker>
-                    </defs>
-                    @if (_session?.Tree?.Links is { } links)
-                    {
-                        @foreach (var link in links)
+        <div class="wf-canvas-wrapper" @ref="_canvasScrollRef">
+            <WorkflowGridDecorator RulerThickness="28" GridSpacing="40"
+                                   Background="#0B1120"
+                                   MinorColor="#2A2D2E"
+                                   MajorColor="#3A3D40"
+                                   AxisColor="#4D4D4D"
+                                   RulerBackground="#252526"
+                                   TickColor="#555555"
+                                   LabelColor="#888888"
+                                   DividerColor="#3A3D40">
+                <div class="wf-canvas" style="width:@_canvasWidth;height:@_canvasHeight" @ref="_canvasRef">
+                    <!-- Links layer (SVG) -->
+                    <svg class="wf-links-svg"
+                         width="@_canvasWidth" height="@_canvasHeight"
+                         viewBox="0 0 @(_canvasW) @(_canvasH)">
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                                    refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#60a5fa" />
+                            </marker>
+                        </defs>
+                        @if (_session?.Tree?.Links is { } links)
                         {
-                            var pts = BuildLinkPoints(link);
-                            <polyline class="wf-link-line"
-                                      points="@pts"
-                                      marker-end="url(#arrowhead)" />
+                            @foreach (var link in links)
+                            {
+                                var pts = BuildLinkPoints(link);
+                                <polyline class="wf-link-line"
+                                          points="@pts"
+                                          marker-end="url(#arrowhead)" />
+                            }
+                        }
+                    </svg>
+
+                    <!-- Nodes layer -->
+                    @if (_session?.Tree?.Nodes is { } nodes)
+                    {
+                        @foreach (var node in nodes)
+                        {
+                            var ns = GetNodeStyle(node);
+                            <div class="wf-node" style="@ns">
+                                @switch (node)
+                                {
+                                    case ControllerViewModel c:
+                                        <WorkflowControllerView Controller="c" />
+                                        break;
+                                    case NodeViewModel w:
+                                        <WorkflowNodeView Node="w" />
+                                        break;
+                                    case BoolSelectorNodeViewModel b:
+                                        <WorkflowBoolSelectorView Selector="b" />
+                                        break;
+                                    case EnumSelectorNodeViewModel e:
+                                        <WorkflowEnumSelectorView Selector="e" />
+                                        break;
+                                }
+                            </div>
                         }
                     }
-                </svg>
+                </div>
+            </WorkflowGridDecorator>
 
-                <!-- Nodes layer -->
-                @if (_session?.Tree?.Nodes is { } nodes)
-                {
-                    @foreach (var node in nodes)
-                    {
-                        var ns = GetNodeStyle(node);
-                        <div class="wf-node" style="@ns">
-                            @switch (node)
-                            {
-                                case ControllerViewModel c:
-                                    <WorkflowControllerView Controller="c" />
-                                    break;
-                                case NodeViewModel w:
-                                    <WorkflowNodeView Node="w" />
-                                    break;
-                                case BoolSelectorNodeViewModel b:
-                                    <WorkflowBoolSelectorView Selector="b" />
-                                    break;
-                                case EnumSelectorNodeViewModel e:
-                                    <WorkflowEnumSelectorView Selector="e" />
-                                    break;
-                            }
-                        </div>
-                    }
-                }
-            </div>
-        </div>
-
-        <!-- Bottom status bar -->
-        <div class="wf-statusbar">
-            <span>Layout: @_canvasLayoutSize</span>
-            <span>@(_session?.Controller?.IsActive == true ? "● Running" : "○ Idle")</span>
+            <WorkflowMinimapOverlay Tree="_session?.Tree"
+                                    Visible="true"
+                                    Width="180" Height="120"
+                                    ScrollOffsetX="0" ScrollOffsetY="0"
+                                    ContentOffsetX="0" ContentOffsetY="0"
+                                    ViewportWidth="800" ViewportHeight="600"
+                                    Background="#1C2330"
+                                    BorderColor="#475569"
+                                    NodeFill="#38BDF8"
+                                    ViewportStroke="#FFFFFF" />
         </div>
     </main>
 </div>

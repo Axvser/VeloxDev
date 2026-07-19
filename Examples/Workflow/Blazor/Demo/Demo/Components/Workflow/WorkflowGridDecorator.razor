@@ -1,0 +1,65 @@
+@* CSS-based grid decorator matching other platform demos *@
+@using Demo.ViewModels
+
+<div class="wf-decorator" style="--ruler:@(_ruler)px; --grid-color:@(_minorColor); --major-color:@(_majorColor); --axis-color:@(_axisColor); --ruler-bg:@(_rulerBg); --tick-color:@(_tickColor); --label-color:@(_labelColor); --divider-color:@(_dividerColor); --bg:@(_bg); --spacing:@(_spacing)px;">
+    @* Corner (empty) *@
+    <div class="wf-deco-corner" style="width:var(--ruler);height:var(--ruler);background:var(--ruler-bg);"></div>
+
+    @* Top ruler *@
+    <div class="wf-deco-top-ruler" style="height:var(--ruler);margin-left:var(--ruler);background:var(--ruler-bg);"></div>
+
+    @* Left ruler *@
+    <div class="wf-deco-left-ruler" style="width:var(--ruler);margin-top:var(--ruler);background:var(--ruler-bg);"></div>
+
+    @* Content area *@
+    <div class="wf-deco-content" style="background:var(--bg);">
+        <div class="wf-grid-bg"></div>
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public double RulerThickness { get; set; } = 28;
+
+    [Parameter]
+    public double GridSpacing { get; set; } = 40;
+
+    [Parameter]
+    public string? Background { get; set; }
+
+    [Parameter]
+    public string? MinorColor { get; set; }
+
+    [Parameter]
+    public string? MajorColor { get; set; }
+
+    [Parameter]
+    public string? AxisColor { get; set; }
+
+    [Parameter]
+    public string? RulerBackground { get; set; }
+
+    [Parameter]
+    public string? TickColor { get; set; }
+
+    [Parameter]
+    public string? LabelColor { get; set; }
+
+    [Parameter]
+    public string? DividerColor { get; set; }
+
+    private string _ruler => RulerThickness.ToString("F0");
+    private string _spacing => GridSpacing.ToString("F0");
+    private string _bg => Background ?? "#0B1120";
+    private string _minorColor => MinorColor ?? "#2A2D2E";
+    private string _majorColor => MajorColor ?? "#3A3D40";
+    private string _axisColor => AxisColor ?? "#4D4D4D";
+    private string _rulerBg => RulerBackground ?? "#252526";
+    private string _tickColor => TickColor ?? "#555555";
+    private string _labelColor => LabelColor ?? "#888888";
+    private string _dividerColor => DividerColor ?? "#3A3D40";
+}

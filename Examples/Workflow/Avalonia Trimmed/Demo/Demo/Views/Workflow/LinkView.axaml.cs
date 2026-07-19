@@ -41,7 +41,7 @@ public partial class LinkView : Control
         AvaloniaProperty.Register<LinkView, bool>(nameof(IsVirtual), false);
 
     public static readonly StyledProperty<Color> LineColorProperty =
-        AvaloniaProperty.Register<LinkView, Color>(nameof(LineColor), Colors.Cyan);
+        AvaloniaProperty.Register<LinkView, Color>(nameof(LineColor), Color.Parse("#DDFFFFFF"));
 
     public static readonly StyledProperty<double> LineThicknessProperty =
         AvaloniaProperty.Register<LinkView, double>(nameof(LineThickness), 2.0);

@@ -28,4 +28,21 @@
             执行完成后自动广播到下游
         </label>
     </div>
+
+    <div class="node-slots">
+        @if (Node?.InputSlot is not null)
+        {
+            <div class="slot-container slot-input">
+                <WorkflowSlotView Slot="Node.InputSlot" IsInput="true" />
+                <span class="slot-label">In</span>
+            </div>
+        }
+        @if (Node?.OutputSlot is not null)
+        {
+            <div class="slot-container slot-output">
+                <WorkflowSlotView Slot="Node.OutputSlot" IsOutput="true" />
+                <span class="slot-label">Out</span>
+            </div>
+        }
+    </div>
 </div>

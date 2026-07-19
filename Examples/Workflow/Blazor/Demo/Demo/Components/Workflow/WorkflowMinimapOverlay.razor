@@ -1,0 +1,112 @@
+@using Demo.ViewModels
+@using VeloxDev.WorkflowSystem
+
+@* Minimap overlay - thumbnail overview of the workflow surface *@
+@if (Visible && Tree is not null)
+{
+    <div class="wf-minimap"
+         style="width:@(Width)px; height:@(Height)px; background:@_bg; border:1px solid @_border;">
+        @if (_contentBounds is { } bounds)
+        {
+            <svg class="wf-minimap-svg" width="@Width" height="@Height" viewBox="0 0 @Width @Height">
+                @foreach (var rect in _nodeRects)
+                {
+                    <rect x="@rect.X" y="@rect.Y" width="@rect.Width" height="@rect.Height"
+                          fill="@_nodeFill" rx="1" ry="1" />
+                }
+                @if (_viewportRect is { } vp)
+                {
+                    <rect x="@vp.X" y="@vp.Y" width="@vp.Width" height="@vp.Height"
+                          stroke="@_viewportStroke" stroke-width="1.5" fill="none" />
+                }
+            </svg>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public IWorkflowTreeViewModel? Tree { get; set; }
+    [Parameter] public bool Visible { get; set; } = true;
+    [Parameter] public double Width { get; set; } = 200;
+    [Parameter] public double Height { get; set; } = 140;
+    [Parameter] public double ScrollOffsetX { get; set; }
+    [Parameter] public double ScrollOffsetY { get; set; }
+    [Parameter] public double ContentOffsetX { get; set; }
+    [Parameter] public double ContentOffsetY { get; set; }
+    [Parameter] public double ViewportWidth { get; set; }
+    [Parameter] public double ViewportHeight { get; set; }
+    [Parameter] public string? Background { get; set; }
+    [Parameter] public string? BorderColor { get; set; }
+    [Parameter] public string? NodeFill { get; set; }
+    [Parameter] public string? ViewportStroke { get; set; }
+
+    private string _bg => Background ?? "#D21922";
+    private string _border => BorderColor ?? "#DC94A3B8";
+    private string _nodeFill => NodeFill ?? "#DC38BDF8";
+    private string _viewportStroke => ViewportStroke ?? "#F0FFFFFF";
+
+    private (double MinX, double MinY, double MaxX, double MaxY, double Pad, double Scale)? _contentBounds;
+    private List<(double X, double Y, double Width, double Height)> _nodeRects = new();
+    private (double X, double Y, double Width, double Height)? _viewportRect;
+
+    protected override void OnParametersSet()
+    {
+        ComputeLayout();
+    }
+
+    private void ComputeLayout()
+    {
+        _nodeRects.Clear();
+        _viewportRect = null;
+        _contentBounds = null;
+
+        if (Tree?.Nodes is null) return;
+
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+        bool hasNode = false;
+
+        foreach (var node in Tree.Nodes)
+        {
+            double nx = node.Anchor.Horizontal;
+            double ny = node.Anchor.Vertical;
+            double nw = Math.Max(1, node.Size.Width);
+            double nh = Math.Max(1, node.Size.Height);
+            minX = Math.Min(minX, nx);
+            minY = Math.Min(minY, ny);
+            maxX = Math.Max(maxX, nx + nw);
+            maxY = Math.Max(maxY, ny + nh);
+            hasNode = true;
+        }
+
+        if (!hasNode) return;
+
+        double pad = 4;
+        double contentW = maxX - minX + pad * 2;
+        double contentH = maxY - minY + pad * 2;
+        double drawW = Width - pad * 2;
+        double drawH = Height - pad * 2;
+
+        if (contentW <= 0 || contentH <= 0 || drawW <= 0 || drawH <= 0) return;
+
+        double scale = Math.Min(drawW / contentW, drawH / contentH);
+
+        foreach (var node in Tree.Nodes)
+        {
+            double x = (node.Anchor.Horizontal - minX + pad) * scale + pad;
+            double y = (node.Anchor.Vertical - minY + pad) * scale + pad;
+            double w = Math.Max(2, node.Size.Width * scale);
+            double h = Math.Max(2, node.Size.Height * scale);
+            _nodeRects.Add((x, y, w, h));
+        }
+
+        double vx = (ScrollOffsetX - ContentOffsetX - minX + pad) * scale + pad;
+        double vy = (ScrollOffsetY - ContentOffsetY - minY + pad) * scale + pad;
+        double vw = Math.Max(4, ViewportWidth * scale);
+        double vh = Math.Max(4, ViewportHeight * scale);
+        _viewportRect = (vx, vy, vw, vh);
+        _contentBounds = (minX, minY, maxX, maxY, pad, scale);
+    }
+
+    public void Dispose() { }
+}
