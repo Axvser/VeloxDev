@@ -33,6 +33,7 @@ public partial class Workflow : ComponentBase, IDisposable
     private double _viewportW = 800;
     private double _viewportH = 600;
     private bool _jsReady;
+    private bool _minimapInit;
     private DotNetObjectReference<Workflow>? _dotNetRef;
 
     private string _canvasWidth => $"{_canvasW}px";
@@ -52,9 +53,17 @@ public partial class Workflow : ComponentBase, IDisposable
             _dotNetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("workflowInterop.initScrollTracking", _canvasScrollRef, _dotNetRef);
             await JS.InvokeVoidAsync("workflowInterop.initNodeDrag", _canvasRef, _dotNetRef);
+            await JS.InvokeVoidAsync("workflowInterop.initCanvasPan", _canvasScrollRef, _dotNetRef);
+            await JS.InvokeVoidAsync("workflowInterop.initRulers", _canvasScrollRef,
+                new { ruler = 28, spacing = 40, rulerBg = "#252526", tickColor = "#555555", dividerColor = "#3A3D40" });
             await InitViewportSize();
             _jsReady = true;
             StateHasChanged();
+        }
+        else if (_jsReady && _minimapInit == false)
+        {
+            await JS.InvokeVoidAsync("workflowInterop.initMinimap", _canvasScrollRef, _dotNetRef);
+            _minimapInit = true;
         }
     }
 
@@ -89,14 +98,26 @@ public partial class Workflow : ComponentBase, IDisposable
     }
 
     [JSInvokable]
+    public string[]? OnGetLinkPoints()
+    {
+        if (_session?.Tree?.Links is null) return null;
+        var result = new List<string>();
+        foreach (var link in _session.Tree.Links)
+        {
+            result.Add(BuildLinkPoints(link));
+        }
+        return [.. result];
+    }
+
+    [JSInvokable]
     public async Task OnNodeDragEnd(int nodeIndex, double left, double top)
     {
         if (_session?.Tree?.Nodes is { } nodes && nodeIndex >= 0 && nodeIndex < nodes.Count)
         {
             var node = nodes[nodeIndex];
-            // Account for scroll offset since position is relative to viewport
-            node.Anchor.Horizontal = left + _scrollLeft;
-            node.Anchor.Vertical = top + _scrollTop;
+            // CSS left/top is already in canvas (world) coordinates — no scroll adjustment needed
+            node.Anchor.Horizontal = left;
+            node.Anchor.Vertical = top;
             _session.Tree.Layout.UpdateCommand.Execute(null);
             StateHasChanged();
         }
