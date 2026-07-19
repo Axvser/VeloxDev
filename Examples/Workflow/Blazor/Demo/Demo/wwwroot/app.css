@@ -9,10 +9,32 @@ html, body {
     overflow: hidden;
 }
 
+/* ── Top bar ──────────────────────────────── */
+.wf-topbar {
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    height: 48px;
+    min-height: 48px;
+    background: #1a1a2e;
+    border-bottom: 1px solid #333344;
+}
+.wf-topbar-title {
+    color: #e0e0e0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* ── Body ──────────────────────────────────── */
+.wf-body {
+    height: calc(100vh - 48px);
+    overflow: hidden;
+}
+
 /* ── App Layout ───────────────────────────── */
 .wf-app {
     display: flex;
-    height: 100vh;
+    height: 100%;
     overflow: hidden;
 }
 

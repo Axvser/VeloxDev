@@ -7,29 +7,32 @@ window.workflowInterop = {
         const self = this;
         canvasElement.addEventListener('mousedown', function (e) {
             const nodeEl = e.target.closest('.wf-node');
-            if (!nodeEl || nodeEl.closest('select, option, input, button')) return; // ignore form elements
+            if (!nodeEl || nodeEl.closest('select, option, input, button')) return;
             const idx = nodeEl.getAttribute('data-node-index');
             if (idx === null) return;
-            self.startDrag(nodeEl, dotnetRef, parseInt(idx));
+            self.startDrag(nodeEl, dotnetRef, parseInt(idx), e);
         });
     },
 
     dragState: null,
 
-    startDrag: function (element, dotnetRef, nodeIndex) {
+    startDrag: function (element, dotnetRef, nodeIndex, e) {
         const self = this;
-        const onMove = function (e) {
-            e.preventDefault();
-            const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
-            const clientY = e.clientY || e.touches?.[0]?.clientY || 0;
-            const dx = clientX - self.dragState.startX;
-            const dy = clientY - self.dragState.startY;
-            const newLeft = self.dragState.origLeft + dx;
-            const newTop = self.dragState.origTop + dy;
-            element.style.left = newLeft + 'px';
-            element.style.top = newTop + 'px';
-            self.dragState.currentX = newLeft;
-            self.dragState.currentY = newTop;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const origLeft = parseFloat(element.style.left) || 0;
+        const origTop = parseFloat(element.style.top) || 0;
+
+        this.dragState = { startX, startY, origLeft, origTop, currentX: origLeft, currentY: origTop };
+
+        const onMove = function (me) {
+            me.preventDefault();
+            const dx = (me.clientX || 0) - self.dragState.startX;
+            const dy = (me.clientY || 0) - self.dragState.startY;
+            element.style.left = (self.dragState.origLeft + dx) + 'px';
+            element.style.top = (self.dragState.origTop + dy) + 'px';
+            self.dragState.currentX = self.dragState.origLeft + dx;
+            self.dragState.currentY = self.dragState.origTop + dy;
         };
         const onUp = function () {
             document.removeEventListener('mousemove', onMove);
@@ -38,17 +41,6 @@ window.workflowInterop = {
                 dotnetRef.invokeMethodAsync('OnNodeDragEnd', nodeIndex, self.dragState.currentX, self.dragState.currentY);
             }
             self.dragState = null;
-        };
-        const rect = element.getBoundingClientRect();
-        const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
-        const clientY = e.clientY || e.touches?.[0]?.clientY || 0;
-        this.dragState = {
-            startX: clientX,
-            startY: clientY,
-            origLeft: parseFloat(element.style.left) || 0,
-            origTop: parseFloat(element.style.top) || 0,
-            currentX: parseFloat(element.style.left) || 0,
-            currentY: parseFloat(element.style.top) || 0
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
