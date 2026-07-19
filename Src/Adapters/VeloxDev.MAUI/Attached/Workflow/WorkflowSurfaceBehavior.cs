@@ -691,15 +691,35 @@ public sealed class WorkflowSurfaceBehavior
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
-        var viewportX = state.ScrollViewer.ScrollX - viewModel.Layout.ActualOffset.Horizontal;
-        var viewportY = state.ScrollViewer.ScrollY - viewModel.Layout.ActualOffset.Vertical;
+
+        // CRITICAL: After ScrollToAsync completes, ScrollViewer dimensions and
+        // scroll position can still be NaN/zero during MAUI's async layout pass.
+        // NaN propagates through Viewport ¡ú Virtualize ¡ú spatial index, causing
+        // all VisibleItems to be cleared (links permanently disappear).
+        // NaN <= 0 returns false in C#, so Virtualize's guard does NOT catch this.
+        var scrollX = state.ScrollViewer.ScrollX;
+        var scrollY = state.ScrollViewer.ScrollY;
+        var svW = state.ScrollViewer.Width;
+        var svH = state.ScrollViewer.Height;
+
+        if (double.IsNaN(scrollX) || double.IsNaN(scrollY) ||
+            double.IsNaN(svW) || double.IsNaN(svH) ||
+            svW <= 0 || svH <= 0)
+        {
+            return;
+        }
+
+        var viewportX = scrollX - viewModel.Layout.ActualOffset.Horizontal;
+        var viewportY = scrollY - viewModel.Layout.ActualOffset.Vertical;
         viewModel.GetHelper().Viewport = new Viewport(
-            viewportX, viewportY,
-            state.ScrollViewer.Width,
-            state.ScrollViewer.Height);
+            double.IsNaN(viewportX) ? 0 : viewportX,
+            double.IsNaN(viewportY) ? 0 : viewportY,
+            svW, svH);
 
         // Persist the viewport position so it survives serialization round-trip.
-        viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
+        viewModel.Layout.ViewportOffset = new Offset(
+            double.IsNaN(scrollX) ? 0 : scrollX,
+            double.IsNaN(scrollY) ? 0 : scrollY);
     }
 
     private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state)
@@ -709,8 +729,8 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        decorator.ScrollOffsetX = state.ScrollViewer.ScrollX;
-        decorator.ScrollOffsetY = state.ScrollViewer.ScrollY;
+        decorator.ScrollOffsetX = double.IsNaN(state.ScrollViewer.ScrollX) ? 0 : state.ScrollViewer.ScrollX;
+        decorator.ScrollOffsetY = double.IsNaN(state.ScrollViewer.ScrollY) ? 0 : state.ScrollViewer.ScrollY;
         decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
     }
@@ -722,12 +742,12 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        minimap.ScrollOffsetX = state.ScrollViewer.ScrollX;
-        minimap.ScrollOffsetY = state.ScrollViewer.ScrollY;
+        minimap.ScrollOffsetX = double.IsNaN(state.ScrollViewer.ScrollX) ? 0 : state.ScrollViewer.ScrollX;
+        minimap.ScrollOffsetY = double.IsNaN(state.ScrollViewer.ScrollY) ? 0 : state.ScrollViewer.ScrollY;
         minimap.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         minimap.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
-        minimap.ViewportWidth = state.ScrollViewer.Width;
-        minimap.ViewportHeight = state.ScrollViewer.Height;
+        minimap.ViewportWidth = double.IsNaN(state.ScrollViewer.Width) ? 1 : state.ScrollViewer.Width;
+        minimap.ViewportHeight = double.IsNaN(state.ScrollViewer.Height) ? 1 : state.ScrollViewer.Height;
         minimap.WorkflowTree = viewModel;
     }
 

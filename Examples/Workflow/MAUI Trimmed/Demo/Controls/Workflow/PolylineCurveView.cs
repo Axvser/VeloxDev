@@ -36,43 +36,26 @@ public sealed class PolylineCurveView : GraphicsView
         }
     }
 
-    private (double X, double Y) GetCanvasOffset()
-    {
-        // Walk up the visual tree to find the parent AbsoluteLayout
-        // (PART_Canvas) and read its TranslationX/Y.  This replaces the
-        // {x:Reference} XAML binding that was removed to eliminate
-        // WinUI binding exceptions.
-        Element? current = this;
-        while (current is not null)
-        {
-            if (current is AbsoluteLayout abs)
-                return (abs.TranslationX, abs.TranslationY);
-            current = current.Parent;
-        }
-        return (0, 0);
-    }
-
     private sealed class PolylineDrawable(PolylineCurveView owner) : IDrawable
     {
         public void Draw(ICanvas canvas, RectF dirtyRect)
         {
-            if (!owner.CanRender)
-            {
-                return;
-            }
+            if (canvas is null) return;
+            if (!owner.CanRender) return;
 
-            var (offsetX, offsetY) = owner.GetCanvasOffset();
+            var color = owner.LineColor;
+            if (color is null) return;
 
-            var startX = (float)(owner.StartLeft + offsetX);
-            var startY = (float)(owner.StartTop + offsetY);
-            var endX = (float)(owner.EndLeft + offsetX);
-            var endY = (float)(owner.EndTop + offsetY);
+            var startX = (float)owner.StartLeft;
+            var startY = (float)owner.StartTop;
+            var endX = (float)owner.EndLeft;
+            var endY = (float)owner.EndTop;
             const float phi = 0.6180339887f;
             var stub = ((endX - startX) / 2f) * (1f - phi);
             var p1X = startX + stub;
             var p2X = endX - stub;
 
-            canvas.StrokeColor = owner.LineColor;
+            canvas.StrokeColor = color;
             canvas.StrokeSize = 4;
             canvas.StrokeDashPattern = owner.IsVirtual ? [4, 2] : null;
             canvas.DrawLine(startX, startY, p1X, startY);
@@ -81,7 +64,7 @@ public sealed class PolylineCurveView : GraphicsView
 
             if (!owner.IsVirtual)
             {
-                DrawArrowhead(canvas, p2X, endY, endX, endY, owner.LineColor);
+                DrawArrowhead(canvas, p2X, endY, endX, endY, color);
             }
 
             canvas.StrokeDashPattern = null;
@@ -89,13 +72,12 @@ public sealed class PolylineCurveView : GraphicsView
 
         private static void DrawArrowhead(ICanvas canvas, float fromX, float fromY, float tipX, float tipY, Color color)
         {
+            if (canvas is null || color is null) return;
+
             var dx = tipX - fromX;
             var dy = tipY - fromY;
             var length = MathF.Sqrt((dx * dx) + (dy * dy));
-            if (length <= float.Epsilon)
-            {
-                return;
-            }
+            if (length <= float.Epsilon) return;
 
             dx /= length;
             dy /= length;

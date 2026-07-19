@@ -11,7 +11,7 @@
             <local:NodeView WidthRequest="{Binding Size.Width}" HeightRequest="{Binding Size.Height}" />
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
-            <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}" EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}" ContentOffsetX="{Binding Source={x:Reference PART_Canvas}, Path=TranslationX}" ContentOffsetY="{Binding Source={x:Reference PART_Canvas}, Path=TranslationY}" CanRender="{Binding IsVisible}" WidthRequest="{Binding Source={x:Reference PART_Canvas}, Path=WidthRequest}" HeightRequest="{Binding Source={x:Reference PART_Canvas}, Path=HeightRequest}" />
+            <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}" EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}" CanRender="{Binding IsVisible}" />
         </DataTemplate>
         <local:TemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" LinkTemplate="{StaticResource LinkTemplate}" />
     </ContentView.Resources>
@@ -22,10 +22,17 @@
             StrokeShape="RoundRectangle TemplateSurfaceCornerRadius"
             BackgroundColor="TemplateSurfaceBackground">
         <local:GridDecorator x:Name="PART_GridDecorator">
-            <ScrollView x:Name="PART_ScrollViewer"
-                        Orientation="Both">
-                <AbsoluteLayout x:Name="PART_Canvas" WidthRequest="{Binding Layout.ActualSize.Width}" HeightRequest="{Binding Layout.ActualSize.Height}" behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}" behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
-            </ScrollView>
+            <Grid RowDefinitions="28,*" ColumnDefinitions="28,*">
+                <ScrollView x:Name="PART_ScrollViewer"
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Orientation="Both">
+                    <AbsoluteLayout x:Name="PART_Canvas"
+                                    BackgroundColor="Transparent"
+                                    behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                                    behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
+                </ScrollView>
+            </Grid>
         </local:GridDecorator>
     </Border>
 </ContentView>

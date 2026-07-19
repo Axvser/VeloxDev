@@ -44,8 +44,10 @@ public partial class TemplateClass : ContentView
     private void UpdateVisual()
     {
         InputTransparent = IsVirtualLink;
-        TranslationX = -ContentOffsetX;
-        TranslationY = -ContentOffsetY;
+        // TranslationX/Y are NOT set here.  Canvas.TranslationX (set by
+        // WorkflowSurfaceBehavior.ApplyLayout) shifts ALL children including
+        // this link view, so the offset is applied visually.  Draw uses
+        // pure world coordinates — no ContentOffsetX/Y needed.
         PART_Graphics.Invalidate();
     }
 
@@ -61,21 +63,22 @@ public partial class TemplateClass : ContentView
     {
         public void Draw(ICanvas canvas, RectF dirtyRect)
         {
-            if (!owner.CanRender)
-            {
-                return;
-            }
+            if (canvas is null) return;
+            if (!owner.CanRender) return;
 
-            var startX = (float)(owner.StartLeft + owner.ContentOffsetX);
-            var startY = (float)(owner.StartTop + owner.ContentOffsetY);
-            var endX = (float)(owner.EndLeft + owner.ContentOffsetX);
-            var endY = (float)(owner.EndTop + owner.ContentOffsetY);
+            var color = owner.LineColor;
+            if (color is null) return;
+
+            var startX = (float)owner.StartLeft;
+            var startY = (float)owner.StartTop;
+            var endX = (float)owner.EndLeft;
+            var endY = (float)owner.EndTop;
             const float phi = 0.6180339887f;
             var stub = ((endX - startX) / 2f) * (1f - phi);
             var firstTurnX = startX + stub;
             var secondTurnX = endX - stub;
 
-            canvas.StrokeColor = owner.LineColor;
+            canvas.StrokeColor = color;
             canvas.StrokeSize = (float)TemplateLinkThickness;
             canvas.StrokeDashPattern = owner.IsVirtualLink ? [4, 2] : null;
             canvas.DrawLine(startX, startY, firstTurnX, startY);
@@ -84,7 +87,7 @@ public partial class TemplateClass : ContentView
 
             if (!owner.IsVirtualLink)
             {
-                DrawArrowhead(canvas, secondTurnX, endY, endX, endY, owner.LineColor);
+                DrawArrowhead(canvas, secondTurnX, endY, endX, endY, color);
             }
 
             canvas.StrokeDashPattern = null;
@@ -98,6 +101,7 @@ public partial class TemplateClass : ContentView
             float tipY,
             Color color)
         {
+            if (canvas is null || color is null) return;
             var dx = tipX - fromX;
             var dy = tipY - fromY;
             var length = MathF.Sqrt((dx * dx) + (dy * dy));

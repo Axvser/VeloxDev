@@ -9,6 +9,7 @@
 	<SingleProject>true</SingleProject>
 	<ImplicitUsings>enable</ImplicitUsings>
 	<Nullable>enable</Nullable>
+	<NoWarn>CA1416</NoWarn>
 	<MauiXamlInflator>SourceGen</MauiXamlInflator>
 	<ApplicationTitle>Demo</ApplicationTitle>
 	<ApplicationId>dev.velox.workflow.demo</ApplicationId>

@@ -57,68 +57,82 @@ public sealed class TemplateClass : GraphicsView, IDrawable, IWorkflowMinimapOve
 
     public void Draw(ICanvas canvas, RectF dirtyRect)
     {
-        if (!IsMinimapVisible) return;
-
-        // Background
-        canvas.FillColor = Color.FromArgb("TemplateMinimapBackground");
-        canvas.FillRoundedRectangle(dirtyRect, 4);
-
-        // Border
-        canvas.StrokeColor = Color.FromArgb("TemplateMinimapBorder");
-        canvas.StrokeSize = 1;
-        canvas.DrawRoundedRectangle(dirtyRect, 4);
-
-        var tree = WorkflowTree;
-        if (tree?.Nodes is null) return;
-
-        // Compute content bounds from nodes
-        float minX = float.MaxValue, minY = float.MaxValue;
-        float maxX = float.MinValue, maxY = float.MinValue;
-        bool hasNode = false;
-
-        foreach (var node in tree.Nodes)
+        try
         {
-            float nx = (float)node.Anchor.Horizontal;
-            float ny = (float)node.Anchor.Vertical;
-            float nw = (float)node.Size.Width;
-            float nh = (float)node.Size.Height;
-            minX = Math.Min(minX, nx);
-            minY = Math.Min(minY, ny);
-            maxX = Math.Max(maxX, nx + nw);
-            maxY = Math.Max(maxY, ny + nh);
-            hasNode = true;
+            if (!IsMinimapVisible) return;
+            if (canvas is null) return;
+
+            // Background
+            canvas.FillColor = Color.FromArgb("TemplateMinimapBackground");
+            canvas.FillRoundedRectangle(dirtyRect, 4);
+
+            // Border
+            canvas.StrokeColor = Color.FromArgb("TemplateMinimapBorder");
+            canvas.StrokeSize = 1;
+            canvas.DrawRoundedRectangle(dirtyRect, 4);
+
+            var tree = WorkflowTree;
+            if (tree?.Nodes is null) return;
+
+            // Compute content bounds from nodes
+            float minX = float.MaxValue, minY = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue;
+            bool hasNode = false;
+
+            foreach (var node in tree.Nodes)
+            {
+                float nx = double.IsNaN(node.Anchor.Horizontal) ? 0 : (float)node.Anchor.Horizontal;
+                float ny = double.IsNaN(node.Anchor.Vertical) ? 0 : (float)node.Anchor.Vertical;
+                float nw = (float)Math.Max(1, node.Size.Width);
+                float nh = (float)Math.Max(1, node.Size.Height);
+                minX = Math.Min(minX, nx);
+                minY = Math.Min(minY, ny);
+                maxX = Math.Max(maxX, nx + nw);
+                maxY = Math.Max(maxY, ny + nh);
+                hasNode = true;
+            }
+
+            if (!hasNode) return;
+
+            float pad = 4;
+            float contentW = maxX - minX + pad * 2;
+            float contentH = maxY - minY + pad * 2;
+            float drawW = dirtyRect.Width - pad * 2;
+            float drawH = dirtyRect.Height - pad * 2;
+
+            if (contentW <= 0 || contentH <= 0 || drawW <= 0 || drawH <= 0)
+                return;
+
+            float scale = Math.Min(drawW / contentW, drawH / contentH);
+
+            // Draw nodes
+            canvas.FillColor = Color.FromArgb("TemplateNodeFill");
+            foreach (var node in tree.Nodes)
+            {
+                float x = ((float)node.Anchor.Horizontal - minX + pad) * scale + pad;
+                float y = ((float)node.Anchor.Vertical - minY + pad) * scale + pad;
+                float w = Math.Max(2, (float)node.Size.Width * scale);
+                float h = Math.Max(2, (float)node.Size.Height * scale);
+                canvas.FillRoundedRectangle(x, y, w, h, 1);
+            }
+
+            // Draw viewport indicator
+            float vx = ((float)ScrollOffsetX - (float)ContentOffsetX - minX + pad) * scale + pad;
+            float vy = ((float)ScrollOffsetY - (float)ContentOffsetY - minY + pad) * scale + pad;
+            float vw = Math.Max(4, (float)ViewportWidth * scale);
+            float vh = Math.Max(4, (float)ViewportHeight * scale);
+
+            if (!float.IsNaN(vx) && !float.IsNaN(vy))
+            {
+                canvas.StrokeColor = Color.FromArgb("TemplateViewportStroke");
+                canvas.StrokeSize = 1.5f;
+                canvas.DrawRectangle(vx, vy, vw, vh);
+            }
         }
-
-        if (!hasNode) return;
-
-        float pad = 4;
-        float contentW = maxX - minX + pad * 2;
-        float contentH = maxY - minY + pad * 2;
-        float drawW = dirtyRect.Width - pad * 2;
-        float drawH = dirtyRect.Height - pad * 2;
-        float scale = Math.Min(drawW / contentW, drawH / contentH);
-        float ox = (float)ScrollOffsetX - (float)ContentOffsetX;
-        float oy = (float)ScrollOffsetY - (float)ContentOffsetY;
-
-        // Draw nodes
-        canvas.FillColor = Color.FromArgb("TemplateNodeFill");
-        foreach (var node in tree.Nodes)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            float x = ((float)node.Anchor.Horizontal - minX + pad) * scale + pad;
-            float y = ((float)node.Anchor.Vertical - minY + pad) * scale + pad;
-            float w = Math.Max(2, (float)node.Size.Width * scale);
-            float h = Math.Max(2, (float)node.Size.Height * scale);
-            canvas.FillRoundedRectangle(x, y, w, h, 1);
+            System.Diagnostics.Debug.WriteLine(
+                $"[Minimap] Draw error: {ex.GetType().Name}: {ex.Message}");
         }
-
-        // Draw viewport indicator
-        float vx = ((float)ScrollOffsetX - (float)ContentOffsetX - minX + pad) * scale + pad;
-        float vy = ((float)ScrollOffsetY - (float)ContentOffsetY - minY + pad) * scale + pad;
-        float vw = Math.Max(4, (float)ViewportWidth * scale);
-        float vh = Math.Max(4, (float)ViewportHeight * scale);
-
-        canvas.StrokeColor = Color.FromArgb("TemplateViewportStroke");
-        canvas.StrokeSize = 1.5f;
-        canvas.DrawRectangle(vx, vy, vw, vh);
     }
 }

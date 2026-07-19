@@ -136,7 +136,7 @@ public sealed class ViewManager
         // This prevents UI freezes when loading 100+ workflow nodes.
         _batchTimer?.Stop();
         _batchTimer = _layout.Dispatcher.CreateTimer();
-        _batchTimer.Interval = TimeSpan.FromMilliseconds(16); // â‰ˆ1 frame
+        _batchTimer.Interval = TimeSpan.FromMilliseconds(16); // ¡Ö1 frame
         _batchTimer.IsRepeating = false;
         _batchTimer.Tick += OnBatchTimerTick;
         _batchTimer.Start();
@@ -170,12 +170,12 @@ public sealed class ViewManager
 
             if (_pendingViews.Count > 0)
             {
-                // More views to create â€” schedule the next batch.
+                // More views to create ¡ª schedule the next batch.
                 ScheduleNextBatchRender();
             }
             else if (!_slotSyncQueued)
             {
-                // All views created â€” schedule a single deferred pass to sync
+                // All views created ¡ª schedule a single deferred pass to sync
                 // node slot layouts (equivalent to WPF's LayoutUpdated).
                 // This avoids the per-node SizeChanged cascade that MAUI triggers.
                 _slotSyncQueued = true;
@@ -209,7 +209,7 @@ public sealed class ViewManager
     private void AddOrReuseView(object viewModel)
     {
         // Use HashSet-style lookup for O(1) duplicate check.
-        // _activeViews is a List, so we scan â€” but LinkBuilder deduplicates,
+        // _activeViews is a List, so we scan ¡ª but LinkBuilder deduplicates,
         // and the pending queue filters duplicates, so this is rarely triggered.
         if (_activeViews.Count > 0)
         {
