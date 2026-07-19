@@ -7,7 +7,7 @@
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Avalonia</Title>
-		<Version>6.0.3</Version>
+		<Version>6.0.4</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + Avalonia</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -28,9 +28,7 @@
 		<PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
 		<PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
 		<PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
-
-		<!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
-		<PackageReference Include="VeloxDev.Core" Version="6.0.3" />
+		<PackageReference Include="VeloxDev.Core" Version="6.0.4" />
 	</ItemGroup>
 
 </Project>
