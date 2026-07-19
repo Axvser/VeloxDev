@@ -20,28 +20,31 @@
         <label class="node-label">Delay (ms)</label>
         <input class="node-input" type="number" value="@_delayMs" @onchange="OnDelayChanged" />
 
+        <label class="node-label">Priority</label>
+        <input class="node-input" type="number" value="@_priority" @onchange="OnPriorityChanged" />
+
         <label class="node-label">Title</label>
         <input class="node-input" type="text" value="@_title" @onchange="OnTitleChanged" />
 
         <label class="node-label">
             <input type="checkbox" checked="@_autoBroadcast" @onchange="OnAutoBroadcastChanged" />
-            执行完成后自动广播到下游
+            Auto-broadcast to downstream
         </label>
     </div>
 
     <div class="node-slots">
         @if (Node?.InputSlot is not null)
         {
-            <div class="slot-container slot-input">
+            <div class="slot-container">
                 <WorkflowSlotView Slot="Node.InputSlot" IsInput="true" />
-                <span class="slot-label">In</span>
+                <span>In</span>
             </div>
         }
         @if (Node?.OutputSlot is not null)
         {
-            <div class="slot-container slot-output">
+            <div class="slot-container" style="margin-left:auto;">
+                <span>Out</span>
                 <WorkflowSlotView Slot="Node.OutputSlot" IsOutput="true" />
-                <span class="slot-label">Out</span>
             </div>
         }
     </div>

@@ -1,16 +1,314 @@
-/* VeloxDev Workflow Blazor Demo */
+/* VeloxDev Workflow Blazor Demo — matching WPF full demo styling */
 html, body {
     margin: 0;
     padding: 0;
     font-family: 'Segoe UI', system-ui, sans-serif;
     background: #0f172a;
     color: #e0e0e0;
+    height: 100%;
+    overflow: hidden;
 }
 
-/* ── Node Slots ───────────────────────────── */
+/* ── App Layout ───────────────────────────── */
+.wf-app {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* ── Sidebar ──────────────────────────────── */
+.wf-sidebar {
+    width: 200px;
+    min-width: 200px;
+    background: #1a1a2e;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    border-right: 1px solid #333344;
+}
+.sb-btn {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    background: #0f3460;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    transition: background 0.15s;
+}
+.sb-btn:hover { background: #1a4a80; }
+.sb-btn:disabled { opacity: 0.4; cursor: default; }
+.sb-divider { height: 1px; background: #333344; margin: 6px 0; }
+.sb-info {
+    padding: 4px 0;
+    font-size: 12px;
+    color: #94A3B8;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.sb-panel {
+    background: #202020;
+    border: 1px solid #4C4C4C;
+    border-radius: 4px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.sb-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: #7EC8FF;
+}
+.sb-toggle { font-size: 11px; color: #ccc; cursor: pointer; }
+.sb-agent-log, .sb-exec-log {
+    max-height: 180px;
+    overflow-y: auto;
+    font-size: 11px;
+    color: #D8D8D8;
+    background: transparent;
+}
+.sb-log-entry { padding: 2px 0; word-wrap: break-word; }
+.sb-agent-input-row {
+    display: flex;
+    gap: 4px;
+}
+.sb-agent-input {
+    flex: 1;
+    padding: 6px;
+    background: #2D2D2D;
+    color: white;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+}
+.sb-agent-send {
+    padding: 6px 12px;
+    background: #0f3460;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+/* ── Main Area ────────────────────────────── */
+.wf-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ── Toolbar ──────────────────────────────── */
+.wf-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 20px;
+    background: #1a1a2e;
+    border-bottom: 1px solid #333344;
+}
+.tb-btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    color: white;
+}
+.tb-run { background: #166534; }
+.tb-close { background: #991b1b; }
+.tb-reset { background: #6b21a8; }
+.tb-btn:hover { filter: brightness(1.2); }
+.tb-btn:disabled { opacity: 0.4; cursor: default; }
+.tb-status { margin-left: auto; font-size: 12px; color: #94A3B8; }
+.tb-layout { font-size: 12px; color: #64748B; margin-left: 12px; }
+
+/* ── Canvas Wrapper ───────────────────────── */
+.wf-canvas-wrapper {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    margin: 20px;
+    border: 1px solid white;
+    border-radius: 3px;
+    background: transparent;
+}
+
+/* ── Grid Decorator ───────────────────────── */
+.wf-decorator {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto 1fr;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+.wf-deco-corner {
+    grid-row: 1; grid-column: 1;
+    border-right: 1px solid var(--divider-color);
+    border-bottom: 1px solid var(--divider-color);
+    z-index: 3;
+    background: var(--ruler-bg);
+}
+.wf-deco-top-ruler {
+    grid-row: 1; grid-column: 2;
+    overflow: hidden;
+    border-bottom: 1px solid var(--divider-color);
+    z-index: 2;
+    background: var(--ruler-bg);
+}
+.wf-deco-left-ruler {
+    grid-row: 2; grid-column: 1;
+    overflow: hidden;
+    border-right: 1px solid var(--divider-color);
+    z-index: 2;
+    background: var(--ruler-bg);
+}
+.wf-deco-content {
+    grid-row: 2; grid-column: 2;
+    position: relative;
+    overflow: auto;
+}
+.wf-deco-content .wf-grid-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+        repeating-linear-gradient(to right, transparent calc(var(--spacing,40px) - 1px), var(--grid-color,#2A2D2E) calc(var(--spacing,40px) - 1px), var(--grid-color,#2A2D2E) var(--spacing,40px)),
+        repeating-linear-gradient(to bottom, transparent calc(var(--spacing,40px) - 1px), var(--grid-color,#2A2D2E) calc(var(--spacing,40px) - 1px), var(--grid-color,#2A2D2E) var(--spacing,40px));
+}
+
+/* ── Minimap ──────────────────────────────── */
+.wf-minimap {
+    position: absolute;
+    right: 45px;
+    top: 56px;
+    border-radius: 4px;
+    overflow: hidden;
+    z-index: 10;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+.wf-minimap-svg { display: block; }
+
+/* ── Canvas ───────────────────────────────── */
+.wf-canvas {
+    position: relative;
+    background: transparent;
+}
+.wf-links-svg {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+.wf-link-line {
+    fill: none;
+    stroke: #60a5fa;
+    stroke-width: 2;
+    stroke-linejoin: round;
+}
+.wf-node {
+    position: absolute;
+    z-index: 2;
+}
+
+/* ── Node View (WPF dark theme match) ─────── */
+.node-root {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-radius: 6px;
+    border: 1.5px solid #4B5563;
+    background: #252525;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+.node-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 52px;
+    min-height: 52px;
+    background: #2d2d2d;
+    border-bottom: 0.5px solid #444;
+    border-radius: 4px 4px 0 0;
+}
+.node-title {
+    color: white;
+    font-weight: bold;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.badge-order {
+    padding: 1px 6px;
+    background: #1F3D1F;
+    border: 1px solid #7BD97B;
+    border-radius: 10px;
+    color: #C8FFC8;
+    font-weight: bold;
+    font-size: 10px;
+}
+.badge-load {
+    padding: 1px 6px;
+    background: #2B2440;
+    border: 1px solid #B799FF;
+    border-radius: 10px;
+    color: #E4D8FF;
+    font-weight: 600;
+    font-size: 10px;
+}
+.node-duration {
+    margin-left: auto;
+    font-size: 18px;
+    font-weight: bold;
+    color: #7EC8FF;
+}
+.node-body {
+    flex: 1;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+}
+.node-body .node-label {
+    display: block;
+    font-size: 12px;
+    color: #DCDCDC;
+    margin-bottom: 2px;
+}
+.node-body .node-input {
+    width: 100%;
+    padding: 6px;
+    background: #333;
+    color: white;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+    box-sizing: border-box;
+}
+.node-body label { font-size: 12px; color: #DCDCDC; cursor: pointer; }
+.node-body input[type=checkbox] { margin-right: 4px; }
 .node-slots {
     display: flex;
-    flex-wrap: wrap;
     gap: 4px;
     padding: 4px 8px 8px;
     border-top: 1px solid #4B5563;
@@ -22,147 +320,149 @@ html, body {
     font-size: 10px;
     color: #94A3B8;
 }
-.slot-input .wf-slot { float: left; }
-.slot-output .wf-slot { float: right; }
-.wf-slot { display: inline-flex; }
-.wf-slot.connected svg circle:first-child { filter: drop-shadow(0 0 3px #22c55e); }
 
-/* ── Grid Decorator ──────────────────────── */
-.wf-decorator {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    grid-template-rows: auto 1fr;
+/* ── Controller View ──────────────────────── */
+.ctrl-root {
     width: 100%;
     height: 100%;
-    overflow: hidden;
-    position: relative;
-}
-.wf-deco-corner {
-    grid-row: 1;
-    grid-column: 1;
-    border-right: 1px solid var(--divider-color);
-    border-bottom: 1px solid var(--divider-color);
-    z-index: 3;
-}
-.wf-deco-top-ruler {
-    grid-row: 1;
-    grid-column: 2;
-    overflow: hidden;
-    border-bottom: 1px solid var(--divider-color);
-    z-index: 2;
-    /* Tick marks via repeating gradient */
-    background-image:
-        repeating-linear-gradient(
-            to right,
-            transparent calc(var(--spacing) - 1px),
-            var(--tick-color) calc(var(--spacing) - 1px),
-            var(--tick-color) var(--spacing)
-        ),
-        linear-gradient(to bottom, transparent calc(100% - 6px), var(--tick-color) calc(100% - 6px));
-    background-color: var(--ruler-bg);
-    background-size: var(--spacing) 100%, 100% 100%;
-}
-.wf-deco-left-ruler {
-    grid-row: 2;
-    grid-column: 1;
-    overflow: hidden;
-    border-right: 1px solid var(--divider-color);
-    z-index: 2;
-    /* Tick marks via repeating gradient */
-    background-image:
-        repeating-linear-gradient(
-            to bottom,
-            transparent calc(var(--spacing) - 1px),
-            var(--tick-color) calc(var(--spacing) - 1px),
-            var(--tick-color) var(--spacing)
-        ),
-        linear-gradient(to right, transparent calc(100% - 6px), var(--tick-color) calc(100% - 6px));
-    background-color: var(--ruler-bg);
-    background-size: 100% var(--spacing), 100% 100%;
-}
-.wf-deco-content {
-    grid-row: 2;
-    grid-column: 2;
-    position: relative;
-    overflow: auto;
-}
-.wf-deco-content .wf-grid-bg {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    background-image:
-        repeating-linear-gradient(
-            to right,
-            transparent calc(var(--spacing,40px) - 1px),
-            var(--grid-color, #2A2D2E) calc(var(--spacing,40px) - 1px),
-            var(--grid-color, #2A2D2E) var(--spacing,40px)
-        ),
-        repeating-linear-gradient(
-            to bottom,
-            transparent calc(var(--spacing,40px) - 1px),
-            var(--grid-color, #2A2D2E) calc(var(--spacing,40px) - 1px),
-            var(--grid-color, #2A2D2E) var(--spacing,40px)
-        );
-}
-
-/* ── Minimap Overlay ──────────────────────── */
-.wf-minimap {
-    position: absolute;
-    border-radius: 4px;
-    overflow: hidden;
-    z-index: 10;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-}
-.wf-minimap-svg {
-    display: block;
-}
-
-/* ── Blazor Workflow Layout ──────────────── */
-.wf-canvas-wrapper {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-    margin: 0 20px 20px 0;
+    display: flex;
+    flex-direction: column;
+    border-radius: 5px;
     border: 1px solid white;
-    border-radius: 3px;
+    background: #2D2D2D;
+    overflow: hidden;
+    box-sizing: border-box;
 }
-.wf-canvas {
-    position: relative;
-    background: transparent;
-}
-.wf-canvas .wf-links-svg {
-    position: absolute;
-    top: 0; left: 0;
-    pointer-events: none;
-    z-index: 1;
-}
-.wf-canvas .wf-link-line {
-    fill: none;
-    stroke: #60a5fa;
-    stroke-width: 2;
-    stroke-linejoin: round;
-}
-.wf-canvas .wf-node {
-    position: absolute;
-    z-index: 2;
-}
-.wf-toolbar {
+.ctrl-header {
+    height: 52px;
+    min-height: 52px;
     display: flex;
     align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 13px;
+    background: #2D2D2D;
+    border-bottom: 0.5px solid #444;
+}
+.ctrl-body {
+    flex: 1;
+    padding: 12px;
+    background: #252525;
+    display: flex;
+    flex-direction: column;
     gap: 8px;
-    padding: 8px 20px;
-    background: #1a1a2e;
-    border-bottom: 1px solid #333344;
+    overflow-y: auto;
 }
-.wf-toolbar .tb-status {
-    margin-left: auto;
+.ctrl-label {
+    display: block;
+    font-size: 11px;
+    color: #DCDCDC;
+    margin-bottom: -4px;
+}
+.ctrl-input, .ctrl-select {
+    width: 100%;
+    padding: 6px;
+    background: #333;
+    color: white;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 11px;
+    box-sizing: border-box;
+}
+.ctrl-footer {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    background: #2D2D2D;
+    border-top: 0.5px solid #444;
+}
+.btn-ctrl {
+    flex: 1;
+    padding: 6px;
+    border: none;
+    border-radius: 3px;
+    color: white;
     font-size: 12px;
-    color: #94A3B8;
+    cursor: pointer;
+    text-align: center;
 }
-.wf-toolbar .tb-layout {
+.btn-run { background: #166534; }
+.btn-close { background: #991b1b; }
+
+/* ── Bool Selector View ───────────────────── */
+.bool-root {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-radius: 6px;
+    border: 1.5px solid #4B5563;
+    background: #252525;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+.bool-header {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    background: #2d2d2d;
+    border-bottom: 0.5px solid #444;
+}
+.bool-body {
+    flex: 1;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.bool-label { font-size: 12px; color: #DCDCDC; cursor: pointer; }
+.bool-label input { margin-right: 4px; }
+
+/* ── Enum Selector View ───────────────────── */
+.enum-root {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-radius: 6px;
+    border: 1.5px solid #4B5563;
+    background: #252525;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+.enum-header {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    background: #2d2d2d;
+    border-bottom: 0.5px solid #444;
+}
+.enum-body {
+    flex: 1;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.enum-label { font-size: 12px; color: #DCDCDC; }
+.enum-select {
+    width: 100%;
+    padding: 6px;
+    background: #333;
+    color: white;
+    border: 1px solid #555;
+    border-radius: 3px;
     font-size: 12px;
-    color: #64748B;
-    margin-left: 12px;
 }
+
+/* ── Slot View ────────────────────────────── */
+.wf-slot { display: inline-flex; }
+.wf-slot.connected svg circle:first-child { filter: drop-shadow(0 0 3px #22c55e); }
+.wf-slot.multi svg circle:first-child { stroke-dasharray: 2 1; }
