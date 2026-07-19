@@ -43,11 +43,8 @@ public partial class LinkView : ContentView
 
     private void UpdateVisual()
     {
-        InputTransparent = IsVirtualLink;
-        // TranslationX/Y are NOT set here.  Canvas.TranslationX (set by
-        // WorkflowSurfaceBehavior.ApplyLayout) shifts ALL children including
-        // this link view, so the offset is applied visually.  Draw uses
-        // pure world coordinates — no ContentOffsetX/Y needed.
+        // InputTransparent is set to True in XAML — never override so links
+        // remain passive and never block pointer events on the canvas.
         PART_Graphics.Invalidate();
     }
 

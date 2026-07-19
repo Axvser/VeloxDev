@@ -1,9 +1,8 @@
-// VeloxDev customization: Adjust drawing and hit testing here while preserving the bindable endpoint properties.
+// VeloxDev customization: Customize line geometry, color, and thickness here.
 using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using VeloxDev.WorkflowSystem;
 
@@ -11,25 +10,17 @@ namespace Demo.Views.Workflow;
 
 /// <summary>
 /// Orthogonal (polyline) connection with golden-ratio stubs.
-/// Hover to highlight, Delete to remove.
+/// Passive visual only — no hover, highlight, or keyboard interaction.
 /// </summary>
 public partial class LinkView : UserControl
 {
     public LinkView()
     {
         InitializeComponent();
-        IsHitTestVisible = true;
-        Focusable = true;
+        IsHitTestVisible = false;
         Panel.SetZIndex(this, -100);
 
-        MouseEnter += (_, _) => { IsHighlighted = true; Focus(); };
-        MouseLeave += (_, _) => IsHighlighted = false;
-        MouseMove += OnHoverMouseMove;
-        DataContextChanged += (_, _) =>
-        {
-            UpdateInteractivity();
-            InvalidateVisual();
-        };
+        DataContextChanged += (_, _) => InvalidateVisual();
     }
 
     #region Dependency properties
@@ -48,8 +39,6 @@ public partial class LinkView : UserControl
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnRenderChanged));
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(LinkView), new PropertyMetadata((Color)ColorConverter.ConvertFromString("#DDFFFFFF"), OnRenderChanged));
-    public static readonly DependencyProperty IsHighlightedProperty =
-        DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnRenderChanged));
 
     public double StartLeft { get => (double)GetValue(StartLeftProperty); set => SetValue(StartLeftProperty, value); }
     public double StartTop { get => (double)GetValue(StartTopProperty); set => SetValue(StartTopProperty, value); }
@@ -58,20 +47,9 @@ public partial class LinkView : UserControl
     public bool CanRender { get => (bool)GetValue(CanRenderProperty); set => SetValue(CanRenderProperty, value); }
     public bool IsVirtual { get => (bool)GetValue(IsVirtualProperty); set => SetValue(IsVirtualProperty, value); }
     public Color LineColor { get => (Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
-    public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty); set => SetValue(IsHighlightedProperty, value); }
 
     private static void OnRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        var control = (LinkView)d;
-        control.UpdateInteractivity();
-        control.InvalidateVisual();
-    }
-
-    private void UpdateInteractivity()
-    {
-        IsHitTestVisible = !IsVirtualLink;
-        Focusable = !IsVirtualLink;
-    }
+        => ((LinkView)d).InvalidateVisual();
 
     private bool IsVirtualLink
         => IsVirtual
@@ -93,20 +71,13 @@ public partial class LinkView : UserControl
         var points = BuildPoints();
         if (points.Count < 2) return;
 
-        var color = IsHighlighted ? Colors.OrangeRed : LineColor;
-        var thickness = IsHighlighted ? 3.5 : 2;
+        var color = LineColor;
+        var thickness = 2;
         var brush = new SolidColorBrush(color);
 
         var pen = IsVirtualLink
             ? new Pen(brush, thickness) { DashStyle = new DashStyle(new double[] { 4, 2 }, 0) }
             : new Pen(brush, thickness);
-
-        if (IsHighlighted)
-        {
-            var glowPen = new Pen(new SolidColorBrush(Color.FromArgb(60, color.R, color.G, color.B)), thickness + 6);
-            for (int i = 0; i < points.Count - 1; i++)
-                ctx.DrawLine(glowPen, points[i], points[i + 1]);
-        }
 
         for (int i = 0; i < points.Count - 1; i++)
             ctx.DrawLine(pen, points[i], points[i + 1]);
@@ -146,47 +117,6 @@ public partial class LinkView : UserControl
         }
         geo.Freeze();
         ctx.DrawGeometry(brush, null, geo);
-    }
-
-    #endregion
-
-    #region Interaction
-
-    private void OnHoverMouseMove(object sender, MouseEventArgs e)
-    {
-        var pt = e.GetPosition(this);
-        bool over = HitTestLine(pt);
-        if (over && !IsHighlighted) { IsHighlighted = true; Focus(); }
-        else if (!over && IsHighlighted) IsHighlighted = false;
-    }
-
-    protected override void OnKeyDown(KeyEventArgs e)
-    {
-        base.OnKeyDown(e);
-        if (e.Key == Key.Delete && IsHighlighted)
-        {
-            if (DataContext is IWorkflowLinkViewModel vm)
-                vm.DeleteCommand.Execute(null);
-            e.Handled = true;
-        }
-    }
-
-    private bool HitTestLine(Point pt)
-    {
-        const double hitRadius = 6.0;
-        var pts = BuildPoints();
-        for (int i = 0; i < pts.Count - 1; i++)
-            if (DistSeg(pt, pts[i], pts[i + 1]) <= hitRadius) return true;
-        return false;
-    }
-
-    private static double DistSeg(Point p, Point a, Point b)
-    {
-        double abx = b.X - a.X, aby = b.Y - a.Y;
-        double len2 = abx * abx + aby * aby;
-        if (len2 < 0.0001) return (p - a).Length;
-        double t = Math.Clamp(((p.X - a.X) * abx + (p.Y - a.Y) * aby) / len2, 0, 1);
-        return (p - new Point(a.X + t * abx, a.Y + t * aby)).Length;
     }
 
     #endregion

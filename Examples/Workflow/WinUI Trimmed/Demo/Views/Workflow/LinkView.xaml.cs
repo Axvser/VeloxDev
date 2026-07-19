@@ -1,8 +1,7 @@
-// VeloxDev customization: Adjust drawing and hit testing here while preserving the bindable endpoint properties.
+// VeloxDev customization: Customize line geometry, color, and thickness here.
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
@@ -14,7 +13,7 @@ namespace Demo.Views.Workflow;
 
 /// <summary>
 /// Orthogonal (polyline) connection with golden-ratio stubs.
-/// Hover to highlight, Delete to remove.
+/// Passive visual only — no hover, highlight, or keyboard interaction.
 /// </summary>
 public sealed partial class LinkView : UserControl
 {
@@ -37,6 +36,7 @@ public sealed partial class LinkView : UserControl
     {
         InitializeComponent();
         Canvas.SetZIndex(this, -100);
+        IsHitTestVisible = false;
 
         var container = new Grid();
         _path = new Path { Stroke = _strokeBrush, StrokeThickness = 2, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false };
@@ -47,15 +47,8 @@ public sealed partial class LinkView : UserControl
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        PointerEntered += (_, _) => { IsHighlighted = true; Focus(FocusState.Pointer); };
-        PointerExited += (_, _) => IsHighlighted = false;
-        PointerMoved += OnHoverPointerMoved;
-        DataContextChanged += (_, _) =>
-        {
-            UpdateInteractivity();
-            ScheduleUpdate();
-        };
-        UpdateInteractivity();
+        DataContextChanged += (_, _) => ScheduleUpdate();
+        ScheduleUpdate();
     }
 
     #region Dependency properties
@@ -74,8 +67,6 @@ public sealed partial class LinkView : UserControl
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnChanged));
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Windows.UI.Color), typeof(LinkView), new PropertyMetadata(ParseColor("#DDFFFFFF"), OnChanged));
-    public static readonly DependencyProperty IsHighlightedProperty =
-        DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnChanged));
 
     public double StartLeft { get => (double)GetValue(StartLeftProperty); set => SetValue(StartLeftProperty, value); }
     public double StartTop { get => (double)GetValue(StartTopProperty); set => SetValue(StartTopProperty, value); }
@@ -84,20 +75,9 @@ public sealed partial class LinkView : UserControl
     public bool CanRender { get => (bool)GetValue(CanRenderProperty); set => SetValue(CanRenderProperty, value); }
     public bool IsVirtual { get => (bool)GetValue(IsVirtualProperty); set => SetValue(IsVirtualProperty, value); }
     public Windows.UI.Color LineColor { get => (Windows.UI.Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
-    public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty); set => SetValue(IsHighlightedProperty, value); }
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        var control = (LinkView)d;
-        control.UpdateInteractivity();
-        control.ScheduleUpdate();
-    }
-
-    private void UpdateInteractivity()
-    {
-        IsHitTestVisible = !IsVirtualLink;
-        IsTabStop = !IsVirtualLink;
-    }
+        => ((LinkView)d).ScheduleUpdate();
 
     private bool IsVirtualLink
         => IsVirtual
@@ -177,8 +157,8 @@ public sealed partial class LinkView : UserControl
         }
 
         BuildPoints();
-        var color = IsHighlighted ? Microsoft.UI.Colors.OrangeRed : LineColor;
-        var thickness = IsHighlighted ? 3.5 : 2;
+        var color = LineColor;
+        var thickness = 2;
         _strokeBrush.Color = color;
         _path.StrokeThickness = thickness;
 
@@ -235,46 +215,6 @@ public sealed partial class LinkView : UserControl
         _points[3] = new Point(EndLeft, EndTop);
     }
 
-    #region Interaction
-
-    private void OnHoverPointerMoved(object sender, PointerRoutedEventArgs e)
-    {
-        var pt = e.GetCurrentPoint(this).Position;
-        bool over = HitTestLine(pt);
-        if (over && !IsHighlighted) { IsHighlighted = true; Focus(FocusState.Pointer); }
-        else if (!over && IsHighlighted) IsHighlighted = false;
-    }
-
-    protected override void OnKeyDown(KeyRoutedEventArgs e)
-    {
-        base.OnKeyDown(e);
-        if (e.Key == Windows.System.VirtualKey.Delete && IsHighlighted)
-        {
-            if (DataContext is IWorkflowLinkViewModel vm)
-                vm.DeleteCommand.Execute(null);
-            e.Handled = true;
-        }
-    }
-
-    private bool HitTestLine(Point pt)
-    {
-        const double hitRadius = 6.0;
-        BuildPoints();
-        for (int i = 0; i < _points.Length - 1; i++)
-            if (DistSeg(pt, _points[i], _points[i + 1]) <= hitRadius) return true;
-        return false;
-    }
-
-    private static double DistSeg(Point p, Point a, Point b)
-    {
-        double abx = b.X - a.X, aby = b.Y - a.Y;
-        double len2 = abx * abx + aby * aby;
-        if (len2 < 0.0001) return Math.Sqrt((p.X - a.X) * (p.X - a.X) + (p.Y - a.Y) * (p.Y - a.Y));
-        double t = Math.Clamp(((p.X - a.X) * abx + (p.Y - a.Y) * aby) / len2, 0, 1);
-        double px = a.X + t * abx - p.X, py = a.Y + t * aby - p.Y;
-        return Math.Sqrt(px * px + py * py);
-    }
-
     private static Windows.UI.Color ParseColor(string hex)
     {
         hex = hex.TrimStart('#');
@@ -291,6 +231,4 @@ public sealed partial class LinkView : UserControl
                 (byte)(value >> 8),
                 (byte)value);
     }
-
-    #endregion
 }
