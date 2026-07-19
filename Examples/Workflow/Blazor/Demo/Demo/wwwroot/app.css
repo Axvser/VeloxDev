@@ -466,3 +466,20 @@ html, body {
 .wf-slot { display: inline-flex; }
 .wf-slot.connected svg circle:first-child { filter: drop-shadow(0 0 3px #22c55e); }
 .wf-slot.multi svg circle:first-child { stroke-dasharray: 2 1; }
+
+/* ── Slot Overlays (positioned at node edges) ── */
+.slot-overlay {
+    position: absolute;
+    z-index: 10;
+    pointer-events: none;
+}
+.slot-input-overlay {
+    left: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+.slot-output-overlay {
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+}

@@ -132,44 +132,75 @@
                         }
                     </svg>
 
-                    <!-- Nodes layer -->
+                    <!-- Nodes layer with drag support -->
                     @if (_session?.Tree?.Nodes is { } nodes)
                     {
+                        var nodeIndex = 0;
                         @foreach (var node in nodes)
                         {
                             var ns = GetNodeStyle(node);
-                            <div class="wf-node" style="@ns">
+                            var idx = nodeIndex;
+                            <div class="wf-node" style="@ns"
+                                 data-node-index="@idx">
                                 @switch (node)
                                 {
                                     case ControllerViewModel c:
-                                        <WorkflowControllerView Controller="c" />
+                                        @* Controller has output slot overlay *@
+                                        <div style="position:relative;width:100%;height:100%;">
+                                            <WorkflowControllerView Controller="c" />
+                                            <div class="slot-overlay slot-output-overlay">
+                                                <WorkflowSlotView Slot="c.OutputSlot" IsOutput="true" />
+                                            </div>
+                                        </div>
                                         break;
                                     case NodeViewModel w:
-                                        <WorkflowNodeView Node="w" />
+                                        <div style="position:relative;width:100%;height:100%;">
+                                            <WorkflowNodeView Node="w" />
+                                            <div class="slot-overlay slot-input-overlay">
+                                                <WorkflowSlotView Slot="w.InputSlot" IsInput="true" />
+                                            </div>
+                                            <div class="slot-overlay slot-output-overlay">
+                                                <WorkflowSlotView Slot="w.OutputSlot" IsOutput="true" />
+                                            </div>
+                                        </div>
                                         break;
                                     case BoolSelectorNodeViewModel b:
-                                        <WorkflowBoolSelectorView Selector="b" />
+                                        <div style="position:relative;width:100%;height:100%;">
+                                            <WorkflowBoolSelectorView Selector="b" />
+                                            <div class="slot-overlay slot-input-overlay">
+                                                <WorkflowSlotView Slot="b.InputSlot" IsInput="true" />
+                                            </div>
+                                        </div>
                                         break;
                                     case EnumSelectorNodeViewModel e:
-                                        <WorkflowEnumSelectorView Selector="e" />
+                                        <div style="position:relative;width:100%;height:100%;">
+                                            <WorkflowEnumSelectorView Selector="e" />
+                                            <div class="slot-overlay slot-input-overlay">
+                                                <WorkflowSlotView Slot="e.InputSlot" IsInput="true" />
+                                            </div>
+                                        </div>
                                         break;
                                 }
                             </div>
+                            nodeIndex++;
                         }
                     }
                 </div>
             </WorkflowGridDecorator>
 
-            <WorkflowMinimapOverlay Tree="_session?.Tree"
-                                    Visible="true"
-                                    Width="180" Height="120"
-                                    ScrollOffsetX="0" ScrollOffsetY="0"
-                                    ContentOffsetX="0" ContentOffsetY="0"
-                                    ViewportWidth="800" ViewportHeight="600"
-                                    Background="#1C2330"
-                                    BorderColor="#475569"
-                                    NodeFill="#38BDF8"
-                                    ViewportStroke="#FFFFFF" />
+            @if (_jsReady && _session?.Tree is not null)
+            {
+                <WorkflowMinimapOverlay Tree="_session.Tree"
+                                        Visible="true"
+                                        Width="180" Height="120"
+                                        ScrollOffsetX="_scrollLeft" ScrollOffsetY="_scrollTop"
+                                        ContentOffsetX="0" ContentOffsetY="0"
+                                        ViewportWidth="_viewportW" ViewportHeight="_viewportH"
+                                        Background="#1C2330"
+                                        BorderColor="#475569"
+                                        NodeFill="#38BDF8"
+                                        ViewportStroke="#FFFFFF" />
+            }
         </div>
     </main>
 </div>

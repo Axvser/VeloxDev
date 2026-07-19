@@ -31,21 +31,4 @@
             Auto-broadcast to downstream
         </label>
     </div>
-
-    <div class="node-slots">
-        @if (Node?.InputSlot is not null)
-        {
-            <div class="slot-container">
-                <WorkflowSlotView Slot="Node.InputSlot" IsInput="true" />
-                <span>In</span>
-            </div>
-        }
-        @if (Node?.OutputSlot is not null)
-        {
-            <div class="slot-container" style="margin-left:auto;">
-                <span>Out</span>
-                <WorkflowSlotView Slot="Node.OutputSlot" IsOutput="true" />
-            </div>
-        }
-    </div>
 </div>

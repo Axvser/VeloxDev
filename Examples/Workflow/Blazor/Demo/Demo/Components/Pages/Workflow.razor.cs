@@ -18,6 +18,8 @@ public partial class Workflow : ComponentBase, IDisposable
     private WorkflowDemoSession? _session;
     private ElementReference _canvasRef;
     private ElementReference _canvasScrollRef;
+    private ElementReference _decoratorContentRef;
+    private ElementReference _minimapRef;
     private ElementReference _agentLogRef;
     private ElementReference _execLogRef;
 
@@ -26,6 +28,12 @@ public partial class Workflow : ComponentBase, IDisposable
     private double _canvasW = 3200;
     private double _canvasH = 2200;
     private string _canvasLayoutSize = "";
+    private double _scrollLeft;
+    private double _scrollTop;
+    private double _viewportW = 800;
+    private double _viewportH = 600;
+    private bool _jsReady;
+    private DotNetObjectReference<Workflow>? _dotNetRef;
 
     private string _canvasWidth => $"{_canvasW}px";
     private string _canvasHeight => $"{_canvasH}px";
@@ -37,6 +45,63 @@ public partial class Workflow : ComponentBase, IDisposable
         UpdateCanvasSize();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("workflowInterop.initScrollTracking", _canvasScrollRef, _dotNetRef);
+            await JS.InvokeVoidAsync("workflowInterop.initNodeDrag", _canvasRef, _dotNetRef);
+            await InitViewportSize();
+            _jsReady = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task InitViewportSize()
+    {
+        try
+        {
+            var vp = await JS.InvokeAsync<ViewportSize>("workflowInterop.getViewportSize", _canvasScrollRef);
+            _viewportW = vp.w;
+            _viewportH = vp.h;
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public void OnScrollChanged(double left, double top)
+    {
+        _scrollLeft = left;
+        _scrollTop = top;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnMinimapClick(double relX, double relY, double mapW, double mapH)
+    {
+        // Calculate target scroll position based on minimap click ratio
+        var maxScrollLeft = Math.Max(0, _canvasW - _viewportW);
+        var maxScrollTop = Math.Max(0, _canvasH - _viewportH);
+        var targetX = (relX / mapW) * maxScrollLeft;
+        var targetY = (relY / mapH) * maxScrollTop;
+        await JS.InvokeVoidAsync("workflowInterop.scrollTo", _canvasScrollRef, targetX, targetY);
+    }
+
+    [JSInvokable]
+    public async Task OnNodeDragEnd(int nodeIndex, double left, double top)
+    {
+        if (_session?.Tree?.Nodes is { } nodes && nodeIndex >= 0 && nodeIndex < nodes.Count)
+        {
+            var node = nodes[nodeIndex];
+            // Account for scroll offset since position is relative to viewport
+            node.Anchor.Horizontal = left + _scrollLeft;
+            node.Anchor.Vertical = top + _scrollTop;
+            _session.Tree.Layout.UpdateCommand.Execute(null);
+            StateHasChanged();
+        }
+    }
+
     private void SubscribeSession()
     {
         if (_session is null) return;
@@ -45,6 +110,8 @@ public partial class Workflow : ComponentBase, IDisposable
         _session.Controller.PropertyChanged += OnControllerPropertyChanged;
         if (_session.Tree is INotifyPropertyChanged np)
             np.PropertyChanged += OnTreePropertyChanged;
+        if (_session.Tree.Layout is INotifyPropertyChanged lp)
+            lp.PropertyChanged += OnLayoutPropertyChanged;
     }
 
     private void UnsubscribeSession()
@@ -55,6 +122,8 @@ public partial class Workflow : ComponentBase, IDisposable
         _session.Controller.PropertyChanged -= OnControllerPropertyChanged;
         if (_session.Tree is INotifyPropertyChanged np)
             np.PropertyChanged -= OnTreePropertyChanged;
+        if (_session.Tree.Layout is INotifyPropertyChanged lp)
+            lp.PropertyChanged -= OnLayoutPropertyChanged;
     }
 
     private void UpdateCanvasSize()
@@ -65,6 +134,12 @@ public partial class Workflow : ComponentBase, IDisposable
             _canvasH = Math.Max(layout.ActualSize.Height, 1200);
             _canvasLayoutSize = $"{layout.ActualSize.Width:F0}×{layout.ActualSize.Height:F0}";
         }
+    }
+
+    private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        UpdateCanvasSize();
+        InvokeAsync(StateHasChanged);
     }
 
     private void OnNodesOrLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -137,10 +212,7 @@ public partial class Workflow : ComponentBase, IDisposable
             UpdateCanvasSize();
             StateHasChanged();
         }
-        catch
-        {
-            // User cancelled or error
-        }
+        catch { }
     }
 
     private async Task LoadPerformanceTest()
@@ -204,5 +276,8 @@ public partial class Workflow : ComponentBase, IDisposable
     public void Dispose()
     {
         UnsubscribeSession();
+        _dotNetRef?.Dispose();
     }
+
+    private record ViewportSize(double w, double h);
 }
