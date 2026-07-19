@@ -1,8 +1,6 @@
-using VeloxDev.WorkflowSystem.AttachedBehaviors;
-
 namespace Demo.Controls;
 
-public sealed class PolylineCurveView : GraphicsView, IWorkflowLinkRenderView
+public sealed class PolylineCurveView : GraphicsView
 {
     public static readonly BindableProperty StartLeftProperty = BindableProperty.Create(nameof(StartLeft), typeof(double), typeof(PolylineCurveView), 0d, propertyChanged: OnInvalidateRequested);
     public static readonly BindableProperty StartTopProperty = BindableProperty.Create(nameof(StartTop), typeof(double), typeof(PolylineCurveView), 0d, propertyChanged: OnInvalidateRequested);
@@ -34,15 +32,24 @@ public sealed class PolylineCurveView : GraphicsView, IWorkflowLinkRenderView
     {
         if (bindable is PolylineCurveView view)
         {
-            view.UpdateVisualOffset();
             view.Invalidate();
         }
     }
 
-    private void UpdateVisualOffset()
+    private (double X, double Y) GetCanvasOffset()
     {
-        TranslationX = -ContentOffsetX;
-        TranslationY = -ContentOffsetY;
+        // Walk up the visual tree to find the parent AbsoluteLayout
+        // (PART_Canvas) and read its TranslationX/Y.  This replaces the
+        // {x:Reference} XAML binding that was removed to eliminate
+        // WinUI binding exceptions.
+        Element? current = this;
+        while (current is not null)
+        {
+            if (current is AbsoluteLayout abs)
+                return (abs.TranslationX, abs.TranslationY);
+            current = current.Parent;
+        }
+        return (0, 0);
     }
 
     private sealed class PolylineDrawable(PolylineCurveView owner) : IDrawable
@@ -54,10 +61,12 @@ public sealed class PolylineCurveView : GraphicsView, IWorkflowLinkRenderView
                 return;
             }
 
-            var startX = (float)(owner.StartLeft + owner.ContentOffsetX);
-            var startY = (float)(owner.StartTop + owner.ContentOffsetY);
-            var endX = (float)(owner.EndLeft + owner.ContentOffsetX);
-            var endY = (float)(owner.EndTop + owner.ContentOffsetY);
+            var (offsetX, offsetY) = owner.GetCanvasOffset();
+
+            var startX = (float)(owner.StartLeft + offsetX);
+            var startY = (float)(owner.StartTop + offsetY);
+            var endX = (float)(owner.EndLeft + offsetX);
+            var endY = (float)(owner.EndTop + offsetY);
             const float phi = 0.6180339887f;
             var stub = ((endX - startX) / 2f) * (1f - phi);
             var p1X = startX + stub;

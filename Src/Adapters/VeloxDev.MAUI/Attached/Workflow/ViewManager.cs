@@ -400,10 +400,6 @@ public sealed class ViewManager
             case IWorkflowLinkViewModel:
                 AbsoluteLayout.SetLayoutFlags(view, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
                 AbsoluteLayout.SetLayoutBounds(view, new Rect(0, 0, Math.Max(1, GetCanvasExtent(canvas.WidthRequest, canvas.Width)), Math.Max(1, GetCanvasExtent(canvas.HeightRequest, canvas.Height))));
-                // ContentOffset cancels out Canvas.TranslationX in the link's
-                // draw math.  Setting it here avoids {x:Reference} bindings in
-                // XAML DataTemplate which cause WinUI binding exceptions.
-                SyncLinkContentOffset(view);
                 break;
             default:
                 AbsoluteLayout.SetLayoutFlags(view, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
@@ -412,33 +408,6 @@ public sealed class ViewManager
         }
     }
 
-    /// <summary>
-    /// Synchronizes ContentOffsetX/Y on link views to match the canvas offset,
-    /// so the link's draw coordinates match the node positions after TranslationX.
-    /// Without this, links draw at world coordinates while nodes are shifted by
-    /// Canvas.TranslationX, causing a visual offset = partial clipping.
-    /// </summary>
-    private static void SyncLinkContentOffset(View view)
-    {
-        Element? current = view;
-        while (current is not null)
-        {
-            if (current.BindingContext is IWorkflowTreeViewModel tree)
-            {
-                var offset = tree.Layout.ActualOffset;
-                // PolylineCurveView uses ContentOffsetX/Y in its draw math AND
-                // sets TranslationX = -ContentOffsetX for visual offset.
-                // For GraphicsView subclasses, set via BindableProperty.
-                if (view is IWorkflowLinkRenderView linkView)
-                {
-                    linkView.ContentOffsetX = offset.Horizontal;
-                    linkView.ContentOffsetY = offset.Vertical;
-                }
-                return;
-            }
-            current = current.Parent;
-        }
-    }
 
 
     private static double GetCanvasExtent(double requested, double actual)
