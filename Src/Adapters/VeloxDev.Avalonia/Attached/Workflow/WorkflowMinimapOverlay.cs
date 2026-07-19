@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using System;
 using System.Collections.Generic;
@@ -394,7 +395,14 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     private void InstanceMarkDirty()
     {
         _pendingRefresh = true;
-        if (IsVisible) InvalidateVisual();
+        if (!IsVisible) return;
+
+        // OnNodePropChanged can fire from the MonoBehaviourManager loop thread.
+        // InvalidateVisual requires the UI thread — dispatch if needed.
+        if (Dispatcher.UIThread.CheckAccess())
+            InvalidateVisual();
+        else
+            Dispatcher.UIThread.Post(InvalidateVisual);
     }
 
     private void MarkDirty()

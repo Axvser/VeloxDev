@@ -235,7 +235,16 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         if (e.PropertyName is nameof(IWorkflowSlotViewModel.Anchor)) MarkDirty();
     }
 
-    private void MarkDirty() { _pendingRefresh = true; Invalidate(); }
+    private void MarkDirty()
+    {
+        _pendingRefresh = true;
+        // Invalidate requires the main thread — dispatch if called from
+        // background (e.g. MonoBehaviourManager loop, BroadcastVisibleItemLayout).
+        if (MainThread.IsMainThread)
+            Invalidate();
+        else
+            MainThread.BeginInvokeOnMainThread(Invalidate);
+    }
 
     // ── Data refresh ─────────────────────────────────────────────────────────
 

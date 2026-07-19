@@ -327,7 +327,15 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     private void MarkDirty()
     {
         _pendingRefresh = true;
-        if (IsVisible) InvalidateVisual();
+        if (!IsVisible) return;
+
+        // OnNodePropChanged / OnSlotPropChanged can fire from the
+        // MonoBehaviourManager loop thread (via BroadcastVisibleItemLayout).
+        // InvalidateVisual requires the UI thread — dispatch if needed.
+        if (Dispatcher.CheckAccess())
+            InvalidateVisual();
+        else
+            Dispatcher.BeginInvoke(InvalidateVisual);
     }
 
     // ── Data refresh ─────────────────────────────────────────────────────────
