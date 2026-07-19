@@ -75,6 +75,35 @@ public partial class LinkView : ContentView
             var firstTurnX = startX + stub;
             var secondTurnX = endX - stub;
 
+            // GraphicsView clips drawing to its own bounds (0,0)-(W,H).
+            // When link endpoints are in other quadrants (negative coordinates),
+            // the line segments are clipped and invisible. Compute the bounding
+            // box of all line points, shift them to non-negative coordinates,
+            // and translate the GraphicsView to compensate — keeping the line
+            // at the correct visual position on the canvas.
+            var minX = Math.Min(startX, Math.Min(firstTurnX, Math.Min(secondTurnX, endX)));
+            var minY = Math.Min(startY, endY);
+            float offsetX = 0, offsetY = 0;
+            if (minX < 0f) offsetX = -minX;
+            if (minY < 0f) offsetY = -minY;
+
+            if (offsetX > 0f || offsetY > 0f)
+            {
+                startX += offsetX;
+                endX += offsetX;
+                firstTurnX += offsetX;
+                secondTurnX += offsetX;
+                startY += offsetY;
+                endY += offsetY;
+                owner.PART_Graphics.TranslationX = -offsetX;
+                owner.PART_Graphics.TranslationY = -offsetY;
+            }
+            else
+            {
+                owner.PART_Graphics.TranslationX = 0f;
+                owner.PART_Graphics.TranslationY = 0f;
+            }
+
             canvas.StrokeColor = color;
             canvas.StrokeSize = 2f;
             canvas.StrokeDashPattern = owner.IsVirtualLink ? [4, 2] : null;

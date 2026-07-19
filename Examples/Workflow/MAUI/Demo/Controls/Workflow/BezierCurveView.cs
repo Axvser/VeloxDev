@@ -58,6 +58,30 @@ public sealed class BezierCurveView : GraphicsView
             var endY = (float)(owner.EndTop + owner.ContentOffsetY);
             var controlOffset = Math.Max(80f, Math.Abs(endX - startX) * 0.45f);
 
+            // GraphicsView clips drawing to its own bounds (0,0)-(W,H).
+            // Offset all coordinates to non-negative and translate the view
+            // so the curve remains at the correct visual position.
+            var minX = Math.Min(startX, endX);
+            var minY = Math.Min(startY, endY);
+            float offsetX = 0, offsetY = 0;
+            if (minX < 0f) offsetX = -minX;
+            if (minY < 0f) offsetY = -minY;
+
+            if (offsetX > 0f || offsetY > 0f)
+            {
+                startX += offsetX;
+                endX += offsetX;
+                startY += offsetY;
+                endY += offsetY;
+                owner.TranslationX = -offsetX;
+                owner.TranslationY = -offsetY;
+            }
+            else
+            {
+                owner.TranslationX = 0f;
+                owner.TranslationY = 0f;
+            }
+
             var path = new PathF();
             path.MoveTo(startX, startY);
             path.CurveTo(startX + controlOffset, startY, endX - controlOffset, endY, endX, endY);

@@ -75,6 +75,32 @@ public partial class TemplateClass : ContentView
             var firstTurnX = startX + stub;
             var secondTurnX = endX - stub;
 
+            // GraphicsView clips drawing to its own bounds (0,0)-(W,H).
+            // Offset all coordinates to non-negative and translate the view
+            // so the line remains at the correct visual position.
+            var minX = Math.Min(startX, Math.Min(firstTurnX, Math.Min(secondTurnX, endX)));
+            var minY = Math.Min(startY, endY);
+            float offsetX = 0, offsetY = 0;
+            if (minX < 0f) offsetX = -minX;
+            if (minY < 0f) offsetY = -minY;
+
+            if (offsetX > 0f || offsetY > 0f)
+            {
+                startX += offsetX;
+                endX += offsetX;
+                firstTurnX += offsetX;
+                secondTurnX += offsetX;
+                startY += offsetY;
+                endY += offsetY;
+                owner.PART_Graphics.TranslationX = -offsetX;
+                owner.PART_Graphics.TranslationY = -offsetY;
+            }
+            else
+            {
+                owner.PART_Graphics.TranslationX = 0f;
+                owner.PART_Graphics.TranslationY = 0f;
+            }
+
             canvas.StrokeColor = color;
             canvas.StrokeSize = (float)TemplateLinkThickness;
             canvas.StrokeDashPattern = owner.IsVirtualLink ? [4, 2] : null;

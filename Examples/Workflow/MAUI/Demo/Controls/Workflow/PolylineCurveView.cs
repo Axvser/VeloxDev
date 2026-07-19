@@ -55,6 +55,32 @@ public sealed class PolylineCurveView : GraphicsView
             var p1X = startX + stub;
             var p2X = endX - stub;
 
+            // GraphicsView clips drawing to its own bounds (0,0)-(W,H).
+            // Offset all coordinates to non-negative and translate the view
+            // so the line remains at the correct visual position.
+            var minX = Math.Min(startX, Math.Min(p1X, Math.Min(p2X, endX)));
+            var minY = Math.Min(startY, endY);
+            float offsetX = 0, offsetY = 0;
+            if (minX < 0f) offsetX = -minX;
+            if (minY < 0f) offsetY = -minY;
+
+            if (offsetX > 0f || offsetY > 0f)
+            {
+                startX += offsetX;
+                endX += offsetX;
+                p1X += offsetX;
+                p2X += offsetX;
+                startY += offsetY;
+                endY += offsetY;
+                owner.TranslationX = -offsetX;
+                owner.TranslationY = -offsetY;
+            }
+            else
+            {
+                owner.TranslationX = 0f;
+                owner.TranslationY = 0f;
+            }
+
             canvas.StrokeColor = color;
             canvas.StrokeSize = 4;
             canvas.StrokeDashPattern = owner.IsVirtual ? [4, 2] : null;

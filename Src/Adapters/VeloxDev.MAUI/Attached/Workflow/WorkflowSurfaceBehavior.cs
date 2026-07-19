@@ -33,6 +33,11 @@ public sealed class WorkflowSurfaceBehavior
         /// <summary>Cancels the previous in-flight ScrollToAsync on each new pan delta,
         /// preventing stack-up of outdated scroll operations.</summary>
         public CancellationTokenSource? PanCts { get; set; }
+
+        /// <summary>True while a pan gesture is active (Started through Completed/Canceled).
+        /// Used by OnScrolled to suppress redundant Refresh during pan gestures, since
+        /// ApplyPanAsync already calls UpdateVisibleRegion after each ScrollToAsync.</summary>
+        public bool PanGestureActive { get; set; }
     }
 
     public static readonly BindableProperty IsEnabledProperty = BindableProperty.CreateAttached(
@@ -431,10 +436,32 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         var host = FindAncestorContentView(viewer);
-        if (host is not null)
+        if (host is null)
         {
-            Refresh(host);
+            return;
         }
+
+        var state = (SurfaceState?)host.GetValue(StateProperty);
+        if (state is null)
+        {
+            return;
+        }
+
+        // During an active pan gesture, ApplyPanAsync already calls
+        // UpdateVisibleRegion after each ScrollToAsync completes.
+        // The OnScrolled that fires from the same ScrollToAsync would
+        // redundantly call Refresh ¡ú ApplyLayout ¡ú UpdateVisibleRegion,
+        // re-reading viewport values while MAUI layout may still be
+        // transitional. This causes a visual flashback/jump on mouse
+        // release (the "Completed" case) because the stale scroll
+        // position writes ViewportOffset/Viewport after the gesture
+        // has logically ended.
+        if (state.PanGestureActive)
+        {
+            return;
+        }
+
+        Refresh(host);
     }
 
     private static void OnScrollViewerSizeChanged(object? sender, EventArgs e)
@@ -504,14 +531,19 @@ public sealed class WorkflowSurfaceBehavior
                     state.LastPanTotalY = 0;
                     state.PanAccumulatedX = state.ScrollViewer.ScrollX;
                     state.PanAccumulatedY = state.ScrollViewer.ScrollY;
+                    state.PanGestureActive = true;
                     break;
                 case GestureStatus.Running:
                     if (WorkflowNodeDragBehavior.IsDraggingNode || WorkflowSlotConnectionBehavior.IsDraggingConnection)
                     {
                         state.LastPanTotalX = e.TotalX;
                         state.LastPanTotalY = e.TotalY;
-                        state.PanAccumulatedX = state.ScrollViewer.ScrollX;
-                        state.PanAccumulatedY = state.ScrollViewer.ScrollY;
+                        // Don't overwrite PanAccumulatedX/Y during node/connection drag.
+                        // When drag ends mid-pan gesture, the next Running enters ApplyPanAsync
+                        // using delta = TotalX - LastPanTotalX applied against the pre-drag
+                        // PanAccumulated snapshot. If PanAccumulated were overwritten with
+                        // ScrollX here (which hasn't changed), delta would be near zero,
+                        // suppressing the intended scroll and causing a viewport jump.
                         break;
                     }
 
@@ -521,10 +553,16 @@ public sealed class WorkflowSurfaceBehavior
                 case GestureStatus.Completed:
                     state.LastPanTotalX = 0;
                     state.LastPanTotalY = 0;
-                    state.PanAccumulatedX = 0;
-                    state.PanAccumulatedY = 0;
+                    // Preserve actual scroll position instead of resetting to 0.
+                    // Between Completed and the next Started, a stale OnScrolled
+                    // may fire (from an in-flight ScrollToAsync), calling Refresh
+                    // which writes ViewportOffset. Having a coherent PanAccumulated
+                    // prevents state corruption across gesture boundaries.
+                    state.PanAccumulatedX = state.ScrollViewer.ScrollX;
+                    state.PanAccumulatedY = state.ScrollViewer.ScrollY;
                     state.PanCts?.Cancel();
                     state.PanCts = null;
+                    state.PanGestureActive = false;
                     break;
             }
         }
