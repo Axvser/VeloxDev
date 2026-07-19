@@ -407,6 +407,29 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
     private void OnDeserialized(StreamingContext context)
     {
         _isDeserializing = false;
+
+        // During deserialization, OnItemAddedToItems skips CreateSlotCommand
+        // (_isDeserializing was true), so the deserialized slots have not been
+        // registered with the parent node.  Without this step the slots exist in
+        // Items but their Parent reference and Slots-collection membership are
+        // missing, breaking the object-reference-level identity that the tree's
+        // Links depend on.
+        //
+        // JSON.NET is configured with PreserveReferencesHandling.Objects, so the
+        // TSlot instances created here are the same instances that the Links'
+        // Sender/Receiver properties point to — we simply need to wire them into
+        // the parent node's hierarchy.
+        if (Parent is not null)
+        {
+            foreach (var item in Items)
+            {
+                var slot = item.Slot;
+                if (slot.Parent is null)
+                    slot.Parent = Parent;
+                if (!Parent.Slots.Any(s => ReferenceEquals(s, slot)))
+                    Parent.Slots.Add(slot);
+            }
+        }
     }
 
     public IEnumerator<TSlot> GetEnumerator()
