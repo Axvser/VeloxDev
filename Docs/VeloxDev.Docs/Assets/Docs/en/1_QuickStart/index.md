@@ -50,32 +50,43 @@ Create a ViewModel for a workflow node — the source generator will create the 
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
-public partial class MyNodeViewModel : WorkflowNodeViewModel
+public partial class MyNodeViewModel : NodeViewModelBase
 {
+	public MyNodeViewModel() => InitializeWorkflow();
+
 	[VeloxProperty] private string _label = "My Node";
 	[VeloxProperty] private int _value;
 }
 ```
 
-## 4. Register the Workflow Surface
+## 4. Create a Tree and Connect
 
-In your XAML view, add the workflow surface behavior and declare the Tree component:
-
-```xml
-<UserControl xmlns="https://github.com/avaloniaui"
-			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
-			 behaviors:WorkflowSurfaceBehavior.IsEnabled="True">
-	<framework:WorkflowTreeView x:Name="TreeView" />
-</UserControl>
+```csharp
+var tree = new TreeViewModelBase();
+var node = new MyNodeViewModel();
+tree.Nodes.Add(node);
 ```
 
 ## 5. Connect and Run
 
 ```csharp
-// In your ViewModel constructor
-var controller = new ControllerViewModel();
+var controller = new ControllerNode();
 var node1 = new MyNodeViewModel();
-var link = WorkflowLinkViewModel.Connect(controller.Slots[0], node1.Slots[0]);
+tree.Nodes.Add(controller);
+tree.Nodes.Add(node1);
+
+// Link via slot connection
+var link = new LinkViewModelBase
+{
+	Sender = controller.Slots[0],
+	Receiver = node1.Slots[0]
+};
+tree.Links.Add(link);
+
+// Compile and execute
+var compiler = new WorkflowCompiler();
+var plan = compiler.Compile(controller, CompileMode.BFS)[0];
+await plan.ExecuteAsync("payload");
 ```
 
 > **Next steps**: Head to **QuickStart → Hello Workflow** for a complete walk‑through, or dive directly into **DeepDive → Workflow Engine** to understand the architecture.

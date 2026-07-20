@@ -1,14 +1,23 @@
 # Tree
 
-The `WorkflowTreeViewModel` is the root container for a single workflow.
+The `TreeViewModelBase` is the root container for a single workflow.
 
 ```csharp
-public partial class WorkflowTreeViewModel
+using VeloxDev.MVVM;
+using VeloxDev.WorkflowSystem;
+
+public partial class TreeViewModelBase : IWorkflowTreeViewModel
 {
-    public ControllerViewModel Controller { get; set; }
-    public ObservableCollection<IWorkflowNodeViewModel> Nodes { get; set; }
-    // ...
+    [VeloxProperty] private CanvasLayout layout = new();
+    [VeloxProperty] private ObservableCollection<IWorkflowNodeViewModel> nodes = [];
+    [VeloxProperty] private ObservableCollection<IWorkflowLinkViewModel> links = [];
+    [VeloxProperty] private Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>> linksMap = [];
+    [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkViewModelBase();
 }
 ```
 
-All nodes, slots, and links within a workflow are scoped to one Tree instance.
+All nodes, slots, and links within a workflow are scoped to one Tree instance. The Tree also manages:
+
+- **Undo/Redo** via `SubmitCommand` / `UndoCommand` / `RedoCommand`
+- **Connection workflow** via `SendConnectionCommand` / `ReceiveConnectionCommand`
+- **Virtual link** for visual feedback during drag-connect

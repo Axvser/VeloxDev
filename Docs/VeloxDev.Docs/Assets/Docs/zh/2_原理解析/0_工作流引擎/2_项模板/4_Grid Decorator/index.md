@@ -1,3 +1,13 @@
-# Grid Decorator
+# Grid Decorator 模板
 
-使用 `dotnet new` 模板创建 Grid Decorator 视图。
+生成实现 `IWorkflowGridDecorator` 的网格装饰器。
+
+```shell
+# WPF
+dotnet new wpf-v-decorator -n MyGridDecorator -ns MyApp.Views
+
+# Avalonia
+dotnet new ava-v-decorator -n MyGridDecorator -ns MyApp.Views
+```
+
+生成的装饰器渲染可吸附网格背景。

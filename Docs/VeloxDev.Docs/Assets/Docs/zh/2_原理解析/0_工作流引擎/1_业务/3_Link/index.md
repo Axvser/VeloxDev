@@ -1,3 +1,24 @@
 # Link
 
-业务工作流组件定制说明。
+通过 `[WorkflowBuilder.Link<THelper>]` 扩展 `LinkViewModelBase`。
+
+```csharp
+using VeloxDev.WorkflowSystem;
+
+public class CustomLinkHelper : LinkHelper<CustomLink>
+{
+    public override void Delete()
+    {
+        // 清理资源后删除
+        base.Delete();
+    }
+}
+
+[WorkflowBuilder.Link<CustomLinkHelper>]
+public partial class CustomLink
+{
+    public CustomLink() => InitializeWorkflow();
+
+    [VeloxProperty] private bool usePolyline = true;
+}
+```

@@ -5,17 +5,44 @@
 ## 安装
 
 ```shell
-dotnet add package VeloxDev.Avalonia  # WPF / WinUI / MAUI / WinForms
+# 根据你的框架选择
+dotnet add package VeloxDev.Avalonia  # WPF / WinUI / MAUI / WinForms / Razor
+```
+
+## 定义节点
+
+```csharp
+using VeloxDev.MVVM;
+using VeloxDev.WorkflowSystem;
+
+public partial class MyNodeViewModel : NodeViewModelBase
+{
+    public MyNodeViewModel() => InitializeWorkflow();
+
+    [VeloxProperty] private string _label = "My Node";
+    [VeloxProperty] private int _value;
+}
 ```
 
 ## Hello Workflow
 
 ```csharp
-var controller = new ControllerViewModel();
+var tree = new TreeViewModelBase();
+var controller = new ControllerNode();
 var node = new MyNodeViewModel();
-WorkflowLinkViewModel.Connect(controller.Slots[0], node.Slots[0]);
+tree.Nodes.Add(controller);
+tree.Nodes.Add(node);
 
+// 连接
+var link = new LinkViewModelBase
+{
+    Sender = controller.Slots[0],
+    Receiver = node.Slots[0]
+};
+tree.Links.Add(link);
+
+// 编译并执行
 var compiler = new WorkflowCompiler();
 var plan = compiler.Compile(controller, CompileMode.BFS)[0];
-await plan.ExecuteAsync(NetworkFlowContext.Create("payload"));
+await plan.ExecuteAsync("payload");
 ```

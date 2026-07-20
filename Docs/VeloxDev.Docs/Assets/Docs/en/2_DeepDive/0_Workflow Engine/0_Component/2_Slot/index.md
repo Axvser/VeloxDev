@@ -1,13 +1,29 @@
 # Slot
 
-A `SlotViewModel` is a typed connection point on a Node.
+A `SlotViewModelBase` is a typed connection point on a Node.
 
 ```csharp
-public partial class SlotViewModel
+using VeloxDev.MVVM;
+using VeloxDev.WorkflowSystem;
+
+public sealed partial class SlotViewModelBase : IWorkflowSlotViewModel
 {
-    [VeloxProperty] public string Title { get; set; }
-    [VeloxProperty] public SlotType SlotType { get; set; } // Input / Output
+    [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> targets = [];
+    [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> sources = [];
+    [VeloxProperty] private SlotChannel channel = SlotChannel.OneBoth;
+    [VeloxProperty] private SlotState state = SlotState.StandBy;
+    [VeloxProperty] private Anchor anchor = new();
+    [VeloxProperty] private IWorkflowNodeViewModel? parent = null;
 }
 ```
 
-Slots enforce direction: an Input slot can only connect to an Output slot. Custom slot providers (`ISlotProvider`) can expose multiple connectors dynamically.
+Key properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Targets` | `ObservableCollection<IWorkflowSlotViewModel>` | Slots this slot connects **to** |
+| `Sources` | `ObservableCollection<IWorkflowSlotViewModel>` | Slots connecting **to** this slot |
+| `Channel` | `SlotChannel` | Direction constraint (`Input`, `Output`, `OneBoth`, `None`) |
+| `State` | `SlotState` | Connection state (`StandBy`, `Connected`, `Linking`, `Error`) |
+| `Anchor` | `Anchor` | Spatial position on the canvas |
+| `Parent` | `IWorkflowNodeViewModel?` | The containing node |

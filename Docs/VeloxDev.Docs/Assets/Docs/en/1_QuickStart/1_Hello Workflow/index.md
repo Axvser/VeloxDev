@@ -1,61 +1,78 @@
 # Hello Workflow
 
-Build a minimal but complete workflow in 5 minutes.
+Create a new console project, paste the code, and run — you'll have an executable workflow in under 2 minutes.
 
 ---
 
-## Step 1 — Create the ViewModels
+## Step 1 — Create a Project
+
+```shell
+dotnet new console -n MyFirstWorkflow
+cd MyFirstWorkflow
+dotnet add package VeloxDev.Core
+```
+
+## Step 2 — Paste This Entire File into `Program.cs`
 
 ```csharp
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.Compilation;
 
-public partial class MyController : ControllerViewModel { }
+// ── 1. Define your Node ViewModels ──────────────────────────────
 
-public partial class StartNode : WorkflowNodeViewModel
+// Controller — the workflow entry point (no inputs, only outputs)
+public partial class ControllerNode : NodeViewModelBase
 {
-	[VeloxProperty] private string _message = "Hello!";
+	public ControllerNode() => InitializeWorkflow();
+
+	[VeloxProperty] private string _seed = "Hello from VeloxDev!";
 }
 
-public partial class EndNode : WorkflowNodeViewModel
+// Processor — receives data, transforms it, and forwards it
+public partial class ProcessorNode : NodeViewModelBase
 {
+	public ProcessorNode() => InitializeWorkflow();
+
 	[VeloxProperty] private string _result = "";
 }
+
+// ── 2. Wire, Compile, and Execute ───────────────────────────────
+
+var ctrl  = new ControllerNode();
+var proc  = new ProcessorNode();
+
+// Link: ctrl's default slot → proc's default slot
+var link = new LinkViewModelBase
+{
+	Sender   = ctrl.Slots[0],
+	Receiver = proc.Slots[0]
+};
+
+var tree = new TreeViewModelBase();
+tree.Nodes.Add(ctrl);
+tree.Nodes.Add(proc);
+tree.Links.Add(link);
+
+// Compile (BFS, forward, from controller)
+var compiler  = new WorkflowCompiler();
+var results   = compiler.Compile(ctrl, CompileMode.BFS);
+var plan      = results[0];
+
+// Execute — the context object flows through each node in order
+var finalResult = await plan.ExecuteAsync("payload");
+Console.WriteLine($"Workflow completed. Final result: {finalResult}");
 ```
 
-## Step 2 — Wire them Together
+## Step 3 — Run
 
-```csharp
-var controller = new MyController();
-var start = new StartNode();
-var end = new EndNode();
-
-// Connect start → end via their default slots
-WorkflowLinkViewModel.Connect(start.Slots[0], end.Slots[0]);
+```shell
+dotnet run
 ```
 
-## Step 3 — Add to the Tree
-
-```csharp
-var tree = new WorkflowTreeViewModel();
-tree.Controller = controller;
-tree.Nodes.Add(start);
-tree.Nodes.Add(end);
+Output:
+```
+Workflow completed. Final result: payload
 ```
 
-## Step 4 — Render in XAML
-
-```xml
-<framework:WorkflowTreeView DataContext="{Binding Tree}" />
-```
-
-## Step 5 — Run
-
-```csharp
-var compiler = new WorkflowCompiler();
-var results = compiler.Compile(tree.Controller, CompileMode.BFS);
-var plan = results[0];
-await plan.ExecuteAsync(NetworkFlowContext.Create("payload"));
-```
-
-That's it. You've just created an executable workflow.
+The payload passed through `ControllerNode` (broadcast via Slot[0]) → `ProcessorNode` (received and returned). No GUI needed — the engine works headlessly.

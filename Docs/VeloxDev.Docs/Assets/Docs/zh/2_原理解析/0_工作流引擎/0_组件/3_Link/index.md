@@ -1,3 +1,17 @@
 # Link
 
-参考对应组件的 ViewModel 接口说明。
+`LinkViewModelBase` 表示两个 Slot 之间的可视化连接线。
+
+```csharp
+using VeloxDev.MVVM;
+using VeloxDev.WorkflowSystem;
+
+public sealed partial class LinkViewModelBase : IWorkflowLinkViewModel
+{
+    [VeloxProperty] private IWorkflowSlotViewModel sender = new SlotViewModelBase();
+    [VeloxProperty] private IWorkflowSlotViewModel receiver = new SlotViewModelBase();
+    [VeloxProperty] private bool isVisible = false;
+}
+```
+
+创建连接只需设置 `Sender` 和 `Receiver`，然后添加到 Tree 的 `Links` 集合中。各平台适配层负责将其渲染为贝塞尔曲线或折线。

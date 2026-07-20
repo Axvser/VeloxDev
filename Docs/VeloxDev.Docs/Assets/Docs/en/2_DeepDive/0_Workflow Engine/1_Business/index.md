@@ -1,20 +1,43 @@
 # Business
 
-Build domain-specific workflow nodes by creating custom Node subclasses and Helpers.
+Build domain-specific workflow components by creating custom subclasses and attaching Helpers via `[WorkflowBuilder]` attributes.
+
+## Custom Node Helper
+
+Override the virtual methods in `NodeHelper<T>` to inject business logic:
 
 ```csharp
-public class MyBusinessHelper : WorkflowHelper<MyBusinessNode>
+using VeloxDev.WorkflowSystem;
+
+// 1. Create a custom helper inheriting from NodeHelper<T>
+public class MyNodeHelper : NodeHelper<MyNodeViewModel>
 {
-    public override async Task ExecuteAsync(
-        MyBusinessNode node, NetworkFlowContext context)
+    // Called when this node receives data during execution
+    public override Task WorkAsync(object? parameter, CancellationToken ct)
     {
         // Business logic here
-        context.SetResult(Calculate(node.InputValue));
+        Console.WriteLine($"Processing: {parameter}");
+        return Task.CompletedTask;
     }
 }
 
-[WorkflowBuilder.MyNode<MyBusinessHelper>]
-public partial class MyBusinessNode { }
+// 2. Decorate the ViewModel with the helper type
+[WorkflowBuilder.Node<MyNodeHelper>]
+public partial class MyNodeViewModel
+{
+    public MyNodeViewModel() => InitializeWorkflow();
+
+    [VeloxProperty] private string inputValue = "";
+}
 ```
 
-The `[WorkflowBuilder]` source generator reads the helper type and generates the ViewModel with all required infrastructure.
+## Available `[WorkflowBuilder]` Attributes
+
+| Attribute | Target | Helper Interface |
+|-----------|--------|------------------|
+| `[WorkflowBuilder.Tree<THelper>]` | Tree | `IWorkflowTreeViewModelHelper` |
+| `[WorkflowBuilder.Node<THelper>]` | Node | `IWorkflowNodeViewModelHelper` |
+| `[WorkflowBuilder.Slot<THelper>]` | Slot | `IWorkflowSlotViewModelHelper` |
+| `[WorkflowBuilder.Link<THelper>]` | Link | `IWorkflowLinkViewModelHelper` |
+
+The source generator reads the helper type and generates all required infrastructure (commands, wiring).

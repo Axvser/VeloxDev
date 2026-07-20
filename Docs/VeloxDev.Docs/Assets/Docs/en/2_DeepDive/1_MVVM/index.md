@@ -1,19 +1,91 @@
 # MVVM Architecture
 
-VeloxDev's MVVM layer is built on source generators, not reflection.
+VeloxDev's MVVM layer is built on **Roslyn source generators**, not reflection. The generators run at compile time, producing zero-runtime-overhead notification properties and commands.
+
+---
+
+## Source Generator Pipeline
+
+```mermaid
+flowchart LR
+    subgraph Source
+        Field["[VeloxProperty]\nprivate string _name"]
+        Method["[VeloxCommand]\nprivate void Save()"]
+    end
+    subgraph Generator[VeloxDev.Core.Generator]
+        A[Parse Attributes]
+        B[Emit Property]
+        C[Emit Command]
+    end
+    subgraph Output
+        Prop["public string Name\n+ INotifyPropertyChanged\n+ OnNameChanged()"]
+        Cmd["public IVeloxCommand\nSaveCommand\n+ CanExecute"]
+    end
+
+    Field --> A --> B --> Prop
+    Method --> A --> C --> Cmd
+```
 
 ## VeloxProperty Generator
 
-Marks a field to generate a full notification property. The generator emits:
+```mermaid
+classDiagram
+    class UserSource {
+        [VeloxProperty]
+        private string _name
+    }
+    class GeneratedOutput {
+        +string Name {get; set;}
+        +event PropertyChangedEventHandler PropertyChanged
+        #void OnNameChanged(string oldValue, string newValue)
+    }
+    class Hook {
+        partial void OnNameChanged(string old, string new)
+    }
+    UserSource ..> GeneratedOutput : generates
+    GeneratedOutput ..> Hook : calls
+```
 
+Marks a **field** to generate:
 - A public CLR property
 - `INotifyPropertyChanging` / `INotifyPropertyChanged` implementations
-- A `partial void On{Name}Changed(T old, T new)` hook
+- A `partial void On{Name}Changed(T oldValue, T newValue)` hook — override for custom logic
+
+Supports two declaration forms:
+
+| Form | Example |
+|------|---------|
+| Field | `[VeloxProperty] private string _name;` |
+| Partial property | `[VeloxProperty] public partial string Name { get; set; }` |
 
 ## VeloxCommand Generator
 
-Marks a method to generate an `ICommand` wrapper. Supports:
+Marks a **method** to generate an `ICommand` wrapper. The method name `Save` produces `SaveCommand`.
 
-- `CanExecute` via a `bool Can{Name}Execute()` companion method
-- Async commands via `Task`-returning methods
-- Parameterized commands via `object? parameter`
+### Supported Method Signatures
+
+| Signature | CanExecute | Cancellation |
+|-----------|------------|-------------|
+| `void Method()` | — | — |
+| `void Method(object?)` | — | — |
+| `Task Method()` | — | — |
+| `Task Method(CancellationToken)` | — | ✓ |
+| `Task Method(object?, CancellationToken)` | — | ✓ |
+| With `canValidate: true` | `bool CanMethod()` | — |
+
+### Command Lifecycle Events
+
+Every `VeloxCommand` exposes events for each stage:
+
+```
+Created → Enqueued → Dequeued → Started → Completed
+                                        ↘ Failed
+                                        ↘ Canceled
+```
+
+## Design Rationale
+
+- **Zero dependencies**: No ReactiveUI, CommunityToolkit, or Fody
+- **Compile-time**: No reflection, no runtime code generation
+- **Partial methods**: User-extensible via `partial void On{Name}Changed` hooks
+- **Concurrency control**: `semaphore` parameter limits parallel executions
