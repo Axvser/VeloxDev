@@ -3,14 +3,129 @@
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 			 xmlns:vm="using:VeloxDev.Docs.ViewModels"
-			 xmlns:views="using:VeloxDev.Docs"
+			 xmlns:models="using:VeloxDev.Docs.Models"
+			 xmlns:md="clr-namespace:AvalonMarkdown.Views;assembly=AvalonMarkdown"
 			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
 			 x:Class="VeloxDev.Docs.Views.MainView"
 			 x:DataType="vm:MainViewModel">
+
 	<Design.DataContext>
 		<vm:MainViewModel />
 	</Design.DataContext>
 
-	<views:DocumentView DataContext="{Binding Document}"/>
+	<Grid RowDefinitions="Auto,Auto,*">
 
+		<!-- 顶部工具栏 -->
+		<Border Grid.Row="0"
+				BorderThickness="0,0,0,1"
+				BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+				Padding="8,6">
+			<Grid ColumnDefinitions="*,Auto">
+				<!-- 左侧 -->
+				<StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+					<ComboBox ItemsSource="{Binding Document.TopLanguages}"
+							  SelectedItem="{Binding Document.SelectedLanguage}"
+							  ToolTip.Tip="Document language"
+							  MinWidth="110">
+						<ComboBox.ItemTemplate>
+							<DataTemplate x:DataType="vm:LanguageOption">
+								<TextBlock Text="{Binding DisplayName}" />
+							</DataTemplate>
+						</ComboBox.ItemTemplate>
+					</ComboBox>
+				</StackPanel>
+				<!-- 右侧工具栏 -->
+				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+					<!-- 翻译目标语言选择 -->
+					<ComboBox ItemsSource="{Binding Document.AllLanguages}"
+							  SelectedItem="{Binding Document.TranslationTargetLanguage}"
+							  MinWidth="110"
+							  ToolTip.Tip="Target language for translation">
+						<ComboBox.ItemTemplate>
+							<DataTemplate x:DataType="vm:LanguageOption">
+								<TextBlock Text="{Binding DisplayName}" />
+							</DataTemplate>
+						</ComboBox.ItemTemplate>
+					</ComboBox>
+
+					<!-- 翻译当前页 -->
+					<Button Content="🌐 Translate"
+							Command="{Binding Document.TranslateCurrentPageCommand}"
+							IsEnabled="{Binding Document.CanTranslate}"
+							ToolTip.Tip="Translate current page via LLM" />
+
+					<!-- 取消翻译 -->
+					<Button Content="🛑"
+							Command="{Binding Document.CancelTranslationCommand}"
+							IsVisible="{Binding Document.IsTranslating}" />
+
+					<!-- 翻译设置按钮 -->
+					<Button x:Name="TranslationSettingsButton"
+							Content="⚙"
+							ToolTip.Tip="Translation settings (API key, model, endpoint)" />
+				</StackPanel>
+			</Grid>
+		</Border>
+
+		<!-- 翻译进度条 -->
+		<Border Grid.Row="1"
+				IsVisible="{Binding Document.IsTranslating}"
+				Padding="8,2"
+				BorderThickness="0,0,0,1"
+				BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+			<Grid ColumnDefinitions="*,Auto">
+				<ProgressBar Grid.Column="0"
+							 Value="{Binding Document.TranslationProgress}"
+							 Minimum="0" Maximum="1"
+							 Height="4"
+							 VerticalAlignment="Center" />
+				<TextBlock Grid.Column="1"
+						   Text="{Binding Document.TranslationStatus}"
+						   FontSize="10"
+						   Opacity="0.7"
+						   Margin="8,0,0,0"
+						   VerticalAlignment="Center" />
+			</Grid>
+		</Border>
+
+		<!-- 主体区域 -->
+		<Grid Grid.Row="2" ColumnDefinitions="240,4,*">
+			<!-- 左侧目录树 -->
+			<Grid Grid.Column="0" RowDefinitions="Auto,*">
+				<TextBlock Grid.Row="0"
+						   Text="Navigation"
+						   Margin="10,8,8,4"
+						   Opacity="0.6"
+						   FontSize="11" />
+				<TreeView Grid.Row="1"
+						  ItemsSource="{Binding Document.Nodes}"
+						  SelectedItem="{Binding Document.SelectedNode}"
+						  Margin="4,0">
+					<TreeView.ItemTemplate>
+						<TreeDataTemplate ItemsSource="{Binding Children}"
+										  x:DataType="models:PageNode">
+							<TextBlock Text="{Binding Title}"
+									   x:DataType="models:PageNode" />
+						</TreeDataTemplate>
+					</TreeView.ItemTemplate>
+				</TreeView>
+			</Grid>
+
+			<GridSplitter Grid.Column="1" ResizeDirection="Columns" Width="4" />
+
+			<!-- 右侧 Markdown 内容 -->
+			<Grid Grid.Column="2" Background="Transparent">
+				<TextBlock Text="Loading..."
+						   IsVisible="{Binding Document.IsLoading}"
+						   HorizontalAlignment="Center"
+						   VerticalAlignment="Center"
+						   Opacity="0.5"
+						   FontSize="18" />
+				<md:MarkdownView x:Name="MarkdownPreview"
+								 HorizontalAlignment="Stretch"
+								 VerticalAlignment="Stretch"
+								 Background="Transparent" />
+			</Grid>
+		</Grid>
+	</Grid>
 </UserControl>

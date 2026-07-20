@@ -1,13 +1,9 @@
-﻿using VeloxDev.MVVM;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace VeloxDev.Docs.ViewModels;
 
-public partial class MainViewModel
+public partial class MainViewModel : ObservableObject
 {
-    [VeloxProperty] private DocumentProvider document = new();
-
-    public MainViewModel()
-    {
-        Document = DocumentProvider.LoadDefault().GetAwaiter().GetResult();
-    }
+    [ObservableProperty]
+    private DocumentViewModel _document = new();
 }

@@ -6,7 +6,8 @@
         xmlns:views="using:VeloxDev.Docs.Views"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="VeloxDev.Docs.Views.MainWindow"
-        Icon="/Assets/avalonia-logo.ico"
-        Title="VeloxDev.Docs">
+        Title="VeloxDev Docs"
+        Width="1200"
+        Height="800">
         <views:MainView />
 </Window>

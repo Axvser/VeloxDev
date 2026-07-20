@@ -11,6 +11,12 @@
     pointer-events: none;
 }
 
+/* Remove any default iframe border from Avalonia WebView */
+iframe {
+    border: none !important;
+    outline: none !important;
+}
+
 /* Light theme styles */
 @media (prefers-color-scheme: light) {
     .avalonia-splash {
