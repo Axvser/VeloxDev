@@ -197,6 +197,11 @@ public partial class DocumentViewModel : ObservableObject
         // Restore ready state: the MarkdownView WebView was not destroyed,
         // only the tree/content was reloaded.
         _markdownViewReady = true;
+        // LoadTreeAsync auto-selected the first node, but OnSelectedNodeChanged
+        // fired while _markdownViewReady was still false and returned early.
+        // Re-trigger content loading for the now-selected node.
+        if (SelectedNode is not null)
+            await LoadContentAsync(SelectedNode);
     }
 
     private async Task LoadContentAsync(PageNode node)

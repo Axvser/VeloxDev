@@ -6,322 +6,217 @@
       "children": []
     },
     {
-      "title": "Version",
-      "path": "Version",
+      "title": "QuickStart",
+      "path": "QuickStart",
       "children": [
         {
-          "title": "V5.0.35",
-          "path": "Version/V5.0.35",
+          "title": "AOP",
+          "path": "QuickStart/AOP",
           "children": []
         },
         {
-          "title": "V5.1.1",
-          "path": "Version/V5.1.1",
-          "children": [
-            {
-              "title": "Agent Building",
-              "path": "Version/V5.1.1/Agent Building",
-              "children": []
-            },
-            {
-              "title": "Conditional Branch Creation",
-              "path": "Version/V5.1.1/Conditional Branch Creation",
-              "children": []
-            }
-          ]
-        },
-        {
-          "title": "V5.2.1",
-          "path": "Version/V5.2.1",
-          "children": []
-        },
-        {
-          "title": "V5.4.0",
-          "path": "Version/V5.4.0",
-          "children": [
-            {
-              "title": "Aspect-Oriented Programming",
-              "path": "Version/V5.4.0/Aspect-Oriented Programming",
-              "children": []
-            }
-          ]
-        },
-        {
-          "title": "V5.5.1",
-          "path": "Version/V5.5.1",
-          "children": [
-            {
-              "title": "Frame Loop",
-              "path": "Version/V5.5.1/Frame Loop",
-              "children": []
-            },
-            {
-              "title": "MVVM",
-              "path": "Version/V5.5.1/MVVM",
-              "children": []
-            },
-            {
-              "title": "Other",
-              "path": "Version/V5.5.1/Other",
-              "children": []
-            },
-            {
-              "title": "Theme System",
-              "path": "Version/V5.5.1/Theme System",
-              "children": []
-            }
-          ]
-        },
-        {
-          "title": "V5.7.0",
-          "path": "Version/V5.7.0",
-          "children": [
-            {
-              "title": "Node Helper",
-              "path": "Version/V5.7.0/Node Helper",
-              "children": []
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "Start",
-      "path": "Start",
-      "children": [
-        {
-          "title": "Aspect-Oriented Programming",
-          "path": "Start/Aspect-Oriented Programming",
+          "title": "Animation",
+          "path": "QuickStart/Animation",
           "children": []
         },
         {
           "title": "Frame Loop",
-          "path": "Start/Frame Loop",
+          "path": "QuickStart/Frame Loop",
+          "children": []
+        },
+        {
+          "title": "Hello Workflow",
+          "path": "QuickStart/Hello Workflow",
+          "children": []
+        },
+        {
+          "title": "Install",
+          "path": "QuickStart/Install",
+          "children": []
+        },
+        {
+          "title": "Intelligent Agent",
+          "path": "QuickStart/Intelligent Agent",
           "children": []
         },
         {
           "title": "MVVM",
-          "path": "Start/MVVM",
-          "children": [
-            {
-              "title": "Notification Properties",
-              "path": "Start/MVVM/Notification Properties",
-              "children": []
-            },
-            {
-              "title": "command",
-              "path": "Start/MVVM/command",
-              "children": []
-            }
-          ]
-        },
-        {
-          "title": "Persistence",
-          "path": "Start/Persistence",
+          "path": "QuickStart/MVVM",
           "children": []
         },
         {
-          "title": "Workflow",
-          "path": "Start/Workflow",
+          "title": "Persistence",
+          "path": "QuickStart/Persistence",
+          "children": []
+        },
+        {
+          "title": "Theme",
+          "path": "QuickStart/Theme",
+          "children": []
+        }
+      ]
+    },
+    {
+      "title": "DeepDive",
+      "path": "DeepDive",
+      "children": [
+        {
+          "title": "AOP",
+          "path": "DeepDive/AOP",
+          "children": []
+        },
+        {
+          "title": "Animation",
+          "path": "DeepDive/Animation",
+          "children": []
+        },
+        {
+          "title": "Frame Loop",
+          "path": "DeepDive/Frame Loop",
+          "children": []
+        },
+        {
+          "title": "Intelligent Agent",
+          "path": "DeepDive/Intelligent Agent",
+          "children": []
+        },
+        {
+          "title": "MVVM",
+          "path": "DeepDive/MVVM",
+          "children": []
+        },
+        {
+          "title": "Persistence",
+          "path": "DeepDive/Persistence",
+          "children": []
+        },
+        {
+          "title": "Theme System",
+          "path": "DeepDive/Theme System",
+          "children": []
+        },
+        {
+          "title": "Workflow Engine",
+          "path": "DeepDive/Workflow Engine",
           "children": [
             {
               "title": "Additional Behaviors",
-              "path": "Start/Workflow/Additional Behaviors",
+              "path": "DeepDive/Workflow Engine/Additional Behaviors",
               "children": [
                 {
                   "title": "Link",
-                  "path": "Start/Workflow/Additional Behaviors/Link",
+                  "path": "DeepDive/Workflow Engine/Additional Behaviors/Link",
                   "children": []
                 },
                 {
                   "title": "Node",
-                  "path": "Start/Workflow/Additional Behaviors/Node",
+                  "path": "DeepDive/Workflow Engine/Additional Behaviors/Node",
                   "children": []
                 },
                 {
                   "title": "Slot",
-                  "path": "Start/Workflow/Additional Behaviors/Slot",
+                  "path": "DeepDive/Workflow Engine/Additional Behaviors/Slot",
                   "children": []
                 },
                 {
                   "title": "Tree",
-                  "path": "Start/Workflow/Additional Behaviors/Tree",
+                  "path": "DeepDive/Workflow Engine/Additional Behaviors/Tree",
                   "children": []
                 }
               ]
             },
             {
               "title": "Business",
-              "path": "Start/Workflow/Business",
+              "path": "DeepDive/Workflow Engine/Business",
               "children": [
                 {
                   "title": "Link",
-                  "path": "Start/Workflow/Business/Link",
+                  "path": "DeepDive/Workflow Engine/Business/Link",
                   "children": []
                 },
                 {
                   "title": "Node",
-                  "path": "Start/Workflow/Business/Node",
+                  "path": "DeepDive/Workflow Engine/Business/Node",
                   "children": []
                 },
                 {
                   "title": "Slot",
-                  "path": "Start/Workflow/Business/Slot",
+                  "path": "DeepDive/Workflow Engine/Business/Slot",
                   "children": []
                 },
                 {
                   "title": "Tree",
-                  "path": "Start/Workflow/Business/Tree",
+                  "path": "DeepDive/Workflow Engine/Business/Tree",
                   "children": []
                 }
               ]
+            },
+            {
+              "title": "Compilation",
+              "path": "DeepDive/Workflow Engine/Compilation",
+              "children": []
             },
             {
               "title": "Component",
-              "path": "Start/Workflow/Component",
+              "path": "DeepDive/Workflow Engine/Component",
               "children": [
                 {
                   "title": "Link",
-                  "path": "Start/Workflow/Component/Link",
+                  "path": "DeepDive/Workflow Engine/Component/Link",
                   "children": []
                 },
                 {
                   "title": "Node",
-                  "path": "Start/Workflow/Component/Node",
+                  "path": "DeepDive/Workflow Engine/Component/Node",
                   "children": []
                 },
                 {
                   "title": "Slot",
-                  "path": "Start/Workflow/Component/Slot",
+                  "path": "DeepDive/Workflow Engine/Component/Slot",
                   "children": []
                 },
                 {
                   "title": "Tree",
-                  "path": "Start/Workflow/Component/Tree",
-                  "children": []
-                }
-              ]
-            },
-            {
-              "title": "Intelligent Agent",
-              "path": "Start/Workflow/Intelligent Agent",
-              "children": [
-                {
-                  "title": "Context",
-                  "path": "Start/Workflow/Intelligent Agent/Context",
-                  "children": []
-                },
-                {
-                  "title": "Create",
-                  "path": "Start/Workflow/Intelligent Agent/Create",
-                  "children": []
-                },
-                {
-                  "title": "MCP",
-                  "path": "Start/Workflow/Intelligent Agent/MCP",
+                  "path": "DeepDive/Workflow Engine/Component/Tree",
                   "children": []
                 }
               ]
             },
             {
               "title": "Item Template",
-              "path": "Start/Workflow/Item Template",
+              "path": "DeepDive/Workflow Engine/Item Template",
               "children": [
                 {
                   "title": "Grid Decorator",
-                  "path": "Start/Workflow/Item Template/Grid Decorator",
+                  "path": "DeepDive/Workflow Engine/Item Template/Grid Decorator",
                   "children": []
                 },
                 {
                   "title": "Link",
-                  "path": "Start/Workflow/Item Template/Link",
+                  "path": "DeepDive/Workflow Engine/Item Template/Link",
                   "children": []
                 },
                 {
                   "title": "Node",
-                  "path": "Start/Workflow/Item Template/Node",
+                  "path": "DeepDive/Workflow Engine/Item Template/Node",
                   "children": []
                 },
                 {
                   "title": "Slot",
-                  "path": "Start/Workflow/Item Template/Slot",
+                  "path": "DeepDive/Workflow Engine/Item Template/Slot",
                   "children": []
                 },
                 {
                   "title": "Template Selector",
-                  "path": "Start/Workflow/Item Template/Template Selector",
+                  "path": "DeepDive/Workflow Engine/Item Template/Template Selector",
                   "children": []
                 },
                 {
                   "title": "Tree",
-                  "path": "Start/Workflow/Item Template/Tree",
+                  "path": "DeepDive/Workflow Engine/Item Template/Tree",
                   "children": []
                 }
               ]
-            },
-            {
-              "title": "compile",
-              "path": "Start/Workflow/compile",
-              "children": []
-            }
-          ]
-        },
-        {
-          "title": "animation",
-          "path": "Start/animation",
-          "children": [
-            {
-              "title": "Fluent",
-              "path": "Start/animation/Fluent",
-              "children": []
-            },
-            {
-              "title": "Snapshot",
-              "path": "Start/animation/Snapshot",
-              "children": []
-            },
-            {
-              "title": "Theme",
-              "path": "Start/animation/Theme",
-              "children": []
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "Question",
-      "path": "Question",
-      "children": [
-        {
-          "title": "Frame Loop",
-          "path": "Question/Frame Loop",
-          "children": []
-        },
-        {
-          "title": "Invalid workflow command",
-          "path": "Question/Invalid workflow command",
-          "children": []
-        },
-        {
-          "title": "Trimmed   AOT",
-          "path": "Question/Trimmed   AOT",
-          "children": [
-            {
-              "title": "Serialization",
-              "path": "Question/Trimmed   AOT/Serialization",
-              "children": []
-            }
-          ]
-        },
-        {
-          "title": "WinUI",
-          "path": "Question/WinUI",
-          "children": [
-            {
-              "title": "animation",
-              "path": "Question/WinUI/animation",
-              "children": []
             }
           ]
         }

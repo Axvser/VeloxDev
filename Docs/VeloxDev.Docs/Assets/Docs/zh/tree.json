@@ -6,266 +6,226 @@
       "children": []
     },
     {
-      "title": "版本",
-      "path": "版本",
+      "title": "快速开始",
+      "path": "快速开始",
       "children": [
         {
-          "title": "V5.0.35",
-          "path": "版本/V5.0.35",
+          "title": "AOP",
+          "path": "快速开始/AOP",
           "children": []
         },
         {
-          "title": "V5.1.1",
-          "path": "版本/V5.1.1",
-          "children": [
-            {
-              "title": "智能体构建",
-              "path": "版本/V5.1.1/智能体构建",
-              "children": []
-            },
-            {
-              "title": "条件分支创建",
-              "path": "版本/V5.1.1/条件分支创建",
-              "children": []
-            }
-          ]
-        },
-        {
-          "title": "V5.2.1",
-          "path": "版本/V5.2.1",
+          "title": "Animation",
+          "path": "快速开始/Animation",
           "children": []
         },
         {
-          "title": "V5.4.0",
-          "path": "版本/V5.4.0",
-          "children": [
-            {
-              "title": "面向切面编程",
-              "path": "版本/V5.4.0/面向切面编程",
-              "children": []
-            }
-          ]
+          "title": "Hello Workflow",
+          "path": "快速开始/Hello Workflow",
+          "children": []
         },
         {
-          "title": "V5.5.1",
-          "path": "版本/V5.5.1",
-          "children": [
-            {
-              "title": "MVVM",
-              "path": "版本/V5.5.1/MVVM",
-              "children": []
-            },
-            {
-              "title": "主题系统",
-              "path": "版本/V5.5.1/主题系统",
-              "children": []
-            },
-            {
-              "title": "其他",
-              "path": "版本/V5.5.1/其他",
-              "children": []
-            },
-            {
-              "title": "帧循环",
-              "path": "版本/V5.5.1/帧循环",
-              "children": []
-            }
-          ]
+          "title": "MVVM",
+          "path": "快速开始/MVVM",
+          "children": []
         },
         {
-          "title": "V5.7.0",
-          "path": "版本/V5.7.0",
-          "children": [
-            {
-              "title": "Node Helper",
-              "path": "版本/V5.7.0/Node Helper",
-              "children": []
-            }
-          ]
+          "title": "Theme",
+          "path": "快速开始/Theme",
+          "children": []
+        },
+        {
+          "title": "安装",
+          "path": "快速开始/安装",
+          "children": []
+        },
+        {
+          "title": "帧循环",
+          "path": "快速开始/帧循环",
+          "children": []
+        },
+        {
+          "title": "持久化",
+          "path": "快速开始/持久化",
+          "children": []
+        },
+        {
+          "title": "智能体",
+          "path": "快速开始/智能体",
+          "children": []
         }
       ]
     },
     {
-      "title": "开始",
-      "path": "开始",
+      "title": "原理解析",
+      "path": "原理解析",
       "children": [
         {
+          "title": "AOP",
+          "path": "原理解析/AOP",
+          "children": []
+        },
+        {
           "title": "MVVM",
-          "path": "开始/MVVM",
+          "path": "原理解析/MVVM",
           "children": [
             {
               "title": "命令",
-              "path": "开始/MVVM/命令",
+              "path": "原理解析/MVVM/命令",
               "children": []
             },
             {
               "title": "通知属性",
-              "path": "开始/MVVM/通知属性",
+              "path": "原理解析/MVVM/通知属性",
               "children": []
             }
           ]
         },
         {
+          "title": "主题系统",
+          "path": "原理解析/主题系统",
+          "children": []
+        },
+        {
           "title": "动画",
-          "path": "开始/动画",
+          "path": "原理解析/动画",
           "children": [
             {
               "title": "Fluent",
-              "path": "开始/动画/Fluent",
+              "path": "原理解析/动画/Fluent",
               "children": []
             },
             {
               "title": "主题",
-              "path": "开始/动画/主题",
+              "path": "原理解析/动画/主题",
               "children": []
             },
             {
               "title": "快照",
-              "path": "开始/动画/快照",
+              "path": "原理解析/动画/快照",
               "children": []
             }
           ]
         },
         {
-          "title": "工作流",
-          "path": "开始/工作流",
+          "title": "工作流引擎",
+          "path": "原理解析/工作流引擎",
           "children": [
             {
               "title": "业务",
-              "path": "开始/工作流/业务",
+              "path": "原理解析/工作流引擎/业务",
               "children": [
                 {
                   "title": "Link",
-                  "path": "开始/工作流/业务/Link",
+                  "path": "原理解析/工作流引擎/业务/Link",
                   "children": []
                 },
                 {
                   "title": "Node",
-                  "path": "开始/工作流/业务/Node",
+                  "path": "原理解析/工作流引擎/业务/Node",
                   "children": []
                 },
                 {
                   "title": "Slot",
-                  "path": "开始/工作流/业务/Slot",
+                  "path": "原理解析/工作流引擎/业务/Slot",
                   "children": []
                 },
                 {
                   "title": "Tree",
-                  "path": "开始/工作流/业务/Tree",
-                  "children": []
-                }
-              ]
-            },
-            {
-              "title": "智能体",
-              "path": "开始/工作流/智能体",
-              "children": [
-                {
-                  "title": "MCP",
-                  "path": "开始/工作流/智能体/MCP",
-                  "children": []
-                },
-                {
-                  "title": "上下文",
-                  "path": "开始/工作流/智能体/上下文",
-                  "children": []
-                },
-                {
-                  "title": "创建",
-                  "path": "开始/工作流/智能体/创建",
+                  "path": "原理解析/工作流引擎/业务/Tree",
                   "children": []
                 }
               ]
             },
             {
               "title": "组件",
-              "path": "开始/工作流/组件",
+              "path": "原理解析/工作流引擎/组件",
               "children": [
                 {
                   "title": "Link",
-                  "path": "开始/工作流/组件/Link",
+                  "path": "原理解析/工作流引擎/组件/Link",
                   "children": []
                 },
                 {
                   "title": "Node",
-                  "path": "开始/工作流/组件/Node",
+                  "path": "原理解析/工作流引擎/组件/Node",
                   "children": []
                 },
                 {
                   "title": "Slot",
-                  "path": "开始/工作流/组件/Slot",
+                  "path": "原理解析/工作流引擎/组件/Slot",
                   "children": []
                 },
                 {
                   "title": "Tree",
-                  "path": "开始/工作流/组件/Tree",
+                  "path": "原理解析/工作流引擎/组件/Tree",
                   "children": []
                 }
               ]
             },
             {
               "title": "编译",
-              "path": "开始/工作流/编译",
+              "path": "原理解析/工作流引擎/编译",
               "children": []
             },
             {
               "title": "附加行为",
-              "path": "开始/工作流/附加行为",
+              "path": "原理解析/工作流引擎/附加行为",
               "children": [
                 {
                   "title": "Link",
-                  "path": "开始/工作流/附加行为/Link",
+                  "path": "原理解析/工作流引擎/附加行为/Link",
                   "children": []
                 },
                 {
                   "title": "Node",
-                  "path": "开始/工作流/附加行为/Node",
+                  "path": "原理解析/工作流引擎/附加行为/Node",
                   "children": []
                 },
                 {
                   "title": "Slot",
-                  "path": "开始/工作流/附加行为/Slot",
+                  "path": "原理解析/工作流引擎/附加行为/Slot",
                   "children": []
                 },
                 {
                   "title": "Tree",
-                  "path": "开始/工作流/附加行为/Tree",
+                  "path": "原理解析/工作流引擎/附加行为/Tree",
                   "children": []
                 }
               ]
             },
             {
               "title": "项模板",
-              "path": "开始/工作流/项模板",
+              "path": "原理解析/工作流引擎/项模板",
               "children": [
                 {
                   "title": "Grid Decorator",
-                  "path": "开始/工作流/项模板/Grid Decorator",
+                  "path": "原理解析/工作流引擎/项模板/Grid Decorator",
                   "children": []
                 },
                 {
                   "title": "Link",
-                  "path": "开始/工作流/项模板/Link",
+                  "path": "原理解析/工作流引擎/项模板/Link",
                   "children": []
                 },
                 {
                   "title": "Node",
-                  "path": "开始/工作流/项模板/Node",
+                  "path": "原理解析/工作流引擎/项模板/Node",
                   "children": []
                 },
                 {
                   "title": "Slot",
-                  "path": "开始/工作流/项模板/Slot",
+                  "path": "原理解析/工作流引擎/项模板/Slot",
                   "children": []
                 },
                 {
                   "title": "Template Selector",
-                  "path": "开始/工作流/项模板/Template Selector",
+                  "path": "原理解析/工作流引擎/项模板/Template Selector",
                   "children": []
                 },
                 {
                   "title": "Tree",
-                  "path": "开始/工作流/项模板/Tree",
+                  "path": "原理解析/工作流引擎/项模板/Tree",
                   "children": []
                 }
               ]
@@ -274,56 +234,34 @@
         },
         {
           "title": "帧循环",
-          "path": "开始/帧循环",
+          "path": "原理解析/帧循环",
           "children": []
         },
         {
           "title": "持久化",
-          "path": "开始/持久化",
+          "path": "原理解析/持久化",
           "children": []
         },
         {
-          "title": "面向切面编程",
-          "path": "开始/面向切面编程",
-          "children": []
-        }
-      ]
-    },
-    {
-      "title": "问题",
-      "path": "问题",
-      "children": [
-        {
-          "title": "Trimmed   AOT",
-          "path": "问题/Trimmed   AOT",
+          "title": "智能体",
+          "path": "原理解析/智能体",
           "children": [
             {
-              "title": "序列化",
-              "path": "问题/Trimmed   AOT/序列化",
+              "title": "MCP",
+              "path": "原理解析/智能体/MCP",
+              "children": []
+            },
+            {
+              "title": "上下文",
+              "path": "原理解析/智能体/上下文",
+              "children": []
+            },
+            {
+              "title": "创建",
+              "path": "原理解析/智能体/创建",
               "children": []
             }
           ]
-        },
-        {
-          "title": "WinUI",
-          "path": "问题/WinUI",
-          "children": [
-            {
-              "title": "动画",
-              "path": "问题/WinUI/动画",
-              "children": []
-            }
-          ]
-        },
-        {
-          "title": "工作流命令无效",
-          "path": "问题/工作流命令无效",
-          "children": []
-        },
-        {
-          "title": "帧循环",
-          "path": "问题/帧循环",
-          "children": []
         }
       ]
     },

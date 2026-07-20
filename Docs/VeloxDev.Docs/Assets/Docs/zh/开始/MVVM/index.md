@@ -1,3 +1,0 @@
-﻿# MVVM
-
-VeloxDev 提供具有特色的ViewModel补全与Command生成，对于社区主流的MVVM框架做过兼容，会避免重复生成基础设施

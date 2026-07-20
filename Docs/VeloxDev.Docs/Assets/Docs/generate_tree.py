@@ -18,9 +18,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # wiki page order (Welcome → Version → Start → Question → Best Practices).
 ROOT_PRIORITY = [
     "Welcome", "欢迎",
-    "Version", "版本",
-    "Start", "开始",
-    "Question", "问题",
+    "QuickStart", "快速开始",
+    "DeepDive", "原理解析",
     "Best Practices", "最佳实践",
 ]
 
