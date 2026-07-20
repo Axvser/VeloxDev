@@ -209,11 +209,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             state.PointerPressSource.PreviewMouseLeftButtonUp += OnSurfaceMouseLeftButtonUp;
         }
 
-        if (state.Canvas is not null)
-        {
-            state.Canvas.RequestBringIntoView += OnRequestBringIntoView;
-        }
-
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ScrollChanged += OnScrollChanged;
@@ -228,11 +223,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             state.PointerPressSource.PreviewMouseLeftButtonUp -= OnSurfaceMouseLeftButtonUp;
         }
 
-        if (state.Canvas is not null)
-        {
-            state.Canvas.RequestBringIntoView -= OnRequestBringIntoView;
-        }
-
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ScrollChanged -= OnScrollChanged;
@@ -243,11 +233,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         state.Canvas = null;
         state.GridDecorator = null;
         state.MinimapOverlay = null;
-    }
-
-    private static void OnRequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
-    {
-        e.Handled = true;
     }
 
     private static void OnPointerPressed(object sender, MouseButtonEventArgs e)
@@ -540,6 +525,13 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return false;
         }
 
+        // 点击 ScrollViewer 的滚动条（Thumb/Track/RepeatButton/ScrollBar）时不启动画布平移
+        if (source is System.Windows.Controls.Primitives.ScrollBar
+            || ancestors.Any(x => x is System.Windows.Controls.Primitives.ScrollBar))
+        {
+            return false;
+        }
+
         if (IsWorkflowLinkVisual(source) || ancestors.Any(IsWorkflowLinkVisual))
         {
             return true;
@@ -574,8 +566,5 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             current = VisualTreeHelper.GetParent(current);
         }
     }
-
-
-
-    }
-    }
+}
+}
