@@ -9,7 +9,7 @@
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WinForms</Title>
-		<Version>6.0.4</Version>
+		<Version>6.0.82</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinForms</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -22,7 +22,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="VeloxDev.Core" Version="6.0.4">
+		<PackageReference Include="VeloxDev.Core" Version="6.0.82">
 			<SetTargetFramework Condition="'$(TargetFramework)' == 'net5.0-windows'">TargetFramework=net5.0</SetTargetFramework>
 		</PackageReference>
 	</ItemGroup>

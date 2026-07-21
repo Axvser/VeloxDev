@@ -1,6 +1,6 @@
 # Link
 
-通过 `[WorkflowBuilder.Link<THelper>]` 扩展 `LinkViewModelBase`。
+通过 `[WorkflowBuilder.Link<THelper>]` 扩展 `LinkDefaultViewModel`。
 
 ```csharp
 using VeloxDev.WorkflowSystem;

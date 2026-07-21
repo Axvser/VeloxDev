@@ -18,7 +18,7 @@ using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
-var tree = new TreeViewModelBase();
+var tree = new TreeDefaultViewModel();
 var ctrl = new ControllerNode();
 tree.Nodes.Add(ctrl);
 
@@ -50,7 +50,7 @@ var response = await agent.RunAsync(userMessage);
 Console.WriteLine($"智能体：{response?.Text}");
 
 // 节点定义
-public partial class ControllerNode : NodeViewModelBase
+public partial class ControllerNode : NodeDefaultViewModel
 {
     public ControllerNode() => InitializeWorkflow();
     [VeloxProperty] private string _seed = "demo";

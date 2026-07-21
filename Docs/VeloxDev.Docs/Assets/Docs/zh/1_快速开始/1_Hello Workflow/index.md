@@ -22,7 +22,7 @@ using VeloxDev.WorkflowSystem.Compilation;
 // ── 1. 定义节点 ViewModel ──────────────────────────────────────
 
 // 控制器 — 工作流入口（无输入，仅有输出）
-public partial class ControllerNode : NodeViewModelBase
+public partial class ControllerNode : NodeDefaultViewModel
 {
     public ControllerNode() => InitializeWorkflow();
 
@@ -30,7 +30,7 @@ public partial class ControllerNode : NodeViewModelBase
 }
 
 // 处理器 — 接收数据、转换、转发
-public partial class ProcessorNode : NodeViewModelBase
+public partial class ProcessorNode : NodeDefaultViewModel
 {
     public ProcessorNode() => InitializeWorkflow();
 
@@ -43,13 +43,13 @@ var ctrl  = new ControllerNode();
 var proc  = new ProcessorNode();
 
 // 连接：ctrl 的默认输出口 → proc 的默认输入口
-var link = new LinkViewModelBase
+var link = new LinkDefaultViewModel
 {
     Sender   = ctrl.Slots[0],
     Receiver = proc.Slots[0]
 };
 
-var tree = new TreeViewModelBase();
+var tree = new TreeDefaultViewModel();
 tree.Nodes.Add(ctrl);
 tree.Nodes.Add(proc);
 tree.Links.Add(link);

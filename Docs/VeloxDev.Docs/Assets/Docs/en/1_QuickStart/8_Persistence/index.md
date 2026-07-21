@@ -19,10 +19,10 @@ using VeloxDev.WorkflowSystem;
 
 // ── Build a workflow ───────────────────────────────────────────────
 
-var tree = new TreeViewModelBase();
+var tree = new TreeDefaultViewModel();
 var ctrl = new ControllerNode();
 tree.Nodes.Add(ctrl);
-tree.Links.Add(new LinkViewModelBase
+tree.Links.Add(new LinkDefaultViewModel
 {
     Sender = ctrl.Slots[0],
     Receiver = ctrl.Slots[0]
@@ -35,12 +35,12 @@ Console.WriteLine(json);
 
 // ── Deserialize back ───────────────────────────────────────────────
 
-var restored = json.Deserialize<TreeViewModelBase>();
+var restored = json.Deserialize<TreeDefaultViewModel>();
 Console.WriteLine($"Restored tree with {restored.Nodes.Count} node(s)");
 
 // ── Safe deserialization ───────────────────────────────────────────
 
-if (json.TryDeserialize<TreeViewModelBase>(out var safe))
+if (json.TryDeserialize<TreeDefaultViewModel>(out var safe))
 {
     Console.WriteLine($"Safe load: {safe.Nodes.Count} node(s)");
 }
@@ -51,12 +51,12 @@ var pretty = tree.Serialize(SerializationOptions.Create().WithIndented());
 await File.WriteAllTextAsync("workflow.json", pretty);
 
 var fromFile = (await File.ReadAllTextAsync("workflow.json"))
-    .Deserialize<TreeViewModelBase>();
+    .Deserialize<TreeDefaultViewModel>();
 Console.WriteLine($"Loaded from file: {fromFile.Nodes.Count} node(s)");
 
 // ── Supporting node ────────────────────────────────────────────────
 
-public partial class ControllerNode : NodeViewModelBase
+public partial class ControllerNode : NodeDefaultViewModel
 {
     public ControllerNode() => InitializeWorkflow();
     [VeloxProperty] private string _label = "Controller";

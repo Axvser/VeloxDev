@@ -1,15 +1,15 @@
 # Link
 
-A `LinkViewModelBase` represents a visual connection line between two Slots.
+A `LinkDefaultViewModel` represents a visual connection line between two Slots.
 
 ```csharp
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
-public sealed partial class LinkViewModelBase : IWorkflowLinkViewModel
+public sealed partial class LinkDefaultViewModel : IWorkflowLinkViewModel
 {
-    [VeloxProperty] private IWorkflowSlotViewModel sender = new SlotViewModelBase();
-    [VeloxProperty] private IWorkflowSlotViewModel receiver = new SlotViewModelBase();
+    [VeloxProperty] private IWorkflowSlotViewModel sender = new SlotDefaultViewModel();
+    [VeloxProperty] private IWorkflowSlotViewModel receiver = new SlotDefaultViewModel();
     [VeloxProperty] private bool isVisible = false;
 }
 ```

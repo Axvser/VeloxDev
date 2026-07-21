@@ -1,12 +1,12 @@
 # Slot
 
-`SlotViewModelBase` 是节点上的类型化连接点，维护节点间的连接关系。
+`SlotDefaultViewModel` 是节点上的类型化连接点，维护节点间的连接关系。
 
 ```csharp
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
-public sealed partial class SlotViewModelBase : IWorkflowSlotViewModel
+public sealed partial class SlotDefaultViewModel : IWorkflowSlotViewModel
 {
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> targets = [];
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> sources = [];

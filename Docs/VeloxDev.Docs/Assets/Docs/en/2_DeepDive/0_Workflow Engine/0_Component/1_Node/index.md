@@ -1,9 +1,9 @@
 # Node
 
-The `NodeViewModelBase` is the base class for all executable nodes.
+The `NodeDefaultViewModel` is the base class for all executable nodes.
 
 ```csharp
-public partial class NodeViewModelBase : IWorkflowNodeViewModel
+public partial class NodeDefaultViewModel : IWorkflowNodeViewModel
 {
     [VeloxProperty] private IWorkflowTreeViewModel? parent;
     [VeloxProperty] private Anchor anchor = new();

@@ -15,7 +15,7 @@ dotnet add package VeloxDev.Avalonia  # WPF / WinUI / MAUI / WinForms / Razor
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
-public partial class MyNodeViewModel : NodeViewModelBase
+public partial class MyNodeViewModel : NodeDefaultViewModel
 {
     public MyNodeViewModel() => InitializeWorkflow();
 
@@ -27,14 +27,14 @@ public partial class MyNodeViewModel : NodeViewModelBase
 ## Hello Workflow
 
 ```csharp
-var tree = new TreeViewModelBase();
+var tree = new TreeDefaultViewModel();
 var controller = new ControllerNode();
 var node = new MyNodeViewModel();
 tree.Nodes.Add(controller);
 tree.Nodes.Add(node);
 
 // 连接
-var link = new LinkViewModelBase
+var link = new LinkDefaultViewModel
 {
     Sender = controller.Slots[0],
     Receiver = node.Slots[0]

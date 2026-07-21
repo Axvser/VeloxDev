@@ -1,6 +1,6 @@
 # Business Link
 
-Extend `LinkViewModelBase` with `[WorkflowBuilder.Link<THelper>]` for custom connection behavior.
+Extend `LinkDefaultViewModel` with `[WorkflowBuilder.Link<THelper>]` for custom connection behavior.
 
 ```csharp
 using VeloxDev.WorkflowSystem;

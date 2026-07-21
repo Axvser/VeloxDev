@@ -1,6 +1,6 @@
 # Slot
 
-通过 `[WorkflowBuilder.Slot<THelper>]` 扩展 `SlotViewModelBase`。
+通过 `[WorkflowBuilder.Slot<THelper>]` 扩展 `SlotDefaultViewModel`。
 
 ```csharp
 using VeloxDev.WorkflowSystem;

@@ -1,12 +1,12 @@
 # Slot
 
-A `SlotViewModelBase` is a typed connection point on a Node.
+A `SlotDefaultViewModel` is a typed connection point on a Node.
 
 ```csharp
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
-public sealed partial class SlotViewModelBase : IWorkflowSlotViewModel
+public sealed partial class SlotDefaultViewModel : IWorkflowSlotViewModel
 {
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> targets = [];
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> sources = [];

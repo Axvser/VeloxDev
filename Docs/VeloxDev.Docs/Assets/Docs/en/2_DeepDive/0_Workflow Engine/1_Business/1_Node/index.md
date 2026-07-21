@@ -1,6 +1,6 @@
 # Business Node
 
-Extend `NodeViewModelBase` with `[WorkflowBuilder.Node<THelper>]` and override helper methods.
+Extend `NodeDefaultViewModel` with `[WorkflowBuilder.Node<THelper>]` and override helper methods.
 
 ```csharp
 using VeloxDev.WorkflowSystem;

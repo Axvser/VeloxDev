@@ -50,7 +50,7 @@ Create a ViewModel for a workflow node — the source generator will create the 
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
-public partial class MyNodeViewModel : NodeViewModelBase
+public partial class MyNodeViewModel : NodeDefaultViewModel
 {
 	public MyNodeViewModel() => InitializeWorkflow();
 
@@ -62,7 +62,7 @@ public partial class MyNodeViewModel : NodeViewModelBase
 ## 4. Create a Tree and Connect
 
 ```csharp
-var tree = new TreeViewModelBase();
+var tree = new TreeDefaultViewModel();
 var node = new MyNodeViewModel();
 tree.Nodes.Add(node);
 ```
@@ -76,7 +76,7 @@ tree.Nodes.Add(controller);
 tree.Nodes.Add(node1);
 
 // Link via slot connection
-var link = new LinkViewModelBase
+var link = new LinkDefaultViewModel
 {
 	Sender = controller.Slots[0],
 	Receiver = node1.Slots[0]

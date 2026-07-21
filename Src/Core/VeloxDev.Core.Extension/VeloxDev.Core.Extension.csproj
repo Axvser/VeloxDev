@@ -21,7 +21,7 @@
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.8.0" />
 		<PackageReference Include="ModelContextProtocol" Version="1.4.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-		<PackageReference Include="VeloxDev.Core" Version="6.0.2" />
+		<PackageReference Include="VeloxDev.Core" Version="6.0.82" />
 	</ItemGroup>
 
 	<ItemGroup>

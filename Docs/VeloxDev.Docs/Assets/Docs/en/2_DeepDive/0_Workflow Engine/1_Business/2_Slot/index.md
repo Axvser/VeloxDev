@@ -1,6 +1,6 @@
 # Business Slot
 
-Extend `SlotViewModelBase` with `[WorkflowBuilder.Slot<THelper>]` for custom slot behavior.
+Extend `SlotDefaultViewModel` with `[WorkflowBuilder.Slot<THelper>]` for custom slot behavior.
 
 ```csharp
 using VeloxDev.WorkflowSystem;

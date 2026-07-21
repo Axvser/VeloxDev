@@ -1,18 +1,18 @@
 # Tree
 
-The `TreeViewModelBase` is the root container for a single workflow.
+The `TreeDefaultViewModel` is the root container for a single workflow.
 
 ```csharp
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
-public partial class TreeViewModelBase : IWorkflowTreeViewModel
+public partial class TreeDefaultViewModel : IWorkflowTreeViewModel
 {
     [VeloxProperty] private CanvasLayout layout = new();
     [VeloxProperty] private ObservableCollection<IWorkflowNodeViewModel> nodes = [];
     [VeloxProperty] private ObservableCollection<IWorkflowLinkViewModel> links = [];
     [VeloxProperty] private Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>> linksMap = [];
-    [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkViewModelBase();
+    [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkDefaultViewModel();
 }
 ```
 

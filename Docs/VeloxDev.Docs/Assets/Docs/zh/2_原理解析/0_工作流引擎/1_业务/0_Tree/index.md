@@ -1,6 +1,6 @@
 # Tree
 
-通过 `[WorkflowBuilder.Tree<THelper>]` 扩展 `TreeViewModelBase`。
+通过 `[WorkflowBuilder.Tree<THelper>]` 扩展 `TreeDefaultViewModel`。
 
 ```csharp
 using VeloxDev.WorkflowSystem;

@@ -29,7 +29,7 @@ using VeloxDev.WorkflowSystem.Compilation;
 
 // ── Build a minimal workflow tree ──────────────────────────────────
 
-var tree = new TreeViewModelBase();
+var tree = new TreeDefaultViewModel();
 var ctrl = new ControllerNode();
 tree.Nodes.Add(ctrl);
 
@@ -68,7 +68,7 @@ Console.WriteLine($"Agent: {response?.Text}");
 
 // ── Supporting node ViewModel ──────────────────────────────────────
 
-public partial class ControllerNode : NodeViewModelBase
+public partial class ControllerNode : NodeDefaultViewModel
 {
     public ControllerNode() => InitializeWorkflow();
     [VeloxProperty] private string _seed = "demo";

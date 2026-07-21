@@ -16,10 +16,10 @@ flowchart TB
     end
 
     subgraph Memory[运行时对象]
-        T[TreeViewModelBase]
-        N[NodeViewModelBase\nSlots[], Parent]
-        L[LinkViewModelBase\nSender, Receiver]
-        S[SlotViewModelBase\nTargets, Sources]
+        T[TreeDefaultViewModel]
+        N[NodeDefaultViewModel\nSlots[], Parent]
+        L[LinkDefaultViewModel\nSender, Receiver]
+        S[SlotDefaultViewModel\nTargets, Sources]
     end
 
     T --> Tree

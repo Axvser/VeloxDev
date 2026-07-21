@@ -22,7 +22,7 @@ using VeloxDev.WorkflowSystem.Compilation;
 // ── 1. Define your Node ViewModels ──────────────────────────────
 
 // Controller — the workflow entry point (no inputs, only outputs)
-public partial class ControllerNode : NodeViewModelBase
+public partial class ControllerNode : NodeDefaultViewModel
 {
 	public ControllerNode() => InitializeWorkflow();
 
@@ -30,7 +30,7 @@ public partial class ControllerNode : NodeViewModelBase
 }
 
 // Processor — receives data, transforms it, and forwards it
-public partial class ProcessorNode : NodeViewModelBase
+public partial class ProcessorNode : NodeDefaultViewModel
 {
 	public ProcessorNode() => InitializeWorkflow();
 
@@ -43,13 +43,13 @@ var ctrl  = new ControllerNode();
 var proc  = new ProcessorNode();
 
 // Link: ctrl's default slot → proc's default slot
-var link = new LinkViewModelBase
+var link = new LinkDefaultViewModel
 {
 	Sender   = ctrl.Slots[0],
 	Receiver = proc.Slots[0]
 };
 
-var tree = new TreeViewModelBase();
+var tree = new TreeDefaultViewModel();
 tree.Nodes.Add(ctrl);
 tree.Nodes.Add(proc);
 tree.Links.Add(link);

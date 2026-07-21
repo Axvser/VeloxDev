@@ -1,9 +1,9 @@
 # Node
 
-`NodeViewModelBase` 是所有可执行节点的基类。
+`NodeDefaultViewModel` 是所有可执行节点的基类。
 
 ```csharp
-public partial class NodeViewModelBase : IWorkflowNodeViewModel
+public partial class NodeDefaultViewModel : IWorkflowNodeViewModel
 {
     [VeloxProperty] private Anchor anchor = new();
     [VeloxProperty] private Size size = new();

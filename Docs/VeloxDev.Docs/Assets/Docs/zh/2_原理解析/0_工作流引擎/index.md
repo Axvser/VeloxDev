@@ -117,7 +117,7 @@ sequenceDiagram
 
 ```
 [WorkflowBuilder.Node<CustomHelper>]
-public partial class MyNode : NodeViewModelBase
+public partial class MyNode : NodeDefaultViewModel
     ↑                          ↑
     源码生成器                   基类（含
     注入 Helper                [VeloxCommand] 等）

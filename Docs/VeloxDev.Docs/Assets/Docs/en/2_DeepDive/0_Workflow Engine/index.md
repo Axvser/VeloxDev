@@ -145,7 +145,7 @@ Each component delegates its behaviour to a **Helper** object injected via sourc
 
 ```
 [WorkflowBuilder.Node<CustomHelper>]
-public partial class MyNode : NodeViewModelBase
+public partial class MyNode : NodeDefaultViewModel
     ↑                          ↑
     Source generator           Base class with
     wires helper               [VeloxCommand]s

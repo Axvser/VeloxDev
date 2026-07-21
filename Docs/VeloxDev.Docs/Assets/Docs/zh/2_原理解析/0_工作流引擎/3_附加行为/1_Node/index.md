@@ -5,6 +5,6 @@
 - **移动**：拖拽触发 `MoveCommand(Offset)` → `Helper.Move()`
 - **定位**：右键菜单触发 `SetAnchorCommand(Anchor)`
 - **删除**：`DeleteCommand()` → `Helper.Delete()`
-- **创建 Slot**：`CreateSlotCommand(SlotViewModelBase)`
+- **创建 Slot**：`CreateSlotCommand(SlotDefaultViewModel)`
 
-这些命令由源码生成器从 `NodeViewModelBase` 的 `[VeloxCommand]` 注解自动生成。
+这些命令由源码生成器从 `NodeDefaultViewModel` 的 `[VeloxCommand]` 注解自动生成。

@@ -1,6 +1,6 @@
 # Business Tree
 
-Extend `TreeViewModelBase` with `[WorkflowBuilder.Tree<THelper>]` for domain-specific behavior.
+Extend `TreeDefaultViewModel` with `[WorkflowBuilder.Tree<THelper>]` for domain-specific behavior.
 
 ```csharp
 using VeloxDev.WorkflowSystem;
