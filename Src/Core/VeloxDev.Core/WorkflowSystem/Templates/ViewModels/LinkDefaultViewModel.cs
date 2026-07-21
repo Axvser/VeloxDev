@@ -5,7 +5,7 @@ namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "工作流Link组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Link component interface")]
-public sealed partial class LinkViewModelBase : IWorkflowLinkViewModel, IWorkflowIdentifiable
+public sealed partial class LinkDefaultViewModel : IWorkflowLinkViewModel, IWorkflowIdentifiable
 {
     private IWorkflowLinkViewModelHelper helper = new LinkHelper();
     public IWorkflowLinkViewModelHelper Helper
@@ -22,10 +22,10 @@ public sealed partial class LinkViewModelBase : IWorkflowLinkViewModel, IWorkflo
 
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
-    public LinkViewModelBase() { InitializeWorkflow(); }
+    public LinkDefaultViewModel() { InitializeWorkflow(); }
 
-    [VeloxProperty] private IWorkflowSlotViewModel sender = new SlotViewModelBase();
-    [VeloxProperty] private IWorkflowSlotViewModel receiver = new SlotViewModelBase();
+    [VeloxProperty] private IWorkflowSlotViewModel sender = new SlotDefaultViewModel();
+    [VeloxProperty] private IWorkflowSlotViewModel receiver = new SlotDefaultViewModel();
     [VeloxProperty] private bool isVisible = false;
 
     [VeloxCommand]

@@ -150,7 +150,7 @@ public partial class TreeHelper<T> : IWorkflowTreeViewModelHelper
     public virtual IWorkflowLinkViewModel CreateLink(
         IWorkflowSlotViewModel sender,
         IWorkflowSlotViewModel receiver)
-        => new LinkViewModelBase()
+        => new LinkDefaultViewModel()
         {
             Sender = sender,
             Receiver = receiver,

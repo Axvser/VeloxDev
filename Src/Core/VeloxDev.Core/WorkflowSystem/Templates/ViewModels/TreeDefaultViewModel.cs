@@ -6,7 +6,7 @@ namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "工作流Tree组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Tree component interface")]
-public partial class TreeViewModelBase : IWorkflowTreeViewModel, IWorkflowIdentifiable
+public sealed partial class TreeDefaultViewModel : IWorkflowTreeViewModel, IWorkflowIdentifiable
 {
     private IWorkflowTreeViewModelHelper helper = new TreeHelper();
     public IWorkflowTreeViewModelHelper Helper
@@ -23,10 +23,10 @@ public partial class TreeViewModelBase : IWorkflowTreeViewModel, IWorkflowIdenti
 
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
-    public TreeViewModelBase() { InitializeWorkflow(); }
+    public TreeDefaultViewModel() { InitializeWorkflow(); }
 
     [VeloxProperty] private CanvasLayout layout = new();
-    [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkViewModelBase() { Sender = new SlotViewModelBase(), Receiver = new SlotViewModelBase() };
+    [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkDefaultViewModel() { Sender = new SlotDefaultViewModel(), Receiver = new SlotDefaultViewModel() };
     [VeloxProperty] private ObservableCollection<IWorkflowNodeViewModel> nodes = [];
     [VeloxProperty] private ObservableCollection<IWorkflowLinkViewModel> links = [];
     [VeloxProperty] private Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>> linksMap = [];

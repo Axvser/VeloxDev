@@ -146,11 +146,11 @@ public class SlotEnumeratorTests
     [TestMethod]
     public void WhenSelectorChanges_UndoOnceRestoresSlotsAndConnections()
     {
-        var tree = new TreeViewModelBase();
-        var senderNode = new NodeViewModelBase();
-        var receiverNode = new NodeViewModelBase();
-        var receiverSlot = new SlotViewModelBase { Channel = SlotChannel.OneSource };
-        var enumerator = new SlotEnumerator<SlotViewModelBase>();
+        var tree = new TreeDefaultViewModel();
+        var senderNode = new NodeDefaultViewModel();
+        var receiverNode = new NodeDefaultViewModel();
+        var receiverSlot = new SlotDefaultViewModel { Channel = SlotChannel.OneSource };
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
 
         tree.GetHelper().CreateNode(senderNode);
         tree.GetHelper().CreateNode(receiverNode);

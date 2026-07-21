@@ -6,7 +6,7 @@ namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "工作流Node组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Node component interface")]
-public sealed partial class NodeViewModelBase : IWorkflowNodeViewModel, IWorkflowIdentifiable
+public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWorkflowIdentifiable
 {
     private IWorkflowNodeViewModelHelper helper = new NodeHelper();
     public IWorkflowNodeViewModelHelper Helper
@@ -23,7 +23,7 @@ public sealed partial class NodeViewModelBase : IWorkflowNodeViewModel, IWorkflo
 
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
-    public NodeViewModelBase() { InitializeWorkflow(); }
+    public NodeDefaultViewModel() { InitializeWorkflow(); }
 
     [VeloxProperty] private IWorkflowTreeViewModel? parent = null;
     [VeloxProperty] private Anchor anchor = new();

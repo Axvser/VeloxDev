@@ -11,7 +11,7 @@ public class WorkflowAgentToolkitTests
     [TestMethod]
     public void MarkDirty_MarksTreeDirty()
     {
-        var tree = new TreeViewModelBase();
+        var tree = new TreeDefaultViewModel();
         var helper = new TestTreeHelper();
         tree.SetHelper(helper);
         var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree));

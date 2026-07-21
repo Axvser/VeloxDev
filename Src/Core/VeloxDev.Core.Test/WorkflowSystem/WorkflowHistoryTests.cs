@@ -8,8 +8,8 @@ public class WorkflowHistoryTests
     [TestMethod]
     public void CreateNode_UndoTwice_DoesNotRestoreNode()
     {
-        var tree = new TreeViewModelBase();
-        var node = new NodeViewModelBase();
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
 
         tree.GetHelper().CreateNode(node);
         Assert.HasCount(1, tree.Nodes);
@@ -25,9 +25,9 @@ public class WorkflowHistoryTests
     [TestMethod]
     public void CreateNode_UndoAndRedo_PreservesNodeSlots()
     {
-        var tree = new TreeViewModelBase();
-        var node = new NodeViewModelBase();
-        var slot = new SlotViewModelBase();
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        var slot = new SlotDefaultViewModel();
         node.GetHelper().CreateSlot(slot);
 
         tree.GetHelper().CreateNode(node);
@@ -47,12 +47,12 @@ public class WorkflowHistoryTests
     [TestMethod]
     public void CreateSlot_UndoTwice_DoesNotRestoreSlot()
     {
-        var tree = new TreeViewModelBase();
-        var node = new NodeViewModelBase();
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
         tree.GetHelper().ClearHistory();
 
-        var slot = new SlotViewModelBase();
+        var slot = new SlotDefaultViewModel();
         node.GetHelper().CreateSlot(slot);
         Assert.HasCount(1, node.Slots);
 

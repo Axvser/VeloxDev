@@ -6,7 +6,7 @@ namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "工作流Slot组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Slot component interface")]
-public sealed partial class SlotViewModelBase : IWorkflowSlotViewModel, IWorkflowIdentifiable
+public sealed partial class SlotDefaultViewModel : IWorkflowSlotViewModel, IWorkflowIdentifiable
 {
     private IWorkflowSlotViewModelHelper helper = new SlotHelper();
     public IWorkflowSlotViewModelHelper Helper
@@ -23,7 +23,7 @@ public sealed partial class SlotViewModelBase : IWorkflowSlotViewModel, IWorkflo
 
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
-    public SlotViewModelBase() { InitializeWorkflow(); }
+    public SlotDefaultViewModel() { InitializeWorkflow(); }
 
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> targets = [];
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> sources = [];

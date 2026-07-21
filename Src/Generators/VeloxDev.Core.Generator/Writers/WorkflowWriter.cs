@@ -266,20 +266,20 @@ namespace VeloxDev.Generators.Writers
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualLinkType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkViewModelBase")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkViewModelBase");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkDefaultViewModel")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkDefaultViewModel");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualSlotType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotViewModelBase")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotViewModelBase");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultSlotType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotViewModelBase")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotViewModelBase");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel");
         }
 
         private INamedTypeSymbol? GetTypeSymbolFromReferencedAssemblies(string fullyQualifiedName)
@@ -853,7 +853,7 @@ namespace VeloxDev.Generators.Writers
                         catch
                         {
                         }
-                        return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotViewModelBase();
+                        return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotDefaultViewModel();
                     }
                     protected virtual void OnWorkflowSlotAdded({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot)
                     {

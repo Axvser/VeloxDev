@@ -32,7 +32,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         [typeof(IWorkflowTreeViewModel), typeof(IWorkflowNodeViewModel), typeof(IWorkflowSlotViewModel), typeof(IWorkflowLinkViewModel), typeof(IWorkflowViewModel)];
 
     private static readonly Type[] FrameworkComponents =
-        [typeof(TreeViewModelBase), typeof(NodeViewModelBase), typeof(SlotViewModelBase), typeof(LinkViewModelBase)];
+        [typeof(TreeDefaultViewModel), typeof(NodeDefaultViewModel), typeof(SlotDefaultViewModel), typeof(LinkDefaultViewModel)];
 
     internal static readonly Type[] FrameworkData =
         [typeof(Anchor), typeof(Offset), typeof(Size)];
