@@ -15,7 +15,8 @@ dotnet add package VeloxDev.Avalonia  # WPF / WinUI / MAUI / WinForms / Razor
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
-public partial class MyNodeViewModel : NodeDefaultViewModel
+[WorkflowBuilder.Node<NodeHelper>]
+public partial class MyNodeViewModel
 {
     public MyNodeViewModel() => InitializeWorkflow();
 

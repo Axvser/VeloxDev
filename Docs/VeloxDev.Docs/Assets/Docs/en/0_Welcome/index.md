@@ -2,33 +2,50 @@
 
 VeloxDev provides .NET developers with the complete architecture needed to build interactive workflow editors.
 
-> **Install**
+---
 
-### Adaptation Library Out-of-the-box, bound with the GUI framework. If you need agent and serialization capabilities, you can additionally install VeloxDev.Core.Extension.
+## What Problem Does It Solve?
 
-| Platform | Package | NuGet |
-|----------|---------|-------|
-| WPF | `VeloxDev.WPF` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WPF?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WPF/) |
-| Avalonia | `VeloxDev.Avalonia` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Avalonia?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Avalonia/) |
-| WinUI | `VeloxDev.WinUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinUI/) |
-| MAUI | `VeloxDev.MAUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) |
-| WinForms | `VeloxDev.WinForms` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinForms?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinForms/) |
-| Razor | `VeloxDev.Razor` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Razor?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Razor/) |
+Building a **visual workflow editor** in .NET traditionally requires implementing: graph storage and traversal, node drag-and-drop and wiring, property editing, undo/redo, serialization persistence, and AI agent interaction.
 
-###  Core Library
+VeloxDev packages all of this into a set of **modular .NET libraries** — from the core graph engine to GUI platform adapters, all in one integrated system.
 
-> Independent of the GUI framework, optional; their upgrades may be faster than the adapter library, sometimes requiring separate installation/upgrade.
+## Core Modules
 
-| Package | NuGet | Description |
-|---------|-------|-------------|
-| `VeloxDev.Core` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/) | Workflow abstractions, MVVM generators, and runtime models — zero third-party dependencies |
-| `VeloxDev.Core.Extension` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Extension?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core.Extension/) | MAF-based Workflow Agent tools and additional runtime extensions |
+| Module | Description |
+|--------|-------------|
+| 🧩 **Workflow Engine** | Graph-topology-based compilation & execution (Tree → Node → Slot → Link) |
+| ⚡ **MVVM Generator** | `[VeloxProperty]` + `[VeloxCommand]` compile-time generation, zero dependencies |
+| 🎬 **Animation System** | Snapshot / Property / Theme modes with 14+ native interpolators |
+| 🎨 **Dynamic Theme** | Declarative Light/Dark switching with `[ThemeConfig]` and animated transitions |
+| 🧵 **Frame Loop** | Unity-style `[MonoBehaviour]` lifecycle with multi-channel control |
+| 🔄 **AOP** | `DispatchProxy` runtime interception with pre/post/replacement handlers |
+| 🤖 **AI Agent** | MAF framework mapping workflow components to LLM tool definitions for natural language control |
+| 💾 **Persistence** | Full workflow graph ↔ JSON serialization/deserialization |
 
+## Supported Platforms
 
-> **Related Links**
+| Platform | Package | Workflow UI | Theme/Animation |
+|----------|---------|-------------|-----------------|
+| WPF | `VeloxDev.WPF` | ✅ Full (attached properties + item templates) | ✅ |
+| Avalonia | `VeloxDev.Avalonia` | ✅ Full (attached properties + item templates) | ✅ |
+| WinUI | `VeloxDev.WinUI` | ✅ Full (attached properties + item templates) | ✅ |
+| MAUI | `VeloxDev.MAUI` | ✅ Full (attached properties + item templates) | ✅ |
+| WinForms | `VeloxDev.WinForms` | ⚠️ Behaviors (self-drawn, no attached properties) | ✅ |
+| Razor / Blazor | `VeloxDev.Razor` | ⚠️ Basic (platform adapters only) | ✅ |
 
-- [GitHub repository](https://github.com/Axvser/VeloxDev)
+## Package Architecture
 
+```
+VeloxDev.Core          ← Core: Workflow, MVVM, Animation, Theme, AOP, FrameLoop (zero dependencies)
+VeloxDev.Core.Extension ← Extensions: AI Agent + Serialization
+VeloxDev.WPF / Avalonia / ... ← Platform adapters
+```
+
+> 💡 **Getting Started**: Install `VeloxDev.WPF` (or your platform package), then add `VeloxDev.Core.Extension` as needed.
+
+## Links
+
+- [GitHub Repository](https://github.com/Axvser/VeloxDev)
 - [Examples Directory](https://github.com/Axvser/VeloxDev/tree/master/Examples)
-
 - [NuGet · VeloxDev.Core](https://www.nuget.org/packages/VeloxDev.Core/)

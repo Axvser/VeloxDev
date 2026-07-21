@@ -1,10 +1,16 @@
 # Hello Workflow
 
-创建一个新控制台项目，粘贴代码并运行 — 2 分钟内获得一个可执行的工作流。
+2 分钟搭建一个可执行的工作流 —— 定义节点、通过标准命令挂载、编译、运行。
 
 ---
 
-## 第一步 — 创建项目
+## Demo 效果
+
+所有节点通过 **标准命令**（`CreateNode` / `SendConnection` / `ReceiveConnection`）挂载到 Tree。
+
+## 操作步骤
+
+### 1. 创建项目
 
 ```shell
 dotnet new console -n MyFirstWorkflow
@@ -12,67 +18,45 @@ cd MyFirstWorkflow
 dotnet add package VeloxDev.Core
 ```
 
-## 第二步 — 将以下代码完整粘贴到 `Program.cs`
+### 2. 编写代码
 
 ```csharp
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.Compilation;
 
-// ── 1. 定义节点 ViewModel ──────────────────────────────────────
+// 自定义节点：声明 Slot 为 partial 属性
+// 生成器在 InitializeWorkflow() 中自动注册到 Slots 集合
 
-// 控制器 — 工作流入口（无输入，仅有输出）
-public partial class ControllerNode : NodeDefaultViewModel
+[WorkflowBuilder.Node<NodeHelper>]
+public partial class ControllerNode
 {
-    public ControllerNode() => InitializeWorkflow();
-
-    [VeloxProperty] private string _seed = "你好！VeloxDev！";
+	public ControllerNode() => InitializeWorkflow();
+	[VeloxProperty] public partial SlotViewModel OutputSlot { get; set; }
 }
 
-// 处理器 — 接收数据、转换、转发
-public partial class ProcessorNode : NodeDefaultViewModel
+[WorkflowBuilder.Node<NodeHelper>]
+public partial class ProcessorNode
 {
-    public ProcessorNode() => InitializeWorkflow();
-
-    [VeloxProperty] private string _result = "";
+	public ProcessorNode() => InitializeWorkflow();
+	[VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 }
 
-// ── 2. 连接、编译、执行 ──────────────────────────────────────────
-
-var ctrl  = new ControllerNode();
-var proc  = new ProcessorNode();
-
-// 连接：ctrl 的默认输出口 → proc 的默认输入口
-var link = new LinkDefaultViewModel
-{
-    Sender   = ctrl.Slots[0],
-    Receiver = proc.Slots[0]
-};
-
+// 使用标准命令挂载到 Tree 并连接
 var tree = new TreeDefaultViewModel();
-tree.Nodes.Add(ctrl);
-tree.Nodes.Add(proc);
-tree.Links.Add(link);
+var ctrl = new ControllerNode();
+var proc = new ProcessorNode();
+var helper = tree.GetHelper();
 
-// 编译（BFS、正向、从控制器开始）
-var compiler  = new WorkflowCompiler();
-var results   = compiler.Compile(ctrl, CompileMode.BFS);
-var plan      = results[0];
+helper.CreateNode(ctrl);      // 标准命令：添加节点
+helper.CreateNode(proc);      // 标准命令：添加节点
+helper.SendConnection(ctrl.OutputSlot);   // 标准命令：设置发送方
+helper.ReceiveConnection(proc.InputSlot); // 标准命令：设置接收方
 
-// 执行 — 上下文对象按序流过每个节点
-var finalResult = await plan.ExecuteAsync("payload");
-Console.WriteLine($"工作流执行完毕。最终结果：{finalResult}");
+// 编译并执行
+var compiler = new WorkflowCompiler();
+var plan = compiler.Compile(ctrl, CompileMode.BFS)[0];
+
+var result = await plan.ExecuteAsync("payload");
+Console.WriteLine($"执行完毕：{result}");
 ```
-
-## 第三步 — 运行
-
-```shell
-dotnet run
-```
-
-输出：
-```
-工作流执行完毕。最终结果：payload
-```
-
-数据负载经过 `ControllerNode`（通过 Slot[0] 广播）→ `ProcessorNode`（接收并返回）。无需 GUI 即可无头运行。

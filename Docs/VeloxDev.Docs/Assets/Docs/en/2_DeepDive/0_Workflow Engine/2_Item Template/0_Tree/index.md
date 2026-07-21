@@ -1,13 +1,22 @@
 # Tree View Template
 
-Generate a Tree View with the `-v-tree` template.
+Binds to `IWorkflowTreeViewModel`. Includes a scrollable canvas surface.
+
+## Usage
 
 ```shell
-# Avalonia
-dotnet new ava-v-tree -n WorkflowTreeView -ns MyApp.Views
-
-# WPF
 dotnet new wpf-v-tree -n WorkflowTreeView -ns MyApp.Views
+dotnet new ava-v-tree -n WorkflowTreeView -ns MyApp.Views
+dotnet new winui-v-tree -n WorkflowTreeView -ns MyApp.Views
+dotnet new maui-v-tree -n WorkflowTreeView -ns MyApp.Views
 ```
 
-The generated view binds to `IWorkflowTreeViewModel` and includes a scrollable canvas surface.
+## Parameters
+
+Common parameters only — no visual customization.
+
+| Short | Parameter | Default | Description |
+|-------|-----------|---------|-------------|
+| `-n` | `--name` | `TreeView` | Class/filename |
+| `-o` | `--output` | Current dir | Output directory |
+| | `--namespace` | `MyApp.Views` | Namespace |

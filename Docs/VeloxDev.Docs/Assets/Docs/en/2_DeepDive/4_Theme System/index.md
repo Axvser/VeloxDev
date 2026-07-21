@@ -31,10 +31,10 @@ sequenceDiagram
     participant Cache as ThemeCache
     participant Target as IThemeObject
 
-    App->>Manager: Transition&lt;Light&gt;(effect)
-    Manager->>Manager: CancleTransition()
+    App->>Manager: Transition(Light, effect)
+    Manager->>Manager: CancelTransition()
     Manager->>Cache: CalculateFrames(steps, ease)
-    Cache-->>Manager: Queue~Action~ frames
+    Cache->>Manager: Return frame queue
     loop Every frame
         Manager->>Target: Apply next interpolated value
     end
@@ -57,6 +57,36 @@ Each platform adapter provides:
 - **`Interpolator`**: Platform-specific interpolation engine (WPF, Avalonia, etc.)
 - **Converters**: `BrushConverter`, `ColorConverter`, `ThicknessConverter`, `CornerRadiusConverter`, etc.
 - **`TransitionEffects`**: Pre-built presets (e.g., `TransitionEffects.Theme`)
+
+## ThemeManager API
+
+| Method | Description |
+|--------|-------------|
+| `Jump<T>()` | Instant switch to theme T |
+| `Transition<T>(TransitionEffect)` | Animated switch to theme T |
+| `Transition(Type, TransitionEffect)` | Runtime type-based switch |
+| `RegisterThemeObject(IThemeObject)` | Register a theme-aware object |
+| `UnregisterThemeObject(IThemeObject)` | Unregister a theme-aware object |
+| `SetPlatformInterpolator(Interpolator)` | Set platform interpolator (required for animation) |
+| `SetThemeValue<T>(name, value)` | Runtime dynamic property override |
+
+### Theme Declaration
+
+```csharp
+[ThemeConfig<BrushConverter, Light, Dark>(nameof(Background), ["#ffffff"], ["#1e1e1e"])]
+[ThemeConfig<BrushConverter, Light, Dark>(nameof(Foreground), ["#1e1e1e"], ["#ffffff"])]
+public partial class MainWindow : Window { ... }
+```
+
+### Lifecycle Hook
+
+```csharp
+// Called automatically after each theme switch
+partial void OnThemeChanged(Type? oldTheme, Type? newTheme)
+{
+    // Custom logic
+}
+```
 
 ## Core Types
 

@@ -8,18 +8,18 @@
 
 ```mermaid
 flowchart TB
-    subgraph Snapshot[快照模式]
-        S1[SnapshotAll()] --> S2[修改属性]
-        S2 --> S3[Effect(...).Execute(target)]
+    subgraph Snapshot["快照模式"]
+        S1["SnapshotAll()"] --> S2["修改属性"]
+        S2 --> S3["Effect(...).Execute(target)"]
     end
 
-    subgraph Property[属性模式]
-        P1[Transition&lt;T&gt;.Create()] --> P2[.Property(lambda, value)]
-        P2 --> P3[.Effect(...).Execute(target)]
+    subgraph Property["属性模式"]
+        P1["Transition.Create()"] --> P2[".Property(lambda, value)"]
+        P2 --> P3[".Effect(...).Execute(target)"]
     end
 
-    subgraph Theme[主题模式]
-        T1[ThemeManager.Transition&lt;Theme&gt;(effect)]
+    subgraph Theme["主题模式"]
+        T1["ThemeManager.Transition(effect)"]
     end
 ```
 
@@ -27,14 +27,10 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    Capture[捕获状态] --> Interpolate[插值
-    NativeInterpolators]
-    Interpolate --> Schedule[调度
-    TransitionScheduler]
-    Schedule --> Transform[转换
-    via Interpreter]
-    Transform --> Apply[应用到
-    DependencyObject]
+    Capture[捕获状态] --> Interpolate[插值]
+    Interpolate --> Schedule[调度]
+    Schedule --> Transform[转换]
+    Transform --> Apply[应用]
 ```
 
 ### 组件分解

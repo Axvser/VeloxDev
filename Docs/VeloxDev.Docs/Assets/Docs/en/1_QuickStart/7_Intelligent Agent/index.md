@@ -1,52 +1,82 @@
 # Intelligent Agent
 
-Bind an AI assistant to your workflow — the agent can create/connect nodes and modify properties via natural language.
+Mark workflow components with AI context attributes, then create an agent — manipulate workflows via **natural language**.
 
 ---
 
-## Step 1 — Install
+## Demo
+
+```
+You: Add a node and connect it to the controller
+Agent: Done! Created NodeX and connected to ControllerNode's default output slot
+```
+
+The agent understands the workflow structure through `[AgentContext]`, `[AgentCommandParameter]`, and `[SlotSelectors]` annotations.
+
+## 1. Annotating Components with AI Context
+
+`[AgentContext]` attaches descriptions to any component, property, or method — supports multiple languages:
+
+```csharp
+using VeloxDev.AI;
+using VeloxDev.MVVM;
+using VeloxDev.WorkflowSystem;
+
+[AgentContext(AgentLanguages.English, "A derived Node component.")]
+[AgentContext(AgentLanguages.Chinese, "派生的Node组件。")]
+[WorkflowBuilder.Node<NodeHelper>]
+public partial class MyNode
+{
+    public MyNode() => InitializeWorkflow();
+
+    [AgentContext(AgentLanguages.English, "Input slot.")]
+    [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
+
+    [AgentContext(AgentLanguages.English, "Simulated delay in ms.")]
+    [VeloxProperty] private int delayMilliseconds = 1200;
+}
+```
+
+`[AgentCommandParameter]` specifies the parameter type for a command:
+
+```csharp
+[AgentCommandParameter(typeof(string))]
+[VeloxCommand]
+private async Task SetUrl(object? parameter, CancellationToken ct) { ... }
+```
+
+`[SlotSelectors]` declares allowed enum selector types for conditional slots:
+
+```csharp
+[SlotSelectors(typeof(MyEnum))]
+[VeloxProperty] public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }
+```
+
+## 2. Install & Create the Agent
 
 ```shell
 dotnet add package VeloxDev.Core.Extension
 ```
-
-## Step 2 — Create a Console App with the Agent
-
-```shell
-dotnet new console -n MyAgentDemo
-cd MyAgentDemo
-dotnet add package VeloxDev.Core.Extension
-```
-
-## Step 3 — Paste into `Program.cs`
 
 ```csharp
 using VeloxDev.AI;
 using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.Compilation;
-
-// ── Build a minimal workflow tree ──────────────────────────────────
 
 var tree = new TreeDefaultViewModel();
-var ctrl = new ControllerNode();
+var ctrl = new MyNode();
 tree.Nodes.Add(ctrl);
 
-// ── Create an agent scope from the tree ────────────────────────────
-
 var scope = tree.AsAgentScope()
-    .WithPromptLanguage(AgentLanguages.Chinese)
+    .WithPromptLanguage(AgentLanguages.English)
     .WithAutoDiscovery("VeloxDev.Core")
     .WithMaxToolCalls(200);
-
-// ── Get the progressive context prompt and tool definitions ────────
 
 var contextPrompt = scope.ProvideProgressiveContextPrompt();
 var tools = scope.ProvideTools();
 
-// ── Bind to an LLM (OpenAI-compatible API, e.g. DeepSeek, Azure) ──
-
+// Bind to LLM (OpenAI-compatible API)
 var apiKey = Environment.GetEnvironmentVariable("AI_API_KEY")
     ?? throw new InvalidOperationException("Set AI_API_KEY");
 
@@ -58,39 +88,21 @@ var chatClient = new OpenAI.OpenAIClient(
 
 var agent = chatClient.AsAIAgent(instructions: contextPrompt, tools: tools);
 
-// ── Let the agent talk to the workflow ─────────────────────────────
-
 Console.Write("You: ");
-var userMessage = Console.ReadLine() ?? "添加一个节点";
-
-var response = await agent.RunAsync(userMessage);
+var response = await agent.RunAsync(Console.ReadLine() ?? "Add a new node");
 Console.WriteLine($"Agent: {response?.Text}");
-
-// ── Supporting node ViewModel ──────────────────────────────────────
-
-public partial class ControllerNode : NodeDefaultViewModel
-{
-    public ControllerNode() => InitializeWorkflow();
-    [VeloxProperty] private string _seed = "demo";
-}
 ```
 
-## Step 4 — Set Your API Key and Run
+## Agent Capabilities
 
-```shell
-set AI_API_KEY=sk-your-key-here
-dotnet run
-```
+| Capability | Required Annotation |
+|-----------|-------------------|
+| Create/Delete nodes | `[WorkflowBuilder.Node]` (auto-discovered) |
+| Read/Write properties | `[VeloxProperty]` + `[AgentContext("description")]` |
+| Invoke commands | `[VeloxCommand]` + `[AgentContext("description")]` |
+| Connect/Disconnect slots | `[AgentContext]` describing slot purpose |
+| Conditional slot routing | `[SlotSelectors(typeof(Enum))]` |
+| Undo/Redo | Automatic (operation stack) |
+| Safety confirmation | Built-in (Level 1+ requires confirmation) |
 
-The agent can:
-- Create/delete nodes
-- Connect/disconnect slots  
-- Modify `[VeloxProperty]` values
-- Execute undo/redo
-- Request confirmation before destructive actions
-
-## Safety Levels
-
-```csharp
-scope.WithInteractionSafety(2); // 0=auto, 1=caution, 2=confirm, 3=strict
-```
+Full example: [Examples/Workflow/Common/Lib/](https://github.com/Axvser/VeloxDev/tree/master/Examples/Workflow/Common/Lib/)

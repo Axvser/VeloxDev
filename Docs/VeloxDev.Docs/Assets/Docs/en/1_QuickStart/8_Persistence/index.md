@@ -1,64 +1,76 @@
 # Persistence
 
-Save and restore workflow state to JSON using `VeloxDev.Core.Extension` — works in any project type.
+Serialize your workflow to JSON — share the same data across Desktop, Browser, and Mobile.
 
 ---
 
-## Step 1 — Install
+## Demo
+
+```csharp
+var json = tree.Serialize();          // Tree → JSON
+var restored = json.Deserialize<TreeDefaultViewModel>(); // JSON → Tree
+Console.WriteLine($"Restored tree with {restored.Nodes.Count} node(s)");
+```
+
+## Steps
+
+### 1. Install
 
 ```shell
 dotnet add package VeloxDev.Core.Extension
 ```
 
-## Step 2 — Paste into `Program.cs`
+### 2. Serialize
 
 ```csharp
-using VeloxDev.MVVM;
-using VeloxDev.MVVM.Serialization;
-using VeloxDev.WorkflowSystem;
+using VeloxDev.Extension.Serialization;
 
-// ── Build a workflow ───────────────────────────────────────────────
+// Synchronous
+string json = tree.Serialize();
 
-var tree = new TreeDefaultViewModel();
-var ctrl = new ControllerNode();
-tree.Nodes.Add(ctrl);
-tree.Links.Add(new LinkDefaultViewModel
-{
-    Sender = ctrl.Slots[0],
-    Receiver = ctrl.Slots[0]
-});
+// Asynchronous
+string jsonAsync = await tree.SerializeAsync();
 
-// ── Serialize to JSON ──────────────────────────────────────────────
-
-var json = tree.Serialize();
-Console.WriteLine(json);
-
-// ── Deserialize back ───────────────────────────────────────────────
-
-var restored = json.Deserialize<TreeDefaultViewModel>();
-Console.WriteLine($"Restored tree with {restored.Nodes.Count} node(s)");
-
-// ── Safe deserialization ───────────────────────────────────────────
-
-if (json.TryDeserialize<TreeDefaultViewModel>(out var safe))
-{
-    Console.WriteLine($"Safe load: {safe.Nodes.Count} node(s)");
-}
-
-// ── Async with indented output ─────────────────────────────────────
-
-var pretty = tree.Serialize(SerializationOptions.Create().WithIndented());
+// Indented formatting
+string pretty = tree.Serialize(SerializationOptions.Create().WithIndented());
 await File.WriteAllTextAsync("workflow.json", pretty);
 
+// UTF8 bytes
+byte[] bytes = tree.SerializeToUtf8Bytes();
+```
+
+### 3. Deserialize
+
+```csharp
+// Safe deserialization
+if (json.TryDeserialize<TreeDefaultViewModel>(out var restored))
+    Console.WriteLine($"Safe load: {restored.Nodes.Count} node(s)");
+
+// Throws on failure
+var tree = json.Deserialize<TreeDefaultViewModel>();
+
+// Load from file
 var fromFile = (await File.ReadAllTextAsync("workflow.json"))
     .Deserialize<TreeDefaultViewModel>();
-Console.WriteLine($"Loaded from file: {fromFile.Nodes.Count} node(s)");
-
-// ── Supporting node ────────────────────────────────────────────────
-
-public partial class ControllerNode : NodeDefaultViewModel
-{
-    public ControllerNode() => InitializeWorkflow();
-    [VeloxProperty] private string _label = "Controller";
-}
 ```
+
+## What's Included
+
+| Component | Serialized Fields |
+|-----------|-------------------|
+| **Tree** | Layout (canvas, viewport offset), VirtualLink |
+| **Node** | Anchor, Size, all `[VeloxProperty]` field values |
+| **Slot** | Anchor, Channel, State, Targets/Sources references |
+| **Link** | Sender/Receiver slot IDs, IsVisible |
+
+## Full API
+
+| Method | Description |
+|--------|-------------|
+| `tree.Serialize()` | Serialize to JSON string |
+| `tree.SerializeAsync()` | Async serialization |
+| `json.Deserialize<T>()` | Deserialize (throws on failure) |
+| `json.TryDeserialize<T>(out var)` | Safe deserialization |
+| `tree.SerializeToUtf8Bytes()` | Serialize to UTF8 bytes |
+| `tree.SerializeToStreamAsync(stream)` | Serialize to stream |
+| `new SerializationOptions().WithIndented()` | Indented formatting |

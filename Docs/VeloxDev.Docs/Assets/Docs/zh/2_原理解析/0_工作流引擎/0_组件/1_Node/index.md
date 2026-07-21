@@ -1,9 +1,9 @@
 # Node
 
-`NodeDefaultViewModel` 是所有可执行节点的基类。
+`NodeDefaultViewModel` 是 `IWorkflowNodeViewModel` 的默认实现，封装了节点核心状态与命令。
 
 ```csharp
-public partial class NodeDefaultViewModel : IWorkflowNodeViewModel
+public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel
 {
     [VeloxProperty] private Anchor anchor = new();
     [VeloxProperty] private Size size = new();
@@ -11,4 +11,4 @@ public partial class NodeDefaultViewModel : IWorkflowNodeViewModel
 }
 ```
 
-通过 `[WorkflowBuilder.Node<THelper>]` 特性在编译时注入自定义业务逻辑 Helper。
+如需自定义节点，使用 `[WorkflowBuilder.Node<THelper>]` 特性声明（而非继承）：

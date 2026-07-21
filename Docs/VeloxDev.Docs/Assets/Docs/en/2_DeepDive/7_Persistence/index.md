@@ -7,24 +7,23 @@ Workflow state serialization using `Newtonsoft.Json` via extension methods in `V
 ## Serialization Graph
 
 ```mermaid
-flowchart TB
-    subgraph JSON[Serialized JSON]\n
-        Tree[Tree\nLayout, VirtualLink]
-        Nodes["Nodes[]\nAnchor, Size"]
-        Links["Links[]\nSender, Receiver"]
-        Maps["LinksMap\nSlot→Slot→Link"]
+flowchart LR
+    subgraph JSON["Serialized JSON"]
+        Tree["Tree\\nLayout, VirtualLink"]
+        Nodes["Nodes[]\\nAnchor, Size"]
+        Links["Links[]\\nSender, Receiver"]
     end
 
-    subgraph Memory[Runtime Objects]
-        T[TreeDefaultViewModel]\n
-        N[NodeDefaultViewModel]\nSlots[], Parent\n
-        L[LinkDefaultViewModel]\nSender, Receiver\n
-        S[SlotDefaultViewModel]\nTargets, Sources\n
+    subgraph Memory["Runtime Objects"]
+        T["TreeDefaultViewModel"]
+        N["NodeDefaultViewModel\\nSlots[], Parent"]
+        L["LinkDefaultViewModel\\nSender, Receiver"]
+        S["SlotDefaultViewModel\\nTargets, Sources"]
     end
 
-    T --> Tree\n
-    N --> Nodes\n
-    L --> Links\n
+    T --> Tree
+    N --> Nodes
+    L --> Links
     S -.->|via Parent| N
     Tree --> Links --> L
     Nodes --> N
@@ -33,26 +32,16 @@ flowchart TB
 
 ## Extension Method API Surface
 
-```mermaid
-flowchart LR
-    subgraph Sync\n
-        T[tree.Serialize&#40;&#41;] --> Str[string JSON]\n
-        S2[tree.Serialize&#40;options&#41;] --> Str2[string with options]\n
-        Str3["json.Deserialize&lt;T&gt;&#40;&#41;"] --> Obj[T]\n
-        B["json.TryDeserialize&lt;T&gt;&#40;out var&#41;"] --> Bool[bool]\n
-    end
-
-    subgraph Async\n
-        T2["await tree.SerializeAsync&#40;&#41;"] --> StrA[string]\n
-        T3["await json.DeserializeAsync&lt;T&gt;&#40;&#41;"] --> ObjA[T]\n
-    end
-
-    subgraph Advanced\n
-        S3["tree.SerializeToUtf8Bytes&#40;&#41;"] --> Bytes[byte&#91;&#93;]\n
-        S4["stream.SerializeToStreamAsync&#40;&#41;"] --> Stream[Stream]\n
-        S5["reader.DeserializeFromTextReaderAsync&#40;&#41;"] --> ObjR[T]\n
-    end
-```
+| Method | Description |
+|--------|-------------|
+| `tree.Serialize()` | Serialize to JSON string |
+| `tree.Serialize(options)` | Serialize with options |
+| `json.Deserialize<T>()` | Deserialize (throws on failure) |
+| `json.TryDeserialize<T>(out var)` | Safe deserialization |
+| `await tree.SerializeAsync()` | Async serialization |
+| `await json.DeserializeAsync<T>()` | Async deserialization |
+| `tree.SerializeToUtf8Bytes()` | Serialize to UTF8 bytes |
+| `stream.SerializeToStreamAsync()` | Serialize to stream |
 
 ## SerializationOptions Fluent API
 
@@ -75,6 +64,36 @@ var json = tree.Serialize(
 | **Slot** | Anchor, Channel, State, Targets (as slot IDs), Sources (as slot IDs) |
 | **Link** | Sender (slot ID), Receiver (slot ID), IsVisible |
 | **Custom data** | All `[VeloxProperty]` values, including business-specific data |
+
+## Full Extension Method API
+
+| Category | Method | Description |
+|----------|--------|-------------|
+| Sync | `tree.Serialize()` | Serialize to JSON string |
+| Sync | `json.Deserialize<T>()` | Deserialize (throws on failure) |
+| Sync | `json.TryDeserialize<T>(out var)` | Safe deserialization |
+| Async | `await tree.SerializeAsync()` | Async serialization |
+| Async | `await json.DeserializeAsync<T>()` | Async deserialization |
+| Formatting | `new SerializationOptions().WithIndented()` | Indented output |
+| Bytes | `tree.SerializeToUtf8Bytes()` | Serialize to UTF8 bytes |
+| Stream | `tree.SerializeToStreamAsync(stream)` | Serialize to stream |
+
+## Serialization Flow
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Ser as SerializationExtension
+    participant Tree as TreeViewModel
+    participant JSON as JSON Document
+
+    App->>Ser: tree.Serialize()
+    Ser->>Tree: Traverse Nodes[]
+    Ser->>Tree: Traverse Links[]
+    Ser->>Tree: Read Layout
+    Ser->>JSON: Build JSON object
+    JSON-->>App: Return JSON string
+```
 
 ## Cross-Platform
 

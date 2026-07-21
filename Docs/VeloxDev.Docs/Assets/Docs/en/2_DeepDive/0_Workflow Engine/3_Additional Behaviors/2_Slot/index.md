@@ -1,11 +1,38 @@
-# Slot Connection Flow
+# WorkflowSlotConnectionBehavior
 
-Slot connection is a multi-step process managed by the Tree:
+Slot view behavior — click to initiate or accept a connection.
 
-1. **Pointer down** on an output slot → `SendConnectionCommand`
-2. **Drag** → `SetPointerCommand(Anchor)` updates the virtual link endpoint
-3. **Pointer enter** an input slot → `ReceiveConnectionCommand` highlights it
-4. **Pointer up** on the input slot → `SubmitCommand(WorkflowActionPair)` creates the link
-5. **Cancel** (ESC) → `ResetVirtualLinkCommand` clears the ghost line
+---
 
-The `SlotChannel` property controls directionality: `Input`, `Output`, `OneBoth`, or `None`.
+## Attached Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `IsEnabled` | `bool` | `false` | Enable connection interaction |
+
+## Behavior
+
+| Event | Action |
+|-------|--------|
+| `PreviewMouseLeftButtonDown` | Calls `SendConnectionCommand.Execute(null)` |
+| `PreviewMouseLeftButtonUp` | Calls `ReceiveConnectionCommand.Execute(null)` |
+
+## Complete Connection Flow
+
+1. Press on output slot → `SendConnectionCommand` sets VirtualLink.Sender
+2. Drag → `SetPointerCommand(Anchor)` updates ghost line (handled by SurfaceBehavior)
+3. Pointer enters input slot → `ReceiveConnectionCommand` sets VirtualLink.Receiver
+4. Release → `SubmitCommand(WorkflowActionPair)` creates and adds Link
+5. ESC cancel → `ResetVirtualLinkCommand` clears ghost line
+
+## SlotChannel Direction Constraints (Flags)
+
+| Value | Flag Value | Meaning |
+|-------|:----------:|---------|
+| `None` | `0` | No connections allowed |
+| `OneTarget` | `1` | At most 1 outgoing connection |
+| `OneSource` | `2` | At most 1 incoming connection |
+| `OneBoth` | `3` | At most 1 out + 1 in |
+| `MultipleTargets` | `4` | Multiple outgoing connections |
+| `MultipleSources` | `8` | Multiple incoming connections |
+| `MultipleBoth` | `12` | Multiple out + multiple in (default) |

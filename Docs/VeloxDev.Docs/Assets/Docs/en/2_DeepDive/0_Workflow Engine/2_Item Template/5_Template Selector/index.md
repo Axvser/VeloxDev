@@ -1,13 +1,22 @@
-# Template Selector View Template
+# Template Selector
 
-Generate a Template Selector with the `-v-selector` template.
+Inherits `DataTemplateSelector`. Maps ViewModel types to corresponding DataTemplates.
+
+## Usage
 
 ```shell
-# WPF
 dotnet new wpf-v-selector -n MyTemplateSelector -ns MyApp.Views
-
-# Avalonia
 dotnet new ava-v-selector -n MyTemplateSelector -ns MyApp.Views
+dotnet new winui-v-selector -n MyTemplateSelector -ns MyApp.Views
+dotnet new maui-v-selector -n MyTemplateSelector -ns MyApp.Views
 ```
 
-The generated selector extends `DataTemplateSelector` and maps ViewModel types (`IWorkflowNodeViewModel`, `IWorkflowSlotViewModel`, etc.) to their corresponding DataTemplates.
+## Parameters
+
+Common parameters only — no visual customization.
+
+| Short | Parameter | Default | Description |
+|-------|-----------|---------|-------------|
+| `-n` | `--name` | `TemplateSelector` | Class/filename |
+| `-o` | `--output` | Current dir | Output directory |
+| | `--namespace` | `MyApp.Views` | Namespace |

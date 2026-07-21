@@ -1,77 +1,86 @@
 # AOP
 
-Apply aspect-oriented programming via `DispatchProxy` — intercept method calls at runtime with before/after hooks, no compile-time weaving.
+Intercept method/property access at runtime via `DispatchProxy` — three handler slots (start/coverage/end), no compile-time weaving required.
 
 ---
 
-## Step 1 — Install
+## Demo
+
+```csharp
+// No need to modify ViewModel source code
+var proxy = data.Aop();  // Get or create a cached DispatchProxy proxy
+
+// Intercept property getter with a before-handler
+proxy.SetProxy(ProxyMembers.Getter, nameof(TeamViewModel.Name),
+    (_, _) => { Console.WriteLine("Name was read"); return null; },
+    null, null);
+```
+
+## Steps
+
+### 1. Install
 
 ```shell
 dotnet add package VeloxDev.Core
 ```
 
-## Step 2 — Define an Interface and Implementation
-
-Paste into `IMyService.cs`:
+### 2. Define a Class with `[AspectOriented]`
 
 ```csharp
 using VeloxDev.AspectOriented;
+using VeloxDev.MVVM;
 
-public interface IMyService : IAspectOriented
+public partial class TeamViewModel
 {
-    int Add(int x, int y);
-}
+    [VeloxProperty][AspectOriented] private string _name = string.Empty;
 
-public class MyService : IMyService
-{
     [AspectOriented]
-    public int Add(int x, int y) => x + y;
+    public void Reset()
+    {
+        Name = string.Empty;
+    }
 }
 ```
 
-## Step 3 — Create Proxy and Attach Handlers
-
-Paste into `Program.cs`:
+### 3. Get the Proxy and Attach Handlers
 
 ```csharp
-using VeloxDev.AspectOriented;
+var data = new TeamViewModel();
+var proxy = data.Aop();  // ① First call creates and caches the DispatchProxy
 
-var proxy = new MyService().CreateProxy();
+// ② Attach handlers for Getter/Setter/Method
+proxy.SetProxy(ProxyMembers.Getter, nameof(TeamViewModel.Name),
+    (_, _) => { /* before: runs before getter */ return null; },
+    null, null);
 
-// before handler
-ProxyHandler logStart = (args, _) =>
-{
-    Console.WriteLine($">> Add({string.Join(", ", args ?? [])})");
-    return null;
-};
+proxy.SetProxy(ProxyMembers.Setter, nameof(TeamViewModel.Name),
+    null, null,
+    (p, _) => { /* after: runs after setter */ Console.WriteLine($"New value={p?[0]}"); return null; });
 
-// after handler
-ProxyHandler logEnd = (args, result) =>
-{
-    Console.WriteLine($"<< Add = {result}");
-    return result;
-};
+// coverage returns non-null to bypass the original method
+proxy.SetProxy(ProxyMembers.Method, nameof(TeamViewModel.Reset),
+    null,
+    (_, _) => { Console.WriteLine("Reset was cancelled"); return null; },
+    null);
 
-proxy.SetProxy(ProxyMembers.Method, nameof(IMyService.Add),
-    start: logStart,   // called before
-    coverage: null,     // null = use original method
-    end: logEnd);       // called after
-
-var result = proxy.Add(3, 4);
-// Output:
-//   >> Add(3, 4)
-//   << Add = 7
-Console.WriteLine($"Result: {result}");
+// All calls through the proxy are intercepted
+var name = proxy.Name;  // Getter → start fires
+proxy.Name = "New Team"; // Setter → end fires
+proxy.Reset();           // Method → coverage replaces
 ```
 
-## How it Works
+### 4. Run
 
-| Piece | Role |
-|-------|------|
-| `IAspectOriented` | Marker interface required for proxy creation |
-| `[AspectOriented]` | Flags a method/property for interception |
-| `CreateProxy<T>()` | Wraps instance in a `DispatchProxy` |
-| `ProxyHandler` | Delegate: `object? (object?[]? parameters, object? previous)` |
-| `SetProxy(...)` | Attaches `start` (before), `coverage` (replace), `end` (after) handlers |
+```shell
+dotnet run
+```
 
-No reflection per-call overhead — `DispatchProxy` routes via `Invoke`.
+## Handler Reference
+
+| Handler | Position | Return Value Meaning |
+|---------|----------|---------------------|
+| **start** (before) | Before original member | Passed to coverage; ignored |
+| **coverage** (replace) | Decides whether to execute | `null` = run original; non-null = replacement result |
+| **end** (after) | After original (or coverage) | Returned to caller |
+
+Full example: [Examples/AOP/WPF](https://github.com/Axvser/VeloxDev/tree/master/Examples/AOP/WPF/Demo)

@@ -8,18 +8,18 @@ The animation system is built on **state-snapshot interpolation**. Every animati
 
 ```mermaid
 flowchart TB
-    subgraph Snapshot[Snapshot Pattern]
-        S1[SnapshotAll&#40;&#41;] --> S2[Mutate properties]
-        S2 --> S3[Effect&#40;TransitionEffect&#41;.Execute&#40;target&#41;]
+    subgraph Snapshot["Snapshot Pattern"]
+        S1["SnapshotAll()"] --> S2["Mutate properties"]
+        S2 --> S3["Effect(...).Execute(target)"]
     end
 
-    subgraph Property[Property Pattern]
-        P1[Transition&lt;T&gt;.Create&#40;&#41;] --> P2[.Property&#40;lambda, value&#41;]
-        P2 --> P3[.Effect&#40;...&#41;.Execute&#40;target&#41;]
+    subgraph Property["Property Pattern"]
+        P1["Transition.Create()"] --> P2[".Property(lambda, value)"]
+        P2 --> P3[".Effect(...).Execute(target)"]
     end
 
-    subgraph Theme[Theme Pattern]
-        T1[ThemeManager.Transition&lt;Theme&gt;&#40;effect&#41;]
+    subgraph Theme["Theme Pattern"]
+        T1["ThemeManager.Transition(effect)"]
     end
 ```
 
@@ -27,14 +27,10 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    Capture[Capture State] --> Interpolate[Interpolate
-    NativeInterpolators]
-    Interpolate --> Schedule[Schedule
-    TransitionScheduler]
-    Schedule --> Transform[Transform
-    via Interpreter]
-    Transform --> Apply[Apply to
-    DependencyObject]
+    Capture["Capture State"] --> Interpolate["Interpolate"]
+    Interpolate --> Schedule["Schedule"]
+    Schedule --> Transform["Transform"]
+    Transform --> Apply["Apply"]
 ```
 
 ### Component Breakdown

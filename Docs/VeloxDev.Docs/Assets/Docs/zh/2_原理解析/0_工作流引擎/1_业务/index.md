@@ -1,40 +1,63 @@
-# 业务
+# 业务（Helper 模式）
 
-通过自定义 Helper 子类注入业务逻辑，使用 `[WorkflowBuilder]` 特性在编译时构建 ViewModel。
+工作流四组件将行为委托给 **Helper** 对象。Helper 由源码生成器自动注入，实现**策略模式**——用户通过继承默认 Helper 并重写方法注入业务逻辑，无需修改组件核心。
 
-## 自定义 Node Helper
+---
 
-继承 `NodeHelper<T>` 并重写虚方法：
+## 机制
 
 ```csharp
-using VeloxDev.WorkflowSystem;
+// 用户代码
+[WorkflowBuilder.Node<HttpHelper<NodeViewModel>>(workSemaphore: 5)]
+public partial class NodeViewModel { ... }
 
-public class MyNodeHelper : NodeHelper<MyNodeViewModel>
+// 生成器输出（.g.cs）
+public partial class NodeViewModel : IWorkflowNodeViewModel
 {
-    // 当节点在执行链中收到数据时调用
-    public override Task WorkAsync(object? parameter, CancellationToken ct)
-    {
-        Console.WriteLine($"处理: {parameter}");
-        return Task.CompletedTask;
-    }
-}
-
-[WorkflowBuilder.Node<MyNodeHelper>]
-public partial class MyNodeViewModel
-{
-    public MyNodeViewModel() => InitializeWorkflow();
-
-    [VeloxProperty] private string inputValue = "";
+    private IWorkflowNodeViewModelHelper helper = new HttpHelper<NodeViewModel>();
+    public void InitializeWorkflow() { helper.Install(this); }
 }
 ```
 
-## 可用的 `[WorkflowBuilder]` 特性
+## [WorkflowBuilder] 特性一览
 
-| 特性 | 目标 | Helper 接口 |
-|------|------|-------------|
-| `[WorkflowBuilder.Tree<THelper>]` | Tree | `IWorkflowTreeViewModelHelper` |
-| `[WorkflowBuilder.Node<THelper>]` | Node | `IWorkflowNodeViewModelHelper` |
-| `[WorkflowBuilder.Slot<THelper>]` | Slot | `IWorkflowSlotViewModelHelper` |
-| `[WorkflowBuilder.Link<THelper>]` | Link | `IWorkflowLinkViewModelHelper` |
+| 特性 | 目标 | Helper 接口 | 默认 Helper |
+|------|------|-------------|-------------|
+| `[WorkflowBuilder.Tree<THelper>]` | Tree | `IWorkflowTreeViewModelHelper` | `TreeHelper<TTree>` |
+| `[WorkflowBuilder.Node<THelper>]` | Node | `IWorkflowNodeViewModelHelper` | `NodeHelper<TNode>` |
+| `[WorkflowBuilder.Slot<THelper>]` | Slot | `IWorkflowSlotViewModelHelper` | `SlotHelper` |
+| `[WorkflowBuilder.Link<THelper>]` | Link | `IWorkflowLinkViewModelHelper` | `LinkHelper` |
 
-源码生成器读取 Helper 类型后自动生成命令、事件绑定等基础设施。
+## 标准扩展点
+
+`VeloxDev.WorkflowSystem.StandardEx` 提供一组标准扩展方法，可在 Helper 中调用：
+
+| 扩展方法 | 用途 |
+|----------|------|
+| `GetStandardCommands()` | 获取组件全部标准命令 |
+| `StandardCreateSlot(slot)` | 带撤销支持的 Slot 创建 |
+| `StandardClosing/StandardClosingAsync()` | 锁定所有命令 |
+| `StandardClose/StandardCloseAsync()` | 清除所有命令 |
+
+## 自定义 Helper 步骤
+
+```csharp
+// 1. 继承默认 Helper
+public class HttpHelper<TNode> : NodeHelper<TNode> where TNode : IWorkflowNodeViewModel
+{
+    public override async Task WorkAsync(object? parameter, CancellationToken ct)
+    {
+        var url = GetUrlFromProperty();
+        using var httpClient = new HttpClient();
+        var response = await httpClient.GetAsync(url, ct);
+    }
+}
+
+// 2. 通过 [WorkflowBuilder.*] 指定
+[WorkflowBuilder.Node<HttpHelper<NodeViewModel>>(workSemaphore: 5)]
+public partial class NodeViewModel { ... }
+```
+
+> 如果不指定 `[WorkflowBuilder.*]`，class 不会获得工作流接口和任何命令。必须始终使用该特性。
+
+各组件 Helper 的可重写方法详见以下子页面。

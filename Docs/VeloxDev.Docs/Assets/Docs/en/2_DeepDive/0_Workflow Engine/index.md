@@ -145,10 +145,12 @@ Each component delegates its behaviour to a **Helper** object injected via sourc
 
 ```
 [WorkflowBuilder.Node<CustomHelper>]
-public partial class MyNode : NodeDefaultViewModel
-    ↑                          ↑
-    Source generator           Base class with
-    wires helper               [VeloxCommand]s
+public partial class MyNode              // Source generator wires helper
+{
+    public MyNode() => InitializeWorkflow();
+
+    [VeloxProperty] private string _label = "demo";
+}
 ```
 
 Helper override points:
@@ -160,3 +162,21 @@ Helper override points:
 | `ReceiveAsync(parameter, sender, receiver, ct)` | On incoming data | No-op |
 | `BroadcastAsync(parameter, ct)` | Node signals downstream | Forwards to all output Slots |
 | `CloseAsync()` | Workflow stops | Cleans up resources |
+
+---
+
+## Key Interfaces & Default Implementations
+
+| Interface | Default Implementation | Purpose |
+|-----------|----------------------|---------|
+| `IWorkflowTreeViewModel` | `TreeDefaultViewModel` | Workflow container, node/link collections |
+| `IWorkflowNodeViewModel` | `NodeDefaultViewModel` | Executable node with Slot collection |
+| `IWorkflowSlotViewModel` | `SlotDefaultViewModel` | Typed connection endpoint |
+| `IWorkflowLinkViewModel` | `LinkDefaultViewModel` | Connection between two Slots |
+| `IWorkflowCompiler` | `WorkflowCompiler` | Graph compilation engine |
+| `IWorkContext` | `WorkContext` | Execution context container |
+| `ISpatialMap` | `SpatialGridHashMap` | Spatial index for large-graph rendering |
+
+## Spatial Management
+
+`SpatialGridHashMap` divides the canvas into grid cells, performing hit-testing and rendering only in the visible area. Ideal for workflows with 100+ nodes.

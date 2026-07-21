@@ -71,7 +71,7 @@ Marks a **method** to generate an `ICommand` wrapper. The method name `Save` pro
 | `Task Method()` | — | — |
 | `Task Method(CancellationToken)` | — | ✓ |
 | `Task Method(object?, CancellationToken)` | — | ✓ |
-| With `canValidate: true` | `bool CanMethod()` | — |
+| With `canValidate: true` | `partial bool CanExecute{Name}Command(object?)` | — |
 
 ### Command Lifecycle Events
 
@@ -89,3 +89,29 @@ Created → Enqueued → Dequeued → Started → Completed
 - **Compile-time**: No reflection, no runtime code generation
 - **Partial methods**: User-extensible via `partial void On{Name}Changed` hooks
 - **Concurrency control**: `semaphore` parameter limits parallel executions
+
+### Cascade Refresh
+
+```csharp
+[VeloxProperty(cascade: [nameof(FullName)])]
+private string _firstName;
+// When FirstName changes, FullName's PropertyChanged is also triggered automatically
+```
+
+### Concurrency Control
+
+```csharp
+[VeloxCommand(semaphore: 1)]  // Max 1 concurrent execution
+private async Task SaveAsync() { ... }
+```
+
+## Comparison: VeloxDev vs CommunityToolkit.Mvvm vs ReactiveUI
+
+| Feature | VeloxDev | CommunityToolkit.Mvvm | ReactiveUI |
+|---------|----------|----------------------|------------|
+| Dependencies | Zero | Microsoft.SourceLink | Reactive* family |
+| Runtime generation | None (compile-time) | None (compile-time) | None (compile-time) |
+| `ICommand` impl | Built-in | Built-in | Built-in |
+| Async support | Built-in | Via `AsyncRelayCommand` | Via `ReactiveCommand` |
+| Cancellation token | Compile-time automatic | Manual | Manual |
+| Concurrency control | Compile-time `semaphore` | Manual | Manual |

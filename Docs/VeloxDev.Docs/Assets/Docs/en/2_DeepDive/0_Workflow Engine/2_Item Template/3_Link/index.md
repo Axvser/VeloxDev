@@ -1,13 +1,22 @@
 # Link View Template
 
-Generate a Link View with the `-v-link` template.
+Binds to `IWorkflowLinkViewModel`. Renders connections as Bezier curves or polylines.
+
+## Usage
 
 ```shell
-# Avalonia
-dotnet new ava-v-link -n MyLinkView -ns MyApp.Views
-
-# WPF
 dotnet new wpf-v-link -n MyLinkView -ns MyApp.Views
+dotnet new ava-v-link -n MyLinkView -ns MyApp.Views
+dotnet new winui-v-link -n MyLinkView -ns MyApp.Views
+dotnet new maui-v-link -n MyLinkView -ns MyApp.Views
 ```
 
-The generated view binds to `IWorkflowLinkViewModel` and renders the connection as a Bezier or polyline curve.
+## Parameters
+
+| Short | Parameter | Default | Description |
+|-------|-----------|---------|-------------|
+| `-n` | `--name` | `LinkView` | Class/filename |
+| `-o` | `--output` | Current dir | Output directory |
+| | `--namespace` | `MyApp.Views` | Namespace |
+| | `--linkColor` | `#DDFFFFFF` | Line color |
+| | `--linkThickness` | `2` | Line thickness |

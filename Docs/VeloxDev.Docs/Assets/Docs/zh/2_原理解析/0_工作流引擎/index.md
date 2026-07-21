@@ -117,10 +117,13 @@ sequenceDiagram
 
 ```
 [WorkflowBuilder.Node<CustomHelper>]
-public partial class MyNode : NodeDefaultViewModel
-    ↑                          ↑
-    源码生成器                   基类（含
-    注入 Helper                [VeloxCommand] 等）
+public partial class MyNode            // 源码生成器注入 Helper
+{
+    public MyNode() => InitializeWorkflow();
+
+    [VeloxProperty] private string _label = "demo";
+    // ↑ 自定义业务属性
+}
 ```
 
 Helper 可重写的方法：
@@ -132,3 +135,21 @@ Helper 可重写的方法：
 | `ReceiveAsync(parameter, sender, receiver, ct)` | 收到数据时 | 空 |
 | `BroadcastAsync(parameter, ct)` | 节点向下游发信号 | 转发到所有输出 Slot |
 | `CloseAsync()` | 工作流停止 | 清理资源 |
+
+---
+
+## 关键接口一览
+
+| 接口 | 默认实现 | 用途 |
+|------|----------|------|
+| `IWorkflowTreeViewModel` | `TreeDefaultViewModel` | 工作流容器，管理节点/连接集合 |
+| `IWorkflowNodeViewModel` | `NodeDefaultViewModel` | 可执行节点，持有 Slot 集合 |
+| `IWorkflowSlotViewModel` | `SlotDefaultViewModel` | 类型化连接端点 |
+| `IWorkflowLinkViewModel` | `LinkDefaultViewModel` | 两个 Slot 间的连接 |
+| `IWorkflowCompiler` | `WorkflowCompiler` | 图编译引擎 |
+| `IWorkContext` | `WorkContext` | 执行时的上下文容器 |
+| `ISpatialMap` | `SpatialGridHashMap` | 空间索引，优化大型图渲染 |
+
+## 空间管理
+
+`SpatialGridHashMap` 将画布划分为网格单元，仅在可见区域执行命中测试和渲染计算，适用于节点数量超过 100 的大型工作流。

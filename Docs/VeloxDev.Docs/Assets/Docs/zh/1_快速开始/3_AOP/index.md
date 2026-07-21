@@ -1,77 +1,93 @@
 # AOP
 
-通过 `DispatchProxy` 在运行时拦截方法调用，前置/后置钩子，无需编译时织入。
+通过 `DispatchProxy` 在运行时拦截方法调用 —— start/coverage/end 三处理器，无需编译时织入。
 
 ---
 
-## 第一步 — 安装
+## Demo 效果
+
+```csharp
+// 无需修改 ViewModel 源码
+var proxy = data.Aop();  // 获取或创建 AOP 代理（自动缓存）
+
+// 为 Name 属性的 Getter 添加前置拦截
+proxy.SetProxy(ProxyMembers.Getter, nameof(TeamViewModel.Name),
+    (_, _) => { Console.WriteLine("Name 被读取了"); return null; },
+    null, null);
+```
+
+## 操作步骤
+
+### 1. 安装
 
 ```shell
 dotnet add package VeloxDev.Core
 ```
 
-## 第二步 — 定义接口和实现
+### 2. 定义接口和实现
 
-粘贴到 `IMyService.cs`：
+接口必须继承 `IAspectOriented`，需要拦截的方法标记 `[AspectOriented]`：
 
 ```csharp
 using VeloxDev.AspectOriented;
+using VeloxDev.MVVM;
 
-public interface IMyService : IAspectOriented
+public partial class TeamViewModel
 {
-    int Add(int x, int y);
-}
+    [VeloxProperty][AspectOriented] private string _name = string.Empty;
 
-public class MyService : IMyService
-{
     [AspectOriented]
-    public int Add(int x, int y) => x + y;
+    public void Reset()
+    {
+        Name = string.Empty;
+    }
 }
 ```
 
-## 第三步 — 创建代理并附加处理器
-
-粘贴到 `Program.cs`：
+### 3. 获取代理并通过 SetProxy 附加处理器
 
 ```csharp
-using VeloxDev.AspectOriented;
+var data = new TeamViewModel();
+var proxy = data.Aop();  // ① 获取/创建 DispatchProxy 代理（自动缓存）
 
-var proxy = new MyService().CreateProxy();
+// ② 为 Getter/Setter/Method 分别设置处理器
+proxy.SetProxy(ProxyMembers.Getter,
+    nameof(TeamViewModel.Name),           // 目标成员
+    (_, _) => { /* 前置：读取前执行 */ return null; },  // start
+    null,                                 // coverage：null=执行原方法
+    null);                                // end
 
-// 前置处理器
-ProxyHandler logStart = (args, _) =>
-{
-    Console.WriteLine($">> Add({string.Join(", ", args ?? [])})");
-    return null;
-};
+proxy.SetProxy(ProxyMembers.Setter,
+    nameof(TeamViewModel.Name),
+    null,
+    null,
+    (p, _) => { /* 后置：修改后执行 */ Console.WriteLine($"新值={p?[0]}"); return null; });
 
-// 后置处理器
-ProxyHandler logEnd = (args, result) =>
-{
-    Console.WriteLine($"<< Add = {result}");
-    return result;
-};
+// coverage 返回非 null 时，替代原方法执行
+proxy.SetProxy(ProxyMembers.Method,
+    nameof(TeamViewModel.Reset),
+    null,
+    (_, _) => { Console.WriteLine("Reset 被取消了"); return null; }, // 替代原逻辑
+    null);
 
-proxy.SetProxy(ProxyMembers.Method, nameof(IMyService.Add),
-    start: logStart,   // 调用前执行
-    coverage: null,     // null = 执行原方法
-    end: logEnd);       // 调用后执行
-
-var result = proxy.Add(3, 4);
-// 输出：
-//   >> Add(3, 4)
-//   << Add = 7
-Console.WriteLine($"结果: {result}");
+// 所有通过 proxy 的调用均被拦截
+var name = proxy.Name;  // Getter → start 触发
+proxy.Name = "新团队";   // Setter → end 触发
+proxy.Reset();           // Method → coverage 替代原方法
 ```
 
-## 组件说明
+### 4. 运行
 
-| 组件 | 作用 |
-|------|------|
-| `IAspectOriented` | 标记接口，代理创建的必要条件 |
-| `[AspectOriented]` | 标记需要拦截的方法/属性 |
-| `CreateProxy<T>()` | 将实例包装为 `DispatchProxy` |
-| `ProxyHandler` | 委托：`object? (object?[]? parameters, object? previous)` |
-| `SetProxy(...)` | 附加 `start`（前置）、`coverage`（替代）、`end`（后置）处理器 |
+```shell
+dotnet run
+```
 
-每次调用无反射开销 — `DispatchProxy` 通过 `Invoke` 路由。
+## 处理器类型
+
+| 处理器 | 位置 | 返回值含义 |
+|--------|------|-----------|
+| **start**（前置） | 原成员执行前 | 传递给 coverage |
+| **coverage**（替代） | 决定是否执行原成员 | `null` = 执行原方法；非 null = 替代结果 |
+| **end**（后置） | 原成员执行后 | 返回给调用方 |
+
+完整示例见 [Examples/AOP/WPF](https://github.com/Axvser/VeloxDev/tree/master/Examples/AOP/WPF/Demo)

@@ -22,7 +22,7 @@ public partial class ViewModel
     private async Task SaveAsync(object? parameter) =>
         await Task.Delay(50);
 
-    private bool CanSave() => IsDirty;
+    private partial bool CanExecuteSaveCommand(object? parameter) => IsDirty;
 }
 ```
 
@@ -36,4 +36,4 @@ public partial class ViewModel
 | `Task Method(CancellationToken)` | 异步可取消 |
 | `Task Method(object?, CancellationToken)` | 异步参数化可取消 |
 
-`canValidate: true` 时需提供 `bool Can{Name}()` 方法。
+`canValidate: true` 时编译器生成 `partial bool CanExecute{Name}Command(object? parameter)` 声明，需用户实现。

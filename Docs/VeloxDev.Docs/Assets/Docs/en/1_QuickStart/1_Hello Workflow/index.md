@@ -1,10 +1,14 @@
 # Hello Workflow
 
-Create a new console project, paste the code, and run — you'll have an executable workflow in under 2 minutes.
+Build an executable workflow in 2 minutes — define nodes, mount via standard commands, compile, and run.
 
 ---
 
-## Step 1 — Create a Project
+All nodes are mounted to the Tree via **standard commands** (`CreateNode` / `SendConnection` / `ReceiveConnection`).
+
+## Steps
+
+### 1. Create Project
 
 ```shell
 dotnet new console -n MyFirstWorkflow
@@ -12,67 +16,45 @@ cd MyFirstWorkflow
 dotnet add package VeloxDev.Core
 ```
 
-## Step 2 — Paste This Entire File into `Program.cs`
+### 2. Write Code
 
 ```csharp
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.Compilation;
 
-// ── 1. Define your Node ViewModels ──────────────────────────────
+// Custom nodes with Slot declared as partial properties
+// The generator auto-registers them into Slots during InitializeWorkflow()
 
-// Controller — the workflow entry point (no inputs, only outputs)
-public partial class ControllerNode : NodeDefaultViewModel
+[WorkflowBuilder.Node<NodeHelper>]
+public partial class ControllerNode
 {
 	public ControllerNode() => InitializeWorkflow();
-
-	[VeloxProperty] private string _seed = "Hello from VeloxDev!";
+	[VeloxProperty] public partial SlotViewModel OutputSlot { get; set; }
 }
 
-// Processor — receives data, transforms it, and forwards it
-public partial class ProcessorNode : NodeDefaultViewModel
+[WorkflowBuilder.Node<NodeHelper>]
+public partial class ProcessorNode
 {
 	public ProcessorNode() => InitializeWorkflow();
-
-	[VeloxProperty] private string _result = "";
+	[VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 }
 
-// ── 2. Wire, Compile, and Execute ───────────────────────────────
-
-var ctrl  = new ControllerNode();
-var proc  = new ProcessorNode();
-
-// Link: ctrl's default slot → proc's default slot
-var link = new LinkDefaultViewModel
-{
-	Sender   = ctrl.Slots[0],
-	Receiver = proc.Slots[0]
-};
-
+// Mount to Tree and connect using standard commands
 var tree = new TreeDefaultViewModel();
-tree.Nodes.Add(ctrl);
-tree.Nodes.Add(proc);
-tree.Links.Add(link);
+var ctrl = new ControllerNode();
+var proc = new ProcessorNode();
+var helper = tree.GetHelper();
 
-// Compile (BFS, forward, from controller)
-var compiler  = new WorkflowCompiler();
-var results   = compiler.Compile(ctrl, CompileMode.BFS);
-var plan      = results[0];
+helper.CreateNode(ctrl);        // Standard command: add node
+helper.CreateNode(proc);        // Standard command: add node
+helper.SendConnection(ctrl.OutputSlot);   // Standard command: set sender
+helper.ReceiveConnection(proc.InputSlot); // Standard command: set receiver
 
-// Execute — the context object flows through each node in order
-var finalResult = await plan.ExecuteAsync("payload");
-Console.WriteLine($"Workflow completed. Final result: {finalResult}");
+// Compile and execute
+var compiler = new WorkflowCompiler();
+var plan = compiler.Compile(ctrl, CompileMode.BFS)[0];
+
+var result = await plan.ExecuteAsync("payload");
+Console.WriteLine($"Done: {result}");
 ```
-
-## Step 3 — Run
-
-```shell
-dotnet run
-```
-
-Output:
-```
-Workflow completed. Final result: payload
-```
-
-The payload passed through `ControllerNode` (broadcast via Slot[0]) → `ProcessorNode` (received and returned). No GUI needed — the engine works headlessly.

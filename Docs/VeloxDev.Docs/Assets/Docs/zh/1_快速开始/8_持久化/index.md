@@ -1,64 +1,67 @@
 # 持久化
 
-使用 `VeloxDev.Core.Extension` 的序列化扩展保存和恢复工作流 — 适用于任何项目类型。
+将工作流序列化为 JSON —— 同一份数据可在 Desktop、Browser、Mobile 间共享。
 
 ---
 
-## 第一步 — 安装
+## Demo 效果
+
+```csharp
+var json = tree.Serialize();          // Tree → JSON
+var restored = json.Deserialize<TreeDefaultViewModel>(); // JSON → Tree
+Console.WriteLine($"还原了 {restored.Nodes.Count} 个节点");
+```
+
+## 操作步骤
+
+### 1. 安装
 
 ```shell
 dotnet add package VeloxDev.Core.Extension
 ```
 
-## 第二步 — 粘贴到 `Program.cs`
+### 2. 序列化
 
 ```csharp
-using VeloxDev.MVVM;
-using VeloxDev.MVVM.Serialization;
-using VeloxDev.WorkflowSystem;
+using VeloxDev.Extension.Serialization;
 
-// 构建工作流
-var tree = new TreeDefaultViewModel();
-var ctrl = new ControllerNode();
-tree.Nodes.Add(ctrl);
-tree.Links.Add(new LinkDefaultViewModel
-{
-    Sender = ctrl.Slots[0],
-    Receiver = ctrl.Slots[0]
-});
+// 同步
+string json = tree.Serialize();
 
-// 序列化为 JSON
-var json = tree.Serialize();
-Console.WriteLine(json);
+// 异步
+string jsonAsync = await tree.SerializeAsync();
 
-// 反序列化还原
-var restored = json.Deserialize<TreeDefaultViewModel>();
-Console.WriteLine($"还原了 {restored.Nodes.Count} 个节点");
-
-// 安全加载
-if (json.TryDeserialize<TreeDefaultViewModel>(out var safe))
-    Console.WriteLine($"安全加载：{safe.Nodes.Count} 个节点");
-
-// 异步 + 格式化
-var pretty = tree.Serialize(SerializationOptions.Create().WithIndented());
+// 格式化输出
+string pretty = tree.Serialize(SerializationOptions.Create().WithIndented());
 await File.WriteAllTextAsync("workflow.json", pretty);
 
+// UTF8 字节
+byte[] bytes = tree.SerializeToUtf8Bytes();
+```
+
+### 3. 反序列化
+
+```csharp
+// 安全反序列化
+if (json.TryDeserialize<TreeDefaultViewModel>(out var restored))
+    Console.WriteLine($"安全加载：{restored.Nodes.Count} 个节点");
+
+// 失败抛异常
+var tree = json.Deserialize<TreeDefaultViewModel>();
+
+// 从文件加载
 var fromFile = (await File.ReadAllTextAsync("workflow.json"))
     .Deserialize<TreeDefaultViewModel>();
-Console.WriteLine($"从文件加载：{fromFile.Nodes.Count} 个节点");
-
-// 节点定义
-public partial class ControllerNode : NodeDefaultViewModel
-{
-    public ControllerNode() => InitializeWorkflow();
-    [VeloxProperty] private string _label = "控制器";
-}
 ```
 
-## 第三步 — 运行
+## 完整 API
 
-```shell
-dotnet run
-```
-
-`VeloxDev.Core.Extension` 提供跨平台序列化支持 — Desktop、Browser、Mobile。
+| 方法 | 说明 |
+|------|------|
+| `tree.Serialize()` | 序列化为 JSON |
+| `tree.SerializeAsync()` | 异步序列化 |
+| `json.Deserialize<T>()` | 反序列化（失败抛异常） |
+| `json.TryDeserialize<T>(out var)` | 安全反序列化 |
+| `tree.SerializeToUtf8Bytes()` | 序列化为 UTF8 字节 |
+| `tree.SerializeToStreamAsync(stream)` | 序列化到流 |
+| `new SerializationOptions().WithIndented()` | 缩进格式化 |

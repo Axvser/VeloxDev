@@ -1,43 +1,61 @@
-# Business
+# Business (Helper Pattern)
 
-Build domain-specific workflow components by creating custom subclasses and attaching Helpers via `[WorkflowBuilder]` attributes.
+The four workflow components delegate their behavior to **Helper** objects. Helpers are injected by the source generator, implementing the **Strategy pattern** — users inherit default helpers and override methods to inject business logic.
 
-## Custom Node Helper
+---
 
-Override the virtual methods in `NodeHelper<T>` to inject business logic:
+## Mechanism
 
 ```csharp
-using VeloxDev.WorkflowSystem;
+// User code
+[WorkflowBuilder.Node<HttpHelper<NodeViewModel>>(workSemaphore: 5)]
+public partial class NodeViewModel { ... }
 
-// 1. Create a custom helper inheriting from NodeHelper<T>
-public class MyNodeHelper : NodeHelper<MyNodeViewModel>
+// Generator output (.g.cs)
+public partial class NodeViewModel : IWorkflowNodeViewModel
 {
-    // Called when this node receives data during execution
-    public override Task WorkAsync(object? parameter, CancellationToken ct)
-    {
-        // Business logic here
-        Console.WriteLine($"Processing: {parameter}");
-        return Task.CompletedTask;
-    }
-}
-
-// 2. Decorate the ViewModel with the helper type
-[WorkflowBuilder.Node<MyNodeHelper>]
-public partial class MyNodeViewModel
-{
-    public MyNodeViewModel() => InitializeWorkflow();
-
-    [VeloxProperty] private string inputValue = "";
+    private IWorkflowNodeViewModelHelper helper = new HttpHelper<NodeViewModel>();
+    public void InitializeWorkflow() { helper.Install(this); }
 }
 ```
 
-## Available `[WorkflowBuilder]` Attributes
+## [WorkflowBuilder] Attribute Reference
 
-| Attribute | Target | Helper Interface |
-|-----------|--------|------------------|
-| `[WorkflowBuilder.Tree<THelper>]` | Tree | `IWorkflowTreeViewModelHelper` |
-| `[WorkflowBuilder.Node<THelper>]` | Node | `IWorkflowNodeViewModelHelper` |
-| `[WorkflowBuilder.Slot<THelper>]` | Slot | `IWorkflowSlotViewModelHelper` |
-| `[WorkflowBuilder.Link<THelper>]` | Link | `IWorkflowLinkViewModelHelper` |
+| Attribute | Target | Helper Interface | Default Helper |
+|-----------|--------|------------------|----------------|
+| `[WorkflowBuilder.Tree<THelper>]` | Tree | `IWorkflowTreeViewModelHelper` | `TreeHelper<TTree>` |
+| `[WorkflowBuilder.Node<THelper>]` | Node | `IWorkflowNodeViewModelHelper` | `NodeHelper<TNode>` |
+| `[WorkflowBuilder.Slot<THelper>]` | Slot | `IWorkflowSlotViewModelHelper` | `SlotHelper` |
+| `[WorkflowBuilder.Link<THelper>]` | Link | `IWorkflowLinkViewModelHelper` | `LinkHelper` |
 
-The source generator reads the helper type and generates all required infrastructure (commands, wiring).
+## Standard Extension Points
+
+`VeloxDev.WorkflowSystem.StandardEx` provides standard extension methods for use in helpers:
+
+| Method | Purpose |
+|--------|---------|
+| `GetStandardCommands()` | Get all standard commands for a component |
+| `StandardCreateSlot(slot)` | Create a slot with undo support |
+| `StandardClosing/StandardClosingAsync()` | Lock all commands |
+| `StandardClose/StandardCloseAsync()` | Clear all commands |
+
+## Custom Helper Steps
+
+```csharp
+// 1. Inherit the default helper
+public class HttpHelper<TNode> : NodeHelper<TNode> where TNode : IWorkflowNodeViewModel
+{
+    public override async Task WorkAsync(object? parameter, CancellationToken ct)
+    {
+        // Business logic entry point
+    }
+}
+
+// 2. Specify via [WorkflowBuilder.*]
+[WorkflowBuilder.Node<HttpHelper<NodeViewModel>>(workSemaphore: 5)]
+public partial class NodeViewModel { ... }
+```
+
+> Without `[WorkflowBuilder.*]`, the class will not receive the workflow interface or any commands. This attribute is mandatory.
+
+See sub-pages for each component's helper overridable methods.

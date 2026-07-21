@@ -1,10 +1,18 @@
 # Theme
 
-Add dynamic Dark/Light switching with animated transitions. The theme system requires a **GUI project** (WPF/Avalonia/WinUI).
+Add dynamic Dark/Light switching with animated transitions. Requires a **GUI project** (WPF/Avalonia/WinUI).
 
 ---
 
-## Step 1 — Create a WPF Project
+## Demo
+
+```shell
+Launch → Click "Toggle Theme" → Background & text color animate smoothly in 500ms
+```
+
+## Steps
+
+### 1. Create a WPF Project and Install
 
 ```shell
 dotnet new wpf -n MyThemedApp
@@ -12,23 +20,22 @@ cd MyThemedApp
 dotnet add package VeloxDev.WPF
 ```
 
-## Step 2 — Decorate Your Window with ThemeConfig
+### 2. Decorate Your Window with `[ThemeConfig]`
 
-Paste into `MainWindow.xaml.cs` (replacing the existing partial class):
+`MainWindow.xaml.cs`:
 
 ```csharp
 using System.Windows;
 using VeloxDev.DynamicTheme;
 using VeloxDev.TransitionSystem;
 
-// Stack [ThemeConfig] attributes to map properties across themes
+// ── Theme partial ─────────────────────────────────────────
 [ThemeConfig<BrushConverter, Light, Dark>(nameof(Background), ["#ffffff"], ["#1e1e1e"])]
 [ThemeConfig<BrushConverter, Light, Dark>(nameof(Foreground), ["#1e1e1e"], ["#ffffff"])]
-public partial class MainWindow : Window
+public partial class MainWindow
 {
-    public MainWindow()
+    private void LoadTheme()
     {
-        InitializeComponent();
         InitializeTheme(); // Must be called AFTER InitializeComponent()
 
         // Required for animated transitions
@@ -36,33 +43,42 @@ public partial class MainWindow : Window
         ThemeManager.StartModel = StartModel.Cache;
     }
 
-    // Switch themes with animation
-    private void ReverseThemeWithAnimation()
+    // Lifecycle callback — called automatically on every theme change
+    partial void OnThemeChanged(Type? oldValue, Type? newValue)
     {
-        var target = ThemeManager.Current == typeof(Dark) ? typeof(Light) : typeof(Dark);
-        ThemeManager.Transition(target, TransitionEffects.Theme);
+        MessageBox.Show($"Theme changed from {oldValue?.Name} to {newValue?.Name}");
     }
 
-    // Switch themes instantly
-    private void ReverseThemeInstant()
+    private static void ReverseThemeWithAnimation()
     {
-        if (ThemeManager.Current == typeof(Dark))
-            ThemeManager.Jump<Light>();
-        else
-            ThemeManager.Jump<Dark>();
+        var condition = ThemeManager.Current == typeof(Dark);
+        if (condition) ThemeManager.Transition<Light>(TransitionEffects.Theme);
+        else           ThemeManager.Transition<Dark>(TransitionEffects.Theme);
     }
 
-    // Lifecycle hook — called automatically on every theme change
-    partial void OnThemeChanged(Type? oldTheme, Type? newTheme)
+    private static void ReverseThemeWithoutAnimation()
     {
-        MessageBox.Show($"Theme: {oldTheme?.Name} → {newTheme?.Name}");
+        var condition = ThemeManager.Current == typeof(Dark);
+        if (condition) ThemeManager.Jump<Light>();
+        else           ThemeManager.Jump<Dark>();
     }
+}
+
+// ── UI interaction partial ───────────────────────────────
+public partial class MainWindow : Window
+{
+    public MainWindow()
+    {
+        InitializeComponent();
+        LoadTheme();
+    }
+
+    private void ChangeTheme(object sender, RoutedEventArgs e)
+        => ReverseThemeWithAnimation();
 }
 ```
 
-## Step 3 — Add Toggle Button in XAML
-
-In `MainWindow.xaml`:
+### 3. Add Toggle Button in XAML
 
 ```xml
 <Window x:Class="Demo.MainWindow" ...>
@@ -73,21 +89,25 @@ In `MainWindow.xaml`:
 </Window>
 ```
 
-## Step 4 — Run
+### 4. Run
 
 ```shell
 dotnet run
 ```
 
-Click the button — the window background and text color animate between light and dark.
+## Flow
 
-## Key APIs
+```mermaid
+flowchart LR
+    Config["[ThemeConfig] declarations"] --> Init["InitializeTheme()"] --> Switch["ThemeManager.Transition()"]
+    Switch --> Animate["Interpolated animation\n(500ms)"] --> Done["OnThemeChanged()"]
+```
 
-| API | Purpose |
-|-----|---------|
-| `[ThemeConfig<TConverter, T1, T2>(...)]` | Declares property-value mappings per theme |
-| `InitializeTheme()` | Generated method called after `InitializeComponent()` |
-| `ThemeManager.Jump<T>()` | Instant switch |
-| `ThemeManager.Transition<T>(effect)` | Animated switch |
-| `ThemeManager.SetPlatformInterpolator()` | Required for transitions |
-| `partial void OnThemeChanged(...)` | Lifecycle hook |
+## Why `[ThemeConfig]` Instead of ResourceDictionary?
+
+| | VeloxDev Theme | Traditional WPF ResourceDictionary |
+|--|----------------|-----------------------------------|
+| Animated transitions | ✓ Built-in | ✗ Requires extra code |
+| Type safety | ✓ Compile-time check | ✗ Runtime string lookup |
+| Scope | ✓ Per-window / any control | ✗ Global |
+| Dynamic overrides | ✓ `SetThemeValue<T>()` at runtime | ✗ Static |

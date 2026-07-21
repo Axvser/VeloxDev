@@ -50,7 +50,8 @@ Create a ViewModel for a workflow node — the source generator will create the 
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
-public partial class MyNodeViewModel : NodeDefaultViewModel
+[WorkflowBuilder.Node<NodeHelper>]
+public partial class MyNodeViewModel
 {
 	public MyNodeViewModel() => InitializeWorkflow();
 

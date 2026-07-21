@@ -1,9 +1,9 @@
 # Node
 
-The `NodeDefaultViewModel` is the base class for all executable nodes.
+`NodeDefaultViewModel` is the default implementation of `IWorkflowNodeViewModel`, encapsulating core node state and commands.
 
 ```csharp
-public partial class NodeDefaultViewModel : IWorkflowNodeViewModel
+public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel
 {
     [VeloxProperty] private IWorkflowTreeViewModel? parent;
     [VeloxProperty] private Anchor anchor = new();
@@ -12,4 +12,4 @@ public partial class NodeDefaultViewModel : IWorkflowNodeViewModel
 }
 ```
 
-Custom business logic is injected via an `IWorkflowNodeViewModelHelper`. The helper is attached via `[WorkflowBuilder.Node<THelper>]` at build time.
+For custom nodes, use the `[WorkflowBuilder.Node<THelper>]` attribute (instead of inheritance):
