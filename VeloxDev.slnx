@@ -141,12 +141,6 @@
     <File Path="LICENSE.txt" />
     <File Path="README.md" />
   </Folder>
-  <Folder Name="/Repository/Web/">
-    <File Path="Docs/Directory.Packages.props" />
-    <Project Path="Docs/VeloxDev.Docs.Browser/VeloxDev.Docs.Browser.csproj" />
-    <Project Path="Docs/VeloxDev.Docs.Desktop/VeloxDev.Docs..Desktop.csproj" />
-    <Project Path="Docs/VeloxDev.Docs/VeloxDev.Docs.csproj" />
-  </Folder>
   <Folder Name="/Templates/">
     <Project Path="Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj" />
