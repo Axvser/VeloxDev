@@ -459,3 +459,6 @@ Docs/VeloxDev.Docs/Assets/Docs/*/tree.json
 
 # Wiki documentation
 /Docs/
+
+# Claude Work Path
+.claude/
