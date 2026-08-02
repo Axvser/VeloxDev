@@ -12,7 +12,7 @@
 ---
 
 ### 🌐 [Online Wiki](https://axvser.github.io/VeloxDev.Docs/)
-### 📁 [Local Wiki](https://github.com/Axvser/VeloxDev/tree/master/Docs)
+### 📁 [Local Wiki](https://github.com/Axvser/VeloxDev.Docs/)
 
 ---
 
