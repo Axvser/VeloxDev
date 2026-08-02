@@ -9,6 +9,8 @@ public interface IConditionalSlotProvider<TSlot> : IEnumerable<TSlot>
     public string SelectorTypeName { get; set; }
     public ObservableCollection<ConditionalSlot<TSlot>> Items { get; set; }
 
+    public object? CurrentValue { get; set; }
+
     public bool TrySelect(object value, out TSlot? slot);
     public void SetSelector(object? selector);
     public void Install(IWorkflowNodeViewModel parent, string memberName);

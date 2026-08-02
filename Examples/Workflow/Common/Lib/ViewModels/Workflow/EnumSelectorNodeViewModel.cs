@@ -36,14 +36,29 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter
         newValue?.PropertyChanged += OnOutputSlotsPropertyChanged;
         OnPropertyChanged(nameof(EnumType));
         OnPropertyChanged(nameof(EnumValues));
+        OnPropertyChanged(nameof(SelectedValue));
     }
 
     private void OnOutputSlotsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // SelectorTypeName 在 SelectorType 之后触发（SlotEnumerator 先设置类型），
+        // 因此触发时 EnumValues 读到的已是新的选择器类型。
         if (e.PropertyName == nameof(SlotEnumerator<>.SelectorTypeName))
         {
             OnPropertyChanged(nameof(EnumType));
             OnPropertyChanged(nameof(EnumValues));
+        }
+        // CurrentValue 现由枚举器持有，这里同步到节点的 SelectedValue 绑定。
+        // UI 框架（WPF/Avalonia）的 ComboBox 在 ItemsSource 换新数组的同一帧内会丢弃
+        // 已重绑的选中项：条目容器尚未按新源生成，字符串匹配失败 → 显示为空。
+        // 延迟一帧，让 ItemsSource 先落地并生成条目，再重绑选中项。
+        if (e.PropertyName == nameof(SlotEnumerator<>.CurrentValue))
+        {
+            var sc = SynchronizationContext.Current;
+            if (sc is not null)
+                sc.Post(_ => OnPropertyChanged(nameof(SelectedValue)), null);
+            else
+                OnPropertyChanged(nameof(SelectedValue));
         }
     }
 
@@ -52,7 +67,11 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter
 
     [AgentContext(AgentLanguages.Chinese, "当前选中的枚举值，决定路由到哪个输出口")]
     [AgentContext(AgentLanguages.English, "Currently selected enum value. Determines which output slot receives the routed input. Set to the desired enum member name (string) or its underlying integer value.")]
-    [VeloxProperty] private object? selectedValue;
+    public object? SelectedValue
+    {
+        get => OutputSlots?.CurrentValue;
+        set { if (OutputSlots is not null) OutputSlots.CurrentValue = value; }
+    }
 
     [VeloxProperty] private string lastRouted = "-";
 
@@ -77,22 +96,19 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter
 
     public Type? EnumType => OutputSlots?.SelectorType;
 
-    public object[] EnumValues
+    public string[] EnumValues
     {
         get
         {
             var t = EnumType;
             if (t == null) return [];
-            if (t == typeof(bool)) return [false, true];
-            var arr = Enum.GetValues(t);
-            var result = new object[arr.Length];
-            arr.CopyTo(result, 0);
-            return result;
+            if (t == typeof(bool)) return ["False", "True"];
+            return Enum.GetNames(t);
         }
     }
 
     public SlotViewModel? GetSlotForValue(object value)
-        => OutputSlots?.TrySelect(value, out var slot) == true ? slot : null;
+        => OutputSlots?.TrySelect(OutputSlots.NormalizeSelectorValue(value), out var slot) == true ? slot : null;
 
     public string GetSlotLabel(int index)
     {
@@ -101,7 +117,8 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter
         return items[index].Slot?.ToString() ?? "?";
     }
 
-    public object? GetCurrentRouteKey() => SelectedValue;
+    public object? GetCurrentRouteKey()
+        => OutputSlots is not null ? OutputSlots.NormalizeSelectorValue(OutputSlots.CurrentValue) : null;
 
     /// <summary>
     /// 编译时路由表：枚举值 → 对应的下游节点

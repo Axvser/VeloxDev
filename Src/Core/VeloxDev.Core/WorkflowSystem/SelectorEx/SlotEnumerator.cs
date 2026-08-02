@@ -7,7 +7,7 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
-public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
+public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, System.ComponentModel.INotifyPropertyChanged
     where TSlot : IWorkflowSlotViewModel, new()
 {
     public SlotEnumerator()
@@ -19,6 +19,17 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
     [VeloxProperty] private string selectorTypeName = string.Empty;
     [VeloxProperty] private Dictionary<object, TSlot> conditionMap = [];
 
+    private object? _currentValue;
+
+    // Remembers each selector type's full state (slots, connections) so switching back to a
+    // previously-used type restores its wiring — the undo timeline is one entry per SetSelector.
+    private readonly Dictionary<string, SelectorState> _typeStates = [];
+
+    // The single source of truth for each credential's last-selected value (the credential is
+    // the selector type). Every credential is remembered independently — even when not active —
+    // and the first time a credential is used its value defaults to the selector's first member.
+    private readonly Dictionary<string, object?> _currentValuesByCredential = [];
+
     private bool _isDeduplicating = false;
     private bool _isApplyingState = false;
     private bool _isDeserializing = false;
@@ -29,6 +40,40 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
     [VeloxProperty] public partial ObservableCollection<ConditionalSlot<TSlot>> Items { get; set; }
     public int Count { get { FlushDeferredRemovals(); return Items.Count; } }
     public TSlot this[int index] { get { FlushDeferredRemovals(); return Items[index].Slot; } }
+
+    public object? CurrentValue
+    {
+        get => _currentValue?.ToString();
+        set
+        {
+            // During deserialization the raw stored value is written first and re-validated
+            // in OnDeserialized (the selector type may not be resolved yet).
+            if (_isDeserializing)
+            {
+                _currentValue = value;
+                return;
+            }
+
+            // Re-entrancy guard: a ComboBox TwoWay binding pushes null into the selected value
+            // the moment its ItemsSource is regenerated — which fires synchronously from the
+            // SelectorTypeName notification inside ApplyAttachedState while _isApplyingState is
+            // true. That write is UI bookkeeping, not a real selection; ignore it, the state
+            // application restores the remembered value itself.
+            if (_isApplyingState)
+                return;
+
+            var newValue = NormalizeSelectorValue(value);
+            if (Equals(_currentValue, newValue)) return;
+
+            _currentValue = newValue;
+            // Record the selection for this credential so switching back restores it.
+            // Never record null: a transient null (e.g. the ComboBox regenerating its items)
+            // must not become the remembered value, or undo/redo would restore an empty selection.
+            if (_currentValue is not null)
+                _currentValuesByCredential[SelectorTypeName] = _currentValue;
+            OnPropertyChanged(nameof(CurrentValue));
+        }
+    }
 
     partial void OnItemAddedToItems(IEnumerable<ConditionalSlot<TSlot>> items)
     {
@@ -65,6 +110,8 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
         }
     }
 
+    public object? NormalizeSelectorValue(object? value) => NormalizeValue(value);
+
     private object? NormalizeValue(object? value)
     {
         if (value is null) return null;
@@ -84,7 +131,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
         try
         {
             if (targetType.IsEnum)
-                return Enum.ToObject(targetType, value);
+                return value is string s ? Enum.Parse(targetType, s, true) : Enum.ToObject(targetType, value);
 
             return Convert.ChangeType(value, targetType);
         }
@@ -92,6 +139,70 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
         {
             return value;
         }
+    }
+
+    private object? RestoreCredentialCurrentValue(SelectorState state)
+    {
+        // The current value for the applied credential comes from the private dictionary (the
+        // source of truth), never from the state snapshot — so undo/redo consistently restores
+        // each credential's last-selected value instead of a stale switch-time snapshot.
+        // A null remembered value is treated as "not remembered" and falls back to the type's
+        // first member — defensive: even if a transient null ever reaches the dictionary, a
+        // restored selector always holds a valid selection (and routing keeps a valid key).
+        var value = _currentValuesByCredential.TryGetValue(state.TypeName, out var v) && v is not null
+            ? v
+            : FirstMemberOf(state.Type);
+        return ValidateCurrentValue(value);
+    }
+
+    private static object? FirstMemberOf(Type? type)
+    {
+        if (type is null) return null;
+        if (type == typeof(bool)) return false;
+        if (!type.IsEnum) return null;
+        return Enum.GetValues(type).Cast<object>().FirstOrDefault();
+    }
+
+    private object? ValidateCurrentValue(object? value)
+    {
+        if (value is null) return null;
+
+        Type? targetType = null;
+        foreach (var key in ConditionMap.Keys)
+        {
+            targetType = key.GetType();
+            break;
+        }
+        targetType ??= SelectorType;
+        if (targetType is null) return null;
+
+        // Already a member of the current selector type — keep it.
+        if (value.GetType() == targetType)
+            return ConditionMap.ContainsKey(value) ? value : null;
+
+        // Enum selector: preserve by member NAME when the name exists in the new type; never
+        // remap by underlying number. When no same-named member exists, fall back to the new
+        // type's FIRST member so the selector always holds a valid selection and routing keeps
+        // waking up a downstream branch (undo/redo still restore the exact remembered value).
+        if (targetType.IsEnum)
+        {
+            try
+            {
+                var parsed = Enum.Parse(targetType, value.ToString()!, ignoreCase: true);
+                if (ConditionMap.ContainsKey(parsed)) return parsed;
+            }
+            catch
+            {
+                // name does not exist — fall through to the first-member default
+            }
+
+            var first = Enum.GetValues(targetType).Cast<object>().FirstOrDefault();
+            return first is not null && ConditionMap.ContainsKey(first) ? first : null;
+        }
+
+        // Non-enum selectors (bool / ISlotProvider): normalize then check membership.
+        var normalized = NormalizeValue(value);
+        return normalized is not null && ConditionMap.ContainsKey(normalized) ? normalized : null;
     }
 
     partial void OnItemRemovedFromItems(IEnumerable<ConditionalSlot<TSlot>> items)
@@ -143,7 +254,6 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
             return;
         }
 
-        var oldState = CaptureState();
         List<ConditionalSlot<TSlot>> newItems = [];
         string newTypeName;
         Type? newType;
@@ -212,7 +322,40 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
             }
         }
 
-        var newState = new SelectorState(newTypeName, newType, newItems, []);
+        // Capture each current branch's downstream targets, so switching to a FRESH type can
+        // re-wire the new branches onto the same downstream nodes (preserves routing topology
+        // instead of leaving the new branches disconnected).
+        var targetsByIndex = Items.Select(item => item.Slot.Targets.ToArray()).ToList();
+
+        // Remember the current selector's full state so switching back restores it.
+        // The undo timeline is one entry per SetSelector: a value change inside a type is
+        // live state, not a separate timeline point.
+        _typeStates[SelectorTypeName] = CaptureState();
+        var oldState = _typeStates[SelectorTypeName];
+
+        // Restore this credential's last-selected value, or (first time on this credential)
+        // default to its first member and record the pair — so EVERY credential is remembered,
+        // not just the currently-active one.
+        if (!_currentValuesByCredential.TryGetValue(newTypeName, out _))
+        {
+            _currentValuesByCredential[newTypeName] = FirstMemberOf(newType);
+        }
+
+        // Restore the target type's remembered state, or build it fresh on first use.
+        bool isFresh;
+        SelectorState newState;
+        if (_typeStates.TryGetValue(newTypeName, out var remembered))
+        {
+            newState = remembered;
+            isFresh = false;
+        }
+        else
+        {
+            newState = new SelectorState(newTypeName, newType, newItems, []);
+            _typeStates[newTypeName] = newState;
+            isFresh = true;
+        }
+
         var tree = Parent.Parent;
         if (tree is null)
         {
@@ -221,8 +364,45 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
         }
 
         tree.GetHelper().Submit(new WorkflowActionPair(
-            () => ApplyAttachedState(tree, newState),
+            () => ApplyNewState(tree, newState, isFresh ? targetsByIndex : null),
             () => ApplyAttachedState(tree, oldState)));
+    }
+
+    private void ApplyNewState(IWorkflowTreeViewModel tree, SelectorState state, List<IWorkflowSlotViewModel[]>? rewireTargets)
+    {
+        ApplyAttachedState(tree, state);
+        if (rewireTargets is null) return;
+
+        // Reconnect each new branch onto the downstream nodes the previous type's branch at
+        // the same position was connected to — a type switch preserves the wiring topology.
+        for (int i = 0; i < state.Items.Count && i < rewireTargets.Count; i++)
+        {
+            var sender = state.Items[i].Slot;
+            foreach (var receiver in rewireTargets[i])
+            {
+                if (receiver.Parent?.Parent != tree) continue;
+                ConnectSlots(tree, sender, receiver);
+            }
+        }
+    }
+
+    private static void ConnectSlots(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    {
+        if (tree.LinksMap.TryGetValue(sender, out var existing) && existing.ContainsKey(receiver)) return;
+
+        var link = tree.GetHelper().CreateLink(sender, receiver);
+        if (!tree.LinksMap.TryGetValue(sender, out var receivers))
+        {
+            receivers = [];
+            tree.LinksMap[sender] = receivers;
+        }
+        receivers[receiver] = link;
+        if (!tree.Links.Contains(link)) tree.Links.Add(link);
+        if (!sender.Targets.Contains(receiver)) sender.Targets.Add(receiver);
+        if (!receiver.Sources.Contains(sender)) receiver.Sources.Add(sender);
+        link.IsVisible = true;
+        sender.GetHelper().UpdateState();
+        receiver.GetHelper().UpdateState();
     }
 
     private SelectorState CaptureState()
@@ -240,12 +420,18 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
     private void ApplyDetachedState(SelectorState state)
     {
         FlushDeferredRemovals();
-        SelectorTypeName = state.TypeName;
+        // Set SelectorType BEFORE SelectorTypeName: consumers that refresh derived values
+        // (e.g. EnumType/EnumValues) listen to SelectorTypeName, so the type must already be
+        // the new value by the time that notification fires, or they read a stale type.
         SelectorType = state.Type;
+        SelectorTypeName = state.TypeName;
         ConditionMap.Clear();
         Items.Clear();
         foreach (var item in state.Items)
             Items.Add(item);
+
+        _currentValue = RestoreCredentialCurrentValue(state);
+        OnPropertyChanged(nameof(CurrentValue));
     }
 
     private void ApplyAttachedState(IWorkflowTreeViewModel tree, SelectorState state)
@@ -273,8 +459,10 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
         _isApplyingState = true;
         try
         {
-            SelectorTypeName = state.TypeName;
+            // SelectorType first, then SelectorTypeName — consumers listening to SelectorTypeName
+            // (e.g. EnumType/EnumValues) must observe the NEW type when it fires.
             SelectorType = state.Type;
+            SelectorTypeName = state.TypeName;
             ConditionMap.Clear();
 
             Items.Clear();
@@ -284,11 +472,15 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
                     ConditionMap[item.Value] = item.Slot;
                 Items.Add(item);
             }
+
+            _currentValue = RestoreCredentialCurrentValue(state);
         }
         finally
         {
             _isApplyingState = false;
         }
+
+        OnPropertyChanged(nameof(CurrentValue));
 
         foreach (var item in state.Items)
         {
@@ -408,6 +600,57 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
     {
         _isDeserializing = false;
 
+        // SelectorType (a Type with a protected setter) is not emitted by the writable-only
+        // contract resolver, so it is NOT restored from JSON. SelectorTypeName (a string) IS
+        // preserved. The constructor may have left SelectorType at the default selector (e.g.
+        // NetworkRequestMethod) — which is NOT null — so we must always re-resolve from the
+        // serialized name (and correct any mismatch), not only when SelectorType happens to be null.
+        // Otherwise EnumType/EnumValues read the stale default type and the dropdown reverts.
+        if (!string.IsNullOrEmpty(SelectorTypeName))
+        {
+            var resolved = ResolveTypeByName(SelectorTypeName);
+            if (resolved is not null)
+            {
+                SelectorType = resolved;
+                // Consumers (e.g. the demo node) refresh EnumValues on SelectorTypeName, so
+                // re-raise it now that SelectorType holds the resolved type — the serializer's
+                // earlier write of the name still saw the constructor's default type.
+                OnPropertyChanged(nameof(SelectorTypeName));
+            }
+        }
+
+        // During deserialization, OnItemAddedToItems normalized each item.Value against the
+        // constructor's default selector type (the serialized type is only resolved above), so
+        // values from a different enum got remapped onto the default type. Re-normalize every
+        // item against the resolved type and rebuild conditionMap — otherwise TrySelect, the
+        // route table and CurrentValue validation all see keys of the wrong enum type.
+        ConditionMap.Clear();
+        foreach (var item in Items)
+        {
+            var normalized = NormalizeValue(item.Value);
+            if (normalized is not null)
+            {
+                item.Value = normalized;
+                ConditionMap[normalized] = item.Slot;
+            }
+        }
+
+        // CurrentValue was deserialized through its normalizing setter while SelectorType may not
+        // have been resolved yet. Re-normalize it now that the type is known (e.g. a JSON string
+        // member name or an Int64 becomes the actual enum member); drop it if it does not match
+        // the restored selector, and notify so a bound dropdown refreshes its selection.
+        _currentValue = ValidateCurrentValue(_currentValue);
+        OnPropertyChanged(nameof(CurrentValue));
+
+        // Seed the per-type cache with the restored selector's state and record the credential's
+        // current value, so post-load switching still restores each type's wiring/value. Both are
+        // runtime-only (not serialized), so they must be re-established here.
+        if (!string.IsNullOrEmpty(SelectorTypeName))
+        {
+            _typeStates[SelectorTypeName] = CaptureState();
+            _currentValuesByCredential[SelectorTypeName] = _currentValue;
+        }
+
         // During deserialization, OnItemAddedToItems skips CreateSlotCommand
         // (_isDeserializing was true), so the deserialized slots have not been
         // registered with the parent node.  Without this step the slots exist in
@@ -436,6 +679,16 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>
     {
         foreach (var item in Items)
             yield return item.Slot;
+    }
+
+    private static Type? ResolveTypeByName(string fullName)
+    {
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var t = asm.GetType(fullName, throwOnError: false, ignoreCase: false);
+            if (t is not null) return t;
+        }
+        return null;
     }
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();

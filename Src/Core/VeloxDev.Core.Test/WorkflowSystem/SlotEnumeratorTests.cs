@@ -135,6 +135,8 @@ file sealed class StubNode : IWorkflowNodeViewModel
 
 file enum BranchKind { Yes, No }
 file enum AlternateBranchKind { First, Second, Third }
+file enum KindWithNo { No, Maybe }
+file enum ThirdKind { Yes, Maybe }
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -169,7 +171,8 @@ public class SlotEnumeratorTests
         enumerator.SetSelector(typeof(AlternateBranchKind));
 
         Assert.HasCount(3, enumerator.Items);
-        Assert.IsEmpty(tree.Links);
+        // The connection is preserved — re-routed onto the new type's first branch by position.
+        Assert.HasCount(1, tree.Links, "type switch re-routes the connection onto the new branch");
 
         tree.GetHelper().Undo();
 
@@ -186,7 +189,7 @@ public class SlotEnumeratorTests
         tree.GetHelper().Redo();
 
         Assert.HasCount(3, enumerator.Items);
-        Assert.IsEmpty(tree.Links);
+        Assert.HasCount(1, tree.Links, "redo re-routes the connection onto the new branch again");
     }
 
     /// <summary>
@@ -477,5 +480,255 @@ public class SlotEnumeratorTests
             Assert.IsInstanceOfType<BranchKind>(entry.Value,
                 $"Item.Value must be normalised to BranchKind, was {entry.Value?.GetType().Name}.");
         }
+    }
+
+    /// <summary>
+    /// Regression test for the Demo Enum-selector dropdown not updating in real-time.
+    /// Consumers (e.g. EnumType/EnumValues) recompute derived values on the
+    /// SelectorTypeName notification, so SelectorType must already hold the NEW type
+    /// by the time SelectorTypeName fires — i.e. SelectorType must be raised FIRST.
+    /// </summary>
+    [TestMethod]
+    public void WhenSetSelectorCalled_SelectorTypeNotifiesBeforeSelectorTypeName()
+    {
+        var node = new StubNode();
+        var enumerator = new SlotEnumerator<StubSlot>();
+        enumerator.Install(node, "OutputSlots");
+
+        var order = new List<string>();
+        enumerator.PropertyChanged += (_, e) => order.Add(e.PropertyName ?? string.Empty);
+
+        enumerator.SetSelector(typeof(BranchKind));
+
+        var typeIdx = order.IndexOf(nameof(SlotEnumerator<StubSlot>.SelectorType));
+        var nameIdx = order.IndexOf(nameof(SlotEnumerator<StubSlot>.SelectorTypeName));
+        Assert.IsTrue(typeIdx >= 0, "SelectorType should raise PropertyChanged during SetSelector.");
+        Assert.IsTrue(nameIdx >= 0, "SelectorTypeName should raise PropertyChanged during SetSelector.");
+        Assert.IsTrue(typeIdx < nameIdx,
+            "SelectorType must be raised before SelectorTypeName so derived refreshes read the new type.");
+    }
+
+    /// <summary>
+    /// Switching the selector type keeps the current value in sync with the new type:
+    /// a value whose member NAME exists in the new enum is preserved; otherwise the value
+    /// defaults to the new type's FIRST member (never remapped by underlying number, which
+    /// would collapse unrelated values arbitrarily), so routing always has a valid key.
+    /// PropertyChanged(CurrentValue) fires so a bound dropdown refreshes. Undo restores the
+    /// exact current value captured for the old type.
+    /// </summary>
+    [TestMethod]
+    public void WhenSetSelectorSwitchesType_CurrentValuePreservedByName_ElseDefaultsToFirst_AndUndoRestores()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(node);
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+        enumerator.Install(node, "OutputSlots");
+
+        enumerator.SetSelector(typeof(BranchKind));   // Yes, No
+        enumerator.CurrentValue = BranchKind.Yes;
+        Assert.AreEqual("Yes", enumerator.CurrentValue);
+
+        var notified = new List<string>();
+        enumerator.PropertyChanged += (_, e) => notified.Add(e.PropertyName ?? string.Empty);
+
+        // "Yes" has no member named "Yes" in AlternateBranchKind → defaults to "First".
+        enumerator.SetSelector(typeof(AlternateBranchKind));
+        Assert.AreEqual(typeof(AlternateBranchKind), enumerator.SelectorType);
+        Assert.AreEqual("First", enumerator.CurrentValue,
+            "an old value with no same-named member in the new type defaults to the new type's first member");
+        Assert.IsTrue(notified.Contains(nameof(SlotEnumerator<SlotDefaultViewModel>.CurrentValue)),
+            "the type switch must notify CurrentValue so a bound dropdown refreshes");
+
+        // Undo restores BranchKind and the current value captured for it.
+        tree.GetHelper().Undo();
+        Assert.AreEqual(typeof(BranchKind), enumerator.SelectorType);
+        Assert.AreEqual("Yes", enumerator.CurrentValue,
+            "undo must restore the current value that was captured for the old type");
+
+        // Name-preservation: a member NAME present in both enums survives the switch.
+        enumerator.CurrentValue = BranchKind.No;
+        enumerator.SetSelector(typeof(KindWithNo));   // shares the "No" member name
+        Assert.AreEqual("No", enumerator.CurrentValue,
+            "a member name present in both enums must be preserved across the type switch");
+    }
+
+    /// <summary>
+    /// The undo timeline is one entry per SetSelector, not per value change: a selection inside
+    /// a type is live state remembered for that type. Undoing a SetSelector restores the old
+    /// type with its remembered value in a single step; switching back to a previously-used
+    /// type restores that type's last-selected value directly.
+    /// </summary>
+    [TestMethod]
+    public void WhenTypeSwitchThenSelection_UndoPerSetSelector_RestoresRememberedValue()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(node);
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+        enumerator.Install(node, "OutputSlots");
+
+        enumerator.SetSelector(typeof(BranchKind));          // Yes, No
+        enumerator.CurrentValue = BranchKind.No;             // A2 = "No"
+        Assert.AreEqual("No", enumerator.CurrentValue);
+
+        tree.GetHelper().ClearHistory();
+
+        // Switch to Alt (one SetSelector = one undo entry). "No" has no same-named member
+        // in Alt → defaults to Alt's first member ("First").
+        enumerator.SetSelector(typeof(AlternateBranchKind)); // First, Second, Third
+        Assert.AreEqual("First", enumerator.CurrentValue);
+
+        // Selecting a value is live state remembered for Alt, NOT a separate undo entry.
+        enumerator.CurrentValue = AlternateBranchKind.Third; // B3
+        Assert.AreEqual("Third", enumerator.CurrentValue);
+
+        // ONE undo reverts the whole SetSelector: old type + its remembered value "No".
+        tree.GetHelper().Undo();
+        Assert.AreEqual(typeof(BranchKind), enumerator.SelectorType);
+        Assert.AreEqual("No", enumerator.CurrentValue,
+            "one undo of the SetSelector restores the old type with its remembered value");
+
+        // Switching back to Alt restores its last-selected value directly — no multi-step undo.
+        enumerator.SetSelector(typeof(AlternateBranchKind));
+        Assert.AreEqual(typeof(AlternateBranchKind), enumerator.SelectorType);
+        Assert.AreEqual("Third", enumerator.CurrentValue,
+            "switching back to a selector restores the value last selected on it");
+    }
+
+    /// <summary>
+    /// Switching between two selector types back and forth must restore EACH type's own
+    /// last-selected value, not the other type's — per-type state memory.
+    /// </summary>
+    [TestMethod]
+    public void WhenSwitchingBackAndForth_EachSelectorRestoresItsLastSelectedValue()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(node);
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+        enumerator.Install(node, "OutputSlots");
+
+        enumerator.SetSelector(typeof(BranchKind));   // Yes, No
+        enumerator.CurrentValue = BranchKind.No;
+        tree.GetHelper().ClearHistory();
+
+        // A → B, pick Third on B.
+        enumerator.SetSelector(typeof(AlternateBranchKind));
+        enumerator.CurrentValue = AlternateBranchKind.Third;
+
+        // B → A: A restores its remembered "No".
+        enumerator.SetSelector(typeof(BranchKind));
+        Assert.AreEqual("No", enumerator.CurrentValue,
+            "switching back to A restores A's remembered value");
+
+        // A → B: B restores its remembered "Third".
+        enumerator.SetSelector(typeof(AlternateBranchKind));
+        Assert.AreEqual("Third", enumerator.CurrentValue,
+            "switching back to B restores B's remembered value");
+    }
+
+    /// <summary>
+    /// EVERY credential's last-selected value is remembered independently — even when not
+    /// active — so repeated switching and undo/redo never lose a credential's selection to
+    /// another's. The private credential→value dictionary is the source of truth.
+    /// </summary>
+    [TestMethod]
+    public void WhenMultipleCredentialsWithUndoRedo_EachRestoresItsLastSelectedValue()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(node);
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+        enumerator.Install(node, "OutputSlots");
+
+        enumerator.SetSelector(typeof(BranchKind));
+        enumerator.CurrentValue = BranchKind.Yes;             // A = Yes
+        enumerator.SetSelector(typeof(AlternateBranchKind));
+        enumerator.CurrentValue = AlternateBranchKind.Third;  // B = Third
+
+        // Switch back and forth — each must keep its own value.
+        enumerator.SetSelector(typeof(BranchKind));
+        Assert.AreEqual("Yes", enumerator.CurrentValue, "switching back to A restores A's value");
+        enumerator.SetSelector(typeof(AlternateBranchKind));
+        Assert.AreEqual("Third", enumerator.CurrentValue, "switching back to B restores B's value");
+
+        // Undo/redo and switch again — both credentials stay preserved.
+        tree.GetHelper().Undo();
+        Assert.AreEqual(typeof(BranchKind), enumerator.SelectorType);
+        Assert.AreEqual("Yes", enumerator.CurrentValue, "undo restores A's value");
+        tree.GetHelper().Redo();
+        Assert.AreEqual("Third", enumerator.CurrentValue, "redo restores B's value");
+        enumerator.SetSelector(typeof(BranchKind));
+        Assert.AreEqual("Yes", enumerator.CurrentValue, "A's value survives further switching");
+        enumerator.SetSelector(typeof(AlternateBranchKind));
+        Assert.AreEqual("Third", enumerator.CurrentValue, "B's value survives further switching");
+    }
+
+    /// <summary>
+    /// Each selector type remembers its full state — including connections — so switching
+    /// away destroys nothing permanently: switching back restores that type's branches and
+    /// wiring. This is what dynamic branch construction requires.
+    /// </summary>
+    [TestMethod]
+    public void WhenSwitchingBetweenTypes_EachTypesConnectionsAreRestored()
+    {
+        var tree = new TreeDefaultViewModel();
+        var sender = new NodeDefaultViewModel();
+        var receiver = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(sender);
+        tree.GetHelper().CreateNode(receiver);
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+        enumerator.Install(sender, "OutputSlots");
+
+        enumerator.SetSelector(typeof(BranchKind));   // Yes, No
+        var yesSlot = enumerator.TrySelect(BranchKind.Yes, out var s) ? s : null;
+        yesSlot!.Channel = SlotChannel.OneTarget;
+        var receiverSlot = new SlotDefaultViewModel { Channel = SlotChannel.OneSource };
+        receiver.GetHelper().CreateSlot(receiverSlot);
+        tree.GetHelper().SendConnection(yesSlot);
+        tree.GetHelper().ReceiveConnection(receiverSlot);
+        Assert.HasCount(1, tree.Links);
+
+        // Switch to Alt: the connection is re-routed onto the new type's first branch.
+        enumerator.SetSelector(typeof(AlternateBranchKind));
+        Assert.HasCount(1, tree.Links,
+            "type switch re-routes the connection onto the new type's branch by position");
+
+        // Switch back to BranchKind: its remembered connection is restored.
+        enumerator.SetSelector(typeof(BranchKind));
+        Assert.HasCount(1, tree.Links,
+            "switching back to a type restores its remembered connections");
+    }
+
+    /// <summary>
+    /// Regression: a ComboBox TwoWay binding pushes null into the selected value the moment its
+    /// ItemsSource is regenerated (which fires synchronously from the SelectorTypeName notification
+    /// during a type switch/undo). That transient null must never become the credential's remembered
+    /// value, or undo/redo would restore an empty selection in the dropdown.
+    /// </summary>
+    [TestMethod]
+    public void WhenTransientNullWrittenToCurrentValue_RememberedValueSurvives()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(node);
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+        enumerator.Install(node, "OutputSlots");
+
+        enumerator.SetSelector(typeof(BranchKind));   // Yes, No
+        enumerator.CurrentValue = BranchKind.No;
+        Assert.AreEqual("No", enumerator.CurrentValue);
+        tree.GetHelper().ClearHistory();
+
+        // Simulate the UI null-push that happens when the ComboBox regenerates its items.
+        enumerator.CurrentValue = null;
+        Assert.IsNull(enumerator.CurrentValue, "the live value may be null temporarily");
+
+        // Switch away and back: the remembered "No" must survive the transient null write.
+        enumerator.SetSelector(typeof(AlternateBranchKind));
+        enumerator.SetSelector(typeof(BranchKind));
+        Assert.AreEqual("No", enumerator.CurrentValue,
+            "a transient null write must not poison the credential's remembered value");
     }
 }

@@ -108,9 +108,9 @@ public static class WorkflowSlotEx
 
         foreach (var target in component.Targets)
         {
-            var tree = target.Parent?.Parent;
+            var targetTree = target.Parent?.Parent;
 
-            if ((tree?.LinksMap.TryGetValue(component, out var dic) ?? false) &&
+            if ((targetTree?.LinksMap.TryGetValue(component, out var dic) ?? false) &&
                 dic.TryGetValue(target, out var link))
             {
                 links.Add(link);
@@ -119,39 +119,43 @@ public static class WorkflowSlotEx
 
         foreach (var source in component.Sources)
         {
-            var tree = source.Parent?.Parent;
+            var sourceTree = source.Parent?.Parent;
 
-            if ((tree?.LinksMap.TryGetValue(source, out var dic) ?? false) &&
+            if ((sourceTree?.LinksMap.TryGetValue(source, out var dic) ?? false) &&
                 dic.TryGetValue(component, out var link))
             {
                 links.Add(link);
             }
         }
 
-        foreach (var link in links)
-        {
-            link.GetHelper().Delete();
-        }
-
         if (component.Parent.Parent is null)
         {
             component.Parent.Slots.Remove(component);
+            return;
         }
-        else
-        {
-            var oldParent = component.Parent;
-            component.Parent.Parent.GetHelper().Submit(new WorkflowActionPair(
-                () =>
+
+        var tree = component.Parent.Parent;
+        var oldParent = component.Parent;
+
+        tree.GetHelper().Submit(new WorkflowActionPair(
+            () =>
+            {
+                foreach (var link in links)
                 {
-                    component.Parent.Slots.Remove(component);
-                    component.Parent = null;
-                },
-                () =>
+                    WorkflowLinkEx.RemoveLinkFromTree(tree, link);
+                }
+                component.Parent.Slots.Remove(component);
+                component.Parent = null;
+            },
+            () =>
+            {
+                oldParent.Slots.Add(component);
+                component.Parent = oldParent;
+                foreach (var link in links)
                 {
-                    oldParent.Slots.Add(component);
-                    component.Parent = oldParent;
-                }));
-        }
+                    WorkflowLinkEx.RestoreLinkToTree(tree, link);
+                }
+            }));
     }
 
     public static bool StandardCanBeSender(this IWorkflowSlotViewModel component)

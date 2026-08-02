@@ -2,6 +2,7 @@ using Demo.ViewModels;
 using System.ComponentModel;
 using System.Drawing.Drawing2D;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.Compilation;
@@ -776,7 +777,8 @@ internal sealed class WorkflowNodeCard : UserControl
     {
         if (_enumCombo is null) return;
         var values = e.EnumValues;
-        if (_enumCombo.Items.Count != values.Length)
+        if (_enumCombo.Items.Count != values.Length ||
+            !values.Cast<object>().SequenceEqual(_enumCombo.Items.Cast<object>()))
         {
             _enumCombo.Items.Clear();
             foreach (var v in values) _enumCombo.Items.Add(v);

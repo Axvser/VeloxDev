@@ -56,7 +56,7 @@
 			<StackPanel Margin="14" Spacing="8">
 				<TextBlock Text="Selected Method" Foreground="#bfbfbf" FontSize="11"/>
 				<ComboBox ItemsSource="{Binding EnumValues}"
-						  SelectedItem="{Binding SelectedValue, Mode=TwoWay}"
+						  SelectedValue="{Binding SelectedValue, Mode=TwoWay}"
 						  HorizontalAlignment="Stretch"/>
 				<TextBlock Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,6,0,0"/>
 				<ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList" ClipToBounds="False">
