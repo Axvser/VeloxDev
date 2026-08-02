@@ -16,111 +16,16 @@ public partial class Workflow : ComponentBase, IDisposable
     private IJSRuntime JS { get; set; } = null!;
 
     private WorkflowDemoSession? _session;
-    private ElementReference _canvasRef;
-    private ElementReference _canvasScrollRef;
-    private ElementReference _decoratorContentRef;
-    private ElementReference _minimapRef;
-    private ElementReference _agentLogRef;
-    private ElementReference _execLogRef;
-
     private string _agentMessage = "";
     private bool _useStreaming = true;
-    private double _canvasW = 3200;
-    private double _canvasH = 2200;
     private string _canvasLayoutSize = "";
-    private double _scrollLeft;
-    private double _scrollTop;
-    private double _viewportW = 800;
-    private double _viewportH = 600;
-    private bool _jsReady;
-    private bool _minimapInit;
-    private DotNetObjectReference<Workflow>? _dotNetRef;
-
-    private string _canvasWidth => $"{_canvasW}px";
-    private string _canvasHeight => $"{_canvasH}px";
+    private readonly List<IWorkflowNodeViewModel> _subscribedNodes = [];
 
     protected override void OnInitialized()
     {
         _session = WorkflowDemoSession.Create();
         SubscribeSession();
         UpdateCanvasSize();
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            _dotNetRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("workflowInterop.initScrollTracking", _canvasScrollRef, _dotNetRef);
-            await JS.InvokeVoidAsync("workflowInterop.initNodeDrag", _canvasRef, _dotNetRef);
-            await JS.InvokeVoidAsync("workflowInterop.initCanvasPan", _canvasScrollRef, _dotNetRef);
-            await JS.InvokeVoidAsync("workflowInterop.initRulers", _canvasScrollRef,
-                new { ruler = 28, spacing = 40, rulerBg = "#252526", tickColor = "#555555", dividerColor = "#3A3D40" });
-            await InitViewportSize();
-            _jsReady = true;
-            StateHasChanged();
-        }
-        else if (_jsReady && _minimapInit == false)
-        {
-            await JS.InvokeVoidAsync("workflowInterop.initMinimap", _canvasScrollRef, _dotNetRef);
-            _minimapInit = true;
-        }
-    }
-
-    private async Task InitViewportSize()
-    {
-        try
-        {
-            var vp = await JS.InvokeAsync<ViewportSize>("workflowInterop.getViewportSize", _canvasScrollRef);
-            _viewportW = vp.w;
-            _viewportH = vp.h;
-        }
-        catch { }
-    }
-
-    [JSInvokable]
-    public void OnScrollChanged(double left, double top)
-    {
-        _scrollLeft = left;
-        _scrollTop = top;
-        StateHasChanged();
-    }
-
-    [JSInvokable]
-    public async Task OnMinimapClick(double relX, double relY, double mapW, double mapH)
-    {
-        // Calculate target scroll position based on minimap click ratio
-        var maxScrollLeft = Math.Max(0, _canvasW - _viewportW);
-        var maxScrollTop = Math.Max(0, _canvasH - _viewportH);
-        var targetX = (relX / mapW) * maxScrollLeft;
-        var targetY = (relY / mapH) * maxScrollTop;
-        await JS.InvokeVoidAsync("workflowInterop.scrollTo", _canvasScrollRef, targetX, targetY);
-    }
-
-    [JSInvokable]
-    public string[]? OnGetLinkPoints()
-    {
-        if (_session?.Tree?.Links is null) return null;
-        var result = new List<string>();
-        foreach (var link in _session.Tree.Links)
-        {
-            result.Add(BuildLinkPoints(link));
-        }
-        return [.. result];
-    }
-
-    [JSInvokable]
-    public async Task OnNodeDragEnd(int nodeIndex, double left, double top)
-    {
-        if (_session?.Tree?.Nodes is { } nodes && nodeIndex >= 0 && nodeIndex < nodes.Count)
-        {
-            var node = nodes[nodeIndex];
-            // CSS left/top is already in canvas (world) coordinates — no scroll adjustment needed
-            node.Anchor.Horizontal = left;
-            node.Anchor.Vertical = top;
-            _session.Tree.Layout.UpdateCommand.Execute(null);
-            StateHasChanged();
-        }
     }
 
     private void SubscribeSession()
@@ -133,6 +38,7 @@ public partial class Workflow : ComponentBase, IDisposable
             np.PropertyChanged += OnTreePropertyChanged;
         if (_session.Tree.Layout is INotifyPropertyChanged lp)
             lp.PropertyChanged += OnLayoutPropertyChanged;
+        SubscribeNodeChanges();
     }
 
     private void UnsubscribeSession()
@@ -145,16 +51,43 @@ public partial class Workflow : ComponentBase, IDisposable
             np.PropertyChanged -= OnTreePropertyChanged;
         if (_session.Tree.Layout is INotifyPropertyChanged lp)
             lp.PropertyChanged -= OnLayoutPropertyChanged;
+        UnsubscribeNodeChanges();
+    }
+
+    private void SubscribeNodeChanges()
+    {
+        if (_session?.Tree?.Nodes is null) return;
+        foreach (var node in _session.Tree.Nodes)
+        {
+            if (node is INotifyPropertyChanged npc)
+            {
+                npc.PropertyChanged += OnNodePropertyChanged;
+                _subscribedNodes.Add(node);
+            }
+        }
+    }
+
+    private void UnsubscribeNodeChanges()
+    {
+        foreach (var node in _subscribedNodes)
+        {
+            if (node is INotifyPropertyChanged npc)
+                npc.PropertyChanged -= OnNodePropertyChanged;
+        }
+        _subscribedNodes.Clear();
+    }
+
+    private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // Live node position + link updates while dragging (Anchor/Size changes).
+        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+            InvokeAsync(StateHasChanged);
     }
 
     private void UpdateCanvasSize()
     {
         if (_session?.Tree?.Layout is { } layout)
-        {
-            _canvasW = Math.Max(layout.ActualSize.Width, 1600);
-            _canvasH = Math.Max(layout.ActualSize.Height, 1200);
             _canvasLayoutSize = $"{layout.ActualSize.Width:F0}×{layout.ActualSize.Height:F0}";
-        }
     }
 
     private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -164,7 +97,11 @@ public partial class Workflow : ComponentBase, IDisposable
     }
 
     private void OnNodesOrLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => InvokeAsync(StateHasChanged);
+    {
+        UnsubscribeNodeChanges();
+        SubscribeNodeChanges();
+        InvokeAsync(StateHasChanged);
+    }
 
     private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
@@ -271,9 +208,6 @@ public partial class Workflow : ComponentBase, IDisposable
             _session.Tree.UseStreamingAgentResponse = _useStreaming;
     }
 
-    private string GetNodeStyle(IWorkflowNodeViewModel node)
-        => $"left:{node.Anchor.Horizontal:F0}px; top:{node.Anchor.Vertical:F0}px; width:{node.Size.Width:F0}px; z-index:{node.Anchor.Layer};";
-
     private string BuildLinkPoints(IWorkflowLinkViewModel link)
     {
         var from = link.Sender?.Parent;
@@ -297,8 +231,5 @@ public partial class Workflow : ComponentBase, IDisposable
     public void Dispose()
     {
         UnsubscribeSession();
-        _dotNetRef?.Dispose();
     }
-
-    private record ViewportSize(double w, double h);
 }

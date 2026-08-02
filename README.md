@@ -182,12 +182,13 @@ VeloxDev/
 │   │   ├── VeloxDev.Avalonia               # Avalonia platform adapter
 │   │   ├── VeloxDev.WinUI                  # WinUI 3 platform adapter
 │   │   ├── VeloxDev.MAUI                   # .NET MAUI platform adapter
-│   │   └── VeloxDev.WinForms               # WinForms platform adapter
+│   │   ├── VeloxDev.WinForms               # WinForms platform adapter
+│   │   └── VeloxDev.Razor                  # Blazor / Razor platform adapter
 │   ├── Generators/
 │   │   └── VeloxDev.Core.Generator         # Roslyn Source Generators (netstandard2.0)
 │   └── Templates/                          # dotnet new item templates for GUI adapters
 ├── Examples/
-│   ├── Workflow/      WPF · Avalonia · WinUI · WinForms · MAUI · Common(Lib)
+│   ├── Workflow/      WPF · Avalonia · WinUI · WinForms · MAUI · Blazor · Common(Lib)
 │   ├── MVVM/          WPF · Avalonia
 │   ├── Transition/    WPF · Avalonia · WinUI · WinForms · MAUI
 │   ├── Theme/         WPF · Avalonia

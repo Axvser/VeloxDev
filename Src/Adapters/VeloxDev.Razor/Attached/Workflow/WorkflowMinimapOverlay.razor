@@ -1,0 +1,27 @@
+@namespace VeloxDev.WorkflowSystem.AttachedBehaviors
+
+@if (IsMinimapVisible && Viewport is not null)
+{
+    <div class="veloxdev-wf-minimap">
+        <div class="veloxdev-wf-minimap-inner"
+             style="width:@WidthCss;height:@HeightCss;background:@Background;border:1px solid @BorderColor;"
+             @ref="_element">
+            <svg class="veloxdev-wf-minimap-svg" width="@WidthCss" height="@HeightCss">
+                @if (MappedNodes is not null)
+                {
+                    @foreach (var n in MappedNodes)
+                    {
+                        <rect x="@n.XCss" y="@n.YCss" width="@n.WCss" height="@n.HCss"
+                              fill="@NodeFill" rx="@NodeRadiusCss" />
+                    }
+                }
+                @if (MappedViewport is { } vr)
+                {
+                    <rect x="@vr.XCss" y="@vr.YCss" width="@vr.WCss" height="@vr.HCss"
+                          fill="@ViewportFill" stroke="@ViewportStroke"
+                          stroke-width="@ViewportStrokeWidthCss" rx="2" />
+                }
+            </svg>
+        </div>
+    </div>
+}

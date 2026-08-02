@@ -1,0 +1,19 @@
+@namespace VeloxDev.WorkflowSystem.AttachedBehaviors
+
+@if (Items is { Count: > 0 })
+{
+    @foreach (var item in Items)
+    {
+        var key = KeySelector is null ? item : (KeySelector(item) ?? item);
+        @if (ItemTemplate is not null)
+        {
+            <div class="veloxdev-wf-pool-item" style="display:contents" @key="key">
+                @ItemTemplate(item)
+            </div>
+        }
+    }
+}
+else if (EmptyContent is not null)
+{
+    @EmptyContent
+}

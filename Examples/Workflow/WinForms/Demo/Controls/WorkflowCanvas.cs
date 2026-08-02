@@ -19,7 +19,7 @@ namespace Demo.Controls;
 ///   - Slot 锚点：每次布局/绘制前通过控件屏幕坐标直接计算，无需独立 Behavior
 ///   - 画布大小：根据节点坐标动态计算，超出窗口区域后出现滚动条
 /// </summary>
-public sealed class WorkflowCanvas : Panel
+public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecorator
 {
     // ── 网格参数 ──────────────────────────────────────────────────────────────
     private const int GridSpacing = 40;
@@ -37,6 +37,25 @@ public sealed class WorkflowCanvas : Panel
     private Point _panPressScreen;
     private Point _panOffsetAtPress;
     private Point _panOffset; // 世界坐标原点在客户端中的像素位置
+
+    // ── IWorkflowGridDecorator ──────────────────────────────────────────────
+    // WorkflowSurfaceBehavior.Refresh 在每次刷新周期把滚动/内容偏移推送到这里，
+    // 供外部装饰器或诊断读取；画布自身的绘制仍使用内部 _panOffset 计算。
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public double ScrollOffsetX { get; set; }
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public double ScrollOffsetY { get; set; }
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public double ContentOffsetX { get; set; }
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public double ContentOffsetY { get; set; }
 
     // ── 公共属性 ──────────────────────────────────────────────────────────────
 
@@ -63,6 +82,7 @@ public sealed class WorkflowCanvas : Panel
 
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewerName(this, nameof(WorkflowCanvas));
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvasName(this, nameof(WorkflowCanvas));
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetGridDecoratorName(this, nameof(WorkflowCanvas));
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(this, nameof(WorkflowCanvas));
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(this, true);
 
@@ -78,6 +98,7 @@ public sealed class WorkflowCanvas : Panel
     private void AttachSession(WorkflowDemoSession? s)
     {
         if (s is null) return;
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, s.Tree);
         s.Tree.Nodes.CollectionChanged += OnNodesChanged;
         s.Tree.Links.CollectionChanged += OnLinksChanged;
         s.Controller.PropertyChanged += OnControllerPropertyChanged;
@@ -107,6 +128,7 @@ public sealed class WorkflowCanvas : Panel
     private void DetachSession(WorkflowDemoSession? s)
     {
         if (s is null) return;
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, null);
         HandleCreated -= OnHandleCreatedForInitialSync;
         s.Tree.Nodes.CollectionChanged -= OnNodesChanged;
         s.Tree.Links.CollectionChanged -= OnLinksChanged;

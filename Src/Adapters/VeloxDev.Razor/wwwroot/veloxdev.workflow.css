@@ -1,0 +1,95 @@
+/* VeloxDev Workflow — base styles for the Blazor behavior components.
+   Consumers can restyle by overriding these classes or setting component parameters. */
+
+.veloxdev-wf-surface {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.veloxdev-wf-scroll {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    cursor: default;
+}
+
+.veloxdev-wf-canvas {
+    position: relative;
+    overflow: hidden;
+    transform-origin: 0 0;
+}
+
+/* Ruler overlay (grid decorator) — anchored top-left of the surface. */
+.veloxdev-wf-ruler {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 0;
+    z-index: 40;
+    pointer-events: none;
+}
+
+.veloxdev-wf-ruler-corner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 42;
+}
+
+.veloxdev-wf-ruler-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 41;
+}
+
+.veloxdev-wf-ruler-left {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 41;
+}
+
+/* Minimap overlay — anchored top-right of the surface. */
+.veloxdev-wf-minimap {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 50;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+.veloxdev-wf-minimap-inner {
+    position: relative;
+    overflow: hidden;
+    cursor: crosshair;
+    border-radius: 6px;
+}
+
+.veloxdev-wf-minimap-svg {
+    display: block;
+}
+
+/* Node drag wrapper. */
+.veloxdev-wf-node-drag {
+    cursor: grab;
+}
+
+.veloxdev-wf-node-drag:active {
+    cursor: grabbing;
+}
+
+/* Slot connection wrapper. pointer-events:auto lets slots nested inside
+   pointer-events:none overlay containers still receive gestures. */
+.veloxdev-wf-slot {
+    cursor: crosshair;
+    pointer-events: auto;
+}
