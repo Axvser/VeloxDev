@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.Workflow.Functions;
@@ -115,6 +116,66 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithAutoMarkDirty(bool enabled = false)
     {
         AutoMarkDirty = enabled;
+        return this;
+    }
+
+    // ── Capability gates (enforced in code, not just prompt) ───────────────
+
+    /// <summary>
+    /// Whether the node-execution tools (<c>ExecuteWork</c>, <c>ExecuteWorkOnNodes</c>,
+    /// <c>BroadcastNode</c>, <c>ReverseBroadcastNode</c>) are allowed.
+    /// These tools run arbitrary node business code, so they are opt-in.
+    /// Default: <c>false</c> (denied). Security is enforced here, not in prompt prose.
+    /// </summary>
+    public WorkflowAgentScope WithAllowExecuteWork(bool enabled = false)
+    {
+        AllowExecuteWork = enabled;
+        return this;
+    }
+
+    internal bool AllowExecuteWork { get; private set; }
+
+    private readonly HashSet<string> _allowedGenericCommands = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Allowlists command names (e.g. <c>"WorkCommand"</c>) for the generic tools
+    /// <c>ExecuteCommandOnNode</c> and <c>ExecuteCommandById</c>. The <c>"Command"</c> suffix is optional.
+    /// When this is never called, generic command execution is disabled entirely (secure default).
+    /// Calling it once restricts those tools to exactly the listed commands.
+    /// </summary>
+    public WorkflowAgentScope WithAllowedGenericCommands(params string[] commandNames)
+    {
+        foreach (var c in commandNames ?? [])
+        {
+            var name = c.EndsWith("Command", StringComparison.OrdinalIgnoreCase) ? c : c + "Command";
+            _allowedGenericCommands.Add(name);
+        }
+        return this;
+    }
+
+    internal bool IsGenericCommandAllowed(string commandName)
+    {
+        var name = commandName.EndsWith("Command", StringComparison.OrdinalIgnoreCase)
+            ? commandName
+            : commandName + "Command";
+        return _allowedGenericCommands.Contains(name);
+    }
+
+    // ── UI-thread marshalling ───────────────────────────────────────────────
+
+    internal SynchronizationContext? UIContext { get; private set; }
+
+    /// <summary>
+    /// Registers the UI <see cref="SynchronizationContext"/> (e.g. the WPF/Avalonia dispatcher
+    /// context) so every tool call is marshalled onto the UI thread. Workflow components are
+    /// UI-bound (<c>ObservableCollection</c> + <c>INotifyPropertyChanged</c>), so mutations MUST
+    /// happen on the thread that owns the binding. Call this during setup while on the UI thread:
+    /// <c>.WithSynchronizationContext(SynchronizationContext.Current)</c>. When <c>null</c> (default),
+    /// tools run on whatever thread the chat client invokes them on.
+    /// </summary>
+    public WorkflowAgentScope WithSynchronizationContext(SynchronizationContext? context)
+    {
+        UIContext = context;
         return this;
     }
 
@@ -345,6 +406,27 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             sb.AppendLine($"> 当前安全挡位：**第 {_interactionSafety} 挡**（由宿主通过 `WithInteractionSafety({_interactionSafety})` 设置）。");
         else
             sb.AppendLine($"> Active safety level: **{_interactionSafety}** (set by the host via `WithInteractionSafety({_interactionSafety})`).");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// A global, language-agnostic recovery protocol injected into both prompt modes.
+    /// Gives the Agent a deterministic procedure when a tool returns error/rejected,
+    /// and tells it that some tools may be disabled by host policy.
+    /// </summary>
+    private string BuildFailureHandlingProtocol(AgentLanguages language)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("## 🛠 Failure Handling Protocol (apply on every error/rejection)");
+        sb.AppendLine();
+        sb.AppendLine("When a tool returns `error` or `rejected`:");
+        sb.AppendLine("1. Read `message`, `reasons`, `hint`, and `preferredAlternative` — they name the cause and the recommended next tool.");
+        sb.AppendLine("2. Do NOT blindly retry the same call with the same arguments.");
+        sb.AppendLine("3. Verify current state first (`ListNodes`, `GetNodeDetail`, `GetComponentContext`) before any retry — indices and IDs shift after structural changes.");
+        sb.AppendLine("4. If a `hint` or `preferredAlternative` names another tool, switch to it.");
+        sb.AppendLine("5. If you still cannot make progress after two attempts, stop and ask the user via `RequestConfirmation`, or report the blocker plainly in your reply. Do not loop silently.");
+        sb.AppendLine();
+        sb.AppendLine("> Some tools may be **disabled by host policy** (e.g. `ExecuteWork`, `ExecuteCommandOnNode`, `ExecuteCommandById`). If a tool returns a `disabled by host policy` error, do not work around it — report it and let the user enable it if needed.");
         return sb.ToString();
     }
 
@@ -690,6 +772,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine(ProvideCustomerDataContext(language));
         result.AppendLine();
 
+        // ── Failure Handling Protocol ──
+        result.AppendLine(BuildFailureHandlingProtocol(language));
+
         // ── Interaction Safety Policy ──
         result.AppendLine(BuildInteractionSafetyPrompt(language));
 
@@ -721,7 +806,15 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         // ── Global Behavioral Constraints ──
         result.AppendLine("## ⚠ Critical Behavioral Constraints");
         result.AppendLine();
-        result.AppendLine("These constraints apply to ALL operations. Violations cause SILENT failures (no error, no effect).");
+        result.AppendLine("These constraints apply to ALL operations.");
+        result.AppendLine();
+        result.AppendLine("### 0. How the framework reports results — read this first");
+        result.AppendLine("Nearly every tool returns a JSON object with a `status` field: `ok`, `error`, or `rejected`.");
+        result.AppendLine("- `ok` — the operation succeeded.");
+        result.AppendLine("- `error` — the operation failed; read `message` for the cause.");
+        result.AppendLine("- `rejected` — a connection was refused; read `reasons`, `hint`, and `preferredAlternative`, which tell you exactly what to do next.");
+        result.AppendLine("Treat `error`/`rejected` as **actionable feedback**, never as a dead end.");
+        result.AppendLine("A few operations on **unmounted** components are silent no-ops (no error, no effect). If an operation seems to do nothing, first call `ListNodes` / `GetNodeDetail` to verify the component is mounted, then retry. See the Failure Handling Protocol below.");
         result.AppendLine();
         result.AppendLine("### 1. Mount-before-operate");
         result.AppendLine("Nodes MUST be added to the Tree (via `CreateNode` / `CloneNodes`) before any operation on their internals.");
@@ -750,11 +843,19 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("Node indices shift after `CreateNode`, `DeleteNode`, `DeleteSlot`, `CloneNodes`. Always refresh after structural changes.");
         result.AppendLine("Runtime IDs are stable for the lifetime of a component, except SlotEnumerator slots which are rebuilt on selector change.");
         result.AppendLine();
-        result.AppendLine("### 5. Patch restrictions");
-        result.AppendLine("NEVER patch: `Parent`, `Nodes`, `Links`, `Slots`, `Targets`, `Sources`, `State`, `RuntimeId`, `Helper`.");
-        result.AppendLine("Properties backed by commands (Anchor → SetAnchorCommand) must use dedicated tools (`SetNodePosition`, `ResizeNode`, `SetSlotChannel`).");
-        result.AppendLine("Slot-typed properties are auto-created by the source generator — do NOT assign or patch them.");
-        result.AppendLine("`[SlotSelectors]`-marked properties must use `SetEnumSlotCollection`, not `PatchNodeProperties`.");
+        result.AppendLine("### 5. Property patching — pick the tool by intent");
+        result.AppendLine("`PatchNodeProperties` / `PatchComponentById` are **rejecting** patchers: for every property they refuse they return a `rejected`/`skipped` entry with the exact `reason`. Use the table instead of guessing:");
+        result.AppendLine();
+        result.AppendLine("| Intent | Use this tool | If it rejects / errors |");
+        result.AppendLine("|---|---|---|");
+        result.AppendLine("| Position / anchor | `SetNodePosition` | call `GetNodeDetail` to read the current Layer, then retry |");
+        result.AppendLine("| Size | `ResizeNode` | ensure width/height > 0; a zero size makes a node invisible |");
+        result.AppendLine("| Slot channel | `SetSlotChannel` | read the slot's current channel via `GetNodeDetail` |");
+        result.AppendLine("| SlotEnumerator selector | `SetEnumSlotCollection` | verify the type is in `allowedSelectorTypes`; never patch it directly |");
+        result.AppendLine("| Add / remove collection slot | `AddSlotToCollection` / `RemoveSlotFromCollection` | — |");
+        result.AppendLine("| Plain custom property | `PatchNodeProperties` | read the `reason`; if it says `command-backed`, use the dedicated tool it names |");
+        result.AppendLine();
+        result.AppendLine("The patcher **always rejects by code** (do not try to work around it): `Parent`, `Nodes`, `Links`, `LinksMap`, `Slots`, `Targets`, `Sources`, `State`, `VirtualLink`, `RuntimeId`, `Helper`, slot-typed properties, and `[SlotSelectors]`-marked properties.");
         result.AppendLine();
         result.AppendLine("### 6. Prefer mutate in-place; fall back to delete+recreate when needed");
         result.AppendLine("ALWAYS prefer in-place mutation over delete+recreate. Deleting a node destroys its identity, all slots, and all connections.");
@@ -766,6 +867,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("- Reposition → `SetNodePosition` / `MoveNode`");
         result.AppendLine("- Reconnect → `ConnectSlots` / `DisconnectSlots` / `ReplaceConnection`");
         result.AppendLine("Only use `DeleteNode` / `DeleteNodes` when the user explicitly asks to remove a node, or when in-place mutation is genuinely impossible (e.g. the node type itself must change). If a patch is rejected, first try the suggested alternative tool; if that also fails, delete+recreate is acceptable as a last resort.");
+        result.AppendLine();
+        result.AppendLine(BuildFailureHandlingProtocol(language));
         result.AppendLine();
 
         // ── Built-in References ──
@@ -802,15 +905,15 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         }
 
         result.AppendLine();
-        result.AppendLine("## 📋 Pre-loaded Component Descriptions (from [AgentContext])");
+        result.AppendLine("## 📋 Registered Component Summaries (one line each)");
         result.AppendLine();
-        result.AppendLine("The following developer instructions are **AUTHORITATIVE** for each customer component type.");
-        result.AppendLine("They define intended usage and semantics. Treat them as ground truth.");
-        result.AppendLine("Call **GetComponentContext** with any type name to retrieve the full property/command table on demand.");
+        result.AppendLine("One-line summaries only. The full property/command tables are intentionally NOT preloaded to keep the prompt small and accurate.");
+        result.AppendLine();
+        result.AppendLine("**MANDATE:** the FIRST time you operate on a type this session, call **GetComponentContext** with its full type name (e.g. `GetComponentContext(\"Demo.ViewModels.HttpNodeViewModel\")`) to load its complete property/command table. Never guess a type's shape from its name or from its one-line summary.");
         result.AppendLine();
         AppendPreloadedComponentSummaries(result, language);
         result.AppendLine();
-        result.AppendLine("> Call **GetComponentContext** with any type name above to get full documentation including all properties and commands.");
+        result.AppendLine("> Before operating on any type: `GetComponentContext(\"<Full.Type.Name>\")` first.");
         result.AppendLine();
 
         // ── Interaction Safety Policy ──
@@ -904,19 +1007,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         void AppendSummary(Type t, AgentLanguages lang)
         {
             var classContexts = AgentContextCollector.GetAgentContext(t, lang);
-            result.AppendLine($"### `{t.FullName}`");
-            result.AppendLine();
-            if (classContexts.Length > 0)
-            {
-                result.AppendLine("**Developer Instructions:**");
-                foreach (var ctx in classContexts)
-                    result.AppendLine($"- {ctx}");
-            }
-            else
-            {
-                result.AppendLine("*(no developer instructions)*");
-            }
-            result.AppendLine();
+            var summary = classContexts.Length > 0 ? string.Join(" | ", classContexts) : "*no developer instructions*";
+            result.AppendLine($"- `{t.FullName}` — {summary}");
         }
 
         foreach (var kvp in CustomerEnums)

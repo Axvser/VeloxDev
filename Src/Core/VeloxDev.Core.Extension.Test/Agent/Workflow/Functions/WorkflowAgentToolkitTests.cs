@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+using System.Threading.Tasks;
 using VeloxDev.AI.Workflow;
 using VeloxDev.AI.Workflow.Functions;
 using VeloxDev.WorkflowSystem;
@@ -41,12 +42,12 @@ public class WorkflowAgentToolkitTests
         Assert.IsInstanceOfType<string>(raw);
 
         var trackMethod = typeof(WorkflowAgentToolkit)
-            .GetMethod("Track", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.IsNotNull(trackMethod, "Track method was not found.");
+            .GetMethod("TrackAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.IsNotNull(trackMethod, "TrackAsync method was not found.");
 
-        var tracked = trackMethod.Invoke(toolkit, [toolName, (string)raw!]);
-        Assert.IsInstanceOfType<string>(tracked);
-        return (string)tracked!;
+        var trackedTask = (Task)trackMethod.Invoke(toolkit, [toolName, (string)raw!])!;
+        trackedTask.GetAwaiter().GetResult();
+        return (string)raw!;
     }
 
     private sealed class TestTreeHelper : TreeHelper

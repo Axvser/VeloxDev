@@ -59,7 +59,20 @@ public static class ComponentPatcher
         }
 
         var type = target.GetType();
+
+        // The patch must be undoable, which requires the component to be mounted in a Tree
+        // (undo history lives on the tree). Reject unmounted targets explicitly instead of
+        // mutating state outside the command/lifecycle pipeline.
+        var tree = ResolveTree(target);
+        if (tree is null)
+            return JsonConvert.SerializeObject(new
+            {
+                status = "error",
+                message = "Patch rejected: the target is not mounted in a Tree, so the change cannot be recorded in undo history. Mount the component first (e.g. create and add the node), then retry.",
+            });
+
         var results = new JArray();
+        var applied = new List<(PropertyInfo Property, object? OldValue, object? NewValue)>();
         int successCount = 0;
 
         foreach (var kv in patch)
@@ -146,7 +159,16 @@ public static class ComponentPatcher
                 {
                     value = kv.Value?.DeserializeToType(prop.PropertyType);
                 }
+                var oldValue = prop.GetValue(target);
+                if (Equals(oldValue, value))
+                {
+                    // Writing the same value would create a no-op undo entry (redo and undo both
+                    // restore identical state). Report it as unchanged and skip it.
+                    results.Add(new JObject { ["property"] = propName, ["status"] = "skipped", ["reason"] = "unchanged" });
+                    continue;
+                }
                 prop.SetValue(target, value);
+                applied.Add((prop, oldValue, value));
                 successCount++;
                 results.Add(new JObject { ["property"] = propName, ["status"] = "ok" });
             }
@@ -154,6 +176,15 @@ public static class ComponentPatcher
             {
                 results.Add(new JObject { ["property"] = propName, ["status"] = "error", ["reason"] = ex.Message });
             }
+        }
+
+        // Commit all successful patches as a single undoable action, mirroring how the
+        // framework wraps human operations (Submit(WorkflowActionPair)).
+        if (applied.Count > 0)
+        {
+            tree.GetHelper().Submit(new WorkflowActionPair(
+                () => { foreach (var (p, _, nv) in applied) p.SetValue(target, nv); },
+                () => { foreach (var (p, ov, _) in applied) p.SetValue(target, ov); }));
         }
 
         return JsonConvert.SerializeObject(new
@@ -165,16 +196,34 @@ public static class ComponentPatcher
     }
 
     /// <summary>
-    /// Applies a JSON patch to a target object, recording the operation in the
-    /// workflow tree's undo/redo history via <see cref="IWorkflowTreeViewModelHelper.Submit"/>.
-    /// Each successfully patched property is captured as an undo-able action pair.
+    /// Applies a JSON patch to a target object and records it in the workflow tree's
+    /// undo/redo history. Since <see cref="ApplyPatch"/> is now undoable itself, this
+    /// is a thin backward-compatible alias. The <paramref name="tree"/> argument is
+    /// ignored — the owning tree is resolved from the target's Parent chain.
     /// </summary>
     /// <param name="target">The object to patch.</param>
     /// <param name="jsonPatch">A JSON object string, e.g. {"Title":"New","Delay":500}.</param>
-    /// <param name="tree">Ignored. Property patches are not undoable — use <see cref="ApplyPatch"/> directly.</param>
+    /// <param name="tree">Ignored; the owning tree is resolved from the target.</param>
     /// <returns>A JSON result string describing successes and failures.</returns>
     public static string ApplyPatchWithUndo(object target, string jsonPatch, IWorkflowTreeViewModel? tree = null)
         => ApplyPatch(target, jsonPatch);
+
+    /// <summary>
+    /// Resolves the owning <see cref="IWorkflowTreeViewModel"/> from a workflow component
+    /// by walking its Parent chain. Returns <c>null</c> for unmounted components — those
+    /// must not be mutated because there is no undo history to record the change in.
+    /// </summary>
+    private static IWorkflowTreeViewModel? ResolveTree(object target)
+    {
+        return target switch
+        {
+            IWorkflowTreeViewModel tree => tree,
+            IWorkflowNodeViewModel node => node.Parent,
+            IWorkflowSlotViewModel slot => slot.Parent?.Parent,
+            IWorkflowLinkViewModel link => link.Sender?.Parent?.Parent,
+            _ => null,
+        };
+    }
 
     /// <summary>
     /// Delegates to <see cref="AgentCommandDiscoverer.FindBackingCommand"/> in Core.

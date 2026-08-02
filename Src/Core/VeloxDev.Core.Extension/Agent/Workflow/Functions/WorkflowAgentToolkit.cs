@@ -9,6 +9,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 
@@ -150,6 +151,20 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         protected override async ValueTask<object?> InvokeCoreAsync(
             AIFunctionArguments arguments, CancellationToken cancellationToken)
         {
+            // Workflow components are UI-bound, so when the host configured a UI SynchronizationContext
+            // and we are not already on it, marshal the entire tool call (body + tracking) onto it.
+            var uiContext = _toolkit._scope.UIContext;
+            if (uiContext is not null && !ReferenceEquals(uiContext, SynchronizationContext.Current))
+            {
+                return await RunOnContextAsync(uiContext, cancellationToken,
+                    () => InvokeCoreInnerAsync(arguments, cancellationToken)).ConfigureAwait(false);
+            }
+            return await InvokeCoreInnerAsync(arguments, cancellationToken).ConfigureAwait(false);
+        }
+
+        private async ValueTask<object?> InvokeCoreInnerAsync(
+            AIFunctionArguments arguments, CancellationToken cancellationToken)
+        {
             // ── Pre-flight: reject if call limit would be exceeded ──
             if (_toolkit._scope.MaxToolCalls.HasValue && _toolkit._toolCallCount >= _toolkit._scope.MaxToolCalls.Value)
                 return WorkflowAgentToolkit.Error($"Tool call limit ({_toolkit._scope.MaxToolCalls.Value}) exceeded. No further tool calls are allowed.");
@@ -164,6 +179,28 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             catch (Exception ex)
             {
                 return WorkflowAgentToolkit.Error($"Tool '{Name}' threw an unhandled exception: {ex.Message}");
+            }
+        }
+
+        private static async ValueTask<T> RunOnContextAsync<T>(
+            SynchronizationContext context, CancellationToken ct, Func<ValueTask<T>> body)
+        {
+            var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (ct.Register(() => tcs.TrySetCanceled(ct)))
+            {
+                context.Post(async _ =>
+                {
+                    try
+                    {
+                        var result = await body();
+                        tcs.TrySetResult(result);
+                    }
+                    catch (Exception ex)
+                    {
+                        tcs.TrySetException(ex);
+                    }
+                }, null);
+                return await tcs.Task.ConfigureAwait(false);
             }
         }
     }
@@ -325,18 +362,19 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Mutation Functions ──────────────────────────
 
-    [Description("Moves a node by relative offset. Coordinate system: +offsetX = rightward, +offsetY = downward (origin is top-left). Undo-able.")]
+    [Description("Moves a node by relative offset. Coordinate system: +offsetX = rightward, +offsetY = downward (origin is top-left). One undoable action.")]
     private string MoveNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Horizontal offset px.")] double offsetX,
         [Description("Vertical offset px.")] double offsetY)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        node!.MoveCommand.Execute(new Offset(offsetX, offsetY));
-        return Ok($"Moved {nodeIndex} by ({offsetX},{offsetY}).");
+        var n = node!;
+        return ApplyAnchorLayout($"Moved {nodeIndex} by ({offsetX},{offsetY}).",
+            [(n, new Anchor(n.Anchor.Horizontal + offsetX, n.Anchor.Vertical + offsetY, n.Anchor.Layer))]);
     }
 
-    [Description("Sets absolute position of a node. Coordinate system: origin (0,0) is top-left; left (X) increases rightward, top (Y) increases downward.")]
+    [Description("Sets absolute position of a node. Coordinate system: origin (0,0) is top-left; left (X) increases rightward, top (Y) increases downward. One undoable action.")]
     private string SetNodePosition(
         [Description("Node index.")] int nodeIndex,
         [Description("Left px.")] double left,
@@ -344,18 +382,25 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         [Description("Layer (z-order).")] int layer = 0)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        node!.SetAnchorCommand.Execute(new Anchor(left, top, layer));
-        return Ok($"Position {nodeIndex} → ({left},{top},{layer}).");
+        return ApplyAnchorLayout($"Position {nodeIndex} → ({left},{top},{layer}).",
+            [(node!, new Anchor(left, top, layer))]);
     }
 
-    [Description("Resizes a node.")]
+    [Description("Resizes a node. One undoable action.")]
     private string ResizeNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Width px.")] double width,
         [Description("Height px.")] double height)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        node!.SetSizeCommand.Execute(new Size(width, height));
+        var n = node!;
+        var oldSize = new Size(n.Size.Width, n.Size.Height);
+        var newSize = new Size(width, height);
+        if (oldSize.Width == newSize.Width && oldSize.Height == newSize.Height)
+            return Ok($"Resized {nodeIndex} → ({width},{height}).");
+        Tree.GetHelper().Submit(new WorkflowActionPair(
+            () => n.SetSizeCommand.Execute(newSize),
+            () => n.SetSizeCommand.Execute(oldSize)));
         return Ok($"Resized {nodeIndex} → ({width},{height}).");
     }
 
@@ -470,24 +515,48 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return Error("No connection found between the specified slots.");
     }
 
-    [Description("Executes WorkCommand on a node.")]
-    private string ExecuteWork(
+    [Description("Executes WorkCommand on a node and WAITS until the node's work actually completes (fires Exited). Returns 'ok' only after real completion; returns an error if the work fails. Disabled by default: the host must call WithAllowExecuteWork(true) on the scope.")]
+    private async Task<string> ExecuteWork(
         [Description("Node index.")] int nodeIndex,
-        [Description("Optional parameter.")] string? parameter = null)
+        [Description("Optional parameter.")] string? parameter = null,
+        CancellationToken cancellationToken = default)
     {
+        if (!_scope.AllowExecuteWork)
+            return Error("ExecuteWork is disabled by host policy. The host must enable node execution via WithAllowExecuteWork(true).");
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        node!.WorkCommand.Execute(parameter);
-        return Ok($"Work executed on node {nodeIndex}.");
+        try
+        {
+            await WaitForCommandAsync(node!.WorkCommand, parameter, cancellationToken).ConfigureAwait(false);
+            return Ok($"Work on node {nodeIndex} completed.");
+        }
+        catch (OperationCanceledException)
+        {
+            return Error($"Work on node {nodeIndex} was cancelled.");
+        }
+        catch (Exception ex)
+        {
+            return Error($"Work on node {nodeIndex} failed: {ex.Message}");
+        }
     }
 
-    [Description("Executes BroadcastCommand on a node to forward data along connections.")]
-    private string BroadcastNode(
+    [Description("Executes BroadcastCommand on a node to forward data along connections, and waits until the broadcast command completes (downstream dispatch itself is fire-and-forget). Disabled by default: requires WithAllowExecuteWork(true).")]
+    private async Task<string> BroadcastNode(
         [Description("Node index.")] int nodeIndex,
-        [Description("Optional parameter.")] string? parameter = null)
+        [Description("Optional parameter.")] string? parameter = null,
+        CancellationToken cancellationToken = default)
     {
+        if (!_scope.AllowExecuteWork)
+            return Error("BroadcastNode is disabled by host policy. The host must enable node execution via WithAllowExecuteWork(true).");
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        node!.BroadcastCommand.Execute(parameter);
-        return Ok($"Broadcast executed on node {nodeIndex}.");
+        try
+        {
+            await WaitForCommandAsync(node!.BroadcastCommand, parameter, cancellationToken).ConfigureAwait(false);
+            return Ok($"Broadcast on node {nodeIndex} completed.");
+        }
+        catch (Exception ex)
+        {
+            return Error($"Broadcast on node {nodeIndex} failed: {ex.Message}");
+        }
     }
 
     [Description("Undoes the last action.")]
@@ -625,24 +694,28 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Generic Command Execution ──────────────────────────
 
-    [Description("Executes any command on a node by index. Use ListComponentCommands to discover available commands.")]
+    [Description("Executes any command on a node by index. Use ListComponentCommands to discover available commands. Disabled by default: the host must allowlist the command via WithAllowedGenericCommands.")]
     private string ExecuteCommandOnNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Command name, e.g. 'WorkCommand'. 'Command' suffix optional.")] string commandName,
         [Description("JSON parameter, or null.")] string? jsonParameter = null)
     {
+        if (!_scope.IsGenericCommandAllowed(commandName))
+            return Error($"Generic command execution is disabled by host policy. The host must allowlist '{commandName}' via WithAllowedGenericCommands.");
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var result = CommandInvoker.Invoke(node!, commandName, jsonParameter);
         NudgeIfEnumSlotNode(node!);
         return result;
     }
 
-    [Description("Executes any command on a component by runtime ID. Works for nodes, slots, links.")]
+    [Description("Executes any command on a component by runtime ID. Works for nodes, slots, links. Disabled by default: the host must allowlist the command via WithAllowedGenericCommands.")]
     private string ExecuteCommandById(
         [Description("Runtime ID.")] string runtimeId,
         [Description("Command name.")] string commandName,
         [Description("JSON parameter, or null.")] string? jsonParameter = null)
     {
+        if (!_scope.IsGenericCommandAllowed(commandName))
+            return Error($"Generic command execution is disabled by host policy. The host must allowlist '{commandName}' via WithAllowedGenericCommands.");
         var component = FindComponentById(runtimeId);
         if (component == null)
             return Error($"Component '{runtimeId}' not found.");
@@ -950,8 +1023,26 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
             var capturedNode = node!;
             Tree.GetHelper().Submit(new WorkflowActionPair(
-                () => { col.Add(slot); NudgeIfEnumSlotNode(capturedNode); },
-                () => { col.Remove(slot); NudgeIfEnumSlotNode(capturedNode); }));
+                () =>
+                {
+                    // The slot must be registered in node.Slots (canonical graph state) AND in the
+                    // collection property — one atomic action, mirroring how the framework wires slots
+                    // into a node. The guards prevent duplicates even if a future path auto-syncs.
+                    if (!ReferenceEquals(slot.Parent, capturedNode))
+                        slot.Parent = capturedNode;
+                    if (!capturedNode.Slots.Contains(slot))
+                        capturedNode.Slots.Add(slot);
+                    if (!col.Contains(slot))
+                        col.Add(slot);
+                },
+                () =>
+                {
+                    col.Remove(slot);
+                    if (capturedNode.Slots.Contains(slot))
+                        capturedNode.Slots.Remove(slot);
+                    if (ReferenceEquals(slot.Parent, capturedNode))
+                        slot.Parent = null;
+                }));
 
             return JsonConvert.SerializeObject(new
             {
@@ -988,8 +1079,23 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 var capturedSlot = slot;
                 var capturedNode = node!;
                 Tree.GetHelper().Submit(new WorkflowActionPair(
-                    () => { col.Remove(capturedSlot); NudgeIfEnumSlotNode(capturedNode); },
-                    () => { col.Insert(capturedIndex, capturedSlot); NudgeIfEnumSlotNode(capturedNode); }));
+                    () =>
+                    {
+                        col.Remove(capturedSlot);
+                        if (capturedNode.Slots.Contains(capturedSlot))
+                            capturedNode.Slots.Remove(capturedSlot);
+                        if (ReferenceEquals(capturedSlot.Parent, capturedNode))
+                            capturedSlot.Parent = null;
+                    },
+                    () =>
+                    {
+                        if (!ReferenceEquals(capturedSlot.Parent, capturedNode))
+                            capturedSlot.Parent = capturedNode;
+                        if (!capturedNode.Slots.Contains(capturedSlot))
+                            capturedNode.Slots.Add(capturedSlot);
+                        if (!col.Contains(capturedSlot))
+                            col.Insert(capturedIndex, capturedSlot);
+                    }));
                 return Ok($"Removed slot '{slotRuntimeId}' from '{propertyName}'. Count={col.Count}.");
             }
         }
@@ -1002,7 +1108,8 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                  "THEN construct the correct JSON and pass it in 'selectorTypeOrJson', with the fully-qualified type name in 'nonEnumTypeName'. " +
                  "Never hard-code the JSON without inspecting the schema first — the type structure may differ from assumptions. " +
                  "This is the correct way to change the selector on a node that already exists — do NOT delete and recreate the node. " +
-                 "WARNING: switching selector type destroys ALL existing connections on the old output slots; you must rewire them after calling this.")]
+                 "WARNING: switching selector type destroys ALL existing connections on the old output slots; you must rewire them after calling this. " +
+                 "Example: SetEnumSlotCollection(nodeIndex: 2, propertyName: \"Outputs\", selectorTypeOrJson: \"Demo.NetworkRequestMethod\").")]
     private string SetEnumSlotCollection(
         [Description("Node index.")] int nodeIndex,
         [Description("Name of the slot collection or SlotEnumerator property, e.g. 'OutputSlots'.")] string propertyName,
@@ -1052,13 +1159,12 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 }
 
                 if (selectorValue == null) return Error($"Deserialized selector value is null.");
+                if (!IsEnumeratorInstalled(enumerator, node)) return Error($"SlotEnumerator '{propertyName}' is not installed on node {nodeIndex} — mount the node first, then retry.");
 
-                var capturedEnumeratorNE = enumerator;
-                var capturedNodeNE = node!;
-                var oldSelectorNE = enumerator.GetType().GetProperty("SelectorType")?.GetValue(enumerator) as Type;
-                Tree.GetHelper().Submit(new WorkflowActionPair(
-                    () => { setSelector.Invoke(capturedEnumeratorNE, [selectorValue]); NudgeNode(capturedNodeNE); },
-                    () => { if (oldSelectorNE != null) setSelector.Invoke(capturedEnumeratorNE, [oldSelectorNE]); NudgeNode(capturedNodeNE); }));
+                // SetSelector captures the previous state and submits its own undoable
+                // WorkflowActionPair internally. Do NOT wrap it in another Submit here —
+                // that would create nested undo entries and break Ctrl+Z semantics.
+                setSelector.Invoke(enumerator, [selectorValue]);
 
                 return new JObject
                 {
@@ -1089,13 +1195,12 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 }
             }
 
-            // Capture old selector type for undo — read SelectorType property if available
-            var oldSelectorType = enumerator.GetType().GetProperty("SelectorType")?.GetValue(enumerator) as Type;
-            var capturedEnumerator = enumerator;
-            var capturedNode = node!;
-            Tree.GetHelper().Submit(new WorkflowActionPair(
-                () => { setSelector.Invoke(capturedEnumerator, [selectorType]); NudgeNode(capturedNode); },
-                () => { if (oldSelectorType != null) setSelector.Invoke(capturedEnumerator, [oldSelectorType]); NudgeNode(capturedNode); }));
+            if (!IsEnumeratorInstalled(enumerator, node)) return Error($"SlotEnumerator '{propertyName}' is not installed on node {nodeIndex} — mount the node first, then retry.");
+
+            // SetSelector captures the previous state (including old slots/links) and submits
+            // its own undoable WorkflowActionPair internally. Call it directly — wrapping it in
+            // another Submit created nested undo entries and required a NudgeNode() workaround.
+            setSelector.Invoke(enumerator, [selectorType]);
 
             var enumNames = selectorType == typeof(bool)
                 ? ["False", "True"]
@@ -1355,9 +1460,10 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Batch Execution ──────────────────────────
 
-    [Description("Executes multiple operations in one call to reduce round-trips. Each op is a JSON object with 'tool' and 'args'. Returns results array.")]
-    private string BatchExecute(
-        [Description("JSON array of operations: [{\"tool\":\"ToolName\",\"args\":{...}},...]")] string operationsJson)
+    [Description("Executes multiple operations in one call to reduce round-trips. Each op is a JSON object with 'tool' and 'args'. Returns results array. Execution operations (ExecuteWork, ExecuteWorkOnNodes, BroadcastNode, ReverseBroadcastNode) are awaited in order. Example: BatchExecute(operationsJson: '[{\"tool\":\"CreateNode\",\"args\":{\"fullTypeName\":\"Demo.HttpNodeViewModel\"}},{\"tool\":\"ConnectByProperty\",\"args\":{\"senderNodeIndex\":0,\"senderProperty\":\"OutputSlot\",\"receiverNodeIndex\":1,\"receiverProperty\":\"InputSlot\"}}]').")]
+    private async Task<string> BatchExecute(
+        [Description("JSON array of operations: [{\"tool\":\"ToolName\",\"args\":{...}},...]")] string operationsJson,
+        CancellationToken cancellationToken = default)
     {
         JArray ops;
         try
@@ -1370,7 +1476,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         }
 
         var results = new JArray();
-        var toolMap = BuildToolDispatchMap();
+        var toolMap = BuildToolDispatchMap(cancellationToken);
 
         foreach (var op in ops)
         {
@@ -1385,7 +1491,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
             try
             {
-                var result = handler(args);
+                var result = await handler(args).ConfigureAwait(false);
                 results.Add(new JObject { ["tool"] = toolName, ["result"] = result });
             }
             catch (Exception ex)
@@ -1397,63 +1503,63 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return results.ToString(Formatting.None);
     }
 
-    private Dictionary<string, Func<JObject, string>> BuildToolDispatchMap()
+    private Dictionary<string, Func<JObject, Task<string>>> BuildToolDispatchMap(CancellationToken ct)
     {
-        return new Dictionary<string, Func<JObject, string>>(StringComparer.OrdinalIgnoreCase)
+        return new Dictionary<string, Func<JObject, Task<string>>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["MoveNode"] = a => MoveNode(a.Value<int>("nodeIndex"), a.Value<double>("offsetX"), a.Value<double>("offsetY")),
-            ["SetNodePosition"] = a => SetNodePosition(a.Value<int>("nodeIndex"), a.Value<double>("left"), a.Value<double>("top"), a.Value<int?>("layer") ?? 0),
-            ["ResizeNode"] = a => ResizeNode(a.Value<int>("nodeIndex"), a.Value<double>("width"), a.Value<double>("height")),
-            ["DeleteNode"] = a => DeleteNode(a.Value<int>("nodeIndex")),
-            ["DeleteSlot"] = a => DeleteSlot(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex")),
-            ["ConnectSlots"] = a => ConnectSlots(a.Value<int>("senderNodeIndex"), a.Value<int>("senderSlotIndex"), a.Value<int>("receiverNodeIndex"), a.Value<int>("receiverSlotIndex")),
-            ["ConnectSlotsById"] = a => ConnectSlotsById(a.Value<string>("senderSlotId")!, a.Value<string>("receiverSlotId")!),
-            ["DisconnectSlots"] = a => DisconnectSlots(a.Value<int>("senderNodeIndex"), a.Value<int>("senderSlotIndex"), a.Value<int>("receiverNodeIndex"), a.Value<int>("receiverSlotIndex")),
-            ["ExecuteWork"] = a => ExecuteWork(a.Value<int>("nodeIndex"), a.Value<string>("parameter")),
-            ["BroadcastNode"] = a => BroadcastNode(a.Value<int>("nodeIndex"), a.Value<string>("parameter")),
-            ["Undo"] = _ => Undo(),
-            ["Redo"] = _ => Redo(),
-            ["PatchNodeProperties"] = a => PatchNodeProperties(a.Value<int>("nodeIndex"), a.Value<string>("jsonPatch")!),
-            ["PatchComponentById"] = a => PatchComponentById(a.Value<string>("runtimeId")!, a.Value<string>("jsonPatch")!),
-            ["ExecuteCommandOnNode"] = a => ExecuteCommandOnNode(a.Value<int>("nodeIndex"), a.Value<string>("commandName")!, a.Value<string>("jsonParameter")),
-            ["ExecuteCommandById"] = a => ExecuteCommandById(a.Value<string>("runtimeId")!, a.Value<string>("commandName")!, a.Value<string>("jsonParameter")),
-            ["CreateNode"] = a => CreateNode(a.Value<string>("fullTypeName")!, a.Value<double?>("left") ?? 0, a.Value<double?>("top") ?? 0, a.Value<double?>("width") ?? 0, a.Value<double?>("height") ?? 0),
-            ["CreateSlotOnNode"] = a => CreateSlotOnNode(a.Value<int>("nodeIndex"), a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "OneBoth"),
-            ["CloneNodes"] = a => CloneNodes(a.Value<string>("nodeIndicesJson")!, a.Value<double?>("offsetX") ?? 200, a.Value<double?>("offsetY") ?? 0),
-            ["ListSlotProperties"] = a => ListSlotProperties(a.Value<int>("nodeIndex")),
-            ["AddSlotToCollection"] = a => AddSlotToCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "MultipleBoth"),
-            ["RemoveSlotFromCollection"] = a => RemoveSlotFromCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("slotRuntimeId")!),
-            ["SetEnumSlotCollection"] = a => SetEnumSlotCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullEnumTypeName")!),
-            ["GetEnumSlotByValue"] = a => GetEnumSlotByValue(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("conditionValue")!),
-            ["SetEnumSlotChannel"] = a => SetEnumSlotChannel(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("conditionValue")!, a.Value<string>("channel")!),
-            ["ConnectEnumSlot"] = a => ConnectEnumSlot(a.Value<int>("senderNodeIndex"), a.Value<string>("senderProperty")!, a.Value<string>("senderCondition")!, a.Value<int>("receiverNodeIndex"), a.Value<string>("receiverSlot")!),
-            ["FindNodes"] = a => FindNodes(a.Value<string>("typeName") ?? "", a.Value<string>("propertyName"), a.Value<string>("propertyValue")),
-            ["ResolveSlotId"] = a => ResolveSlotId(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<int?>("collectionIndex") ?? 0),
-            ["ConnectByProperty"] = a => ConnectByProperty(a.Value<int>("senderNodeIndex"), a.Value<string>("senderProperty")!, a.Value<int>("receiverNodeIndex"), a.Value<string>("receiverProperty")!, a.Value<int?>("senderCollectionIndex") ?? 0, a.Value<int?>("receiverCollectionIndex") ?? 0),
-            ["CreateAndConfigureNode"] = a => CreateAndConfigureNode(a.Value<string>("fullTypeName")!, a.Value<double?>("left") ?? 0, a.Value<double?>("top") ?? 0, a.Value<double?>("width") ?? 0, a.Value<double?>("height") ?? 0, a.Value<string>("jsonPatch"), a.Value<string>("enumSlotProperty"), a.Value<string>("enumTypeName")),
-            ["DeleteNodes"] = a => DeleteNodes(a.Value<string>("nodeIndicesJson")!),
-            ["ArrangeNodes"] = a => ArrangeNodes(a.Value<string>("arrangementsJson")!),
-            ["GetFullTopology"] = _ => GetFullTopology(),
-            ["SearchForward"] = a => SearchForward(a.Value<int>("nodeIndex"), a.Value<string>("typeName"), a.Value<int?>("maxDepth") ?? 0),
-            ["SearchReverse"] = a => SearchReverse(a.Value<int>("nodeIndex"), a.Value<string>("typeName"), a.Value<int?>("maxDepth") ?? 0),
-            ["SearchAllRelative"] = a => SearchAllRelative(a.Value<int>("nodeIndex"), a.Value<string>("typeName"), a.Value<int?>("maxDepth") ?? 0),
-            ["IsConnected"] = a => IsConnected(a.Value<int>("sourceNodeIndex"), a.Value<int>("targetNodeIndex"), a.Value<string>("direction") ?? "forward"),
-            ["FindPath"] = a => FindPath(a.Value<int>("sourceNodeIndex"), a.Value<int>("targetNodeIndex")),
-            ["ReverseBroadcastNode"] = a => ReverseBroadcastNode(a.Value<int>("nodeIndex"), a.Value<string>("parameter")),
-            ["DisconnectSlotsById"] = a => DisconnectSlotsById(a.Value<string>("senderSlotId")!, a.Value<string>("receiverSlotId")!),
-            ["DisconnectAllFromSlot"] = a => DisconnectAllFromSlot(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex")),
-            ["DisconnectAllFromNode"] = a => DisconnectAllFromNode(a.Value<int>("nodeIndex")),
-            ["ReplaceConnection"] = a => ReplaceConnection(a.Value<string>("oldSenderSlotId")!, a.Value<string>("oldReceiverSlotId")!, a.Value<string>("newSenderSlotId")!, a.Value<string>("newReceiverSlotId")!),
-            ["SetSlotChannel"] = a => SetSlotChannel(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex"), a.Value<string>("channel")!),
-            ["GetLinkDetail"] = a => GetLinkDetail(a.Value<string>("linkId")!),
-            ["ExecuteWorkOnNodes"] = a => ExecuteWorkOnNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("parameter")),
-            ["BulkPatchNodes"] = a => BulkPatchNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("jsonPatch")!),
-            ["AlignNodes"] = a => AlignNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("alignment")!),
-            ["DistributeNodes"] = a => DistributeNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("axis")!),
-            ["AutoLayout"] = a => AutoLayout(a.Value<double?>("startX") ?? 0, a.Value<double?>("startY") ?? 0, a.Value<double?>("gapX") ?? 80, a.Value<double?>("gapY") ?? 40, a.Value<string>("direction") ?? "horizontal"),
-            ["GetNodeStatistics"] = a => GetNodeStatistics(a.Value<int>("nodeIndex")),
-            ["ListCreatableTypes"] = _ => ListCreatableTypes(),
-            ["ValidateWorkflow"] = _ => ValidateWorkflow(),
+            ["MoveNode"] = a => Task.FromResult(MoveNode(a.Value<int>("nodeIndex"), a.Value<double>("offsetX"), a.Value<double>("offsetY"))),
+            ["SetNodePosition"] = a => Task.FromResult(SetNodePosition(a.Value<int>("nodeIndex"), a.Value<double>("left"), a.Value<double>("top"), a.Value<int?>("layer") ?? 0)),
+            ["ResizeNode"] = a => Task.FromResult(ResizeNode(a.Value<int>("nodeIndex"), a.Value<double>("width"), a.Value<double>("height"))),
+            ["DeleteNode"] = a => Task.FromResult(DeleteNode(a.Value<int>("nodeIndex"))),
+            ["DeleteSlot"] = a => Task.FromResult(DeleteSlot(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex"))),
+            ["ConnectSlots"] = a => Task.FromResult(ConnectSlots(a.Value<int>("senderNodeIndex"), a.Value<int>("senderSlotIndex"), a.Value<int>("receiverNodeIndex"), a.Value<int>("receiverSlotIndex"))),
+            ["ConnectSlotsById"] = a => Task.FromResult(ConnectSlotsById(a.Value<string>("senderSlotId")!, a.Value<string>("receiverSlotId")!)),
+            ["DisconnectSlots"] = a => Task.FromResult(DisconnectSlots(a.Value<int>("senderNodeIndex"), a.Value<int>("senderSlotIndex"), a.Value<int>("receiverNodeIndex"), a.Value<int>("receiverSlotIndex"))),
+            ["ExecuteWork"] = a => ExecuteWork(a.Value<int>("nodeIndex"), a.Value<string>("parameter"), ct),
+            ["BroadcastNode"] = a => BroadcastNode(a.Value<int>("nodeIndex"), a.Value<string>("parameter"), ct),
+            ["Undo"] = _ => Task.FromResult(Undo()),
+            ["Redo"] = _ => Task.FromResult(Redo()),
+            ["PatchNodeProperties"] = a => Task.FromResult(PatchNodeProperties(a.Value<int>("nodeIndex"), a.Value<string>("jsonPatch")!)),
+            ["PatchComponentById"] = a => Task.FromResult(PatchComponentById(a.Value<string>("runtimeId")!, a.Value<string>("jsonPatch")!)),
+            ["ExecuteCommandOnNode"] = a => Task.FromResult(ExecuteCommandOnNode(a.Value<int>("nodeIndex"), a.Value<string>("commandName")!, a.Value<string>("jsonParameter"))),
+            ["ExecuteCommandById"] = a => Task.FromResult(ExecuteCommandById(a.Value<string>("runtimeId")!, a.Value<string>("commandName")!, a.Value<string>("jsonParameter"))),
+            ["CreateNode"] = a => Task.FromResult(CreateNode(a.Value<string>("fullTypeName")!, a.Value<double?>("left") ?? 0, a.Value<double?>("top") ?? 0, a.Value<double?>("width") ?? 0, a.Value<double?>("height") ?? 0)),
+            ["CreateSlotOnNode"] = a => Task.FromResult(CreateSlotOnNode(a.Value<int>("nodeIndex"), a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "OneBoth")),
+            ["CloneNodes"] = a => Task.FromResult(CloneNodes(a.Value<string>("nodeIndicesJson")!, a.Value<double?>("offsetX") ?? 200, a.Value<double?>("offsetY") ?? 0)),
+            ["ListSlotProperties"] = a => Task.FromResult(ListSlotProperties(a.Value<int>("nodeIndex"))),
+            ["AddSlotToCollection"] = a => Task.FromResult(AddSlotToCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "MultipleBoth")),
+            ["RemoveSlotFromCollection"] = a => Task.FromResult(RemoveSlotFromCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("slotRuntimeId")!)),
+            ["SetEnumSlotCollection"] = a => Task.FromResult(SetEnumSlotCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullEnumTypeName")!)),
+            ["GetEnumSlotByValue"] = a => Task.FromResult(GetEnumSlotByValue(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("conditionValue")!)),
+            ["SetEnumSlotChannel"] = a => Task.FromResult(SetEnumSlotChannel(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("conditionValue")!, a.Value<string>("channel")!)),
+            ["ConnectEnumSlot"] = a => Task.FromResult(ConnectEnumSlot(a.Value<int>("senderNodeIndex"), a.Value<string>("senderProperty")!, a.Value<string>("senderCondition")!, a.Value<int>("receiverNodeIndex"), a.Value<string>("receiverSlot")!)),
+            ["FindNodes"] = a => Task.FromResult(FindNodes(a.Value<string>("typeName") ?? "", a.Value<string>("propertyName"), a.Value<string>("propertyValue"))),
+            ["ResolveSlotId"] = a => Task.FromResult(ResolveSlotId(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<int?>("collectionIndex") ?? 0)),
+            ["ConnectByProperty"] = a => Task.FromResult(ConnectByProperty(a.Value<int>("senderNodeIndex"), a.Value<string>("senderProperty")!, a.Value<int>("receiverNodeIndex"), a.Value<string>("receiverProperty")!, a.Value<int?>("senderCollectionIndex") ?? 0, a.Value<int?>("receiverCollectionIndex") ?? 0)),
+            ["CreateAndConfigureNode"] = a => Task.FromResult(CreateAndConfigureNode(a.Value<string>("fullTypeName")!, a.Value<double?>("left") ?? 0, a.Value<double?>("top") ?? 0, a.Value<double?>("width") ?? 0, a.Value<double?>("height") ?? 0, a.Value<string>("jsonPatch"), a.Value<string>("enumSlotProperty"), a.Value<string>("enumTypeName"))),
+            ["DeleteNodes"] = a => Task.FromResult(DeleteNodes(a.Value<string>("nodeIndicesJson")!)),
+            ["ArrangeNodes"] = a => Task.FromResult(ArrangeNodes(a.Value<string>("arrangementsJson")!)),
+            ["GetFullTopology"] = _ => Task.FromResult(GetFullTopology()),
+            ["SearchForward"] = a => Task.FromResult(SearchForward(a.Value<int>("nodeIndex"), a.Value<string>("typeName"), a.Value<int?>("maxDepth") ?? 0)),
+            ["SearchReverse"] = a => Task.FromResult(SearchReverse(a.Value<int>("nodeIndex"), a.Value<string>("typeName"), a.Value<int?>("maxDepth") ?? 0)),
+            ["SearchAllRelative"] = a => Task.FromResult(SearchAllRelative(a.Value<int>("nodeIndex"), a.Value<string>("typeName"), a.Value<int?>("maxDepth") ?? 0)),
+            ["IsConnected"] = a => Task.FromResult(IsConnected(a.Value<int>("sourceNodeIndex"), a.Value<int>("targetNodeIndex"), a.Value<string>("direction") ?? "forward")),
+            ["FindPath"] = a => Task.FromResult(FindPath(a.Value<int>("sourceNodeIndex"), a.Value<int>("targetNodeIndex"))),
+            ["ReverseBroadcastNode"] = a => ReverseBroadcastNode(a.Value<int>("nodeIndex"), a.Value<string>("parameter"), ct),
+            ["DisconnectSlotsById"] = a => Task.FromResult(DisconnectSlotsById(a.Value<string>("senderSlotId")!, a.Value<string>("receiverSlotId")!)),
+            ["DisconnectAllFromSlot"] = a => Task.FromResult(DisconnectAllFromSlot(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex"))),
+            ["DisconnectAllFromNode"] = a => Task.FromResult(DisconnectAllFromNode(a.Value<int>("nodeIndex"))),
+            ["ReplaceConnection"] = a => Task.FromResult(ReplaceConnection(a.Value<string>("oldSenderSlotId")!, a.Value<string>("oldReceiverSlotId")!, a.Value<string>("newSenderSlotId")!, a.Value<string>("newReceiverSlotId")!)),
+            ["SetSlotChannel"] = a => Task.FromResult(SetSlotChannel(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex"), a.Value<string>("channel")!)),
+            ["GetLinkDetail"] = a => Task.FromResult(GetLinkDetail(a.Value<string>("linkId")!)),
+            ["ExecuteWorkOnNodes"] = a => ExecuteWorkOnNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("parameter"), ct),
+            ["BulkPatchNodes"] = a => Task.FromResult(BulkPatchNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("jsonPatch")!)),
+            ["AlignNodes"] = a => Task.FromResult(AlignNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("alignment")!)),
+            ["DistributeNodes"] = a => Task.FromResult(DistributeNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("axis")!)),
+            ["AutoLayout"] = a => Task.FromResult(AutoLayout(a.Value<double?>("startX") ?? 0, a.Value<double?>("startY") ?? 0, a.Value<double?>("gapX") ?? 80, a.Value<double?>("gapY") ?? 40, a.Value<string>("direction") ?? "horizontal")),
+            ["GetNodeStatistics"] = a => Task.FromResult(GetNodeStatistics(a.Value<int>("nodeIndex"))),
+            ["ListCreatableTypes"] = _ => Task.FromResult(ListCreatableTypes()),
+            ["ValidateWorkflow"] = _ => Task.FromResult(ValidateWorkflow()),
         };
     }
 
@@ -1594,14 +1700,24 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Reverse Broadcast ──────────────────────────
 
-    [Description("Executes ReverseBroadcastCommand on a node to trigger WorkCommand on upstream (source) nodes.")]
-    private string ReverseBroadcastNode(
+    [Description("Executes ReverseBroadcastCommand on a node to trigger WorkCommand on upstream (source) nodes, and waits until the reverse-broadcast command completes (upstream work itself is fire-and-forget). Disabled by default: requires WithAllowExecuteWork(true).")]
+    private async Task<string> ReverseBroadcastNode(
         [Description("Node index.")] int nodeIndex,
-        [Description("Optional parameter.")] string? parameter = null)
+        [Description("Optional parameter.")] string? parameter = null,
+        CancellationToken cancellationToken = default)
     {
+        if (!_scope.AllowExecuteWork)
+            return Error("ReverseBroadcastNode is disabled by host policy. The host must enable node execution via WithAllowExecuteWork(true).");
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        node!.ReverseBroadcastCommand.Execute(parameter);
-        return Ok($"Reverse broadcast executed on node {nodeIndex}.");
+        try
+        {
+            await WaitForCommandAsync(node!.ReverseBroadcastCommand, parameter, cancellationToken).ConfigureAwait(false);
+            return Ok($"Reverse broadcast on node {nodeIndex} completed.");
+        }
+        catch (Exception ex)
+        {
+            return Error($"Reverse broadcast on node {nodeIndex} failed: {ex.Message}");
+        }
     }
 
     // ────────────────────────── Connection Management ──────────────────────────
@@ -1900,16 +2016,19 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Bulk Operations ──────────────────────────
 
-    [Description("Executes WorkCommand on multiple nodes in one call. Optionally pass a parameter shared by all.")]
-    private string ExecuteWorkOnNodes(
+    [Description("Executes WorkCommand on multiple nodes and WAITS for each to complete before returning. Optionally pass a parameter shared by all. Disabled by default: requires WithAllowExecuteWork(true).")]
+    private async Task<string> ExecuteWorkOnNodes(
         [Description("JSON array of node indices, e.g. [0,1,2].")] string nodeIndicesJson,
-        [Description("Optional parameter passed to each WorkCommand.")] string? parameter = null)
+        [Description("Optional parameter passed to each WorkCommand.")] string? parameter = null,
+        CancellationToken cancellationToken = default)
     {
+        if (!_scope.AllowExecuteWork)
+            return Error("ExecuteWorkOnNodes is disabled by host policy. The host must enable node execution via WithAllowExecuteWork(true).");
         int[] indices;
         try { indices = [.. JArray.Parse(nodeIndicesJson).Select(t => t.Value<int>())]; }
         catch (Exception ex) { return Error($"Invalid JSON array: {ex.Message}"); }
 
-        int executed = 0;
+        int completed = 0;
         var errors = new JArray();
         foreach (var idx in indices)
         {
@@ -1918,11 +2037,18 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 errors.Add($"Index {idx} out of range.");
                 continue;
             }
-            Tree.Nodes[idx].WorkCommand.Execute(parameter);
-            executed++;
+            try
+            {
+                await WaitForCommandAsync(Tree.Nodes[idx].WorkCommand, parameter, cancellationToken).ConfigureAwait(false);
+                completed++;
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"Node {idx}: {ex.Message}");
+            }
         }
 
-        var result = new JObject { ["status"] = "ok", ["executed"] = executed };
+        var result = new JObject { ["status"] = "ok", ["completed"] = completed };
         if (errors.Count > 0) result["errors"] = errors;
         return result.ToString(Formatting.None);
     }
@@ -1976,36 +2102,37 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         }
         if (nodes.Count < 2) return Error("Need at least 2 nodes to align.");
 
+        var changes = new List<(IWorkflowNodeViewModel Node, Anchor NewAnchor)>();
         switch (alignment.ToLowerInvariant())
         {
             case "left":
                 var minX = nodes.Min(n => n.Anchor.Horizontal);
-                foreach (var n in nodes) n.SetAnchorCommand.Execute(new Anchor(minX, n.Anchor.Vertical, n.Anchor.Layer));
+                foreach (var n in nodes) changes.Add((n, new Anchor(minX, n.Anchor.Vertical, n.Anchor.Layer)));
                 break;
             case "right":
                 var maxRight = nodes.Max(n => n.Anchor.Horizontal + n.Size.Width);
-                foreach (var n in nodes) n.SetAnchorCommand.Execute(new Anchor(maxRight - n.Size.Width, n.Anchor.Vertical, n.Anchor.Layer));
+                foreach (var n in nodes) changes.Add((n, new Anchor(maxRight - n.Size.Width, n.Anchor.Vertical, n.Anchor.Layer)));
                 break;
             case "top":
                 var minY = nodes.Min(n => n.Anchor.Vertical);
-                foreach (var n in nodes) n.SetAnchorCommand.Execute(new Anchor(n.Anchor.Horizontal, minY, n.Anchor.Layer));
+                foreach (var n in nodes) changes.Add((n, new Anchor(n.Anchor.Horizontal, minY, n.Anchor.Layer)));
                 break;
             case "bottom":
                 var maxBottom = nodes.Max(n => n.Anchor.Vertical + n.Size.Height);
-                foreach (var n in nodes) n.SetAnchorCommand.Execute(new Anchor(n.Anchor.Horizontal, maxBottom - n.Size.Height, n.Anchor.Layer));
+                foreach (var n in nodes) changes.Add((n, new Anchor(n.Anchor.Horizontal, maxBottom - n.Size.Height, n.Anchor.Layer)));
                 break;
             case "centerh":
                 var avgX = nodes.Average(n => n.Anchor.Horizontal + n.Size.Width / 2);
-                foreach (var n in nodes) n.SetAnchorCommand.Execute(new Anchor(avgX - n.Size.Width / 2, n.Anchor.Vertical, n.Anchor.Layer));
+                foreach (var n in nodes) changes.Add((n, new Anchor(avgX - n.Size.Width / 2, n.Anchor.Vertical, n.Anchor.Layer)));
                 break;
             case "centerv":
                 var avgY = nodes.Average(n => n.Anchor.Vertical + n.Size.Height / 2);
-                foreach (var n in nodes) n.SetAnchorCommand.Execute(new Anchor(n.Anchor.Horizontal, avgY - n.Size.Height / 2, n.Anchor.Layer));
+                foreach (var n in nodes) changes.Add((n, new Anchor(n.Anchor.Horizontal, avgY - n.Size.Height / 2, n.Anchor.Layer)));
                 break;
             default:
                 return Error($"Unknown alignment '{alignment}'. Valid: left, right, top, bottom, centerH, centerV.");
         }
-        return Ok($"Aligned {nodes.Count} nodes by '{alignment}'.");
+        return ApplyAnchorLayout($"Aligned {nodes.Count} nodes by '{alignment}'", changes);
     }
 
     [Description("Evenly distributes nodes along an axis. Axis: 'horizontal' or 'vertical'. Nodes are sorted by current position and spacing is equalized.")]
@@ -2025,6 +2152,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         }
         if (nodes.Count < 3) return Error("Need at least 3 nodes to distribute.");
 
+        var changes = new List<(IWorkflowNodeViewModel Node, Anchor NewAnchor)>();
         if (axis.Equals("horizontal", StringComparison.OrdinalIgnoreCase))
         {
             nodes.Sort((a, b) => a.Anchor.Horizontal.CompareTo(b.Anchor.Horizontal));
@@ -2034,7 +2162,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             for (int i = 1; i < nodes.Count - 1; i++)
             {
                 var n = nodes[i];
-                n.SetAnchorCommand.Execute(new Anchor(first + step * i, n.Anchor.Vertical, n.Anchor.Layer));
+                changes.Add((n, new Anchor(first + step * i, n.Anchor.Vertical, n.Anchor.Layer)));
             }
         }
         else if (axis.Equals("vertical", StringComparison.OrdinalIgnoreCase))
@@ -2046,14 +2174,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             for (int i = 1; i < nodes.Count - 1; i++)
             {
                 var n = nodes[i];
-                n.SetAnchorCommand.Execute(new Anchor(n.Anchor.Horizontal, first + step * i, n.Anchor.Layer));
+                changes.Add((n, new Anchor(n.Anchor.Horizontal, first + step * i, n.Anchor.Layer)));
             }
         }
         else
         {
             return Error($"Unknown axis '{axis}'. Valid: horizontal, vertical.");
         }
-        return Ok($"Distributed {nodes.Count} nodes along '{axis}'.");
+        return ApplyAnchorLayout($"Distributed {nodes.Count} nodes along '{axis}'", changes);
     }
 
     [Description("Auto-layouts all nodes using topology-aware layered layout (Sugiyama-style). Coordinate system: origin (0,0) = top-left corner of the canvas (equivalent to mathematical Q4: X+ rightward, Y+ downward). Nodes are arranged in layers following the propagation chain from source nodes (in-degree=0). Within each layer, nodes are ordered by barycenter heuristic to minimize edge crossings. Node sizes are respected to avoid overlap. Disconnected subgraphs are laid out independently. Direction: left-to-right (horizontal) or top-to-bottom (vertical).")]
@@ -2132,6 +2260,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         double globalOffsetX = startX;
         double globalOffsetY = startY;
         int totalMoved = 0;
+        var layoutChanges = new List<(IWorkflowNodeViewModel Node, Anchor NewAnchor)>();
 
         foreach (var component in components)
         {
@@ -2224,7 +2353,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 {
                     double nx = horizontal ? layerPos : crossPos;
                     double ny = horizontal ? crossPos : layerPos;
-                    n.SetAnchorCommand.Execute(new Anchor(nx, ny, n.Anchor.Layer));
+                    layoutChanges.Add((n, new Anchor(nx, ny, n.Anchor.Layer)));
                     totalMoved++;
 
                     double nodeMain = horizontal ? n.Size.Width : n.Size.Height;
@@ -2247,7 +2376,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 globalOffsetX += maxCrossExtent + gapX * 2;
         }
 
-        return Ok($"Auto-layout: {totalMoved} nodes arranged in {components.Count} subgraph(s), direction={direction}.");
+        return ApplyAnchorLayout($"Auto-layout: {totalMoved} nodes arranged in {components.Count} subgraph(s), direction={direction}.", layoutChanges);
     }
 
     private static double GetBarycenter(
@@ -2702,7 +2831,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Composite Functions (reduce round-trips) ──────────────────────────
 
-    [Description("Connects two slots by property names on their owning nodes. No need to resolve slot IDs first. For collection properties, specify the index.")]
+    [Description("Connects two slots by property names on their owning nodes. No need to resolve slot IDs first. For collection properties, specify the index. Example: ConnectByProperty(senderNodeIndex: 0, senderProperty: \"OutputSlot\", receiverNodeIndex: 1, receiverProperty: \"InputSlot\").")]
     private string ConnectByProperty(
         [Description("Sender node index.")] int senderNodeIndex,
         [Description("Sender slot property name, e.g. 'OutputSlot', 'OutputSlots'.")] string senderProperty,
@@ -2726,7 +2855,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return Ok($"Connected [{senderNodeIndex}].{senderProperty}→[{receiverNodeIndex}].{receiverProperty}.");
     }
 
-    [Description("Creates a node, optionally patches properties, optionally sets enum slot collection — all in one call. Returns full node detail with slot IDs so you can immediately connect. Replaces the 3-step: CreateNode → PatchNodeProperties → SetEnumSlotCollection.")]
+    [Description("Creates a node, optionally patches properties, optionally sets enum slot collection — all in one call. Returns full node detail with slot IDs so you can immediately connect. Replaces the 3-step: CreateNode → PatchNodeProperties → SetEnumSlotCollection. Example: CreateAndConfigureNode(fullTypeName: \"Demo.HttpNodeViewModel\", left: 100, top: 100, width: 320, height: 200, jsonPatch: '{\"Title\":\"Fetch\"}', enumSlotProperty: \"Outputs\", enumTypeName: \"Demo.NetworkRequestMethod\").")]
     private string CreateAndConfigureNode(
         [Description("Fully-qualified type name.")] string fullTypeName,
         [Description("Left px.")] double left = 0,
@@ -2806,7 +2935,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         try { arrangements = JArray.Parse(arrangementsJson); }
         catch (Exception ex) { return Error($"Invalid JSON array: {ex.Message}"); }
 
-        int moved = 0;
+        var changes = new List<(IWorkflowNodeViewModel Node, Anchor NewAnchor)>();
         var errors = new JArray();
         foreach (var entry in arrangements)
         {
@@ -2819,11 +2948,19 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             var x = entry["x"]?.Value<double>() ?? 0;
             var y = entry["y"]?.Value<double>() ?? 0;
             var layer = entry["l"]?.Value<int>() ?? 0;
-            Tree.Nodes[idx].SetAnchorCommand.Execute(new Anchor(x, y, layer));
-            moved++;
+            changes.Add((Tree.Nodes[idx], new Anchor(x, y, layer)));
         }
 
-        var result = new JObject { ["status"] = "ok", ["moved"] = moved };
+        // Commit all entries as ONE undoable action (a human repositions several nodes as a single gesture).
+        if (changes.Count > 0)
+        {
+            var oldAnchors = changes.Select(c => (c.Node, new Anchor(c.Node.Anchor.Horizontal, c.Node.Anchor.Vertical, c.Node.Anchor.Layer))).ToList();
+            Tree.GetHelper().Submit(new WorkflowActionPair(
+                () => { foreach (var (n, a) in changes) n.SetAnchorCommand.Execute(a); },
+                () => { foreach (var (n, o) in oldAnchors) n.SetAnchorCommand.Execute(o); }));
+        }
+
+        var result = new JObject { ["status"] = "ok", ["moved"] = changes.Count };
         if (errors.Count > 0) result["errors"] = errors;
         return result.ToString(Formatting.None);
     }
@@ -2937,6 +3074,17 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             .Any(p => IsSlotEnumeratorProperty(p.PropertyType, out _));
     }
 
+    /// <summary>
+    /// Verifies a SlotEnumerator is actually installed on the given node before mutating it.
+    /// Uninstalled enumerators make <c>SetSelector</c> a silent no-op, so we surface it as an
+    /// explicit error instead (matching the framework's no-silent-failures contract).
+    /// </summary>
+    private static bool IsEnumeratorInstalled(object enumerator, IWorkflowNodeViewModel node)
+    {
+        return enumerator.GetType().GetProperty("Parent")?.GetValue(enumerator) is IWorkflowNodeViewModel parent
+            && ReferenceEquals(parent, node);
+    }
+
     private static void NudgeIfEnumSlotNode(IWorkflowNodeViewModel node)
     {
         if (HasSlotEnumerator(node))
@@ -2985,6 +3133,58 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             reasons,
             hint = "Do NOT retry the same connection. Check slot channels and ValidateConnection rules, or choose different slots."
         }, Formatting.None);
+    }
+
+    /// <summary>
+    /// Dispatches a command and waits until it actually completes, mirroring the framework's own
+    /// compiled-execution loop (<c>CompilationResult.ExecuteItemAsync</c>). <c>VeloxCommand.ExecuteAsync</c>
+    /// is fire-and-forget, so without this the Agent could never observe when node work really finished.
+    /// Throws on failure (or cancellation) so the caller can return a structured error.
+    /// </summary>
+    private static async Task WaitForCommandAsync(IVeloxCommand command, object? parameter, CancellationToken ct)
+    {
+        Exception? failure = null;
+        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using (ct.Register(() => tcs.TrySetCanceled(ct)))
+        {
+            CommandEventHandler onExited = _ => tcs.TrySetResult(null);
+            CommandEventHandler onFailed = e => failure = e.Exception;
+            command.Exited += onExited;
+            command.Failed += onFailed;
+            try
+            {
+                await command.ExecuteAsync(parameter).ConfigureAwait(false);
+                await tcs.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                command.Exited -= onExited;
+                command.Failed -= onFailed;
+            }
+        }
+        if (failure is not null)
+            throw failure;
+    }
+
+    /// <summary>
+    /// Applies a set of anchor changes as a SINGLE undoable action. A human performs a layout
+    /// gesture once, so the Agent tool must produce exactly one undo entry for the whole layout.
+    /// Nodes whose anchor already equals the target are excluded, so an alignment/layout that
+    /// doesn't actually move anything does not create a no-op undo entry.
+    /// </summary>
+    private string ApplyAnchorLayout(string message, IReadOnlyList<(IWorkflowNodeViewModel Node, Anchor NewAnchor)> changes)
+    {
+        var effective = changes
+            .Where(c => c.Node.Anchor.Horizontal != c.NewAnchor.Horizontal ||
+                        c.Node.Anchor.Vertical != c.NewAnchor.Vertical ||
+                        c.Node.Anchor.Layer != c.NewAnchor.Layer)
+            .ToList();
+        if (effective.Count == 0) return Ok("Nothing to change.");
+        var oldAnchors = effective.Select(c => (c.Node, new Anchor(c.Node.Anchor.Horizontal, c.Node.Anchor.Vertical, c.Node.Anchor.Layer))).ToList();
+        Tree.GetHelper().Submit(new WorkflowActionPair(
+            () => { foreach (var (n, a) in effective) n.SetAnchorCommand.Execute(a); },
+            () => { foreach (var (n, o) in oldAnchors) n.SetAnchorCommand.Execute(o); }));
+        return Ok(message);
     }
 
     private static string Ok(string message) => JsonConvert.SerializeObject(new { status = "ok", message }, Formatting.None);
