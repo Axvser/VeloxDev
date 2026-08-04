@@ -3,10 +3,12 @@
 <div class="veloxdev-wf-surface">
     <div id="@ScrollViewerId" class="veloxdev-wf-scroll" @ref="_scroller">
         <div id="@CanvasId" class="veloxdev-wf-canvas" style="@CanvasStyle" @ref="_canvas">
-            @if (ChildContent is not null)
-            {
-                @ChildContent(new SurfaceCanvas(_canvasW, _canvasH))
-            }
+            <div class="veloxdev-wf-canvas-content" style="@ContentStyle">
+                @if (ChildContent is not null)
+                {
+                    @ChildContent(new SurfaceCanvas(ContentWidth, ContentHeight))
+                }
+            </div>
         </div>
     </div>
     @if (GridDecorator is not null && _viewport is not null)

@@ -24,6 +24,13 @@
     transform-origin: 0 0;
 }
 
+/* Content wrapper: shifted by the negative offset so the canvas can expand left/up. */
+.veloxdev-wf-canvas-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
 /* Ruler overlay (grid decorator) — anchored top-left of the surface. */
 .veloxdev-wf-ruler {
     position: absolute;

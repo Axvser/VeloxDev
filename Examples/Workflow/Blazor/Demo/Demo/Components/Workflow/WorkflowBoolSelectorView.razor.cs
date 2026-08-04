@@ -1,6 +1,7 @@
 using Demo.ViewModels;
 using Microsoft.AspNetCore.Components;
 using System.ComponentModel;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Components.Workflow;
 
@@ -8,6 +9,9 @@ public partial class WorkflowBoolSelectorView : ComponentBase, IDisposable
 {
     [Parameter]
     public BoolSelectorNodeViewModel? Selector { get; set; }
+
+    [Parameter]
+    public IWorkflowTreeViewModel? Tree { get; set; }
 
     private string _title = "";
     private bool _condition;

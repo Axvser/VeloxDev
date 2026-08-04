@@ -237,6 +237,10 @@ html, body {
     stroke-width: 2;
     stroke-linejoin: round;
 }
+.wf-link-virtual {
+    stroke: #fbbf24;
+    stroke-dasharray: 6 4;
+}
 .wf-node {
     position: absolute;
     z-index: 2;
@@ -416,7 +420,7 @@ html, body {
     border-radius: 6px;
     border: 1.5px solid #4B5563;
     background: #252525;
-    overflow: hidden;
+    overflow: visible;
     box-sizing: border-box;
 }
 .bool-header {
@@ -448,7 +452,7 @@ html, body {
     border-radius: 6px;
     border: 1.5px solid #4B5563;
     background: #252525;
-    overflow: hidden;
+    overflow: visible;
     box-sizing: border-box;
 }
 .enum-header {
@@ -477,6 +481,27 @@ html, body {
     border: 1px solid #555;
     border-radius: 3px;
     font-size: 12px;
+}
+
+/* ── Selector multi-output slots (SlotEnumerator) ─────────── */
+.selector-slots {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.selector-slot-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-right: -16px;
+}
+.selector-slot-label {
+    font-size: 11px;
+    color: #d6a0ff;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 /* ── Slot View ────────────────────────────── */

@@ -56,12 +56,16 @@ public partial class WorkflowSlotConnectionBehavior : ComponentBase, IAsyncDispo
     }
 
     [JSInvokable]
-    public void OnSlotConnectionStart()
+    public void OnSlotConnectionStart(double worldX, double worldY)
     {
         if (Slot is null || Tree is null)
         {
             return;
         }
+
+        // Pin the slot's anchor to its measured screen position so the virtual link starts from
+        // the slot itself, even if the slot was never measured by a layout behavior.
+        Slot.Anchor = new Anchor(worldX, worldY, Slot.Anchor.Layer);
 
         if (Slot.SendConnectionCommand.CanExecute(null))
         {

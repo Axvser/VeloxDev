@@ -61,23 +61,50 @@ window.veloxdevWorkflow = (() => {
     // SURFACE — canvas pan (middle mouse / space+left / left on blank),
     // scroll reporting, and auto-expansion near edges.
     // ════════════════════════════════════════════════════════════
+    // Surfaces register here by scroller id so other surfaces (e.g. the minimap) can drive
+    // scroll + edge expansion through the same code path.
+    const surfaceRegistry = {};
+
     function initSurface(scrollerEl, canvasEl, dotnetRef) {
         if (!scrollerEl || !canvasEl) return null;
         let panState = null;
         let spaceHeld = false;
 
+        // The canvas-content wrapper is translated by the "negative offset" so the canvas can
+        // expand in all four directions. Growing right/down enlarges the canvas itself; growing
+        // left/up enlarges the canvas AND shifts the content wrapper right/down by the same amount.
+        const contentEl = canvasEl.querySelector('.veloxdev-wf-canvas-content');
+        const offsets = { x: 0, y: 0 };
+
+        function growContent(axis, amount) {
+            if (axis === 'x') {
+                offsets.x += amount;
+                canvasEl.style.width = (canvasEl.offsetWidth + amount) + 'px';
+                if (contentEl) contentEl.style.left = offsets.x + 'px';
+            } else {
+                offsets.y += amount;
+                canvasEl.style.height = (canvasEl.offsetHeight + amount) + 'px';
+                if (contentEl) contentEl.style.top = offsets.y + 'px';
+            }
+            report();
+        }
+
         function expandCanvas() {
-            const iw = parseFloat(canvasEl.style.width) || 0;
-            const ih = parseFloat(canvasEl.style.height) || 0;
             const cw = scrollerEl.clientWidth;
             const ch = scrollerEl.clientHeight;
+            // Remaining scrollable space per axis. When the user reaches the right/bottom
+            // edge there is < 400px left, so grow the canvas to keep room to drag into.
+            const remW = scrollerEl.scrollWidth - scrollerEl.scrollLeft - cw;
+            const remH = scrollerEl.scrollHeight - scrollerEl.scrollTop - ch;
             let changed = false;
-            if (scrollerEl.scrollWidth < cw + 400) {
-                canvasEl.style.width = Math.max(iw, cw + 800) + 'px';
+            if (remW < 400) {
+                const iw = parseFloat(canvasEl.style.width) || canvasEl.offsetWidth || 0;
+                canvasEl.style.width = (iw + 800) + 'px';
                 changed = true;
             }
-            if (scrollerEl.scrollHeight < ch + 400) {
-                canvasEl.style.height = Math.max(ih, ch + 800) + 'px';
+            if (remH < 400) {
+                const ih = parseFloat(canvasEl.style.height) || canvasEl.offsetHeight || 0;
+                canvasEl.style.height = (ih + 800) + 'px';
                 changed = true;
             }
             return changed;
@@ -87,7 +114,9 @@ window.veloxdevWorkflow = (() => {
             if (dotnetRef) {
                 dotnetRef.invokeMethodAsync('OnSurfaceScroll',
                     scrollerEl.scrollLeft, scrollerEl.scrollTop,
-                    scrollerEl.clientWidth, scrollerEl.clientHeight);
+                    scrollerEl.clientWidth, scrollerEl.clientHeight,
+                    canvasEl.offsetWidth, canvasEl.offsetHeight,
+                    offsets.x, offsets.y);
             }
         }
 
@@ -99,10 +128,24 @@ window.veloxdevWorkflow = (() => {
             report();
         };
 
+        // Applies a scroll delta with edge expansion in all four directions. Used by panning and
+        // by the minimap so both can grow the canvas when the user keeps dragging past an edge.
+        function scrollBy(scrollDx, scrollDy) {
+            let nl = scrollerEl.scrollLeft + scrollDx;
+            let nt = scrollerEl.scrollTop + scrollDy;
+            if (nl < 0) { growContent('x', -nl); nl = 0; }
+            else if (nl >= scrollerEl.scrollWidth - scrollerEl.clientWidth - 50) { expandCanvas(); }
+            if (nt < 0) { growContent('y', -nt); nt = 0; }
+            else if (nt >= scrollerEl.scrollHeight - scrollerEl.clientHeight - 50) { expandCanvas(); }
+            scrollerEl.scrollLeft = nl;
+            scrollerEl.scrollTop = nt;
+        }
+        surfaceRegistry[scrollerEl.id] = scrollBy;
+
         function startPan(e) {
             e.preventDefault();
             panState = {
-                startX: e.clientX, startY: e.clientY,
+                lastX: e.clientX, lastY: e.clientY,
                 scrollLeft: scrollerEl.scrollLeft, scrollTop: scrollerEl.scrollTop
             };
             scrollerEl.style.cursor = 'grabbing';
@@ -126,14 +169,26 @@ window.veloxdevWorkflow = (() => {
 
         const onMove = function (e) {
             if (!panState) return;
-            const dx = e.clientX - panState.startX;
-            const dy = e.clientY - panState.startY;
-            const nl = panState.scrollLeft - dx;
-            const nt = panState.scrollTop - dy;
-            if (nl <= 0 || nl >= scrollerEl.scrollWidth - scrollerEl.clientWidth - 50) expandCanvas();
-            if (nt <= 0 || nt >= scrollerEl.scrollHeight - scrollerEl.clientHeight - 50) expandCanvas();
+            const dx = e.clientX - panState.lastX;
+            const dy = e.clientY - panState.lastY;
+            if (dx === 0 && dy === 0) return;
+            panState.lastX = e.clientX;
+            panState.lastY = e.clientY;
+
+            let nl = panState.scrollLeft - dx;
+            let nt = panState.scrollTop - dy;
+
+            // Left/top edge: grow the canvas in that direction and shift the content, keeping
+            // the drag continuous (the content tracks the mouse). Offset is grow-only.
+            if (nl < 0) { growContent('x', -nl); nl = 0; }
+            else if (nl >= scrollerEl.scrollWidth - scrollerEl.clientWidth - 50) { expandCanvas(); }
+            if (nt < 0) { growContent('y', -nt); nt = 0; }
+            else if (nt >= scrollerEl.scrollHeight - scrollerEl.clientHeight - 50) { expandCanvas(); }
+
             scrollerEl.scrollLeft = nl;
             scrollerEl.scrollTop = nt;
+            panState.scrollLeft = nl;
+            panState.scrollTop = nt;
         };
         const onUp = function () {
             if (panState) { scrollerEl.style.cursor = ''; panState = null; }
@@ -147,6 +202,7 @@ window.veloxdevWorkflow = (() => {
 
         return {
             dispose: function () {
+                delete surfaceRegistry[scrollerEl.id];
                 scrollerEl.removeEventListener('scroll', onScroll);
                 document.removeEventListener('keydown', keydown);
                 document.removeEventListener('keyup', keyup);
@@ -167,6 +223,15 @@ window.veloxdevWorkflow = (() => {
         if (!el) return;
         el.scrollLeft = ratioX * Math.max(0, el.scrollWidth - el.clientWidth);
         el.scrollTop = ratioY * Math.max(0, el.scrollHeight - el.clientHeight);
+    }
+
+    // Restores an absolute world scroll position (used after loading a workflow whose viewport
+    // was persisted in CanvasLayout.ViewportOffset).
+    function scrollToPosition(scrollerId, x, y) {
+        const el = document.getElementById(scrollerId);
+        if (!el) return;
+        el.scrollLeft = Math.max(0, x);
+        el.scrollTop = Math.max(0, y);
     }
 
     // ════════════════════════════════════════════════════════════
@@ -192,12 +257,17 @@ window.veloxdevWorkflow = (() => {
             dragState.lastY = e.clientY;
             if (dotnetRef && (dx !== 0 || dy !== 0)) {
                 dotnetRef.invokeMethodAsync('OnNodeDrag', dx, dy);
+                // Let the enclosing slot-layout behavior re-measure slots live while dragging,
+                // so links follow the node in real time (not just after the drop).
+                nodeEl.dispatchEvent(new CustomEvent('veloxdev-node-drag-move', { bubbles: true }));
             }
         };
         const onUp = function () {
             if (!dragState) return;
             dragState = null;
             if (dotnetRef) dotnetRef.invokeMethodAsync('OnNodeDragEnd');
+            // Let the enclosing slot-layout behavior re-measure this node's slots now that they moved.
+            nodeEl.dispatchEvent(new CustomEvent('veloxdev-node-drag-end', { bubbles: true }));
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
@@ -224,18 +294,33 @@ window.veloxdevWorkflow = (() => {
             e.preventDefault();
             e.stopPropagation();
             active = true;
-            if (dotnetRef) dotnetRef.invokeMethodAsync('OnSlotConnectionStart');
+            // Measure this slot's own world position up-front so the virtual link starts from the
+            // slot even if its anchor was never laid out (e.g. freshly created selector slots).
+            const canvasEl = slotEl.closest('.veloxdev-wf-canvas');
+            let worldX = 0, worldY = 0;
+            if (canvasEl) {
+                const rect = canvasEl.getBoundingClientRect();
+                const contentEl = canvasEl.querySelector('.veloxdev-wf-canvas-content');
+                const r = slotEl.getBoundingClientRect();
+                worldX = (r.left + r.width / 2) - rect.left - (contentEl ? contentEl.offsetLeft : 0);
+                worldY = (r.top + r.height / 2) - rect.top - (contentEl ? contentEl.offsetTop : 0);
+            }
+            if (dotnetRef) dotnetRef.invokeMethodAsync('OnSlotConnectionStart', worldX, worldY);
         });
 
         const onMove = function (e) {
             if (!active || !dotnetRef) return;
             const canvasEl = slotEl.closest('.veloxdev-wf-canvas');
-            const scrollerEl = slotEl.closest('.veloxdev-wf-scroll');
-            if (!canvasEl || !scrollerEl) return;
+            if (!canvasEl) return;
             const rect = canvasEl.getBoundingClientRect();
-            const tr = getCanvasTranslate(canvasEl);
-            const worldX = (e.clientX - rect.left) + scrollerEl.scrollLeft - tr.x;
-            const worldY = (e.clientY - rect.top) + scrollerEl.scrollTop - tr.y;
+            // World coordinates relative to the canvas origin. getBoundingClientRect already
+            // accounts for the scroller offset; subtract the content-wrapper translate so the
+            // virtual link's receiver matches node/slot anchors.
+            const contentEl = canvasEl.querySelector('.veloxdev-wf-canvas-content');
+            const contentX = contentEl ? contentEl.offsetLeft : 0;
+            const contentY = contentEl ? contentEl.offsetTop : 0;
+            const worldX = (e.clientX - rect.left) - contentX;
+            const worldY = (e.clientY - rect.top) - contentY;
             dotnetRef.invokeMethodAsync('OnSlotConnectionMove', worldX, worldY);
         };
 
@@ -254,7 +339,7 @@ window.veloxdevWorkflow = (() => {
             active = false;
             if (!dotnetRef) return;
             const targetEl = resolveSlotAt(e);
-            const targetId = targetEl ? targetEl.getAttribute('data-slot-id') : null;
+            const targetId = targetEl ? targetEl.getAttribute('data-veloxdev-slot-id') : null;
             dotnetRef.invokeMethodAsync('OnSlotConnectionEnd', targetId);
         };
 
@@ -276,25 +361,35 @@ window.veloxdevWorkflow = (() => {
     // ════════════════════════════════════════════════════════════
     function initSlotLayout(hostEl, dotnetRef) {
         if (!hostEl) return null;
+        let lastKey = '';
 
         function measure() {
             if (!dotnetRef) return;
             const canvasEl = hostEl.closest('.veloxdev-wf-canvas');
-            const scrollerEl = hostEl.closest('.veloxdev-wf-scroll');
             if (!canvasEl) return;
             const canvasRect = canvasEl.getBoundingClientRect();
-            const tr = getCanvasTranslate(canvasEl);
+            const contentEl = canvasEl.querySelector('.veloxdev-wf-canvas-content');
+            const contentX = contentEl ? contentEl.offsetLeft : 0;
+            const contentY = contentEl ? contentEl.offsetTop : 0;
             const batch = [];
             hostEl.querySelectorAll('[data-veloxdev-slot-id]').forEach(function (el) {
                 const id = el.getAttribute('data-veloxdev-slot-id');
                 if (!id) return;
                 const r = el.getBoundingClientRect();
                 if (r.width <= 0 && r.height <= 0) return;
-                const cx = (r.left + r.width / 2) - canvasRect.left + (scrollerEl ? scrollerEl.scrollLeft : 0) - tr.x;
-                const cy = (r.top + r.height / 2) - canvasRect.top + (scrollerEl ? scrollerEl.scrollTop : 0) - tr.y;
+                // World coordinates relative to the canvas origin; getBoundingClientRect already
+                // accounts for the scroller offset, and we subtract the content translate so slot
+                // anchors match node anchors. Sent as strings so the .NET string[][] parameter
+                // marshals without an exception.
+                const cx = ((r.left + r.width / 2) - canvasRect.left - contentX).toFixed(2);
+                const cy = ((r.top + r.height / 2) - canvasRect.top - contentY).toFixed(2);
                 batch.push([id, cx, cy]);
             });
-            if (batch.length) dotnetRef.invokeMethodAsync('OnSlotLayoutBatch', batch);
+            if (!batch.length) return;
+            const key = batch.map(b => b[0] + ':' + b[1] + ',' + b[2]).join(';');
+            if (key === lastKey) return;
+            lastKey = key;
+            dotnetRef.invokeMethodAsync('OnSlotLayoutBatch', batch);
         }
 
         measure();
@@ -304,11 +399,62 @@ window.veloxdevWorkflow = (() => {
             ro = new ResizeObserver(measure);
             ro.observe(hostEl);
         }
+        // Re-measure live while this node is dragged and once more when the drop ends. The drag
+        // behavior dispatches bubbling veloxdev-node-drag-move/-end events on its wrapper which
+        // reach this host, so a drag only re-measures the dragged node's own slots, keeping the
+        // cost flat even at 1000 nodes.
+        // The move loop keeps re-measuring each frame until the slot positions stabilize, so the
+        // slots (and links drawn from them) converge on the node's final position even while the
+        // .NET renderer is still applying move deltas.
+        let liveRaf = 0;
+        let liveMeasuring = false;
+        const onDragMove = function () {
+            if (liveMeasuring) return;
+            liveMeasuring = true;
+            const tick = function () {
+                if (!liveMeasuring) return;
+                const before = lastKey;
+                measure();
+                if (lastKey === before) {
+                    liveMeasuring = false;   // converged; stop until the next move
+                    return;
+                }
+                liveRaf = requestAnimationFrame(tick);
+            };
+            liveRaf = requestAnimationFrame(tick);
+        };
+        const onDragEnd = function () {
+            liveMeasuring = false;
+            if (liveRaf) cancelAnimationFrame(liveRaf);
+            measure();
+        };
+        hostEl.addEventListener('veloxdev-node-drag-move', onDragMove);
+        hostEl.addEventListener('veloxdev-node-drag-end', onDragEnd);
+
+        // Re-measure when slot elements are added/removed (e.g. a selector switching its output
+        // slots). The filter ignores ordinary text/attribute churn, so this stays cheap.
+        let mo = null;
+        if (window.MutationObserver) {
+            mo = new MutationObserver(function (mutations) {
+                for (const m of mutations) {
+                    if (m.type !== 'childList') continue;
+                    const hasSlotChange = [...m.addedNodes, ...m.removedNodes].some(
+                        n => n.nodeType === 1 && (n.querySelector?.('[data-veloxdev-slot-id]') || n.matches?.('[data-veloxdev-slot-id]')));
+                    if (hasSlotChange) { measure(); return; }
+                }
+            });
+            mo.observe(hostEl, { childList: true, subtree: true });
+        }
 
         return {
             dispose: function () {
                 window.removeEventListener('resize', measure);
                 if (ro) ro.disconnect();
+                if (mo) mo.disconnect();
+                liveMeasuring = false;
+                if (liveRaf) cancelAnimationFrame(liveRaf);
+                hostEl.removeEventListener('veloxdev-node-drag-move', onDragMove);
+                hostEl.removeEventListener('veloxdev-node-drag-end', onDragEnd);
             }
         };
     }
@@ -332,12 +478,20 @@ window.veloxdevWorkflow = (() => {
             if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
                 dragState.hasMoved = true;
                 const scroller = document.getElementById(scrollerId);
+                const scrollBy = surfaceRegistry[scrollerId];
                 if (scroller) {
                     const rect = minimapEl.getBoundingClientRect();
                     const maxSX = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
                     const maxSY = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-                    if (maxSX > 0) scroller.scrollLeft += (dx / rect.width) * maxSX;
-                    if (maxSY > 0) scroller.scrollTop += (dy / rect.height) * maxSY;
+                    if (scrollBy) {
+                        // Route through the surface so dragging past a minimap edge expands the
+                        // canvas in that direction instead of just hitting a hard stop.
+                        scrollBy((dx / rect.width) * maxSX, (dy / rect.height) * maxSY);
+                    } else {
+                        // No surface registered (standalone minimap): fall back to direct scroll.
+                        scroller.scrollLeft += (dx / rect.width) * maxSX;
+                        scroller.scrollTop += (dy / rect.height) * maxSY;
+                    }
                 }
                 dragState.startX = e.clientX;
                 dragState.startY = e.clientY;
@@ -369,6 +523,7 @@ window.veloxdevWorkflow = (() => {
         initSurface,
         getViewportSize,
         scrollToRatio,
+        scrollToPosition,
         initNodeDrag,
         initSlotConnection,
         initSlotLayout,
@@ -382,6 +537,7 @@ export const getCanvasTranslate = window.veloxdevWorkflow.getCanvasTranslate;
 export const initSurface = window.veloxdevWorkflow.initSurface;
 export const getViewportSize = window.veloxdevWorkflow.getViewportSize;
 export const scrollToRatio = window.veloxdevWorkflow.scrollToRatio;
+export const scrollToPosition = window.veloxdevWorkflow.scrollToPosition;
 export const initNodeDrag = window.veloxdevWorkflow.initNodeDrag;
 export const initSlotConnection = window.veloxdevWorkflow.initSlotConnection;
 export const initSlotLayout = window.veloxdevWorkflow.initSlotLayout;

@@ -184,7 +184,15 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         var vy = ScrollOffsetY - ContentOffsetY;
         var mx = ox + (vx - minX) * scale;
         var my = oy + (vy - minY) * scale;
-        MappedViewport = new Mapped(mx, my, Math.Max(2, vw * scale), Math.Max(2, vh * scale));
+        var mw = Math.Max(2, vw * scale);
+        var mh = Math.Max(2, vh * scale);
+        // Clamp the viewport rect inside the minimap so the draggable handle never leaves the
+        // bounds. When the user pushes it past an edge, the surface's edge-expansion takes over.
+        mw = Math.Min(mw, Width);
+        mh = Math.Min(mh, Height);
+        mx = Math.Max(0, Math.Min(mx, Width - mw));
+        my = Math.Max(0, Math.Min(my, Height - mh));
+        MappedViewport = new Mapped(mx, my, mw, mh);
     }
 
     [JSInvokable]

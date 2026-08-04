@@ -1,6 +1,7 @@
 using Demo.ViewModels;
 using Microsoft.AspNetCore.Components;
 using System.ComponentModel;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Components.Workflow;
 
@@ -8,6 +9,9 @@ public partial class WorkflowEnumSelectorView : ComponentBase, IDisposable
 {
     [Parameter]
     public EnumSelectorNodeViewModel? Selector { get; set; }
+
+    [Parameter]
+    public IWorkflowTreeViewModel? Tree { get; set; }
 
     private string _title = "";
     private object? _selectedValue;

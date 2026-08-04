@@ -11,5 +11,19 @@
             <input type="checkbox" checked="@_condition" @onchange="OnConditionChanged" />
             Condition = True
         </label>
+        <div class="selector-slots">
+            @if (Selector?.OutputSlots is { } slots)
+            {
+                @foreach (var item in slots.Items)
+                {
+                    <div class="selector-slot-row">
+                        <span class="selector-slot-label">@item.Name</span>
+                        <WorkflowSlotConnectionBehavior Slot="item.Slot" Tree="Tree">
+                            <WorkflowSlotView Slot="item.Slot" IsOutput="true" />
+                        </WorkflowSlotConnectionBehavior>
+                    </div>
+                }
+            }
+        </div>
     </div>
 </div>

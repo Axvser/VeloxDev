@@ -142,6 +142,11 @@
                                           points="@pts"
                                           marker-end="url(#arrowhead)" />
                             }
+                            @if (tree.VirtualLink.IsVisible)
+                            {
+                                <polyline class="wf-link-line wf-link-virtual"
+                                          points="@BuildVirtualLinkPoints(tree.VirtualLink)" />
+                            }
                         </svg>
 
                         <!-- Nodes layer (ViewPool + drag + slot-connection behaviors) -->
@@ -150,57 +155,65 @@
                                 @switch (node)
                                 {
                                     case ControllerViewModel c:
-                                        <WorkflowNodeDragBehavior Node="c" Style="@($"width:{c.Size.Width:F0}px;height:{c.Size.Height:F0}px;")">
-                                            <div style="position:relative;width:100%;height:100%;">
-                                                <WorkflowControllerView Controller="c" />
-                                                <div class="slot-overlay slot-output-overlay">
-                                                    <WorkflowSlotConnectionBehavior Slot="c.OutputSlot" Tree="tree">
-                                                        <WorkflowSlotView Slot="c.OutputSlot" IsOutput="true" />
-                                                    </WorkflowSlotConnectionBehavior>
+                                        <WorkflowSlotLayoutBehavior Node="c">
+                                            <WorkflowNodeDragBehavior Node="c" Style="@($"width:{c.Size.Width:F0}px;height:{c.Size.Height:F0}px;")">
+                                                <div style="position:relative;width:100%;height:100%;">
+                                                    <WorkflowControllerView Controller="c" />
+                                                    <div class="slot-overlay slot-output-overlay">
+                                                        <WorkflowSlotConnectionBehavior Slot="c.OutputSlot" Tree="tree">
+                                                            <WorkflowSlotView Slot="c.OutputSlot" IsOutput="true" />
+                                                        </WorkflowSlotConnectionBehavior>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </WorkflowNodeDragBehavior>
+                                            </WorkflowNodeDragBehavior>
+                                        </WorkflowSlotLayoutBehavior>
                                         break;
                                     case NodeViewModel w:
-                                        <WorkflowNodeDragBehavior Node="w" Style="@($"width:{w.Size.Width:F0}px;height:{w.Size.Height:F0}px;")">
-                                            <div style="position:relative;width:100%;height:100%;">
-                                                <WorkflowNodeView Node="w" />
-                                                <div class="slot-overlay slot-input-overlay">
-                                                    <WorkflowSlotConnectionBehavior Slot="w.InputSlot" Tree="tree">
-                                                        <WorkflowSlotView Slot="w.InputSlot" IsInput="true" />
-                                                    </WorkflowSlotConnectionBehavior>
+                                        <WorkflowSlotLayoutBehavior Node="w">
+                                            <WorkflowNodeDragBehavior Node="w" Style="@($"width:{w.Size.Width:F0}px;height:{w.Size.Height:F0}px;")">
+                                                <div style="position:relative;width:100%;height:100%;">
+                                                    <WorkflowNodeView Node="w" />
+                                                    <div class="slot-overlay slot-input-overlay">
+                                                        <WorkflowSlotConnectionBehavior Slot="w.InputSlot" Tree="tree">
+                                                            <WorkflowSlotView Slot="w.InputSlot" IsInput="true" />
+                                                        </WorkflowSlotConnectionBehavior>
+                                                    </div>
+                                                    <div class="slot-overlay slot-output-overlay">
+                                                        <WorkflowSlotConnectionBehavior Slot="w.OutputSlot" Tree="tree">
+                                                            <WorkflowSlotView Slot="w.OutputSlot" IsOutput="true" />
+                                                        </WorkflowSlotConnectionBehavior>
+                                                    </div>
                                                 </div>
-                                                <div class="slot-overlay slot-output-overlay">
-                                                    <WorkflowSlotConnectionBehavior Slot="w.OutputSlot" Tree="tree">
-                                                        <WorkflowSlotView Slot="w.OutputSlot" IsOutput="true" />
-                                                    </WorkflowSlotConnectionBehavior>
-                                                </div>
-                                            </div>
-                                        </WorkflowNodeDragBehavior>
+                                            </WorkflowNodeDragBehavior>
+                                        </WorkflowSlotLayoutBehavior>
                                         break;
                                     case BoolSelectorNodeViewModel b:
-                                        <WorkflowNodeDragBehavior Node="b" Style="@($"width:{b.Size.Width:F0}px;height:{b.Size.Height:F0}px;")">
-                                            <div style="position:relative;width:100%;height:100%;">
-                                                <WorkflowBoolSelectorView Selector="b" />
-                                                <div class="slot-overlay slot-input-overlay">
-                                                    <WorkflowSlotConnectionBehavior Slot="b.InputSlot" Tree="tree">
-                                                        <WorkflowSlotView Slot="b.InputSlot" IsInput="true" />
-                                                    </WorkflowSlotConnectionBehavior>
+                                        <WorkflowSlotLayoutBehavior Node="b">
+                                            <WorkflowNodeDragBehavior Node="b" Style="@($"width:{b.Size.Width:F0}px;height:{b.Size.Height:F0}px;")">
+                                                <div style="position:relative;width:100%;height:100%;">
+                                                    <WorkflowBoolSelectorView Selector="b" Tree="tree" />
+                                                    <div class="slot-overlay slot-input-overlay">
+                                                        <WorkflowSlotConnectionBehavior Slot="b.InputSlot" Tree="tree">
+                                                            <WorkflowSlotView Slot="b.InputSlot" IsInput="true" />
+                                                        </WorkflowSlotConnectionBehavior>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </WorkflowNodeDragBehavior>
+                                            </WorkflowNodeDragBehavior>
+                                        </WorkflowSlotLayoutBehavior>
                                         break;
                                     case EnumSelectorNodeViewModel e:
-                                        <WorkflowNodeDragBehavior Node="e" Style="@($"width:{e.Size.Width:F0}px;height:{e.Size.Height:F0}px;")">
-                                            <div style="position:relative;width:100%;height:100%;">
-                                                <WorkflowEnumSelectorView Selector="e" />
-                                                <div class="slot-overlay slot-input-overlay">
-                                                    <WorkflowSlotConnectionBehavior Slot="e.InputSlot" Tree="tree">
-                                                        <WorkflowSlotView Slot="e.InputSlot" IsInput="true" />
-                                                    </WorkflowSlotConnectionBehavior>
+                                        <WorkflowSlotLayoutBehavior Node="e">
+                                            <WorkflowNodeDragBehavior Node="e" Style="@($"width:{e.Size.Width:F0}px;height:{e.Size.Height:F0}px;")">
+                                                <div style="position:relative;width:100%;height:100%;">
+                                                    <WorkflowEnumSelectorView Selector="e" Tree="tree" />
+                                                    <div class="slot-overlay slot-input-overlay">
+                                                        <WorkflowSlotConnectionBehavior Slot="e.InputSlot" Tree="tree">
+                                                            <WorkflowSlotView Slot="e.InputSlot" IsInput="true" />
+                                                        </WorkflowSlotConnectionBehavior>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </WorkflowNodeDragBehavior>
+                                            </WorkflowNodeDragBehavior>
+                                        </WorkflowSlotLayoutBehavior>
                                         break;
                                 }
                             </ItemTemplate>

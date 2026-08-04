@@ -58,6 +58,7 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
             return;
         }
 
+        var anyChanged = false;
         foreach (var entry in batch)
         {
             if (entry.Length < 3)
@@ -77,6 +78,15 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
             }
 
             slot.Anchor = new Anchor(x, y, slot.Anchor.Layer);
+            anyChanged = true;
+        }
+
+        // Notify the node that its slot layout changed. Consumers render links from slot anchors,
+        // so this makes them redraw immediately during a live drag instead of waiting for the
+        // node's own Anchor to change again.
+        if (anyChanged)
+        {
+            Node.OnPropertyChanged(nameof(IWorkflowNodeViewModel.Anchor));
         }
     }
 

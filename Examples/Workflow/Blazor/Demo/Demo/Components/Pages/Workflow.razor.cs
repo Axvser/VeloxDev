@@ -20,6 +20,7 @@ public partial class Workflow : ComponentBase, IDisposable
     private bool _useStreaming = true;
     private string _canvasLayoutSize = "";
     private readonly List<IWorkflowNodeViewModel> _subscribedNodes = [];
+    private INotifyPropertyChanged? _subscribedVirtualLink;
 
     protected override void OnInitialized()
     {
@@ -38,6 +39,13 @@ public partial class Workflow : ComponentBase, IDisposable
             np.PropertyChanged += OnTreePropertyChanged;
         if (_session.Tree.Layout is INotifyPropertyChanged lp)
             lp.PropertyChanged += OnLayoutPropertyChanged;
+        // The VirtualLink raises its own PropertyChanged (Send/Receive/Reset only mutate the
+        // VirtualLink object, not the tree), so subscribe directly to redraw the gesture.
+        if (_session.Tree.VirtualLink is INotifyPropertyChanged vp)
+        {
+            vp.PropertyChanged += OnVirtualLinkPropertyChanged;
+            _subscribedVirtualLink = vp;
+        }
         SubscribeNodeChanges();
     }
 
@@ -51,6 +59,11 @@ public partial class Workflow : ComponentBase, IDisposable
             np.PropertyChanged -= OnTreePropertyChanged;
         if (_session.Tree.Layout is INotifyPropertyChanged lp)
             lp.PropertyChanged -= OnLayoutPropertyChanged;
+        if (_subscribedVirtualLink is not null)
+        {
+            _subscribedVirtualLink.PropertyChanged -= OnVirtualLinkPropertyChanged;
+            _subscribedVirtualLink = null;
+        }
         UnsubscribeNodeChanges();
     }
 
@@ -107,6 +120,9 @@ public partial class Workflow : ComponentBase, IDisposable
         => InvokeAsync(StateHasChanged);
 
     private void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        => InvokeAsync(StateHasChanged);
+
+    private void OnVirtualLinkPropertyChanged(object? sender, PropertyChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
 
     private async Task RunWorkflow()
@@ -169,6 +185,15 @@ public partial class Workflow : ComponentBase, IDisposable
             SubscribeSession();
             UpdateCanvasSize();
             StateHasChanged();
+
+            // Restore the saved viewing position (mirrors the XAML demos, which read
+            // Layout.ViewportOffset after loading and scroll to it).
+            var vp = _session.Tree.Layout?.ViewportOffset;
+            if (vp is { } viewport && (viewport.Horizontal > 0 || viewport.Vertical > 0))
+            {
+                await Task.Delay(120); // let the surface lay out the canvas first
+                await JS.InvokeVoidAsync("veloxdevWorkflow.scrollToPosition", "wf-scroll", viewport.Horizontal, viewport.Vertical);
+            }
         }
         catch { }
     }
@@ -210,18 +235,56 @@ public partial class Workflow : ComponentBase, IDisposable
 
     private string BuildLinkPoints(IWorkflowLinkViewModel link)
     {
-        var from = link.Sender?.Parent;
-        var to = link.Receiver?.Parent;
-        if (from is null || to is null) return "";
+        var sender = link.Sender;
+        var receiver = link.Receiver;
+        if (sender is null || receiver is null) return "";
 
-        double sx = from.Anchor.Horizontal + from.Size.Width;
-        double sy = from.Anchor.Vertical + from.Size.Height / 2;
-        double ex = to.Anchor.Horizontal;
-        double ey = to.Anchor.Vertical + to.Size.Height / 2;
+        // Draw from the slot anchors (measured by WorkflowSlotLayoutBehavior), so a node's
+        // multiple output slots each get their own line endpoint instead of clustering at the
+        // node edge. This matches the XAML adapters.
+        double sx = sender.Anchor.Horizontal;
+        double sy = sender.Anchor.Vertical;
+        double ex = receiver.Anchor.Horizontal;
+        double ey = receiver.Anchor.Vertical;
+
+        // Defensive fallback: an unmeasured slot has a (0,0) anchor; use its node edge instead.
+        if (sx == 0 && sy == 0 && sender.Parent is { } sNode)
+        {
+            sx = sNode.Anchor.Horizontal + sNode.Size.Width;
+            sy = sNode.Anchor.Vertical + sNode.Size.Height / 2;
+        }
+        if (ex == 0 && ey == 0 && receiver.Parent is { } rNode)
+        {
+            ex = rNode.Anchor.Horizontal;
+            ey = rNode.Anchor.Vertical + rNode.Size.Height / 2;
+        }
 
         double dx = ex - sx;
         const double phi = 0.6180339887;
         double stub = Math.Abs(dx) / 2.0 * (1.0 - phi);
+        double p1x = sx + stub;
+        double p4x = ex - stub;
+
+        return $"{sx:F1},{sy:F1} {p1x:F1},{sy:F1} {p4x:F1},{ey:F1} {ex:F1},{ey:F1}";
+    }
+
+    private string BuildVirtualLinkPoints(IWorkflowLinkViewModel link)
+    {
+        var sender = link.Sender;
+        if (sender is null) return "";
+
+        // The virtual link's Sender is the standalone slot whose Anchor is set by the core
+        // SendConnection flow to the source slot's (measured) anchor. Its Receiver tracks the
+        // pointer. Both are canvas/world coordinates.
+        double sx = sender.Anchor.Horizontal;
+        double sy = sender.Anchor.Vertical;
+        double ex = link.Receiver.Anchor.Horizontal;
+        double ey = link.Receiver.Anchor.Vertical;
+
+        double dx = ex - sx;
+        const double phi = 0.6180339887;
+        // Signed stub keeps the orthogonal bend on the correct side when dragging leftward.
+        double stub = dx / 2.0 * (1.0 - phi);
         double p1x = sx + stub;
         double p4x = ex - stub;
 

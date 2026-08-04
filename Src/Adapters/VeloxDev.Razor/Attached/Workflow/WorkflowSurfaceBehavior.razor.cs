@@ -69,7 +69,16 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private double _viewportH = 600;
     private double _canvasW = 1600;
     private double _canvasH = 1200;
+
+    // Content translate for left/top canvas expansion. The canvas element grows in all four
+    // directions; the content wrapper is shifted right/down by this offset so world (node/slot)
+    // coordinates stay put while the newly revealed area appears to the left/top.
+    private double _offsetX;
+    private double _offsetY;
     private SurfaceViewport _viewport = null!;
+
+    private double ContentWidth => Math.Max(1, _canvasW - _offsetX);
+    private double ContentHeight => Math.Max(1, _canvasH - _offsetY);
 
     private string CanvasStyle
     {
@@ -85,6 +94,15 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         }
     }
 
+    private string ContentStyle
+    {
+        get
+        {
+            return $"position:absolute;left:{_offsetX.ToString("0")}px;top:{_offsetY.ToString("0")}px;" +
+                   $"width:{ContentWidth.ToString("0")}px;height:{ContentHeight.ToString("0")}px;";
+        }
+    }
+
     /// <inheritdoc />
     protected override void OnParametersSet()
     {
@@ -93,8 +111,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         if (Tree is not null)
         {
             var (w, h) = ComputeCanvasSize();
-            _canvasW = w;
-            _canvasH = h;
+            _canvasW = Math.Max(_canvasW, w + _offsetX);
+            _canvasH = Math.Max(_canvasH, h + _offsetY);
             _viewport = BuildViewport();
         }
     }
@@ -113,25 +131,57 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     }
 
     [JSInvokable]
-    public void OnSurfaceScroll(double scrollLeft, double scrollTop, double viewportW, double viewportH)
+    public void OnSurfaceScroll(double scrollLeft, double scrollTop, double viewportW, double viewportH, double canvasW, double canvasH, double offsetX, double offsetY)
     {
         _scrollLeft = scrollLeft;
         _scrollTop = scrollTop;
         _viewportW = Math.Max(1, viewportW);
         _viewportH = Math.Max(1, viewportH);
 
+        // Keep the .NET-side canvas size and content translate in sync with JS-side auto-expansion
+        // (grow-only), so subsequent re-renders never shrink the canvas back after it was expanded
+        // near an edge, and never reset the left/top offset while the user is panning.
+        if (canvasW > _canvasW)
+        {
+            _canvasW = canvasW;
+        }
+
+        if (canvasH > _canvasH)
+        {
+            _canvasH = canvasH;
+        }
+
+        if (offsetX > _offsetX)
+        {
+            _offsetX = offsetX;
+        }
+
+        if (offsetY > _offsetY)
+        {
+            _offsetY = offsetY;
+        }
+
         if (Tree is not null)
         {
             var layout = Tree.Layout;
             var contentX = layout?.ActualOffset.Horizontal ?? 0;
             var contentY = layout?.ActualOffset.Vertical ?? 0;
+            var viewportX = scrollLeft - _offsetX - contentX;
+            var viewportY = scrollTop - _offsetY - contentY;
             try
             {
-                Tree.GetHelper().Viewport = new Viewport(scrollLeft - contentX, scrollTop - contentY, _viewportW, _viewportH);
+                Tree.GetHelper().Viewport = new Viewport(viewportX, viewportY, _viewportW, _viewportH);
             }
             catch
             {
                 // Best-effort viewport bookkeeping; some trees may not support it.
+            }
+
+            // Persist the viewport position (world coordinates) so it survives a serialization
+            // round-trip — mirrors the XAML adapters' WorkflowSurfaceBehavior.UpdateVisibleRegion.
+            if (layout is not null)
+            {
+                layout.ViewportOffset = new Offset(viewportX, viewportY);
             }
 
             _viewport = BuildViewport();
@@ -163,8 +213,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private SurfaceViewport BuildViewport()
         => new(
             Tree ?? throw new InvalidOperationException("WorkflowSurfaceBehavior requires a Tree."),
-            _scrollLeft,
-            _scrollTop,
+            _scrollLeft - _offsetX,
+            _scrollTop - _offsetY,
             _viewportW,
             _viewportH,
             Tree.Layout?.ActualOffset.Horizontal ?? 0,
