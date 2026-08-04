@@ -49,6 +49,10 @@ Pick the adapter for your GUI framework and you get everything — workflow, age
 | WinUI | `VeloxDev.WinUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinUI/) |
 | MAUI | `VeloxDev.MAUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) |
 
+Adapter API docs:
+[WinForms](Src/Adapters/VeloxDev.WinForms/README.md) ·
+[Blazor / Razor](Src/Adapters/VeloxDev.Razor/README.md)
+
 ### Build a WPF workflow view suite with the CLI
 
 Run these commands from an existing WPF project. Replace `MyApp` with the
