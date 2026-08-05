@@ -39,7 +39,7 @@ SetEnumSlotCollection(nodeIndex, "OutputSlots",
     "Demo.ViewModels.CustomRouteSelector")
 ```
 
-> ⚠️ Switching selector type destroys ALL existing connections on old output slots — rewire after calling.
+> ⚠️ Switching the selector type rebuilds the branches. The framework auto re-wires new branches onto the previous branches' downstream (by position), and a previously-used type's connections are restored — do **NOT** manually rewire. If the new type has fewer members, the downstream of dropped positions is lost.
 
 ### Accessing Internal Slots by Condition Value
 

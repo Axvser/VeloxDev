@@ -1138,7 +1138,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return Error($"Slot '{slotRuntimeId}' not found in '{propertyName}'.");
     }
 
-    [Description("Sets the selector of a SlotEnumerator on an EXISTING node. enum/bool: pass the type name in 'selectorTypeOrJson' (e.g. 'Demo.NetworkRequestMethod', 'System.Boolean'). Non-enum ISlotProvider: GetTypeSchema(type) first, then pass JSON in 'selectorTypeOrJson' and the type name in 'nonEnumTypeName'. Do NOT delete/recreate the node. WARNING: switching selector destroys all existing connections on the old slots — rewire after.")]
+    [Description("Sets the selector of a SlotEnumerator on an EXISTING node. enum/bool: pass the type name in 'selectorTypeOrJson' (e.g. 'Demo.NetworkRequestMethod', 'System.Boolean'). Non-enum ISlotProvider: GetTypeSchema(type) first, then pass JSON in 'selectorTypeOrJson' and the type name in 'nonEnumTypeName'. Do NOT delete/recreate the node. New branches are auto re-wired onto the previous branches' downstream (by position); a reused type's connections are restored — do NOT manually rewire.")]
     private string SetEnumSlotCollection(
         [Description("Node index.")] int nodeIndex,
         [Description("Name of the slot collection or SlotEnumerator property, e.g. 'OutputSlots'.")] string propertyName,
@@ -1155,10 +1155,6 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         {
             var enumerator = prop.GetValue(node);
             if (enumerator == null) return Error($"SlotEnumerator '{propertyName}' is null.");
-
-            // Locate SetSelector(object?) via the runtime type
-            var setSelector = enumerator.GetType().GetMethod("SetSelector", [typeof(object)]);
-            if (setSelector == null) return Error($"SetSelector method not found on SlotEnumerator.");
 
             // Determine whether we are in enum/bool mode or arbitrary-object mode
             bool isNonEnum = !string.IsNullOrWhiteSpace(nonEnumTypeName);
@@ -1193,7 +1189,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 // SetSelector captures the previous state and submits its own undoable
                 // WorkflowActionPair internally. Do NOT wrap it in another Submit here —
                 // that would create nested undo entries and break Ctrl+Z semantics.
-                setSelector.Invoke(enumerator, [selectorValue]);
+                try
+                {
+                    InvokeSetSelector(enumerator, selectorValue);
+                }
+                catch (Exception ex)
+                {
+                    return Error($"SetSelector failed: {ex.Message}");
+                }
 
                 return new JObject
                 {
@@ -1229,7 +1232,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             // SetSelector captures the previous state (including old slots/links) and submits
             // its own undoable WorkflowActionPair internally. Call it directly — wrapping it in
             // another Submit created nested undo entries and required an anchor-refresh workaround.
-            setSelector.Invoke(enumerator, [selectorType]);
+            try
+            {
+                InvokeSetSelector(enumerator, selectorType);
+            }
+            catch (Exception ex)
+            {
+                return Error($"SetSelector failed: {ex.Message}");
+            }
 
             var enumNames = selectorType == typeof(bool)
                 ? ["False", "True"]
@@ -3236,6 +3246,30 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     {
         return enumerator.GetType().GetProperty("Parent")?.GetValue(enumerator) is IWorkflowNodeViewModel parent
             && ReferenceEquals(parent, node);
+    }
+
+    /// <summary>
+    /// Invokes Core's <c>IConditionalSlotProvider&lt;T&gt;.SetSelector</c> — the native channel for
+    /// switching a SlotEnumerator's selector — instead of reflecting the concrete type's method.
+    /// Routing through the interface keeps the call correct for any provider implementation
+    /// (including custom ones with an explicit interface implementation), and is more robust under
+    /// trimming/AOT than <c>GetMethod</c> on the runtime type.
+    /// </summary>
+    private static void InvokeSetSelector(object enumerator, object? selector)
+    {
+        var type = enumerator.GetType();
+        foreach (var iface in type.GetInterfaces())
+        {
+            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IConditionalSlotProvider<>))
+            {
+                var setSelector = iface.GetMethod("SetSelector");
+                if (setSelector is null)
+                    throw new InvalidOperationException("IConditionalSlotProvider<T> does not expose SetSelector.");
+                setSelector.Invoke(enumerator, [selector]);
+                return;
+            }
+        }
+        throw new InvalidOperationException($"'{type.FullName}' does not implement IConditionalSlotProvider<T>.");
     }
 
     private static void RefreshSlotAnchorsIfEnumSlotNode(IWorkflowNodeViewModel node)
