@@ -51,15 +51,48 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     private readonly HashSet<Type> _globallyDiscoveredTypes = [];
 
     private readonly List<AITool> _customTools = [];
+    private readonly List<AITool> _queryOnlyCustomTools = [];
+    private readonly HashSet<string> _queryOnlyCustomToolNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly StringBuilder _customToolPrompt = new();
 
     private AgentLanguages _defaultLanguage = AgentLanguages.English;
     private AgentLanguages? _outputLanguage;
 
     /// <summary>
-    /// Tools registered by the developer via <see cref="WithTools"/>.
+    /// Mutation-capable tools registered by the developer via <see cref="WithTools"/>.
     /// </summary>
     internal IReadOnlyList<AITool> CustomTools => _customTools;
+
+    /// <summary>
+    /// Read-only tools registered by the developer via <see cref="WithQueryTools"/>.
+    /// They are never auto-marked dirty, even when <see cref="WithAutoMarkDirty"/> is enabled.
+    /// </summary>
+    internal IReadOnlyList<AITool> QueryOnlyCustomTools => _queryOnlyCustomTools;
+
+    /// <summary>
+    /// Whether a tool name was registered as read-only via <see cref="WithQueryTools"/>.
+    /// </summary>
+    internal bool IsQueryOnlyCustomTool(string toolName)
+        => _queryOnlyCustomToolNames.Contains(toolName);
+
+    /// <summary>
+    /// Distinct assemblies of all types registered via <see cref="WithComponents"/>, <see cref="WithEnums"/>,
+    /// <see cref="WithInterfaces"/>, <see cref="WithData"/>, or <see cref="WithAutoDiscovery"/>. Used by
+    /// ListCreatableTypes to surface creatable types from registered libraries even before any node
+    /// instance exists in the tree.
+    /// </summary>
+    internal IEnumerable<Assembly> CustomerAssemblies
+    {
+        get
+        {
+            var seen = new HashSet<Assembly>();
+            foreach (var set in CustomerComponents.Values) foreach (var t in set) seen.Add(t.Assembly);
+            foreach (var set in CustomerEnums.Values) foreach (var t in set) seen.Add(t.Assembly);
+            foreach (var set in CustomerInterfaces.Values) foreach (var t in set) seen.Add(t.Assembly);
+            foreach (var set in CustomerData.Values) foreach (var t in set) seen.Add(t.Assembly);
+            return seen;
+        }
+    }
 
     /// <summary>
     /// Sets the global default language used when a per-call <c>language</c> argument is <c>null</c>.
@@ -90,28 +123,82 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return this;
     }
 
+    internal int? MaxReadToolCalls { get; private set; }
+    internal int? MaxWriteToolCalls { get; private set; }
+
     /// <summary>
-    /// Registers custom <see cref="AITool"/> instances that will be merged into the
-    /// tool list returned by <see cref="ProvideTools"/>. Use <paramref name="promptContext"/> to inject
-    /// additional instructions into the system prompt so the Agent knows when and how to use them.
-    /// Pass <c>null</c> if the tool metadata (name + description) is self-explanatory.
+    /// Sets a separate cap on read-only (query) tool calls. Independent of <see cref="WithMaxToolCalls"/>
+    /// and <see cref="WithMaxWriteToolCalls"/>. Use to stop token-heavy queries (ListNodes, GetFullTopology, …)
+    /// from consuming the mutation budget.
     /// </summary>
-    /// <param name="promptContext">Optional prompt text describing custom tools.</param>
-    /// <param name="tools">One or more <see cref="AITool"/> instances.</param>
-    public WorkflowAgentScope WithTools(string? promptContext, params AITool[] tools)
+    public WorkflowAgentScope WithMaxReadToolCalls(int maxCalls)
     {
-        _customTools.AddRange(tools);
-        if (!string.IsNullOrWhiteSpace(promptContext))
-        {
-            _customToolPrompt.AppendLine(promptContext);
-        }
+        MaxReadToolCalls = maxCalls;
         return this;
     }
 
     /// <summary>
+    /// Sets a separate cap on mutation (non-query) tool calls. Independent of <see cref="WithMaxToolCalls"/>
+    /// and <see cref="WithMaxReadToolCalls"/>. Use to bound how many graph edits an Agent may make in a turn.
+    /// </summary>
+    public WorkflowAgentScope WithMaxWriteToolCalls(int maxCalls)
+    {
+        MaxWriteToolCalls = maxCalls;
+        return this;
+    }
+
+    /// <summary>
+    /// Registers mutation-capable custom <see cref="AITool"/> instances merged into the tool list
+    /// returned by <see cref="ProvideTools"/>. Each tool is wrapped with the same tracked wrapper as the
+    /// built-in tools, so it receives UI-thread marshalling (<see cref="WithSynchronizationContext"/>),
+    /// <see cref="WithMaxToolCalls"/> accounting, the <see cref="WithToolCallCallback"/> notification, and
+    /// (when <see cref="WithAutoMarkDirty"/> is enabled) automatic dirty marking. Non-<c>AIFunction</c>
+    /// tools (e.g. raw MCP client tools) are added as-is — convert them with the SDK's
+    /// <c>ToAIFunction()</c>/<c>AsAIFunction()</c> to opt into the tracked wrapper.
+    /// Use <paramref name="promptContext"/> to inject instructions into the system prompt describing
+    /// when and how to use these tools; pass <c>null</c> if the tool metadata is self-explanatory.
+    /// </summary>
+    /// <param name="promptContext">Optional prompt text describing the custom tools.</param>
+    /// <param name="tools">One or more <see cref="AITool"/> instances.</param>
+    public WorkflowAgentScope WithTools(string? promptContext, params AITool[] tools)
+    {
+        _customTools.AddRange(tools);
+        AppendCustomToolPrompt(promptContext);
+        return this;
+    }
+
+    /// <summary>
+    /// Registers read-only custom <see cref="AITool"/> instances. They behave exactly like
+    /// <see cref="WithTools"/> tools, except they never trigger automatic dirty marking (mirroring the
+    /// built-in <c>QueryToolNames</c> set). Use for custom query / introspection tools.
+    /// </summary>
+    /// <param name="promptContext">Optional prompt text describing the custom tools.</param>
+    /// <param name="tools">One or more <see cref="AITool"/> instances.</param>
+    public WorkflowAgentScope WithQueryTools(string? promptContext, params AITool[] tools)
+    {
+        foreach (var tool in tools ?? [])
+        {
+            _queryOnlyCustomTools.Add(tool);
+            if (!string.IsNullOrEmpty(tool.Name))
+                _queryOnlyCustomToolNames.Add(tool.Name);
+        }
+        AppendCustomToolPrompt(promptContext);
+        return this;
+    }
+
+    private void AppendCustomToolPrompt(string? promptContext)
+    {
+        if (!string.IsNullOrWhiteSpace(promptContext))
+            _customToolPrompt.AppendLine(promptContext);
+    }
+
+    /// <summary>
     /// Configures whether every mutation tool call automatically marks the workflow tree as dirty.
-    /// When enabled, the Agent may rely on framework-managed dirty marking.
-    /// When disabled (the default), the framework does not auto-mark dirty and the Agent is not instructed to call <c>MarkDirty</c>.
+    /// When enabled (<c>true</c>), the framework marks dirty after every mutation tool call and the
+    /// Agent can rely on framework-managed dirty marking — it does not need to call <c>MarkDirty</c>.
+    /// When disabled (<c>false</c>, the default), the framework does not auto-mark; the injected prompt
+    /// (CommandReference.md) instead instructs the Agent to call <c>MarkDirty</c> exactly once at the
+    /// end of a mutation task. Pure query tools never trigger auto dirty marking.
     /// </summary>
     public WorkflowAgentScope WithAutoMarkDirty(bool enabled = false)
     {
@@ -775,6 +862,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         // ── Failure Handling Protocol ──
         result.AppendLine(BuildFailureHandlingProtocol(language));
 
+        // ── Custom Tools ──
+        AppendCustomToolsSection(result);
+
         // ── Interaction Safety Policy ──
         result.AppendLine(BuildInteractionSafetyPrompt(language));
 
@@ -916,6 +1006,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("> Before operating on any type: `GetComponentContext(\"<Full.Type.Name>\")` first.");
         result.AppendLine();
 
+        // ── Custom Tools ──
+        AppendCustomToolsSection(result);
+
         // ── Interaction Safety Policy ──
         result.AppendLine(BuildInteractionSafetyPrompt(language));
 
@@ -924,6 +1017,19 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine();
         AppendOutputLanguageDirective(result);
         return result.ToString();
+    }
+
+    /// <summary>
+    /// Injects the <see cref="WithTools"/> / <see cref="WithQueryTools"/> <c>promptContext</c> text
+    /// (if any) as a "Custom Tools" section so the Agent knows when and how to use them.
+    /// </summary>
+    private void AppendCustomToolsSection(StringBuilder result)
+    {
+        if (_customToolPrompt.Length == 0) return;
+        result.AppendLine("## Custom Tools");
+        result.AppendLine();
+        result.AppendLine(_customToolPrompt.ToString().TrimEnd());
+        result.AppendLine();
     }
 
     private void AppendOutputLanguageDirective(StringBuilder result)
@@ -1001,6 +1107,14 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// with <c>ChatOptions.Tools</c> or <c>AsAIAgent(tools: ...)</c>.
     /// </summary>
     public IList<AITool> ProvideTools() => CreateToolkit().CreateTools();
+
+    /// <summary>
+    /// Convenience method: creates the toolkit and returns only the tools in the given
+    /// <see cref="WorkflowToolCategory"/> flags. Use this to shrink the tool surface exposed to
+    /// the LLM (lower token cost, better tool-selection accuracy). Custom tools registered via
+    /// <see cref="WithTools"/> are always included.
+    /// </summary>
+    public IList<AITool> ProvideTools(WorkflowToolCategory categories) => CreateToolkit().CreateTools(categories);
 
     private void AppendPreloadedComponentSummaries(StringBuilder result, AgentLanguages language)
     {
