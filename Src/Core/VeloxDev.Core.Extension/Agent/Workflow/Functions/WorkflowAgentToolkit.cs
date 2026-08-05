@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -25,35 +26,56 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     private readonly WorkflowAgentScope _scope = scope ?? throw new ArgumentNullException(nameof(scope));
     private readonly WorkflowStateTracker _tracker = new(scope.Tree);
     private int _toolCallCount;
+    private int _readToolCallCount;
+    private int _writeToolCallCount;
     private IWorkflowTreeViewModel Tree => _scope.Tree;
 
     /// <summary>
-    /// Creates all AI tools for workflow operations within the scoped tree.
-    /// Every tool is wrapped with <see cref="TrackedAIFunction"/> so that
-    /// <see cref="Track"/> is invoked after each call.
+    /// Creates the AI tools for workflow operations within the scoped tree, optionally restricted
+    /// to the given <see cref="WorkflowToolCategory"/> flags. Every tool is wrapped with
+    /// <see cref="TrackedAIFunction"/> so that tracking is invoked after each call.
+    /// Developer-registered custom tools are always included regardless of <paramref name="categories"/>.
     /// </summary>
-    public IList<AITool> CreateTools()
+    public IList<AITool> CreateTools(WorkflowToolCategory categories = WorkflowToolCategory.All)
     {
         AITool T(Delegate method, string name)
             => new TrackedAIFunction(AIFunctionFactory.Create(method, name), this);
 
-        var tools = new List<AITool>
+        var tools = new List<AITool>();
+
+        void Add(WorkflowToolCategory category, params AITool[] items)
         {
-            // ── Query ──
+            if ((categories & category) == category)
+                tools.AddRange(items);
+        }
+
+        // ── Query (read-only inspection) ──
+        Add(WorkflowToolCategory.Query,
             T(ListNodes, nameof(ListNodes)),
             T(GetNodeDetail, nameof(GetNodeDetail)),
             T(GetNodeDetailById, nameof(GetNodeDetailById)),
             T(ListConnections, nameof(ListConnections)),
             T(GetTypeSchema, nameof(GetTypeSchema)),
-            // ── Progressive Context ──
             T(GetWorkflowSummary, nameof(GetWorkflowSummary)),
             T(GetComponentContext, nameof(GetComponentContext)),
             T(ListComponentCommands, nameof(ListComponentCommands)),
-            // ── State Tracking / Diff ──
+            T(FindNodes, nameof(FindNodes)),
+            T(ResolveSlotId, nameof(ResolveSlotId)),
+            T(ListSlotProperties, nameof(ListSlotProperties)),
+            T(GetEnumSlotByValue, nameof(GetEnumSlotByValue)),
+            T(GetLinkDetail, nameof(GetLinkDetail)),
+            T(ListCreatableTypes, nameof(ListCreatableTypes)),
+            T(ValidateWorkflow, nameof(ValidateWorkflow)),
+            T(GetFullTopology, nameof(GetFullTopology)));
+
+        // ── State tracking / diff / dirty ──
+        Add(WorkflowToolCategory.State,
             T(TakeSnapshot, nameof(TakeSnapshot)),
             T(GetChangesSinceSnapshot, nameof(GetChangesSinceSnapshot)),
-            T(MarkDirty, nameof(MarkDirty)),
-            // ── Mutation ──
+            T(MarkDirty, nameof(MarkDirty)));
+
+        // ── Structural mutation ──
+        Add(WorkflowToolCategory.Mutation,
             T(MoveNode, nameof(MoveNode)),
             T(SetNodePosition, nameof(SetNodePosition)),
             T(ResizeNode, nameof(ResizeNode)),
@@ -62,83 +84,91 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             T(ConnectSlots, nameof(ConnectSlots)),
             T(ConnectSlotsById, nameof(ConnectSlotsById)),
             T(DisconnectSlots, nameof(DisconnectSlots)),
-            T(ExecuteWork, nameof(ExecuteWork)),
-            T(BroadcastNode, nameof(BroadcastNode)),
-            T(Undo, nameof(Undo)),
-            T(Redo, nameof(Redo)),
-            T(PatchNodeProperties, nameof(PatchNodeProperties)),
-            T(PatchComponentById, nameof(PatchComponentById)),
-            // ── Generic Command Execution ──
-            T(ExecuteCommandOnNode, nameof(ExecuteCommandOnNode)),
-            T(ExecuteCommandById, nameof(ExecuteCommandById)),
-            T(CreateNode, nameof(CreateNode)),
-            T(CreateSlotOnNode, nameof(CreateSlotOnNode)),
-            // ── Batch ──
-            T(BatchExecute, nameof(BatchExecute)),
-            // ── Clone ──
-            T(CloneNodes, nameof(CloneNodes)),
-            // ── Slot Collections ──
-            T(ListSlotProperties, nameof(ListSlotProperties)),
-            T(AddSlotToCollection, nameof(AddSlotToCollection)),
-            T(RemoveSlotFromCollection, nameof(RemoveSlotFromCollection)),
-            T(SetEnumSlotCollection, nameof(SetEnumSlotCollection)),
-            T(GetEnumSlotByValue, nameof(GetEnumSlotByValue)),
-            T(SetEnumSlotChannel, nameof(SetEnumSlotChannel)),
-            T(ConnectEnumSlot, nameof(ConnectEnumSlot)),
-            // ── Search / Shortcut ──
-            T(FindNodes, nameof(FindNodes)),
-            T(ResolveSlotId, nameof(ResolveSlotId)),
-            // ── Graph Traversal ──
-            T(SearchForward, nameof(SearchForward)),
-            T(SearchReverse, nameof(SearchReverse)),
-            T(SearchAllRelative, nameof(SearchAllRelative)),
-            T(IsConnected, nameof(IsConnected)),
-            T(FindPath, nameof(FindPath)),
-            // ── Reverse Broadcast ──
-            T(ReverseBroadcastNode, nameof(ReverseBroadcastNode)),
-            // ── Connection Management ──
             T(DisconnectSlotsById, nameof(DisconnectSlotsById)),
             T(DisconnectAllFromSlot, nameof(DisconnectAllFromSlot)),
             T(DisconnectAllFromNode, nameof(DisconnectAllFromNode)),
             T(ReplaceConnection, nameof(ReplaceConnection)),
-            // ── Slot Channel ──
             T(SetSlotChannel, nameof(SetSlotChannel)),
-            // ── Link Inspection ──
-            T(GetLinkDetail, nameof(GetLinkDetail)),
-            // ── Bulk Operations ──
+            T(SetEnumSlotChannel, nameof(SetEnumSlotChannel)),
+            T(ConnectEnumSlot, nameof(ConnectEnumSlot)),
+            T(PatchNodeProperties, nameof(PatchNodeProperties)),
+            T(PatchComponentById, nameof(PatchComponentById)),
+            T(CreateNode, nameof(CreateNode)),
+            T(CreateSlotOnNode, nameof(CreateSlotOnNode)),
+            T(AddSlotToCollection, nameof(AddSlotToCollection)),
+            T(RemoveSlotFromCollection, nameof(RemoveSlotFromCollection)),
+            T(SetEnumSlotCollection, nameof(SetEnumSlotCollection)),
+            T(Undo, nameof(Undo)),
+            T(Redo, nameof(Redo)),
+            T(BulkPatchNodes, nameof(BulkPatchNodes)));
+
+        // ── Node execution (gated by WithAllowExecuteWork) ──
+        Add(WorkflowToolCategory.Execution,
+            T(ExecuteWork, nameof(ExecuteWork)),
             T(ExecuteWorkOnNodes, nameof(ExecuteWorkOnNodes)),
-            T(BulkPatchNodes, nameof(BulkPatchNodes)),
-            // ── Layout ──
+            T(BroadcastNode, nameof(BroadcastNode)),
+            T(ReverseBroadcastNode, nameof(ReverseBroadcastNode)));
+
+        // ── Generic command execution (gated by WithAllowedGenericCommands) ──
+        Add(WorkflowToolCategory.Command,
+            T(ExecuteCommandOnNode, nameof(ExecuteCommandOnNode)),
+            T(ExecuteCommandById, nameof(ExecuteCommandById)));
+
+        // ── Graph traversal ──
+        Add(WorkflowToolCategory.Graph,
+            T(SearchForward, nameof(SearchForward)),
+            T(SearchReverse, nameof(SearchReverse)),
+            T(SearchAllRelative, nameof(SearchAllRelative)),
+            T(IsConnected, nameof(IsConnected)),
+            T(FindPath, nameof(FindPath)));
+
+        // ── Layout ──
+        Add(WorkflowToolCategory.Layout,
             T(AlignNodes, nameof(AlignNodes)),
             T(DistributeNodes, nameof(DistributeNodes)),
-            T(AutoLayout, nameof(AutoLayout)),
-            // ── Analytics ──
-            T(GetNodeStatistics, nameof(GetNodeStatistics)),
-            T(ListCreatableTypes, nameof(ListCreatableTypes)),
-            T(ValidateWorkflow, nameof(ValidateWorkflow)),
-            // ── Composite (reduce round-trips) ──
+            T(AutoLayout, nameof(AutoLayout)));
+
+        // ── Analytics ──
+        Add(WorkflowToolCategory.Analytics,
+            T(GetNodeStatistics, nameof(GetNodeStatistics)));
+
+        // ── Composite (multi-step shortcuts that reduce round-trips) ──
+        Add(WorkflowToolCategory.Composite,
+            T(BatchExecute, nameof(BatchExecute)),
             T(ConnectByProperty, nameof(ConnectByProperty)),
             T(CreateAndConfigureNode, nameof(CreateAndConfigureNode)),
+            T(CloneNodes, nameof(CloneNodes)),
             T(DeleteNodes, nameof(DeleteNodes)),
-            T(ArrangeNodes, nameof(ArrangeNodes)),
-            T(GetFullTopology, nameof(GetFullTopology)),
-        };
+            T(ArrangeNodes, nameof(ArrangeNodes)));
 
         // ── Interaction (only registered when handlers are configured AND level > 0) ──
         if (_scope.IsInteractionAllowed)
         {
             if (_scope.SelectionHandler != null)
-                tools.Add(T(RequestSelection, nameof(RequestSelection)));
+                Add(WorkflowToolCategory.Interaction, T(RequestSelection, nameof(RequestSelection)));
             if (_scope.ConfirmationHandler != null)
-                tools.Add(T(RequestConfirmation, nameof(RequestConfirmation)));
+                Add(WorkflowToolCategory.Interaction, T(RequestConfirmation, nameof(RequestConfirmation)));
         }
 
-        // Merge developer-registered custom tools
+        // Merge developer-registered custom tools (always included). AIFunction-typed tools are
+        // wrapped with TrackedAIFunction so they get the same UI-thread marshalling, MaxToolCalls
+        // accounting, ToolCalled callback and auto-dirty handling as the built-in tools. Non-AIFunction
+        // tools (e.g. raw MCP client tools) are added as-is.
         foreach (var tool in _scope.CustomTools)
-            tools.Add(tool);
+            tools.Add(WrapCustomTool(tool));
+        foreach (var tool in _scope.QueryOnlyCustomTools)
+            tools.Add(WrapCustomTool(tool));
 
         return tools;
     }
+
+    /// <summary>
+    /// Wraps an <c>AIFunction</c> custom tool with <see cref="TrackedAIFunction"/> so it receives the
+    /// same tracking (UI marshal, call counting, callback, auto-dirty) as the built-in tools.
+    /// Non-<c>AIFunction</c> tools are returned unchanged.
+    /// </summary>
+    private AITool WrapCustomTool(AITool tool)
+        => tool is AIFunction fn ? new TrackedAIFunction(fn, this) : tool;
 
     /// <summary>
     /// Wraps an <see cref="AIFunction"/> so that <see cref="Track"/> is called
@@ -165,9 +195,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         private async ValueTask<object?> InvokeCoreInnerAsync(
             AIFunctionArguments arguments, CancellationToken cancellationToken)
         {
-            // ── Pre-flight: reject if call limit would be exceeded ──
+            // ── Pre-flight: reject if any configured call limit would be exceeded ──
             if (_toolkit._scope.MaxToolCalls.HasValue && _toolkit._toolCallCount >= _toolkit._scope.MaxToolCalls.Value)
                 return WorkflowAgentToolkit.Error($"Tool call limit ({_toolkit._scope.MaxToolCalls.Value}) exceeded. No further tool calls are allowed.");
+            bool isQueryTool = _toolkit.IsQueryTool(Name);
+            if (!isQueryTool && _toolkit._scope.MaxWriteToolCalls.HasValue && _toolkit._writeToolCallCount >= _toolkit._scope.MaxWriteToolCalls.Value)
+                return WorkflowAgentToolkit.Error($"Mutation tool call limit ({_toolkit._scope.MaxWriteToolCalls.Value}) exceeded. No further mutation tool calls are allowed.");
+            if (isQueryTool && _toolkit._scope.MaxReadToolCalls.HasValue && _toolkit._readToolCallCount >= _toolkit._scope.MaxReadToolCalls.Value)
+                return WorkflowAgentToolkit.Error($"Query tool call limit ({_toolkit._scope.MaxReadToolCalls.Value}) exceeded. No further query tool calls are allowed.");
 
             try
             {
@@ -211,7 +246,8 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// </summary>
     private static readonly HashSet<string> QueryToolNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ListNodes", "GetNodeDetail", "GetWorkflowSummary", "GetComponentContext",
+        "ListNodes", "GetNodeDetail", "GetNodeDetailById", "ListConnections", "GetTypeSchema",
+        "GetWorkflowSummary", "GetComponentContext",
         "ListComponentCommands", "GetChangesSinceSnapshot", "TakeSnapshot",
         "GetFullTopology", "FindNodes", "ResolveSlotId", "ListSlotProperties",
         "GetEnumSlotByValue", "GetLinkDetail", "GetNodeStatistics", "ListCreatableTypes",
@@ -226,10 +262,21 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     private async Task TrackAsync(string toolName, string result)
     {
         Interlocked.Increment(ref _toolCallCount);
+        if (IsQueryTool(toolName))
+            Interlocked.Increment(ref _readToolCallCount);
+        else
+            Interlocked.Increment(ref _writeToolCallCount);
         await _scope.RaiseToolCalledAsync(toolName, result, _toolCallCount);
-        if (_scope.AutoMarkDirty && !QueryToolNames.Contains(toolName))
+        if (_scope.AutoMarkDirty && !QueryToolNames.Contains(toolName) && !_scope.IsQueryOnlyCustomTool(toolName))
             Tree.GetHelper().MarkDirty();
     }
+
+    /// <summary>
+    /// Whether a tool is a read-only query (a built-in <see cref="QueryToolNames"/> entry or a
+    /// registered query-only custom tool).
+    /// </summary>
+    private bool IsQueryTool(string toolName)
+        => QueryToolNames.Contains(toolName) || _scope.IsQueryOnlyCustomTool(toolName);
 
     // ────────────────────────── Query Functions ──────────────────────────
 
@@ -340,7 +387,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return obj.ToString(Formatting.None);
     }
 
-    [Description("Lists all visible connections. Compact: [{id,sid,rid}] where sid/rid are slot runtime IDs.")]
+    [Description("Lists all visible connections only (compact, with link ids). GetFullTopology also returns connections alongside full node/slot detail — prefer it for the whole graph; use this only when you need links without node detail.")]
     private string ListConnections()
     {
         var links = Tree.Links;
@@ -363,34 +410,37 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     // ────────────────────────── Mutation Functions ──────────────────────────
 
     [Description("Moves a node by relative offset. Coordinate system: +offsetX = rightward, +offsetY = downward (origin is top-left). One undoable action.")]
-    private string MoveNode(
+    private async Task<string> MoveNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Horizontal offset px.")] double offsetX,
-        [Description("Vertical offset px.")] double offsetY)
+        [Description("Vertical offset px.")] double offsetY,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var n = node!;
-        return ApplyAnchorLayout($"Moved {nodeIndex} by ({offsetX},{offsetY}).",
-            [(n, new Anchor(n.Anchor.Horizontal + offsetX, n.Anchor.Vertical + offsetY, n.Anchor.Layer))]);
+        return await ApplyAnchorLayoutAsync($"Moved {nodeIndex} by ({offsetX},{offsetY}).",
+            [(n, new Anchor(n.Anchor.Horizontal + offsetX, n.Anchor.Vertical + offsetY, n.Anchor.Layer))], cancellationToken).ConfigureAwait(false);
     }
 
     [Description("Sets absolute position of a node. Coordinate system: origin (0,0) is top-left; left (X) increases rightward, top (Y) increases downward. One undoable action.")]
-    private string SetNodePosition(
+    private async Task<string> SetNodePosition(
         [Description("Node index.")] int nodeIndex,
         [Description("Left px.")] double left,
         [Description("Top px.")] double top,
-        [Description("Layer (z-order).")] int layer = 0)
+        [Description("Layer (z-order).")] int layer = 0,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        return ApplyAnchorLayout($"Position {nodeIndex} → ({left},{top},{layer}).",
-            [(node!, new Anchor(left, top, layer))]);
+        return await ApplyAnchorLayoutAsync($"Position {nodeIndex} → ({left},{top},{layer}).",
+            [(node!, new Anchor(left, top, layer))], cancellationToken).ConfigureAwait(false);
     }
 
     [Description("Resizes a node. One undoable action.")]
-    private string ResizeNode(
+    private async Task<string> ResizeNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Width px.")] double width,
-        [Description("Height px.")] double height)
+        [Description("Height px.")] double height,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var n = node!;
@@ -398,37 +448,46 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         var newSize = new Size(width, height);
         if (oldSize.Width == newSize.Width && oldSize.Height == newSize.Height)
             return Ok($"Resized {nodeIndex} → ({width},{height}).");
+        var completion = WaitForExitedAsync(n.SetSizeCommand, cancellationToken);
         Tree.GetHelper().Submit(new WorkflowActionPair(
             () => n.SetSizeCommand.Execute(newSize),
             () => n.SetSizeCommand.Execute(oldSize)));
+        await completion.ConfigureAwait(false);
         return Ok($"Resized {nodeIndex} → ({width},{height}).");
     }
 
     [Description("Deletes a node. Cascade: auto-deletes all child slots and their connections — no need to delete them first.")]
-    private string DeleteNode(
-        [Description("Node index.")] int nodeIndex)
+    private async Task<string> DeleteNode(
+        [Description("Node index.")] int nodeIndex,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        node!.DeleteCommand.Execute(null);
+        var completion = WaitForExitedAsync(node!.DeleteCommand, cancellationToken);
+        node.DeleteCommand.Execute(null);
+        await completion.ConfigureAwait(false);
         return Ok($"Node {nodeIndex} deleted.");
     }
 
     [Description("Deletes a slot and its connections.")]
-    private string DeleteSlot(
+    private async Task<string> DeleteSlot(
         [Description("Node index.")] int nodeIndex,
-        [Description("Slot index within the node.")] int slotIndex)
+        [Description("Slot index within the node.")] int slotIndex,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetSlot(nodeIndex, slotIndex, out var slot, out var error)) return error;
-        slot!.DeleteCommand.Execute(null);
+        var completion = WaitForExitedAsync(slot!.DeleteCommand, cancellationToken);
+        slot.DeleteCommand.Execute(null);
+        await completion.ConfigureAwait(false);
         return Ok($"Slot [{nodeIndex}][{slotIndex}] deleted.");
     }
 
-    [Description("⚠ PREFER ConnectByProperty — slot indices are UNSTABLE for generated nodes (SlotEnumerator members can shift). ConnectByProperty uses stable property names and is always safer. Use ConnectSlots ONLY when you have already called ListSlotProperties and confirmed the exact stable index. Uses Tree.SendConnectionCommand + ReceiveConnectionCommand. Returns slot-property map on success so you can switch to property-based routing immediately.")]
-    private string ConnectSlots(
+    [Description("⚠ Prefer ConnectByProperty — slot indices shift on SlotEnumerator nodes. Use only after ListSlotProperties confirms a stable index. Returns the slot→property map so you can switch to property routing.")]
+    private async Task<string> ConnectSlots(
         [Description("Sender node index.")] int senderNodeIndex,
         [Description("Sender slot index.")] int senderSlotIndex,
         [Description("Receiver node index.")] int receiverNodeIndex,
-        [Description("Receiver slot index.")] int receiverSlotIndex)
+        [Description("Receiver slot index.")] int receiverSlotIndex,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetSlot(senderNodeIndex, senderSlotIndex, out var senderSlot, out var error)) return error;
         if (!TryGetSlot(receiverNodeIndex, receiverSlotIndex, out var receiverSlot, out error)) return error;
@@ -439,8 +498,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         senderPropMap.TryGetValue(senderSlot!, out var senderPropHint);
         receiverPropMap.TryGetValue(receiverSlot!, out var receiverPropHint);
 
-        Tree.SendConnectionCommand.Execute(senderSlot!);
-        Tree.ReceiveConnectionCommand.Execute(receiverSlot!);
+        await SendReceiveAsync(senderSlot!, receiverSlot!, cancellationToken);
 
         bool connected = VerifyConnection(senderSlot!, receiverSlot!);
         if (!connected)
@@ -468,9 +526,10 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     [Description("Connects two slots by their runtime IDs. IDs are stable across UI redraws but NOT across SlotEnumerator reconfiguration. Prefer ConnectByProperty for SlotEnumerator and generated slot collections; use this only with IDs obtained after the latest collection configuration. The framework may silently reject: check 'connected' in the response.")]
-    private string ConnectSlotsById(
+    private async Task<string> ConnectSlotsById(
         [Description("Runtime ID of the sender slot.")] string senderSlotId,
-        [Description("Runtime ID of the receiver slot.")] string receiverSlotId)
+        [Description("Runtime ID of the receiver slot.")] string receiverSlotId,
+        CancellationToken cancellationToken = default)
     {
         if (FindComponentById(senderSlotId) is not IWorkflowSlotViewModel sender) return Error($"Sender slot '{senderSlotId}' not found.");
         if (FindComponentById(receiverSlotId) is not IWorkflowSlotViewModel receiver) return Error($"Receiver slot '{receiverSlotId}' not found.");
@@ -479,8 +538,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         var senderPropHint = sender.Parent != null ? (BuildSlotPropertyMap(sender.Parent).TryGetValue(sender, out var sp) ? sp : null) : null;
         var receiverPropHint = receiver.Parent != null ? (BuildSlotPropertyMap(receiver.Parent).TryGetValue(receiver, out var rp) ? rp : null) : null;
 
-        Tree.SendConnectionCommand.Execute(sender);
-        Tree.ReceiveConnectionCommand.Execute(receiver);
+        await SendReceiveAsync(sender, receiver, cancellationToken);
 
         bool connected = VerifyConnection(sender, receiver);
         if (!connected)
@@ -498,18 +556,21 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     [Description("Removes a connection between two slots by node/slot indices.")]
-    private string DisconnectSlots(
+    private async Task<string> DisconnectSlots(
         [Description("Sender node index.")] int senderNodeIndex,
         [Description("Sender slot index.")] int senderSlotIndex,
         [Description("Receiver node index.")] int receiverNodeIndex,
-        [Description("Receiver slot index.")] int receiverSlotIndex)
+        [Description("Receiver slot index.")] int receiverSlotIndex,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetSlot(senderNodeIndex, senderSlotIndex, out var senderSlot, out var error)) return error;
         if (!TryGetSlot(receiverNodeIndex, receiverSlotIndex, out var receiverSlot, out error)) return error;
 
         if (Tree.LinksMap.TryGetValue(senderSlot!, out var dic) && dic.TryGetValue(receiverSlot!, out var link))
         {
+            var completion = WaitForExitedAsync(link.DeleteCommand, cancellationToken);
             link.DeleteCommand.Execute(null);
+            await completion.ConfigureAwait(false);
             return Ok($"Disconnected [{senderNodeIndex}][{senderSlotIndex}]✕[{receiverNodeIndex}][{receiverSlotIndex}].");
         }
         return Error("No connection found between the specified slots.");
@@ -593,7 +654,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var result = ComponentPatcher.ApplyPatch(node!, jsonPatch);
-        NudgeIfEnumSlotNode(node!);
+        RefreshSlotAnchorsIfEnumSlotNode(node!);
         return result;
     }
 
@@ -606,7 +667,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (component == null) return Error($"Component '{runtimeId}' not found.");
         var result = ComponentPatcher.ApplyPatch(component, jsonPatch);
         if (component is IWorkflowNodeViewModel patchedNode)
-            NudgeIfEnumSlotNode(patchedNode);
+            RefreshSlotAnchorsIfEnumSlotNode(patchedNode);
         return result;
     }
 
@@ -704,7 +765,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             return Error($"Generic command execution is disabled by host policy. The host must allowlist '{commandName}' via WithAllowedGenericCommands.");
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var result = CommandInvoker.Invoke(node!, commandName, jsonParameter);
-        NudgeIfEnumSlotNode(node!);
+        RefreshSlotAnchorsIfEnumSlotNode(node!);
         return result;
     }
 
@@ -721,11 +782,11 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             return Error($"Component '{runtimeId}' not found.");
         var result = CommandInvoker.Invoke(component, commandName, jsonParameter);
         if (component is IWorkflowNodeViewModel cmdNode)
-            NudgeIfEnumSlotNode(cmdNode);
+            RefreshSlotAnchorsIfEnumSlotNode(cmdNode);
         return result;
     }
 
-    [Description("Creates a node and adds it to the tree via CreateNodeCommand. This is the ONLY correct way to add nodes — NEVER add nodes by directly modifying the Nodes collection. IMPORTANT: Nodes must NEVER have Size(0,0). Always provide width/height, or use GetComponentContext first to discover the type's documented default size. If you cannot determine the default, use width=300 height=260 as a safe fallback. The tool automatically offsets the position if it overlaps an existing node.")]
+    [Description("Creates a node (via CreateNodeCommand — never modify the Nodes collection directly). Width/height must be > 0; 0 uses the type's documented default (fallback 300×260). Position auto-offsets to avoid overlap.")]
     private string CreateNode(
         [Description("Fully-qualified type name.")] string fullTypeName,
         [Description("Left px. Consider existing node positions to avoid overlap.")] double left = 0,
@@ -739,13 +800,12 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!typeof(IWorkflowNodeViewModel).IsAssignableFrom(type))
             return Error($"'{fullTypeName}' does not implement IWorkflowNodeViewModel.");
 
-        // Resolve non-zero size: prefer caller value > AgentContext default > random fallback
-        if (width <= 0 || height <= 0)
-        {
-            var resolved = ResolveDefaultSize(type);
-            if (width <= 0) width = resolved.Width;
-            if (height <= 0) height = resolved.Height;
-        }
+        // Resolve a non-zero size: the caller's explicit value wins; otherwise fall back to the
+        // deterministic safe default (300×260, the same value the prompt instructs as a fallback).
+        // For a type's documented default, the Agent reads GetComponentContext and passes it
+        // explicitly — or resizes afterwards with ResizeNode.
+        if (width <= 0) width = 300;
+        if (height <= 0) height = 260;
 
         // Auto-offset to avoid overlapping existing nodes using spatial query
         const double padding = 30;
@@ -830,30 +890,6 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         {
             return Error($"Failed to create node: {ex.Message}");
         }
-    }
-
-    private static Size ResolveDefaultSize(Type nodeType)
-    {
-        // Try to extract size from AgentContext attributes (any language)
-        foreach (var lang in new[] { AgentLanguages.English, AgentLanguages.Chinese })
-        {
-            var contexts = AgentContextReader.GetContexts(nodeType, lang);
-            foreach (var ctx in contexts)
-            {
-                // Look for patterns like "300×260", "300*260", "300x260"
-                var match = System.Text.RegularExpressions.Regex.Match(ctx, @"(\d{2,4})\s*[×xX\*]\s*(\d{2,4})");
-                if (match.Success
-                    && double.TryParse(match.Groups[1].Value, out var w) && w > 0
-                    && double.TryParse(match.Groups[2].Value, out var h) && h > 0)
-                {
-                    return new Size(w, h);
-                }
-            }
-        }
-
-        // Random fallback — never return 0
-        var rng = new Random();
-        return new Size(rng.Next(200, 400), rng.Next(150, 300));
     }
 
     [Description("Creates a dynamic slot on a node via CreateSlotCommand. Only use when the node does NOT already define typed slot properties (e.g. InputSlot/OutputSlot) — those are auto-created by source generator.")]
@@ -1102,14 +1138,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return Error($"Slot '{slotRuntimeId}' not found in '{propertyName}'.");
     }
 
-    [Description("Sets or changes the selector on a SlotEnumerator property of an EXISTING node. " +
-                 "For enum/bool selectors pass the fully-qualified type name in 'selectorTypeOrJson' (e.g. 'Demo.ViewModels.NetworkRequestMethod' or 'System.Boolean'). " +
-                 "For non-enum ISlotProvider selectors: FIRST call GetTypeSchema(nonEnumTypeName) to understand the type's property structure, " +
-                 "THEN construct the correct JSON and pass it in 'selectorTypeOrJson', with the fully-qualified type name in 'nonEnumTypeName'. " +
-                 "Never hard-code the JSON without inspecting the schema first — the type structure may differ from assumptions. " +
-                 "This is the correct way to change the selector on a node that already exists — do NOT delete and recreate the node. " +
-                 "WARNING: switching selector type destroys ALL existing connections on the old output slots; you must rewire them after calling this. " +
-                 "Example: SetEnumSlotCollection(nodeIndex: 2, propertyName: \"Outputs\", selectorTypeOrJson: \"Demo.NetworkRequestMethod\").")]
+    [Description("Sets the selector of a SlotEnumerator on an EXISTING node. enum/bool: pass the type name in 'selectorTypeOrJson' (e.g. 'Demo.NetworkRequestMethod', 'System.Boolean'). Non-enum ISlotProvider: GetTypeSchema(type) first, then pass JSON in 'selectorTypeOrJson' and the type name in 'nonEnumTypeName'. Do NOT delete/recreate the node. WARNING: switching selector destroys all existing connections on the old slots — rewire after.")]
     private string SetEnumSlotCollection(
         [Description("Node index.")] int nodeIndex,
         [Description("Name of the slot collection or SlotEnumerator property, e.g. 'OutputSlots'.")] string propertyName,
@@ -1199,7 +1228,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
             // SetSelector captures the previous state (including old slots/links) and submits
             // its own undoable WorkflowActionPair internally. Call it directly — wrapping it in
-            // another Submit created nested undo entries and required a NudgeNode() workaround.
+            // another Submit created nested undo entries and required an anchor-refresh workaround.
             setSelector.Invoke(enumerator, [selectorType]);
 
             var enumNames = selectorType == typeof(bool)
@@ -1350,10 +1379,11 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     // ────────────────────────── Clone ──────────────────────────
 
     [Description("Clones a set of nodes (by indices) with their internal connections to a new position. Returns mapping of old→new node IDs.")]
-    private string CloneNodes(
+    private async Task<string> CloneNodes(
         [Description("JSON array of node indices to clone, e.g. [0,1,2].")] string nodeIndicesJson,
         [Description("Horizontal offset px for cloned nodes.")] double offsetX = 200,
-        [Description("Vertical offset px for cloned nodes.")] double offsetY = 0)
+        [Description("Vertical offset px for cloned nodes.")] double offsetY = 0,
+        CancellationToken cancellationToken = default)
     {
         int[] indices;
         try
@@ -1377,6 +1407,15 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         var sourceSet = new HashSet<IWorkflowNodeViewModel>(sourceNodes);
         var oldToNew = new Dictionary<string, IWorkflowNodeViewModel>();
         var slotMap = new Dictionary<string, IWorkflowSlotViewModel>(); // old slot id → new slot
+
+        // Record the undo depth so the whole clone can be collapsed into a single undo entry
+        // (each CreateNode / CreateSlot / connection command pushes its own entry otherwise).
+        var undoStack = TryGetUndoStack(Tree);
+        var undoDepth = undoStack?.Count ?? 0;
+
+        // CreateNodeCommand is a shared per-tree command dispatched once per clone — wait for all
+        // dispatches to actually complete so the tool returns only after the clones are mounted.
+        var createNodeWait = WaitForNDispatchesAsync(Tree.CreateNodeCommand, sourceNodes.Count, cancellationToken);
 
         // Phase 1: Clone nodes with slots
         foreach (var src in sourceNodes)
@@ -1413,15 +1452,40 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                     var newSlot = (IWorkflowSlotViewModel)Activator.CreateInstance(slotType);
                     newSlot.Channel = srcSlot.Channel;
                     ComponentPatcher.CopyScalarProperties(srcSlot, newSlot);
+                    var slotCompletion = WaitForExitedAsync(clone.CreateSlotCommand, cancellationToken);
                     clone.CreateSlotCommand.Execute(newSlot);
+                    await slotCompletion.ConfigureAwait(false);
                     slotMap[GetComponentId(srcSlot)] = newSlot;
                 }
                 catch { /* skip non-clonable slots */ }
             }
         }
 
-        // Phase 2: Re-establish internal connections (only between cloned nodes)
+        await createNodeWait.ConfigureAwait(false);
+
+        // Phase 2: Re-establish internal connections (only between cloned nodes).
+        // Send/Receive are shared per-tree commands — compute the exact dispatch count up front
+        // (matching the dispatch condition below, so the wait count can never be missed) and wait
+        // for every connection's commands to complete before returning.
         int connCount = 0;
+        foreach (var src in sourceNodes)
+        {
+            foreach (var srcSlot in src.Slots)
+            {
+                foreach (var target in srcSlot.Targets)
+                {
+                    if (target.Parent != null && sourceSet.Contains(target.Parent)
+                        && slotMap.ContainsKey(GetComponentId(srcSlot))
+                        && slotMap.ContainsKey(GetComponentId(target)))
+                        connCount++;
+                }
+            }
+        }
+
+        var sendWait = WaitForNDispatchesAsync(Tree.SendConnectionCommand, connCount, cancellationToken);
+        var recvWait = WaitForNDispatchesAsync(Tree.ReceiveConnectionCommand, connCount, cancellationToken);
+
+        int connected = 0;
         foreach (var src in sourceNodes)
         {
             foreach (var srcSlot in src.Slots)
@@ -1438,24 +1502,79 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                             Tree.SendConnectionCommand.Execute(newSender);
                             Tree.ReceiveConnectionCommand.Execute(newReceiver);
                             if (VerifyConnection(newSender, newReceiver))
-                                connCount++;
+                                connected++;
                         }
                     }
                 }
             }
         }
 
+        await Task.WhenAll(sendWait, recvWait).ConfigureAwait(false);
+
         var mapping = new JObject();
         foreach (var kvp in oldToNew)
             mapping[kvp.Key] = GetComponentId(kvp.Value);
+
+        // Collapse every undo entry created by this clone into one atomic gesture.
+        if (undoStack is not null)
+            CollapseUndoStack(undoStack, undoDepth);
 
         return JsonConvert.SerializeObject(new
         {
             status = "ok",
             cloned = oldToNew.Count,
-            connections = connCount,
+            connections = connected,
             mapping,
         }, Formatting.None);
+    }
+
+    /// <summary>
+    /// Reflects the Core-internal undo stack (<c>WorkflowTreeEx.TreeCache.UndoStack</c>). Returns
+    /// <c>null</c> when reflection fails — callers must treat it as best-effort. Core internals are
+    /// only read, never modified.
+    /// </summary>
+    private ConcurrentStack<IWorkflowActionPair>? TryGetUndoStack(IWorkflowTreeViewModel tree)
+    {
+        try
+        {
+            var getCache = typeof(WorkflowTreeEx).GetMethod("GetCache",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            var cache = getCache?.Invoke(null, [tree]);
+            return cache?.GetType().GetProperty("UndoStack")?.GetValue(cache)
+                as ConcurrentStack<IWorkflowActionPair>;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Pops every undo entry pushed since <paramref name="depth"/> and replaces them with a single
+    /// entry whose Undo reverses the whole batch (last-created first) and whose Redo replays it in
+    /// creation order — turning a multi-step gesture into one Ctrl+Z step.
+    /// </summary>
+    private static void CollapseUndoStack(ConcurrentStack<IWorkflowActionPair> stack, int depth)
+    {
+        var popped = new List<IWorkflowActionPair>();
+        while (stack.Count > depth)
+        {
+            if (!stack.TryPop(out var pair)) break;
+            popped.Add(pair);
+        }
+        if (popped.Count == 0) return;
+
+        // popped[0] = last-created (top), popped[^1] = first-created.
+        var redos = new Action[popped.Count];
+        var undos = new Action[popped.Count];
+        for (int i = 0; i < popped.Count; i++)
+        {
+            undos[i] = popped[i].Undo;                    // reverse creation order → correct undo
+            redos[popped.Count - 1 - i] = popped[i].Redo; // creation order → correct redo
+        }
+        stack.Push(new WorkflowActionPair(
+            () => { foreach (var r in redos) r.Invoke(); },
+            () => { foreach (var u in undos) u.Invoke(); }));
     }
 
     // ────────────────────────── Batch Execution ──────────────────────────
@@ -1507,14 +1626,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     {
         return new Dictionary<string, Func<JObject, Task<string>>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["MoveNode"] = a => Task.FromResult(MoveNode(a.Value<int>("nodeIndex"), a.Value<double>("offsetX"), a.Value<double>("offsetY"))),
-            ["SetNodePosition"] = a => Task.FromResult(SetNodePosition(a.Value<int>("nodeIndex"), a.Value<double>("left"), a.Value<double>("top"), a.Value<int?>("layer") ?? 0)),
-            ["ResizeNode"] = a => Task.FromResult(ResizeNode(a.Value<int>("nodeIndex"), a.Value<double>("width"), a.Value<double>("height"))),
-            ["DeleteNode"] = a => Task.FromResult(DeleteNode(a.Value<int>("nodeIndex"))),
-            ["DeleteSlot"] = a => Task.FromResult(DeleteSlot(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex"))),
-            ["ConnectSlots"] = a => Task.FromResult(ConnectSlots(a.Value<int>("senderNodeIndex"), a.Value<int>("senderSlotIndex"), a.Value<int>("receiverNodeIndex"), a.Value<int>("receiverSlotIndex"))),
-            ["ConnectSlotsById"] = a => Task.FromResult(ConnectSlotsById(a.Value<string>("senderSlotId")!, a.Value<string>("receiverSlotId")!)),
-            ["DisconnectSlots"] = a => Task.FromResult(DisconnectSlots(a.Value<int>("senderNodeIndex"), a.Value<int>("senderSlotIndex"), a.Value<int>("receiverNodeIndex"), a.Value<int>("receiverSlotIndex"))),
+            ["MoveNode"] = a => MoveNode(a.Value<int>("nodeIndex"), a.Value<double>("offsetX"), a.Value<double>("offsetY"), ct),
+            ["SetNodePosition"] = a => SetNodePosition(a.Value<int>("nodeIndex"), a.Value<double>("left"), a.Value<double>("top"), a.Value<int?>("layer") ?? 0, ct),
+            ["ResizeNode"] = a => ResizeNode(a.Value<int>("nodeIndex"), a.Value<double>("width"), a.Value<double>("height"), ct),
+            ["DeleteNode"] = a => DeleteNode(a.Value<int>("nodeIndex"), ct),
+            ["DeleteSlot"] = a => DeleteSlot(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex"), ct),
+            ["ConnectSlots"] = a => ConnectSlots(a.Value<int>("senderNodeIndex"), a.Value<int>("senderSlotIndex"), a.Value<int>("receiverNodeIndex"), a.Value<int>("receiverSlotIndex"), ct),
+            ["ConnectSlotsById"] = a => ConnectSlotsById(a.Value<string>("senderSlotId")!, a.Value<string>("receiverSlotId")!, ct),
+            ["DisconnectSlots"] = a => DisconnectSlots(a.Value<int>("senderNodeIndex"), a.Value<int>("senderSlotIndex"), a.Value<int>("receiverNodeIndex"), a.Value<int>("receiverSlotIndex"), ct),
             ["ExecuteWork"] = a => ExecuteWork(a.Value<int>("nodeIndex"), a.Value<string>("parameter"), ct),
             ["BroadcastNode"] = a => BroadcastNode(a.Value<int>("nodeIndex"), a.Value<string>("parameter"), ct),
             ["Undo"] = _ => Task.FromResult(Undo()),
@@ -1525,20 +1644,24 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             ["ExecuteCommandById"] = a => Task.FromResult(ExecuteCommandById(a.Value<string>("runtimeId")!, a.Value<string>("commandName")!, a.Value<string>("jsonParameter"))),
             ["CreateNode"] = a => Task.FromResult(CreateNode(a.Value<string>("fullTypeName")!, a.Value<double?>("left") ?? 0, a.Value<double?>("top") ?? 0, a.Value<double?>("width") ?? 0, a.Value<double?>("height") ?? 0)),
             ["CreateSlotOnNode"] = a => Task.FromResult(CreateSlotOnNode(a.Value<int>("nodeIndex"), a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "OneBoth")),
-            ["CloneNodes"] = a => Task.FromResult(CloneNodes(a.Value<string>("nodeIndicesJson")!, a.Value<double?>("offsetX") ?? 200, a.Value<double?>("offsetY") ?? 0)),
+            ["CloneNodes"] = a => CloneNodes(a.Value<string>("nodeIndicesJson")!, a.Value<double?>("offsetX") ?? 200, a.Value<double?>("offsetY") ?? 0, ct),
             ["ListSlotProperties"] = a => Task.FromResult(ListSlotProperties(a.Value<int>("nodeIndex"))),
             ["AddSlotToCollection"] = a => Task.FromResult(AddSlotToCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "MultipleBoth")),
             ["RemoveSlotFromCollection"] = a => Task.FromResult(RemoveSlotFromCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("slotRuntimeId")!)),
-            ["SetEnumSlotCollection"] = a => Task.FromResult(SetEnumSlotCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullEnumTypeName")!)),
+            ["SetEnumSlotCollection"] = a => Task.FromResult(SetEnumSlotCollection(
+                a.Value<int>("nodeIndex"),
+                a.Value<string>("propertyName")!,
+                a.Value<string>("selectorTypeOrJson") ?? a.Value<string>("fullEnumTypeName") ?? "",
+                a.Value<string>("nonEnumTypeName") ?? "")),
             ["GetEnumSlotByValue"] = a => Task.FromResult(GetEnumSlotByValue(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("conditionValue")!)),
             ["SetEnumSlotChannel"] = a => Task.FromResult(SetEnumSlotChannel(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("conditionValue")!, a.Value<string>("channel")!)),
-            ["ConnectEnumSlot"] = a => Task.FromResult(ConnectEnumSlot(a.Value<int>("senderNodeIndex"), a.Value<string>("senderProperty")!, a.Value<string>("senderCondition")!, a.Value<int>("receiverNodeIndex"), a.Value<string>("receiverSlot")!)),
+            ["ConnectEnumSlot"] = a => ConnectEnumSlot(a.Value<int>("senderNodeIndex"), a.Value<string>("senderProperty")!, a.Value<string>("senderCondition")!, a.Value<int>("receiverNodeIndex"), a.Value<string>("receiverSlot")!, a.Value<string>("receiverCondition"), ct),
             ["FindNodes"] = a => Task.FromResult(FindNodes(a.Value<string>("typeName") ?? "", a.Value<string>("propertyName"), a.Value<string>("propertyValue"))),
             ["ResolveSlotId"] = a => Task.FromResult(ResolveSlotId(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<int?>("collectionIndex") ?? 0)),
-            ["ConnectByProperty"] = a => Task.FromResult(ConnectByProperty(a.Value<int>("senderNodeIndex"), a.Value<string>("senderProperty")!, a.Value<int>("receiverNodeIndex"), a.Value<string>("receiverProperty")!, a.Value<int?>("senderCollectionIndex") ?? 0, a.Value<int?>("receiverCollectionIndex") ?? 0)),
+            ["ConnectByProperty"] = a => ConnectByProperty(a.Value<int>("senderNodeIndex"), a.Value<string>("senderProperty")!, a.Value<int>("receiverNodeIndex"), a.Value<string>("receiverProperty")!, a.Value<int?>("senderCollectionIndex") ?? 0, a.Value<int?>("receiverCollectionIndex") ?? 0, ct),
             ["CreateAndConfigureNode"] = a => Task.FromResult(CreateAndConfigureNode(a.Value<string>("fullTypeName")!, a.Value<double?>("left") ?? 0, a.Value<double?>("top") ?? 0, a.Value<double?>("width") ?? 0, a.Value<double?>("height") ?? 0, a.Value<string>("jsonPatch"), a.Value<string>("enumSlotProperty"), a.Value<string>("enumTypeName"))),
-            ["DeleteNodes"] = a => Task.FromResult(DeleteNodes(a.Value<string>("nodeIndicesJson")!)),
-            ["ArrangeNodes"] = a => Task.FromResult(ArrangeNodes(a.Value<string>("arrangementsJson")!)),
+            ["DeleteNodes"] = a => DeleteNodes(a.Value<string>("nodeIndicesJson")!, ct),
+            ["ArrangeNodes"] = a => ArrangeNodes(a.Value<string>("arrangementsJson")!, ct),
             ["GetFullTopology"] = _ => Task.FromResult(GetFullTopology()),
             ["SearchForward"] = a => Task.FromResult(SearchForward(a.Value<int>("nodeIndex"), a.Value<string>("typeName"), a.Value<int?>("maxDepth") ?? 0)),
             ["SearchReverse"] = a => Task.FromResult(SearchReverse(a.Value<int>("nodeIndex"), a.Value<string>("typeName"), a.Value<int?>("maxDepth") ?? 0)),
@@ -1546,17 +1669,17 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             ["IsConnected"] = a => Task.FromResult(IsConnected(a.Value<int>("sourceNodeIndex"), a.Value<int>("targetNodeIndex"), a.Value<string>("direction") ?? "forward")),
             ["FindPath"] = a => Task.FromResult(FindPath(a.Value<int>("sourceNodeIndex"), a.Value<int>("targetNodeIndex"))),
             ["ReverseBroadcastNode"] = a => ReverseBroadcastNode(a.Value<int>("nodeIndex"), a.Value<string>("parameter"), ct),
-            ["DisconnectSlotsById"] = a => Task.FromResult(DisconnectSlotsById(a.Value<string>("senderSlotId")!, a.Value<string>("receiverSlotId")!)),
-            ["DisconnectAllFromSlot"] = a => Task.FromResult(DisconnectAllFromSlot(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex"))),
-            ["DisconnectAllFromNode"] = a => Task.FromResult(DisconnectAllFromNode(a.Value<int>("nodeIndex"))),
-            ["ReplaceConnection"] = a => Task.FromResult(ReplaceConnection(a.Value<string>("oldSenderSlotId")!, a.Value<string>("oldReceiverSlotId")!, a.Value<string>("newSenderSlotId")!, a.Value<string>("newReceiverSlotId")!)),
+            ["DisconnectSlotsById"] = a => DisconnectSlotsById(a.Value<string>("senderSlotId")!, a.Value<string>("receiverSlotId")!, ct),
+            ["DisconnectAllFromSlot"] = a => DisconnectAllFromSlot(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex"), ct),
+            ["DisconnectAllFromNode"] = a => DisconnectAllFromNode(a.Value<int>("nodeIndex"), ct),
+            ["ReplaceConnection"] = a => ReplaceConnection(a.Value<string>("oldSenderSlotId")!, a.Value<string>("oldReceiverSlotId")!, a.Value<string>("newSenderSlotId")!, a.Value<string>("newReceiverSlotId")!, ct),
             ["SetSlotChannel"] = a => Task.FromResult(SetSlotChannel(a.Value<int>("nodeIndex"), a.Value<int>("slotIndex"), a.Value<string>("channel")!)),
             ["GetLinkDetail"] = a => Task.FromResult(GetLinkDetail(a.Value<string>("linkId")!)),
             ["ExecuteWorkOnNodes"] = a => ExecuteWorkOnNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("parameter"), ct),
             ["BulkPatchNodes"] = a => Task.FromResult(BulkPatchNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("jsonPatch")!)),
-            ["AlignNodes"] = a => Task.FromResult(AlignNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("alignment")!)),
-            ["DistributeNodes"] = a => Task.FromResult(DistributeNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("axis")!)),
-            ["AutoLayout"] = a => Task.FromResult(AutoLayout(a.Value<double?>("startX") ?? 0, a.Value<double?>("startY") ?? 0, a.Value<double?>("gapX") ?? 80, a.Value<double?>("gapY") ?? 40, a.Value<string>("direction") ?? "horizontal")),
+            ["AlignNodes"] = a => AlignNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("alignment")!, ct),
+            ["DistributeNodes"] = a => DistributeNodes(a.Value<string>("nodeIndicesJson")!, a.Value<string>("axis")!, ct),
+            ["AutoLayout"] = a => AutoLayout(a.Value<double?>("startX") ?? 20, a.Value<double?>("startY") ?? 20, a.Value<double?>("gapX") ?? 80, a.Value<double?>("gapY") ?? 40, a.Value<string>("direction") ?? "horizontal", ct),
             ["GetNodeStatistics"] = a => Task.FromResult(GetNodeStatistics(a.Value<int>("nodeIndex"))),
             ["ListCreatableTypes"] = _ => Task.FromResult(ListCreatableTypes()),
             ["ValidateWorkflow"] = _ => Task.FromResult(ValidateWorkflow()),
@@ -1723,101 +1846,103 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     // ────────────────────────── Connection Management ──────────────────────────
 
     [Description("Removes a connection between two slots by their runtime IDs.")]
-    private string DisconnectSlotsById(
+    private async Task<string> DisconnectSlotsById(
         [Description("Runtime ID of the sender slot.")] string senderSlotId,
-        [Description("Runtime ID of the receiver slot.")] string receiverSlotId)
+        [Description("Runtime ID of the receiver slot.")] string receiverSlotId,
+        CancellationToken cancellationToken = default)
     {
         if (FindComponentById(senderSlotId) is not IWorkflowSlotViewModel sender) return Error($"Sender slot '{senderSlotId}' not found.");
         if (FindComponentById(receiverSlotId) is not IWorkflowSlotViewModel receiver) return Error($"Receiver slot '{receiverSlotId}' not found.");
 
         if (Tree.LinksMap.TryGetValue(sender, out var dic) && dic.TryGetValue(receiver, out var link))
         {
+            var completion = WaitForExitedAsync(link.DeleteCommand, cancellationToken);
             link.DeleteCommand.Execute(null);
+            await completion.ConfigureAwait(false);
             return Ok($"Disconnected {senderSlotId}→{receiverSlotId}.");
         }
         return Error("No connection found between the specified slots.");
     }
 
     [Description("Disconnects all connections from a specific slot (both as sender and receiver).")]
-    private string DisconnectAllFromSlot(
+    private async Task<string> DisconnectAllFromSlot(
         [Description("Node index.")] int nodeIndex,
-        [Description("Slot index within the node.")] int slotIndex)
+        [Description("Slot index within the node.")] int slotIndex,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetSlot(nodeIndex, slotIndex, out var slot, out var error)) return error;
-        int count = 0;
 
-        // Delete links where this slot is sender
+        // Deduplicate links (a link can appear as both sender and receiver of this slot).
+        var linksToDelete = new HashSet<IWorkflowLinkViewModel>();
         if (Tree.LinksMap.TryGetValue(slot!, out var targets))
-        {
-            foreach (var link in targets.Values.ToArray())
-            {
-                link.DeleteCommand.Execute(null);
-                count++;
-            }
-        }
-
-        // Delete links where this slot is receiver
+            foreach (var link in targets.Values)
+                linksToDelete.Add(link);
         foreach (var kvp in Tree.LinksMap)
-        {
-            if (kvp.Value.TryGetValue(slot!, out var link))
-            {
-                link.DeleteCommand.Execute(null);
-                count++;
-            }
-        }
+            foreach (var inner in kvp.Value)
+                if (ReferenceEquals(inner.Key, slot))
+                    linksToDelete.Add(inner.Value);
 
-        return Ok($"Disconnected {count} link(s) from slot [{nodeIndex}][{slotIndex}].");
+        var completions = new List<Task>(linksToDelete.Count);
+        foreach (var link in linksToDelete)
+        {
+            completions.Add(WaitForExitedAsync(link.DeleteCommand, cancellationToken));
+            link.DeleteCommand.Execute(null);
+        }
+        await Task.WhenAll(completions).ConfigureAwait(false);
+
+        return Ok($"Disconnected {linksToDelete.Count} link(s) from slot [{nodeIndex}][{slotIndex}].");
     }
 
     [Description("Disconnects ALL connections from ALL slots of a node (without deleting the node or its slots).")]
-    private string DisconnectAllFromNode(
-        [Description("Node index.")] int nodeIndex)
+    private async Task<string> DisconnectAllFromNode(
+        [Description("Node index.")] int nodeIndex,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        int count = 0;
         var slotSet = new HashSet<IWorkflowSlotViewModel>(node!.Slots);
 
-        foreach (var slot in node.Slots.ToArray())
+        // Deduplicate links (a link between two of this node's slots appears once).
+        var linksToDelete = new HashSet<IWorkflowLinkViewModel>();
+        foreach (var slot in node.Slots)
         {
             if (Tree.LinksMap.TryGetValue(slot, out var targets))
-            {
-                foreach (var link in targets.Values.ToArray())
-                {
-                    link.DeleteCommand.Execute(null);
-                    count++;
-                }
-            }
+                foreach (var link in targets.Values)
+                    linksToDelete.Add(link);
         }
+        foreach (var kvp in Tree.LinksMap)
+            foreach (var inner in kvp.Value)
+                if (slotSet.Contains(inner.Key))
+                    linksToDelete.Add(inner.Value);
 
-        // Also remove links where node's slots are receivers
-        foreach (var kvp in Tree.LinksMap.ToArray())
+        var completions = new List<Task>(linksToDelete.Count);
+        foreach (var link in linksToDelete)
         {
-            foreach (var innerKvp in kvp.Value.ToArray())
-            {
-                if (slotSet.Contains(innerKvp.Key))
-                {
-                    innerKvp.Value.DeleteCommand.Execute(null);
-                    count++;
-                }
-            }
+            completions.Add(WaitForExitedAsync(link.DeleteCommand, cancellationToken));
+            link.DeleteCommand.Execute(null);
         }
+        await Task.WhenAll(completions).ConfigureAwait(false);
 
-        return Ok($"Disconnected {count} link(s) from node {nodeIndex}.");
+        return Ok($"Disconnected {linksToDelete.Count} link(s) from node {nodeIndex}.");
     }
 
     [Description("Atomically replaces a connection: disconnects old sender→receiver and connects new sender→receiver. Useful for re-routing connections without losing the other endpoint.")]
-    private string ReplaceConnection(
+    private async Task<string> ReplaceConnection(
         [Description("Runtime ID of the old sender slot.")] string oldSenderSlotId,
         [Description("Runtime ID of the old receiver slot.")] string oldReceiverSlotId,
         [Description("Runtime ID of the new sender slot.")] string newSenderSlotId,
-        [Description("Runtime ID of the new receiver slot.")] string newReceiverSlotId)
+        [Description("Runtime ID of the new receiver slot.")] string newReceiverSlotId,
+        CancellationToken cancellationToken = default)
     {
         // Disconnect old
         if (FindComponentById(oldSenderSlotId) is not IWorkflowSlotViewModel oldSender) return Error($"Old sender slot '{oldSenderSlotId}' not found.");
         if (FindComponentById(oldReceiverSlotId) is not IWorkflowSlotViewModel oldReceiver) return Error($"Old receiver slot '{oldReceiverSlotId}' not found.");
 
+        Task? deleteCompletion = null;
         if (Tree.LinksMap.TryGetValue(oldSender, out var dic) && dic.TryGetValue(oldReceiver, out var link))
+        {
+            deleteCompletion = WaitForExitedAsync(link.DeleteCommand, cancellationToken);
             link.DeleteCommand.Execute(null);
+        }
         else
             return Error("No existing connection found between old sender and receiver.");
 
@@ -1825,8 +1950,15 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (FindComponentById(newSenderSlotId) is not IWorkflowSlotViewModel newSender) return Error($"New sender slot '{newSenderSlotId}' not found.");
         if (FindComponentById(newReceiverSlotId) is not IWorkflowSlotViewModel newReceiver) return Error($"New receiver slot '{newReceiverSlotId}' not found.");
 
+        var sendCompletion = WaitForExitedAsync(Tree.SendConnectionCommand, cancellationToken);
+        var recvCompletion = WaitForExitedAsync(Tree.ReceiveConnectionCommand, cancellationToken);
         Tree.SendConnectionCommand.Execute(newSender);
         Tree.ReceiveConnectionCommand.Execute(newReceiver);
+
+        if (deleteCompletion is not null)
+            await Task.WhenAll(deleteCompletion, sendCompletion, recvCompletion).ConfigureAwait(false);
+        else
+            await Task.WhenAll(sendCompletion, recvCompletion).ConfigureAwait(false);
 
         bool connected = VerifyConnection(newSender, newReceiver);
         if (!connected)
@@ -1917,18 +2049,19 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             return Error($"Invalid channel '{channel}'");
 
         slot.SetChannelCommand.Execute(ch);
-        NudgeIfEnumSlotNode((IWorkflowNodeViewModel)Tree.Nodes[nodeIndex]);
+        RefreshSlotAnchorsIfEnumSlotNode((IWorkflowNodeViewModel)Tree.Nodes[nodeIndex]);
         return Ok($"Slot '{conditionValue}' in {propertyName}[{nodeIndex}] channel set to {ch}");
     }
 
     [Description("Connects SlotEnumerator slot (by condition) to another slot. The receiver can be a plain slot property/index OR another SlotEnumerator slot — supply receiverCondition to pick the receiver slot by its enum/bool condition value instead of by index.")]
-    private string ConnectEnumSlot(
+    private async Task<string> ConnectEnumSlot(
         [Description("Sender node index")] int senderNodeIndex,
         [Description("Sender SlotEnumerator property")] string senderProperty,
         [Description("Sender condition value")] string senderCondition,
         [Description("Receiver node index")] int receiverNodeIndex,
         [Description("Receiver slot property or index. When receiverCondition is supplied this must be the SlotEnumerator property name.")] string receiverSlot,
-        [Description("Optional: receiver condition value (enum name or True/False). Set this when the receiver slot also lives inside a SlotEnumerator property.")] string? receiverCondition = null)
+        [Description("Optional: receiver condition value (enum name or True/False). Set this when the receiver slot also lives inside a SlotEnumerator property.")] string? receiverCondition = null,
+        CancellationToken cancellationToken = default)
     {
         var senderResult = GetEnumSlotByValue(senderNodeIndex, senderProperty, senderCondition);
         var senderParsed = JObject.Parse(senderResult);
@@ -1966,8 +2099,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             if (receiver == null) return Error($"Slot '{receiverSlot}' is null");
         }
 
-        Tree.SendConnectionCommand.Execute(sender);
-        Tree.ReceiveConnectionCommand.Execute(receiver);
+        await SendReceiveAsync(sender, receiver, cancellationToken);
 
         bool connected = receiver is not null && VerifyConnection(sender, receiver);
         var senderLabel = $"[{senderNodeIndex}].{senderProperty}[{senderCondition}]";
@@ -2086,9 +2218,10 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     // ────────────────────────── Layout Functions ──────────────────────────
 
     [Description("Aligns nodes to a common edge or center. Alignment: 'left','right','top','bottom','centerH','centerV'.")]
-    private string AlignNodes(
+    private async Task<string> AlignNodes(
         [Description("JSON array of node indices, e.g. [0,1,2].")] string nodeIndicesJson,
-        [Description("Alignment: 'left','right','top','bottom','centerH','centerV'.")] string alignment)
+        [Description("Alignment: 'left','right','top','bottom','centerH','centerV'.")] string alignment,
+        CancellationToken cancellationToken = default)
     {
         int[] indices;
         try { indices = [.. JArray.Parse(nodeIndicesJson).Select(t => t.Value<int>())]; }
@@ -2132,13 +2265,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             default:
                 return Error($"Unknown alignment '{alignment}'. Valid: left, right, top, bottom, centerH, centerV.");
         }
-        return ApplyAnchorLayout($"Aligned {nodes.Count} nodes by '{alignment}'", changes);
+        return await ApplyAnchorLayoutAsync($"Aligned {nodes.Count} nodes by '{alignment}'", changes, cancellationToken).ConfigureAwait(false);
     }
 
     [Description("Evenly distributes nodes along an axis. Axis: 'horizontal' or 'vertical'. Nodes are sorted by current position and spacing is equalized.")]
-    private string DistributeNodes(
+    private async Task<string> DistributeNodes(
         [Description("JSON array of node indices, e.g. [0,1,2].")] string nodeIndicesJson,
-        [Description("Axis: 'horizontal' or 'vertical'.")] string axis)
+        [Description("Axis: 'horizontal' or 'vertical'.")] string axis,
+        CancellationToken cancellationToken = default)
     {
         int[] indices;
         try { indices = [.. JArray.Parse(nodeIndicesJson).Select(t => t.Value<int>())]; }
@@ -2181,16 +2315,17 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         {
             return Error($"Unknown axis '{axis}'. Valid: horizontal, vertical.");
         }
-        return ApplyAnchorLayout($"Distributed {nodes.Count} nodes along '{axis}'", changes);
+        return await ApplyAnchorLayoutAsync($"Distributed {nodes.Count} nodes along '{axis}'", changes, cancellationToken).ConfigureAwait(false);
     }
 
-    [Description("Auto-layouts all nodes using topology-aware layered layout (Sugiyama-style). Coordinate system: origin (0,0) = top-left corner of the canvas (equivalent to mathematical Q4: X+ rightward, Y+ downward). Nodes are arranged in layers following the propagation chain from source nodes (in-degree=0). Within each layer, nodes are ordered by barycenter heuristic to minimize edge crossings. Node sizes are respected to avoid overlap. Disconnected subgraphs are laid out independently. Direction: left-to-right (horizontal) or top-to-bottom (vertical).")]
-    private string AutoLayout(
+    [Description("Sugiyama-style layered layout of all nodes (sources→layers, barycenter ordering, size-aware, disconnected subgraphs handled). Direction: 'horizontal' (L→R) or 'vertical' (T→B). Coordinates: origin top-left, +X right, +Y down.")]
+    private async Task<string> AutoLayout(
         [Description("Start X position of the layout bounding box. Default 20.")] double startX = 20,
         [Description("Start Y position of the layout bounding box. Default 20.")] double startY = 20,
         [Description("Horizontal gap between layers (horizontal) or nodes within a layer (vertical).")] double gapX = 80,
         [Description("Vertical gap between nodes within a layer (horizontal) or between layers (vertical).")] double gapY = 40,
-        [Description("Direction: 'horizontal' (left-to-right) or 'vertical' (top-to-bottom).")] string direction = "horizontal")
+        [Description("Direction: 'horizontal' (left-to-right) or 'vertical' (top-to-bottom).")] string direction = "horizontal",
+        CancellationToken cancellationToken = default)
     {
         var nodes = Tree.Nodes;
         if (nodes.Count == 0) return Ok("No nodes to layout.");
@@ -2376,7 +2511,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 globalOffsetX += maxCrossExtent + gapX * 2;
         }
 
-        return ApplyAnchorLayout($"Auto-layout: {totalMoved} nodes arranged in {components.Count} subgraph(s), direction={direction}.", layoutChanges);
+        return await ApplyAnchorLayoutAsync($"Auto-layout: {totalMoved} nodes arranged in {components.Count} subgraph(s), direction={direction}.", layoutChanges, cancellationToken).ConfigureAwait(false);
     }
 
     private static double GetBarycenter(
@@ -2454,6 +2589,8 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         };
         foreach (var node in Tree.Nodes)
             assemblies.Add(node.GetType().Assembly);
+        foreach (var asm in _scope.CustomerAssemblies)
+            assemblies.Add(asm);
 
         foreach (var asm in assemblies)
         {
@@ -2641,11 +2778,13 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     private (IWorkflowNodeViewModel? node, int index) FindNodeById(string runtimeId)
     {
+        // Resolve IDs the same way every other tool does (GetComponentId: RuntimeId when the
+        // component implements IWorkflowIdentifiable, else a stable hash fallback) so an ID
+        // returned by ListNodes/GetNodeDetail always round-trips through the by-id tools.
         for (int i = 0; i < Tree.Nodes.Count; i++)
         {
-            var node = Tree.Nodes[i];
-            if (node is IWorkflowIdentifiable id && id.RuntimeId == runtimeId)
-                return (node, i);
+            if (string.Equals(GetComponentId(Tree.Nodes[i]), runtimeId, StringComparison.Ordinal))
+                return (Tree.Nodes[i], i);
         }
         return (null, -1);
     }
@@ -2832,21 +2971,21 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     // ────────────────────────── Composite Functions (reduce round-trips) ──────────────────────────
 
     [Description("Connects two slots by property names on their owning nodes. No need to resolve slot IDs first. For collection properties, specify the index. Example: ConnectByProperty(senderNodeIndex: 0, senderProperty: \"OutputSlot\", receiverNodeIndex: 1, receiverProperty: \"InputSlot\").")]
-    private string ConnectByProperty(
+    private async Task<string> ConnectByProperty(
         [Description("Sender node index.")] int senderNodeIndex,
         [Description("Sender slot property name, e.g. 'OutputSlot', 'OutputSlots'.")] string senderProperty,
         [Description("Receiver node index.")] int receiverNodeIndex,
         [Description("Receiver slot property name, e.g. 'InputSlot'.")] string receiverProperty,
         [Description("For sender collection properties, the zero-based index. Default 0.")] int senderCollectionIndex = 0,
-        [Description("For receiver collection properties, the zero-based index. Default 0.")] int receiverCollectionIndex = 0)
+        [Description("For receiver collection properties, the zero-based index. Default 0.")] int receiverCollectionIndex = 0,
+        CancellationToken cancellationToken = default)
     {
         var senderSlot = ResolveSlotFromProperty(senderNodeIndex, senderProperty, senderCollectionIndex);
         if (senderSlot == null) return Error($"Cannot resolve sender slot: node={senderNodeIndex}, prop={senderProperty}[{senderCollectionIndex}].");
         var receiverSlot = ResolveSlotFromProperty(receiverNodeIndex, receiverProperty, receiverCollectionIndex);
         if (receiverSlot == null) return Error($"Cannot resolve receiver slot: node={receiverNodeIndex}, prop={receiverProperty}[{receiverCollectionIndex}].");
 
-        Tree.SendConnectionCommand.Execute(senderSlot);
-        Tree.ReceiveConnectionCommand.Execute(receiverSlot);
+        await SendReceiveAsync(senderSlot, receiverSlot, cancellationToken);
 
         bool connected = VerifyConnection(senderSlot, receiverSlot);
         if (!connected)
@@ -2855,7 +2994,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return Ok($"Connected [{senderNodeIndex}].{senderProperty}→[{receiverNodeIndex}].{receiverProperty}.");
     }
 
-    [Description("Creates a node, optionally patches properties, optionally sets enum slot collection — all in one call. Returns full node detail with slot IDs so you can immediately connect. Replaces the 3-step: CreateNode → PatchNodeProperties → SetEnumSlotCollection. Example: CreateAndConfigureNode(fullTypeName: \"Demo.HttpNodeViewModel\", left: 100, top: 100, width: 320, height: 200, jsonPatch: '{\"Title\":\"Fetch\"}', enumSlotProperty: \"Outputs\", enumTypeName: \"Demo.NetworkRequestMethod\").")]
+    [Description("Creates a node, optionally patches properties and sets an enum slot collection in one call; returns full node detail with slot IDs. Replaces CreateNode → PatchNodeProperties → SetEnumSlotCollection.")]
     private string CreateAndConfigureNode(
         [Description("Fully-qualified type name.")] string fullTypeName,
         [Description("Left px.")] double left = 0,
@@ -2902,8 +3041,9 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     [Description("Deletes multiple nodes by indices in one call. Indices are processed in descending order to avoid shifting. Cascade: each node's slots and connections are auto-deleted.")]
-    private string DeleteNodes(
-        [Description("JSON array of node indices to delete, e.g. [0,2,5].")] string nodeIndicesJson)
+    private async Task<string> DeleteNodes(
+        [Description("JSON array of node indices to delete, e.g. [0,2,5].")] string nodeIndicesJson,
+        CancellationToken cancellationToken = default)
     {
         int[] indices;
         try { indices = [.. JArray.Parse(nodeIndicesJson).Select(t => t.Value<int>()).Distinct().OrderByDescending(x => x)]; }
@@ -2911,6 +3051,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
         int deleted = 0;
         var errors = new JArray();
+        var completions = new List<Task>();
         foreach (var idx in indices)
         {
             if (idx < 0 || idx >= Tree.Nodes.Count)
@@ -2918,9 +3059,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 errors.Add($"Index {idx} out of range.");
                 continue;
             }
-            Tree.Nodes[idx].DeleteCommand.Execute(null);
+            // Capture the delete command BEFORE executing (the node is removed on dispatch) and wait
+            // for its completion so the tool only returns once the cascade has actually run.
+            var deleteCommand = Tree.Nodes[idx].DeleteCommand;
+            completions.Add(WaitForExitedAsync(deleteCommand, cancellationToken));
+            deleteCommand.Execute(null);
             deleted++;
         }
+        await Task.WhenAll(completions).ConfigureAwait(false);
 
         var result = new JObject { ["status"] = "ok", ["deleted"] = deleted };
         if (errors.Count > 0) result["errors"] = errors;
@@ -2928,8 +3074,9 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     [Description("Sets absolute positions for multiple nodes in one call. Coordinate system: origin (0,0) = top-left, x increases rightward, y increases downward. Each entry: {i: nodeIndex, x: left, y: top, l?: layer}. Saves N tool calls.")]
-    private string ArrangeNodes(
-        [Description("JSON array of position entries: [{\"i\":0,\"x\":100,\"y\":200},{\"i\":1,\"x\":400,\"y\":200}]")] string arrangementsJson)
+    private async Task<string> ArrangeNodes(
+        [Description("JSON array of position entries: [{\"i\":0,\"x\":100,\"y\":200},{\"i\":1,\"x\":400,\"y\":200}]")] string arrangementsJson,
+        CancellationToken cancellationToken = default)
     {
         JArray arrangements;
         try { arrangements = JArray.Parse(arrangementsJson); }
@@ -2955,9 +3102,13 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (changes.Count > 0)
         {
             var oldAnchors = changes.Select(c => (c.Node, new Anchor(c.Node.Anchor.Horizontal, c.Node.Anchor.Vertical, c.Node.Anchor.Layer))).ToList();
+            var completions = new List<Task>(changes.Count);
+            foreach (var (n, _) in changes)
+                completions.Add(WaitForExitedAsync(n.SetAnchorCommand, cancellationToken));
             Tree.GetHelper().Submit(new WorkflowActionPair(
                 () => { foreach (var (n, a) in changes) n.SetAnchorCommand.Execute(a); },
                 () => { foreach (var (n, o) in oldAnchors) n.SetAnchorCommand.Execute(o); }));
+            await Task.WhenAll(completions).ConfigureAwait(false);
         }
 
         var result = new JObject { ["status"] = "ok", ["moved"] = changes.Count };
@@ -3005,6 +3156,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             if (!link.IsVisible) continue;
             linksArr.Add(new JObject
             {
+                ["id"] = GetComponentId(link),
                 ["sid"] = link.Sender != null ? GetComponentId(link.Sender) : null,
                 ["rid"] = link.Receiver != null ? GetComponentId(link.Receiver) : null,
             });
@@ -3057,14 +3209,15 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     /// <summary>
-    /// Applies an imperceptible nudge (+0.5, −0.5 px) to force the UI to recalculate
-    /// slot anchor positions. Required after any mutation that changes slots on a node
-    /// with <see cref="SlotEnumerator{TSlot}"/> properties.
+    /// Raises <c>Anchor</c>/<c>Size</c> PropertyChanged so the platform's slot layout behavior
+    /// re-syncs slot anchor positions after slots changed on a node with
+    /// <see cref="SlotEnumerator{TSlot}"/> properties. Unlike the old ±0.5px move nudge, this is
+    /// non-mutating: it produces NO undo entries and leaves the node geometry untouched.
     /// </summary>
-    private static void NudgeNode(IWorkflowNodeViewModel node)
+    private static void RefreshSlotAnchors(IWorkflowNodeViewModel node)
     {
-        node.MoveCommand.Execute(new Offset(0.5, 0));
-        node.MoveCommand.Execute(new Offset(-0.5, 0));
+        node.OnPropertyChanged(nameof(node.Anchor));
+        node.OnPropertyChanged(nameof(node.Size));
     }
 
     private static bool HasSlotEnumerator(IWorkflowNodeViewModel node)
@@ -3085,10 +3238,10 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             && ReferenceEquals(parent, node);
     }
 
-    private static void NudgeIfEnumSlotNode(IWorkflowNodeViewModel node)
+    private static void RefreshSlotAnchorsIfEnumSlotNode(IWorkflowNodeViewModel node)
     {
         if (HasSlotEnumerator(node))
-            NudgeNode(node);
+            RefreshSlotAnchors(node);
     }
 
     /// <summary>
@@ -3167,12 +3320,84 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     /// <summary>
-    /// Applies a set of anchor changes as a SINGLE undoable action. A human performs a layout
-    /// gesture once, so the Agent tool must produce exactly one undo entry for the whole layout.
-    /// Nodes whose anchor already equals the target are excluded, so an alignment/layout that
-    /// doesn't actually move anything does not create a no-op undo entry.
+    /// Subscribes to a command's <c>Exited</c>/<c>Failed</c> and returns a task that completes when the
+    /// NEXT dispatch finishes. Call this BEFORE dispatching (e.g. inside a Submit redo closure) so the
+    /// completion is observable; awaiting afterwards guarantees the mutation has actually been applied
+    /// before the tool returns (no stale-state window for the next tool call).
     /// </summary>
-    private string ApplyAnchorLayout(string message, IReadOnlyList<(IWorkflowNodeViewModel Node, Anchor NewAnchor)> changes)
+    private static async Task WaitForExitedAsync(IVeloxCommand command, CancellationToken ct)
+    {
+        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using (ct.Register(() => tcs.TrySetCanceled(ct)))
+        {
+            CommandEventHandler onExited = _ => tcs.TrySetResult(null);
+            CommandEventHandler onFailed = e => tcs.TrySetException(e.Exception);
+            command.Exited += onExited;
+            command.Failed += onFailed;
+            try
+            {
+                await tcs.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                command.Exited -= onExited;
+                command.Failed -= onFailed;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Subscribes to a shared command's <c>Exited</c> and returns a task that completes once
+    /// <paramref name="count"/> dispatches have finished. Use for commands dispatched multiple times
+    /// per tool call (e.g. the tree's CreateNodeCommand / SendConnectionCommand / ReceiveConnectionCommand),
+    /// where <see cref="WaitForExitedAsync"/> cannot map a handler to one specific dispatch.
+    /// </summary>
+    private static Task WaitForNDispatchesAsync(IVeloxCommand command, int count, CancellationToken ct)
+    {
+        if (count <= 0) return Task.CompletedTask;
+        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        int remaining = count;
+        CommandEventHandler onExited = _ =>
+        {
+            if (Interlocked.Decrement(ref remaining) == 0)
+                tcs.TrySetResult(null);
+        };
+        CommandEventHandler onFailed = e => tcs.TrySetException(e.Exception);
+        command.Exited += onExited;
+        command.Failed += onFailed;
+        var registration = ct.Register(() => tcs.TrySetCanceled(ct));
+        return tcs.Task.ContinueWith(
+            _ =>
+            {
+                command.Exited -= onExited;
+                command.Failed -= onFailed;
+                registration.Dispose();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Dispatches the tree's Send then Receive connection commands and awaits both completions, so a
+    /// connection tool returns only after the connection is actually created.
+    /// </summary>
+    private async Task SendReceiveAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, CancellationToken ct)
+    {
+        var sendCompletion = WaitForExitedAsync(Tree.SendConnectionCommand, ct);
+        var recvCompletion = WaitForExitedAsync(Tree.ReceiveConnectionCommand, ct);
+        Tree.SendConnectionCommand.Execute(sender);
+        Tree.ReceiveConnectionCommand.Execute(receiver);
+        await Task.WhenAll(sendCompletion, recvCompletion).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Applies a set of anchor changes as a SINGLE undoable action and waits until the anchors are
+    /// actually applied. A human performs a layout gesture once, so the Agent tool must produce exactly
+    /// one undo entry for the whole layout. Nodes whose anchor already equals the target are excluded,
+    /// so an alignment/layout that doesn't actually move anything does not create a no-op undo entry.
+    /// </summary>
+    private async Task<string> ApplyAnchorLayoutAsync(string message, IReadOnlyList<(IWorkflowNodeViewModel Node, Anchor NewAnchor)> changes, CancellationToken ct)
     {
         var effective = changes
             .Where(c => c.Node.Anchor.Horizontal != c.NewAnchor.Horizontal ||
@@ -3181,9 +3406,17 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             .ToList();
         if (effective.Count == 0) return Ok("Nothing to change.");
         var oldAnchors = effective.Select(c => (c.Node, new Anchor(c.Node.Anchor.Horizontal, c.Node.Anchor.Vertical, c.Node.Anchor.Layer))).ToList();
+
+        // Subscribe to every SetAnchorCommand BEFORE the Submit dispatches them.
+        var completions = new List<Task>(effective.Count);
+        foreach (var (n, _) in effective)
+            completions.Add(WaitForExitedAsync(n.SetAnchorCommand, ct));
+
         Tree.GetHelper().Submit(new WorkflowActionPair(
             () => { foreach (var (n, a) in effective) n.SetAnchorCommand.Execute(a); },
             () => { foreach (var (n, o) in oldAnchors) n.SetAnchorCommand.Execute(o); }));
+
+        await Task.WhenAll(completions).ConfigureAwait(false);
         return Ok(message);
     }
 
