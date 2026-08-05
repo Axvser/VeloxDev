@@ -7,10 +7,10 @@
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<IsTrimmable>false</IsTrimmable>
 		<Title>VeloxDev.Core.Extension</Title>
-		<Version>6.0.0</Version>
+		<Version>6.0.132</Version>
 		<Authors>Axvser</Authors>
 		<PackageReadmeFile></PackageReadmeFile>
-		<Description>VeloxDev.Core tries not to rely on any third-party libraries, while Extension, as an optional extension package, contains a set of advanced functions implemented based on third-party libraries, which can further optimize the user experience</Description>
+		<Description>Optional companion to the dependency-free VeloxDev.Core. Adds MAF-based Workflow Agent tools (60+ function-calling tools, MCP support) and runtime extensions for building AI-controllable workflow editors on WPF, Avalonia, WinUI, MAUI, WinForms, and Blazor/Razor.</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 	</PropertyGroup>
@@ -21,7 +21,7 @@
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.8.0" />
 		<PackageReference Include="ModelContextProtocol" Version="1.4.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-		<PackageReference Include="VeloxDev.Core" Version="6.0.82" />
+		<PackageReference Include="VeloxDev.Core" Version="6.0.132" />
 	</ItemGroup>
 
 	<ItemGroup>
