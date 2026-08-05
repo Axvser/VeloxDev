@@ -110,7 +110,7 @@ public class WorkflowLifecycleFidelityTests
     }
 
     [TestMethod]
-    public void MoveNode_IsUndoableInOneStep()
+    public async Task MoveNode_IsUndoableInOneStep()
     {
         var tree = new TreeDefaultViewModel();
         var node = new NodeDefaultViewModel();
@@ -118,18 +118,31 @@ public class WorkflowLifecycleFidelityTests
         node.Anchor = new Anchor(10, 20, 0);
         var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree));
 
-        var result = InvokeTool(toolkit, "MoveNode", ("nodeIndex", 0), ("offsetX", 50), ("offsetY", 30));
+        var result = await InvokeToolAsync(toolkit, "MoveNode", ("nodeIndex", 0), ("offsetX", 50), ("offsetY", 30));
         var json = JObject.Parse(result);
         Assert.AreEqual("ok", json["status"]?.Value<string>());
 
         // MoveNode must be undoable in a single step. Previously it produced ZERO undo entries
         // (StandardMove doesn't Submit), so Ctrl+Z undid an unrelated earlier operation instead.
-        Assert.AreEqual(60, node.Anchor.Horizontal);
-        Assert.AreEqual(50, node.Anchor.Vertical);
+        // SetAnchorCommand is fire-and-forget async, so poll until the anchor settles rather than
+        // asserting inline (tests run with method-level parallelism).
+        await WaitUntilAsync(() => node.Anchor.Horizontal == 60 && node.Anchor.Vertical == 50,
+            "MoveNode should move the node");
 
         tree.GetHelper().Undo();
-        Assert.AreEqual(10, node.Anchor.Horizontal);
-        Assert.AreEqual(20, node.Anchor.Vertical);
+        await WaitUntilAsync(() => node.Anchor.Horizontal == 10 && node.Anchor.Vertical == 20,
+            "Undo should restore the original position");
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, string message, int timeoutMs = 3000)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            if (sw.ElapsedMilliseconds > timeoutMs)
+                Assert.Fail($"Timed out waiting for: {message}");
+            await Task.Delay(5).ConfigureAwait(false);
+        }
     }
 
     [TestMethod]
