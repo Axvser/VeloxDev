@@ -245,6 +245,17 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
                 }
                 catch { }
             }
+            else if (pt.IsEnum)
+            {
+                // Enum-typed properties (e.g. selector/routing state) are captured as their
+                // name string so diff output stays human-readable and detects changes.
+                try
+                {
+                    var val = prop.GetValue(target);
+                    obj[prop.Name] = val != null ? val.ToString() : JValue.CreateNull();
+                }
+                catch { }
+            }
         }
     }
 }
