@@ -32,6 +32,18 @@ Prefer composite tools over multi-step sequences to reduce round-trips:
 - Prefer **RuntimeId** over indices for multi-step operations (stable across add/remove).
 - Use **ConnectSlotsById** when you already have slot IDs, or **ConnectByProperty** when you know property names.
 
+### Query tools — pick the right one, don't call several
+
+| Need… | Use… |
+|---|---|
+| Quick orient (counts + distinct types) | **GetWorkflowSummary** |
+| Compact node list | **ListNodes** |
+| Full graph (nodes + slots + connections, one call) | **GetFullTopology** |
+| One node's full detail | **GetNodeDetail** / **GetNodeDetailById** |
+| Connections only | **ListConnections** (GetFullTopology already includes them) |
+| Type shape + runtime defaults | **GetTypeSchema** |
+| Developer docs of a type | **GetComponentContext** |
+
 ### Cache invalidation checklist
 
 Refresh before the next topology-sensitive step if you just called any of these:

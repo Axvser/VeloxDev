@@ -30,6 +30,18 @@
 - 多步操作中优先使用 **RuntimeId**（而非索引），在增删操作后依然稳定。
 - 已有插槽 ID 时使用 **ConnectSlotsById**；知道属性名时使用 **ConnectByProperty**。
 
+### 查询工具——按需选一个，别连环调用
+
+| 需要… | 使用… |
+|---|---|
+| 快速概览（数量 + 去重类型） | **GetWorkflowSummary** |
+| 紧凑节点列表 | **ListNodes** |
+| 完整拓扑（节点 + 插槽 + 连接，一次调用） | **GetFullTopology** |
+| 单个节点的完整详情 | **GetNodeDetail** / **GetNodeDetailById** |
+| 仅连接列表 | **ListConnections**（GetFullTopology 已包含连接） |
+| 类型结构 + 运行时默认值 | **GetTypeSchema** |
+| 类型的开发者文档 | **GetComponentContext** |
+
 ### 缓存失效检查表
 
 如果刚调用过以下任一操作，在下一次依赖拓扑的步骤前应先刷新：
