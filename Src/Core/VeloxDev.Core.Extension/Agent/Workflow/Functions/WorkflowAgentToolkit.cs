@@ -3,7 +3,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -786,13 +785,13 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return result;
     }
 
-    [Description("Creates a node (via CreateNodeCommand — never modify the Nodes collection directly). Width/height must be > 0; 0 uses the type's documented default (fallback 300×260). Position auto-offsets to avoid overlap.")]
+    [Description("Creates a node (via CreateNodeCommand — never modify the Nodes collection directly). Width/height: 0 reads the type's default ([DefaultSize]) if declared, else 300×260. Position auto-offsets to avoid overlap.")]
     private string CreateNode(
         [Description("Fully-qualified type name.")] string fullTypeName,
         [Description("Left px. Consider existing node positions to avoid overlap.")] double left = 0,
         [Description("Top px. Consider existing node positions to avoid overlap.")] double top = 0,
-        [Description("Width px. Must be > 0. Use GetComponentContext to discover defaults.")] double width = 0,
-        [Description("Height px. Must be > 0. Use GetComponentContext to discover defaults.")] double height = 0)
+        [Description("Width px. 0 = type's default size (fallback 300×260). Use GetComponentContext to discover the exact default.")] double width = 0,
+        [Description("Height px. 0 = type's default size (fallback 300×260). Use GetComponentContext to discover the exact default.")] double height = 0)
     {
         var type = TypeIntrospector.ResolveType(fullTypeName);
         if (type == null)
@@ -800,12 +799,21 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!typeof(IWorkflowNodeViewModel).IsAssignableFrom(type))
             return Error($"'{fullTypeName}' does not implement IWorkflowNodeViewModel.");
 
-        // Resolve a non-zero size: the caller's explicit value wins; otherwise fall back to the
-        // deterministic safe default (300×260, the same value the prompt instructs as a fallback).
-        // For a type's documented default, the Agent reads GetComponentContext and passes it
-        // explicitly — or resizes afterwards with ResizeNode.
-        if (width <= 0) width = 300;
-        if (height <= 0) height = 260;
+        // Resolve a non-zero size: the caller's explicit value wins; otherwise read the node's real
+        // default baked into the field initializer by the generator ([DefaultSize]), which survives
+        // Activator.CreateInstance. Only fall back to the deterministic 300×260 if the type declares
+        // no default at all.
+        IWorkflowNodeViewModel node;
+        try
+        {
+            node = (IWorkflowNodeViewModel)Activator.CreateInstance(type);
+            if (width <= 0) width = node.Size.Width > 0 ? node.Size.Width : 300;
+            if (height <= 0) height = node.Size.Height > 0 ? node.Size.Height : 260;
+        }
+        catch (Exception ex)
+        {
+            return Error($"Failed to create node: {ex.Message}");
+        }
 
         // Auto-offset to avoid overlapping existing nodes using spatial query
         const double padding = 30;
@@ -863,7 +871,6 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
         try
         {
-            var node = (IWorkflowNodeViewModel)Activator.CreateInstance(type);
             node.Anchor = new Anchor(left, top, 0);
             // Set size before adding to tree so the first Virtualize call (fired by
             // OnNodesChanged → Nodes.Add) already sees the correct bounds.  If size
@@ -1388,12 +1395,11 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Clone ──────────────────────────
 
-    [Description("Clones a set of nodes (by indices) with their internal connections to a new position. Returns mapping of old→new node IDs.")]
-    private async Task<string> CloneNodes(
+    [Description("Clones a set of nodes (by indices) with their internal connections to a new position. Returns mapping of old→new node IDs. Connections to nodes outside the cloned set cannot be carried over and are reported as dropped.")]
+    private string CloneNodes(
         [Description("JSON array of node indices to clone, e.g. [0,1,2].")] string nodeIndicesJson,
         [Description("Horizontal offset px for cloned nodes.")] double offsetX = 200,
-        [Description("Vertical offset px for cloned nodes.")] double offsetY = 0,
-        CancellationToken cancellationToken = default)
+        [Description("Vertical offset px for cloned nodes.")] double offsetY = 0)
     {
         int[] indices;
         try
@@ -1413,21 +1419,18 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 return Error($"Node index {idx} out of range [0,{Tree.Nodes.Count}).");
             sourceNodes.Add(Tree.Nodes[idx]);
         }
+        if (sourceNodes.Count == 0)
+            return Ok("Nothing to clone.");
 
         var sourceSet = new HashSet<IWorkflowNodeViewModel>(sourceNodes);
         var oldToNew = new Dictionary<string, IWorkflowNodeViewModel>();
         var slotMap = new Dictionary<string, IWorkflowSlotViewModel>(); // old slot id → new slot
 
-        // Record the undo depth so the whole clone can be collapsed into a single undo entry
-        // (each CreateNode / CreateSlot / connection command pushes its own entry otherwise).
-        var undoStack = TryGetUndoStack(Tree);
-        var undoDepth = undoStack?.Count ?? 0;
-
-        // CreateNodeCommand is a shared per-tree command dispatched once per clone — wait for all
-        // dispatches to actually complete so the tool returns only after the clones are mounted.
-        var createNodeWait = WaitForNDispatchesAsync(Tree.CreateNodeCommand, sourceNodes.Count, cancellationToken);
-
-        // Phase 1: Clone nodes with slots
+        // Phase 1 (preflight, BEFORE any mutation): instantiate every clone and copy scalar
+        // properties. Any failure here returns an error with nothing mounted, so a clone is
+        // all-or-nothing instead of leaving a half-cloned tree behind.
+        var clones = new List<IWorkflowNodeViewModel>();
+        var slotOwners = new List<(IWorkflowNodeViewModel Owner, IWorkflowSlotViewModel Slot)>();
         foreach (var src in sourceNodes)
         {
             var srcType = src.GetType();
@@ -1448,11 +1451,10 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
             // Copy scalar properties (non-command-backed)
             ComponentPatcher.CopyScalarProperties(src, clone);
-
-            Tree.CreateNodeCommand.Execute(clone);
+            clones.Add(clone);
             oldToNew[GetComponentId(src)] = clone;
 
-            // Clone slots
+            // Clone slots (a slot that cannot be instantiated fails the whole clone)
             for (int s = 0; s < src.Slots.Count; s++)
             {
                 var srcSlot = src.Slots[s];
@@ -1462,40 +1464,20 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                     var newSlot = (IWorkflowSlotViewModel)Activator.CreateInstance(slotType);
                     newSlot.Channel = srcSlot.Channel;
                     ComponentPatcher.CopyScalarProperties(srcSlot, newSlot);
-                    var slotCompletion = WaitForExitedAsync(clone.CreateSlotCommand, cancellationToken);
-                    clone.CreateSlotCommand.Execute(newSlot);
-                    await slotCompletion.ConfigureAwait(false);
                     slotMap[GetComponentId(srcSlot)] = newSlot;
+                    slotOwners.Add((clone, newSlot));
                 }
-                catch { /* skip non-clonable slots */ }
-            }
-        }
-
-        await createNodeWait.ConfigureAwait(false);
-
-        // Phase 2: Re-establish internal connections (only between cloned nodes).
-        // Send/Receive are shared per-tree commands — compute the exact dispatch count up front
-        // (matching the dispatch condition below, so the wait count can never be missed) and wait
-        // for every connection's commands to complete before returning.
-        int connCount = 0;
-        foreach (var src in sourceNodes)
-        {
-            foreach (var srcSlot in src.Slots)
-            {
-                foreach (var target in srcSlot.Targets)
+                catch (Exception ex)
                 {
-                    if (target.Parent != null && sourceSet.Contains(target.Parent)
-                        && slotMap.ContainsKey(GetComponentId(srcSlot))
-                        && slotMap.ContainsKey(GetComponentId(target)))
-                        connCount++;
+                    return Error($"Failed to instantiate slot '{slotType.Name}' on {srcType.Name}: {ex.Message}");
                 }
             }
         }
 
-        var sendWait = WaitForNDispatchesAsync(Tree.SendConnectionCommand, connCount, cancellationToken);
-        var recvWait = WaitForNDispatchesAsync(Tree.ReceiveConnectionCommand, connCount, cancellationToken);
-
-        int connected = 0;
+        // Phase 2 (preflight): collect internal connections to re-establish (both endpoints cloned),
+        // and count external ones that cannot be carried over.
+        var internalConnections = new List<(IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver)>();
+        int dropped = 0;
         foreach (var src in sourceNodes)
         {
             foreach (var srcSlot in src.Slots)
@@ -1504,87 +1486,111 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 {
                     if (target.Parent != null && sourceSet.Contains(target.Parent))
                     {
-                        var srcSlotId = GetComponentId(srcSlot);
-                        var tgtSlotId = GetComponentId(target);
-                        if (slotMap.TryGetValue(srcSlotId, out var newSender) &&
-                            slotMap.TryGetValue(tgtSlotId, out var newReceiver))
-                        {
-                            Tree.SendConnectionCommand.Execute(newSender);
-                            Tree.ReceiveConnectionCommand.Execute(newReceiver);
-                            if (VerifyConnection(newSender, newReceiver))
-                                connected++;
-                        }
+                        if (slotMap.TryGetValue(GetComponentId(srcSlot), out var newSender) &&
+                            slotMap.TryGetValue(GetComponentId(target), out var newReceiver))
+                            internalConnections.Add((newSender, newReceiver));
+                    }
+                    else
+                    {
+                        dropped++;
                     }
                 }
             }
         }
 
-        await Task.WhenAll(sendWait, recvWait).ConfigureAwait(false);
+        // Commit the whole clone as ONE undoable gesture. Redo/undo mutate the collections directly
+        // (mirroring Core's own StandardCreateNode / StandardCreateNewConnection action bodies) so no
+        // intermediate undo entries are produced and no Core internals need reflecting.
+        Tree.GetHelper().Submit(new WorkflowActionPair(
+            () =>
+            {
+                foreach (var clone in clones)
+                {
+                    clone.Parent = Tree;
+                    Tree.Nodes.Add(clone); // triggers NodeAdded via Tree's Nodes CollectionChanged
+                }
+                foreach (var (owner, slot) in slotOwners)
+                {
+                    slot.Parent = owner;
+                    if (!owner.Slots.Any(s => ReferenceEquals(s, slot)))
+                        owner.Slots.Add(slot);
+                }
+                foreach (var (sender, receiver) in internalConnections)
+                    EstablishConnection(Tree, sender, receiver);
+            },
+            () =>
+            {
+                foreach (var (sender, receiver) in internalConnections)
+                    RemoveConnection(Tree, sender, receiver);
+                for (int i = clones.Count - 1; i >= 0; i--)
+                {
+                    Tree.Nodes.Remove(clones[i]);
+                    clones[i].Parent = null;
+                }
+            }));
 
         var mapping = new JObject();
         foreach (var kvp in oldToNew)
             mapping[kvp.Key] = GetComponentId(kvp.Value);
 
-        // Collapse every undo entry created by this clone into one atomic gesture.
-        if (undoStack is not null)
-            CollapseUndoStack(undoStack, undoDepth);
-
         return JsonConvert.SerializeObject(new
         {
             status = "ok",
             cloned = oldToNew.Count,
-            connections = connected,
+            connections = internalConnections.Count,
+            droppedExternalConnections = dropped,
             mapping,
         }, Formatting.None);
     }
 
     /// <summary>
-    /// Reflects the Core-internal undo stack (<c>WorkflowTreeEx.TreeCache.UndoStack</c>). Returns
-    /// <c>null</c> when reflection fails — callers must treat it as best-effort. Core internals are
-    /// only read, never modified.
+    /// Establishes a connection by mutating the tree's collections directly (no per-connection undo
+    /// entry), mirroring Core's <c>StandardCreateNewConnection</c> redo action. Only used inside a
+    /// single undoable gesture so the whole clone stays one Ctrl+Z step.
     /// </summary>
-    private ConcurrentStack<IWorkflowActionPair>? TryGetUndoStack(IWorkflowTreeViewModel tree)
+    private static void EstablishConnection(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
     {
-        try
-        {
-            var getCache = typeof(WorkflowTreeEx).GetMethod("GetCache",
-                BindingFlags.NonPublic | BindingFlags.Static);
-            var cache = getCache?.Invoke(null, [tree]);
-            return cache?.GetType().GetProperty("UndoStack")?.GetValue(cache)
-                as ConcurrentStack<IWorkflowActionPair>;
-        }
-        catch
-        {
-            return null;
-        }
+        if (sender is null || receiver is null) return;
+        if (!tree.LinksMap.TryGetValue(sender, out var receiverLinks))
+            tree.LinksMap[sender] = receiverLinks = new Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>();
+        if (receiverLinks.ContainsKey(receiver)) return;
+
+        var link = tree.GetHelper().CreateLink(sender, receiver);
+        link.IsVisible = true;
+        receiverLinks[receiver] = link;
+        tree.Links.Add(link);
+
+        if (!sender.Targets.Contains(receiver))
+            sender.Targets.Add(receiver);
+        if (!receiver.Sources.Contains(sender))
+            receiver.Sources.Add(sender);
+
+        sender.GetHelper().UpdateState();
+        receiver.GetHelper().UpdateState();
     }
 
     /// <summary>
-    /// Pops every undo entry pushed since <paramref name="depth"/> and replaces them with a single
-    /// entry whose Undo reverses the whole batch (last-created first) and whose Redo replays it in
-    /// creation order — turning a multi-step gesture into one Ctrl+Z step.
+    /// Removes a connection created by <see cref="EstablishConnection"/> (mirrors Core's
+    /// <c>StandardCreateNewConnection</c> undo action).
     /// </summary>
-    private static void CollapseUndoStack(ConcurrentStack<IWorkflowActionPair> stack, int depth)
+    private static void RemoveConnection(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
     {
-        var popped = new List<IWorkflowActionPair>();
-        while (stack.Count > depth)
+        if (sender is null || receiver is null) return;
+        if (tree.LinksMap.TryGetValue(sender, out var receiverLinks) &&
+            receiverLinks.TryGetValue(receiver, out var link))
         {
-            if (!stack.TryPop(out var pair)) break;
-            popped.Add(pair);
-        }
-        if (popped.Count == 0) return;
+            receiverLinks.Remove(receiver);
+            if (receiverLinks.Count == 0)
+                tree.LinksMap.Remove(sender);
 
-        // popped[0] = last-created (top), popped[^1] = first-created.
-        var redos = new Action[popped.Count];
-        var undos = new Action[popped.Count];
-        for (int i = 0; i < popped.Count; i++)
-        {
-            undos[i] = popped[i].Undo;                    // reverse creation order → correct undo
-            redos[popped.Count - 1 - i] = popped[i].Redo; // creation order → correct redo
+            tree.Links.Remove(link);
+            sender.Targets.Remove(receiver);
+            receiver.Sources.Remove(sender);
+            link.IsVisible = false;
+
+            sender.GetHelper().UpdateState();
+            receiver.GetHelper().UpdateState();
         }
-        stack.Push(new WorkflowActionPair(
-            () => { foreach (var r in redos) r.Invoke(); },
-            () => { foreach (var u in undos) u.Invoke(); }));
     }
 
     // ────────────────────────── Batch Execution ──────────────────────────
@@ -1654,7 +1660,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             ["ExecuteCommandById"] = a => Task.FromResult(ExecuteCommandById(a.Value<string>("runtimeId")!, a.Value<string>("commandName")!, a.Value<string>("jsonParameter"))),
             ["CreateNode"] = a => Task.FromResult(CreateNode(a.Value<string>("fullTypeName")!, a.Value<double?>("left") ?? 0, a.Value<double?>("top") ?? 0, a.Value<double?>("width") ?? 0, a.Value<double?>("height") ?? 0)),
             ["CreateSlotOnNode"] = a => Task.FromResult(CreateSlotOnNode(a.Value<int>("nodeIndex"), a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "OneBoth")),
-            ["CloneNodes"] = a => CloneNodes(a.Value<string>("nodeIndicesJson")!, a.Value<double?>("offsetX") ?? 200, a.Value<double?>("offsetY") ?? 0, ct),
+            ["CloneNodes"] = a => Task.FromResult(CloneNodes(a.Value<string>("nodeIndicesJson")!, a.Value<double?>("offsetX") ?? 200, a.Value<double?>("offsetY") ?? 0)),
             ["ListSlotProperties"] = a => Task.FromResult(ListSlotProperties(a.Value<int>("nodeIndex"))),
             ["AddSlotToCollection"] = a => Task.FromResult(AddSlotToCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("fullSlotTypeName")!, a.Value<string>("channel") ?? "MultipleBoth")),
             ["RemoveSlotFromCollection"] = a => Task.FromResult(RemoveSlotFromCollection(a.Value<int>("nodeIndex"), a.Value<string>("propertyName")!, a.Value<string>("slotRuntimeId")!)),
@@ -2788,9 +2794,9 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     private (IWorkflowNodeViewModel? node, int index) FindNodeById(string runtimeId)
     {
-        // Resolve IDs the same way every other tool does (GetComponentId: RuntimeId when the
-        // component implements IWorkflowIdentifiable, else a stable hash fallback) so an ID
-        // returned by ListNodes/GetNodeDetail always round-trips through the by-id tools.
+        // Resolve IDs the same way every other tool does (GetComponentId: the component's RuntimeId,
+        // provided by its Helper) so an ID returned by ListNodes/GetNodeDetail always round-trips
+        // through the by-id tools.
         for (int i = 0; i < Tree.Nodes.Count; i++)
         {
             if (string.Equals(GetComponentId(Tree.Nodes[i]), runtimeId, StringComparison.Ordinal))
@@ -2825,9 +2831,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     private static string GetComponentId(object component)
     {
+        // Convention: every workflow component's Helper provides a stable RuntimeId (all default
+        // templates implement IWorkflowIdentifiable). Falling back to GetHashCode would yield a value
+        // that is neither stable across runs nor meaningful to the Agent — so a missing RuntimeId is
+        // an error, not something to paper over.
         if (component is IWorkflowIdentifiable identifiable)
             return identifiable.RuntimeId;
-        return component.GetHashCode().ToString("x8");
+        throw new InvalidOperationException(
+            $"'{component.GetType().Name}' does not implement IWorkflowIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
     }
 
     private static void AppendScalarProperties(JObject obj, object target)

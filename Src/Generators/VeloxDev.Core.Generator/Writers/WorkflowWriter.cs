@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
@@ -14,6 +15,7 @@ namespace VeloxDev.Generators.Writers
         public const string CancellationTokenFullName = "global::System.Threading.CancellationToken";
         private WorkflowAttributeModel? _workflowModel;
         private bool _isBaseClassWorkflowGenerated;
+        private bool _hasNodeDefaultsWithoutAttribute;
 
         public override void Initialize(Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
@@ -21,11 +23,38 @@ namespace VeloxDev.Generators.Writers
 
             _workflowModel = GetWorkflowAttributeModel(namedTypeSymbol);
             _isBaseClassWorkflowGenerated = _workflowModel != null && CheckBaseClassForWorkflowInfrastructure(namedTypeSymbol.BaseType, _workflowModel.WorkflowType);
+            _hasNodeDefaultsWithoutAttribute = _workflowModel == null
+                && IsNodeDefaultOnlySubclass(namedTypeSymbol);
         }
 
         public override bool CanWrite()
         {
-            return Symbol != null && _workflowModel != null;
+            return Symbol != null && (_workflowModel != null || _hasNodeDefaultsWithoutAttribute);
+        }
+
+        /// <summary>
+        /// True when the class has no [WorkflowBuilder.*] attribute but declares its own
+        /// [DefaultAnchor]/[DefaultSize] AND inherits from an already-generated workflow base.
+        /// Such a class must still get an InitializeWorkflowCore override so its node-layout
+        /// defaults are applied instead of silently dropped.
+        /// </summary>
+        private bool IsNodeDefaultOnlySubclass(INamedTypeSymbol symbol)
+        {
+            // No [WorkflowBuilder.*] attribute (guaranteed by caller), but a node-layout default present.
+            if (GetDefaultAnchor(symbol) == null && GetDefaultSize(symbol) == null)
+                return false; // no node-layout default to apply
+
+            // Must inherit from a generated workflow base of Node kind. Walk the base chain and
+            // look for a [WorkflowBuilder.Node] attribute at any level.
+            var current = symbol.BaseType;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                if (current.GetAttributes().Any(IsWorkflowViewModelAttribute)
+                    && CreateWorkflowAttributeModel(current.GetAttributes().First(IsWorkflowViewModelAttribute), current)?.WorkflowType == 2)
+                    return true;
+                current = current.BaseType;
+            }
+            return false;
         }
 
         public override string GetFileName()
@@ -43,7 +72,12 @@ namespace VeloxDev.Generators.Writers
             var model = _workflowModel;
             if (model == null || _isBaseClassWorkflowGenerated) return Array.Empty<string>();
 
-            return [GetWorkflowInterfaceName(model.WorkflowType)];
+            var interfaces = new List<string> { GetWorkflowInterfaceName(model.WorkflowType) };
+            if (!HasIdentifiableInfrastructure(model.TargetClassSymbol))
+            {
+                interfaces.Add($"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowIdentifiable");
+            }
+            return [.. interfaces];
         }
 
         private WorkflowAttributeModel? GetWorkflowAttributeModel(INamedTypeSymbol symbol)
@@ -328,7 +362,19 @@ namespace VeloxDev.Generators.Writers
         public override string GenerateBody()
         {
             var model = _workflowModel;
-            if (model == null) return string.Empty;
+            if (model == null)
+            {
+                // A [WorkflowBuilder.*]-less subclass that only overrides node-layout defaults:
+                // emit the InitializeWorkflowCore override that applies [DefaultAnchor]/[DefaultSize]
+                // over the inherited base implementation.
+                if (_hasNodeDefaultsWithoutAttribute)
+                {
+                    var defaultsSb = new StringBuilder();
+                    GenerateNodeDefaultsOnlyOverrideBody(defaultsSb);
+                    return defaultsSb.ToString();
+                }
+                return string.Empty;
+            }
 
             var sb = new StringBuilder();
 
@@ -369,11 +415,13 @@ namespace VeloxDev.Generators.Writers
                     }
                 """);
 
-            // Node subclasses extend the one-time initialization core with their own slots/enumerators.
+            // Node subclasses extend the one-time initialization core with their own
+            // slots/enumerators and, optionally, their own DefaultAnchor/DefaultSize.
             if (model.WorkflowType == 2)
             {
                 var members = GetNodeInitMembers(model.TargetClassSymbol);
-                if (members.Count > 0)
+                var defaults = GenerateNodeDefaultAssignments(model.TargetClassSymbol);
+                if (members.Count > 0 || !string.IsNullOrWhiteSpace(defaults))
                 {
                     var initBody = GenerateInitializeWorkflowBody(model.TargetClassSymbol, isOverride: false);
                     sb.AppendLine($$"""
@@ -381,6 +429,7 @@ namespace VeloxDev.Generators.Writers
                         {
                             base.InitializeWorkflowCore();
                             {{initBody}}
+                            {{defaults}}
                         }
                         """);
                 }
@@ -471,6 +520,7 @@ namespace VeloxDev.Generators.Writers
         {
             sb.AppendLine($$"""
          {{GenerateHelperProperty(model)}}
+         {{GenerateIdentifiableMember()}}
 
          private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel virtualLink = new {{model.VirtualLinkType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() { Sender = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}(), Receiver = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() };
          private {{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout layout = new();
@@ -716,10 +766,11 @@ namespace VeloxDev.Generators.Writers
         {
             sb.AppendLine($$"""
                     {{GenerateHelperProperty(model)}}
+                    {{GenerateIdentifiableMember()}}
 
                     private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel? parent = null;
-                    private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
-                    private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = new();
+                    private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = {{GenerateNodeAnchorInitializer(model.TargetClassSymbol)}};
+                    private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = {{GenerateNodeSizeInitializer(model.TargetClassSymbol)}};
                     private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> slots = [];
 
                     protected virtual {{TaskFullName}} Move({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
@@ -973,6 +1024,7 @@ namespace VeloxDev.Generators.Writers
         {
             sb.AppendLine($$"""
         {{GenerateHelperProperty(model)}}
+        {{GenerateIdentifiableMember()}}
 
         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> targets = [];
         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> sources = [];
@@ -1167,6 +1219,7 @@ namespace VeloxDev.Generators.Writers
         {
             sb.AppendLine($$"""
         {{GenerateHelperProperty(model)}}
+        {{GenerateIdentifiableMember()}}
 
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel sender = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel receiver = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
@@ -1257,6 +1310,152 @@ namespace VeloxDev.Generators.Writers
         }
     """);
         }
+
+        #region RuntimeId 与 Node 默认布局
+
+        /// <summary>
+        /// True when the target class (or any base) already exposes a RuntimeId member or implements
+        /// IWorkflowIdentifiable — in that case the generator must not emit a duplicate member/interface.
+        /// </summary>
+        private static bool HasIdentifiableInfrastructure(INamedTypeSymbol symbol)
+        {
+            if (symbol.GetMembers("RuntimeId").Any()) return true;
+
+            var current = symbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                if (current.AllInterfaces.Any(i =>
+                    i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).EndsWith("IWorkflowIdentifiable")))
+                    return true;
+                current = current.BaseType;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Generates the read-only RuntimeId member. The property has a protected setter so the
+        /// interface exposes only a getter, and Core.Extension's writable-properties-only serializer
+        /// (which keys off the public setter) treats it as a computed property and excludes it.
+        /// </summary>
+        private string GenerateIdentifiableMember()
+        {
+            if (Symbol == null || HasIdentifiableInfrastructure(Symbol)) return string.Empty;
+            return "public string RuntimeId { get; protected set; } = global::System.Guid.NewGuid().ToString(\"N\");\n";
+        }
+
+        /// <summary>
+        /// Backing-field initializer for the generated Anchor field, driven by [DefaultAnchor].
+        /// Emitted as a field initializer (not in InitializeWorkflowCore) so the default survives
+        /// construction paths that never call InitializeWorkflow (e.g. Activator.CreateInstance in
+        /// the Agent's CreateNode/CloneNodes).
+        /// </summary>
+        private string GenerateNodeAnchorInitializer(INamedTypeSymbol symbol)
+        {
+            var a = GetDefaultAnchor(symbol);
+            return a == null
+                ? "new()"
+                : $"new {NAMESPACE_VELOX_WORKFLOW}.Anchor({FormatDouble(a.Value.H)}, {FormatDouble(a.Value.V)}, {a.Value.L})";
+        }
+
+        /// <summary>Backing-field initializer for the generated Size field, driven by [DefaultSize].</summary>
+        private string GenerateNodeSizeInitializer(INamedTypeSymbol symbol)
+        {
+            var s = GetDefaultSize(symbol);
+            return s == null
+                ? "new()"
+                : $"new {NAMESPACE_VELOX_WORKFLOW}.Size({FormatDouble(s.Value.W)}, {FormatDouble(s.Value.H)})";
+        }
+
+        /// <summary>
+        /// Override body for a [WorkflowBuilder.*]-less subclass that only re-declares node-layout
+        /// defaults. The base class's backing-field initializers are fixed, so the subclass applies
+        /// its own [DefaultAnchor]/[DefaultSize] through the public Anchor/Size properties after
+        /// base initialization. Requires a parameterless constructor in the base for InitializeWorkflow.
+        /// </summary>
+        private void GenerateNodeDefaultsOnlyOverrideBody(StringBuilder sb)
+        {
+            sb.AppendLine($$"""
+                protected override void InitializeWorkflowCore()
+                {
+                    base.InitializeWorkflowCore();
+                    {{GenerateNodeDefaultAssignments(Symbol!)}}
+                }
+                """);
+        }
+
+        /// <summary>
+        /// Property assignments for a subclass override of InitializeWorkflowCore. The subclass cannot
+        /// change the base class's backing-field initializers, so its own DefaultAnchor/DefaultSize are
+        /// applied through the public Anchor/Size properties after base initialization.
+        /// </summary>
+        private static string GenerateNodeDefaultAssignments(INamedTypeSymbol symbol)
+        {
+            var sb = new StringBuilder();
+            var a = GetDefaultAnchor(symbol);
+            if (a != null)
+                sb.AppendLine($"Anchor = new {NAMESPACE_VELOX_WORKFLOW}.Anchor({FormatDouble(a.Value.H)}, {FormatDouble(a.Value.V)}, {a.Value.L});");
+            var s = GetDefaultSize(symbol);
+            if (s != null)
+                sb.AppendLine($"Size = new {NAMESPACE_VELOX_WORKFLOW}.Size({FormatDouble(s.Value.W)}, {FormatDouble(s.Value.H)});");
+            return sb.ToString();
+        }
+
+        private static AttributeData? GetNodeMetricsAttribute(INamedTypeSymbol symbol, string attributeName)
+        {
+            return symbol.GetAttributes().FirstOrDefault(a =>
+            {
+                var fullName = a.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                return fullName != null && fullName.EndsWith("." + attributeName, StringComparison.Ordinal);
+            });
+        }
+
+        private static (double H, double V, int L)? GetDefaultAnchor(INamedTypeSymbol symbol)
+        {
+            var attr = GetNodeMetricsAttribute(symbol, "DefaultAnchorAttribute");
+            if (attr == null) return null;
+
+            double h = 0, v = 0;
+            int l = 0;
+            var args = attr.ConstructorArguments;
+            if (args.Length > 0) h = GetPrimitiveDouble(args[0]);
+            if (args.Length > 1) v = GetPrimitiveDouble(args[1]);
+            if (args.Length > 2) l = GetPrimitiveInt(args[2]);
+            foreach (var na in attr.NamedArguments)
+            {
+                if (na.Key == "horizontal") h = GetPrimitiveDouble(na.Value);
+                else if (na.Key == "vertical") v = GetPrimitiveDouble(na.Value);
+                else if (na.Key == "layer") l = GetPrimitiveInt(na.Value);
+            }
+            return (h, v, l);
+        }
+
+        private static (double W, double H)? GetDefaultSize(INamedTypeSymbol symbol)
+        {
+            var attr = GetNodeMetricsAttribute(symbol, "DefaultSizeAttribute");
+            if (attr == null) return null;
+
+            double w = 0, h = 0;
+            var args = attr.ConstructorArguments;
+            if (args.Length > 0) w = GetPrimitiveDouble(args[0]);
+            if (args.Length > 1) h = GetPrimitiveDouble(args[1]);
+            foreach (var na in attr.NamedArguments)
+            {
+                if (na.Key == "width") w = GetPrimitiveDouble(na.Value);
+                else if (na.Key == "height") h = GetPrimitiveDouble(na.Value);
+            }
+            return (w, h);
+        }
+
+        private static double GetPrimitiveDouble(TypedConstant arg)
+            => arg.Kind == TypedConstantKind.Primitive && arg.Value is double d ? d : 0d;
+
+        private static int GetPrimitiveInt(TypedConstant arg)
+            => arg.Kind == TypedConstantKind.Primitive && arg.Value is int i ? i : 0;
+
+        private static string FormatDouble(double value)
+            => value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+
+        #endregion
 
         #region InitializeWorkflow 辅助方法
 

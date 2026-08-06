@@ -224,9 +224,14 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
 
     private static string GetRuntimeId(object component)
     {
+        // Convention: every workflow component's Helper provides a stable RuntimeId (the source
+        // generator implements IWorkflowIdentifiable on all workflow components). Falling back to
+        // GetHashCode would yield a value that is neither stable across runs nor meaningful — so a
+        // missing RuntimeId is an error, not something to paper over.
         if (component is IWorkflowIdentifiable identifiable)
             return identifiable.RuntimeId;
-        return component.GetHashCode().ToString("x8");
+        throw new InvalidOperationException(
+            $"'{component.GetType().Name}' does not implement IWorkflowIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
     }
 
     private static void AppendScalarProps(JObject obj, object target)
