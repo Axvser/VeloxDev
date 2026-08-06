@@ -1347,7 +1347,7 @@ namespace VeloxDev.Generators.Writers
         /// Backing-field initializer for the generated Anchor field, driven by [DefaultAnchor].
         /// Emitted as a field initializer (not in InitializeWorkflowCore) so the default survives
         /// construction paths that never call InitializeWorkflow (e.g. Activator.CreateInstance in
-        /// the Agent's CreateNode/CloneNodes).
+        /// the Agent's CreateNode).
         /// </summary>
         private string GenerateNodeAnchorInitializer(INamedTypeSymbol symbol)
         {
