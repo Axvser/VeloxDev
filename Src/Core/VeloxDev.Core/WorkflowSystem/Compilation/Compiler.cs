@@ -72,8 +72,8 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         // 根据方向构建邻接表
         var adj = direction switch
         {
-            CompileDirection.Reverse => BuildReverseAdjacency(allNodes),
-            _ => BuildForwardAdjacency(allNodes),
+            CompileDirection.Reverse => BuildReverseAdjacency(allNodes, nodeToIndex),
+            _ => BuildForwardAdjacency(allNodes, nodeToIndex),
         };
 
         // 检测环路（基于全图，一次检测供所有入口使用）
@@ -93,7 +93,7 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         {
             CompileScope.Omni => direction == CompileDirection.Reverse
                 ? FindOmniExits(allNodes)
-                : FindOmniEntries(allNodes),
+                : FindOmniEntries(allNodes, nodeToIndex),
             _ => [startIdx],
         };
 
@@ -137,7 +137,7 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
                 MarkLoopEntry(items, allNodes, globalCycleInfo);
 
             CollectSlotRoutes(items);
-            ComputeBranchExclusives(items, allNodes);
+            ComputeBranchExclusives(items, allNodes, nodeToIndex);
 
             results.Add(new CompilationResult(items.AsReadOnly(), mode, direction, scope,
                 globalCycleInfo.HasCycle, cycleHandling, _logger, _machineId));
@@ -150,7 +150,8 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
 
     // ── Adjacency ──────────────────────────────────────────────────────────
 
-    private List<int>[] BuildForwardAdjacency(IWorkflowNodeViewModel[] nodes)
+    private List<int>[] BuildForwardAdjacency(
+        IWorkflowNodeViewModel[] nodes, Dictionary<IWorkflowNodeViewModel, int> nodeToIndex)
     {
         var adj = new List<int>[nodes.Length];
         for (int i = 0; i < nodes.Length; i++) adj[i] = [];
@@ -162,9 +163,11 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
             {
                 foreach (var target in slot.Targets)
                 {
-                    if (target.Parent is null) continue;
-                    var j = Array.IndexOf(nodes, target.Parent);
-                    if (j >= 0) { adj[i].Add(j); edgeCount++; }
+                    if (target.Parent is { } parent &&
+                        nodeToIndex.TryGetValue(parent, out var j))
+                    {
+                        adj[i].Add(j); edgeCount++;
+                    }
                 }
             }
         }
@@ -173,7 +176,8 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         return adj;
     }
 
-    private List<int>[] BuildReverseAdjacency(IWorkflowNodeViewModel[] nodes)
+    private List<int>[] BuildReverseAdjacency(
+        IWorkflowNodeViewModel[] nodes, Dictionary<IWorkflowNodeViewModel, int> nodeToIndex)
     {
         var adj = new List<int>[nodes.Length];
         for (int i = 0; i < nodes.Length; i++) adj[i] = [];
@@ -185,9 +189,11 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
             {
                 foreach (var source in slot.Sources)
                 {
-                    if (source.Parent is null) continue;
-                    var j = Array.IndexOf(nodes, source.Parent);
-                    if (j >= 0) { adj[i].Add(j); edgeCount++; }
+                    if (source.Parent is { } parent &&
+                        nodeToIndex.TryGetValue(parent, out var j))
+                    {
+                        adj[i].Add(j); edgeCount++;
+                    }
                 }
             }
         }
@@ -200,7 +206,8 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
     /// Find all true entry points (in-degree = 0) in the graph.
     /// For Forward + Omni: these are natural starting nodes.
     /// </summary>
-    private List<int> FindOmniEntries(IWorkflowNodeViewModel[] nodes)
+    private List<int> FindOmniEntries(
+        IWorkflowNodeViewModel[] nodes, Dictionary<IWorkflowNodeViewModel, int> nodeToIndex)
     {
         var inDegree = new int[nodes.Length];
         for (int i = 0; i < nodes.Length; i++)
@@ -209,9 +216,11 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
             {
                 foreach (var target in slot.Targets)
                 {
-                    if (target.Parent is null) continue;
-                    var j = Array.IndexOf(nodes, target.Parent);
-                    if (j >= 0) inDegree[j]++;
+                    if (target.Parent is { } parent &&
+                        nodeToIndex.TryGetValue(parent, out var j))
+                    {
+                        inDegree[j]++;
+                    }
                 }
             }
         }
@@ -439,9 +448,10 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
     /// 执行时，未选中分支的独占项将被跳过。
     /// </summary>
     private void ComputeBranchExclusives(
-        List<CompiledItem> items, IWorkflowNodeViewModel[] nodes)
+        List<CompiledItem> items, IWorkflowNodeViewModel[] nodes,
+        Dictionary<IWorkflowNodeViewModel, int> nodeToIndex)
     {
-        var forwardAdj = BuildForwardAdjacency(nodes);
+        var forwardAdj = BuildForwardAdjacency(nodes, nodeToIndex);
         var nodeToItemId = new Dictionary<IWorkflowNodeViewModel, int>();
         foreach (var item in items)
             nodeToItemId[item.Node] = item.Id;
@@ -452,15 +462,13 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
             if (item.RouteTable is null || item.RouteTable.Count == 0)
                 continue;
 
-            var routerIdx = Array.IndexOf(nodes, item.Node);
-            if (routerIdx < 0) continue;
+            if (!nodeToIndex.TryGetValue(item.Node, out var routerIdx)) continue;
 
             // 1) 收集每个分支的所有下游节点
             var branchDescendants = new Dictionary<object, HashSet<int>>();
             foreach (var kv in item.RouteTable)
             {
-                var targetIdx = Array.IndexOf(nodes, kv.Value);
-                if (targetIdx < 0) continue;
+                if (!nodeToIndex.TryGetValue(kv.Value, out var targetIdx)) continue;
 
                 var descendants = new HashSet<int>();
                 var queue = new Queue<int>();

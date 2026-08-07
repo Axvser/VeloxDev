@@ -251,6 +251,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, Sy
 
         if (Parent is null)
         {
+            WorkflowGuard.Fail("The selector is not installed on a node; SetSelector cannot apply the selection.");
             return;
         }
 

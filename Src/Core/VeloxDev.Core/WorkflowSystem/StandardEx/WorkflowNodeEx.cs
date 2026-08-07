@@ -232,7 +232,12 @@ public static class WorkflowNodeEx
 
     public static void StandardDelete(this IWorkflowNodeViewModel component)
     {
-        if (component is null || component.Parent is null) return;
+        if (component is null) return;
+        if (component.Parent is null)
+        {
+            WorkflowGuard.Fail("The node is not attached to a tree; deletion cannot be performed.");
+            return;
+        }
 
         var tree = component.Parent;
         var oldParent = component.Parent;

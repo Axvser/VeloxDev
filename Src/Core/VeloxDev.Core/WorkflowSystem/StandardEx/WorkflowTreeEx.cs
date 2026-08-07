@@ -28,7 +28,12 @@ public static class WorkflowTreeEx
     {
         var oldParent = node.Parent;
         var newParent = component;
-        node.GetHelper().Delete();
+        // Detach the node from its previous tree first. A detached node (first CreateNode)
+        // has nothing to detach — skip, otherwise StandardDelete's attachment guard fires.
+        if (node.Parent is not null)
+        {
+            node.GetHelper().Delete();
+        }
         component.StandardSubmit(new WorkflowActionPair(
             () => CreateNodeRedo(component, node, newParent),
             () => CreateNodeUndo(component, node, oldParent)));
@@ -92,6 +97,12 @@ public static class WorkflowTreeEx
     public static void StandardSendConnection(this IWorkflowTreeViewModel component, IWorkflowSlotViewModel slot)
     {
         var cache = GetCache(component);
+
+        if (slot.Parent?.Parent is null)
+        {
+            WorkflowGuard.Fail("The slot is not attached to a tree; it cannot send a connection.");
+            return;
+        }
 
         // 1. 检查发送端能力
         bool canBeSender = slot.StandardCanBeSender();

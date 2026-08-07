@@ -3,17 +3,36 @@ using VeloxDev.TransitionSystem.NativeInterpolators;
 
 namespace VeloxDev.Core.Test.TransitionSystem;
 
+// These tests exercise the process-wide static registry InterpolatorCore.NativeInterpolators.
+// Each test writes only its own private Type key and always removes it in finally, so tests
+// are order-independent and never clobber each other or the native defaults — the identity
+// assertions hold regardless of parallelization. [DoNotParallelize] is kept purely as
+// defense-in-depth for the shared static registry (matching MonoBehaviourManagerTests),
+// not because the tests require serial execution.
 [TestClass]
+[DoNotParallelize]
 public class InterpolatorCoreTests
 {
+    // Private marker types serving as unique, test-owned registration keys.
+    private sealed class RegistrationKey { }
+    private sealed class OverwriteKey { }
+    private sealed class RemovalKey { }
+    private sealed class CustomKey { }
+
     [TestMethod]
     public void RegisterInterpolator_And_TryGet_Succeeds()
     {
         var interp = new DoubleInterpolator();
-        InterpolatorCore.RegisterInterpolator(typeof(double), interp);
-
-        Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(double), out var result));
-        Assert.AreSame(interp, result);
+        InterpolatorCore.RegisterInterpolator(typeof(RegistrationKey), interp);
+        try
+        {
+            Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(RegistrationKey), out var result));
+            Assert.AreSame(interp, result);
+        }
+        finally
+        {
+            InterpolatorCore.UnregisterInterpolator(typeof(RegistrationKey), out _);
+        }
     }
 
     [TestMethod]
@@ -27,15 +46,12 @@ public class InterpolatorCoreTests
     public void UnregisterInterpolator_RemovesEntry()
     {
         var interp = new FloatInterpolator();
-        InterpolatorCore.RegisterInterpolator(typeof(float), interp);
-        var removed = InterpolatorCore.UnregisterInterpolator(typeof(float), out var old);
+        InterpolatorCore.RegisterInterpolator(typeof(RemovalKey), interp);
+        var removed = InterpolatorCore.UnregisterInterpolator(typeof(RemovalKey), out var old);
 
         Assert.IsTrue(removed);
         Assert.AreSame(interp, old);
-        Assert.IsFalse(InterpolatorCore.TryGetInterpolator(typeof(float), out _));
-
-        // Re-register for other tests
-        InterpolatorCore.RegisterInterpolator(typeof(float), interp);
+        Assert.IsFalse(InterpolatorCore.TryGetInterpolator(typeof(RemovalKey), out _));
     }
 
     [TestMethod]
@@ -43,11 +59,17 @@ public class InterpolatorCoreTests
     {
         var old = new DoubleInterpolator();
         var replacement = new DoubleInterpolator();
-        InterpolatorCore.RegisterInterpolator(typeof(double), old);
-        InterpolatorCore.RegisterInterpolator(typeof(double), replacement);
-
-        Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(double), out var result));
-        Assert.AreSame(replacement, result);
+        InterpolatorCore.RegisterInterpolator(typeof(OverwriteKey), old);
+        InterpolatorCore.RegisterInterpolator(typeof(OverwriteKey), replacement);
+        try
+        {
+            Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(OverwriteKey), out var result));
+            Assert.AreSame(replacement, result);
+        }
+        finally
+        {
+            InterpolatorCore.UnregisterInterpolator(typeof(OverwriteKey), out _);
+        }
     }
 
     [TestMethod]
@@ -58,14 +80,18 @@ public class InterpolatorCoreTests
     }
 
     [TestMethod]
-    public void RegisterInterpolator_ForString_Succeeds()
+    public void RegisterInterpolator_ForCustomType_Succeeds()
     {
         var interpolator = new FloatInterpolator();
-        InterpolatorCore.RegisterInterpolator(typeof(string), interpolator);
-
-        Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(string), out var result));
-        Assert.AreSame(interpolator, result);
-
-        InterpolatorCore.UnregisterInterpolator(typeof(string), out _);
+        InterpolatorCore.RegisterInterpolator(typeof(CustomKey), interpolator);
+        try
+        {
+            Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(CustomKey), out var result));
+            Assert.AreSame(interpolator, result);
+        }
+        finally
+        {
+            InterpolatorCore.UnregisterInterpolator(typeof(CustomKey), out _);
+        }
     }
 }

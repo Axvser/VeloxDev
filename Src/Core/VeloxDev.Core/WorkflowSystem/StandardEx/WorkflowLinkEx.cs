@@ -13,7 +13,11 @@ public static class WorkflowLinkEx
 
     public static void StandardDelete(this IWorkflowLinkViewModel component)
     {
-        if (component.Sender?.Parent?.Parent is null) return;
+        if (component.Sender?.Parent?.Parent is null)
+        {
+            WorkflowGuard.Fail("The link's sender is not attached to a tree; deletion cannot be performed.");
+            return;
+        }
         var tree = component.Sender.Parent.Parent;
 
         if (tree.LinksMap.TryGetValue(component.Sender, out var dic) &&

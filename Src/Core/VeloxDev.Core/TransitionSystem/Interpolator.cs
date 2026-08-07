@@ -162,14 +162,13 @@ public abstract class InterpolatorCore : IFrameInterpolatorCore
     }
     public static bool RegisterInterpolator(Type type, IValueInterpolator interpolator)
     {
-        if (NativeInterpolators.TryGetValue(type, out var oldValue))
-        {
-            return NativeInterpolators.TryUpdate(type, interpolator, oldValue);
-        }
-        else
-        {
-            return NativeInterpolators.TryAdd(type, interpolator);
-        }
+        // Atomic last-writer-wins install. The previous read-modify-write
+        // (TryGetValue + TryUpdate) raced: a concurrent registration of the same type
+        // between the two calls made TryUpdate fail and this registration was silently
+        // dropped. AddOrUpdate makes the update unconditional and atomic, so the
+        // registration is guaranteed to land.
+        NativeInterpolators.AddOrUpdate(type, interpolator, (_, _) => interpolator);
+        return true;
     }
     public static bool UnregisterInterpolator(Type type, out IValueInterpolator? interpolator)
     {

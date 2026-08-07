@@ -15,7 +15,11 @@ public static class WorkflowSlotEx
 
     public static void StandardSetChannel(this IWorkflowSlotViewModel component, SlotChannel channel)
     {
-        if (component.Parent?.Parent is null) return;
+        if (component.Parent?.Parent is null)
+        {
+            WorkflowGuard.Fail("The slot is not attached to a tree; SetChannel cannot clean up existing connections.");
+            return;
+        }
         var tree = component.Parent.Parent;
         List<IWorkflowLinkViewModel> links_asSource = [];
         List<IWorkflowLinkViewModel> links_asTarget = [];
@@ -92,17 +96,31 @@ public static class WorkflowSlotEx
     public static void StandardApplyConnection(this IWorkflowSlotViewModel component)
     {
         var tree = component.Parent?.Parent;
-        tree?.GetHelper()?.SendConnection(component);
+        if (tree is null)
+        {
+            WorkflowGuard.Fail("The slot is not attached to a tree; the connection cannot be sent.");
+            return;
+        }
+        tree.GetHelper()?.SendConnection(component);
     }
     public static void StandardReceiveConnection(this IWorkflowSlotViewModel component)
     {
         var tree = component.Parent?.Parent;
-        tree?.GetHelper().ReceiveConnection(component);
+        if (tree is null)
+        {
+            WorkflowGuard.Fail("The slot is not attached to a tree; the connection cannot be received.");
+            return;
+        }
+        tree.GetHelper().ReceiveConnection(component);
     }
 
     public static void StandardDelete(this IWorkflowSlotViewModel component)
     {
-        if (component.Parent is null) return;
+        if (component.Parent is null)
+        {
+            WorkflowGuard.Fail("The slot is not attached to a node; deletion cannot be performed.");
+            return;
+        }
 
         HashSet<IWorkflowLinkViewModel> links = [];
 
