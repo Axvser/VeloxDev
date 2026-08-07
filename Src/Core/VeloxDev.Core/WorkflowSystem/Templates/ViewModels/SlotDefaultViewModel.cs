@@ -30,7 +30,7 @@ public sealed partial class SlotDefaultViewModel : IWorkflowSlotViewModel, IWork
     [VeloxProperty] private IWorkflowNodeViewModel? parent = null;
     [VeloxProperty] private SlotChannel channel = SlotChannel.OneBoth;
     [VeloxProperty] private SlotState state = SlotState.StandBy;
-    [VeloxProperty] private Anchor anchor = new();
+    [VeloxProperty] private Anchor anchor = new(double.NaN, double.NaN, 0);
 
     [VeloxCommand]
     private Task SetChannel(object? parameter, CancellationToken ct)

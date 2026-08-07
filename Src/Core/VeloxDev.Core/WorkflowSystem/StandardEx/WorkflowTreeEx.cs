@@ -174,8 +174,9 @@ public static class WorkflowTreeEx
     {
         var cache = GetCache(component);
 
-        component.VirtualLink.Sender.Anchor = new Anchor();
-        component.VirtualLink.Receiver.Anchor = new Anchor();
+        // 重置为"无值"(NaN),而非原点 (0,0,0):虚拟链接端点在拖拽前没有有效坐标。
+        component.VirtualLink.Sender.Anchor = new Anchor(double.NaN, double.NaN, 0);
+        component.VirtualLink.Receiver.Anchor = new Anchor(double.NaN, double.NaN, 0);
         component.VirtualLink.IsVisible = false;
 
         if (cache.CurrentSender != null)

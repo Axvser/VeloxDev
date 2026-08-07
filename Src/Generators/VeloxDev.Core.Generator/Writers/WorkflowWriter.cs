@@ -1031,7 +1031,8 @@ namespace VeloxDev.Generators.Writers
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel? parent = null;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel channel = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel.MultipleBoth;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState state = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState.StandBy;
-        private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new();
+        // Slot 锚点默认 NaN(无值):链接在双端锚点被 GUI 测量(写入真实坐标)前不渲染。
+        private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new(global::System.Double.NaN, global::System.Double.NaN, 0);
 
         protected virtual {{TaskFullName}} SetChannel({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
         {

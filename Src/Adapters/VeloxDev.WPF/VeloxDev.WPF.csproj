@@ -11,7 +11,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WPF</Title>
-		<Version>6.0.82</Version>
+		<Version>6.0.187</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WPF</Description>
 	 <PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -25,9 +25,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="VeloxDev.Core" Version="6.0.82">
-			<SetTargetFramework Condition="'$(TargetFramework)' == 'net5.0-windows'">TargetFramework=net5.0</SetTargetFramework>
-		</PackageReference>
+		<ProjectReference Include="..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
 	</ItemGroup>
 
 </Project>
