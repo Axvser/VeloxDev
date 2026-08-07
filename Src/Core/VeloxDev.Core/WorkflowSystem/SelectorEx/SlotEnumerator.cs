@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Runtime.Serialization;
 using System.Threading;
 using VeloxDev.MVVM;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem;
 
@@ -105,8 +106,19 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, Sy
                     conditionMap[normalizedValue] = item.Slot;
             }
 
-            if (!_isDeserializing)
-                Parent?.CreateSlotCommand.Execute(item.Slot);
+            if (!_isDeserializing && Parent is { } parent)
+            {
+                // Register the slot with the parent while the node is still detached so a later
+                // deferred CreateSlotCommand dispatch cannot execute AFTER the node is mounted —
+                // there StandardCreateSlot's attached branch would Submit a phantom undo entry
+                // for a slot construction already created. StandardCreateSlot is a plain
+                // no-Submit collection add here; its idempotency guard then makes the command's
+                // re-dispatch a no-op. The command is still dispatched to honor the standard
+                // slot-creation flow (a node's CreateSlotCommand is the registration contract).
+                if (parent.Parent is null)
+                    parent.StandardCreateSlot(item.Slot);
+                parent.CreateSlotCommand.Execute(item.Slot);   // attached → one undoable step per slot
+            }
         }
     }
 

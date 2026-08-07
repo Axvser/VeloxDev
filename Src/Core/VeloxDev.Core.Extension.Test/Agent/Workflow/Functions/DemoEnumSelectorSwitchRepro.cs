@@ -97,29 +97,46 @@ public class DemoEnumSelectorSwitchRepro
     {
         var session = WorkflowDemoSession.Create();
         var node = session.Tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
+        var vr = typeof(NetworkRequestMethod).Assembly.GetType("Demo.ViewModels.VoltageRange");
+        Assert.IsNotNull(vr, "VoltageRange should exist in Lib");
 
-        // Select a Voltage value first, so "retain previous selection" is meaningful.
+        // The demo keeps its bootstrap on the undo stack (逐条引导步骤), but the interactive
+        // switches we perform below land on top of it — so a single Undo pops exactly our own
+        // switch, deterministically. To exercise the undo path, perform switches of our own, then
+        // undo one.
+        // The demo starts on VoltageRange; select a Voltage value first so "retain previous
+        // selection" is meaningful.
         node.SelectedValue = "High";
 
-        // Undo line 194 → HTTP. The dropdown must show GET (the value set at demo setup).
-        session.Tree.GetHelper().Undo();
-        Assert.AreEqual(typeof(NetworkRequestMethod), node.EnumType, "undo returns to HTTP");
-        Assert.AreEqual("Get", node.SelectedValue, "undo to HTTP shows GET selected");
+        // Switch to HTTP → HTTP must show GET (the value the demo's initial setup selected).
+        node.OutputSlots.SetSelector(typeof(NetworkRequestMethod));
+        Assert.AreEqual(typeof(NetworkRequestMethod), node.EnumType);
+        Assert.AreEqual("Get", node.SelectedValue, "HTTP shows GET selected");
 
         // Select an HTTP mode, then switch back to Voltage — Voltage must retain High.
         node.SelectedValue = "Post";
         Assert.AreEqual("Post", node.SelectedValue);
-        var vr = typeof(NetworkRequestMethod).Assembly.GetType("Demo.ViewModels.VoltageRange");
         node.OutputSlots.SetSelector(vr!);
         Assert.AreEqual("High", node.SelectedValue, "Voltage retains its previous selection");
+
+        // Undo the Voltage switch → back to HTTP; HTTP must retain Post.
+        session.Tree.GetHelper().Undo();
+        Assert.AreEqual(typeof(NetworkRequestMethod), node.EnumType, "undo returns to HTTP");
+        Assert.AreEqual("Post", node.SelectedValue, "undo to HTTP shows POST selected");
     }
 
     [TestMethod]
-    public async Task DefaultDemo_AfterUndoLine194_RoutesToHandler()
+    public async Task DefaultDemo_AfterUndoSelectSwitch_RoutesToHandler()
     {
         var session = WorkflowDemoSession.Create();
-        session.Tree.GetHelper().Undo();   // undo line 194 → NetworkRequestMethod + connections
         var node = session.Tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
+
+        // The demo keeps its bootstrap on the undo stack, so an interactive switch performed on
+        // top is the deterministic top entry. Exercise the switch/undo path here: switch the
+        // selector, then undo it — the remembered state (type + routing connections) must
+        // restore, and routing must still wake up a downstream handler.
+        node.OutputSlots.SetSelector(typeof(NetworkRequestMethod));
+        session.Tree.GetHelper().Undo();   // → back to the pre-switch type (VoltageRange) + connections
         int connectedSlots = node.OutputSlots.Items.Count(s => s.Slot.Targets.Count > 0);
 
         var compiler = new WorkflowCompiler();
@@ -129,9 +146,9 @@ public class DemoEnumSelectorSwitchRepro
         await results[0].ExecuteAsync(context, CancellationToken.None);
         int executedHandlers = context.ExecutionTrail.Count(t => t.Contains("Handler"));
 
-        Console.WriteLine($"after undo line-194: type={node.EnumType?.Name} " +
+        Console.WriteLine($"after undo select-switch: type={node.EnumType?.Name} " +
                           $"connectedSlots={connectedSlots} executedHandlers={executedHandlers}");
-        Assert.IsGreaterThan(0, connectedSlots, "undoing line-194 restores the routing connections");
+        Assert.IsGreaterThan(0, connectedSlots, "undoing a selector switch restores the routing connections");
         Assert.IsGreaterThan(0, executedHandlers,
             "with connections restored, routing wakes up a downstream handler");
     }

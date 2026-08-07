@@ -21,6 +21,14 @@ public static class WorkflowNodeEx
     public static void StandardCreateSlot(this IWorkflowNodeViewModel component, IWorkflowSlotViewModel slot)
     {
         if (component is null) return;
+
+        // Idempotency guard: a slot already registered with this node (same reference) is a
+        // re-dispatch of a slot that construction or a prior CreateSlot already created. Without
+        // this, a late deferred dispatch would take the attached branch below and push a phantom
+        // undo entry whose Undo would then tear the slot out of the node.
+        if (component.Slots.Any(s => ReferenceEquals(s, slot)))
+            return;
+
         var oldParent = slot.Parent;
         var newParent = component;
         if (component.Parent is null)

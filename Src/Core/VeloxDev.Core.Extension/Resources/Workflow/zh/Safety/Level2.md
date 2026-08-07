@@ -10,11 +10,10 @@
 
 此挡位对破坏性操作及清空值操作要求确认：
 
-1. 删除一个或多个节点（`DeleteNode`、`DeleteNodes`）。
+1. 删除一个或多个节点（`DeleteNode`）。
 2. 删除插槽（`DeleteSlot`）。
 3. 将属性值设置为 `null`、空字符串 `""`、`0` 或 `false`，且当前值非空——这会清除已有内容。
-4. 执行包含上述任意操作的批量操作（`BatchExecute`）。
-5. 任何在开发者 `[AgentContext]` 注解中被显式标记为敏感的操作。
+4. 任何在开发者 `[AgentContext]` 注解中被显式标记为敏感的操作。
 
 若 `RequestConfirmation` 返回 `denied`，你**必须**立即停止并告知用户——不得继续执行，也不得用其他操作代替。
 

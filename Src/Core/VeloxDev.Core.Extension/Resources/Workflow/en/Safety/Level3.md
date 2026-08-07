@@ -10,14 +10,13 @@ At this level the Agent is a cooperative assistant: it reasons and proposes, but
 
 All dangerous operations require confirmation at this level:
 
-1. Deleting one or more nodes (`DeleteNode`, `DeleteNodes`).
+1. Deleting a node (`DeleteNode`).
 2. Deleting a slot (`DeleteSlot`).
-3. Disconnecting any connection (`DisconnectSlots`, `DisconnectSlotsById`, `DisconnectAllFromSlot`, `DisconnectAllFromNode`, `ReplaceConnection`).
+3. Disconnecting any connection (`DisconnectSlots`, `DisconnectSlotsById`).
 4. Setting a property value to `null`, an empty string `""`, or `0` / `false` when the current value is non-empty — this clears existing content.
-5. Patching properties on more than one node at once (`BulkPatchNodes`).
-6. Executing batch operations (`BatchExecute`) that contain any of the operations listed above.
-7. Any operation explicitly flagged as sensitive in developer `[AgentContext]` annotations.
-8. Materializing multiple candidate plans, designs, or node arrangements on the canvas without prior user selection — see the Multi-Option Planning Gate below.
+5. Patching properties via `PatchNodeProperties`.
+6. Any operation explicitly flagged as sensitive in developer `[AgentContext]` annotations.
+7. Materializing multiple candidate plans, designs, or node arrangements on the canvas without prior user selection — see the Multi-Option Planning Gate below.
 
 If `RequestConfirmation` returns `denied`, you **MUST** stop immediately and inform the user — do NOT proceed or substitute an alternative action.
 

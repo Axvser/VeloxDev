@@ -60,7 +60,15 @@ public static class ObservableCollectionTracker
     /// </summary>
     private sealed class Entry
     {
-        private readonly HashSet<Delegate> _handlers = new(ReferenceEqualityComparer.Instance);
+        // Dedupe by (Method, Target) identity, not by delegate reference identity.
+        // The generated getters pass a method group (e.g. OnItemsCollectionChanged),
+        // which produces a FRESH delegate instance on every getter access. Comparing
+        // by reference would therefore re-subscribe on every access and grow the
+        // event's invocation list without bound. Comparing by method + target makes
+        // the subscription idempotent across getter accesses while still treating
+        // genuinely distinct handlers (different methods, or the same method bound
+        // to different target instances) as different.
+        private readonly HashSet<Delegate> _handlers = new(MethodTargetEqualityComparer.Instance);
 
         public bool TryAdd(Delegate handler)
         {
@@ -80,14 +88,28 @@ public static class ObservableCollectionTracker
     }
 
     /// <summary>
-    /// Ensures delegates are compared by reference identity, not by
-    /// MulticastDelegate equality (which can match different lambdas).
+    /// Compares delegates by (Method, Target) identity: the same method bound to
+    /// the same target instance is the same handler. Target is compared by
+    /// reference (not MulticastDelegate equality) so value-equal-but-distinct
+    /// target instances are never conflated.
     /// </summary>
-    private sealed class ReferenceEqualityComparer : IEqualityComparer<Delegate>
+    private sealed class MethodTargetEqualityComparer : IEqualityComparer<Delegate>
     {
-        public static readonly ReferenceEqualityComparer Instance = new();
+        public static readonly MethodTargetEqualityComparer Instance = new();
 
-        public bool Equals(Delegate? x, Delegate? y) => ReferenceEquals(x, y);
-        public int GetHashCode(Delegate obj) => RuntimeHelpers.GetHashCode(obj);
+        public bool Equals(Delegate? x, Delegate? y)
+        {
+            if (ReferenceEquals(x, y)) return true;
+            if (x is null || y is null) return false;
+            return x.Method == y.Method && ReferenceEquals(x.Target, y.Target);
+        }
+
+        public int GetHashCode(Delegate obj)
+        {
+            var hash = obj.Method.GetHashCode();
+            if (obj.Target is not null)
+                hash = (hash * 397) ^ RuntimeHelpers.GetHashCode(obj.Target);
+            return hash;
+        }
     }
 }

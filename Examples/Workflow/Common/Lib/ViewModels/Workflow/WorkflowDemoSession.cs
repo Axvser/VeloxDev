@@ -108,41 +108,46 @@ public sealed class WorkflowDemoSession
         }
 
         // --- Slots ---
-        controller.OutputSlot = CreateOutputSlot(SlotChannel.MultipleTargets);
+        // Each factory registers its slot with the node SYNCHRONOUSLY (one undoable Submit)
+        // before the property setter fires the node's fire-and-forget CreateSlotCommand — that
+        // re-dispatch is then a no-op via StandardCreateSlot's idempotency guard. This keeps the
+        // bootstrap's ~62 undo entries in a deterministic order so each Ctrl+Z tears exactly one
+        // setup step (逐条引导步骤).
+        controller.OutputSlot = CreateOutputSlot(controller, SlotChannel.MultipleTargets);
 
-        loadSeed.InputSlot = CreateInputSlot();
-        loadSeed.OutputSlot = CreateOutputSlot(SlotChannel.MultipleTargets);
+        loadSeed.InputSlot = CreateInputSlot(loadSeed);
+        loadSeed.OutputSlot = CreateOutputSlot(loadSeed, SlotChannel.MultipleTargets);
 
-        warmCache.InputSlot = CreateInputSlot();
-        warmCache.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        warmCache.InputSlot = CreateInputSlot(warmCache);
+        warmCache.OutputSlot = CreateOutputSlot(warmCache, SlotChannel.OneTarget);
 
-        boolSelector.InputSlot = CreateInputSlot();
+        boolSelector.InputSlot = CreateInputSlot(boolSelector);
 
-        branchA.InputSlot = CreateInputSlot();
-        branchA.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        branchB.InputSlot = CreateInputSlot();
-        branchB.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        branchA.InputSlot = CreateInputSlot(branchA);
+        branchA.OutputSlot = CreateOutputSlot(branchA, SlotChannel.OneTarget);
+        branchB.InputSlot = CreateInputSlot(branchB);
+        branchB.OutputSlot = CreateOutputSlot(branchB, SlotChannel.OneTarget);
 
-        joinHot.InputSlot = CreateInputSlot();
-        joinHot.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        joinCold.InputSlot = CreateInputSlot();
-        joinCold.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        joinHot.InputSlot = CreateInputSlot(joinHot);
+        joinHot.OutputSlot = CreateOutputSlot(joinHot, SlotChannel.OneTarget);
+        joinCold.InputSlot = CreateInputSlot(joinCold);
+        joinCold.OutputSlot = CreateOutputSlot(joinCold, SlotChannel.OneTarget);
 
-        aggregate.InputSlot = CreateInputSlot(SlotChannel.MultipleSources);
-        aggregate.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        aggregate.InputSlot = CreateInputSlot(aggregate, SlotChannel.MultipleSources);
+        aggregate.OutputSlot = CreateOutputSlot(aggregate, SlotChannel.OneTarget);
 
-        enumSelector.InputSlot = CreateInputSlot();
+        enumSelector.InputSlot = CreateInputSlot(enumSelector);
 
-        handleGet.InputSlot = CreateInputSlot();
-        handleGet.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        handlePost.InputSlot = CreateInputSlot();
-        handlePost.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        handlePut.InputSlot = CreateInputSlot();
-        handlePut.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
-        handleDelete.InputSlot = CreateInputSlot();
-        handleDelete.OutputSlot = CreateOutputSlot(SlotChannel.OneTarget);
+        handleGet.InputSlot = CreateInputSlot(handleGet);
+        handleGet.OutputSlot = CreateOutputSlot(handleGet, SlotChannel.OneTarget);
+        handlePost.InputSlot = CreateInputSlot(handlePost);
+        handlePost.OutputSlot = CreateOutputSlot(handlePost, SlotChannel.OneTarget);
+        handlePut.InputSlot = CreateInputSlot(handlePut);
+        handlePut.OutputSlot = CreateOutputSlot(handlePut, SlotChannel.OneTarget);
+        handleDelete.InputSlot = CreateInputSlot(handleDelete);
+        handleDelete.OutputSlot = CreateOutputSlot(handleDelete, SlotChannel.OneTarget);
 
-        finalize.InputSlot = CreateInputSlot(SlotChannel.MultipleSources);
+        finalize.InputSlot = CreateInputSlot(finalize, SlotChannel.MultipleSources);
 
         // --- Connections ---
 
@@ -192,22 +197,46 @@ public sealed class WorkflowDemoSession
         Connect(tree, handleDelete.OutputSlot!, finalize.InputSlot!);
 
         enumSelector.OutputSlots.SetSelector(typeof(VoltageRange));
-        //helper.ClearHistory();
+
+        // The default sample is deliberately NOT a clean baseline (逐条引导步骤): every setup
+        // Submit above — 15 × CreateNode, the 26 synchronous slot registrations, the 20
+        // connections, and the mounted SetSelector — stays on the undo stack as one undoable
+        // entry, so Ctrl+Z tears the sample apart one setup step at a time and Redo re-builds
+        // it. Because every Submit above is synchronous and ordered, the very first Undo always
+        // reverts the mounted SetSelector. Hosts that instead want an interactive-only baseline
+        // may call helper.ClearHistory() themselves before handing control to the Agent.
+
         return new WorkflowDemoSession(tree, controller,
             [loadSeed, warmCache, branchA, branchB, joinHot, joinCold, aggregate, handleGet, handlePost, handlePut, handleDelete, finalize]);
     }
 
-    private static SlotViewModel CreateInputSlot(SlotChannel channel = SlotChannel.OneSource)
-        => new()
+    private static SlotViewModel CreateInputSlot(IWorkflowNodeViewModel node, SlotChannel channel = SlotChannel.OneSource)
+        => RegisterSlot(node, new SlotViewModel
         {
             Channel = channel,
-        };
+        });
 
-    private static SlotViewModel CreateOutputSlot(SlotChannel channel)
-        => new()
+    private static SlotViewModel CreateOutputSlot(IWorkflowNodeViewModel node, SlotChannel channel)
+        => RegisterSlot(node, new SlotViewModel
         {
             Channel = channel,
-        };
+        });
+
+    /// <summary>
+    /// Registers a slot with its node SYNCHRONOUSLY (one undoable Submit when the node is
+    /// attached). The property setter that receives this slot also fires the node's
+    /// fire-and-forget <c>CreateSlotCommand</c>; its later re-dispatch is a no-op thanks to
+    /// <c>StandardCreateSlot</c>'s idempotency guard. Without this synchronous registration the
+    /// bootstrap's slot Submits would be deferred to the thread pool and interleave
+    /// nondeterministically with the connection Submits — breaking the demo's "逐条引导步骤"
+    /// undo contract (each Ctrl+Z must tear exactly one setup step in a stable, deterministic
+    /// order).
+    /// </summary>
+    private static SlotViewModel RegisterSlot(IWorkflowNodeViewModel node, SlotViewModel slot)
+    {
+        node.GetHelper().CreateSlot(slot);
+        return slot;
+    }
 
     private static void Connect(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
     {

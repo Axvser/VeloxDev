@@ -56,7 +56,7 @@ public class WorkflowAgentToolkitTests
         Assert.IsFalse(query.Any(t => string.Equals(t.Name, "ExecuteWork", StringComparison.OrdinalIgnoreCase)),
             "ExecuteWork is an execution tool and must not appear in a Query-only set");
         Assert.IsFalse(query.Any(t => string.Equals(t.Name, "AutoLayout", StringComparison.OrdinalIgnoreCase)),
-            "AutoLayout is a layout tool and must not appear in a Query-only set");
+            "AutoLayout is no longer provided at all");
     }
 
     [TestMethod]
@@ -71,8 +71,15 @@ public class WorkflowAgentToolkitTests
         Assert.IsTrue(all.Any(t => string.Equals(t.Name, "CreateNode", StringComparison.OrdinalIgnoreCase)));
         Assert.IsTrue(all.Any(t => string.Equals(t.Name, "ExecuteWork", StringComparison.OrdinalIgnoreCase)));
         Assert.IsTrue(all.Any(t => string.Equals(t.Name, "SearchForward", StringComparison.OrdinalIgnoreCase)));
-        Assert.IsTrue(all.Any(t => string.Equals(t.Name, "AutoLayout", StringComparison.OrdinalIgnoreCase)));
-        Assert.IsTrue(all.Any(t => string.Equals(t.Name, "BatchExecute", StringComparison.OrdinalIgnoreCase)));
+        // Removed composite/bundled tools must never surface, even under All.
+        Assert.IsFalse(all.Any(t => string.Equals(t.Name, "AutoLayout", StringComparison.OrdinalIgnoreCase)),
+            "AutoLayout was removed — no bundled layout gestures");
+        Assert.IsFalse(all.Any(t => string.Equals(t.Name, "BatchExecute", StringComparison.OrdinalIgnoreCase)),
+            "BatchExecute was removed — no multi-tool dispatch");
+        Assert.IsFalse(all.Any(t => string.Equals(t.Name, "CloneNodes", StringComparison.OrdinalIgnoreCase)),
+            "CloneNodes was removed — no bundled clone gesture");
+        Assert.IsFalse(all.Any(t => string.Equals(t.Name, "CreateAndConfigureNode", StringComparison.OrdinalIgnoreCase)),
+            "CreateAndConfigureNode was removed — no bundled create+patch+set gesture");
         // Interaction tools require a registered handler — absent even under All without one.
         Assert.IsFalse(all.Any(t => string.Equals(t.Name, "RequestSelection", StringComparison.OrdinalIgnoreCase)));
     }
@@ -108,27 +115,28 @@ public class WorkflowAgentToolkitTests
     }
 
     [TestMethod]
-    public async Task CloneNodes_UndoRemovesAllClonesInOneStep()
+    public async Task MoveNode_RoutesThroughSetAnchorCommand_AndIsNonUndoable()
     {
-        var session = WorkflowDemoSession.Create();
-        var tree = session.Tree;
-        int originalCount = tree.Nodes.Count;
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(node);
+        node.Anchor = new Anchor(10, 20, 0);
         var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree));
 
-        var result = InvokeTool(toolkit, "CloneNodes",
-            ("nodeIndicesJson", "[0]"),
-            ("offsetX", 300.0),
-            ("offsetY", 0.0));
+        var result = InvokeTool(toolkit, "MoveNode", ("nodeIndex", 0), ("offsetX", 50.0), ("offsetY", 30.0));
         var json = JObject.Parse(result);
         Assert.AreEqual("ok", json["status"]?.Value<string>());
 
-        // CreateNodeCommand is fire-and-forget async, so poll until the clone lands in the tree.
-        await WaitUntilAsync(() => tree.Nodes.Count == originalCount + 1, "cloned node should appear");
+        await WaitUntilAsync(() => node.Anchor.Horizontal == 60 && node.Anchor.Vertical == 50,
+            "MoveNode should move the node");
 
-        // A single Undo must reverse the whole clone (node + its slots), not just one sub-step.
+        // MoveNode routes through the node's SetAnchorCommand (Helper.SetAnchor → StandardSetAnchor),
+        // which is Core's own semantics: the same command the GUI drag adapters fire per delta. It is
+        // NOT an undoable operation — GUI dragging a node is not undoable either. The toolkit must not
+        // fabricate a Submit entry; a subsequent Undo therefore has nothing to reverse for this move.
         tree.GetHelper().Undo();
-        await WaitUntilAsync(() => tree.Nodes.Count == originalCount,
-            "one Undo should remove every cloned node — CloneNodes must be a single undo gesture");
+        Assert.IsTrue(node.Anchor.Horizontal == 60 && node.Anchor.Vertical == 50,
+            "MoveNode is non-undoable (matches GUI drag semantics): Undo must not nudge the anchor");
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, string message, int timeoutMs = 3000)
@@ -328,6 +336,31 @@ public class WorkflowAgentToolkitTests
         var trackedTask = (Task)trackMethod.Invoke(toolkit, [toolName, (string)raw!])!;
         trackedTask.GetAwaiter().GetResult();
         return (string)raw!;
+    }
+
+    [TestMethod]
+    public void GetFullTopology_IncludesLinkIds()
+    {
+        var session = WorkflowDemoSession.Create();
+        var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(session.Tree));
+
+        var method = typeof(WorkflowAgentToolkit)
+            .GetMethod("GetFullTopology", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.IsNotNull(method, "GetFullTopology method was not found.");
+
+        var raw = method.Invoke(toolkit, null);
+        Assert.IsInstanceOfType<string>(raw);
+        var topology = JObject.Parse((string)raw!);
+
+        var links = topology["links"] as JArray;
+        Assert.IsNotNull(links);
+        Assert.IsGreaterThan(0, links!.Count, "demo session should have visible connections");
+        foreach (var link in links)
+        {
+            Assert.IsNotNull(link["id"], "every GetFullTopology link entry must carry a runtime id");
+            Assert.IsNotNull(link["sid"], "every link entry must carry a sender slot id");
+            Assert.IsNotNull(link["rid"], "every link entry must carry a receiver slot id");
+        }
     }
 
     private sealed class TestTreeHelper : TreeHelper

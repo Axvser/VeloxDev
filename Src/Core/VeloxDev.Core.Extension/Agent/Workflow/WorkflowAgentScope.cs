@@ -907,7 +907,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("A few operations on **unmounted** components are silent no-ops (no error, no effect). If an operation seems to do nothing, first call `ListNodes` / `GetNodeDetail` to verify the component is mounted, then retry. See the Failure Handling Protocol below.");
         result.AppendLine();
         result.AppendLine("### 1. Mount-before-operate");
-        result.AppendLine("Nodes MUST be added to the Tree (via `CreateNode` / `CloneNodes`) before any operation on their internals.");
+        result.AppendLine("Nodes MUST be added to the Tree (via `CreateNode`) before any operation on their internals.");
         result.AppendLine("Operating on an unmounted node (`Parent == null`) results in " + (language == AgentLanguages.Chinese ? "**静默无操作**——框架不报错，操作不生效" : "**silent no-op** — the framework returns without error and the operation has no effect") + ".");
         result.AppendLine("Always use a `nodeIndex` or `runtimeId` obtained from `ListNodes` / `CreateNode` to reference nodes.");
         result.AppendLine();
@@ -930,7 +930,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("You do NOT need to call `DisconnectSlots` before `ConnectSlots` for the same node pair.");
         result.AppendLine();
         result.AppendLine("### 4. Reference integrity");
-        result.AppendLine("Node indices shift after `CreateNode`, `DeleteNode`, `DeleteSlot`, `CloneNodes`. Always refresh after structural changes.");
+        result.AppendLine("Node indices shift after `CreateNode`, `DeleteNode`, `DeleteSlot`. Always refresh after structural changes.");
         result.AppendLine("Runtime IDs are stable for the lifetime of a component, except SlotEnumerator slots which are rebuilt on selector change.");
         result.AppendLine();
         result.AppendLine("### 5. Property patching — pick the tool by intent");
@@ -955,8 +955,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine("- Add/remove slots → `AddSlotToCollection` / `RemoveSlotFromCollection` / `CreateSlotOnNode`");
         result.AppendLine("- Resize → `ResizeNode`");
         result.AppendLine("- Reposition → `SetNodePosition` / `MoveNode`");
-        result.AppendLine("- Reconnect → `ConnectSlots` / `DisconnectSlots` / `ReplaceConnection`");
-        result.AppendLine("Only use `DeleteNode` / `DeleteNodes` when the user explicitly asks to remove a node, or when in-place mutation is genuinely impossible (e.g. the node type itself must change). If a patch is rejected, first try the suggested alternative tool; if that also fails, delete+recreate is acceptable as a last resort.");
+        result.AppendLine("- Reconnect → `DisconnectSlots` then `ConnectSlots` (or `ConnectByProperty`); reconnecting is a two-step command sequence, never one bundled call");
+        result.AppendLine("Only use `DeleteNode` when the user explicitly asks to remove a node, or when in-place mutation is genuinely impossible (e.g. the node type itself must change). If a patch is rejected, first try the suggested alternative tool; if that also fails, delete+recreate is acceptable as a last resort.");
         result.AppendLine();
         result.AppendLine(BuildFailureHandlingProtocol(language));
         result.AppendLine();

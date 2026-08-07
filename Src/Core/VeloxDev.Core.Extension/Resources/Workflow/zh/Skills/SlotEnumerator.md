@@ -4,10 +4,12 @@
 
 ### 创建节点
 
-使用 **`CreateAndConfigureNode`**，同时传入 `enumSlotProperty` 和 `enumTypeName`——这是唯一正确的创建+配置方式：
+先调用 **`CreateNode`** 创建节点，然后调用 **`SetEnumSlotCollection`** 为其配置选择器类型：
 
 ```
-CreateAndConfigureNode(fullTypeName, ..., enumSlotProperty="OutputSlots", enumTypeName="Demo.ViewModels.MyEnum")
+CreateNode(fullTypeName, ..., x, y, width, height)
+
+SetEnumSlotCollection(nodeIndex, "OutputSlots", selectorTypeOrJson="Demo.ViewModels.MyEnum")
 ```
 
 - 节点的 `[AgentContext]` 描述中列出了 `enumSlotProperty` 名称和 `allowedSelectorTypes`——**调用前必须先读取**。

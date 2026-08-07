@@ -4,11 +4,14 @@ Node types may declare **SlotEnumerator properties** — any property whose type
 
 ### Creation
 
-Use **`CreateAndConfigureNode`** with `enumSlotProperty` + `enumTypeName` — this is the single correct call for creation + selector setup:
+Create the node first, then configure its selector:
 
 ```
-CreateAndConfigureNode(fullTypeName, ..., enumSlotProperty="OutputSlots", enumTypeName="Demo.ViewModels.MyEnum")
+CreateNode(fullTypeName, ..., )
+SetEnumSlotCollection(nodeIndex, "OutputSlots", "Demo.ViewModels.MyEnum", ...)
 ```
+
+Call **`CreateNode`** to create the node, then **`SetEnumSlotCollection`** to set the selector type on the `SlotEnumerator` property.
 
 - The node's `[AgentContext]` description lists the `enumSlotProperty` name and the `allowedSelectorTypes`. **Read it before calling.**
 - Do NOT call `ListSlotProperties` as a prerequisite — allowed types are already in `[AgentContext]`.

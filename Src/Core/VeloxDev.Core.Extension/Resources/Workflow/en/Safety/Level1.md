@@ -10,7 +10,7 @@ At this level the Agent acts autonomously on semantic decisions and only pauses 
 
 Only the most destructive operations require confirmation at this level:
 
-1. Deleting one or more nodes (`DeleteNode`, `DeleteNodes`).
+1. Deleting a node (`DeleteNode`).
 2. Deleting a slot (`DeleteSlot`).
 3. Any operation explicitly flagged as sensitive in developer `[AgentContext]` annotations.
 

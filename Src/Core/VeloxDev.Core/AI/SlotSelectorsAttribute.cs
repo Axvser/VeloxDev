@@ -9,8 +9,8 @@ namespace VeloxDev.AI;
 /// </para>
 /// <para>
 /// The property is automatically rejected by <c>PatchNodeProperties</c> — the only
-/// valid mutation path is the <c>SetEnumSlotCollection</c> tool (or <c>CreateAndConfigureNode</c>
-/// with <c>enumSlotProperty</c> + <c>enumTypeName</c>).
+/// valid mutation path is the <c>SetEnumSlotCollection</c> tool (after the node exists via
+/// <c>CreateNode</c>).
 /// </para>
 /// <para>
 /// Two constructors are provided:

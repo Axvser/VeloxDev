@@ -23,9 +23,6 @@
 | 设置枚举插槽集合 | SetEnumSlotCollection | 清除并重建枚举驱动集合 |
 | 按条件查找节点 | FindNodes | 仅只读查询 |
 | 通过属性解析插槽 ID | ResolveSlotId | 仅只读查询 |
-| **创建并配置节点** | **CreateAndConfigureNode** | CreateNode + Patch + SetEnum 合并为一次调用 |
-| **批量删除节点** | **DeleteNodes** | Node.DeleteCommand × N |
-| **批量定位节点** | **ArrangeNodes** | SetAnchorCommand × N |
 | **完整图快照** | **GetFullTopology** | 一次调用获取所有节点+插槽+连接 |
 | **标记工作流为脏** | **MarkDirty** | TreeHelper.MarkDirty |
 | **反向广播** | **ReverseBroadcastNode** | Node.ReverseBroadcastCommand |
@@ -35,16 +32,9 @@
 | **连通性检查** | **IsConnected** | 传递可达性检测 |
 | **查找路径** | **FindPath** | 两节点间最短正向路径 |
 | 按 ID 断开连接 | DisconnectSlotsById | Link.DeleteCommand |
-| 断开插槽所有连接 | DisconnectAllFromSlot | 批量 Link.DeleteCommand |
-| 断开节点所有连接 | DisconnectAllFromNode | 批量 Link.DeleteCommand |
-| 替换连接 | ReplaceConnection | 原子式断开+重连 |
 | 设置插槽通道 | SetSlotChannel | Slot.SetChannelCommand |
 | 查看连接详情 | GetLinkDetail | 仅只读查询 |
 | 对多节点执行工作 | ExecuteWorkOnNodes | WorkCommand × N |
-| 批量修改节点属性 | BulkPatchNodes | 相同属性变更应用到 N 个节点 |
-| 对齐节点 | AlignNodes | SetAnchorCommand × N（左/右/上/下/居中） |
-| 分布节点 | DistributeNodes | 按轴均匀间距 |
-| 自动拓扑布局 | AutoLayout | Sugiyama 分层布局，按传播链排列 |
 | 节点统计 | GetNodeStatistics | 入度/出度、已连接节点 |
 | 列出可创建类型 | ListCreatableTypes | 发现可用节点/插槽类型 |
 | 验证工作流 | ValidateWorkflow | 检查问题（零尺寸、孤立节点等） |

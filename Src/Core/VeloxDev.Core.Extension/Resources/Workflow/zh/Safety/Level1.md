@@ -10,7 +10,7 @@
 
 此挡位仅对最具破坏性的操作要求确认：
 
-1. 删除一个或多个节点（`DeleteNode`、`DeleteNodes`）。
+1. 删除一个或多个节点（`DeleteNode`）。
 2. 删除插槽（`DeleteSlot`）。
 3. 任何在开发者 `[AgentContext]` 注解中被显式标记为敏感的操作。
 

@@ -27,7 +27,7 @@ public enum WorkflowToolCategory
     /// <summary>Graph traversal &amp; path finding: SearchForward/Reverse/AllRelative, IsConnected, FindPath.</summary>
     Graph = 1 << 4,
 
-    /// <summary>Layout helpers: AlignNodes, DistributeNodes, AutoLayout.</summary>
+    /// <summary>Reserved. No bundled layout tools — multi-node layout is done node-by-node via MoveNode/SetNodePosition.</summary>
     Layout = 1 << 5,
 
     /// <summary>Analytics: GetNodeStatistics.</summary>
@@ -36,7 +36,7 @@ public enum WorkflowToolCategory
     /// <summary>State snapshots &amp; dirty marking: TakeSnapshot, GetChangesSinceSnapshot, MarkDirty.</summary>
     State = 1 << 7,
 
-    /// <summary>Multi-step shortcuts that reduce round-trips: BatchExecute, ConnectByProperty, CreateAndConfigureNode, CloneNodes, DeleteNodes, ArrangeNodes.</summary>
+    /// <summary>Reserved. No composite/bundled tools — every operation is a single component-command step.</summary>
     Composite = 1 << 8,
 
     /// <summary>User interaction: RequestSelection, RequestConfirmation (only when handlers are configured).</summary>

@@ -110,7 +110,7 @@ public class WorkflowLifecycleFidelityTests
     }
 
     [TestMethod]
-    public async Task MoveNode_IsUndoableInOneStep()
+    public async Task MoveNode_ReplaysGuiDragSemantics_AndIsNonUndoable()
     {
         var tree = new TreeDefaultViewModel();
         var node = new NodeDefaultViewModel();
@@ -122,16 +122,17 @@ public class WorkflowLifecycleFidelityTests
         var json = JObject.Parse(result);
         Assert.AreEqual("ok", json["status"]?.Value<string>());
 
-        // MoveNode must be undoable in a single step. Previously it produced ZERO undo entries
-        // (StandardMove doesn't Submit), so Ctrl+Z undid an unrelated earlier operation instead.
-        // SetAnchorCommand is fire-and-forget async, so poll until the anchor settles rather than
-        // asserting inline (tests run with method-level parallelism).
+        // MoveNode dispatches SetAnchorCommand — the exact command every GUI drag adapter fires per
+        // delta (MoveCommand/SetAnchorCommand → Helper.SetAnchor → StandardSetAnchor, no Submit).
+        // Lifecycle fidelity therefore means the move is NOT undoable, exactly like dragging a node
+        // by hand: Core's undo history only records commands that Submit (CreateSlot, Delete,
+        // connection, SetSelector). Asserting "one-step undo" would claim a contract Core does not have.
         await WaitUntilAsync(() => node.Anchor.Horizontal == 60 && node.Anchor.Vertical == 50,
             "MoveNode should move the node");
 
         tree.GetHelper().Undo();
-        await WaitUntilAsync(() => node.Anchor.Horizontal == 10 && node.Anchor.Vertical == 20,
-            "Undo should restore the original position");
+        Assert.IsTrue(node.Anchor.Horizontal == 60 && node.Anchor.Vertical == 50,
+            "MoveNode is non-undoable (matches GUI drag semantics): Undo must not nudge the anchor");
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, string message, int timeoutMs = 3000)

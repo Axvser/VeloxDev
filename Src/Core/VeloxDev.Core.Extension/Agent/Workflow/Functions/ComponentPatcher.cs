@@ -72,7 +72,6 @@ public static class ComponentPatcher
             });
 
         var results = new JArray();
-        var applied = new List<(PropertyInfo Property, object? OldValue, object? NewValue)>();
         int successCount = 0;
 
         foreach (var kv in patch)
@@ -168,7 +167,6 @@ public static class ComponentPatcher
                     continue;
                 }
                 prop.SetValue(target, value);
-                applied.Add((prop, oldValue, value));
                 successCount++;
                 results.Add(new JObject { ["property"] = propName, ["status"] = "ok" });
             }
@@ -178,14 +176,11 @@ public static class ComponentPatcher
             }
         }
 
-        // Commit all successful patches as a single undoable action, mirroring how the
-        // framework wraps human operations (Submit(WorkflowActionPair)).
-        if (applied.Count > 0)
-        {
-            tree.GetHelper().Submit(new WorkflowActionPair(
-                () => { foreach (var (p, _, nv) in applied) p.SetValue(target, nv); },
-                () => { foreach (var (p, ov, _) in applied) p.SetValue(target, ov); }));
-        }
+        // Properties are set directly (already done above). The Agent toolkit must NOT produce
+        // Submit(WorkflowActionPair) entries — undo/redo is exclusively owned by Core's commands.
+        // Direct property writes that need to be undoable must go through their backing command
+        // (e.g. Anchor → SetAnchorCommand), which the command-backed-property rejection above
+        // already routes there. Unmounted-target rejection (tree is null) is still enforced above.
 
         return JsonConvert.SerializeObject(new
         {

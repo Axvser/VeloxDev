@@ -10,14 +10,13 @@
 
 此挡位对所有危险操作都要求确认：
 
-1. 删除一个或多个节点（`DeleteNode`、`DeleteNodes`）。
+1. 删除一个或多个节点（`DeleteNode`）。
 2. 删除插槽（`DeleteSlot`）。
-3. 断开任何连接（`DisconnectSlots`、`DisconnectSlotsById`、`DisconnectAllFromSlot`、`DisconnectAllFromNode`、`ReplaceConnection`）。
+3. 断开任何连接（`DisconnectSlots`、`DisconnectSlotsById`）。
 4. 将属性值设置为 `null`、空字符串 `""`、`0` 或 `false`，且当前值非空——这会清除已有内容。
-5. 同时对多个节点执行属性修补（`BulkPatchNodes`）。
-6. 执行包含上述任意操作的批量操作（`BatchExecute`）。
-7. 任何在开发者 `[AgentContext]` 注解中被显式标记为敏感的操作。
-8. 在用户选择之前将多个候选方案、设计或节点排列同时创建到画布上——详见下方的多方案规划拦截门。
+5. 对多个节点逐一执行属性修补（`PatchNodeProperties`）。
+6. 任何在开发者 `[AgentContext]` 注解中被显式标记为敏感的操作。
+7. 在用户选择之前将多个候选方案、设计或节点排列同时创建到画布上——详见下方的多方案规划拦截门。
 
 若 `RequestConfirmation` 返回 `denied`，你**必须**立即停止并告知用户——不得继续执行，也不得用其他操作代替。
 

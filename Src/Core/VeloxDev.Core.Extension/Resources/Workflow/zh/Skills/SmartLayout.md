@@ -66,9 +66,9 @@
 
 ### 第五步 — 应用坐标
 
-对全图重新排列时，使用 `AutoLayout`（它内部已处理上述所有逻辑）。
+不存在一步到位的自动布局组合工具——必须自行按上面各步计算坐标，然后对**每个节点**逐个调用 `SetNodePosition` 或 `MoveNode` 应用其坐标。
 
-对局部或手动布局，使用 `MoveNode`（单节点）或 `BatchMoveNodes`（多节点）应用计算出的坐标。
+对局部或手动布局，同样使用 `MoveNode`（单节点）或逐个调用 `SetNodePosition`（多节点）应用计算出的坐标。
 
 移动完成后，调用 `ListNodes` 一次确认实际坐标是否符合预期（工具可能已对部分节点自动偏移以避免重叠）。
 
@@ -107,4 +107,4 @@
    - **Q3**：目标 = `(-(w + 20), 20)` —— X 负，Y 正（包围盒在原点左侧）
    - **Q2**：目标 = `(-(w + 20), -(h + 20))` —— 两者均为负
 3. 计算 `deltaX = targetX - minX`，`deltaY = targetY - minY`。
-4. 通过 `BatchMoveNodes` 将 delta 应用到所有受影响节点。
+4. 对每个受影响节点逐个调用 `SetNodePosition`，将 delta 应用到其坐标。

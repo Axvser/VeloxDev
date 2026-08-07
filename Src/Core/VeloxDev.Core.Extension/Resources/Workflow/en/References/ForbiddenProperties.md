@@ -1,6 +1,6 @@
 ## 🚫 Forbidden Properties and Operations
 
-**Node creation MUST go through `CreateNode` or `CreateAndConfigureNode`.** NEVER add nodes by directly modifying the Nodes collection or any other means. The Tree's `CreateNodeCommand` performs essential initialization; bypassing it causes broken state.
+**Node creation MUST go through `CreateNode`.** NEVER add nodes by directly modifying the Nodes collection or any other means. The Tree's `CreateNodeCommand` performs essential initialization; bypassing it causes broken state.
 
 The following properties are **framework-managed** and must NEVER be set or patched directly:
 

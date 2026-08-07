@@ -6,7 +6,6 @@
 
 ```
 1. CreateNode          — 节点必须先存在于树中，才能进行后续任何操作
-   （或 CreateAndConfigureNode — 将步骤 1-2 合并为一次调用）
 2. PatchNodeProperties  — 配置标量属性（Title、DelayMs 等）
    SetEnumSlotCollection — 为 SlotEnumerator 属性设置选择器类型
 3. CreateSlotOnNode /   — 创建或配置插槽（必须在节点已加入树之后）
@@ -16,6 +15,8 @@
 5. ExecuteWork /        — 执行工作流逻辑（仅在拓扑完整后）
    BroadcastNode
 ```
+
+**强制序列**：没有"一步到位"的复合工具——每一步都必须作为独立命令逐步执行，就像人类开发者按上述顺序在 GUI 中逐步操作一样。
 
 ### 顺序重要性说明
 
@@ -32,39 +33,10 @@
 
 | 违规操作 | 实际后果 |
 |---|---|
-| 在**未添加到 Tree** 的节点上操作（`Parent == null`） | `DeleteNode` / `SetSlotChannel` / `DisconnectAllFromSlot` → **静默无操作**。`CreateSlotOnNode` → 添加插槽但**无撤销注册** |
+| 在**未添加到 Tree** 的节点上操作（`Parent == null`） | `DeleteNode` / `SetSlotChannel` → **静默无操作**。`CreateSlotOnNode` → 添加插槽但**无撤销注册** |
 | 在 `Parent == null` 的插槽上操作 | `DeleteSlot` → **静默无操作** |
 | 在 `Sender?.Parent?.Parent == null` 的连接上操作 | `DeleteCommand` → **静默无操作** |
 
 **始终**通过 `ListNodes` / `CreateNode` 获取有效的 `nodeIndex` 或 `runtimeId` 后再操作节点内部。除非你刚刚创建或查询了节点，否则不要假设节点存在。
 
-### BatchExecute 顺序规则
-
-**BatchExecute** 调用中的操作按**数组顺序依次执行**。  
-必须按正确的生命周期顺序排列：CreateNode → Patch → Slot → Connect → Execute。
-
-### 常用 BatchExecute 模式
-
-**模式 A — 一次调用中创建、配置并连接两个节点：**
-```json
-BatchExecute([
-  { "tool": "CreateNode",          "type": "MyNodeType", "x": 100, "y": 100, "width": 200, "height": 100 },
-  { "tool": "CreateNode",          "type": "MyNodeType", "x": 400, "y": 100, "width": 200, "height": 100 },
-  { "tool": "PatchNodeProperties", "nodeId": "$0.id", "properties": { "Title": "源节点" } },
-  { "tool": "PatchNodeProperties", "nodeId": "$1.id", "properties": { "Title": "目标节点" } },
-  { "tool": "ConnectByProperty",   "sourceNodeId": "$0.id", "sourceProperty": "OutputSlot",
-                                   "targetNodeId": "$1.id", "targetProperty": "InputSlot" }
-])
-```
-
-**模式 B — 批量重新配置已有节点（无需创建）：**
-```json
-BatchExecute([
-  { "tool": "PatchNodeProperties", "nodeId": "id-A", "properties": { "DelayMs": 500 } },
-  { "tool": "PatchNodeProperties", "nodeId": "id-B", "properties": { "DelayMs": 500 } },
-  { "tool": "ConnectByProperty",   "sourceNodeId": "id-A", "sourceProperty": "OutputSlot",
-                                   "targetNodeId": "id-B", "targetProperty": "InputSlot" }
-])
-```
-
-> 尽可能使用 `CreateAndConfigureNode` 替代 `CreateNode + PatchNodeProperties + SetEnumSlotCollection`——它是 3 合 1 的组合工具，可进一步缩短 BatchExecute 数组长度。
+> 每个操作都必须作为独立命令逐步调用——依次执行 `CreateNode` → `PatchNodeProperties` →（如需）`SetEnumSlotCollection` → 插槽 → 连接 → 执行。不存在批量/复合工具。

@@ -34,7 +34,7 @@
 
 即使采用速度优先策略，遇到以下操作后也必须刷新实时状态，因为旧索引或旧 slot ID 可能已失效：
 
-- `CreateNode`、`DeleteNode`、`DeleteSlot`、`CloneNodes`
+- `CreateNode`、`DeleteNode`、`DeleteSlot`
 - `CreateSlotOnNode`、`AddSlotToCollection`、`RemoveSlotFromCollection`
 - `SetEnumSlotCollection`（旧枚举插槽 ID 与旧连接都会过期）
 - 当前工具链之外的用户操作或外部流程可能已修改树

@@ -23,9 +23,6 @@
 | Set enum on slot collection | SetEnumSlotCollection | Clears + rebuilds enum-driven collection |
 | Find nodes by filter | FindNodes | Introspection (no mutation) |
 | Resolve slot ID by property | ResolveSlotId | Introspection (no mutation) |
-| **Create + configure node** | **CreateAndConfigureNode** | CreateNode + Patch + SetEnum in one call |
-| **Delete multiple nodes** | **DeleteNodes** | Node.DeleteCommand × N |
-| **Position multiple nodes** | **ArrangeNodes** | SetAnchorCommand × N |
 | **Full graph snapshot** | **GetFullTopology** | All nodes + slots + connections in one call |
 | **Mark workflow dirty** | **MarkDirty** | TreeHelper.MarkDirty |
 | **Reverse broadcast** | **ReverseBroadcastNode** | Node.ReverseBroadcastCommand |
@@ -35,16 +32,9 @@
 | **Check connectivity** | **IsConnected** | Transitive reachability check |
 | **Find path** | **FindPath** | Shortest forward path between two nodes |
 | Disconnect by IDs | DisconnectSlotsById | Link.DeleteCommand |
-| Disconnect all from slot | DisconnectAllFromSlot | Bulk Link.DeleteCommand |
-| Disconnect all from node | DisconnectAllFromNode | Bulk Link.DeleteCommand |
-| Replace connection | ReplaceConnection | Atomic disconnect + reconnect |
 | Set slot channel | SetSlotChannel | Slot.SetChannelCommand |
 | Inspect link | GetLinkDetail | Introspection (no mutation) |
 | Execute work on many | ExecuteWorkOnNodes | WorkCommand × N |
-| Patch many nodes | BulkPatchNodes | Same patch applied to N nodes |
-| Align nodes | AlignNodes | SetAnchorCommand × N (left/right/top/bottom/center) |
-| Distribute nodes | DistributeNodes | Equalize spacing along axis |
-| Auto topology layout | AutoLayout | Sugiyama-style layered layout |
 | Node statistics | GetNodeStatistics | In/out degree, connected nodes |
 | List creatable types | ListCreatableTypes | Discover available node/slot types |
 | Validate workflow | ValidateWorkflow | Check for issues (zero size, isolated nodes) |

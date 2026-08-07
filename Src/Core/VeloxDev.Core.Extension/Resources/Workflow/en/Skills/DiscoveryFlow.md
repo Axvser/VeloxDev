@@ -34,7 +34,7 @@ Choose a refresh strategy before making mutations:
 
 Even in speed-first mode, refresh live state after operations that may invalidate cached indices or slot IDs:
 
-- `CreateNode`, `DeleteNode`, `DeleteSlot`, `CloneNodes`
+- `CreateNode`, `DeleteNode`, `DeleteSlot`
 - `CreateSlotOnNode`, `AddSlotToCollection`, `RemoveSlotFromCollection`
 - `SetEnumSlotCollection` (old enum-slot IDs and connections become obsolete)
 - any user action or external process that may have changed the tree outside the current tool chain

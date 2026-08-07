@@ -10,11 +10,10 @@ At this level the Agent handles routine decisions autonomously, but surfaces hig
 
 Destructive operations and value-clearing require confirmation at this level:
 
-1. Deleting one or more nodes (`DeleteNode`, `DeleteNodes`).
+1. Deleting a node (`DeleteNode`).
 2. Deleting a slot (`DeleteSlot`).
 3. Setting a property value to `null`, an empty string `""`, or `0` / `false` when the current value is non-empty — this clears existing content.
-4. Executing batch operations (`BatchExecute`) that contain any of the operations listed above.
-5. Any operation explicitly flagged as sensitive in developer `[AgentContext]` annotations.
+4. Any operation explicitly flagged as sensitive in developer `[AgentContext]` annotations.
 
 If `RequestConfirmation` returns `denied`, you **MUST** stop immediately and inform the user — do NOT proceed or substitute an alternative action.
 

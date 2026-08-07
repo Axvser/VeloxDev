@@ -66,9 +66,9 @@ After positioning, verify **no two nodes overlap** by checking bounding box inte
 
 ### Step 5 — Apply Positions
 
-Use `AutoLayout` for full-graph rearrangement (it handles all of the above internally).
+There is **no** `AutoLayout` tool. Apply the computed positions node-by-node, one command per node:
 
-For manual or partial layouts, call `MoveNode` (single) or `BatchMoveNodes` (multiple) with the computed coordinates.
+- For each node, call **`SetNodePosition`** (or **`MoveNode`**) with that node's computed coordinates.
 
 After moving, call `ListNodes` once to confirm actual positions match expectations (the tool may have auto-offset some nodes to avoid overlap).
 
@@ -107,4 +107,4 @@ When the user asks to move the layout to a different quadrant:
    - **Q3**: target = `(-(w + 20), 20)` — X negative, Y positive (box sits left of origin)
    - **Q2**: target = `(-(w + 20), -(h + 20))` — both negative
 3. Compute `deltaX = targetX - minX`, `deltaY = targetY - minY`.
-4. Apply the delta to all affected nodes via `BatchMoveNodes`.
+4. Apply the delta to each affected node via `SetNodePosition` (or `MoveNode`) — one call per node.

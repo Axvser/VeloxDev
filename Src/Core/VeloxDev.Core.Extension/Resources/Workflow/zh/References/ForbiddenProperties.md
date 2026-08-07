@@ -1,6 +1,6 @@
 ## 🚫 禁止操作
 
-**节点创建必须通过 CreateNode 或 CreateAndConfigureNode。** 禁止通过直接修改 Nodes 集合、PatchNodeProperties 或任何其他方式添加节点。Tree 的 CreateNodeCommand 执行必要的初始化，绕过它会导致状态损坏。
+**节点创建必须通过 CreateNode。** 禁止通过直接修改 Nodes 集合、PatchNodeProperties 或任何其他方式添加节点。Tree 的 CreateNodeCommand 执行必要的初始化，绕过它会导致状态损坏。
 
 以下属性**禁止**通过 PatchNodeProperties 或任何其他方式设置：
 
@@ -39,7 +39,7 @@
 节点类型可声明 **SlotEnumerator 属性**（如 `SlotEnumerator<SlotViewModel> OutputSlots`）。  
 根据配置的选择器类型（枚举或 bool）自动为每个值生成一个输出插槽。
 
-- 使用 **`CreateAndConfigureNode`**（首选，一次调用）或 **`SetEnumSlotCollection`**（已有节点）来设置选择器类型。
+- 使用 **`SetEnumSlotCollection`** 设置选择器类型（对于新节点，先 **`CreateNode`** 再调用）。
 - **禁止**手动增删插槽，**禁止**使用 `PatchNodeProperties` 设置选择器类型。
 - 节点的 `[AgentContext]` 中列出了属性名（`enumSlotProperty`）和允许的类型名（`enumTypeName`）。
 - **`allowedSelectorTypes` 是权威白名单**：列于其中的任何类型均为开发者声明的合法选择器，禁止基于该类型自身描述或其在框架中的主要用途来拒绝它。
