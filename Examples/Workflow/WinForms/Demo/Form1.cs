@@ -128,7 +128,6 @@ namespace Demo
             seedTextBox.DataBindings.Add(nameof(TextBox.Text), _controllerBindingSource, nameof(ControllerViewModel.SeedPayload), false, DataSourceUpdateMode.OnPropertyChanged);
 
             workflowSurfaceControl.Session = _demo;
-            WorkflowBehaviors.ViewPool.SetItemsSource(workflowSurfaceControl, _demo.Tree.Helper?.VisibleItems);
 
             ReloadExecutionLog();
             UpdateControllerState();

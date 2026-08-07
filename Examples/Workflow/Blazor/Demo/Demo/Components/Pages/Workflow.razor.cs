@@ -233,64 +233,6 @@ public partial class Workflow : ComponentBase, IDisposable
             _session.Tree.UseStreamingAgentResponse = _useStreaming;
     }
 
-    private string BuildLinkPoints(IWorkflowLinkViewModel link)
-    {
-        var sender = link.Sender;
-        var receiver = link.Receiver;
-        if (sender is null || receiver is null) return "";
-
-        // Draw from the slot anchors (measured by WorkflowSlotLayoutBehavior), so a node's
-        // multiple output slots each get their own line endpoint instead of clustering at the
-        // node edge. This matches the XAML adapters.
-        double sx = sender.Anchor.Horizontal;
-        double sy = sender.Anchor.Vertical;
-        double ex = receiver.Anchor.Horizontal;
-        double ey = receiver.Anchor.Vertical;
-
-        // Defensive fallback: an unmeasured slot has a (0,0) anchor; use its node edge instead.
-        if (sx == 0 && sy == 0 && sender.Parent is { } sNode)
-        {
-            sx = sNode.Anchor.Horizontal + sNode.Size.Width;
-            sy = sNode.Anchor.Vertical + sNode.Size.Height / 2;
-        }
-        if (ex == 0 && ey == 0 && receiver.Parent is { } rNode)
-        {
-            ex = rNode.Anchor.Horizontal;
-            ey = rNode.Anchor.Vertical + rNode.Size.Height / 2;
-        }
-
-        double dx = ex - sx;
-        const double phi = 0.6180339887;
-        double stub = Math.Abs(dx) / 2.0 * (1.0 - phi);
-        double p1x = sx + stub;
-        double p4x = ex - stub;
-
-        return $"{sx:F1},{sy:F1} {p1x:F1},{sy:F1} {p4x:F1},{ey:F1} {ex:F1},{ey:F1}";
-    }
-
-    private string BuildVirtualLinkPoints(IWorkflowLinkViewModel link)
-    {
-        var sender = link.Sender;
-        if (sender is null) return "";
-
-        // The virtual link's Sender is the standalone slot whose Anchor is set by the core
-        // SendConnection flow to the source slot's (measured) anchor. Its Receiver tracks the
-        // pointer. Both are canvas/world coordinates.
-        double sx = sender.Anchor.Horizontal;
-        double sy = sender.Anchor.Vertical;
-        double ex = link.Receiver.Anchor.Horizontal;
-        double ey = link.Receiver.Anchor.Vertical;
-
-        double dx = ex - sx;
-        const double phi = 0.6180339887;
-        // Signed stub keeps the orthogonal bend on the correct side when dragging leftward.
-        double stub = dx / 2.0 * (1.0 - phi);
-        double p1x = sx + stub;
-        double p4x = ex - stub;
-
-        return $"{sx:F1},{sy:F1} {p1x:F1},{sy:F1} {p4x:F1},{ey:F1} {ex:F1},{ey:F1}";
-    }
-
     public void Dispose()
     {
         UnsubscribeSession();

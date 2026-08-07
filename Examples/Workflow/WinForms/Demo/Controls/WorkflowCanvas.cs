@@ -1,5 +1,6 @@
 using Demo.ViewModels;
 using Demo.Workflow;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing.Drawing2D;
@@ -31,6 +32,13 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     // ── 状态 ──────────────────────────────────────────────────────────────────
     private WorkflowDemoSession? _session;
     private readonly Dictionary<IWorkflowNodeViewModel, WorkflowNodeCard> _cards = [];
+
+    // 连线叠层：透明 Panel，承载池化的模板 LinkView 子控件；随平移/滚动移动。
+    private readonly TransparentLinksHost _linksHost;
+
+    // 响应式连线集合（VirtualLink + 真实链接），由 _linksHost 上的 ViewManager 消费。
+    private ObservableCollection<IWorkflowViewModel>? _linkItems;
+    private IWorkflowTreeViewModel? _linksSubscribedTree;
 
     // 平移
     private bool _isPanning;
@@ -92,6 +100,32 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
             ControlStyles.ResizeRedraw |
             ControlStyles.UserPaint,
             true);
+
+        // 连线叠层：全尺寸透明 Panel，作为 ViewManager 的宿主承载模板 LinkView。
+        // Enabled=false 使其不拦截鼠标（画布平移/节点交互不受影响）；透明背景让
+        // 网格（画布 OnPaintBackground）透过叠层显示。
+        _linksHost = new TransparentLinksHost
+        {
+            Location = Point.Empty,
+            Size = new System.Drawing.Size(1920, 1080),
+        };
+        Controls.Add(_linksHost);
+
+        // LinkView 工厂：新建模板 LinkView（透明，Dock=Fill，经 ViewModel 绑定 link）。
+        var selector = new Views.TemplateSelector
+        {
+            LinkViewFactory = link =>
+            {
+                var view = new Views.LinkView
+                {
+                    Dock = DockStyle.Fill,
+                    BackColor = Color.Transparent,
+                };
+                view.ViewModel = link;
+                return view;
+            },
+        };
+        WorkflowBehaviors.ViewPool.SetTemplateSelector(_linksHost, selector);
     }
 
     // ── Session 生命周期 ───────────────────────────────────────────────────────
@@ -106,11 +140,74 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         foreach (var node in s.Tree.Nodes) AddCard(node);
         UpdateCanvasMinSize();
 
-        // 延迟同步：等 WinForms 完成首次布局后再计算 SlotButton 屏幕坐标
+        // 连线池：VirtualLink（首位）+ 全部真实 Link → _linksHost 上的 ViewManager。
+        AttachLinksPool(s.Tree);
+
+        // 延迟同步：等 WinForms 完成首次布局后再计算 SlotView 屏幕坐标
         if (IsHandleCreated)
             BeginInvoke(InitialSync);
         else
             HandleCreated += OnHandleCreatedForInitialSync;
+    }
+
+    /// <summary>
+    /// 为连线叠层创建响应式链接集合（VirtualLink + 全部真实链接），交给 ViewManager
+    /// 池化渲染为模板 LinkView。集合自身的变更会把 VirtualLink / 链接的增删自动
+    /// 反映到池中，因此画布不再需要自己维护连线绘制。
+    /// </summary>
+    private void AttachLinksPool(IWorkflowTreeViewModel tree)
+    {
+        _linkItems = new ObservableCollection<IWorkflowViewModel> { tree.VirtualLink };
+        foreach (var link in tree.Links)
+        {
+            _linkItems.Add(link);
+        }
+
+        _linksSubscribedTree = tree;
+        tree.Links.CollectionChanged += OnLinksCollectionChanged;
+        WorkflowBehaviors.ViewPool.SetItemsSource(_linksHost, _linkItems);
+        PositionLinksHost();
+    }
+
+    private void OnLinksCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(new NotifyCollectionChangedEventHandler(OnLinksCollectionChanged), sender, e);
+            return;
+        }
+
+        if (_linkItems is null) return;
+
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add when e.NewItems is not null:
+                foreach (var link in e.NewItems)
+                {
+                    _linkItems.Add((IWorkflowViewModel)link);
+                }
+                break;
+            case NotifyCollectionChangedAction.Remove when e.OldItems is not null:
+                foreach (var link in e.OldItems)
+                {
+                    _linkItems.Remove((IWorkflowViewModel)link);
+                }
+                break;
+            case NotifyCollectionChangedAction.Reset:
+                _linkItems.Clear();
+                if (_linksSubscribedTree is not null)
+                {
+                    _linkItems.Add(_linksSubscribedTree.VirtualLink);
+                    foreach (var link in _linksSubscribedTree.Links)
+                    {
+                        _linkItems.Add(link);
+                    }
+                }
+                break;
+        }
+
+        SyncAllSlotAnchors();
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     private void OnHandleCreatedForInitialSync(object? sender, EventArgs e)
@@ -133,6 +230,15 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         s.Tree.Nodes.CollectionChanged -= OnNodesChanged;
         s.Tree.Links.CollectionChanged -= OnLinksChanged;
         s.Controller.PropertyChanged -= OnControllerPropertyChanged;
+
+        if (_linksSubscribedTree is not null)
+        {
+            _linksSubscribedTree.Links.CollectionChanged -= OnLinksCollectionChanged;
+        }
+
+        _linksSubscribedTree = null;
+        _linkItems = null;
+        WorkflowBehaviors.ViewPool.SetItemsSource(_linksHost, null);
 
         foreach (var card in _cards.Values)
         {
@@ -261,13 +367,34 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
             LayoutCard(node, card);
         }
 
+        PositionLinksHost();
         UpdateCanvasMinSize();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
+    /// <summary>
+    /// 将连线叠层定位到世界坐标原点处（pan + scroll）。叠层内的 LinkView 用世界
+    /// 坐标（slot.Anchor）画折线，因此叠层随画布平移/滚动整体移动即可保持对齐。
+    /// 尺寸跟随当前内容范围。
+    /// </summary>
+    private void PositionLinksHost()
+    {
+        var scroll = AutoScrollPosition;
+        var w = Math.Max(ClientSize.Width, 1920);
+        var h = Math.Max(ClientSize.Height, 1080);
+
+        // 注意：不要 BringToFront —— 连线叠层保持在卡片之下，连线下沉到节点后面
+        // （与 WPF 模板的链接在节点背后的层级一致）。叠层本身透明且 Enabled=false，
+        // 不会阻挡画布平移或节点/槽位交互。
+        _linksHost.Location = new Point(
+            _panOffset.X + scroll.X,
+            _panOffset.Y + scroll.Y);
+        _linksHost.Size = new System.Drawing.Size(w, h);
+    }
+
     // ── Slot 锚点同步 ────────────────────────────────────────────────────────
     /// <summary>
-    /// 计算所有 SlotButton 的实时世界坐标，写入 IWorkflowSlotViewModel.Anchor，
+    /// 计算所有 SlotView 的实时世界坐标，写入 IWorkflowSlotViewModel.Anchor，
     /// 并返回一份 slot→世界坐标 的快照字典，供绘制使用。
     /// </summary>
     private Dictionary<IWorkflowSlotViewModel, PointF> BuildSlotWorldMap()
@@ -310,7 +437,7 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     }
 
     private static void CollectSlotButton(
-        SlotButton? btn,
+        Views.SlotView? btn,
         WorkflowNodeCard card,
         float cardOriginX,
         float cardOriginY,
@@ -333,11 +460,11 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         map[btn.ViewModel] = new PointF(cardOriginX + cx, cardOriginY + cy);
     }
 
-    private static IEnumerable<SlotButton> EnumerateSlotButtons(Control root)
+    private static IEnumerable<Views.SlotView> EnumerateSlotButtons(Control root)
     {
         foreach (Control child in root.Controls)
         {
-            if (child is SlotButton sb) yield return sb;
+            if (child is Views.SlotView sb) yield return sb;
             foreach (var nested in EnumerateSlotButtons(child))
                 yield return nested;
         }
@@ -407,6 +534,23 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     }
 
     // ── 绘制 ──────────────────────────────────────────────────────────────────
+    // 网格与标尺画在 OnPaintBackground 中（而非 OnPaint），这样透明叠层的模板
+    // LinkView 子控件（BackColor=Transparent）能透过自身合成显示网格 —— 这是
+    // WinForms 透明子控件合成机制的硬性要求（子控件只合成父控件的
+    // OnPaintBackground 输出）。
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        base.OnPaintBackground(e);
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+
+        var scroll = AutoScrollPosition;
+        var origin = new PointF(_panOffset.X + scroll.X, _panOffset.Y + scroll.Y);
+
+        DrawGrid(g, origin);
+        DrawAxisScale(g, origin);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
@@ -416,45 +560,15 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         var scroll = AutoScrollPosition;
         var origin = new PointF(_panOffset.X + scroll.X, _panOffset.Y + scroll.Y);
 
-        DrawGrid(g, origin);
-        DrawAxisScale(g, origin);
-
         if (_session is null) return;
 
-        // 实时计算所有 Slot 的世界坐标快照，不依赖缓存
+        // 实时计算所有 Slot 的世界坐标快照，写回 slot.Anchor（连线端点、命中测试用）
         var slotMap = BuildSlotWorldMap();
-
-        // 同步写回 slot.Anchor，保证 HitTest 等数据层面也能使用最新坐标
         foreach (var (slot, pt) in slotMap)
             slot.Anchor = new Anchor(pt.X, pt.Y, slot.Anchor.Layer);
 
-        // 连线和槽位在世界坐标系中绘制，需要偏移 origin
-        var state = g.Save();
-        g.TranslateTransform(origin.X, origin.Y);
-
-        // 已确认连线
-        using var linkPen = new Pen(Color.FromArgb(34, 211, 238), 4f);
-        using var linkDot = new SolidBrush(Color.FromArgb(103, 232, 249));
-        foreach (var link in _session.Tree.Links.Where(l => l.IsVisible))
-            DrawLink(g, linkPen, linkDot, link, slotMap);
-
-        // 虚线（连线中）
-        if (_session.Tree.VirtualLink.IsVisible)
-        {
-            using var vPen = new Pen(Color.FromArgb(226, 232, 240), 3f);
-            using var vDot = new SolidBrush(Color.FromArgb(226, 232, 240));
-            DrawLink(g, vPen, vDot, _session.Tree.VirtualLink, slotMap);
-        }
-
-        // 槽位圆圈（覆盖在卡片上方）
-        using var slotPen = new Pen(Color.White, 1.5f);
-        foreach (var node in _session.Tree.Nodes)
-        {
-            foreach (var slot in EnumerateNodeSlots(node))
-                DrawSlot(g, slotPen, slot, slotMap);
-        }
-
-        g.Restore(state);
+        // 连线由模板 LinkView 子控件（透明叠层 _linksHost）绘制，画布本身不再画线。
+        // 槽位由卡片内的模板 SlotView 绘制，画布不再画槽位圆圈。
 
         // 没有对应卡片的节点：绘制占位矩形
         foreach (var node in _session.Tree.Nodes)
@@ -462,40 +576,6 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
             if (!_cards.ContainsKey(node))
                 DrawNodeFallback(g, node, origin);
         }
-    }
-
-    private static void DrawLink(
-        Graphics g, Pen pen, Brush dotBrush,
-        IWorkflowLinkViewModel link,
-        Dictionary<IWorkflowSlotViewModel, PointF> slotMap)
-    {
-        // 优先从实时快照取坐标，回退到缓存的 slot.Anchor
-        slotMap.TryGetValue(link.Sender, out var sp);
-        slotMap.TryGetValue(link.Receiver, out var rp);
-        var sx = sp != default ? sp.X : (float)link.Sender.Anchor.Horizontal;
-        var sy = sp != default ? sp.Y : (float)link.Sender.Anchor.Vertical;
-        var ex = rp != default ? rp.X : (float)link.Receiver.Anchor.Horizontal;
-        var ey = rp != default ? rp.Y : (float)link.Receiver.Anchor.Vertical;
-        var cp = Math.Max(80f, MathF.Abs(ex - sx) * 0.45f);
-
-        using var path = new GraphicsPath();
-        path.AddBezier(sx, sy, sx + cp, sy, ex - cp, ey, ex, ey);
-        g.DrawPath(pen, path);
-        g.FillEllipse(dotBrush, sx - 5, sy - 5, 10, 10);
-        g.FillEllipse(dotBrush, ex - 5, ey - 5, 10, 10);
-    }
-
-    private static void DrawSlot(
-        Graphics g, Pen pen,
-        IWorkflowSlotViewModel slot,
-        Dictionary<IWorkflowSlotViewModel, PointF> slotMap)
-    {
-        slotMap.TryGetValue(slot, out var pt);
-        var x = (pt != default ? pt.X : (float)slot.Anchor.Horizontal) - 10;
-        var y = (pt != default ? pt.Y : (float)slot.Anchor.Vertical) - 10;
-        using var brush = new SolidBrush(SlotColor(slot.State));
-        g.FillEllipse(brush, x, y, 20, 20);
-        g.DrawEllipse(pen, x, y, 20, 20);
     }
 
     private static void DrawNodeFallback(Graphics g, IWorkflowNodeViewModel node, PointF origin)
@@ -668,6 +748,14 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     // 阻止 WinForms 将子控件滚动到视图内（会干扰平移逻辑）
     protected override Point ScrollToControl(Control activeControl) => DisplayRectangle.Location;
 
+    protected override void OnScroll(ScrollEventArgs se)
+    {
+        base.OnScroll(se);
+        // 滚动时同步连线叠层位置（LinksHost 本身不会被 AutoScroll 移动）。
+        PositionLinksHost();
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -693,14 +781,6 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
 
     private static bool NearZero(double v) => Math.Abs(v) < Eps;
 
-    private static Color SlotColor(SlotState state) => state switch
-    {
-        var s when s.HasFlag(SlotState.Sender) && s.HasFlag(SlotState.Receiver) => Color.Violet,
-        var s when s.HasFlag(SlotState.Sender) => Color.Tomato,
-        var s when s.HasFlag(SlotState.Receiver) => Color.Lime,
-        _ => Color.White,
-    };
-
     private static GraphicsPath RoundRectF(RectangleF r, float radius)
     {
         var d = radius * 2f;
@@ -711,5 +791,31 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
         path.CloseFigure();
         return path;
+    }
+}
+
+/// <summary>
+/// 透明的连线叠层面板：承载池化的模板 LinkView 子控件。透明背景让画布的网格
+/// （画布 OnPaintBackground）透过显示；Enabled=false 使其不拦截鼠标（画布平移、
+/// 节点拖拽、槽位连线都由画布与卡片上的 Behavior 处理）。
+/// </summary>
+internal sealed class TransparentLinksHost : Panel
+{
+    public TransparentLinksHost()
+    {
+        DoubleBuffered = true;
+        BackColor = Color.Transparent;
+        Enabled = false;
+        TabStop = false;
+        SetStyle(
+            ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.OptimizedDoubleBuffer |
+            ControlStyles.SupportsTransparentBackColor,
+            true);
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        // 不填充不透明背景，保持透明以显示画布网格。
     }
 }

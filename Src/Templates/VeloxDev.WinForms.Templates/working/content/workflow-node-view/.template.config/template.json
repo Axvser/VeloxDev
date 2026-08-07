@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "WinForms",
+    "Node"
+  ],
+  "identity": "VeloxDev.WinForms.WorkflowNodeView",
+  "name": "VeloxDev WinForms Workflow Node View",
+  "description": "A minimal WinForms view for a VeloxDev workflow node component.",
+  "shortName": "winforms-v-node",
+  "sourceName": "TemplateClass",
+  "defaultName": "NodeView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated node view.",
+      "defaultValue": "MyApp.Views",
+      "replaces": "TemplateNamespace"
+    },
+    "nodeBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node background color.",
+      "defaultValue": "#DDFFFFFF",
+      "replaces": "TemplateNodeBackground"
+    },
+    "nodeForeground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node foreground color.",
+      "defaultValue": "#DD1E1E1E",
+      "replaces": "TemplateNodeForeground"
+    },
+    "nodeBorderBrush": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node border color.",
+      "defaultValue": "#331E1E1E",
+      "replaces": "TemplateNodeBorderBrush"
+    },
+    "nodeBorderThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node border thickness.",
+      "defaultValue": "1",
+      "replaces": "TemplateNodeBorderThickness"
+    },
+    "nodeCornerRadius": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node corner radius.",
+      "defaultValue": "6",
+      "replaces": "TemplateNodeCornerRadius"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.cs"
+    }
+  ]
+}

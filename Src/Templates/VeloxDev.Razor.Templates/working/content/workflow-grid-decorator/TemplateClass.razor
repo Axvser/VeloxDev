@@ -1,0 +1,13 @@
+@namespace TemplateNamespace
+@using VeloxDev.WorkflowSystem.AttachedBehaviors
+
+@if (Viewport is { } vp)
+{
+    <WorkflowGridDecorator Viewport="vp"
+                           RulerThickness="@RulerThickness"
+                           Spacing="@GridSpacing"
+                           RulerBackground="@RulerBackgroundCss"
+                           TickColor="@RulerTickColorCss"
+                           LabelColor="@RulerLabelColorCss"
+                           DividerColor="@RulerDividerColorCss" />
+}

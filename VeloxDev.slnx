@@ -146,5 +146,7 @@
     <Project Path="Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj" />
+    <Project Path="Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj" />
+    <Project Path="Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj" />
   </Folder>
 </Solution>

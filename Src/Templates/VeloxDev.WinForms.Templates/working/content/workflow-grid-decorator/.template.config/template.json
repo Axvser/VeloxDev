@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [ "VeloxDev", "Workflow", "WinForms", "Code" ],
+  "identity": "VeloxDev.WinForms.WorkflowGridDecorator",
+  "name": "VeloxDev WinForms Workflow Grid Decorator",
+  "description": "A lightweight WinForms workflow grid implementing IWorkflowGridDecorator.",
+  "shortName": "winforms-v-decorator",
+  "sourceName": "TemplateClass",
+  "defaultName": "GridDecorator",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated decorator.",
+      "defaultValue": "MyApp.Views",
+      "replaces": "TemplateNamespace"
+    },
+    "gridBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Grid background color.",
+      "defaultValue": "#1E1E1E",
+      "replaces": "TemplateGridBackground"
+    },
+    "minorGridColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minor grid line color.",
+      "defaultValue": "#2A2D2E",
+      "replaces": "TemplateMinorGridColor"
+    },
+    "majorGridColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Major grid line color.",
+      "defaultValue": "#3A3D40",
+      "replaces": "TemplateMajorGridColor"
+    },
+    "axisColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Grid axis color.",
+      "defaultValue": "#4D4D4D",
+      "replaces": "TemplateAxisColor"
+    },
+    "gridSpacing": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minor grid spacing.",
+      "defaultValue": "40d",
+      "replaces": "TemplateGridSpacing"
+    },
+    "majorLineEvery": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Number of minor cells between major lines.",
+      "defaultValue": "5",
+      "replaces": "TemplateMajorLineEvery"
+    },
+    "rulerBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Ruler area background color.",
+      "defaultValue": "#252526",
+      "replaces": "TemplateRulerBackground"
+    },
+    "rulerTickColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Ruler tick mark color.",
+      "defaultValue": "#555555",
+      "replaces": "TemplateRulerTickColor"
+    },
+    "rulerLabelColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Ruler label text color.",
+      "defaultValue": "#888888",
+      "replaces": "TemplateRulerLabelColor"
+    },
+    "rulerDividerColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Divider line between ruler and content area.",
+      "defaultValue": "#3A3D40",
+      "replaces": "TemplateRulerDividerColor"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "TemplateClass.cs" }
+  ]
+}

@@ -56,11 +56,11 @@ internal sealed class WorkflowNodeCard : UserControl
     private CheckBox? _conditionCheck;
     private ComboBox? _enumCombo;
     private TableLayoutPanel? _outputSlotsLayout;
-    private readonly List<(Label label, SlotButton slot)> _dynamicSlotRows = [];
+    private readonly List<(Label label, Views.SlotView slot)> _dynamicSlotRows = [];
 
-    // ── 主槽位按钮（边缘固定的圆形槽位，由 WorkflowCanvas 计算屏幕位置）────
-    internal SlotButton? InputSlotButton { get; private set; }
-    internal SlotButton? OutputSlotButton { get; private set; }
+    // ── 主槽位按钮（边缘固定的槽位视图，由 WorkflowCanvas 计算屏幕位置）────
+    internal Views.SlotView? InputSlotButton { get; private set; }
+    internal Views.SlotView? OutputSlotButton { get; private set; }
 
     // ── 事件 ──────────────────────────────────────────────────────────────────
     /// <summary>
@@ -261,10 +261,10 @@ internal sealed class WorkflowNodeCard : UserControl
 
     // ── 槽位按钮管理 ──────────────────────────────────────────────────────────
 
-    private SlotButton AddSlotButton(IWorkflowSlotViewModel? slot)
+    private Views.SlotView AddSlotButton(IWorkflowSlotViewModel? slot)
     {
-        var btn = new SlotButton();
-        btn.Bind(slot);
+        var btn = new Views.SlotView();
+        btn.ViewModel = slot;
         Controls.Add(btn);
         btn.BringToFront();
         return btn;
@@ -644,8 +644,8 @@ internal sealed class WorkflowNodeCard : UserControl
         SetText(_bodyDuration, n.LastDuration);
         SetText(_errorLabel, $"Error: {n.LastError}");
         SetText(_responseLabel, n.LastResponsePreview);
-        InputSlotButton?.Bind(n.InputSlot);
-        OutputSlotButton?.Bind(n.OutputSlot);
+        InputSlotButton!.ViewModel = n.InputSlot;
+        OutputSlotButton!.ViewModel = n.OutputSlot;
     }
 
     private void ApplyController(ControllerViewModel c)
@@ -664,7 +664,7 @@ internal sealed class WorkflowNodeCard : UserControl
                 : "The controller only pushes the initial context into the workflow.";
         }
 
-        OutputSlotButton?.Bind(c.OutputSlot);
+        OutputSlotButton!.ViewModel = c.OutputSlot;
     }
 
     private static void PopulateCombo<T>(ComboBox? combo, T[] items, T selected)
@@ -682,7 +682,7 @@ internal sealed class WorkflowNodeCard : UserControl
         SetText(_routedBadge, b.LastRouted);
         SetVisible(_routedBadge, !string.IsNullOrEmpty(b.LastRouted) && b.LastRouted != "-");
         SetChecked(_conditionCheck, b.Condition);
-        InputSlotButton?.Bind(b.InputSlot);
+        InputSlotButton!.ViewModel = b.InputSlot;
         RebuildBoolSlots(b);
     }
 
@@ -691,7 +691,7 @@ internal sealed class WorkflowNodeCard : UserControl
         SetText(_titleLabel, e.Title);
         SetText(_routedBadge, e.LastRouted);
         SetVisible(_routedBadge, !string.IsNullOrEmpty(e.LastRouted) && e.LastRouted != "-");
-        InputSlotButton?.Bind(e.InputSlot);
+        InputSlotButton!.ViewModel = e.InputSlot;
         UpdateEnumCombo(e);
         RebuildEnumSlots(e);
     }
@@ -737,7 +737,7 @@ internal sealed class WorkflowNodeCard : UserControl
             {
                 _dynamicSlotRows[i].label.Text = entries[i].Name;
                 _dynamicSlotRows[i].label.ForeColor = labelColor;
-                _dynamicSlotRows[i].slot.Bind(entries[i].Slot);
+                _dynamicSlotRows[i].slot.ViewModel = entries[i].Slot;
             }
 
             return;
@@ -764,8 +764,8 @@ internal sealed class WorkflowNodeCard : UserControl
             lbl.Text = entries[i].Name;
             _outputSlotsLayout.Controls.Add(lbl, 0, i);
 
-            var btn = new SlotButton { Margin = new Padding(2, 4, 2, 4) };
-            btn.Bind(entries[i].Slot);
+            var btn = new Views.SlotView { Margin = new Padding(2, 4, 2, 4) };
+            btn.ViewModel = entries[i].Slot;
             _outputSlotsLayout.Controls.Add(btn, 1, i);
             _dynamicSlotRows.Add((lbl, btn));
         }
@@ -1071,98 +1071,4 @@ internal sealed class WorkflowNodeCard : UserControl
         btn.Click += OnCommandButtonClick;
         return btn;
     }
-}
-
-/// <summary>
-/// 工作流槽位的可点击按钮控件（圆形，owner-draw）。
-/// 直接内嵌在 WorkflowNodeCard 或 _outputSlotsLayout 中。
-/// 槽位在画布层的 anchor 由 WorkflowCanvas 读取此按钮的屏幕位置计算。
-/// </summary>
-internal sealed class SlotButton : Control
-{
-    private IWorkflowSlotViewModel? _slot;
-    private INotifyPropertyChanged? _notifier;
-
-    internal IWorkflowSlotViewModel? ViewModel => _slot;
-
-    internal SlotButton()
-    {
-        Size = new System.Drawing.Size(20, 20);
-        Margin = Padding.Empty;
-        Cursor = Cursors.Hand;
-        TabStop = false;
-        WorkflowBehaviors.WorkflowSlotConnectionBehavior.SetIsEnabled(this, true);
-
-        SetStyle(
-            ControlStyles.AllPaintingInWmPaint |
-            ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw |
-            ControlStyles.UserPaint,
-            true);
-    }
-
-    internal void Bind(IWorkflowSlotViewModel? slot)
-    {
-        if (ReferenceEquals(_slot, slot)) return;
-
-        if (_notifier is not null)
-        {
-            _notifier.PropertyChanged -= OnSlotChanged;
-            _notifier = null;
-        }
-
-        _slot = slot;
-        Tag = slot;
-        Visible = slot is not null;
-
-        if (slot is INotifyPropertyChanged n)
-        {
-            _notifier = n;
-            n.PropertyChanged += OnSlotChanged;
-        }
-
-        Invalidate();
-    }
-    protected override void OnPaintBackground(PaintEventArgs e)
-    {
-        // 用父控件背景色填充，避免 WinForms 透明背景异常
-        e.Graphics.Clear(Parent?.BackColor ?? Color.FromArgb(30, 42, 53));
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        if (_slot is null) return;
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var brush = new SolidBrush(SlotColor(_slot.State));
-        using var pen = new Pen(Color.White, 1.4F);
-        var rect = new RectangleF(1.5F, 1.5F, Width - 3F, Height - 3F);
-        e.Graphics.FillEllipse(brush, rect);
-        e.Graphics.DrawEllipse(pen, rect);
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing && _notifier is not null)
-        {
-            _notifier.PropertyChanged -= OnSlotChanged;
-            _notifier = null;
-        }
-
-        base.Dispose(disposing);
-    }
-
-    private void OnSlotChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (InvokeRequired) { BeginInvoke(new PropertyChangedEventHandler(OnSlotChanged), sender, e); return; }
-        Invalidate();
-    }
-
-    private static Color SlotColor(SlotState state) => state switch
-    {
-        var s when s.HasFlag(SlotState.Sender) && s.HasFlag(SlotState.Receiver) => Color.Violet,
-        var s when s.HasFlag(SlotState.Sender) => Color.Tomato,
-        var s when s.HasFlag(SlotState.Receiver) => Color.Lime,
-        _ => Color.White,
-    };
 }

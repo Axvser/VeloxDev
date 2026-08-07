@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [ "VeloxDev", "Workflow", "WinForms", "Code" ],
+  "identity": "VeloxDev.WinForms.WorkflowTemplateSelector",
+  "name": "VeloxDev WinForms Workflow Template Selector",
+  "description": "A WinForms IWorkflowTemplateSelector for VeloxDev node, slot, link, and tree view models.",
+  "shortName": "winforms-v-selector",
+  "sourceName": "TemplateClass",
+  "defaultName": "TemplateSelector",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated selector.",
+      "defaultValue": "MyApp.Views",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "TemplateClass.cs" }
+  ]
+}

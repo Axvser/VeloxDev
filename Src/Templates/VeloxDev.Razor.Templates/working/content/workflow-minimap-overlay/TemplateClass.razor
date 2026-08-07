@@ -1,0 +1,14 @@
+@namespace TemplateNamespace
+@using VeloxDev.WorkflowSystem.AttachedBehaviors
+
+@if (Viewport is { } vp)
+{
+    <WorkflowMinimapOverlay Viewport="vp"
+                            Width="@Width"
+                            Height="@Height"
+                            ScrollViewerId="@ScrollViewerId"
+                            Background="@Background"
+                            BorderColor="@Border"
+                            NodeFill="@NodeFill"
+                            ViewportStroke="@ViewportStroke" />
+}

@@ -1,0 +1,12 @@
+@namespace TemplateNamespace
+@using VeloxDev.WorkflowSystem
+@using VeloxDev.WorkflowSystem.AttachedBehaviors
+
+@if (Items is not null)
+{
+    <ViewPool ItemsSource="@Items" KeySelector="@KeySelector">
+        <ItemTemplate Context="item">
+            @Select(item)
+        </ItemTemplate>
+    </ViewPool>
+}

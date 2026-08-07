@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>VeloxDev.WinForms.Templates</PackageId>
+    <Version>6.0.4</Version>
+    <Authors>Axvser</Authors>
+    <Title>VeloxDev WinForms templates</Title>
+    <Description>Item templates for building VeloxDev workflow views with WinForms.</Description>
+    <PackageTags>dotnet-new;templates;veloxdev;workflow;winforms</PackageTags>
+    <PackageType>Template</PackageType>
+    <PackageIcon>veloxdev-logo.png</PackageIcon>
+    <PackageReadmeFile></PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Axvser/VeloxDev</RepositoryUrl>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="content\**\*" Pack="true" PackagePath="content" />
+    <None Include="..\..\..\..\Assets\veloxdev-logo.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\skills\veloxdev-workflow-item-templates\references\**\*" Pack="true" PackagePath="references" Visible="false" />
+  </ItemGroup>
+
+</Project>

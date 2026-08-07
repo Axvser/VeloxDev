@@ -1,0 +1,73 @@
+@namespace Demo.Components.Workflow
+@using VeloxDev.WorkflowSystem
+@using VeloxDev.WorkflowSystem.AttachedBehaviors
+@using Demo.Components.Workflow
+
+@if (Tree is not null)
+{
+    <WorkflowSurfaceBehavior Tree="Tree"
+                             IsEnabled="true"
+                             ScrollViewerId="@ScrollViewerId"
+                             CanvasId="@CanvasId"
+                             GridSpacing="@GridSpacing"
+                             GridColor="@MinorGridColor"
+                             Background="@Background">
+        <GridDecorator Context="vp">
+            <GridDecorator Viewport="vp"
+                           RulerThickness="28"
+                           GridSpacing="@GridSpacing"
+                           RulerBackground="@RulerBackground"
+                           TickColor="@RulerTickColor"
+                           DividerColor="@RulerDividerColor" />
+        </GridDecorator>
+        <Minimap Context="vp">
+            <MinimapOverlay Viewport="vp"
+                            Width="180" Height="120"
+                            ScrollViewerId="@ScrollViewerId" />
+        </Minimap>
+        <ChildContent Context="sc">
+            @* Links layer: one full-canvas link view per connection (absolute, overflow visible). *@
+            <div class="veloxdev-wf-links" style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0")px;height:@sc.Height.ToString("0")px;pointer-events:none;">
+                @foreach (var link in Tree.Links)
+                {
+                    <LinkView Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />
+                }
+                @if (Tree.VirtualLink.IsVisible)
+                {
+                    <LinkView Link="Tree.VirtualLink" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />
+                }
+            </div>
+
+            @* Nodes layer: pooled node views with generically-populated slot hosts. *@
+            <ViewPool ItemsSource="Tree.Nodes" KeySelector="n => n">
+                <ItemTemplate Context="item">
+                    @if (item is IWorkflowNodeViewModel n && NodeTemplate is not null)
+                    {
+                        @NodeTemplate(n)
+                    }
+                    else if (item is IWorkflowNodeViewModel n2)
+                    {
+                        <NodeView Node="n2" Tree="Tree">
+                            <InputSlots>
+                                @foreach (var slot in InputSlotsOf(n2))
+                                {
+                                    <WorkflowSlotConnectionBehavior Slot="slot" Tree="Tree">
+                                        <SlotView Slot="slot" Tree="Tree" SlotSize="18" />
+                                    </WorkflowSlotConnectionBehavior>
+                                }
+                            </InputSlots>
+                            <OutputSlots>
+                                @foreach (var slot in OutputSlotsOf(n2))
+                                {
+                                    <WorkflowSlotConnectionBehavior Slot="slot" Tree="Tree">
+                                        <SlotView Slot="slot" Tree="Tree" SlotSize="14" />
+                                    </WorkflowSlotConnectionBehavior>
+                                }
+                            </OutputSlots>
+                        </NodeView>
+                    }
+                </ItemTemplate>
+            </ViewPool>
+        </ChildContent>
+    </WorkflowSurfaceBehavior>
+}
