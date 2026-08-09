@@ -496,6 +496,20 @@ window.veloxdevWorkflow = (() => {
         minimapEl.addEventListener('mousedown', function (e) {
             e.preventDefault();
             dragState = { startX: e.clientX, startY: e.clientY, hasMoved: false };
+            if (dotnetRef) {
+                const rect = minimapEl.getBoundingClientRect();
+                const scroller = document.getElementById(scrollerId);
+                // Navigate on press, not release: when the viewport is outside the fit-all area the
+                // adapter centers it on all nodes immediately, so a single press snaps back to a
+                // valid area instead of requiring a second click on the cluster. The async result
+                // is deliberately ignored — navigation always happens on press (to the clicked
+                // point when the viewport already shows all nodes, else to the fit-all viewport).
+                dotnetRef.invokeMethodAsync('OnMinimapPress',
+                    e.clientX - rect.left,
+                    e.clientY - rect.top,
+                    scroller ? scroller.scrollLeft : 0,
+                    scroller ? scroller.scrollTop : 0);
+            }
         });
 
         const onMove = function (e) {
@@ -535,18 +549,7 @@ window.veloxdevWorkflow = (() => {
             }
         };
         const onUp = function () {
-            if (!dragState) return;
-            if (!dragState.hasMoved && dotnetRef) {
-                const rect = minimapEl.getBoundingClientRect();
-                const scroller = document.getElementById(scrollerId);
-                // Send the clicked minimap pixel position (not a ratio) plus the current scroll, so
-                // .NET can invert its render mapping and convert it to an absolute scroll position.
-                dotnetRef.invokeMethodAsync('OnMinimapNavigate',
-                    dragState.startX - rect.left,
-                    dragState.startY - rect.top,
-                    scroller ? scroller.scrollLeft : 0,
-                    scroller ? scroller.scrollTop : 0);
-            }
+            // Navigation already happened on mousedown (OnMinimapPress); nothing to do here.
             dragState = null;
         };
         document.addEventListener('mousemove', onMove);

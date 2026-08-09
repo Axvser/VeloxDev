@@ -221,11 +221,15 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         // Resolve ScrollViewer by recursively searching from the visual root.
         // FindControl only searches descendants, not the whole tree, so we
         // search by walking the full visual tree from the root.
+        // NOTE: VisualExtensions.GetVisualRoot() was removed in Avalonia 12 and
+        // e.Root's return type changed (IRenderRoot in 11, Visual in 12), so walk
+        // up via GetVisualParent() whose signature is identical in both 11.x and 12.x.
         if (!string.IsNullOrWhiteSpace(ScrollViewerName))
         {
-            var root = this.GetVisualRoot() as Visual;
-            if (root is not null)
-                _scrollViewer = FindByName<ScrollViewer>(root, ScrollViewerName);
+            Visual root = this;
+            while (root.GetVisualParent() is { } parent)
+                root = parent;
+            _scrollViewer = FindByName<ScrollViewer>(root, ScrollViewerName);
         }
 
         _pendingRefresh = true;

@@ -234,27 +234,68 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         }
     }
 
+    /// <summary>
+    /// Called from JS on minimap <c>mousedown</c>. Navigates immediately: if the current viewport
+    /// already contains the fit-all bounds (the minimum range that shows every node), jump straight
+    /// to the pressed world coordinate; otherwise jump to the fit-all viewport first, so a single
+    /// press snaps back to a valid area that shows all nodes (no second click needed).
+    /// </summary>
     [JSInvokable]
-    public void OnMinimapNavigate(double x, double y, double currentScrollLeft, double currentScrollTop)
+    public void OnMinimapPress(double x, double y, double currentScrollLeft, double currentScrollTop)
     {
         if (string.IsNullOrWhiteSpace(ScrollViewerId) || _module is null || _scale <= 0)
         {
             return;
         }
 
-        // Invert the render mapping (minimapX = ox + (worldX - minX) * scale) to recover the world
-        // coordinate under the click, then convert world -> scrollLeft. scrollLeft = worldX + _offsetX
-        // + contentX, and _offsetX + contentX = currentScrollLeft - ScrollOffsetX (from the surface
-        // viewport: ScrollOffsetX = scrollLeft - _offsetX, minus contentX). Keeping both directions on
-        // the rendered scale means a drag/click tracks the viewport rectangle 1:1 even after the
-        // canvas edge-extension grows the scroll extent.
         var offsetX = currentScrollLeft - ScrollOffsetX;
         var offsetY = currentScrollTop - ScrollOffsetY;
         var worldX = _minX + (x - _mapOx) / _scale;
         var worldY = _minY + (y - _mapOy) / _scale;
-        var targetX = worldX + offsetX + ContentOffsetX;
-        var targetY = worldY + offsetY + ContentOffsetY;
 
+        // Fit-all bounds in world coordinates (mirrors Recompute): the minimum rectangle that
+        // contains every node.
+        double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+        if (WorkflowTree?.Nodes is { } nodes)
+        {
+            foreach (var n in nodes)
+            {
+                minX = Math.Min(minX, n.Anchor.Horizontal);
+                minY = Math.Min(minY, n.Anchor.Vertical);
+                maxX = Math.Max(maxX, n.Anchor.Horizontal + n.Size.Width);
+                maxY = Math.Max(maxY, n.Anchor.Vertical + n.Size.Height);
+            }
+        }
+
+        if (minX > maxX || minY > maxY)
+        {
+            // No nodes: fall back to a plain jump to the pressed point.
+            _ = JS.InvokeVoidAsync("veloxdevWorkflow.scrollToPosition", ScrollViewerId,
+                worldX + offsetX + ContentOffsetX, worldY + offsetY + ContentOffsetY);
+            return;
+        }
+
+        // Current viewport world rect (from the surface viewport: ScrollOffsetX = scrollLeft - offset).
+        var vx = ScrollOffsetX - ContentOffsetX;
+        var vy = ScrollOffsetY - ContentOffsetY;
+        var vw = Math.Max(1, ViewportWidth);
+        var vh = Math.Max(1, ViewportHeight);
+
+        if (vx <= minX && vy <= minY && vx + vw >= maxX && vy + vh >= maxY)
+        {
+            // Viewport already covers every node: jump to the pressed point as today.
+            _ = JS.InvokeVoidAsync("veloxdevWorkflow.scrollToPosition", ScrollViewerId,
+                worldX + offsetX + ContentOffsetX, worldY + offsetY + ContentOffsetY);
+            return;
+        }
+
+        // Viewport is outside the fit-all area: center it on the nodes' bounds so one press snaps
+        // back to a valid viewport that shows all nodes. Clamp to >= 0; the surface's edge
+        // expansion grows the canvas if the target exceeds the current scroll extent.
+        var cx = (minX + maxX) / 2;
+        var cy = (minY + maxY) / 2;
+        var targetX = cx - vw / 2 + offsetX + ContentOffsetX;
+        var targetY = cy - vh / 2 + offsetY + ContentOffsetY;
         _ = JS.InvokeVoidAsync("veloxdevWorkflow.scrollToPosition", ScrollViewerId, targetX, targetY);
     }
 

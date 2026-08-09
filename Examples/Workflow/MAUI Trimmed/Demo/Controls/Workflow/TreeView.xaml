@@ -40,6 +40,6 @@
                               HorizontalOptions="End"
                               VerticalOptions="Start"
                               Margin="0,12,12,0"
-                              InputTransparent="True" />
+                              ScrollViewerName="PART_ScrollViewer" />
     </Grid>
 </ContentView>
