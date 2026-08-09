@@ -836,10 +836,8 @@ public class WorkflowCompilerTests
     {
         var (t, nodes) = GraphBuilder.BuildDiamond();
         var r = _compiler.Compile(nodes[0], CompileMode.DFS, CompileDirection.Forward)[0];
-        // 前序 DFS: n0 → (n1分支 → n3) → 回溯 → (n2分支 → n3已访问)
-        // 结果: [n0, n1, n3, n2] 或 [n0, n2, n3, n1]
+        // 前序 DFS 保留探索偏好，但汇合点 n3 必须排在其所有输入（n1、n2）之后。
         Assert.AreSame(nodes[0], r.Items[0].Node, "DFS Diamond: start");
-        // n3 必须在 n1 或 n2 之后（至少一个子节点已探索）
         var idx3 = -1; var idx1 = -1; var idx2 = -1;
         for (int i = 0; i < r.Items.Count; i++)
         {
@@ -847,7 +845,172 @@ public class WorkflowCompilerTests
             if (r.Items[i].Node == nodes[2]) idx2 = i;
             if (r.Items[i].Node == nodes[3]) idx3 = i;
         }
-        Assert.IsTrue(idx3 > idx1 || idx3 > idx2, "n3 should come after at least one branch node");
+        Assert.IsTrue(idx3 > idx1 && idx3 > idx2,
+            "n3 (merge point) must come after BOTH branch nodes n1 and n2, not just one");
+    }
+
+    [TestMethod]
+    public void DFS_Diamond_ReverseOrder_MergePointAfterInputs()
+    {
+        // Reverse DFS：遍历边反向，n3 是起点（ord 最小），n0 变为反向图的汇合点
+        // （依赖 n1 与 n2 的「反向输出」）。反向 DFS 前序会过早探索 n0 ——
+        // 重排必须保证反向图中每条边 Y→X 都满足 Y 在 X 之前，即 n0 排在 n1、n2 之后。
+        var (t, nodes) = GraphBuilder.BuildDiamond();
+        var r = _compiler.Compile(nodes[3], CompileMode.DFS, CompileDirection.Reverse)[0];
+        Assert.AreSame(nodes[3], r.Items[0].Node, "Reverse DFS starts from the end (n3)");
+
+        var idx0 = r.Items.First(i => i.Node == nodes[0]).Order;
+        var idx1 = r.Items.First(i => i.Node == nodes[1]).Order;
+        var idx2 = r.Items.First(i => i.Node == nodes[2]).Order;
+        Assert.IsTrue(idx0 > idx1 && idx0 > idx2,
+            "n0 (reverse-graph merge point) must come after its inputs n1 and n2 under Reverse DFS");
+    }
+
+    [TestMethod]
+    public void DFS_LinearChain_PreOrderPreserved()
+    {
+        // 链图无汇合 → 拓扑修正必须原样保留前序 DFS 顺序。
+        var (t, n) = GraphBuilder.BuildLinearChain();
+        var r = _compiler.Compile(n[0], CompileMode.DFS, CompileDirection.Forward)[0];
+        Assert.AreSame(n[0], r.Items[0].Node, "chain first");
+        Assert.AreSame(n[1], r.Items[1].Node, "chain second");
+        Assert.AreSame(n[2], r.Items[2].Node, "chain third");
+    }
+
+    [TestMethod]
+    public void DFS_Diamond_PriorityBiasStillRespected()
+    {
+        // 有优先级 + 汇合点：n0 → n1(p=2), n2(p=0) → n3。
+        // 低优先级 n2 分支应被优先探索（n2 先于 n1），同时 n3 仍在两者之后。
+        var t = new StubTree();
+        var n0 = new StubNode { Parent = t };
+        var n1 = new PriorityNode { Parent = t, CompilePriority = 2 };
+        var n2 = new PriorityNode { Parent = t, CompilePriority = 0 };
+        var n3 = new StubNode { Parent = t };
+        var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3} };
+        n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]); n3.Slots.Add(s[3]);
+        GraphBuilder.Connect(s[0], s[1]); GraphBuilder.Connect(s[0], s[2]);
+        GraphBuilder.Connect(s[1], s[3]); GraphBuilder.Connect(s[2], s[3]);
+        t.Nodes.Add(n0); t.Nodes.Add(n1); t.Nodes.Add(n2); t.Nodes.Add(n3);
+
+        var r = _compiler.Compile(n0, CompileMode.DFS)[0];
+        var o0 = r.Items.First(i => i.Node == n0).Order;
+        var o1 = r.Items.First(i => i.Node == n1).Order;
+        var o2 = r.Items.First(i => i.Node == n2).Order;
+        var o3 = r.Items.First(i => i.Node == n3).Order;
+        Assert.AreEqual(0, o0, "n0 start");
+        Assert.IsTrue(o2 < o1, "n2 (priority=0) explored before n1 (priority=2)");
+        Assert.IsTrue(o3 > o1 && o3 > o2, "merge point n3 after both inputs");
+    }
+
+    [TestMethod]
+    public void DFS_ConditionalRouter_MergePointAfterAllInputs()
+    {
+        // 用户场景（demo 拓扑）：controller → branchA, branchB → aggregate。
+        // 聚合点 aggregate 是两分支的汇合点，DFS 下必须排在 branchA 与 branchB 之后。
+        var t = new StubTree();
+        var controller = new StubNode { Parent = t };
+        var branchA = new StubNode { Parent = t };
+        var branchB = new StubNode { Parent = t };
+        var aggregate = new StubNode { Parent = t };
+        var s = new[] { new StubSlot{Parent=controller}, new StubSlot{Parent=branchA}, new StubSlot{Parent=branchB}, new StubSlot{Parent=aggregate} };
+        controller.Slots.Add(s[0]); branchA.Slots.Add(s[1]); branchB.Slots.Add(s[2]); aggregate.Slots.Add(s[3]);
+        GraphBuilder.Connect(s[0], s[1]); GraphBuilder.Connect(s[0], s[2]);
+        GraphBuilder.Connect(s[1], s[3]); GraphBuilder.Connect(s[2], s[3]);
+        t.Nodes.Add(controller); t.Nodes.Add(branchA); t.Nodes.Add(branchB); t.Nodes.Add(aggregate);
+
+        var r = _compiler.Compile(controller, CompileMode.DFS)[0];
+        var oA = r.Items.First(i => i.Node == branchA).Order;
+        var oB = r.Items.First(i => i.Node == branchB).Order;
+        var oAgg = r.Items.First(i => i.Node == aggregate).Order;
+        Assert.IsTrue(oAgg > oA && oAgg > oB,
+            "aggregate (merge point) must run after BOTH branchA and branchB under DFS");
+    }
+
+    [TestMethod]
+    public void DFS_RouterWithThreeBranches_MergePointAfterAllInputs()
+    {
+        // 三路条件分支（enumSelector）：n0(router) → n1, n2, n3 → merge。
+        // 汇合点 merge 必须排在三个分支之后 —— 条件分支介入时 DFS 顺序错误的原始用例。
+        var t = new StubTree();
+        var n0 = new RoutingNode { Parent = t, CurrentRouteKey = "a" };
+        var n1 = new StubNode { Parent = t };
+        var n2 = new StubNode { Parent = t };
+        var n3 = new StubNode { Parent = t };
+        var merge = new StubNode { Parent = t };
+        n0.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
+        {
+            ["a"] = [n1], ["b"] = [n2], ["c"] = [n3],
+        };
+        var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3}, new StubSlot{Parent=merge} };
+        n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]); n3.Slots.Add(s[3]); merge.Slots.Add(s[4]);
+        GraphBuilder.Connect(s[0], s[1]); GraphBuilder.Connect(s[0], s[2]); GraphBuilder.Connect(s[0], s[3]);
+        GraphBuilder.Connect(s[1], s[4]); GraphBuilder.Connect(s[2], s[4]); GraphBuilder.Connect(s[3], s[4]);
+        t.Nodes.Add(n0); t.Nodes.Add(n1); t.Nodes.Add(n2); t.Nodes.Add(n3); t.Nodes.Add(merge);
+
+        var r = _compiler.Compile(n0, CompileMode.DFS)[0];
+        var o0 = r.Items.First(i => i.Node == n0).Order;
+        var o1 = r.Items.First(i => i.Node == n1).Order;
+        var o2 = r.Items.First(i => i.Node == n2).Order;
+        var o3 = r.Items.First(i => i.Node == n3).Order;
+        var oM = r.Items.First(i => i.Node == merge).Order;
+        Assert.AreEqual(0, o0, "router is the entry");
+        Assert.IsTrue(oM > o1 && oM > o2 && oM > o3,
+            "merge point must come after all three router branches under DFS");
+    }
+
+    [TestMethod]
+    public void DFS_SkippedBranch_DoesNotForceReorder()
+    {
+        // 条件分支 + 剪除：chosen=true 时 n2（false 独占）被 IsSkipped。
+        // 汇合点重排发生在剪除之前（重排只看拓扑，不看跳过标记），但 skip 节点
+        // 拥有 Order=-1，不能占用有效流程顺序。断言 n3 在 n1 之后、skip 节点不影响顺序。
+        var t = new StubTree();
+        var n0 = new RoutingNode { Parent = t, CurrentRouteKey = true };
+        var n1 = new StubNode { Parent = t };
+        var n2 = new StubNode { Parent = t };
+        var n3 = new StubNode { Parent = t };
+        n0.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
+        {
+            [true] = [n1],
+            [false] = [n2],
+        };
+        var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3} };
+        n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]); n3.Slots.Add(s[3]);
+        GraphBuilder.Connect(s[0], s[1]); GraphBuilder.Connect(s[0], s[2]);
+        GraphBuilder.Connect(s[1], s[3]); GraphBuilder.Connect(s[2], s[3]);
+        t.Nodes.Add(n0); t.Nodes.Add(n1); t.Nodes.Add(n2); t.Nodes.Add(n3);
+
+        var r = _compiler.Compile(n0, CompileMode.DFS)[0];
+
+        var item2 = r.Items.First(i => i.Node == n2);
+        Assert.IsTrue(item2.IsSkipped, "n2 on unchosen (false) branch must be skipped");
+        Assert.AreEqual(-1, item2.Order, "skipped item has Order=-1");
+
+        // 有效节点顺序连续：n0=0, n1=1, n3=2（skip 不占位）。
+        var o0 = r.Items.First(i => i.Node == n0).Order;
+        var o1 = r.Items.First(i => i.Node == n1).Order;
+        var o3 = r.Items.First(i => i.Node == n3).Order;
+        Assert.AreEqual(0, o0);
+        Assert.AreEqual(1, o1);
+        Assert.AreEqual(2, o3, "n3 (merge) after n1, compacted past skipped n2");
+        Assert.IsTrue(o3 > o1, "merge point n3 after chosen branch n1");
+    }
+
+    [TestMethod]
+    public void DFS_Cycle_Trim_FallsBackToPreOrder()
+    {
+        // 成环图无法满足严格拓扑约束（n0→n1→n2→n0 无合法起点）。
+        // 必须优雅回退到原始 DFS 前序，而不是抛异常或卡死。
+        var (t, n) = GraphBuilder.BuildCycle();
+        var r = _compiler.Compile(n[0], CompileMode.DFS, CompileDirection.Forward,
+            CompileScope.FromNode, CycleHandling.Trim)[0];
+
+        Assert.IsTrue(r.HasCycle);
+        // 回退保序：前序 [n0, n1, n2]。
+        Assert.AreSame(n[0], r.Items[0].Node);
+        Assert.AreSame(n[1], r.Items[1].Node);
+        Assert.AreSame(n[2], r.Items[2].Node);
     }
 
     // ═══════════════════════════════════════════════════════════════════════

@@ -112,6 +112,14 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
 
             if (Indices.Count == 0) continue;
 
+            // DFS 汇合点重排：前序 DFS 会把「输入未就绪」的汇合点（diamond 的 n3、
+            // 条件分支合并处）过早加入结果 —— 例如 n0→n1→n3→n2 中 n3 排在 n2 之前，
+            // 但 n3 依赖 n2 的输出。这里做一次拓扑修正：每条遍历边 Y→X 都满足 Y 在 X
+            // 之前（即每个节点位于其所有遍历输入之后）。链/树部分原样保持前序，只有
+            // 汇合点被推迟到其所有输入之后。BFS 已通过层级顺序天然满足输入前置，无需修正。
+            if (mode == CompileMode.DFS)
+                Indices = ReorderDfsMergePoints(Indices, adj);
+
             // 跨域检查
             foreach (var idx in Indices)
             {
@@ -362,6 +370,106 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
     /// </summary>
     private static int GetPriority(IWorkflowNodeViewModel node)
         => node is ICompileTimePriority p ? p.CompilePriority : 0;
+
+    // ── DFS merge-point reorder ───────────────────────────────────────────
+
+    /// <summary>
+    /// DFS 汇合点拓扑修正。
+    ///
+    /// 前序 DFS 保持父节点优先，但会破坏输入就绪性：汇合点（diamond 图的 n3、
+    /// 条件分支合并处）在第一个分支被探索时就被加入结果，此时它的其他输入分支
+    /// 尚未被遍历 —— 执行时 n3 会在其依赖节点之前运行。
+    ///
+    /// 这里以「每条遍历边 Y→X 必须满足 Y 在 X 之前」为约束做稳定拓扑排序：
+    /// 边方向无关 Forward/Reverse —— Forward 下即"生产者先于消费者"（执行约束），
+    /// Reverse 下同样成立（方向已由邻接表表达）。链/树部分无汇合，顺序原样保留；
+    /// 只有输入未就绪的汇合点被推迟到其所有输入之后。排序是稳定的：当多个节点
+    /// 同时就绪时，优先取出原始 DFS 位置最靠前者，因此 DFS 前序偏好尽量保留。
+    ///
+    /// 成环的图（CycleHandling.Trim/Allow）无法满足严格拓扑约束 —— 若强推会让环中
+    /// 某个节点永远落后于它的输入。此时优雅回退：按原始 DFS 顺序返回，不抛异常。
+    ///
+    /// 复杂度 O(V + E)。
+    /// </summary>
+    private List<int> ReorderDfsMergePoints(List<int> order, List<int>[] adj)
+    {
+        int n = order.Count;
+        if (n < 2) return order;
+
+        // 仅考察本次遍历覆盖的节点（Omni 多子图时各结果独立重排，互不影响）。
+        var inOrder = new HashSet<int>(order);
+
+        // 原始 DFS 位置：就绪判定时用于保持前序偏好。
+        var pos = new Dictionary<int, int>(n);
+        for (int i = 0; i < n; i++) pos[order[i]] = i;
+
+        // 入度：order 内节点间、adj 表达的全部约束边。约束边 Y→X 表示 Y 必须先于 X。
+        // constraints[i] 存的是 order 内的位置（与 done/inDegree/inReady 对齐）。
+        var inDegree = new int[n];
+        var constraints = new List<int>[n];
+        for (int i = 0; i < n; i++) constraints[i] = [];
+
+        for (int i = 0; i < n; i++)
+        {
+            int u = order[i];
+            foreach (var v in adj[u])
+            {
+                if (v == u || !inOrder.Contains(v)) continue;
+                // 约束边 u→v 表示「u 必须先于 v」：v 的入度 +1，u 完成时释放 v。
+                inDegree[pos[v]]++;
+                constraints[pos[u]].Add(pos[v]);
+            }
+        }
+
+        // 稳定 Kahn：初始就绪节点 = 无输入约束者，按原始 DFS 顺序入队。
+        var ready = new List<int>(n);
+        var inReady = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (inDegree[i] == 0)
+            {
+                ready.Add(i);
+                inReady[i] = true;
+            }
+        }
+
+        var result = new List<int>(n);
+        var done = new bool[n];
+
+        while (ready.Count > 0)
+        {
+            // 稳定选择：原始 DFS 位置最靠前者。
+            int best = 0;
+            for (int k = 1; k < ready.Count; k++)
+                if (ready[k] < ready[best])
+                    best = k;
+
+            int u = ready[best];
+            ready.RemoveAt(best);
+            inReady[u] = false;
+            done[u] = true;
+            result.Add(order[u]);
+
+            foreach (var v in constraints[u])
+            {
+                if (done[v] || inReady[v]) continue;
+                if (--inDegree[v] == 0)
+                {
+                    ready.Add(v);
+                    inReady[v] = true;
+                }
+            }
+        }
+
+        // 成环（或超图中存在无法满足的约束）时 result 不完整 → 回退原始 DFS 顺序。
+        if (result.Count != n)
+        {
+            _logger?.Log(CtxWarn("DFS", "cycle — merge-point reorder fell back to DFS pre-order"));
+            return order;
+        }
+
+        return result;
+    }
 
     // ── Cycle detection ────────────────────────────────────────────────────
 
