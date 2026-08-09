@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>VeloxDev.WinForms.Templates</PackageId>
-    <Version>6.0.188</Version>
+    <Version>6.0.189</Version>
     <Authors>Axvser</Authors>
     <Title>VeloxDev WinForms templates</Title>
     <Description>Item templates for building VeloxDev workflow views with WinForms.</Description>

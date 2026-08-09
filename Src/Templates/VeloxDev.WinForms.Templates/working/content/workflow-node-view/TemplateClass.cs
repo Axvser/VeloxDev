@@ -56,26 +56,30 @@ public sealed class TemplateClass : UserControl
     {
         DoubleBuffered = true;
         SetStyle(ControlStyles.ResizeRedraw, true);
-        BackColor = _background;
         _opaqueBackground = Color.FromArgb(255, _background.R, _background.G, _background.B);
+        // Opaque background — the configured color is translucent (#DDFFFFFF), and a
+        // translucent BackColor throws in .NET 10 (Control.set_BackColor requires
+        // A == 0xFF without SupportsTransparentBackColor).
+        BackColor = _opaqueBackground;
 
         // Header row: title + drag surface (whole card acts as the drag handle).
-        // Transparent so the card's own opaque background paints through: the title
-        // composites onto the solid card instead of a translucent header panel that
-        // would ghost stale pixels on repaint.
-        var header = new TransparentPanel
+        // Opaque double-buffered panel: without AllPaintingInWmPaint +
+        // OptimizedDoubleBuffer the header erases its background and paints the text
+        // in separate passes, which flickers while the node card moves during a drag.
+        var header = new DoubleBufferedPanel
         {
             Dock = DockStyle.Top,
             Height = 36,
+            BackColor = _opaqueBackground,
             Name = "PART_Header",
         };
         header.Paint += (_, e) =>
         {
             var g = e.Graphics;
             using var brush = new SolidBrush(_foreground);
-            var font = new Font(Font.FontFamily, 10f, FontStyle.Bold);
+            using var font = new Font(Font.FontFamily, 10f, FontStyle.Bold);
             var rect = new RectangleF(12, 0, Math.Max(0, header.Width - 24), header.Height);
-            var format = new StringFormat { LineAlignment = StringAlignment.Center };
+            using var format = new StringFormat { LineAlignment = StringAlignment.Center };
             g.DrawString(_title, font, brush, rect, format);
         };
 
@@ -86,15 +90,15 @@ public sealed class TemplateClass : UserControl
         _dynamicOutputs = new DynamicOutputsPanel
         {
             Dock = DockStyle.Fill,
+            BackColor = _opaqueBackground,
             Name = "PART_DynamicOutputs",
         };
 
-        // Host the dynamic-outputs panel directly on the card. A transparent
-        // intermediate panel would break the WinForms transparent-composite walk
-        // (it stops at a plain panel and paints Color.Transparent, a no-op), so
-        // rebuilt rows/labels would never erase stale pixels — the ghost text under
-        // SetSelector-switched labels and the invisible input port both came from
-        // that. Here the walk terminates at this card's real painted background.
+        // Host the dynamic-outputs panel directly on the card with the card's own
+        // opaque background: the transparent-composite walk that WinForms performs
+        // for translucent children stops at a plain panel and paints a no-op, so
+        // rebuilt rows/labels would never erase stale pixels. An opaque background
+        // erases cleanly every repaint.
         Controls.Add(PART_DynamicOutputs);
         Controls.Add(header);
 
@@ -121,8 +125,8 @@ public sealed class TemplateClass : UserControl
 
         public DynamicOutputsPanel()
         {
-            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
+            // Opaque background set by the card ctor (the card's opaque color);
+            // no transparency anywhere.
         }
 
         public void SetInputView(SlotView? view)
@@ -186,12 +190,12 @@ public sealed class TemplateClass : UserControl
         public Label Label { get; }
         public SlotView Slot { get; }
 
-        public DynamicSlotRow(string name, IWorkflowSlotViewModel slot, Color foreground)
+        public DynamicSlotRow(string name, IWorkflowSlotViewModel slot, Color foreground, Color background)
         {
             Height = 26;
             Margin = Padding.Empty;
-            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
+            // Opaque row background (the card's opaque color) — no transparency.
+            BackColor = background;
 
             Label = new Label
             {
@@ -199,7 +203,7 @@ public sealed class TemplateClass : UserControl
                 AutoEllipsis = true,
                 TextAlign = ContentAlignment.MiddleRight,
                 ForeColor = foreground,
-                BackColor = Color.Transparent,
+                BackColor = background,
                 Margin = Padding.Empty,
                 Padding = new Padding(0, 0, 8, 0),
                 Font = new Font(Font.FontFamily, 8.5f, FontStyle.Regular),
@@ -227,16 +231,22 @@ public sealed class TemplateClass : UserControl
     }
 
     /// <summary>
-    /// Panel variant that declares <see cref="ControlStyles.SupportsTransparentBackColor"/>
-    /// so it can host content that composites this card's opaque background (the header
-    /// title). A plain panel cannot set a transparent BackColor.
+    /// Panel with full double buffering and an opaque background. The header title
+    /// is painted in its <c>Paint</c> event; without AllPaintingInWmPaint +
+    /// OptimizedDoubleBuffer, every repaint erases the background and draws the text
+    /// in separate passes, which flickers visibly while the node card moves during
+    /// a drag.
     /// </summary>
-    private sealed class TransparentPanel : Panel
+    private sealed class DoubleBufferedPanel : Panel
     {
-        public TransparentPanel()
+        public DoubleBufferedPanel()
         {
-            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
+            SetStyle(
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw |
+                ControlStyles.UserPaint,
+                true);
         }
     }
 
@@ -452,7 +462,7 @@ public sealed class TemplateClass : UserControl
                     continue;
                 }
 
-                rows.Add(new DynamicSlotRow(ResolveSlotLabel(slot, outputIndex), slot, _foreground));
+                rows.Add(new DynamicSlotRow(ResolveSlotLabel(slot, outputIndex), slot, _foreground, _opaqueBackground));
                 outputIndex++;
             }
 
@@ -626,17 +636,13 @@ public sealed class TemplateClass : UserControl
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         // Draw the rounded chrome here so the card paints as a single surface.
-        // The fill MUST be opaque: WinForms only alpha-composites a control's
-        // background when SupportsTransparentBackColor is set, and this card
-        // deliberately does NOT set it (the style would push the transparent-
-        // composite walk from the children PAST this card, so row labels would
-        // erase to the dark surface instead of the card). Without it, a translucent
-        // fill blends over the previous double-buffer contents, so stale pixels —
-        // old row labels after a SetSelector rebuild, or a card that previously
-        // covered a region — bleed through as faint ghosts, and transparent
-        // children (the input port glyph, the row labels) composite over garbage.
-        // Erase the WHOLE card rect with an opaque backdrop first, then fill the
-        // rounded body with the opaque card color, then stroke the border.
+        // The fill is fully opaque — no SupportsTransparentBackColor anywhere, so
+        // WinForms never runs a transparent-composite walk through the card. The
+        // opaque fill erases the double buffer cleanly every repaint: stale pixels
+        // (old row labels after a SetSelector rebuild, or a card that previously
+        // covered a region) cannot bleed through as ghosts. Erase the WHOLE card
+        // rect with an opaque backdrop first, then fill the rounded body with the
+        // opaque card color, then stroke the border.
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var bounds = new RectangleF(0, 0, Width, Height);

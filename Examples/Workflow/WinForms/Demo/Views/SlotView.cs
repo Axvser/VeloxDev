@@ -33,17 +33,16 @@ public sealed class SlotView : Control
         Margin = Padding.Empty;
         Cursor = Cursors.Hand;
         TabStop = false;
-        // TemplateSlotBackground is a translucent color (#01000000); the control
-        // must declare SupportsTransparentBackColor before assigning it, otherwise
-        // WinForms throws (transparent background key not supported).
+        // Opaque background: WinForms has no reliable transparent compositing, so
+        // the slot erases to its parent's (opaque) background color in
+        // OnPaintBackground instead of declaring SupportsTransparentBackColor.
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.OptimizedDoubleBuffer |
             ControlStyles.ResizeRedraw |
-            ControlStyles.UserPaint |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.UserPaint,
             true);
-        BackColor = ParseColor("#01000000");
+        BackColor = ParseColor("#1E1E1E");
         WorkflowSlotConnectionBehavior.SetIsEnabled(this, true);
     }
 

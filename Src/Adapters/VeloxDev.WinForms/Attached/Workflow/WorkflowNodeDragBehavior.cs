@@ -126,6 +126,12 @@ public sealed class WorkflowNodeDragBehavior
     {
         state.IsDragging = false;
         state.CoordinateHost = null;
+
+        // 节点卡片启用拖动时自动加 WS_CLIPCHILDREN：卡片自绘圆角边框时裁剪内部
+        // TableLayoutPanel/标签/输入框等子控件区域，避免父窗口绘制覆盖内部控件
+        // 导致的内容闪烁。宿主无需任何改动。
+        NativeWindowStyleHelper.EnsureClipChildren(control);
+
         HookControlTree(control, control);
     }
 
@@ -196,7 +202,8 @@ public sealed class WorkflowNodeDragBehavior
             return;
         }
 
-        var current = state.CoordinateHost.PointToClient(Control.MousePosition);
+        var host = state.CoordinateHost;
+        var current = host.PointToClient(Control.MousePosition);
         var dx = current.X - state.LastPosition.X;
         var dy = current.Y - state.LastPosition.Y;
         if (dx == 0 && dy == 0)
@@ -207,6 +214,19 @@ public sealed class WorkflowNodeDragBehavior
         if (node.MoveCommand.CanExecute(new Offset(dx, dy)))
         {
             node.MoveCommand.Execute(new Offset(dx, dy));
+
+            // WinForms 的 Invalidate() 只把重绘请求排队，WM_PAINT 要等消息循环空闲
+            // 才合并处理。拖动期间鼠标消息高频到达，画布重绘被不断延后，节点旧位置
+            // 的卡片图像与旧连线几何来不及擦除，形成拖尾残影。移动后立即同步重绘
+            // 坐标宿主（画布：网格/连线），保证连线跟手且无残影。
+            host.Invalidate();
+            host.Update();
+
+            // 递归同步重绘被拖动卡片整棵子树：卡片背景同步绘制后，内部透明子控件
+            // （标题头、输出行面板、槽位视图）的重绘仍在消息循环中排队——卡片移动
+            // 后它们会短暂显示旧背景残留，在输出行组上下方的透明空白区表现为条形
+            // 闪烁（全屏大画布下最明显）。递归重绘让卡片与所有透明层同帧完成合成。
+            RedrawTree(control);
         }
 
         state.LastPosition = current;
@@ -483,6 +503,31 @@ public sealed class WorkflowNodeDragBehavior
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// 同步重绘控件及其全部子控件（透明合成链）。WinForms 的 <see cref="Control.Update"/>
+    /// 只同步处理单个窗口的 WM_PAINT；透明子控件（标题头、输出行、槽位视图）在父级
+    /// 移动后需要重新从父背景合成，若其重绘留在消息循环中异步排队，会短暂显示旧背景
+    /// 残留——拖动节点时表现为卡片内输出行上下方的条形闪烁。递归调用保证整棵子树
+    /// 在同一帧完成绘制。
+    /// </summary>
+    private static void RedrawTree(Control root)
+    {
+        if (root is null || root.IsDisposed || !root.IsHandleCreated)
+        {
+            return;
+        }
+
+        // 先让父级同步重绘（不透明背景/边框），再逐层同步子控件，保证透明合成
+        // 顺序正确（子控件从已更新的父背景上合成自己的内容）。
+        root.Invalidate();
+        root.Update();
+
+        foreach (Control child in root.Controls)
+        {
+            RedrawTree(child);
+        }
     }
 
     private static DragState GetState(Control element)

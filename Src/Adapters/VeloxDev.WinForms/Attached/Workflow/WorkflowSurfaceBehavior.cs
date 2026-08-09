@@ -48,6 +48,15 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         GetState(element).IsEnabled = value;
+
+        if (value)
+        {
+            // 宿主画布启用时自动编排 Win32 窗口样式，消除自绘画布与子窗口（节点
+            // 卡片）重绘分离导致的闪烁/残影：画布窗口加 WS_CLIPCHILDREN，所在顶级
+            // 窗体加 WS_EX_COMPOSITED（DWM 统一合成整个窗体树）。宿主无需任何改动。
+            NativeWindowStyleHelper.EnsureClipChildren(element);
+            NativeWindowStyleHelper.EnsureComposited(element);
+        }
     }
 
     /// <summary>
@@ -74,6 +83,7 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         GetState(element).ScrollViewerName = value;
+        EnsureClipChildrenForName(element, value);
     }
 
     /// <summary>
@@ -100,6 +110,7 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         GetState(element).CanvasName = value;
+        EnsureClipChildrenForName(element, value);
     }
 
     /// <summary>
@@ -126,6 +137,7 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         GetState(element).GridDecoratorName = value;
+        EnsureClipChildrenForName(element, value);
     }
 
     /// <summary>
@@ -180,6 +192,7 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         GetState(element).MinimapOverlayName = value;
+        EnsureClipChildrenForName(element, value);
     }
 
     /// <summary>
@@ -272,7 +285,18 @@ public sealed class WorkflowSurfaceBehavior
         WorkflowCanvasTransformBehavior.Apply(host, contentOffset);
 
         host.PerformLayout();
+
+        // 异步失效重绘：WM_PAINT 由消息循环合并处理。Refresh 会被运行状态刷新/滚动/
+        // 集合变更等非交互场景高频调用，一律同步重绘会让自绘画布每帧立即重画造成卡顿，
+        // 因此默认保持异步。
+        // 例外：宿主正在捕获鼠标（画布平移/拖动手势进行中）时同步重绘——否则高频
+        // 鼠标消息把 WM_PAINT 不断延后，节点旧位置与旧连线来不及擦除形成残影。
+        // 拖动节点的同步重绘由 WorkflowNodeDragBehavior 单独触发，此路径无需重复。
         host.Invalidate();
+        if (host.Capture)
+        {
+            host.Update();
+        }
     }
 
     private static IWorkflowTreeViewModel? ResolveTree(Control host)
@@ -313,6 +337,22 @@ public sealed class WorkflowSurfaceBehavior
 
     private static System.Drawing.Size ResolveClientSize(Control host)
         => host.ClientSize.Width > 0 ? host.ClientSize : host.Size;
+
+    private static void EnsureClipChildrenForName(Control root, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        // 按名称解析对应控件（如 PART_ScrollViewer / PART_Canvas / PART_GridDecorator），
+        // 自动为其窗口加 WS_CLIPCHILDREN：这些层叠容器重绘时裁剪子控件区域，避免
+        // 覆盖节点视图/连线导致层间闪烁。控件在句柄创建前即可通过控件树解析。
+        if (FindControlByName(root, name!) is Control control)
+        {
+            NativeWindowStyleHelper.EnsureClipChildren(control);
+        }
+    }
 
     private static Control? FindControlByName(Control root, string name)
     {

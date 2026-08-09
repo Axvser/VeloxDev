@@ -33,17 +33,13 @@ public sealed class SlotView : Control
         Margin = Padding.Empty;
         Cursor = Cursors.Hand;
         TabStop = false;
-        // #01000000 is a translucent color (#01000000); the control
-        // must declare SupportsTransparentBackColor before assigning it, otherwise
-        // WinForms throws (transparent background key not supported).
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.OptimizedDoubleBuffer |
             ControlStyles.ResizeRedraw |
-            ControlStyles.UserPaint |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.UserPaint,
             true);
-        BackColor = ParseColor("#01000000");
+        BackColor = ParseColor("#1E1E1E");
         WorkflowSlotConnectionBehavior.SetIsEnabled(this, true);
     }
 
@@ -86,12 +82,12 @@ public sealed class SlotView : Control
         }
     }
 
-    // No OnPaintBackground override: with a translucent BackColor the default
-    // paints the nearest opaque ancestor's background through this control, so the
-    // glyph floats over the node card (or the grid where the slot is half-off the
-    // edge). Clearing to Parent.BackColor here instead painted BLACK when the host
-    // panel is itself transparent (Clear(Color.Transparent) == black on GDI),
-    // producing the jarring dark box around each slot.
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        // Fill with the parent's opaque background so the glyph blends into the
+        // card (or the surface) without any transparent compositing.
+        e.Graphics.Clear(Parent?.BackColor ?? ParseColor("#1E1E1E"));
+    }
 
     /// <summary>Design-time viewBox size of the slot glyph's SVG artboard.</summary>
     private const float ArtboardSize = 1024f;

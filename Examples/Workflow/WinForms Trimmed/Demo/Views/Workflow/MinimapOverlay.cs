@@ -37,8 +37,12 @@ public sealed class MinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowMi
         Height = 140;
         Anchor = AnchorStyles.Top | AnchorStyles.Right;
         SetStyle(ControlStyles.ResizeRedraw, true);
-        SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-        BackColor = Color.Transparent;
+        // Opaque background: WinForms has no reliable transparent compositing, so
+        // the overlay erases to its own color instead of letting the surface show
+        // through a transparent panel. Force alpha to 255 — a translucent BackColor
+        // throws in .NET 10 (Control.set_BackColor requires A == 0xFF without
+        // SupportsTransparentBackColor).
+        BackColor = Color.FromArgb(255, _background);
     }
 
     /// <summary>

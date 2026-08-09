@@ -32,6 +32,7 @@ public sealed class NodeView : UserControl
     private IWorkflowNodeViewModel? _node;
     private INotifyPropertyChanged? _notifier;
     private readonly Color _background = ParseColor("#DDFFFFFF");
+    private readonly Color _opaqueBackground;
     private readonly Color _foreground = ParseColor("#DD1E1E1E");
     private readonly Color _border = ParseColor("#331E1E1E");
     private readonly float _borderThickness = float.Parse("1", CultureInfo.InvariantCulture);
@@ -42,32 +43,38 @@ public sealed class NodeView : UserControl
     {
         DoubleBuffered = true;
         SetStyle(ControlStyles.ResizeRedraw, true);
-        BackColor = _background;
+        _opaqueBackground = Color.FromArgb(255, _background.R, _background.G, _background.B);
+        BackColor = _opaqueBackground;
 
         // Header row: title + drag surface (whole card acts as the drag handle).
-        var header = new Panel
+        // Opaque double-buffered panel: without AllPaintingInWmPaint +
+        // OptimizedDoubleBuffer the header erases its background and paints the text
+        // in separate passes, which flickers while the node card moves during a drag.
+        var header = new DoubleBufferedPanel
         {
             Dock = DockStyle.Top,
             Height = 36,
-            BackColor = _background,
+            BackColor = _opaqueBackground,
             Name = "PART_Header",
         };
-        header.Paint += (_, e) =>
-        {
-            var g = e.Graphics;
-            using var brush = new SolidBrush(_foreground);
-            var font = new Font(Font.FontFamily, 10f, FontStyle.Bold);
-            var rect = new RectangleF(12, 0, Math.Max(0, header.Width - 24), header.Height);
-            var format = new StringFormat { LineAlignment = StringAlignment.Center };
-            g.DrawString(_title, font, brush, rect, format);
-        };
+            header.Paint += (_, e) =>
+            {
+                var g = e.Graphics;
+                using var brush = new SolidBrush(_foreground);
+                using var font = new Font(Font.FontFamily, 10f, FontStyle.Bold);
+                var rect = new RectangleF(12, 0, Math.Max(0, header.Width - 24), header.Height);
+                using var format = new StringFormat { LineAlignment = StringAlignment.Center };
+                g.DrawString(_title, font, brush, rect, format);
+            };
 
-        // Body: hosts content + slot hosts (kept transparent so the chrome shows through).
-        PART_InputSlot = new Panel
+            // Body: hosts content + slot hosts. Opaque background (the card's own color)
+            // — WinForms has no reliable transparent compositing, so children erase to a
+            // solid color instead of letting the card's rounded chrome show through.
+            PART_InputSlot = new Panel
         {
             Dock = DockStyle.Left,
             Width = 24,
-            BackColor = Color.Transparent,
+            BackColor = _opaqueBackground,
             Name = "PART_InputSlot",
         };
         PART_OutputSlots = new FlowLayoutPanel
@@ -75,11 +82,11 @@ public sealed class NodeView : UserControl
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
-            BackColor = Color.Transparent,
+            BackColor = _opaqueBackground,
             Name = "PART_OutputSlots",
         };
 
-        var body = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+        var body = new Panel { Dock = DockStyle.Fill, BackColor = _opaqueBackground };
         body.Controls.Add(PART_OutputSlots);
         body.Controls.Add(PART_InputSlot);
 
@@ -201,11 +208,13 @@ public sealed class NodeView : UserControl
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         // Draw the rounded chrome here so the card paints as a single surface.
+        // The fill must be opaque: a translucent fill blends over the previous
+        // double-buffer contents, so stale pixels bleed through as faint ghosts.
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var bounds = new RectangleF(0, 0, Width, Height);
         using var path = RoundRect(bounds, _cornerRadius);
-        using var brush = new SolidBrush(_background);
+        using var brush = new SolidBrush(_opaqueBackground);
         using var pen = new Pen(_border, _borderThickness);
         g.FillPath(brush, path);
         g.DrawPath(pen, path);
@@ -260,5 +269,25 @@ public sealed class NodeView : UserControl
         }
 
         base.Dispose(disposing);
+    }
+
+    /// <summary>
+    /// Panel with full double buffering and an opaque background. The header title
+    /// is painted in its <c>Paint</c> event; without AllPaintingInWmPaint +
+    /// OptimizedDoubleBuffer, every repaint erases the background and draws the text
+    /// in separate passes, which flickers visibly while the node card moves during
+    /// a drag.
+    /// </summary>
+    private sealed class DoubleBufferedPanel : Panel
+    {
+        public DoubleBufferedPanel()
+        {
+            SetStyle(
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw |
+                ControlStyles.UserPaint,
+                true);
+        }
     }
 }

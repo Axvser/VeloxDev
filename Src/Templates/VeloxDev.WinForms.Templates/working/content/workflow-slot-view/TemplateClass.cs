@@ -33,26 +33,21 @@ public sealed class TemplateClass : Control
         Margin = Padding.Empty;
         Cursor = Cursors.Hand;
         TabStop = false;
-        // TemplateSlotBackground is a translucent color (#01000000); the control
-        // must declare SupportsTransparentBackColor before assigning it, otherwise
-        // WinForms throws (transparent background key not supported).
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.OptimizedDoubleBuffer |
             ControlStyles.ResizeRedraw |
-            ControlStyles.UserPaint |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.UserPaint,
             true);
         BackColor = ParseColor("TemplateSlotBackground");
         WorkflowSlotConnectionBehavior.SetIsEnabled(this, true);
     }
 
-    // No OnPaintBackground override: with a translucent BackColor the default
-    // paints the nearest opaque ancestor's background through this control, so the
-    // glyph floats over the node card (or the grid where the slot is half-off the
-    // edge). Clearing to Parent.BackColor here instead painted BLACK when the host
-    // panel is itself transparent (Clear(Color.Transparent) == black on GDI),
-    // producing the jarring dark box around each slot.
+    // Opaque background: WinForms has no reliable transparent compositing, so the
+    // slot erases to its parent's (opaque) background color instead of declaring
+    // SupportsTransparentBackColor and relying on the translucent-composite walk.
+    // Clearing to Parent.BackColor is safe now — every host panel is opaque, so
+    // Clear never sees Color.Transparent (which GDI paints as black).
 
     /// <summary>Gets or sets the workflow slot bound to this view.</summary>
     [Browsable(false)]
@@ -91,6 +86,13 @@ public sealed class TemplateClass : Control
         {
             ViewModel = tagged;
         }
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        // Fill with the parent's opaque background so the glyph blends into the
+        // card (or the surface) without any transparent compositing.
+        e.Graphics.Clear(Parent?.BackColor ?? ParseColor("TemplateSlotBackground"));
     }
 
     /// <summary>Design-time viewBox size of the slot glyph's SVG artboard.</summary>

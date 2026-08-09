@@ -34,15 +34,18 @@ public sealed class TemplateClass : Control
 
     public TemplateClass()
     {
-        // Passive overlay: no hit-testing, sits behind the nodes. The link is a
-        // transparent layer so the grid/surface beneath it shows through.
+        // Passive overlay: no hit-testing, sits behind the nodes. The link is
+        // rendered by the host canvas (Render) rather than as a child window, and
+        // uses an opaque background so it never participates in WinForms' fragile
+        // transparent compositing.
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.UserPaint |
-            ControlStyles.SupportsTransparentBackColor,
+            ControlStyles.UserPaint,
             true);
-        BackColor = Color.Transparent;
+        // No BackColor assignment: the link is rendered by the host canvas (Render)
+        // and never shown as a child window, so it keeps the default opaque
+        // background (a translucent BackColor would throw in .NET 10).
         TabStop = false;
         Enabled = false;
     }

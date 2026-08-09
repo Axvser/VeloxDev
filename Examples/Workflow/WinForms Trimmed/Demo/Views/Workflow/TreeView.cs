@@ -31,11 +31,20 @@ public sealed class TreeView : UserControl
     /// <summary>Scrollable viewport host (AutoScroll). The surface behavior reads scroll offsets from this control.</summary>
     public ScrollableControl PART_ScrollViewer { get; }
 
-    /// <summary>Absolute-positioned canvas that hosts pooled node views and paints links.</summary>
+    /// <summary>
+    /// Absolute-positioned canvas that hosts pooled node views and paints links.
+    /// The canvas is opaque and draws the grid, rulers, and links itself (WinForms
+    /// has no reliable transparent compositing, so the tree no longer layers a
+    /// transparent canvas over a separate grid decorator).
+    /// </summary>
     public Panel PART_Canvas { get; }
 
-    /// <summary>Grid + ruler decorator that implements <see cref="IWorkflowGridDecorator"/>.</summary>
-    public Control PART_GridDecorator { get; }
+    /// <summary>
+    /// Grid + ruler surface. The canvas implements <see cref="IWorkflowGridDecorator"/>
+    /// and renders the grid/rulers in its own paint cycle; this property exposes the
+    /// same surface for decorator offset pushes and compatibility.
+    /// </summary>
+    public Control PART_GridDecorator => PART_Canvas;
 
     /// <summary>Optional minimap overlay that implements <see cref="IWorkflowMinimapOverlay"/>.</summary>
     public Control? PART_MinimapOverlay { get; private set; }
@@ -85,24 +94,17 @@ public sealed class TreeView : UserControl
             ControlStyles.UserPaint,
             true);
 
-        // Grid decorator: the base layer, fully fills the surface.
-        PART_GridDecorator = new GridDecorator
-        {
-            Dock = DockStyle.Fill,
-            Name = "PART_GridDecorator",
-        };
-
         // Scroll viewer: viewport host. Panning moves the canvas directly (see
         // ApplyPan); AutoScroll is disabled so the control never
         // repositions the canvas from its own (clamped) scroll position.
-        // A plain ScrollableControl/Panel rejects Color.Transparent (no
-        // SupportsTransparentBackColor style), so the transparent subclasses below
-        // carry the style; otherwise ctor throws "control does not support a
-        // transparent background color".
-        PART_ScrollViewer = new TransparentScrollableControl
+        // Opaque background: WinForms has no reliable transparent compositing, so
+        // the tree no longer layers a transparent viewport over a grid decorator —
+        // the canvas paints the grid and rulers itself.
+        PART_ScrollViewer = new ScrollableControl
         {
             Dock = DockStyle.Fill,
             AutoScroll = false,
+            BackColor = _surfaceBackground,
             Name = "PART_ScrollViewer",
         };
 
@@ -111,10 +113,9 @@ public sealed class TreeView : UserControl
         // to each node view (see ApplyPan / NodeView.ApplyPosition). A content-sized
         // sheet that moves with the pan instead clipped nodes whose canvas-local
         // position went negative, which made the left/top/top-left regions appear to
-        // have no canvas at all. Links are painted in its OnPaint (SurfaceCanvas)
-        // rather than as a separate full-size sibling window, so there is no
-        // overlapping transparent layer for WinForms WS_CLIPSIBLINGS to clip during
-        // a connection drag.
+        // have no canvas at all. The canvas is opaque and paints the grid, rulers,
+        // and links in one pass — no transparent siblings to clip (WS_CLIPSIBLINGS)
+        // and no multi-pass compositing that flickers during drags.
         var canvas = new SurfaceCanvas
         {
             Dock = DockStyle.Fill,
@@ -124,8 +125,7 @@ public sealed class TreeView : UserControl
         canvas.LinkRenderers = _linkRenderers;
         PART_Canvas = canvas;
         PART_ScrollViewer.Controls.Add(PART_Canvas);
-        PART_GridDecorator.Controls.Add(PART_ScrollViewer);
-        Controls.Add(PART_GridDecorator);
+        Controls.Add(PART_ScrollViewer);
 
         // View pool: nodes go into the canvas; links are painted as renderers by the
         // canvas OnPaint (see RebuildLinkRenderers), so only the node factory is needed.
@@ -135,8 +135,9 @@ public sealed class TreeView : UserControl
         WorkflowSurfaceBehavior.SetIsEnabled(this, true);
         WorkflowSurfaceBehavior.SetScrollViewerName(this, "PART_ScrollViewer");
         WorkflowSurfaceBehavior.SetCanvasName(this, "PART_Canvas");
-        WorkflowSurfaceBehavior.SetGridDecoratorName(this, "PART_GridDecorator");
-        WorkflowSurfaceBehavior.SetPointerPressSourceName(this, "PART_GridDecorator");
+        // The canvas renders the grid/rulers, so it is also the grid decorator.
+        WorkflowSurfaceBehavior.SetGridDecoratorName(this, "PART_Canvas");
+        WorkflowSurfaceBehavior.SetPointerPressSourceName(this, "PART_Canvas");
 
         // Pan: dragging the empty canvas moves the canvas by a signed offset, then
         // pushes the new world origin into the grid decorator + minimap so they track.
@@ -150,47 +151,36 @@ public sealed class TreeView : UserControl
     }
 
     /// <summary>
-    /// ScrollableControl variant that declares <see cref="ControlStyles.SupportsTransparentBackColor"/>
-    /// so its <c>BackColor</c> can be <see cref="Color.Transparent"/> — the grid decorator's background
-    /// must composite through the scroll viewport.
+    /// The canvas layer: an opaque surface that hosts pooled node views and paints
+    /// the grid, rulers, and link renderers in a single paint pass. Node cards are
+    /// children of the canvas and repaint after it, so links render behind the nodes.
+    /// There is no transparency anywhere in this stack — WinForms has no reliable
+    /// transparent compositing, and an opaque single-layer canvas avoids both the
+    /// multi-pass flicker of transparent layering and the WS_CLIPSIBLINGS clipping
+    /// of overlapping full-size sibling windows.
     /// </summary>
-    private sealed class TransparentScrollableControl : ScrollableControl
+    private sealed class SurfaceCanvas : Panel, IWorkflowGridDecorator
     {
-        public TransparentScrollableControl()
-        {
-            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
-        }
-    }
+        // Grid/ruler metrics, shared with the full demo's self-drawn canvas.
+        private const double DefaultRulerThickness = 36;
+        private const double GridSpacing = 40;
+        private const int MajorFreq = 5;
+        private const double Eps = 0.001;
 
-    /// <summary>
-    /// Panel variant that declares <see cref="ControlStyles.SupportsTransparentBackColor"/>; used for
-    /// <see cref="PART_Canvas"/> so nodes sit above the grid.
-    /// </summary>
-    private class TransparentPanel : Panel
-    {
-        public TransparentPanel()
-        {
-            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
-        }
-    }
+        private readonly Color _gridBackground = ParseColor("#1E1E1E");
+        private readonly Color _rulerBackground = ParseColor("#252526");
+        private readonly Color _labelColor = ParseColor("#888888");
+        private readonly Color _minorGridColor = ParseColor("#2A2D2E");
+        private readonly Color _majorGridColor = ParseColor("#3A3D40");
+        private readonly Color _axisColor = ParseColor("#4D4D4D");
+        private readonly Color _tickColor = ParseColor("#555555");
+        private readonly Color _dividerColor = ParseColor("#3A3D40");
+        private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
 
-    /// <summary>
-    /// The canvas layer: hosts pooled node views and paints the link renderers in
-    /// <c>OnPaint</c> so links never exist as child windows. Node cards are children
-    /// of the canvas and repaint after it, so links render behind the nodes.
-    /// </summary>
-    private sealed class SurfaceCanvas : TransparentPanel
-    {
         public SurfaceCanvas()
         {
-            // Double-buffer the canvas. During a connection drag
-            // WorkflowSurfaceBehavior.Refresh invalidates the whole surface on every
-            // mouse move, and the transparent composite (grid → scroll viewer →
-            // canvas) repaints in multiple passes — unbuffered, that shows up as
-            // visible flicker.
             DoubleBuffered = true;
+            BackColor = _gridBackground;
             SetStyle(
                 ControlStyles.AllPaintingInWmPaint |
                 ControlStyles.OptimizedDoubleBuffer |
@@ -216,6 +206,53 @@ public sealed class TreeView : UserControl
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public Point PanOffset { get; set; }
 
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ScrollOffsetX { get; set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ScrollOffsetY { get; set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ContentOffsetX { get; set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ContentOffsetY { get; set; }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            // The grid and rulers render in the background pass so they sit under
+            // the node cards (child windows) exactly like the old grid decorator
+            // layer, but in the same opaque surface as the links.
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var bounds = new RectangleF(0, 0, Width, Height);
+            var ruler = (float)DefaultRulerThickness;
+            var contentRect = new RectangleF(
+                ruler, ruler,
+                Math.Max(0, bounds.Width - ruler),
+                Math.Max(0, bounds.Height - ruler));
+
+            using var bgBrush = new SolidBrush(_gridBackground);
+            using var rulerBrush = new SolidBrush(_rulerBackground);
+            g.FillRectangle(bgBrush, bounds);
+            g.FillRectangle(rulerBrush, 0, 0, bounds.Width, ruler);
+            g.FillRectangle(rulerBrush, 0, 0, ruler, bounds.Height);
+
+            if (contentRect.Width > 0 && contentRect.Height > 0)
+            {
+                var saved = g.Save();
+                g.SetClip(contentRect);
+                DrawGrid(g, contentRect);
+                g.Restore(saved);
+            }
+
+            DrawRulers(g, bounds, contentRect);
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
@@ -228,6 +265,124 @@ public sealed class TreeView : UserControl
             {
                 lv.Render(g);
             }
+        }
+
+        private void DrawGrid(Graphics g, RectangleF contentRect)
+        {
+            var spacing = Math.Max(8, GridSpacing);
+            var majorStep = spacing * Math.Max(1, MajorFreq);
+            var worldLeft = ScrollOffsetX - ContentOffsetX;
+            var worldTop = ScrollOffsetY - ContentOffsetY;
+            var worldRight = worldLeft + contentRect.Width;
+            var worldBottom = worldTop + contentRect.Height;
+
+            using var minorPen = new Pen(_minorGridColor, 1f);
+            using var majorPen = new Pen(_majorGridColor, 1f);
+            using var axisPen = new Pen(_axisColor, 1.2f);
+
+            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
+            {
+                var x = (float)(contentRect.X + (value - worldLeft));
+                var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
+                g.DrawLine(pen, x, contentRect.Y, x, contentRect.Bottom);
+            }
+
+            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
+            {
+                var y = (float)(contentRect.Y + (value - worldTop));
+                var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
+                g.DrawLine(pen, contentRect.X, y, contentRect.Right, y);
+            }
+        }
+
+        private void DrawRulers(Graphics g, RectangleF bounds, RectangleF contentRect)
+        {
+            var ruler = (float)DefaultRulerThickness;
+            var spacing = Math.Max(8, GridSpacing);
+            var majorStep = spacing * Math.Max(1, MajorFreq);
+            var worldLeft = ScrollOffsetX - ContentOffsetX;
+            var worldTop = ScrollOffsetY - ContentOffsetY;
+            var worldRight = worldLeft + contentRect.Width;
+            var worldBottom = worldTop + contentRect.Height;
+
+            using var dividerPen = new Pen(_dividerColor, 1f);
+            using var tickPen = new Pen(_tickColor, 1f);
+            using var axisPen = new Pen(_axisColor, 1f);
+            using var labelBrush = new SolidBrush(_labelColor);
+            using var format = new StringFormat(StringFormat.GenericTypographic);
+
+            g.DrawLine(dividerPen, ruler, 0, ruler, bounds.Height);
+            g.DrawLine(dividerPen, 0, ruler, bounds.Width, ruler);
+
+            // Top ruler.
+            var saved = g.Save();
+            g.SetClip(new RectangleF(ruler, 0, contentRect.Width, ruler));
+            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
+            {
+                var x = (float)(contentRect.X + (value - worldLeft));
+                var isMajor = IsMajorLine(value, majorStep);
+                var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
+                var pen = IsNearZero(value) ? axisPen : tickPen;
+                g.DrawLine(pen, x, ruler, x, (float)(ruler - tickLength));
+
+                if (isMajor)
+                {
+                    var text = FormatGridValue(value);
+                    g.DrawString(text, _labelFont, labelBrush, x + 3, 2, format);
+                }
+            }
+            g.Restore(saved);
+
+            // Left ruler.
+            saved = g.Save();
+            g.SetClip(new RectangleF(0, ruler, ruler, contentRect.Height));
+            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
+            {
+                var y = (float)(contentRect.Y + (value - worldTop));
+                var isMajor = IsMajorLine(value, majorStep);
+                var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
+                var pen = IsNearZero(value) ? axisPen : tickPen;
+                g.DrawLine(pen, ruler, y, (float)(ruler - tickLength), y);
+
+                if (isMajor)
+                {
+                    var text = FormatGridValue(value);
+                    g.DrawString(text, _labelFont, labelBrush, 3, y + 2, format);
+                }
+            }
+            g.Restore(saved);
+        }
+
+        private Pen SelectPen(double value, double majorStep, Pen minorPen, Pen majorPen, Pen axisPen)
+            => IsNearZero(value) ? axisPen : IsMajorLine(value, majorStep) ? majorPen : minorPen;
+
+        private static bool IsMajorLine(double value, double majorStep)
+            => majorStep > 0
+                && (Math.Abs(value % majorStep) < Eps
+                    || Math.Abs(value % majorStep - majorStep) < Eps
+                    || Math.Abs(value % majorStep + majorStep) < Eps);
+
+        private static bool IsNearZero(double value)
+            => Math.Abs(value) < Eps;
+
+        private static string FormatGridValue(double value)
+        {
+            var abs = Math.Abs(value);
+            if (abs < 10000)
+            {
+                return Math.Round(value).ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (abs < 1000000)
+            {
+                return Math.Round(value / 1000d, 1).ToString(CultureInfo.InvariantCulture) + "K";
+            }
+
+            return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
         }
     }
 
@@ -505,6 +660,11 @@ public sealed class TreeView : UserControl
         }
 
         PART_Canvas.Invalidate();
+
+        // Invalidate 只是排队，高频平移时 WM_PAINT 被延后，节点旧位置与旧连线
+        // 来不及擦除形成残影；同步重绘画布（连线）与网格装饰器，保证每帧干净。
+        PART_Canvas.Update();
+        PART_GridDecorator.Update();
 
         try
         {
