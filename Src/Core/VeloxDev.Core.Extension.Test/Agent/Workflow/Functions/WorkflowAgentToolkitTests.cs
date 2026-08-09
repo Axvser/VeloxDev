@@ -115,6 +115,31 @@ public class WorkflowAgentToolkitTests
     }
 
     [TestMethod]
+    public void ClearHistory_DropsUndoRedoStack_WithoutTouchingCanvas()
+    {
+        var session = WorkflowDemoSession.Create();
+        var tree = session.Tree;
+        var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree));
+
+        // Fabricate an undoable mutation entry (CreateNode via the standard helper path).
+        var newNode = new NodeViewModel { Title = "ClearHistoryProbe", Size = new Size(300, 260) };
+        tree.GetHelper().CreateNode(newNode);
+        Assert.IsTrue(tree.Nodes.Contains(newNode), "node must exist before ClearHistory");
+
+        var result = InvokeTool(toolkit, "ClearHistory");
+        var json = JObject.Parse(result);
+        Assert.AreEqual("ok", json["status"]?.Value<string>(), result);
+
+        // Undo must now be a no-op — the entry was dropped with the history.
+        tree.GetHelper().Undo();
+        Assert.IsTrue(tree.Nodes.Contains(newNode),
+            "Undo after ClearHistory must not remove the node (history cleared, canvas untouched)");
+
+        // The canvas itself is left as-is: the node still exists after ClearHistory.
+        Assert.IsTrue(tree.Nodes.Contains(newNode), "ClearHistory must not touch the canvas");
+    }
+
+    [TestMethod]
     public async Task MoveNode_RoutesThroughSetAnchorCommand_AndIsNonUndoable()
     {
         var tree = new TreeDefaultViewModel();

@@ -97,7 +97,8 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             T(RemoveSlotFromCollection, nameof(RemoveSlotFromCollection)),
             T(SetEnumSlotCollection, nameof(SetEnumSlotCollection)),
             T(Undo, nameof(Undo)),
-            T(Redo, nameof(Redo)));
+            T(Redo, nameof(Redo)),
+            T(ClearHistory, nameof(ClearHistory)));
 
         // ── Node execution (gated by WithAllowExecuteWork) ──
         Add(WorkflowToolCategory.Execution,
@@ -625,6 +626,18 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     {
         Tree.RedoCommand.Execute(null);
         return Ok("Redo.");
+    }
+
+    /// <summary>
+    /// Clears the entire undo/redo history. The canvas state is left untouched — only the
+    /// recorded mutation trail is dropped. Use after a batch op the user must not undo through
+    /// (e.g. ClearCanvas), so the user cannot walk back past the boundary.
+    /// </summary>
+    [Description("Clears the entire undo/redo history WITHOUT touching the canvas. The workflow state stays as-is; only the recorded mutation trail is dropped. Use after a bulk operation (e.g. clearing the canvas) so undo cannot walk back past the boundary.")]
+    private string ClearHistory()
+    {
+        Tree.GetHelper().ClearHistory();
+        return Ok("Undo/redo history cleared (canvas untouched).");
     }
 
     // ────────────────────────── Introspection Functions ──────────────────────────
