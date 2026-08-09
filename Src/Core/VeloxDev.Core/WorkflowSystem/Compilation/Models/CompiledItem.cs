@@ -13,11 +13,30 @@ public sealed class CompiledItem
     /// <summary>Unique identifier within the compilation result.</summary>
     public int Id { get; }
 
+    /// <summary>
+    /// Composite identity: per-result UID + sequential <see cref="Id"/>.
+    /// Uniquely identifies this item across every result produced by one
+    /// <see cref="WorkflowCompiler.Compile"/> call (resolves Omni-mode ID collisions).
+    /// For skipped items (<see cref="IsSkipped"/>) the <see cref="CompiledIdentity.OrderId"/>
+    /// is reset to -1 — they are compiled but own no flow identity.
+    /// </summary>
+    public CompiledIdentity CompositeId { get; internal set; }
+
     /// <summary>The actual workflow node view model.</summary>
     public IWorkflowNodeViewModel Node { get; }
 
     /// <summary>Execution order (0-based position in the list).</summary>
     public int Order { get; internal set; }
+
+    /// <summary>
+    /// True when this item is a conditional-branch node skipped at compile time: it belongs to
+    /// an unchosen branch of a router (per the router's <see cref="ICompileTimeRouter.GetCurrentRouteKey"/>
+    /// at compile time). Skipped items still receive <see cref="ICompileTimeNotifier.OnCompiled"/> so
+    /// the node learns it was compiled-but-skipped, but they own no flow identity —
+    /// <see cref="CompositeId"/>.<see cref="CompiledIdentity.OrderId"/> is -1 and <see cref="Order"/> is -1.
+    /// They are NOT executed at runtime.
+    /// </summary>
+    public bool IsSkipped { get; internal set; }
 
     /// <summary>
     /// BFS/DFS depth level from the traversal start point.
@@ -73,12 +92,13 @@ public sealed class CompiledItem
 
     /// <summary>
     /// Pre-compiled route table collected from <see cref="ICompileTimeRouter.GetRouteTable"/>.
-    /// Key = condition/selector value, Value = target node.
+    /// Key = condition/selector value, Value = downstream node(s) for that branch.
+    /// A branch may fan out to multiple targets, so the value is a list.
     /// Null if the node does not implement <see cref="ICompileTimeRouter"/>.
     /// Using direct node references ensures the routing stays valid
     /// even if slot connections are later modified.
     /// </summary>
-    public IReadOnlyDictionary<object, IWorkflowNodeViewModel>? RouteTable { get; internal set; }
+    public IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>? RouteTable { get; internal set; }
 
     /// <summary>
     /// For router nodes (those with <see cref="RouteTable"/>), maps each route key
@@ -88,11 +108,12 @@ public sealed class CompiledItem
     /// </summary>
     public Dictionary<object, HashSet<int>>? BranchExclusiveItems { get; internal set; }
 
-    internal CompiledItem(int id, IWorkflowNodeViewModel node, int order)
+    internal CompiledItem(int id, IWorkflowNodeViewModel node, int order, CompiledIdentity compositeId)
     {
         Id = id;
         Node = node;
         Order = order;
+        CompositeId = compositeId;
     }
 
     /// <summary>

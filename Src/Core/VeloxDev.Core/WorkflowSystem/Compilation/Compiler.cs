@@ -120,10 +120,12 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
                         $"Cross-domain node detected: node at index {idx} belongs to a different Tree.");
             }
 
-            // 构建 Item
+            // 构建 Item（每个结果独立 UID：Omni 模式下各结果的顺序 ID 从 0 重新开始，
+            // 复合 ID = UID + 顺序 ID 在单次 Compile 内全局唯一，无冲突）
             int idCounter = 0;
+            var uid = Guid.NewGuid();
             var items = Indices.Select(idx =>
-                new CompiledItem(idCounter++, allNodes[idx], 0)
+                new CompiledItem(idCounter++, allNodes[idx], 0, new CompiledIdentity(uid, idCounter - 1))
             ).ToList();
 
             for (int i = 0; i < items.Count; i++)
@@ -139,8 +141,19 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
             CollectSlotRoutes(items);
             ComputeBranchExclusives(items, allNodes, nodeToIndex);
 
+            // 条件分支剪除（编译期）：路由元数据（路由表 + 当前选中分支）能判定走不到的分支，
+            // 其独占节点在编译时就被标记为 IsSkipped —— 不拥有流程身份（Order/OrderId = -1），
+            // 执行时也不会运行。但它们仍收到 OnCompiled 通知，得知自己被编译时略过（UID 保留）。
+            MarkCompileTimeSkipped(items);
+
+            // 编译期通知：节点立即获知自己的编译身份（ICompileTimeNotifier）
+            // 被略过的节点也会收到 —— 但拿到的是跳过标记，而非流程顺序。
+            foreach (var item in items)
+                if (item.Node is ICompileTimeNotifier notifier)
+                    notifier.OnCompiled(item);
+
             results.Add(new CompilationResult(items.AsReadOnly(), mode, direction, scope,
-                globalCycleInfo.HasCycle, cycleHandling, _logger, _machineId));
+                globalCycleInfo.HasCycle, cycleHandling, _logger, _machineId, uid));
         }
 
         _logger?.Log(Ctx("Compiler", $"done {results.Count}r {results.Sum(r => r.Items.Count)}i"));
@@ -465,20 +478,25 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
             if (!nodeToIndex.TryGetValue(item.Node, out var routerIdx)) continue;
 
             // 1) 收集每个分支的所有下游节点
+            //    一个分支可指向多个目标（1:N fan-out），每个目标都要做 BFS，
+            //    并集才是该分支的下游集合。
             var branchDescendants = new Dictionary<object, HashSet<int>>();
             foreach (var kv in item.RouteTable)
             {
-                if (!nodeToIndex.TryGetValue(kv.Value, out var targetIdx)) continue;
-
                 var descendants = new HashSet<int>();
-                var queue = new Queue<int>();
-                queue.Enqueue(targetIdx);
-                while (queue.Count > 0)
+                foreach (var target in kv.Value)
                 {
-                    var u = queue.Dequeue();
-                    if (!descendants.Add(u)) continue;
-                    foreach (var v in forwardAdj[u])
-                        queue.Enqueue(v);
+                    if (!nodeToIndex.TryGetValue(target, out var targetIdx)) continue;
+
+                    var queue = new Queue<int>();
+                    queue.Enqueue(targetIdx);
+                    while (queue.Count > 0)
+                    {
+                        var u = queue.Dequeue();
+                        if (!descendants.Add(u)) continue;
+                        foreach (var v in forwardAdj[u])
+                            queue.Enqueue(v);
+                    }
                 }
                 branchDescendants[kv.Key] = descendants;
             }
@@ -525,5 +543,72 @@ public sealed class WorkflowCompiler : IWorkflowCompiler
         }
 
         _logger?.Log(Ctx("Exclusive", $"{routerWithExclusiveCount}r"));
+    }
+
+    // ── Compile-time branch pruning ─────────────────────────────────────
+
+    /// <summary>
+    /// 编译期条件分支剪除。
+    /// 对每个实现 <see cref="ICompileTimeRouter"/> 的节点，读取其当前选中的分支
+    /// （<see cref="ICompileTimeRouter.GetCurrentRouteKey"/>），把未选中分支的独占项
+    /// （<see cref="CompiledItem.BranchExclusiveItems"/> 中非选中 key 对应的 ID 集）
+    /// 标记为 <see cref="CompiledItem.IsSkipped"/>。
+    ///
+    /// 被略过的节点不拥有流程身份：<see cref="CompiledItem.Order"/> 与
+    /// <see cref="CompiledItem.CompositeId"/> 的 OrderId 置为 -1（UID 保留）。
+    /// 它们仍会收到 <see cref="ICompileTimeNotifier.OnCompiled"/> 通知，
+    /// 以便节点知道自己「被编译但被略过」；执行时不会被运行。
+    ///
+    /// 注：一个节点可能同时属于多个路由器的不同分支（例如钻石图的汇合点），
+    /// 只要它不是任何「未选中分支」的独占项，就不会被标记。因此这里逐路由器
+    /// 累加跳过集，再统一判定。
+    /// </summary>
+    private void MarkCompileTimeSkipped(List<CompiledItem> items)
+    {
+        var skippedIds = new HashSet<int>();
+        foreach (var item in items)
+        {
+            if (item.RouteTable is null || item.Node is not ICompileTimeRouter router)
+                continue;
+            if (item.BranchExclusiveItems is null || item.BranchExclusiveItems.Count == 0)
+                continue;
+
+            var chosenKey = router.GetCurrentRouteKey();
+            foreach (var kv in item.BranchExclusiveItems)
+            {
+                if (Equals(kv.Key, chosenKey)) continue;   // 选中分支 → 保留
+                skippedIds.UnionWith(kv.Value);            // 未选中分支 → 略过
+            }
+        }
+
+        if (skippedIds.Count == 0)
+            return;
+
+        int skippedCount = 0;
+        foreach (var item in items)
+        {
+            if (!skippedIds.Contains(item.Id))
+                continue;
+
+            item.IsSkipped = true;
+            item.Order = -1;
+            item.CompositeId = new CompiledIdentity(item.CompositeId.Uid, -1);
+            skippedCount++;
+        }
+
+        // 紧凑重建保留项的顺序号：被略过的节点不占位，流程顺序连续无空洞。
+        // 内部 Id（遍历序号）保持不变，供 BranchExclusiveItems / ErrorRedirect 等引用。
+        int next = 0;
+        foreach (var item in items)
+        {
+            if (item.IsSkipped)
+                continue;
+
+            item.Order = next;
+            item.CompositeId = new CompiledIdentity(item.CompositeId.Uid, next);
+            next++;
+        }
+
+        _logger?.Log(Ctx("Prune", $"{skippedCount}i"));
     }
 }

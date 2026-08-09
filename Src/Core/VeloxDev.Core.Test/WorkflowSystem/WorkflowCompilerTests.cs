@@ -138,12 +138,12 @@ file sealed class StubTree : IWorkflowTreeViewModel
 
 file sealed class RoutingNode : StubNode, ICompileTimeRouter
 {
-    public IReadOnlyDictionary<object, IWorkflowNodeViewModel> RouteTable { get; set; }
-        = new Dictionary<object, IWorkflowNodeViewModel>();
+    public IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> RouteTable { get; set; }
+        = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>();
 
     public object? CurrentRouteKey { get; set; }
 
-    public IReadOnlyDictionary<object, IWorkflowNodeViewModel> GetRouteTable() => RouteTable;
+    public IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> GetRouteTable() => RouteTable;
     public object? GetCurrentRouteKey() => CurrentRouteKey;
 }
 
@@ -155,6 +155,16 @@ file sealed class SinkNode : StubNode, ICompileTimeSink
 
     public void OnExecutionEvent(ExecCtx context)
         => Events.Add(context);
+}
+
+// ── Stub with ICompileTimeNotifier ──────────────────────────────────────────
+
+file sealed class CompiledNode : StubNode, ICompileTimeNotifier
+{
+    public List<CompiledItem> NotifiedItems { get; } = [];
+
+    public void OnCompiled(CompiledItem item)
+        => NotifiedItems.Add(item);
 }
 
 // ── Stub with ICompileTimePriority ──────────────────────────────────────────
@@ -442,10 +452,10 @@ public class WorkflowCompilerTests
         var targetA = new StubNode { Parent = t };
         var targetB = new StubNode { Parent = t };
         var router = new RoutingNode { Parent = t };
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            ["a"] = targetA,
-            ["b"] = targetB,
+            ["a"] = [targetA],
+            ["b"] = [targetB],
         };
         t.Nodes.Add(router);
         t.Nodes.Add(targetA);
@@ -454,8 +464,8 @@ public class WorkflowCompilerTests
         var r = _compiler.Compile(router, CompileMode.BFS)[0];
         var routeTable = r.Items[0].RouteTable;
         Assert.IsNotNull(routeTable);
-        Assert.AreSame(targetA, routeTable!["a"]);
-        Assert.AreSame(targetB, routeTable!["b"]);
+        Assert.AreSame(targetA, routeTable!["a"][0]);
+        Assert.AreSame(targetB, routeTable!["b"][0]);
     }
 
     [TestMethod]
@@ -464,9 +474,9 @@ public class WorkflowCompilerTests
         var t = new StubTree();
         var target = new StubNode { Parent = t };
         var router = new RoutingNode { Parent = t };
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            ["x"] = target,
+            ["x"] = [target],
         };
         // 用 Slot 把 router 和 target 连起来，确保两者都在遍历范围内
         var s0 = new StubSlot { Parent = router }; router.Slots.Add(s0);
@@ -484,13 +494,13 @@ public class WorkflowCompilerTests
             var item1 = r1.Items.FirstOrDefault(i => i.Node == router);
             Assert.IsNotNull(item1, $"Router not found for {mode}/FromNode");
             Assert.IsNotNull(item1.RouteTable);
-            Assert.AreSame(target, item1.RouteTable["x"]);
+            Assert.AreSame(target, item1.RouteTable["x"][0]);
 
             var results2 = _compiler.Compile(router, mode, CompileDirection.Forward, CompileScope.Omni);
             var item2 = results2.SelectMany(r => r.Items).FirstOrDefault(i => i.Node == router);
             Assert.IsNotNull(item2, $"Router not found for {mode}/Omni");
             Assert.IsNotNull(item2.RouteTable);
-            Assert.AreSame(target, item2.RouteTable["x"]);
+            Assert.AreSame(target, item2.RouteTable["x"][0]);
         }
 
         // Reverse + FromNode
@@ -646,10 +656,10 @@ public class WorkflowCompilerTests
         var n1 = new StubNode { Parent = t };
         var n2 = new StubNode { Parent = t };
         var n3 = new StubNode { Parent = t };
-        n0.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        n0.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            [true] = n1,
-            [false] = n2,
+            [true] = [n1],
+            [false] = [n2],
         };
         var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3} };
         n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]); n3.Slots.Add(s[3]);
@@ -676,10 +686,10 @@ public class WorkflowCompilerTests
         var n1 = new StubNode { Parent = t };
         var n2 = new StubNode { Parent = t };
         var n3 = new StubNode { Parent = t };
-        n0.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        n0.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            [true] = n1,
-            [false] = n2,
+            [true] = [n1],
+            [false] = [n2],
         };
         var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3} };
         n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]); n3.Slots.Add(s[3]);
@@ -1041,7 +1051,99 @@ public class WorkflowCompilerTests
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // 19. Comprehensive: Skipped items lifecycle
+    // 19. ICompileTimeNotifier: compile-time identity notification
+    // ═══════════════════════════════════════════════════════════════════════
+
+    [TestMethod]
+    public void CompileTimeNotifier_NodeGetsOwnIdentity()
+    {
+        var t = new StubTree();
+        var n = new CompiledNode { Parent = t };
+        t.Nodes.Add(n);
+
+        var r = _compiler.Compile(n, CompileMode.BFS)[0];
+
+        Assert.AreEqual(1, n.NotifiedItems.Count, "node is notified once at compile time");
+        var item = n.NotifiedItems[0];
+        Assert.AreSame(n, item.Node, "notified item wraps the node itself");
+        Assert.AreEqual(0, item.Id, "sequential id = 0 for single-node graph");
+        Assert.AreEqual(0, item.Order, "order = 0 for single-node graph");
+        Assert.AreEqual(r.Identity, item.CompositeId.Uid, "composite UID matches the result identity");
+        Assert.AreEqual(item.Id, item.CompositeId.OrderId, "composite OrderId matches sequential id");
+    }
+
+    [TestMethod]
+    public void CompileTimeNotifier_ChainNodesGetSequentialIdsAndSameUid()
+    {
+        var t = new StubTree();
+        var nodes = new[] { new CompiledNode { Parent = t }, new CompiledNode { Parent = t }, new CompiledNode { Parent = t } };
+        var slots = nodes.Select(n => new StubSlot { Parent = n }).ToArray();
+        for (int i = 0; i < 3; i++) nodes[i].Slots.Add(slots[i]);
+        GraphBuilder.Connect(slots[0], slots[1]);
+        GraphBuilder.Connect(slots[1], slots[2]);
+        foreach (var n in nodes) t.Nodes.Add(n);
+
+        var r = _compiler.Compile(nodes[0], CompileMode.BFS)[0];
+
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.AreEqual(1, nodes[i].NotifiedItems.Count, $"node {i} notified once");
+            var item = nodes[i].NotifiedItems[0];
+            Assert.AreEqual(i, item.Id, $"node {i} gets sequential id {i}");
+            Assert.AreEqual(r.Identity, item.CompositeId.Uid, $"node {i} shares the result UID");
+            Assert.AreEqual(item.Id, item.CompositeId.OrderId, $"node {i} OrderId matches Id");
+        }
+    }
+
+    [TestMethod]
+    public void CompileTimeNotifier_OmniMode_DistinctUidsPerResult_ResolvesOrderIdCollision()
+    {
+        // 两个相互独立的子图（无连接），Omni + Forward 会产生两个结果，
+        // 每个结果的顺序 ID 都从 0 开始。复合 ID 依赖 per-result UID 区分，
+        // 否则两个 OrderId=0 会冲突。
+        var t = new StubTree();
+        var a = new CompiledNode { Parent = t };
+        var b = new CompiledNode { Parent = t };
+        var slotA = new StubSlot { Parent = a };
+        var slotB = new StubSlot { Parent = b };
+        a.Slots.Add(slotA); b.Slots.Add(slotB);
+        t.Nodes.Add(a); t.Nodes.Add(b);
+
+        var results = _compiler.Compile(a, CompileMode.BFS,
+            CompileDirection.Forward, CompileScope.Omni);
+
+        Assert.AreEqual(2, results.Count, "two independent subgraphs → two results");
+        var ids = results.Select(r => r.Identity).Distinct().ToArray();
+        Assert.AreEqual(2, ids.Length, "each result has a distinct UID");
+
+        foreach (var r in results)
+        {
+            Assert.AreEqual(1, r.Items.Count, "each result has one item");
+            var item = r.Items[0];
+            Assert.AreEqual(0, item.CompositeId.OrderId, "both results start OrderId at 0");
+            Assert.AreEqual(r.Identity, item.CompositeId.Uid, "item UID matches its result");
+            Assert.AreEqual(0, item.Id, "sequential Id restarts at 0 per result");
+        }
+
+        // 复合 ID 全局不冲突：两个 (Uid, OrderId=0) 的 Uid 不同
+        var c0 = results[0].Items[0].CompositeId;
+        var c1 = results[1].Items[0].CompositeId;
+        Assert.AreNotEqual(c0, c1, "composite identities differ across results despite same OrderId");
+    }
+
+    [TestMethod]
+    public void CompileTimeNotifier_NotFiredForPlainNodes()
+    {
+        var t = new StubTree();
+        var plain = new StubNode { Parent = t };
+        t.Nodes.Add(plain);
+
+        _compiler.Compile(plain, CompileMode.BFS);
+        Assert.IsTrue(true, "plain node without ICompileTimeNotifier compiles without issue");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 20. Comprehensive: Skipped items lifecycle
     // ═══════════════════════════════════════════════════════════════════════
 
     [TestMethod]
@@ -1052,10 +1154,10 @@ public class WorkflowCompilerTests
         var n1 = new SinkNode { Parent = t }; // true 分支
         var n2 = new SinkNode { Parent = t }; // false 分支
 
-        n0.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        n0.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            [true] = n1,
-            [false] = n2,
+            [true] = [n1],
+            [false] = [n2],
         };
         var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2} };
         n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]);
@@ -1141,9 +1243,9 @@ public class WorkflowCompilerTests
         var downstream = new StubNode { Parent = t };
         var router = new RoutingNode { Parent = t };
         // RouteTable 有下游节点引用
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            ["target"] = downstream,
+            ["target"] = [downstream],
         };
         // 但不创建任何 Slot 连接
         t.Nodes.Add(router);
@@ -1158,10 +1260,107 @@ public class WorkflowCompilerTests
         var routeTable = r.Items[0].RouteTable;
         Assert.IsNotNull(routeTable);
         Assert.AreEqual(1, routeTable!.Count);
-        Assert.AreSame(downstream, routeTable!["target"]);
+        Assert.AreSame(downstream, routeTable!["target"][0]);
 
         // BranchExclusiveItems 应为 null — 下游不在 items 中，ComputeBranchExclusives 无法建立映射
         Assert.IsNull(r.Items[0].BranchExclusiveItems);
+    }
+
+    [TestMethod]
+    public void BranchExclusive_MultipleTargetsPerBranch_AllAreExclusive()
+    {
+        // 用户场景：A→1, B→2, C→3, C→4（分支 C 有两个目标）。
+        // RouteTable 必须能表达 1:N：C 分支同时指向 3 和 4。
+        // 若用 1:1 映射，后写的目标会覆盖先写的，丢失的节点不会被任何分支的
+        // 独占集覆盖，执行时会被错误地计入。
+        var t = new StubTree();
+        var n0 = new RoutingNode { Parent = t, CurrentRouteKey = "A" };
+        var n1 = new StubNode { Parent = t };
+        var n2 = new StubNode { Parent = t };
+        var n3 = new StubNode { Parent = t };
+        var n4 = new StubNode { Parent = t };
+
+        // RouteTable：C 分支有 3 和 4 两个目标（1:N fan-out）
+        n0.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
+        {
+            ["A"] = [n1],
+            ["B"] = [n2],
+            ["C"] = [n3, n4],
+        };
+
+        var s = new[] {
+            new StubSlot{Parent=n0}, new StubSlot{Parent=n0}, new StubSlot{Parent=n0},
+            new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3}, new StubSlot{Parent=n4} };
+        n0.Slots.Add(s[0]); n0.Slots.Add(s[1]); n0.Slots.Add(s[2]);
+        n1.Slots.Add(s[3]); n2.Slots.Add(s[4]); n3.Slots.Add(s[5]); n4.Slots.Add(s[6]);
+        GraphBuilder.Connect(s[0], s[3]); // A→1
+        GraphBuilder.Connect(s[1], s[4]); // B→2
+        GraphBuilder.Connect(s[2], s[5]); // C→3
+        GraphBuilder.Connect(s[2], s[6]); // C→4
+        t.Nodes.Add(n0); t.Nodes.Add(n1); t.Nodes.Add(n2); t.Nodes.Add(n3); t.Nodes.Add(n4);
+
+        var r = _compiler.Compile(n0, CompileMode.BFS)[0];
+
+        // 编译遍历应包含所有 5 个节点（邻接表按 slot.Targets 正确收集 C→3 与 C→4）
+        Assert.AreEqual(5, r.Items.Count, "all nodes reachable via slot adjacency");
+        var routerItem = r.Items[0];
+        Assert.IsNotNull(routerItem.BranchExclusiveItems);
+
+        // 路由表必须完整保留 C 分支的两个目标
+        Assert.AreEqual(2, routerItem.RouteTable!["C"].Count,
+            "route table keeps BOTH targets of branch C (1:N)");
+        Assert.AreSame(n3, routerItem.RouteTable["C"][0]);
+        Assert.AreSame(n4, routerItem.RouteTable["C"][1]);
+
+        // 关键断言：3 和 4 都必须落在某个分支的独占集中。
+        // 若 1:1 覆盖导致任一目标丢失，则它不在任何 BranchExclusiveItems 里 → 执行时被错误计入。
+        var allExclusiveIds = routerItem.BranchExclusiveItems!.Values.SelectMany(v => v).ToHashSet();
+        var idOf3 = r.Items.First(i => i.Node == n3).Id;
+        var idOf4 = r.Items.First(i => i.Node == n4).Id;
+        Assert.IsTrue(allExclusiveIds.Contains(idOf3),
+            $"node 3 (C→3) must belong to some branch's exclusive set — currently lost due to 1:1 overwrite");
+        Assert.IsTrue(allExclusiveIds.Contains(idOf4),
+            $"node 4 (C→4) must belong to some branch's exclusive set");
+    }
+
+    [TestMethod]
+    public async Task BranchExclusive_MultipleTargetsPerBranch_ExecutionSkipsUnchosenBranchTargets()
+    {
+        // 执行层验证用户场景：A→1, B→2, C→3, C→4，选择 A。
+        // 3 和 4 属于 C 分支独占，选择 A 时两者都必须被跳过；
+        // 修复前 1:1 覆盖会丢失 C→4，导致 4 被错误执行。
+        var t = new StubTree();
+        var n0 = new RoutingNode { Parent = t, CurrentRouteKey = "A" };
+        var n1 = new StubNode { Parent = t };
+        var n2 = new StubNode { Parent = t };
+        var n3 = new StubNode { Parent = t };
+        var n4 = new StubNode { Parent = t };
+
+        n0.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
+        {
+            ["A"] = [n1],
+            ["B"] = [n2],
+            ["C"] = [n3, n4],
+        };
+
+        var s = new[] {
+            new StubSlot{Parent=n0}, new StubSlot{Parent=n0}, new StubSlot{Parent=n0},
+            new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3}, new StubSlot{Parent=n4} };
+        n0.Slots.Add(s[0]); n0.Slots.Add(s[1]); n0.Slots.Add(s[2]);
+        n1.Slots.Add(s[3]); n2.Slots.Add(s[4]); n3.Slots.Add(s[5]); n4.Slots.Add(s[6]);
+        GraphBuilder.Connect(s[0], s[3]); // A→1
+        GraphBuilder.Connect(s[1], s[4]); // B→2
+        GraphBuilder.Connect(s[2], s[5]); // C→3
+        GraphBuilder.Connect(s[2], s[6]); // C→4
+        t.Nodes.Add(n0); t.Nodes.Add(n1); t.Nodes.Add(n2); t.Nodes.Add(n3); t.Nodes.Add(n4);
+
+        var r = _compiler.Compile(n0, CompileMode.BFS)[0];
+        await r.ExecuteAsync();
+
+        Assert.AreEqual(1, n1.TrackedCommand.ExecuteCount, "A→1 executed (chosen)");
+        Assert.AreEqual(0, n2.TrackedCommand.ExecuteCount, "B→2 skipped (unchosen)");
+        Assert.AreEqual(0, n3.TrackedCommand.ExecuteCount, "C→3 skipped (C not chosen)");
+        Assert.AreEqual(0, n4.TrackedCommand.ExecuteCount, "C→4 skipped (C not chosen) — must NOT leak into A");
     }
 
     [TestMethod]
@@ -1170,9 +1369,9 @@ public class WorkflowCompilerTests
         var t = new StubTree();
         var downstream = new StubNode { Parent = t };
         var router = new RoutingNode { Parent = t };
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            ["target"] = downstream,
+            ["target"] = [downstream],
         };
         t.Nodes.Add(router);
         t.Nodes.Add(downstream);
@@ -1191,9 +1390,9 @@ public class WorkflowCompilerTests
         var t = new StubTree();
         var downstream = new StubNode { Parent = t };
         var router = new RoutingNode { Parent = t };
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            ["target"] = downstream,
+            ["target"] = [downstream],
         };
         t.Nodes.Add(router);
         t.Nodes.Add(downstream);
@@ -1224,9 +1423,9 @@ public class WorkflowCompilerTests
         router.Slots.Add(routerSlot);
         downstream.Slots.Add(downstreamSlot);
         GraphBuilder.Connect(routerSlot, downstreamSlot);  // routerSlot.Targets = [downstreamSlot]
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            ["Get"] = downstream,
+            ["Get"] = [downstream],
         };
         t.Nodes.Add(router);
         t.Nodes.Add(downstream);
@@ -1242,7 +1441,7 @@ public class WorkflowCompilerTests
         //    从 Parent.Slots 中移除旧 Slot
         router.Slots.Remove(routerSlot);
         //    清空 RouteTable（新的 VoltageRange slots 没有 Targets）
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>();
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>();
         //    创建新 Slot（模拟 VoltageRange 的新 slots）
         var newSlot = new StubSlot { Parent = router };
         router.Slots.Add(newSlot);
@@ -1270,9 +1469,9 @@ public class WorkflowCompilerTests
         router.Slots.Add(routerSlot);
         downstream.Slots.Add(downstreamSlot);
         GraphBuilder.Connect(routerSlot, downstreamSlot);
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            ["Get"] = downstream,
+            ["Get"] = [downstream],
         };
         t.Nodes.Add(router);
         t.Nodes.Add(downstream);
@@ -1281,7 +1480,7 @@ public class WorkflowCompilerTests
         routerSlot.Targets.Clear();
         downstreamSlot.Sources.Clear();
         router.Slots.Remove(routerSlot);
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>();
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>();
         var newSlot = new StubSlot { Parent = router };
         router.Slots.Add(newSlot);
 
@@ -1307,9 +1506,9 @@ public class WorkflowCompilerTests
         router.Slots.Add(routerSlot);
         downstream.Slots.Add(downstreamSlot);
         GraphBuilder.Connect(routerSlot, downstreamSlot);
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            ["target"] = downstream,
+            ["target"] = [downstream],
         };
         t.Nodes.Add(router);
         t.Nodes.Add(downstream);
@@ -1322,7 +1521,7 @@ public class WorkflowCompilerTests
         routerSlot.Targets.Clear();
         downstreamSlot.Sources.Clear();
         router.Slots.Remove(routerSlot);
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>();
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>();
         var newSlot = new StubSlot { Parent = router };
         router.Slots.Add(newSlot);
 
@@ -1390,10 +1589,10 @@ public class WorkflowCompilerTests
         var n1 = new RoutingNode { Parent = t };
         var n2 = new StubNode { Parent = t };
         var n3 = new StubNode { Parent = t };
-        n1.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        n1.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            ["a"] = n2,
-            ["b"] = n3,
+            ["a"] = [n2],
+            ["b"] = [n3],
         };
         var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3} };
         n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]); n3.Slots.Add(s[3]);
@@ -1424,8 +1623,8 @@ public class WorkflowCompilerTests
         var n1 = new RoutingNode { Parent = t };
         var n2 = new RoutingNode { Parent = t };
         var n3 = new StubNode { Parent = t };
-        n1.RouteTable = new Dictionary<object, IWorkflowNodeViewModel> { ["x"] = n2 };
-        n2.RouteTable = new Dictionary<object, IWorkflowNodeViewModel> { ["y"] = n3 };
+        n1.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> { ["x"] = [n2] };
+        n2.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> { ["y"] = [n3] };
         var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2}, new StubSlot{Parent=n3} };
         n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]); n3.Slots.Add(s[3]);
         GraphBuilder.Connect(s[0], s[1]); GraphBuilder.Connect(s[1], s[2]); GraphBuilder.Connect(s[2], s[3]);
@@ -1446,7 +1645,7 @@ public class WorkflowCompilerTests
         var n0 = new StubNode { Parent = t };
         var n1 = new RoutingNode { Parent = t };
         var n2 = new StubNode { Parent = t };
-        n1.RouteTable = new Dictionary<object, IWorkflowNodeViewModel> { ["t"] = n2 };
+        n1.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> { ["t"] = [n2] };
         var s = new[] { new StubSlot{Parent=n0}, new StubSlot{Parent=n1}, new StubSlot{Parent=n2} };
         n0.Slots.Add(s[0]); n1.Slots.Add(s[1]); n2.Slots.Add(s[2]);
         GraphBuilder.Connect(s[0], s[1]); GraphBuilder.Connect(s[1], s[2]);
@@ -1492,10 +1691,10 @@ public class WorkflowCompilerTests
         GraphBuilder.Connect(rSlot1, d1Slot);
         GraphBuilder.Connect(rSlot2, d2InSlot);
         GraphBuilder.Connect(d2OutSlot, fSlot);
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
         {
-            ["Get"] = downstream1,
-            ["Post"] = downstream2,
+            ["Get"] = [downstream1],
+            ["Post"] = [downstream2],
         };
         t.Nodes.Add(router);
         t.Nodes.Add(downstream1);
@@ -1510,7 +1709,7 @@ public class WorkflowCompilerTests
         // 断开 router 的所有下游连接（模拟 SetSelector 切换）
         rSlot1.Targets.Clear(); d1Slot.Sources.Clear(); router.Slots.Remove(rSlot1);
         rSlot2.Targets.Clear(); d2InSlot.Sources.Clear(); router.Slots.Remove(rSlot2);
-        router.RouteTable = new Dictionary<object, IWorkflowNodeViewModel>();
+        router.RouteTable = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>();
 
         // Omni+Forward 编译 → disconnected 节点成为独立入口
         var rAfter = _compiler.Compile(router, CompileMode.BFS, CompileDirection.Forward, CompileScope.Omni);

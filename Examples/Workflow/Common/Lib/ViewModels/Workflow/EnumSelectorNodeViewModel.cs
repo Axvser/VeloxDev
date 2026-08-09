@@ -10,12 +10,22 @@ namespace Demo.ViewModels;
 [AgentContext(AgentLanguages.Chinese, "枚举选择器节点，可将输入按枚举成员路由到多个执行路径。默认大小为 280×380。")]
 [AgentContext(AgentLanguages.English, "Enum selector node that routes input to multiple execution paths based on enum members. Default size: 280×380.")]
 [WorkflowBuilder.Node<EnumSelectorHelper>(workSemaphore: 1)]
-public partial class EnumSelectorNodeViewModel : ICompileTimeRouter
+public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTimeNotifier
 {
     public EnumSelectorNodeViewModel()
     {
         InitializeWorkflow();
         OutputSlots.SetSelector(typeof(NetworkRequestMethod));
+    }
+
+    /// <summary>
+    /// 编译期回调：编译瞬间获知自己的编译身份。
+    /// 正常编译（选中分支）写入顺序（+1 对齐运行时 1-based）；被略过时保持 0。
+    /// </summary>
+    public void OnCompiled(CompiledItem item)
+    {
+        IsCompileSkipped = item.IsSkipped;
+        LastExecutionOrder = item.IsSkipped ? 0 : item.Order + 1;
     }
 
     [AgentContext(AgentLanguages.Chinese, "输入口（接收端）")]
@@ -92,6 +102,9 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter
     public bool HasExecutionOrder => LastExecutionOrder > 0;
     public string ExecutionOrderText => LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
 
+    /// <summary>本次编译中该节点是否因属于未选中条件分支而被略过（编译期判定）。</summary>
+    public bool IsCompileSkipped { get; private set; }
+
     public bool HasInputSlot => _inputSlot is not null;
 
     public Type? EnumType => OutputSlots?.SelectorType;
@@ -121,22 +134,35 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter
         => OutputSlots is not null ? OutputSlots.NormalizeSelectorValue(OutputSlots.CurrentValue) : null;
 
     /// <summary>
-    /// 编译时路由表：枚举值 → 对应的下游节点
+    /// 编译时路由表：枚举值 → 对应的下游节点列表。
+    /// 单个分支可能扇出到多个目标（如 C→3 且 C→4），必须保留全部目标；
+    /// 旧的 1:1 赋值会让后写的目标覆盖先写的，导致丢失分支路径。
     /// </summary>
-    public IReadOnlyDictionary<object, IWorkflowNodeViewModel> GetRouteTable()
+    public IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> GetRouteTable()
     {
-        var dict = new Dictionary<object, IWorkflowNodeViewModel>();
-        if (OutputSlots is null) return dict;
+        var dict = new Dictionary<object, List<IWorkflowNodeViewModel>>();
+        if (OutputSlots is null) return EmptyRouteTable();
 
         foreach (var item in OutputSlots.Items)
         {
             var slot = item.Slot;
+            if (item.Value is null || slot.Targets.Count == 0) continue;
+
+            if (!dict.TryGetValue(item.Value, out var list))
+                dict[item.Value] = list = [];
+
             foreach (var target in slot.Targets)
-            {
-                if (target.Parent is not null && item.Value is not null)
-                    dict[item.Value] = target.Parent;
-            }
+                if (target.Parent is not null && !list.Contains(target.Parent))
+                    list.Add(target.Parent);
         }
-        return dict;
+        return ToReadOnly(dict);
     }
+
+    private static IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> EmptyRouteTable()
+        => new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>();
+
+    private static IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> ToReadOnly(
+        Dictionary<object, List<IWorkflowNodeViewModel>> dict)
+        => dict.ToDictionary(kv => kv.Key,
+            kv => (IReadOnlyList<IWorkflowNodeViewModel>)kv.Value.AsReadOnly());
 }

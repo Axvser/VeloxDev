@@ -11,9 +11,24 @@ namespace Demo.ViewModels;
 [WorkflowBuilder.Node
     <HttpHelper<NodeViewModel>>
     (workSemaphore: 5)]
-public partial class NodeViewModel : ICompileTimePriority
+public partial class NodeViewModel : ICompileTimePriority, ICompileTimeNotifier
 {
     public NodeViewModel() => InitializeWorkflow();
+
+    /// <summary>
+    /// 编译期回调：节点被编译的瞬间立即获知自己的编译身份。
+    /// - 正常编译（选中分支）：Order 与运行时执行顺序一致（BFS items 顺序），
+    ///   此处 +1 对齐运行时的 1-based 编号，让下游节点在「点击运行的一瞬」
+    ///   即可显示顺序，无需等节点真正开始执行。
+    /// - 被略过（未选中分支的独占节点）：item.IsSkipped 为 true，
+    ///   不写入流程顺序（LastExecutionOrder 保持 0，徽标不显示），
+    ///   但记录 IsCompileSkipped，让节点得知自己「被编译但被略过」。
+    /// </summary>
+    public void OnCompiled(CompiledItem item)
+    {
+        IsCompileSkipped = item.IsSkipped;
+        LastExecutionOrder = item.IsSkipped ? 0 : item.Order + 1;
+    }
 
     [AgentContext(AgentLanguages.Chinese, "输入口")]
     [AgentContext(AgentLanguages.English, "Input slot (receiver). Connect an upstream output slot here to feed data into this node.")]
@@ -70,6 +85,9 @@ public partial class NodeViewModel : ICompileTimePriority
     public string ExecutionOrderText => LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
     public bool HasWorkLoad => RunCount > 0 || WaitCount > 0;
     public string WorkLoadText => $"Run: {RunCount} · Queue: {WaitCount}";
+
+    /// <summary>本次编译中该节点是否因属于未选中条件分支而被略过（编译期判定）。</summary>
+    public bool IsCompileSkipped { get; private set; }
 
     partial void OnIsRunningChanged(bool oldValue, bool newValue)
     {

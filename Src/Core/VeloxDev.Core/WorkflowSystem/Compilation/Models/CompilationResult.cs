@@ -31,6 +31,14 @@ public sealed class CompilationResult
     /// <summary>The traversal scope used during compilation.</summary>
     public CompileScope Scope { get; }
 
+    /// <summary>
+    /// Unique ID for this result within its <see cref="WorkflowCompiler.Compile"/> call.
+    /// Combined with each item's sequential <see cref="CompiledItem.Id"/> it forms the
+    /// globally unique <see cref="CompiledItem.CompositeId"/>. Every item in this result
+    /// shares the same UID.
+    /// </summary>
+    public Guid Identity { get; }
+
     /// <summary>Whether a cycle was detected in the graph.</summary>
     public bool HasCycle { get; }
 
@@ -40,11 +48,13 @@ public sealed class CompilationResult
     internal CompilationResult(IReadOnlyList<CompiledItem> items, CompileMode mode,
         CompileDirection direction, CompileScope scope, bool hasCycle,
         CycleHandling cycleHandling = CycleHandling.Throw,
-        IDiagnosticLogger? logger = null, Guid machineId = default)
+        IDiagnosticLogger? logger = null, Guid machineId = default,
+        Guid? identity = null)
     {
         _items = items;
         _logger = logger;
         _machineId = machineId == default ? Guid.NewGuid() : machineId;
+        Identity = identity ?? Guid.NewGuid();
         Mode = mode;
         Direction = direction;
         Scope = scope;
@@ -166,8 +176,8 @@ public sealed class CompilationResult
         {
             ct.ThrowIfCancellationRequested();
 
-            // 跳过被路由分支排除的项
-            if (skippedItems.Contains(item.Id))
+            // 跳过被路由分支排除的项（编译期已标记的 IsSkipped，或执行期分支排除的）
+            if (item.IsSkipped || skippedItems.Contains(item.Id))
             {
                 logger?.Log(Ctx("Execute", $"[{item.Id}] skip"));
                 NotifyExecutionSink(item, currentParam, ExecutionEvent.BeforeExecute, totalCount);

@@ -15,17 +15,23 @@ public interface ICompileTimeRouter
 {
     /// <summary>
     /// Called during compilation. Returns a read-only mapping from
-    /// condition/selector values to the downstream nodes that should
+    /// condition/selector values to the downstream node(s) that should
     /// receive the output.
+    ///
+    /// A single branch may fan out to MULTIPLE downstream nodes (e.g. one
+    /// selector value connected to two targets). The value is a list so every
+    /// target is retained — a 1:1 mapping would silently drop all-but-last.
     ///
     /// Using direct node references instead of slot indices ensures
     /// the routing stays valid even if the user later modifies
     /// connection relationships.
     ///
     /// Example — a conditional node with "Yes" / "No" branches:
-    ///   { "yes" → yesNode, "no" → noNode }
+    ///   { "yes" → [yesNode], "no" → [noNode] }
+    /// Example — a branch that fans out:
+    ///   { "c" → [node3, node4] }
     /// </summary>
-    IReadOnlyDictionary<object, IWorkflowNodeViewModel> GetRouteTable();
+    IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> GetRouteTable();
 
     /// <summary>
     /// Called at execution time after <see cref="GetRouteTable"/> was collected.
