@@ -13,7 +13,8 @@
 			 behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
 			 behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
 			 behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-			 behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+			 behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+			 behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
 	
 	<UserControl.DataTemplates>
 		<!-- 节点模板 -->
@@ -36,7 +37,7 @@
 
 	<!-- 渲染节点编辑器 ( 支持虚拟化 ) -->
 	<Grid Grid.Column="2">
-		<Border x:Name="PART_SurfaceBorder" BorderBrush="White" BorderThickness="1" CornerRadius="3">
+		<Border x:Name="PART_SurfaceBorder" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="3" Background="#1E1E1E">
 			<local:WorkflowGridDecorator x:Name="PART_GridDecorator">
 				<ScrollViewer x:Name="PART_ScrollViewer" HorizontalScrollBarVisibility="Auto" IsScrollInertiaEnabled="False" >
 					<Canvas x:Name="PART_Canvas"
@@ -49,5 +50,11 @@
 				</ScrollViewer>
 			</local:WorkflowGridDecorator>
 		</Border>
+		<!-- 小地图 -->
+		<local:MinimapOverlay x:Name="PART_MinimapOverlay"
+							  HorizontalAlignment="Right"
+							  VerticalAlignment="Top"
+							  Margin="0,12,12,0"
+							  IsHitTestVisible="False"/>
 	</Grid>
 </UserControl>

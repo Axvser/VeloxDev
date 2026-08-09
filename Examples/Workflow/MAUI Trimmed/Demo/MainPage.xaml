@@ -5,5 +5,5 @@
              x:Class="Demo.MainPage"
              Title="Workflow Trimmed"
              BackgroundColor="#020617">
-    <workflow:WorkflowView Margin="16" />
+    <workflow:TreeView x:Name="WorkflowTree" Margin="16" />
 </ContentPage>

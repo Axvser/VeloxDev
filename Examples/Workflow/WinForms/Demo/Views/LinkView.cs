@@ -50,31 +50,47 @@ public sealed class LinkView : Control
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float StartLeft { get => _startLeft; set { _startLeft = value; Invalidate(); } }
+    public float StartLeft { get => _startLeft; set { _startLeft = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float StartTop { get => _startTop; set { _startTop = value; Invalidate(); } }
+    public float StartTop { get => _startTop; set { _startTop = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float EndLeft { get => _endLeft; set { _endLeft = value; Invalidate(); } }
+    public float EndLeft { get => _endLeft; set { _endLeft = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float EndTop { get => _endTop; set { _endTop = value; Invalidate(); } }
+    public float EndTop { get => _endTop; set { _endTop = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool CanRender { get => _canRender; set { _canRender = value; Invalidate(); } }
+    public bool CanRender { get => _canRender; set { _canRender = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool IsVirtual { get => _isVirtual; set { _isVirtual = value; Invalidate(); } }
+    public bool IsVirtual { get => _isVirtual; set { _isVirtual = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color LineColor { get => _lineColor; set { _lineColor = value; Invalidate(); } }
+    public Color LineColor { get => _lineColor; set { _lineColor = value; RequestPaint(); } }
+
+    /// <summary>
+    /// Optional callback invoked instead of <see cref="Control.Invalidate"/> when link
+    /// geometry or visibility changes. A surface that renders this link inside its own
+    /// <c>OnPaint</c> (rather than as a child control) sets this to invalidate the host
+    /// canvas, keeping the connection live while dragging.
+    /// </summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Action? ExternalInvalidate { get; set; }
+
+    private void RequestPaint()
+    {
+        if (ExternalInvalidate is { } external) external();
+        else Invalidate();
+    }
 
     /// <summary>Wires a link model so anchor/visibility changes repaint this view.</summary>
     public void Bind(IWorkflowLinkViewModel? link)
@@ -199,7 +215,7 @@ public sealed class LinkView : Control
         }
 
         IsVirtual = IsVirtualLink(_link);
-        Invalidate();
+        RequestPaint();
     }
 
     public void Sync(IWorkflowLinkViewModel? link)
@@ -211,7 +227,7 @@ public sealed class LinkView : Control
     }
 
     private bool IsVirtualLink(IWorkflowLinkViewModel link)
-        => _isVirtual || (link.Sender?.Parent is null && link.Receiver?.Parent is null);
+        => link.Sender?.Parent is null && link.Receiver?.Parent is null;
 
     protected override void Dispose(bool disposing)
     {
@@ -231,9 +247,26 @@ public sealed class LinkView : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
+        Render(e.Graphics);
+    }
+
+    /// <summary>
+    /// 将连线几何绘制到任意 <see cref="Graphics"/> 表面。画布在 OnPaint 中先把所有
+    /// Slot 锚点写回，再 TranslateTransform(origin) 后按世界坐标统一调用本方法 ——
+    /// 连线不再各自作为透明叠层子控件，规避 WinForms 中重叠全尺寸兄弟窗口被
+    /// WS_CLIPSIBLINGS 裁掉（仅最上层可绘制）导致连线不可见的问题。作为独立控件
+    /// 使用时 OnPaint 走同一路径。
+    /// </summary>
+    public void Render(Graphics g)
+    {
         if (!_canRender) return;
 
-        var g = e.Graphics;
+        // NaN gate (mirrors WorkflowLinkRenderEx.IsRenderReady in the XAML adapters): slot
+        // anchors default to NaN until the canvas measures them, so a real link must not paint
+        // a stale frame at NaN/origin before measurement lands. Placeholder endpoints (Parent
+        // is null, e.g. the VirtualLink gesture) are exempt and render immediately.
+        if (_link is not null && !WorkflowSlotUpdateGate.IsLinkRenderReady(_link)) return;
+
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         var points = BuildPoints();

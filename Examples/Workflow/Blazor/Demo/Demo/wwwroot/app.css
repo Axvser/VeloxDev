@@ -231,13 +231,23 @@ html, body {
 }
 
 /* ── Node body (rendered inside generated TemplateNodeView) ── */
+/* The generated card body is a flex column so body-only inner views (node-body,
+   ctrl-root, bool-root, enum-root) fill the card below the header. */
+.veloxdev-wf-node-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
 .node-body {
     flex: 1;
+    min-height: 0;
     padding: 14px;
     display: flex;
     flex-direction: column;
     gap: 10px;
     overflow-y: auto;
+    background: #252525;
+    box-sizing: border-box;
 }
 .node-body .node-label {
     display: block;
@@ -258,32 +268,102 @@ html, body {
 .node-body label { font-size: 12px; color: #DCDCDC; cursor: pointer; }
 .node-body input[type=checkbox] { margin-right: 4px; }
 
-/* ── Controller View ──────────────────────── */
+/* ── Node execution feedback strip (step number, load, status, duration) ── */
+.wf-node-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 10px;
+    margin-top: auto;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: #1F1F1F;
+    border-radius: 0 0 5px 5px;
+}
+.wf-node-status-chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 3px 7px;
+    border-radius: 9px;
+    white-space: nowrap;
+}
+.wf-node-status-order   { background: rgba(200, 255, 200, 0.12); color: #C8FFC8; border: 1px solid rgba(200, 255, 200, 0.3); }
+.wf-node-status-load    { background: rgba(228, 216, 255, 0.1); color: #E4D8FF; border: 1px solid rgba(228, 216, 255, 0.25); }
+.wf-node-status-state   { background: rgba(126, 200, 255, 0.12); color: #7EC8FF; border: 1px solid rgba(126, 200, 255, 0.3); }
+.wf-node-status-running { background: rgba(255, 213, 74, 0.15); color: #FFD54A; border: 1px solid rgba(255, 213, 74, 0.45); }
+.wf-node-status-duration{ background: rgba(160, 160, 160, 0.12); color: #B9B9B9; border: 1px solid rgba(160, 160, 160, 0.25); }
+.wf-node-status-trace   { background: rgba(214, 160, 255, 0.1); color: #D6A0FF; border: 1px solid rgba(214, 160, 255, 0.25); }
+
+/* ── Node card execution highlight (badges + running glow). Demo-only: the item
+   templates never emit these classes, so generated node cards stay clean. ── */
+.veloxdev-wf-node-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 3px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.veloxdev-wf-node-badge-order {
+    background: rgba(200, 255, 200, 0.14);
+    color: #C8FFC8;
+    border: 1px solid rgba(200, 255, 200, 0.35);
+}
+
+.veloxdev-wf-node-badge-load {
+    background: rgba(228, 216, 255, 0.12);
+    color: #E4D8FF;
+    border: 1px solid rgba(228, 216, 255, 0.3);
+}
+
+.veloxdev-wf-node-badge-running {
+    background: rgba(255, 213, 74, 0.14);
+    color: #FFD54A;
+    border: 1px solid rgba(255, 213, 74, 0.45);
+}
+
+.veloxdev-wf-node-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #FFD54A;
+    animation: veloxdev-wf-pulse 1s ease-in-out infinite;
+}
+
+@keyframes veloxdev-wf-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.35; transform: scale(0.7); }
+}
+
+/* The card itself breathes a yellow glow while its node is executing. */
+.veloxdev-wf-node-running {
+    animation: veloxdev-wf-card-glow 1.2s ease-in-out infinite;
+}
+
+@keyframes veloxdev-wf-card-glow {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(255, 213, 74, 0.35), 0 0 10px rgba(255, 213, 74, 0.3); }
+    50%      { box-shadow: 0 0 0 1px rgba(255, 213, 74, 0.7), 0 0 22px rgba(255, 213, 74, 0.55); }
+}
+
+/* ── Controller View (body-only; card chrome comes from TemplateNodeView) ── */
 .ctrl-root {
-    width: 100%;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    border-radius: 5px;
-    border: 1px solid white;
-    background: #2D2D2D;
     overflow: hidden;
     box-sizing: border-box;
 }
-.ctrl-header {
-    height: 52px;
-    min-height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 13px;
-    background: #2D2D2D;
-    border-bottom: 0.5px solid #444;
-}
 .ctrl-body {
     flex: 1;
+    min-height: 0;
     padding: 12px;
     background: #252525;
     display: flex;
@@ -327,66 +407,44 @@ html, body {
 .btn-run { background: #166534; }
 .btn-close { background: #991b1b; }
 
-/* ── Bool Selector View ───────────────────── */
+/* ── Bool Selector View (body-only; card chrome comes from TemplateNodeView) ── */
 .bool-root {
-    width: 100%;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    border-radius: 6px;
-    border: 1.5px solid #4B5563;
-    background: #252525;
     overflow: visible;
     box-sizing: border-box;
 }
-.bool-header {
-    height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    background: #2d2d2d;
-    border-bottom: 0.5px solid #444;
-}
 .bool-body {
     flex: 1;
+    min-height: 0;
     padding: 14px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    background: #252525;
 }
 .bool-label { font-size: 12px; color: #DCDCDC; cursor: pointer; }
 .bool-label input { margin-right: 4px; }
 
-/* ── Enum Selector View ───────────────────── */
+/* ── Enum Selector View (body-only; card chrome comes from TemplateNodeView) ── */
 .enum-root {
-    width: 100%;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    border-radius: 6px;
-    border: 1.5px solid #4B5563;
-    background: #252525;
     overflow: visible;
     box-sizing: border-box;
 }
-.enum-header {
-    height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    background: #2d2d2d;
-    border-bottom: 0.5px solid #444;
-}
 .enum-body {
     flex: 1;
+    min-height: 0;
     padding: 14px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    background: #252525;
 }
 .enum-label { font-size: 12px; color: #DCDCDC; }
 .enum-select {

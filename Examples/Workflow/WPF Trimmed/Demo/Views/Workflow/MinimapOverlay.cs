@@ -57,7 +57,7 @@ public sealed class MinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     // ── Brushes ──────────────────────────────────────────────────────────────
 
-    private static readonly Brush BackgroundBrush = CreateBrush("#D21922");
+    private static readonly Brush BackgroundBrush = CreateBrush("#D2141922");
     private static readonly Pen BorderPen = CreatePen("#DC94A3B8", 1);
     private static readonly Brush NodeBrush = CreateBrush("#DC38BDF8");
     private static readonly Pen ViewportPen = CreatePen("#F0FFFFFF", 1.5);

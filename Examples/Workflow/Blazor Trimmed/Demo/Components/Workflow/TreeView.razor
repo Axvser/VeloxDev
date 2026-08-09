@@ -1,0 +1,82 @@
+@namespace Demo.Components.Workflow
+@using VeloxDev.WorkflowSystem
+@using VeloxDev.WorkflowSystem.AttachedBehaviors
+@using Demo.Components.Workflow
+
+@if (Tree is not null)
+{
+    <WorkflowSurfaceBehavior Tree="Tree"
+                             IsEnabled="true"
+                             ScrollViewerId="@ScrollViewerId"
+                             CanvasId="@CanvasId"
+                             GridSpacing="@GridSpacing"
+                             GridColor="@MinorGridColor"
+                             Background="@Background">
+        <GridDecorator Context="vp">
+            <GridDecorator Viewport="vp"
+                           RulerThickness="28"
+                           GridSpacing="@GridSpacing"
+                           RulerBackground="@RulerBackground"
+                           RulerTickColor="@RulerTickColor"
+                           RulerDividerColor="@RulerDividerColor" />
+        </GridDecorator>
+        <Minimap Context="vp">
+            <MinimapOverlay Viewport="vp"
+                            Width="180" Height="120"
+                            ScrollViewerId="@ScrollViewerId" />
+        </Minimap>
+        <ChildContent Context="sc">
+            @* Links layer: one full-canvas link view per connection (absolute, overflow visible). *@
+            <div class="veloxdev-wf-links" style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0")px;height:@sc.Height.ToString("0")px;pointer-events:none;">
+                @foreach (var link in Tree.Links)
+                {
+                    <LinkView Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />
+                }
+                @if (Tree.VirtualLink.IsVisible)
+                {
+                    <LinkView Link="Tree.VirtualLink" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />
+                }
+            </div>
+
+            @* Nodes layer: pooled node views dispatched by the template selector.
+               The selector uses the caller's NodeTemplate override, or falls back to the
+               generically-populated NodeView slot hosts below. *@
+            <CustomTemplateSelector Items="Tree.Nodes" KeySelector="n => n"
+                                    NodeTemplate="NodeTemplate ?? RenderGenericNode" />
+        </ChildContent>
+    </WorkflowSurfaceBehavior>
+}
+
+@code {
+    /// <summary>
+    /// Default node template used when the caller does not supply <see cref="TreeView.NodeTemplate"/>:
+    /// the generated <c>NodeView</c> with input/output slot hosts populated generically
+    /// from <c>Node.Slots</c> (channel-based input/output split).
+    /// </summary>
+    private RenderFragment<IWorkflowNodeViewModel> RenderGenericNode => node => @<text>
+        @{ var names = SlotNamesOf(node); }
+        <NodeView Node="node" Tree="Tree" AllowOverflow="true">
+            <InputSlots>
+                @foreach (var slot in InputSlotsOf(node))
+                {
+                    <WorkflowSlotConnectionBehavior Slot="slot" Tree="Tree">
+                        <SlotView Slot="slot" Tree="Tree" SlotSize="18" />
+                    </WorkflowSlotConnectionBehavior>
+                }
+            </InputSlots>
+            <OutputSlots>
+                @foreach (var slot in OutputSlotsOf(node))
+                {
+                    names.TryGetValue(slot, out var name);
+                    <div style="display:flex;align-items:center;">
+                        @if (name is not null)
+                        {
+                            <span style="margin-left:auto;margin-right:8px;color:@NodeForegroundCss;font-size:11px;white-space:nowrap;">@name</span>
+                        }
+                        <SlotView Slot="slot" Tree="Tree" SlotSize="14" />
+                    </div>
+                }
+            </OutputSlots>
+        </NodeView>
+    </text>;
+}

@@ -68,6 +68,8 @@ public partial class TemplateClass : UserControl
         base.OnRender(ctx);
         if (!CanRender) return;
 
+        if (DataContext is IWorkflowLinkViewModel link && !link.IsRenderReady()) return;
+
         var points = BuildPoints();
         if (points.Count < 2) return;
 

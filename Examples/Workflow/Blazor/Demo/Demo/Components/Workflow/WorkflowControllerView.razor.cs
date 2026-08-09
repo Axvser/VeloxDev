@@ -47,9 +47,6 @@ public partial class WorkflowControllerView : ComponentBase, IDisposable
         _selectedCycle = Controller.CycleHandling;
     }
 
-    private string GetBorderStyle()
-        => Controller?.IsActive == true ? "border-color:#67e8f9;" : "border-color:white;";
-
     private void OnSeedChanged(ChangeEventArgs e)
     {
         if (Controller is null) return;

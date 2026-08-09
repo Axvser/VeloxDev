@@ -1,9 +1,9 @@
-using System;
-using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using System;
+using System.Globalization;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace TemplateNamespace;
@@ -12,14 +12,14 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 
-    private static readonly IBrush BackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("TemplateGridBackground"));
+    private static readonly IBrush SurfaceBackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("TemplateGridBackground"));
     private static readonly IBrush RulerBackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("TemplateRulerBackground"));
     private static readonly IBrush LabelBrush = new ImmutableSolidColorBrush(Color.Parse("TemplateRulerLabelColor"));
-    private static readonly Pen MinorGridPen = CreatePen("TemplateMinorGridColor", 1);
-    private static readonly Pen MajorGridPen = CreatePen("TemplateMajorGridColor", 1);
-    private static readonly Pen AxisPen = CreatePen("TemplateAxisColor", 1.2);
-    private static readonly Pen TickPen = CreatePen("TemplateRulerTickColor", 1);
-    private static readonly Pen DividerPen = CreatePen("TemplateRulerDividerColor", 1);
+    private static readonly Pen MinorGridPen = new(new ImmutableSolidColorBrush(Color.Parse("TemplateMinorGridColor")), 1);
+    private static readonly Pen MajorGridPen = new(new ImmutableSolidColorBrush(Color.Parse("TemplateMajorGridColor")), 1);
+    private static readonly Pen AxisPen = new(new ImmutableSolidColorBrush(Color.Parse("TemplateAxisColor")), 1.2);
+    private static readonly Pen TickPen = new(new ImmutableSolidColorBrush(Color.Parse("TemplateRulerTickColor")), 1);
+    private static readonly Pen DividerPen = new(new ImmutableSolidColorBrush(Color.Parse("TemplateRulerDividerColor")), 1);
 
     public static readonly StyledProperty<double> RulerThicknessProperty =
         AvaloniaProperty.Register<TemplateClass, double>(nameof(RulerThickness), 28d);
@@ -47,9 +47,13 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
         AffectsMeasure<TemplateClass>(RulerThicknessProperty);
         AffectsArrange<TemplateClass>(RulerThicknessProperty);
         AffectsRender<TemplateClass>(
-            RulerThicknessProperty, GridSpacingProperty, MajorLineEveryProperty,
-            ScrollOffsetXProperty, ScrollOffsetYProperty,
-            ContentOffsetXProperty, ContentOffsetYProperty);
+            RulerThicknessProperty,
+            GridSpacingProperty,
+            MajorLineEveryProperty,
+            ScrollOffsetXProperty,
+            ScrollOffsetYProperty,
+            ContentOffsetXProperty,
+            ContentOffsetYProperty);
     }
 
     public TemplateClass()
@@ -113,16 +117,21 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
             return new Size(ruler, ruler);
         }
 
-        return new Size(Child.DesiredSize.Width + ruler, Child.DesiredSize.Height + ruler);
+        return new Size(
+            Child.DesiredSize.Width + ruler,
+            Child.DesiredSize.Height + ruler);
     }
 
     protected override Size ArrangeOverride(Size finalSize)
     {
         var ruler = Math.Max(0, RulerThickness);
-        Child?.Arrange(new Rect(
-            ruler, ruler,
+        var childBounds = new Rect(
+            ruler,
+            ruler,
             Math.Max(0, finalSize.Width - ruler),
-            Math.Max(0, finalSize.Height - ruler)));
+            Math.Max(0, finalSize.Height - ruler));
+
+        Child?.Arrange(childBounds);
         return finalSize;
     }
 
@@ -136,11 +145,12 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
 
         var ruler = Math.Max(0, RulerThickness);
         var contentRect = new Rect(
-            ruler, ruler,
+            ruler,
+            ruler,
             Math.Max(0, bounds.Width - ruler),
             Math.Max(0, bounds.Height - ruler));
 
-        context.DrawRectangle(BackgroundBrush, null, bounds);
+        context.DrawRectangle(SurfaceBackgroundBrush, null, bounds);
         context.DrawRectangle(RulerBackgroundBrush, null, new Rect(0, 0, bounds.Width, ruler));
         context.DrawRectangle(RulerBackgroundBrush, null, new Rect(0, 0, ruler, bounds.Height));
 
@@ -148,6 +158,7 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
         {
             using (context.PushClip(contentRect))
             {
+                context.DrawRectangle(SurfaceBackgroundBrush, null, contentRect);
                 DrawGrid(context, contentRect);
             }
         }
@@ -168,14 +179,16 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
             var x = contentRect.X + (value - worldLeft);
-            context.DrawLine(SelectPen(value, majorStep), new Point(x, contentRect.Y), new Point(x, contentRect.Bottom));
+            var pen = IsNearZero(value) ? AxisPen : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
+            context.DrawLine(pen, new Point(x, contentRect.Y), new Point(x, contentRect.Bottom));
         }
 
         var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
             var y = contentRect.Y + (value - worldTop);
-            context.DrawLine(SelectPen(value, majorStep), new Point(contentRect.X, y), new Point(contentRect.Right, y));
+            var pen = IsNearZero(value) ? AxisPen : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
+            context.DrawLine(pen, new Point(contentRect.X, y), new Point(contentRect.Right, y));
         }
     }
 
@@ -233,8 +246,13 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
     {
         var text = FormatGridValue(value);
         var formattedText = new FormattedText(
-            text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            Typeface.Default, 10, LabelBrush);
+            text,
+            CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight,
+            Typeface.Default,
+            10,
+            LabelBrush);
+
         context.DrawText(formattedText, point);
     }
 
@@ -254,19 +272,19 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
         return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
     }
 
-    private static Pen SelectPen(double value, double majorStep)
-        => IsNearZero(value)
-            ? AxisPen
-            : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
-
     private static bool IsMajorLine(double value, double majorStep)
-        => majorStep > 0 && (Math.Abs(value % majorStep) < MajorLineEpsilon
-            || Math.Abs(value % majorStep - majorStep) < MajorLineEpsilon
-            || Math.Abs(value % majorStep + majorStep) < MajorLineEpsilon);
+    {
+        if (majorStep <= 0)
+        {
+            return false;
+        }
+
+        var remainder = value % majorStep;
+        return Math.Abs(remainder) < MajorLineEpsilon
+               || Math.Abs(remainder - majorStep) < MajorLineEpsilon
+               || Math.Abs(remainder + majorStep) < MajorLineEpsilon;
+    }
 
     private static bool IsNearZero(double value)
         => Math.Abs(value) < MajorLineEpsilon;
-
-    private static Pen CreatePen(string color, double thickness)
-        => new(new ImmutableSolidColorBrush(Color.Parse(color)), thickness);
 }

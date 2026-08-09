@@ -16,7 +16,8 @@ namespace TemplateNamespace;
 public sealed class TemplateClass : Panel, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
-    private const double DefaultRulerThickness = 28;
+    // 其余方案模板代码同为 28px，但用户反馈 WinForms 视觉上偏小，故默认放大到 36px。
+    private const double DefaultRulerThickness = 36;
 
     private readonly Color _background = ParseColor("TemplateGridBackground");
     private readonly Color _rulerBackground = ParseColor("TemplateRulerBackground");
@@ -28,7 +29,7 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
     private readonly Color _dividerColor = ParseColor("TemplateRulerDividerColor");
     private readonly double _gridSpacing = ParseGridValue("TemplateGridSpacing");
     private readonly int _majorLineEvery = int.Parse("TemplateMajorLineEvery", CultureInfo.InvariantCulture);
-    private readonly Font _labelFont = new("Segoe UI", 8f);
+    private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
 
     public TemplateClass()
     {
@@ -62,10 +63,23 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public double ContentOffsetY { get; set; }
 
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        base.OnPaintBackground(e);
+        // Draw the entire surface here: WinForms transparent children (the tree
+        // view's scroll viewport, canvas, links host) composite the parent's
+        // OnPaintBackground — never its OnPaint — so the grid and rulers must be
+        // painted in this method to show through the viewport.
+        Render(e.Graphics);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
-        base.OnPaint(e);
-        var g = e.Graphics;
+        // Surface rendering lives in OnPaintBackground; see the note there.
+    }
+
+    private void Render(Graphics g)
+    {
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         var bounds = new RectangleF(0, 0, Width, Height);

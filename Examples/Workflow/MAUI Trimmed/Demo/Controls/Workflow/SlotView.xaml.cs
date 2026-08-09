@@ -53,7 +53,7 @@ public partial class SlotView : ContentView
                 var value when value.HasFlag(SlotState.Sender) && value.HasFlag(SlotState.Receiver) => Colors.Violet,
                 var value when value.HasFlag(SlotState.Sender) => Colors.Tomato,
                 var value when value.HasFlag(SlotState.Receiver) => Colors.Lime,
-                _ => Colors.White,
+                _ => Color.FromArgb("#DD1E1E1E"),
             };
     }
 }

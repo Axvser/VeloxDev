@@ -121,18 +121,13 @@ public sealed class TemplateClass : GraphicsView, IDrawable, IWorkflowMinimapOve
             float vy = ((float)ScrollOffsetY - (float)ContentOffsetY - minY + pad) * scale + pad;
             float vw = Math.Max(4, (float)ViewportWidth * scale);
             float vh = Math.Max(4, (float)ViewportHeight * scale);
-
-            if (!float.IsNaN(vx) && !float.IsNaN(vy))
-            {
-                canvas.StrokeColor = Color.FromArgb("TemplateViewportStroke");
-                canvas.StrokeSize = 1.5f;
-                canvas.DrawRectangle(vx, vy, vw, vh);
-            }
+            canvas.StrokeColor = Color.FromArgb("TemplateViewportStroke");
+            canvas.StrokeSize = 1.5f;
+            canvas.DrawRectangle(vx, vy, vw, vh);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[Minimap] Draw error: {ex.GetType().Name}: {ex.Message}");
+            // Swallow rendering exceptions to avoid crashing the UI
         }
     }
 }

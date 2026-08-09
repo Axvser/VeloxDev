@@ -181,23 +181,23 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         var receiver = link.Receiver;
         if (sender is null || receiver is null) return "";
 
+        // NaN gate: slot anchors default to NaN (unmeasured placeholder). Rendering before
+        // the GUI measures the endpoints would serialize NaN coordinates and paint a stale
+        // frame that jumps back once measurement lands — the first-entry flicker the XAML
+        // adapters guard against via WorkflowLinkRenderEx.IsRenderReady(). Skip until both
+        // non-virtual endpoints are measured. Placeholder endpoints (Parent is null, e.g. the
+        // VirtualLink gesture) are exempt and render immediately.
+        if (!WorkflowSlotUpdateGate.IsLinkRenderReady(link)) return "";
+
         double sx = sender.Anchor.Horizontal;
         double sy = sender.Anchor.Vertical;
         double ex = receiver.Anchor.Horizontal;
         double ey = receiver.Anchor.Vertical;
 
-        // Defensive fallback: unmeasured slots have a (0,0) anchor; use the node edge instead.
-        if (sx == 0 && sy == 0 && sender.Parent is { } sNode)
-        {
-            sx = sNode.Anchor.Horizontal + sNode.Size.Width;
-            sy = sNode.Anchor.Vertical + sNode.Size.Height / 2;
-        }
-
-        if (ex == 0 && ey == 0 && receiver.Parent is { } rNode)
-        {
-            ex = rNode.Anchor.Horizontal;
-            ey = rNode.Anchor.Vertical + rNode.Size.Height / 2;
-        }
+        // Placeholder endpoints (VirtualLink gesture) can still carry NaN anchors on the
+        // reset intermediate frames (Reset nulls the anchors before clearing IsVisible), which
+        // would serialize a "NaN,NaN" polyline. Suppress until the coordinates are real.
+        if (double.IsNaN(sx) || double.IsNaN(sy) || double.IsNaN(ex) || double.IsNaN(ey)) return "";
 
         double dx = ex - sx;
         // Signed stub keeps the orthogonal bend on the correct side when dragging leftward.

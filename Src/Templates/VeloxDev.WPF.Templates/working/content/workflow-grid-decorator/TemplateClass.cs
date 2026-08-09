@@ -11,36 +11,47 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 
-    private static readonly Brush BackgroundBrush = CreateBrush("TemplateGridBackground");
-    private static readonly Brush RulerBackgroundBrush = CreateBrush("TemplateRulerBackground");
-    private static readonly Brush LabelBrush = CreateBrush("TemplateRulerLabelColor");
-    private static readonly Pen MinorGridPen = CreatePen("TemplateMinorGridColor", 1);
-    private static readonly Pen MajorGridPen = CreatePen("TemplateMajorGridColor", 1);
-    private static readonly Pen AxisPen = CreatePen("TemplateAxisColor", 1.2);
-    private static readonly Pen TickPen = CreatePen("TemplateRulerTickColor", 1);
-    private static readonly Pen DividerPen = CreatePen("TemplateRulerDividerColor", 1);
+    private static readonly Brush SurfaceBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("TemplateGridBackground"));
+    private static readonly Brush RulerBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("TemplateRulerBackground"));
+    private static readonly Brush LabelBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("TemplateRulerLabelColor"));
+    private static readonly Pen MinorGridPen = CreateFrozenPen("TemplateMinorGridColor", 1);
+    private static readonly Pen MajorGridPen = CreateFrozenPen("TemplateMajorGridColor", 1);
+    private static readonly Pen AxisPen = CreateFrozenPen("TemplateAxisColor", 1.2);
+    private static readonly Pen TickPen = CreateFrozenPen("TemplateRulerTickColor", 1);
+    private static readonly Pen DividerPen = CreateFrozenPen("TemplateRulerDividerColor", 1);
     private static readonly Typeface LabelTypeface = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
 
     public static readonly DependencyProperty RulerThicknessProperty =
         DependencyProperty.Register(nameof(RulerThickness), typeof(double), typeof(TemplateClass),
             new FrameworkPropertyMetadata(28d, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange | FrameworkPropertyMetadataOptions.AffectsRender));
 
-    public static readonly DependencyProperty GridSpacingProperty = DependencyProperty.Register(
-        nameof(GridSpacing), typeof(double), typeof(TemplateClass),
-        new FrameworkPropertyMetadata(TemplateGridSpacing, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty GridSpacingProperty =
+        DependencyProperty.Register(nameof(GridSpacing), typeof(double), typeof(TemplateClass),
+            new FrameworkPropertyMetadata(TemplateGridSpacing, FrameworkPropertyMetadataOptions.AffectsRender));
 
-    public static readonly DependencyProperty MajorLineEveryProperty = DependencyProperty.Register(
-        nameof(MajorLineEvery), typeof(int), typeof(TemplateClass),
-        new FrameworkPropertyMetadata(TemplateMajorLineEvery, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty MajorLineEveryProperty =
+        DependencyProperty.Register(nameof(MajorLineEvery), typeof(int), typeof(TemplateClass),
+            new FrameworkPropertyMetadata(TemplateMajorLineEvery, FrameworkPropertyMetadataOptions.AffectsRender));
 
-    public static readonly DependencyProperty ScrollOffsetXProperty = RegisterOffset(nameof(ScrollOffsetX));
-    public static readonly DependencyProperty ScrollOffsetYProperty = RegisterOffset(nameof(ScrollOffsetY));
-    public static readonly DependencyProperty ContentOffsetXProperty = RegisterOffset(nameof(ContentOffsetX));
-    public static readonly DependencyProperty ContentOffsetYProperty = RegisterOffset(nameof(ContentOffsetY));
+    public static readonly DependencyProperty ScrollOffsetXProperty =
+        DependencyProperty.Register(nameof(ScrollOffsetX), typeof(double), typeof(TemplateClass),
+            new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public static readonly DependencyProperty ScrollOffsetYProperty =
+        DependencyProperty.Register(nameof(ScrollOffsetY), typeof(double), typeof(TemplateClass),
+            new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public static readonly DependencyProperty ContentOffsetXProperty =
+        DependencyProperty.Register(nameof(ContentOffsetX), typeof(double), typeof(TemplateClass),
+            new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public static readonly DependencyProperty ContentOffsetYProperty =
+        DependencyProperty.Register(nameof(ContentOffsetY), typeof(double), typeof(TemplateClass),
+            new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender));
 
     static TemplateClass()
     {
-        BackgroundBrush.Freeze();
+        SurfaceBackgroundBrush.Freeze();
         RulerBackgroundBrush.Freeze();
         LabelBrush.Freeze();
     }
@@ -114,9 +125,11 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
     {
         var ruler = Math.Max(0, RulerThickness);
         Child?.Arrange(new Rect(
-            ruler, ruler,
+            ruler,
+            ruler,
             Math.Max(0, arrangeSize.Width - ruler),
             Math.Max(0, arrangeSize.Height - ruler)));
+
         return arrangeSize;
     }
 
@@ -132,17 +145,19 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
 
         var ruler = Math.Max(0, RulerThickness);
         var contentRect = new Rect(
-            ruler, ruler,
+            ruler,
+            ruler,
             Math.Max(0, bounds.Width - ruler),
             Math.Max(0, bounds.Height - ruler));
 
-        drawingContext.DrawRectangle(BackgroundBrush, null, bounds);
+        drawingContext.DrawRectangle(SurfaceBackgroundBrush, null, bounds);
         drawingContext.DrawRectangle(RulerBackgroundBrush, null, new Rect(0, 0, bounds.Width, ruler));
         drawingContext.DrawRectangle(RulerBackgroundBrush, null, new Rect(0, 0, ruler, bounds.Height));
 
         if (contentRect.Width > 0 && contentRect.Height > 0)
         {
             drawingContext.PushClip(new RectangleGeometry(contentRect));
+            drawingContext.DrawRectangle(SurfaceBackgroundBrush, null, contentRect);
             DrawGrid(drawingContext, contentRect);
             drawingContext.Pop();
         }
@@ -163,14 +178,16 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
             var x = contentRect.X + (value - worldLeft);
-            context.DrawLine(SelectPen(value, majorStep), new Point(x, contentRect.Y), new Point(x, contentRect.Bottom));
+            var pen = IsNearZero(value) ? AxisPen : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
+            context.DrawLine(pen, new Point(x, contentRect.Y), new Point(x, contentRect.Bottom));
         }
 
         var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
             var y = contentRect.Y + (value - worldTop);
-            context.DrawLine(SelectPen(value, majorStep), new Point(contentRect.X, y), new Point(contentRect.Right, y));
+            var pen = IsNearZero(value) ? AxisPen : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
+            context.DrawLine(pen, new Point(contentRect.X, y), new Point(contentRect.Right, y));
         }
     }
 
@@ -222,12 +239,18 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
         context.Pop();
     }
 
-    private void DrawLabel(DrawingContext context, double value, Point point)
+    private static void DrawLabel(DrawingContext context, double value, Point point)
     {
         var text = FormatGridValue(value);
         var formattedText = new FormattedText(
-            text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            LabelTypeface, 10, LabelBrush, 1.0);
+            text,
+            CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight,
+            LabelTypeface,
+            10,
+            LabelBrush,
+            1.0);
+
         context.DrawText(formattedText, point);
     }
 
@@ -247,34 +270,25 @@ public sealed class TemplateClass : Decorator, IWorkflowGridDecorator
         return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
     }
 
-    private static DependencyProperty RegisterOffset(string name)
-        => DependencyProperty.Register(
-            name, typeof(double), typeof(TemplateClass),
-            new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender));
-
-    private static Pen SelectPen(double value, double majorStep)
-        => IsNearZero(value)
-            ? AxisPen
-            : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
-
     private static bool IsMajorLine(double value, double majorStep)
-        => majorStep > 0 && (Math.Abs(value % majorStep) < MajorLineEpsilon
-            || Math.Abs(value % majorStep - majorStep) < MajorLineEpsilon
-            || Math.Abs(value % majorStep + majorStep) < MajorLineEpsilon);
+    {
+        if (majorStep <= 0)
+        {
+            return false;
+        }
+
+        var remainder = value % majorStep;
+        return Math.Abs(remainder) < MajorLineEpsilon
+               || Math.Abs(remainder - majorStep) < MajorLineEpsilon
+               || Math.Abs(remainder + majorStep) < MajorLineEpsilon;
+    }
 
     private static bool IsNearZero(double value)
         => Math.Abs(value) < MajorLineEpsilon;
 
-    private static Brush CreateBrush(string color)
+    private static Pen CreateFrozenPen(string color, double thickness)
     {
-        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
-        brush.Freeze();
-        return brush;
-    }
-
-    private static Pen CreatePen(string color, double thickness)
-    {
-        var pen = new Pen(CreateBrush(color), thickness);
+        var pen = new Pen(new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)), thickness);
         pen.Freeze();
         return pen;
     }

@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Customize the content, but keep PART_* names synchronized with WorkflowSlotLayoutBehavior. -->
+<!-- VeloxDev customization: Customize the node content; keep PART_* names synchronized with WorkflowSlotLayoutBehavior. -->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:TemplateNamespace"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="TemplateNamespace.TemplateClass"
-             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True" behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot" behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots" behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
+             behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots"
+             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
     <Grid RowDefinitions="36,*">
         <Border Grid.RowSpan="2"
                 Stroke="TemplateNodeBorderBrush"
@@ -15,11 +18,12 @@
 
         <Grid behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas" behaviors:WorkflowNodeDragBehavior.IsEnabled="True"
               Grid.Row="0"
-              Margin="12,0">
+              Background="Transparent">
             <Label Text="{Binding Name}"
                    TextColor="TemplateNodeForeground"
                    FontAttributes="Bold"
-                   VerticalTextAlignment="Center" />
+                   VerticalTextAlignment="Center"
+                   Margin="12,0" />
         </Grid>
 
         <Grid Grid.Row="1" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">

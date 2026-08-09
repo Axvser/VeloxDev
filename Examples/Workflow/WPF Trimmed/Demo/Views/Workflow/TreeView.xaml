@@ -8,7 +8,8 @@
              behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
              behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
     <UserControl.Resources>
         <DataTemplate x:Key="NodeTemplate">
             <workflowViews:NodeView Width="{Binding Size.Width}"
@@ -24,7 +25,7 @@
                                              EndLeft="{Binding Receiver.Anchor.Horizontal}"
                                              EndTop="{Binding Receiver.Anchor.Vertical}"
                                              CanRender="{Binding IsVisible}"
-                                             LineColor="White"
+                                             LineColor="#DDFFFFFF"
                                              Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
                                              Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
                                              Panel.ZIndex="-1"
@@ -34,19 +35,26 @@
                                               NodeTemplate="{StaticResource NodeTemplate}"
                                               LinkTemplate="{StaticResource LinkTemplate}" />
     </UserControl.Resources>
-    <Border x:Name="PART_SurfaceBorder" BorderBrush="White" BorderThickness="1" Background="#0B1120">
-        <workflowViews:WorkflowGridDecorator x:Name="PART_GridDecorator">
-            <ScrollViewer x:Name="PART_ScrollViewer"
-                          HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Auto"
-                          PanningMode="Both">
-                <Canvas x:Name="PART_Canvas"
-                        Width="{Binding Layout.ActualSize.Width}"
-                        Height="{Binding Layout.ActualSize.Height}"
-                        Background="Transparent"
-                        behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
-                        behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
-            </ScrollViewer>
-        </workflowViews:WorkflowGridDecorator>
-    </Border>
+    <Grid>
+        <Border x:Name="PART_SurfaceBorder" BorderBrush="#33FFFFFF" BorderThickness="1" Background="#1E1E1E">
+            <workflowViews:WorkflowGridDecorator x:Name="PART_GridDecorator">
+                <ScrollViewer x:Name="PART_ScrollViewer"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              PanningMode="Both">
+                    <Canvas x:Name="PART_Canvas"
+                            Width="{Binding Layout.ActualSize.Width}"
+                            Height="{Binding Layout.ActualSize.Height}"
+                            Background="Transparent"
+                            behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                            behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
+                </ScrollViewer>
+            </workflowViews:WorkflowGridDecorator>
+        </Border>
+        <workflowViews:MinimapOverlay x:Name="PART_MinimapOverlay"
+                                      HorizontalAlignment="Right"
+                                      VerticalAlignment="Top"
+                                      Margin="0,12,12,0"
+                                      IsHitTestVisible="False" />
+    </Grid>
 </UserControl>

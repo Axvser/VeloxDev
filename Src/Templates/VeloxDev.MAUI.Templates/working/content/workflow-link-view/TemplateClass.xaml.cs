@@ -76,8 +76,11 @@ public partial class TemplateClass : ContentView
             var secondTurnX = endX - stub;
 
             // GraphicsView clips drawing to its own bounds (0,0)-(W,H).
-            // Offset all coordinates to non-negative and translate the view
-            // so the line remains at the correct visual position.
+            // When link endpoints are in other quadrants (negative coordinates),
+            // the line segments are clipped and invisible. Compute the bounding
+            // box of all line points, shift them to non-negative coordinates,
+            // and translate the GraphicsView to compensate — keeping the line
+            // at the correct visual position on the canvas.
             var minX = Math.Min(startX, Math.Min(firstTurnX, Math.Min(secondTurnX, endX)));
             var minY = Math.Min(startY, endY);
             float offsetX = 0, offsetY = 0;

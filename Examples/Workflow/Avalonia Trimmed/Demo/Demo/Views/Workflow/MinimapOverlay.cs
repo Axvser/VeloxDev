@@ -65,7 +65,7 @@ public sealed class MinimapOverlay : Control, IWorkflowMinimapOverlay
     // ── Rendering ────────────────────────────────────────────────────────────
 
     private static readonly IBrush BackgroundBrush =
-        new ImmutableSolidColorBrush(Color.Parse("#D21922"));
+        new ImmutableSolidColorBrush(Color.Parse("#D2141922"));
     private static readonly Pen BorderPen = CreatePen("#DC94A3B8", 1);
     private static readonly IBrush NodeBrush =
         new ImmutableSolidColorBrush(Color.Parse("#DC38BDF8"));

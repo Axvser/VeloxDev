@@ -4,10 +4,9 @@ using VeloxDev.WorkflowSystem.AttachedBehaviors;
 namespace TemplateNamespace;
 
 /// <summary>
-/// A Blazor workflow grid decorator that mirrors the surface's scroll/content offset as
-/// ruler bars (tick marks), driven by the symbol colors/spacings below. Renders the
-/// adapter's <see cref="WorkflowGridDecorator"/> with these values; the grid background
-/// itself is drawn by the workflow surface CSS.
+/// A Blazor grid decorator mirroring the surface's scroll/content offset as ruler tick
+/// bars, driven by the color/spacing parameters below. Renders the adapter's
+/// <see cref="WorkflowGridDecorator"/>; the grid background is drawn by the surface CSS.
 /// </summary>
 public partial class TemplateClass : ComponentBase
 {
@@ -43,10 +42,15 @@ public partial class TemplateClass : ComponentBase
     [Parameter]
     public string? RulerDividerColor { get; set; }
 
+    /// <summary>Gets or sets the axis (world 0) tick color.</summary>
+    [Parameter]
+    public string? AxisColor { get; set; }
+
     private string RulerBackgroundCss => RulerBackground ?? ToCss("TemplateRulerBackground");
     private string RulerTickColorCss => RulerTickColor ?? ToCss("TemplateRulerTickColor");
     private string RulerLabelColorCss => RulerLabelColor ?? ToCss("TemplateRulerLabelColor");
     private string RulerDividerColorCss => RulerDividerColor ?? ToCss("TemplateRulerDividerColor");
+    private string AxisColorCss => AxisColor ?? ToCss("TemplateAxisColor");
 
     private static double ParseGridValue(string value)
     {
@@ -60,9 +64,8 @@ public partial class TemplateClass : ComponentBase
     }
 
     /// <summary>
-    /// Converts XAML-style <c>#AARRGGBB</c> color literals (as used by the template symbols)
-    /// into CSS color values, so symbol-driven colors work in Razor views. Also passes
-    /// through named colors and CSS <c>rgb()/rgba()</c> strings unchanged.
+    /// Converts XAML-style <c>#AARRGGBB</c> colors (template symbol defaults) to CSS color
+    /// values; passes named colors and <c>rgb()/rgba()</c> strings through unchanged.
     /// </summary>
     private static string ToCss(string value)
     {

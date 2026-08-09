@@ -31,13 +31,15 @@
     top: 0;
 }
 
-/* Ruler overlay (grid decorator) — anchored top-left of the surface. */
+/* Ruler overlay (grid decorator) — anchored top-left of the surface.
+   height:100% so the left band (top:0/bottom:0) actually spans the full height;
+   previously height:0 collapsed the left ruler completely. */
 .veloxdev-wf-ruler {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 0;
+    height: 100%;
     z-index: 40;
     pointer-events: none;
 }
@@ -54,6 +56,7 @@
     top: 0;
     left: 0;
     right: 0;
+    overflow: hidden;
     z-index: 41;
 }
 
@@ -62,7 +65,67 @@
     top: 0;
     left: 0;
     bottom: 0;
+    overflow: hidden;
     z-index: 41;
+}
+
+/* The tick layer inside each band. It is translated by the scroll offset so ticks
+   align with the canvas grid and node anchors while the band background stays put. */
+.veloxdev-wf-ruler-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Per-tick label block. The block sits at the tick position; the 1px tick line
+   anchors to the band edge and the numeric text sits beside it, mirroring the
+   WPF/Avalonia/MAUI ruler label layout. */
+.veloxdev-wf-ruler-top .veloxdev-wf-ruler-label {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+}
+
+.veloxdev-wf-ruler-top .veloxdev-wf-ruler-tickline {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 1px;
+}
+
+.veloxdev-wf-ruler-top .veloxdev-wf-ruler-text {
+    position: absolute;
+    left: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    font: 10px/1 "Segoe UI", Arial, sans-serif;
+    white-space: nowrap;
+}
+
+.veloxdev-wf-ruler-left .veloxdev-wf-ruler-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 0;
+}
+
+.veloxdev-wf-ruler-left .veloxdev-wf-ruler-tickline {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 1px;
+}
+
+.veloxdev-wf-ruler-left .veloxdev-wf-ruler-text {
+    position: absolute;
+    left: 3px;
+    top: 2px;
+    font: 10px/1 "Segoe UI", Arial, sans-serif;
+    white-space: nowrap;
 }
 
 /* Minimap overlay — anchored top-right of the surface. */

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
 using Microsoft.AspNetCore.Components;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -30,13 +33,21 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
     [Parameter]
     public string TickColor { get; set; } = "#555555";
 
-    /// <summary>Gets or sets the label color (reserved for future numeric labels).</summary>
+    /// <summary>Gets or sets the numeric label color.</summary>
     [Parameter]
     public string LabelColor { get; set; } = "#888888";
+
+    /// <summary>Gets or sets the number of minor cells between major ticks (major ticks get labels).</summary>
+    [Parameter]
+    public int MajorLineEvery { get; set; } = 5;
 
     /// <summary>Gets or sets the ruler divider color.</summary>
     [Parameter]
     public string DividerColor { get; set; } = "#3A3D40";
+
+    /// <summary>Gets or sets the axis (world 0) ruler tick color. Defaults to the tick color.</summary>
+    [Parameter]
+    public string? AxisColor { get; set; }
 
     /// <inheritdoc />
     public double ScrollOffsetX { get; set; }
@@ -50,10 +61,19 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
     /// <inheritdoc />
     public double ContentOffsetY { get; set; }
 
-    private string RulerThicknessCss => RulerThickness.ToString("0.#");
-    private string SpacingCss => Spacing.ToString("0.#");
+    // The corner/band inline styles need an explicit px unit — a unitless length (e.g. "28") is
+    // invalid CSS and the browser drops it, collapsing the corner, bands, and tick lines to 0×0.
+    private string RulerThicknessCss => RulerThickness.ToString("0.#") + "px";
+
+    // The bands span the full surface width/height (background always covers the strip); only the
+    // tick layer translates. ScrollOffsetX = scrollLeft - _offsetX, so -ScrollOffsetX = _offsetX -
+    // scrollLeft places the layer's origin exactly on the content boundary, and a world v tick
+    // (band-local v) lands at surface _offsetX + v - scrollLeft — where the canvas draws world v.
     private string TopTransform => $"translateX({(-ScrollOffsetX).ToString("0.#")}px)";
     private string LeftTransform => $"translateY({(-ScrollOffsetY).ToString("0.#")}px)";
+    private string TickLengthCss(bool isMajor)
+        => (isMajor ? Math.Max(0, RulerThickness - 6) : Math.Max(6, RulerThickness * 0.35)).ToString("0.#") + "px";
+    private string AxisColorCss => string.IsNullOrEmpty(AxisColor) ? TickColor : AxisColor;
 
     /// <inheritdoc />
     protected override void OnParametersSet()
@@ -67,5 +87,53 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
             ContentOffsetX = vp.ContentOffsetX;
             ContentOffsetY = vp.ContentOffsetY;
         }
+    }
+
+    /// <summary>
+    /// Tick positions along the horizontal (top) ruler, in band-local pixels. The band is
+    /// translated by -ScrollOffsetX, and world <c>v</c> sits at band-local <c>v</c> (world 0 lands
+    /// on the ruler/content boundary), mirroring the XAML adapters' content translation. Emits the
+    /// viewport-visible range plus one spacing of margin so edges stay covered while scrolling.
+    /// </summary>
+    private IEnumerable<(double Pos, bool IsMajor, bool IsZero)> TopTicks
+        => ComputeTicks(ScrollOffsetX, Viewport?.ViewportWidth ?? 0);
+
+    /// <summary>
+    /// Tick positions along the vertical (left) ruler, in band-local pixels. See <see cref="TopTicks"/>.
+    /// </summary>
+    private IEnumerable<(double Pos, bool IsMajor, bool IsZero)> LeftTicks
+        => ComputeTicks(ScrollOffsetY, Viewport?.ViewportHeight ?? 0);
+
+    private IEnumerable<(double Pos, bool IsMajor, bool IsZero)> ComputeTicks(double scroll, double extent)
+    {
+        var spacing = Math.Max(8, Spacing);
+        var majorStep = spacing * Math.Max(1, MajorLineEvery);
+
+        var first = Math.Floor(scroll / spacing) * spacing;
+        for (var v = first; v <= scroll + extent + spacing; v += spacing)
+        {
+            var isZero = Math.Abs(v) < 0.001;
+            var isMajor = isZero
+                          || Math.Abs(v % majorStep) < 0.001
+                          || Math.Abs(v % majorStep - majorStep) < 0.001
+                          || Math.Abs(v % majorStep + majorStep) < 0.001;
+            yield return (v, isMajor, isZero);
+        }
+    }
+
+    private static string FormatGridValue(double value)
+    {
+        var abs = Math.Abs(value);
+        if (abs < 10000)
+        {
+            return Math.Round(value).ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (abs < 1000000)
+        {
+            return Math.Round(value / 1000d, 1).ToString(CultureInfo.InvariantCulture) + "K";
+        }
+
+        return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
     }
 }

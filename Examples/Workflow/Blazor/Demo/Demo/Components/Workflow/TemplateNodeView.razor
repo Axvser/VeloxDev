@@ -6,17 +6,34 @@
 {
     <WorkflowSlotLayoutBehavior Node="Node">
         <WorkflowNodeDragBehavior Node="Node" Style="@($"width:{Node.Size.Width:F0}px;height:{Node.Size.Height:F0}px;")">
-            <div class="veloxdev-wf-node-card"
+            <div class="veloxdev-wf-node-card @(IsRunning ? "veloxdev-wf-node-running" : null)"
                  style="position:relative;width:100%;height:100%;
-                        background:@BackgroundCss;
+                        background:@CardBackgroundCss;
                         border:@BorderThicknessCss solid @BorderBrushCss;
                         border-radius:@CornerRadiusCss;
                         overflow:@(AllowOverflow ? "visible" : "hidden");">
                 <div class="veloxdev-wf-node-header"
-                     style="height:36px;display:flex;align-items:center;padding:0 12px;
+                     style="height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;
                             color:@ForegroundCss;font-weight:bold;font-size:13px;
-                            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                    @(Title ?? FallbackTitle)
+                            background:@HeaderBackgroundCss;
+                            border-bottom:1px solid @HeaderDividerCss;">
+                    <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                        @(Title ?? FallbackTitle)
+                    </span>
+                    @if (HasOrderBadge)
+                    {
+                        <span class="veloxdev-wf-node-badge veloxdev-wf-node-badge-order" title="执行步骤编号">@OrderText</span>
+                    }
+                    @if (HasLoadBadge)
+                    {
+                        <span class="veloxdev-wf-node-badge veloxdev-wf-node-badge-load" title="工作负载">@LoadText</span>
+                    }
+                    @if (IsRunning)
+                    {
+                        <span class="veloxdev-wf-node-badge veloxdev-wf-node-badge-running">
+                            <span class="veloxdev-wf-node-pulse"></span>执行中
+                        </span>
+                    }
                 </div>
                 <div class="veloxdev-wf-node-body" style="position:absolute;left:0;right:0;top:36px;bottom:0;">
                     @if (BodyContent is not null)

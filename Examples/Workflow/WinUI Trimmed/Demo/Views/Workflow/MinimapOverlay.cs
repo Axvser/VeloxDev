@@ -63,7 +63,7 @@ public sealed class MinimapOverlay : Canvas, IWorkflowMinimapOverlay
     private Rectangle? _viewportRect;
     private readonly List<Rectangle> _nodeRects = [];
 
-    private static readonly SolidColorBrush BackgroundBrush = CreateBrush("#D21922");
+    private static readonly SolidColorBrush BackgroundBrush = CreateBrush("#D2141922");
     private static readonly SolidColorBrush BorderBrush = CreateBrush("#DC94A3B8");
     private static readonly SolidColorBrush NodeBrush = CreateBrush("#DC38BDF8");
     private static readonly SolidColorBrush ViewportBrush = CreateBrush("#F0FFFFFF");

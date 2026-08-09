@@ -13,7 +13,6 @@ public partial class WorkflowEnumSelectorView : ComponentBase, IDisposable
     [Parameter]
     public IWorkflowTreeViewModel? Tree { get; set; }
 
-    private string _title = "";
     private object? _selectedValue;
     private object[] _items = [];
 
@@ -32,7 +31,6 @@ public partial class WorkflowEnumSelectorView : ComponentBase, IDisposable
     private void SyncFromViewModel()
     {
         if (Selector is null) return;
-        _title = Selector.Title;
         _selectedValue = Selector.SelectedValue;
         _items = Selector.EnumValues ?? [];
     }

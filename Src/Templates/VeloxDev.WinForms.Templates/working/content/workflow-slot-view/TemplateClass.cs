@@ -47,6 +47,13 @@ public sealed class TemplateClass : Control
         WorkflowSlotConnectionBehavior.SetIsEnabled(this, true);
     }
 
+    // No OnPaintBackground override: with a translucent BackColor the default
+    // paints the nearest opaque ancestor's background through this control, so the
+    // glyph floats over the node card (or the grid where the slot is half-off the
+    // edge). Clearing to Parent.BackColor here instead painted BLACK when the host
+    // panel is itself transparent (Clear(Color.Transparent) == black on GDI),
+    // producing the jarring dark box around each slot.
+
     /// <summary>Gets or sets the workflow slot bound to this view.</summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -84,11 +91,6 @@ public sealed class TemplateClass : Control
         {
             ViewModel = tagged;
         }
-    }
-
-    protected override void OnPaintBackground(PaintEventArgs e)
-    {
-        e.Graphics.Clear(Parent?.BackColor ?? Color.FromArgb(30, 42, 53));
     }
 
     /// <summary>Design-time viewBox size of the slot glyph's SVG artboard.</summary>

@@ -107,12 +107,18 @@
                                          CanvasId="wf-canvas"
                                          GridSpacing="40"
                                          GridColor="#2A2D2E"
-                                         Background="#0B1120">
+                                         MajorGridColor="#3A3D40"
+                                         MajorLineEvery="5"
+                                         AxisColor="#4D4D4D"
+                                         Background="#1E1E1E">
                     <GridDecorator Context="vp">
                         <WorkflowGridDecorator Viewport="vp"
                                                RulerThickness="28" Spacing="40"
+                                               MajorLineEvery="5"
                                                RulerBackground="#252526"
                                                TickColor="#555555"
+                                               LabelColor="#888888"
+                                               AxisColor="#4D4D4D"
                                                DividerColor="#3A3D40" />
                     </GridDecorator>
                     <Minimap Context="vp">
@@ -146,7 +152,11 @@
                                 @switch (node)
                                 {
                                     case ControllerViewModel c:
-                                        <TemplateNodeView Node="c" Title="Network Flow Controller">
+                                        <TemplateNodeView Node="c" Title="Network Flow Controller"
+                                                          AllowOverflow="true"
+                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
+                                                          BorderBrush="@(c.IsActive ? "#DD67E8F9" : "#DD4B5563")"
+                                                          BorderThickness="1.5" CornerRadius="6">
                                             <BodyContent>
                                                 <WorkflowControllerView Controller="c" />
                                             </BodyContent>
@@ -158,7 +168,10 @@
                                         </TemplateNodeView>
                                         break;
                                     case NodeViewModel w:
-                                        <TemplateNodeView Node="w">
+                                        <TemplateNodeView Node="w"
+                                                          AllowOverflow="true"
+                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
+                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
                                             <BodyContent>
                                                 <WorkflowNodeView Node="w" />
                                             </BodyContent>
@@ -175,7 +188,10 @@
                                         </TemplateNodeView>
                                         break;
                                     case BoolSelectorNodeViewModel b:
-                                        <TemplateNodeView Node="b">
+                                        <TemplateNodeView Node="b"
+                                                          AllowOverflow="true"
+                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
+                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
                                             <BodyContent>
                                                 <WorkflowBoolSelectorView Selector="b" Tree="tree" />
                                             </BodyContent>
@@ -187,7 +203,10 @@
                                         </TemplateNodeView>
                                         break;
                                     case EnumSelectorNodeViewModel e:
-                                        <TemplateNodeView Node="e">
+                                        <TemplateNodeView Node="e"
+                                                          AllowOverflow="true"
+                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
+                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
                                             <BodyContent>
                                                 <WorkflowEnumSelectorView Selector="e" Tree="tree" />
                                             </BodyContent>

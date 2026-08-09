@@ -13,7 +13,6 @@ public partial class WorkflowBoolSelectorView : ComponentBase, IDisposable
     [Parameter]
     public IWorkflowTreeViewModel? Tree { get; set; }
 
-    private string _title = "";
     private bool _condition;
 
     protected override void OnInitialized()
@@ -31,7 +30,6 @@ public partial class WorkflowBoolSelectorView : ComponentBase, IDisposable
     private void SyncFromViewModel()
     {
         if (Selector is null) return;
-        _title = Selector.Title;
         _condition = Selector.Condition;
     }
 

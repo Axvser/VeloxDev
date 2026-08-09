@@ -1,21 +1,23 @@
 using Demo.ViewModels.Workflow;
 using Demo.ViewModels.Workflow.Enums;
+using Microsoft.AspNetCore.Components;
 using VeloxDev.WorkflowSystem;
 
-namespace Demo.Controls;
+namespace Demo.Components.Pages;
 
-public partial class WorkflowView : ContentView
+public partial class Home : ComponentBase
 {
-    public WorkflowView()
+    private TreeViewModel? _tree;
+
+    protected override void OnInitialized()
     {
-        InitializeComponent();
-        LoadTree();
+        _tree = new TreeViewModel();
+        LoadTree(_tree);
     }
 
-    private void LoadTree()
+    private static void LoadTree(TreeViewModel tree)
     {
-        var tree = new TreeViewModel();
-        var size = new VeloxDev.WorkflowSystem.Size(260, 180);
+        var size = new Size(260, 180);
         var nodes = new[]
         {
             new NodeViewModel { Name = "Boolean routes", Size = size, Anchor = new Anchor { Horizontal = 80, Vertical = 80 } },
@@ -34,7 +36,5 @@ public partial class WorkflowView : ContentView
         nodes[0].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
         nodes[1].InputSlot.SetChannelCommand.Execute(SlotChannel.MultipleSources);
         nodes[2].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
-
-        BindingContext = tree;
     }
 }

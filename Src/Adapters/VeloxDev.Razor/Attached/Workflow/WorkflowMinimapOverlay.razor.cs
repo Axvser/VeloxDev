@@ -32,27 +32,32 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
 
     /// <summary>Gets or sets the minimap background color.</summary>
     [Parameter]
-    public string Background { get; set; } = "#1C2330";
+    public string Background { get; set; } = "#D2141922";
 
     /// <summary>Gets or sets the minimap border color.</summary>
     [Parameter]
-    public string BorderColor { get; set; } = "#475569";
+    public string BorderColor { get; set; } = "#DC94A3B8";
 
     /// <summary>Gets or sets the node fill color.</summary>
     [Parameter]
-    public string NodeFill { get; set; } = "#38BDF8";
+    public string NodeFill { get; set; } = "#DC38BDF8";
 
     /// <summary>Gets or sets the node corner radius in pixels.</summary>
     [Parameter]
     public double NodeRadius { get; set; } = 2;
 
-    /// <summary>Gets or sets the viewport indicator fill color.</summary>
+    /// <summary>
+    /// Gets or sets the viewport indicator fill color. Defaults to a subtle white fill
+    /// (<c>#28FFFFFF</c>), matching the WPF/Avalonia/MAUI/WinUI adapters. Item templates and
+    /// trimmed demos override this to <c>transparent</c> so their indicator renders as an
+    /// outline only.
+    /// </summary>
     [Parameter]
     public string ViewportFill { get; set; } = "rgba(255,255,255,0.15)";
 
     /// <summary>Gets or sets the viewport indicator stroke color.</summary>
     [Parameter]
-    public string ViewportStroke { get; set; } = "#FFFFFF";
+    public string ViewportStroke { get; set; } = "#F0FFFFFF";
 
     /// <summary>Gets or sets the viewport indicator stroke width.</summary>
     [Parameter]
@@ -95,11 +100,23 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     private DotNetObjectReference<WorkflowMinimapOverlay>? _dotNetRef;
     private IJSObjectReference? _handle;
 
+    // Content-fit mapping used to render the minimap. It is pushed to JS so drag/click navigation
+    // inverts the SAME mapping (instead of a raw scroll-extent ratio, which diverges once the canvas
+    // is edge-extended and overshoots by n×). Only the fields below change with content bounds.
+    private double _scale;
+    private double _mapOx;
+    private double _mapOy;
+    private double _minX;
+    private double _minY;
+
     private IReadOnlyList<Mapped>? MappedNodes { get; set; }
     private Mapped? MappedViewport { get; set; }
 
-    private string WidthCss => Width.ToString("0.#");
-    private string HeightCss => Height.ToString("0.#");
+    // Unitless lengths are invalid inside a CSS style="" attribute (the browser drops them,
+    // collapsing the element to 0×0). These feed the inline width/height style; the px suffix is
+    // also accepted by the SVG width/height attributes below.
+    private string WidthCss => Width.ToString("0.#") + "px";
+    private string HeightCss => Height.ToString("0.#") + "px";
     private string NodeRadiusCss => NodeRadius.ToString("0.#");
     private string ViewportStrokeWidthCss => ViewportStrokeWidth.ToString("0.#");
 
@@ -132,6 +149,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/VeloxDev.Razor/veloxdev.workflow.js");
             _dotNetRef = DotNetObjectReference.Create(this);
             _handle = await _module.InvokeAsync<IJSObjectReference>("initMinimap", _element, ScrollViewerId, _dotNetRef);
+            PushMapping();
         }
     }
 
@@ -171,6 +189,13 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         var ox = pad + (drawW - bw * scale) / 2;
         var oy = pad + (drawH - bh * scale) / 2;
 
+        _scale = scale;
+        _mapOx = ox;
+        _mapOy = oy;
+        _minX = minX;
+        _minY = minY;
+        PushMapping();
+
         MappedNodes = nodes.Select(n =>
         {
             var x = ox + (n.Anchor.Horizontal - minX) * scale;
@@ -195,15 +220,42 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         MappedViewport = new Mapped(mx, my, mw, mh);
     }
 
-    [JSInvokable]
-    public void OnMinimapNavigate(double ratioX, double ratioY)
+    /// <summary>
+    /// Pushes the content-fit mapping used to render the minimap to JS, so drag/click
+    /// navigation inverts the SAME scale instead of a raw scroll-extent ratio (which diverges
+    /// once the canvas is edge-extended and overshoots by n×). Called on every Recompute and
+    /// once more on first render so JS has a mapping before the user can interact.
+    /// </summary>
+    private void PushMapping()
     {
-        if (string.IsNullOrWhiteSpace(ScrollViewerId) || _module is null)
+        if (_module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
+        {
+            _ = _module.InvokeVoidAsync("setMinimapMapping", ScrollViewerId, _scale, _mapOx, _mapOy, _minX, _minY);
+        }
+    }
+
+    [JSInvokable]
+    public void OnMinimapNavigate(double x, double y, double currentScrollLeft, double currentScrollTop)
+    {
+        if (string.IsNullOrWhiteSpace(ScrollViewerId) || _module is null || _scale <= 0)
         {
             return;
         }
 
-        _ = JS.InvokeVoidAsync("veloxdevWorkflow.scrollToRatio", ScrollViewerId, ratioX, ratioY);
+        // Invert the render mapping (minimapX = ox + (worldX - minX) * scale) to recover the world
+        // coordinate under the click, then convert world -> scrollLeft. scrollLeft = worldX + _offsetX
+        // + contentX, and _offsetX + contentX = currentScrollLeft - ScrollOffsetX (from the surface
+        // viewport: ScrollOffsetX = scrollLeft - _offsetX, minus contentX). Keeping both directions on
+        // the rendered scale means a drag/click tracks the viewport rectangle 1:1 even after the
+        // canvas edge-extension grows the scroll extent.
+        var offsetX = currentScrollLeft - ScrollOffsetX;
+        var offsetY = currentScrollTop - ScrollOffsetY;
+        var worldX = _minX + (x - _mapOx) / _scale;
+        var worldY = _minY + (y - _mapOy) / _scale;
+        var targetX = worldX + offsetX + ContentOffsetX;
+        var targetY = worldY + offsetY + ContentOffsetY;
+
+        _ = JS.InvokeVoidAsync("veloxdevWorkflow.scrollToPosition", ScrollViewerId, targetX, targetY);
     }
 
     /// <inheritdoc />

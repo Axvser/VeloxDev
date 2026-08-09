@@ -13,23 +13,72 @@ namespace TemplateNamespace;
 /// <summary>
 /// A minimap overlay that renders a thumbnail overview of a workflow surface.
 /// Implements <see cref="IWorkflowMinimapOverlay"/> for automatic data updates
-/// from <see cref="WorkflowSurfaceBehavior"/>.
+/// from <see cref="WorkflowSurfaceBehavior"/>. The viewport outline is draggable:
+/// dragging raises <see cref="IWorkflowMinimapScrollSource.ViewportScrollRequested"/>
+/// so the host surface can pan to match.
 /// </summary>
-public sealed class TemplateClass : Panel, IWorkflowMinimapOverlay
+public sealed class TemplateClass : Panel, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource
 {
     private readonly Color _background = ParseColor("TemplateMinimapBackground");
     private readonly Color _border = ParseColor("TemplateMinimapBorder");
     private readonly Color _nodeFill = ParseColor("TemplateNodeFill");
     private readonly Color _viewportStroke = ParseColor("TemplateViewportStroke");
 
+    // Overlay margin from the surface's top-right corner.
+    private const int CornerMargin = 12;
+
+    private bool _dragging;
+    private Point _dragOffset;
+
     public TemplateClass()
     {
         DoubleBuffered = true;
         Width = 200;
         Height = 140;
+        Anchor = AnchorStyles.Top | AnchorStyles.Right;
         SetStyle(ControlStyles.ResizeRedraw, true);
         SetStyle(ControlStyles.SupportsTransparentBackColor, true);
         BackColor = Color.Transparent;
+    }
+
+    /// <summary>
+    /// Raised while the user drags the viewport; carries the desired world-space
+    /// scroll offsets (<see cref="ScrollOffsetX"/> / <see cref="ScrollOffsetY"/>).
+    /// </summary>
+    public event Action<double, double>? ViewportScrollRequested;
+
+    protected override void OnParentChanged(EventArgs e)
+    {
+        base.OnParentChanged(e);
+        if (Parent is not null)
+        {
+            Parent.Resize -= OnParentResized;
+            Parent.Resize += OnParentResized;
+        }
+
+        PositionAtTopRight();
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        PositionAtTopRight();
+    }
+
+    private void OnParentResized(object? sender, EventArgs e) => PositionAtTopRight();
+
+    /// <summary>
+    /// Anchors this overlay to the top-right of its host surface. The surface's
+    /// size is only known once it is added and laid out, so the position is
+    /// recomputed whenever the parent resizes.
+    /// </summary>
+    private void PositionAtTopRight()
+    {
+        if (Parent is null) return;
+
+        Location = new Point(
+            Math.Max(0, Parent.ClientSize.Width - Width - CornerMargin),
+            CornerMargin);
     }
 
     [Browsable(false)]
@@ -79,8 +128,93 @@ public sealed class TemplateClass : Panel, IWorkflowMinimapOverlay
         g.FillRectangle(bgBrush, rect);
         g.DrawRectangle(borderPen, rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
 
+        var layout = ComputeLayout();
+        if (layout is null) return;
+        var l = layout.Value;
+
+        using var nodeBrush = new SolidBrush(_nodeFill);
+        using var viewportPen = new Pen(_viewportStroke, 1.5f);
+
+        foreach (var node in l.Tree.Nodes)
+        {
+            double x = l.Ox + (node.Anchor.Horizontal - l.MinX) * l.Scale;
+            double y = l.Oy + (node.Anchor.Vertical - l.MinY) * l.Scale;
+            double w = Math.Max(2, node.Size.Width * l.Scale);
+            double h = Math.Max(2, node.Size.Height * l.Scale);
+            g.FillRectangle(nodeBrush, (float)x, (float)y, (float)w, (float)h);
+        }
+
+        var vp = ViewportRect(l);
+        g.DrawRectangle(viewportPen, (float)vp.X, (float)vp.Y, (float)vp.Width, (float)vp.Height);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (e.Button != MouseButtons.Left) return;
+
+        var layout = ComputeLayout();
+        if (layout is null) return;
+
+        // Grab the viewport at a fixed offset from the cursor. Dragging anywhere on
+        // the minimap keeps that offset, so the viewport follows the pointer — the
+        // absolute grab mapping the WPF/Avalonia/WinUI/MAUI/Razor minimaps use.
+        var l = layout.Value;
+        var vp = ViewportRect(l);
+        _dragOffset = new Point((int)(e.X - vp.X), (int)(e.Y - vp.Y));
+        _dragging = true;
+        Capture = true;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (!_dragging) return;
+
+        var layout = ComputeLayout();
+        if (layout is null) return;
+
+        // Invert the paint mapping (viewport top-left in minimap pixels -> desired
+        // world-space ScrollOffset) through the same centered content-fit transform
+        // the paint uses, matching the other five GUI frameworks.
+        var l = layout.Value;
+        double vx = e.X - _dragOffset.X;
+        double vy = e.Y - _dragOffset.Y;
+        double sx = (vx - l.Ox) / l.Scale + l.MinX + ContentOffsetX;
+        double sy = (vy - l.Oy) / l.Scale + l.MinY + ContentOffsetY;
+
+        ViewportScrollRequested?.Invoke(sx, sy);
+        Invalidate();
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        if (!_dragging) return;
+
+        _dragging = false;
+        Capture = false;
+    }
+
+    protected override void OnMouseCaptureChanged(EventArgs e)
+    {
+        base.OnMouseCaptureChanged(e);
+        // Capture was stolen or released outside the minimap (e.g. alt-tab);
+        // stop dragging so the next press starts a fresh grab.
+        if (!Capture)
+        {
+            _dragging = false;
+        }
+    }
+
+    /// <summary>
+    /// Canvas bounds + scale shared by painting and drag mapping. Returns null when
+    /// there are no nodes yet, so the minimap stays blank until the tree lays out.
+    /// </summary>
+    private MinimapLayout? ComputeLayout()
+    {
         var tree = WorkflowTree;
-        if (tree?.Nodes is null) return;
+        if (tree?.Nodes is null) return null;
 
         double minX = double.MaxValue, minY = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue;
@@ -95,32 +229,59 @@ public sealed class TemplateClass : Panel, IWorkflowMinimapOverlay
             hasNode = true;
         }
 
-        if (!hasNode) return;
+        if (!hasNode) return null;
 
+        // The minimap canvas is the node content only (no viewport union), matching
+        // the other five GUI frameworks: the content is fitted at a content-fit scale
+        // and centered in the drawable area, and the viewport block is clamped at the
+        // minimap edge. Panning past the content then extends the surface instead of
+        // re-fitting the whole minimap around the viewport.
         const double pad = 4;
-        double contentW = maxX - minX + pad * 2;
-        double contentH = maxY - minY + pad * 2;
-        double drawW = rect.Width - pad * 2;
-        double drawH = rect.Height - pad * 2;
+        double contentW = Math.Max(1, maxX - minX);
+        double contentH = Math.Max(1, maxY - minY);
+        double drawW = Width - pad * 2;
+        double drawH = Height - pad * 2;
         double scale = Math.Min(drawW / contentW, drawH / contentH);
+        // Centered content-fit: ox/oy is the top-left of the scaled content, centered
+        // in the drawable area — the same transform the WPF/Avalonia/WinUI/MAUI
+        // ComputeTransform and the Razor Recompute mapping produce, so a drag/click
+        // inverts the same mapping the paint uses.
+        double ox = pad + (drawW - contentW * scale) / 2;
+        double oy = pad + (drawH - contentH * scale) / 2;
+        return new MinimapLayout(tree, minX, minY, scale, ox, oy);
+    }
 
-        using var nodeBrush = new SolidBrush(_nodeFill);
-        using var viewportPen = new Pen(_viewportStroke, 1.5f);
+    private RectangleF ViewportRect(MinimapLayout l)
+    {
+        // Map the viewport through the same centered content-fit transform the nodes
+        // use, then clamp the block inside the minimap so it never leaves the bounds —
+        // matching WPF/Avalonia/WinUI/MAUI/Razor. When the user drags it to an edge,
+        // the requested scroll grows and the surface pans into the empty space.
+        double vx = l.Ox + (ScrollOffsetX - ContentOffsetX - l.MinX) * l.Scale;
+        double vy = l.Oy + (ScrollOffsetY - ContentOffsetY - l.MinY) * l.Scale;
+        double vw = Math.Max(4, ViewportWidth * l.Scale);
+        double vh = Math.Max(4, ViewportHeight * l.Scale);
+        vx = Math.Max(0, Math.Min(Width - vw, vx));
+        vy = Math.Max(0, Math.Min(Height - vh, vy));
+        return new RectangleF((float)vx, (float)vy, (float)vw, (float)vh);
+    }
 
-        foreach (var node in tree.Nodes)
+    private readonly struct MinimapLayout
+    {
+        public readonly IWorkflowTreeViewModel Tree;
+        public readonly double MinX, MinY, Scale, Ox, Oy;
+
+        public MinimapLayout(
+            IWorkflowTreeViewModel tree,
+            double minX, double minY, double scale, double ox, double oy)
         {
-            double x = (node.Anchor.Horizontal - minX + pad) * scale + pad;
-            double y = (node.Anchor.Vertical - minY + pad) * scale + pad;
-            double w = Math.Max(2, node.Size.Width * scale);
-            double h = Math.Max(2, node.Size.Height * scale);
-            g.FillRectangle(nodeBrush, (float)x, (float)y, (float)w, (float)h);
+            Tree = tree;
+            MinX = minX;
+            MinY = minY;
+            Scale = scale;
+            Ox = ox;
+            Oy = oy;
         }
-
-        double vx = (ScrollOffsetX - ContentOffsetX - minX + pad) * scale + pad;
-        double vy = (ScrollOffsetY - ContentOffsetY - minY + pad) * scale + pad;
-        double vw = Math.Max(4, ViewportWidth * scale);
-        double vh = Math.Max(4, ViewportHeight * scale);
-        g.DrawRectangle(viewportPen, (float)vx, (float)vy, (float)vw, (float)vh);
     }
 
     private static Color ParseColor(string hex)
@@ -149,4 +310,14 @@ public sealed class TemplateClass : Panel, IWorkflowMinimapOverlay
 
         return Color.FromName(value);
     }
+}
+
+/// <summary>
+/// Implemented by minimap overlays whose viewport can be dragged to request surface
+/// scrolling. Kept off <see cref="IWorkflowMinimapOverlay"/> so the shared adapter
+/// interface stays framework-agnostic.
+/// </summary>
+public interface IWorkflowMinimapScrollSource
+{
+    event Action<double, double>? ViewportScrollRequested;
 }

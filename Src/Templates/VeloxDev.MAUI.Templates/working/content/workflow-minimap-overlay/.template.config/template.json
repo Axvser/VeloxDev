@@ -25,28 +25,28 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Minimap background color.",
-      "defaultValue": "#141922",
+      "defaultValue": "#D2141922",
       "replaces": "TemplateMinimapBackground"
     },
     "minimapBorder": {
       "type": "parameter",
       "datatype": "text",
       "description": "Minimap border color.",
-      "defaultValue": "#94A3B8",
+      "defaultValue": "#DC94A3B8",
       "replaces": "TemplateMinimapBorder"
     },
     "nodeFill": {
       "type": "parameter",
       "datatype": "text",
       "description": "Node rectangle fill color.",
-      "defaultValue": "#38BDF8",
+      "defaultValue": "#DC38BDF8",
       "replaces": "TemplateNodeFill"
     },
     "viewportStroke": {
       "type": "parameter",
       "datatype": "text",
       "description": "Viewport indicator stroke color.",
-      "defaultValue": "#FFFFFF",
+      "defaultValue": "#F0FFFFFF",
       "replaces": "TemplateViewportStroke"
     }
   },

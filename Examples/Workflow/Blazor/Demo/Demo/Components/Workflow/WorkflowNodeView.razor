@@ -17,4 +17,32 @@
         <input type="checkbox" checked="@_autoBroadcast" @onchange="OnAutoBroadcastChanged" />
         Auto-broadcast to downstream
     </label>
+
+    @if (HasFeedback)
+    {
+        <div class="wf-node-status">
+            @if (_hasOrderBadge)
+            {
+                <span class="wf-node-status-chip wf-node-status-order" title="执行步骤编号">步骤 @_orderText</span>
+            }
+            @if (_hasLoadBadge)
+            {
+                <span class="wf-node-status-chip wf-node-status-load" title="工作负载">@_loadText</span>
+            }
+            @if (!string.IsNullOrEmpty(_statusText))
+            {
+                <span class="wf-node-status-chip wf-node-status-state @(Node?.IsRunning == true ? "wf-node-status-running" : null)">
+                    @_statusText
+                </span>
+            }
+            @if (!string.IsNullOrEmpty(_duration))
+            {
+                <span class="wf-node-status-chip wf-node-status-duration" title="耗时">耗时 @_duration</span>
+            }
+            @if (!string.IsNullOrEmpty(_traceText) && _traceText != "未执行")
+            {
+                <span class="wf-node-status-chip wf-node-status-trace" title="执行轨迹">@_traceText</span>
+            }
+        </div>
+    }
 </div>

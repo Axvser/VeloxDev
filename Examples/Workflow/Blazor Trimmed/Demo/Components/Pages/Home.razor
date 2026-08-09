@@ -1,0 +1,13 @@
+@page "/"
+@rendermode RenderMode.InteractiveServer
+
+<PageTitle>VeloxDev Workflow — Blazor Trimmed Demo</PageTitle>
+
+<div class="wf-page">
+    <div class="wf-canvas">
+        @if (_tree is not null)
+        {
+            <TreeView Tree="_tree" />
+        }
+    </div>
+</div>

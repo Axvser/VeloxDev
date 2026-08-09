@@ -58,6 +58,7 @@
             titleLabel = new Label();
             executionLogListBox = new ListBox();
             workflowSurfaceControl = new Controls.WorkflowCanvas();
+            minimapOverlay = new Views.MinimapOverlay();
             ((System.ComponentModel.ISupportInitialize)splitContainer).BeginInit();
             splitContainer.Panel1.SuspendLayout();
             splitContainer.Panel2.SuspendLayout();
@@ -74,6 +75,7 @@
             splitContainer.Panel1.Controls.Add(logTabControl);
             splitContainer.Panel1.Controls.Add(toolbarPanel);
             splitContainer.Panel1.Padding = new Padding(12);
+            splitContainer.Panel2.Controls.Add(minimapOverlay);
             splitContainer.Panel2.Controls.Add(workflowSurfaceControl);
             splitContainer.Panel2.Padding = new Padding(12);
             splitContainer.Size = new Size(1440, 820);
@@ -349,6 +351,14 @@
             workflowSurfaceControl.Name = "workflowSurfaceControl";
             workflowSurfaceControl.Size = new Size(1000, 796);
             workflowSurfaceControl.TabIndex = 0;
+            //
+            // minimapOverlay
+            //
+            // 小地图宿主在非滚动区（splitContainer.Panel2），画布平移/滚动时固定右上角。
+            // Location 由 MinimapOverlay.PositionAtTopRight 按父容器尺寸计算，这里不设。
+            minimapOverlay.Name = "minimapOverlay";
+            minimapOverlay.TabIndex = 1;
+            minimapOverlay.BringToFront();
             // 
             // Form1
             // 
@@ -401,5 +411,6 @@
         private Button agentSendButton;
         private ListBox executionLogListBox;
         private Controls.WorkflowCanvas workflowSurfaceControl;
+        private Views.MinimapOverlay minimapOverlay;
     }
 }

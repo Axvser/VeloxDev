@@ -1,6 +1,7 @@
 @namespace TemplateNamespace
 @using VeloxDev.WorkflowSystem
 @using VeloxDev.WorkflowSystem.AttachedBehaviors
+@* VeloxDev customization: Customize the node card markup and styles here; keep the WorkflowSlotLayoutBehavior / WorkflowNodeDragBehavior wrappers. *@
 
 @if (Node is not null)
 {
@@ -27,7 +28,7 @@
                     @if (InputSlots is not null)
                     {
                         <div class="veloxdev-wf-node-input-host"
-                             style="position:absolute;left:0;top:50%;transform:translate(-50%,-50%);z-index:1;">
+                             style="position:absolute;left:2px;top:50%;transform:translateY(-50%);z-index:1;">
                             @InputSlots
                         </div>
                     }
@@ -35,7 +36,7 @@
                     @if (OutputSlots is not null)
                     {
                         <div class="veloxdev-wf-node-output-host"
-                             style="position:absolute;right:0;top:50%;transform:translate(50%,-50%);z-index:1;">
+                             style="position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:1;">
                             @OutputSlots
                         </div>
                     }

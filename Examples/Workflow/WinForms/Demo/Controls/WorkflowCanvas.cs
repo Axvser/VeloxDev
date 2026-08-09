@@ -1,9 +1,9 @@
 using Demo.ViewModels;
 using Demo.Workflow;
-using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -26,25 +26,31 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     private const int GridSpacing = 40;
     private const int MajorFreq = 5;
     private const double Eps = 0.001;
-    private const int TickLen = 8;
-    private const int LabelPad = 4;
+    // 标尺带厚度。其余方案代码同为 28px，但用户反馈 WinForms 视觉上偏小，故放大到 36px。
+    private const int RulerThickness = 36;
 
     // ── 状态 ──────────────────────────────────────────────────────────────────
     private WorkflowDemoSession? _session;
     private readonly Dictionary<IWorkflowNodeViewModel, WorkflowNodeCard> _cards = [];
 
-    // 连线叠层：透明 Panel，承载池化的模板 LinkView 子控件；随平移/滚动移动。
-    private readonly TransparentLinksHost _linksHost;
-
-    // 响应式连线集合（VirtualLink + 真实链接），由 _linksHost 上的 ViewManager 消费。
-    private ObservableCollection<IWorkflowViewModel>? _linkItems;
-    private IWorkflowTreeViewModel? _linksSubscribedTree;
+    // 连线渲染器：模板 LinkView（VirtualLink + 全部真实链接）。它们不是子控件，而是
+    // 复用模板 LinkView 的几何（Render），由画布 OnPaint 统一绘制 —— 避免 WinForms 中
+    // 重叠全尺寸透明兄弟窗口被 WS_CLIPSIBLINGS 裁掉（仅最上层可绘制）的问题。
+    private readonly List<Views.LinkView> _linkRenderers = [];
 
     // 平移
     private bool _isPanning;
     private Point _panPressScreen;
     private Point _panOffsetAtPress;
-    private Point _panOffset; // 世界坐标原点在客户端中的像素位置
+    // 世界坐标原点在客户端中的像素位置。默认落在内容区左上角 (RulerThickness,
+    // RulerThickness)，与其余方案一致：内容从标尺带右侧/下方开始，刻度“0”出现在
+    // 内容边界而非左上角交界区。
+    private Point _panOffset = new(RulerThickness, RulerThickness);
+
+    // 小地图：宿主在 splitContainer.Panel2（非滚动区），由 SyncMinimap 手动同步。
+    // 不使用 SetMinimapOverlayName —— Refresh 的 ResolveScrollOffset 只返回
+    // -AutoScrollPosition，不含 _panOffset，手动同步才是确定性的。
+    private Control? _minimap;
 
     // ── IWorkflowGridDecorator ──────────────────────────────────────────────
     // WorkflowSurfaceBehavior.Refresh 在每次刷新周期把滚动/内容偏移推送到这里，
@@ -81,11 +87,55 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         }
     }
 
+    /// <summary>
+    /// 可选的小地图覆盖层。宿主应把它放在非滚动区（如 splitContainer.Panel2）并
+    /// <c>BringToFront</c>，使画布平移/滚动时小地图固定不动。画布负责同步可见区域
+    /// 并响应小地图的视口拖动请求。
+    /// </summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Control? MinimapOverlay
+    {
+        get => _minimap;
+        set
+        {
+            if (ReferenceEquals(_minimap, value)) return;
+            if (_minimap is not null)
+            {
+                if (_minimap is Views.IWorkflowMinimapScrollSource oldSrc)
+                {
+                    oldSrc.ViewportScrollRequested -= OnMinimapScrollRequested;
+                }
+
+                if (_minimap is WorkflowBehaviors.IWorkflowMinimapOverlay oldMm)
+                {
+                    oldMm.WorkflowTree = null;
+                }
+            }
+
+            _minimap = value;
+            if (value is not null)
+            {
+                if (value is Views.IWorkflowMinimapScrollSource src)
+                {
+                    src.ViewportScrollRequested += OnMinimapScrollRequested;
+                }
+
+                if (value is WorkflowBehaviors.IWorkflowMinimapOverlay mm)
+                {
+                    mm.WorkflowTree = _session?.Tree;
+                }
+
+                SyncMinimap();
+            }
+        }
+    }
+
     // ── 构造 ──────────────────────────────────────────────────────────────────
     public WorkflowCanvas()
     {
         DoubleBuffered = true;
-        BackColor = Color.FromArgb(15, 23, 42);
+        BackColor = Color.FromArgb(30, 30, 30); // #1E1E1E 模板网格装饰器默认背景
         AutoScroll = true;
 
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewerName(this, nameof(WorkflowCanvas));
@@ -101,31 +151,6 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
             ControlStyles.UserPaint,
             true);
 
-        // 连线叠层：全尺寸透明 Panel，作为 ViewManager 的宿主承载模板 LinkView。
-        // Enabled=false 使其不拦截鼠标（画布平移/节点交互不受影响）；透明背景让
-        // 网格（画布 OnPaintBackground）透过叠层显示。
-        _linksHost = new TransparentLinksHost
-        {
-            Location = Point.Empty,
-            Size = new System.Drawing.Size(1920, 1080),
-        };
-        Controls.Add(_linksHost);
-
-        // LinkView 工厂：新建模板 LinkView（透明，Dock=Fill，经 ViewModel 绑定 link）。
-        var selector = new Views.TemplateSelector
-        {
-            LinkViewFactory = link =>
-            {
-                var view = new Views.LinkView
-                {
-                    Dock = DockStyle.Fill,
-                    BackColor = Color.Transparent,
-                };
-                view.ViewModel = link;
-                return view;
-            },
-        };
-        WorkflowBehaviors.ViewPool.SetTemplateSelector(_linksHost, selector);
     }
 
     // ── Session 生命周期 ───────────────────────────────────────────────────────
@@ -140,8 +165,9 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         foreach (var node in s.Tree.Nodes) AddCard(node);
         UpdateCanvasMinSize();
 
-        // 连线池：VirtualLink（首位）+ 全部真实 Link → _linksHost 上的 ViewManager。
-        AttachLinksPool(s.Tree);
+        // 连线渲染器：VirtualLink（首位）+ 全部真实 Link → 画布 OnPaint 统一绘制。
+        AttachLinksPool();
+        SyncMinimap();
 
         // 延迟同步：等 WinForms 完成首次布局后再计算 SlotView 屏幕坐标
         if (IsHandleCreated)
@@ -151,63 +177,33 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     }
 
     /// <summary>
-    /// 为连线叠层创建响应式链接集合（VirtualLink + 全部真实链接），交给 ViewManager
-    /// 池化渲染为模板 LinkView。集合自身的变更会把 VirtualLink / 链接的增删自动
-    /// 反映到池中，因此画布不再需要自己维护连线绘制。
+    /// 建立画布连线渲染器（VirtualLink + 全部真实链接）。渲染器复用模板 LinkView，
+    /// 但不加入控件树，由画布 OnPaint 统一调用其 <see cref="Views.LinkView.Render"/>；
+    /// 链接增删由 <see cref="OnLinksChanged"/> 触发重建。
     /// </summary>
-    private void AttachLinksPool(IWorkflowTreeViewModel tree)
+    private void AttachLinksPool()
     {
-        _linkItems = new ObservableCollection<IWorkflowViewModel> { tree.VirtualLink };
-        foreach (var link in tree.Links)
-        {
-            _linkItems.Add(link);
-        }
-
-        _linksSubscribedTree = tree;
-        tree.Links.CollectionChanged += OnLinksCollectionChanged;
-        WorkflowBehaviors.ViewPool.SetItemsSource(_linksHost, _linkItems);
-        PositionLinksHost();
+        RebuildLinkRenderers();
     }
 
-    private void OnLinksCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void RebuildLinkRenderers()
     {
-        if (InvokeRequired)
+        foreach (var lv in _linkRenderers) lv.Dispose();
+        _linkRenderers.Clear();
+        if (_session is null) return;
+
+        _linkRenderers.Add(CreateLinkRenderer(_session.Tree.VirtualLink));
+        foreach (var link in _session.Tree.Links)
         {
-            BeginInvoke(new NotifyCollectionChangedEventHandler(OnLinksCollectionChanged), sender, e);
-            return;
+            _linkRenderers.Add(CreateLinkRenderer(link));
         }
+    }
 
-        if (_linkItems is null) return;
-
-        switch (e.Action)
-        {
-            case NotifyCollectionChangedAction.Add when e.NewItems is not null:
-                foreach (var link in e.NewItems)
-                {
-                    _linkItems.Add((IWorkflowViewModel)link);
-                }
-                break;
-            case NotifyCollectionChangedAction.Remove when e.OldItems is not null:
-                foreach (var link in e.OldItems)
-                {
-                    _linkItems.Remove((IWorkflowViewModel)link);
-                }
-                break;
-            case NotifyCollectionChangedAction.Reset:
-                _linkItems.Clear();
-                if (_linksSubscribedTree is not null)
-                {
-                    _linkItems.Add(_linksSubscribedTree.VirtualLink);
-                    foreach (var link in _linksSubscribedTree.Links)
-                    {
-                        _linkItems.Add(link);
-                    }
-                }
-                break;
-        }
-
-        SyncAllSlotAnchors();
-        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+    private static Views.LinkView CreateLinkRenderer(IWorkflowLinkViewModel link)
+    {
+        var view = new Views.LinkView();
+        view.ViewModel = link;
+        return view;
     }
 
     private void OnHandleCreatedForInitialSync(object? sender, EventArgs e)
@@ -220,6 +216,43 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     {
         SyncAllSlotAnchors();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        SyncMinimap();
+    }
+
+    // ── 小地图同步 ─────────────────────────────────────────────────────────────
+    /// <summary>
+    /// 把当前可见世界区域推送到小地图。节点卡片按 anchor + panOffset + scroll
+    /// 定位（<see cref="NodeBounds"/>），node.Anchor 已是最终屏幕世界坐标 —— 该
+    /// 自绘画布不再套用内容偏移平移，故小地图 ContentOffset 恒为 0，
+    /// ScrollOffset = -(panOffset + scroll) 恰好等于屏幕左缘对应的世界坐标。
+    /// </summary>
+    private void SyncMinimap()
+    {
+        if (_minimap is not WorkflowBehaviors.IWorkflowMinimapOverlay m) return;
+
+        var scroll = AutoScrollPosition;
+        m.ScrollOffsetX = -(_panOffset.X + scroll.X);
+        m.ScrollOffsetY = -(_panOffset.Y + scroll.Y);
+        m.ContentOffsetX = 0;
+        m.ContentOffsetY = 0;
+        m.ViewportWidth = ClientSize.Width;
+        m.ViewportHeight = ClientSize.Height;
+        m.WorkflowTree = _session?.Tree;
+        _minimap.Invalidate();
+    }
+
+    /// <summary>
+    /// 小地图拖动请求滚动：小地图表达的是绝对的世界可见区域，故先把 AutoScroll
+    /// 归零（鼠标滚轮滚过之后 AutoScrollPosition 非 0，会与平移打架，且会在
+    /// RelayoutAllCards → UpdateCanvasMinSize 里被重新钳位，导致视口块反复回弹、
+    /// 看起来拖不动），再按 ScrollOffset = -panOffset 反解 panOffset = -sx，
+    /// 最后重排卡片（顺带再次同步小地图）。
+    /// </summary>
+    private void OnMinimapScrollRequested(double sx, double sy)
+    {
+        AutoScrollPosition = Point.Empty;
+        _panOffset = new Point((int)Math.Round(-sx), (int)Math.Round(-sy));
+        RelayoutAllCards();
     }
 
     private void DetachSession(WorkflowDemoSession? s)
@@ -231,14 +264,8 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         s.Tree.Links.CollectionChanged -= OnLinksChanged;
         s.Controller.PropertyChanged -= OnControllerPropertyChanged;
 
-        if (_linksSubscribedTree is not null)
-        {
-            _linksSubscribedTree.Links.CollectionChanged -= OnLinksCollectionChanged;
-        }
-
-        _linksSubscribedTree = null;
-        _linkItems = null;
-        WorkflowBehaviors.ViewPool.SetItemsSource(_linksHost, null);
+        foreach (var lv in _linkRenderers) lv.Dispose();
+        _linkRenderers.Clear();
 
         foreach (var card in _cards.Values)
         {
@@ -247,7 +274,6 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         }
 
         _cards.Clear();
-        WorkflowBehaviors.ViewPool.SetItemsSource(this, null);
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
@@ -271,14 +297,17 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         SyncAllSlotAnchors();
         UpdateCanvasMinSize();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        SyncMinimap();
     }
 
     private void OnLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (InvokeRequired) { BeginInvoke(new Action(() => OnLinksChanged(sender, e))); return; }
-        // 新建/删除连线时重新同步所有槽位锚点，保证两端坐标正确
+        // 新建/删除连线时重建渲染器并重新同步所有槽位锚点，保证两端坐标正确
+        RebuildLinkRenderers();
         SyncAllSlotAnchors();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        SyncMinimap();
     }
 
     private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -332,6 +361,7 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         }
 
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        SyncMinimap();
     }
 
     private void RefreshAllCards()
@@ -342,6 +372,7 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         }
 
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        SyncMinimap();
     }
 
     /// <summary>将节点卡片定位到画布坐标对应的客户端位置。</summary>
@@ -367,29 +398,9 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
             LayoutCard(node, card);
         }
 
-        PositionLinksHost();
         UpdateCanvasMinSize();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-    }
-
-    /// <summary>
-    /// 将连线叠层定位到世界坐标原点处（pan + scroll）。叠层内的 LinkView 用世界
-    /// 坐标（slot.Anchor）画折线，因此叠层随画布平移/滚动整体移动即可保持对齐。
-    /// 尺寸跟随当前内容范围。
-    /// </summary>
-    private void PositionLinksHost()
-    {
-        var scroll = AutoScrollPosition;
-        var w = Math.Max(ClientSize.Width, 1920);
-        var h = Math.Max(ClientSize.Height, 1080);
-
-        // 注意：不要 BringToFront —— 连线叠层保持在卡片之下，连线下沉到节点后面
-        // （与 WPF 模板的链接在节点背后的层级一致）。叠层本身透明且 Enabled=false，
-        // 不会阻挡画布平移或节点/槽位交互。
-        _linksHost.Location = new Point(
-            _panOffset.X + scroll.X,
-            _panOffset.Y + scroll.Y);
-        _linksHost.Size = new System.Drawing.Size(w, h);
+        SyncMinimap();
     }
 
     // ── Slot 锚点同步 ────────────────────────────────────────────────────────
@@ -414,7 +425,9 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
             var map = new Dictionary<IWorkflowSlotViewModel, PointF>(ReferenceEqualityComparer.Instance);
             CollectNodeSlotPositions(card, map, scroll, _panOffset);
             foreach (var (slot, pt) in map)
+            {
                 slot.Anchor = new Anchor(pt.X, pt.Y, slot.Anchor.Layer);
+            }
         }
     }
 
@@ -534,10 +547,8 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     }
 
     // ── 绘制 ──────────────────────────────────────────────────────────────────
-    // 网格与标尺画在 OnPaintBackground 中（而非 OnPaint），这样透明叠层的模板
-    // LinkView 子控件（BackColor=Transparent）能透过自身合成显示网格 —— 这是
-    // WinForms 透明子控件合成机制的硬性要求（子控件只合成父控件的
-    // OnPaintBackground 输出）。
+    // 网格与标尺画在 OnPaintBackground 中（而非 OnPaint），作为最底层垫底；卡片
+    // 为子控件绘制在其上，连线由 OnPaint 的模板 LinkView 几何绘制在其上。
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         base.OnPaintBackground(e);
@@ -548,7 +559,7 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         var origin = new PointF(_panOffset.X + scroll.X, _panOffset.Y + scroll.Y);
 
         DrawGrid(g, origin);
-        DrawAxisScale(g, origin);
+        DrawFloatingRulers(g, origin);
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -567,8 +578,16 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         foreach (var (slot, pt) in slotMap)
             slot.Anchor = new Anchor(pt.X, pt.Y, slot.Anchor.Layer);
 
-        // 连线由模板 LinkView 子控件（透明叠层 _linksHost）绘制，画布本身不再画线。
-        // 槽位由卡片内的模板 SlotView 绘制，画布不再画槽位圆圈。
+        // 连线：模板 LinkView 的几何在画布上统一绘制（TranslateTransform(origin) 后
+        // 使用世界坐标）。渲染器不加入控件树，规避 WinForms 重叠全尺寸兄弟窗口被
+        // WS_CLIPSIBLINGS 裁掉的问题；槽位由卡片内的模板 SlotView 绘制。
+        var linkState = g.Save();
+        g.TranslateTransform(origin.X, origin.Y);
+        foreach (var lv in _linkRenderers)
+        {
+            lv.Render(g);
+        }
+        g.Restore(linkState);
 
         // 没有对应卡片的节点：绘制占位矩形
         foreach (var node in _session.Tree.Nodes)
@@ -595,77 +614,119 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     }
 
     // ── 网格绘制 ──────────────────────────────────────────────────────────────
+    /// <summary>
+    /// 绘制内容区网格（从 (RulerThickness, RulerThickness) 开始，随内容滚动平移）。
+    /// 与其余方案（WPF/Avalonia/MAUI/WinUI 模板、Blazor）一致：网格属于内容，标尺悬浮。
+    /// </summary>
     private void DrawGrid(Graphics g, PointF origin)
     {
-        using var minor = new Pen(Color.FromArgb(45, 66, 94), 1f);
-        using var major = new Pen(Color.FromArgb(72, 103, 145), 1f);
-        using var axis = new Pen(Color.FromArgb(56, 189, 248), 1.2f);
+        // 配色对齐 WinForms 网格装饰器模板默认（#2A2D2E / #3A3D40 / 轴线 #4D4D4D）。
+        using var minor = new Pen(Color.FromArgb(42, 45, 46), 1f);
+        using var major = new Pen(Color.FromArgb(58, 61, 64), 1f);
+        using var axis = new Pen(Color.FromArgb(77, 77, 77), 1.2f);
 
-        var left = -origin.X;
-        var top = -origin.Y;
-        var right = left + ClientSize.Width;
-        var bottom = top + ClientSize.Height;
+        var contentLeft = RulerThickness;
+        var contentTop = RulerThickness;
+        var contentRight = ClientSize.Width;
+        var contentBottom = ClientSize.Height;
 
-        var startX = Math.Floor(left / GridSpacing) * GridSpacing;
-        var startY = Math.Floor(top / GridSpacing) * GridSpacing;
+        // 网格仅绘制在内容区（标尺带之外），与其余方案的 PushClip(contentRect) 一致。
+        var gridState = g.Save();
+        g.SetClip(new RectangleF(contentLeft, contentTop, contentRight - contentLeft, contentBottom - contentTop));
 
-        for (var x = startX; x <= right + GridSpacing; x += GridSpacing)
+        // 世界坐标换算到客户端：x 落在内容区内（>= RulerThickness）的才画。
+        var startX = Math.Floor((-origin.X) / GridSpacing) * GridSpacing;
+        for (var x = startX; x <= -origin.X + contentRight + GridSpacing; x += GridSpacing)
         {
             var sx = (float)(x + origin.X);
+            if (sx < contentLeft - GridSpacing) continue;
             var pen = NearZero(x) ? axis : IsMajor(x) ? major : minor;
-            g.DrawLine(pen, sx, 0, sx, ClientSize.Height);
+            g.DrawLine(pen, sx, contentTop, sx, contentBottom);
         }
 
-        for (var y = startY; y <= bottom + GridSpacing; y += GridSpacing)
+        var startY = Math.Floor((-origin.Y) / GridSpacing) * GridSpacing;
+        for (var y = startY; y <= -origin.Y + contentBottom + GridSpacing; y += GridSpacing)
         {
             var sy = (float)(y + origin.Y);
+            if (sy < contentTop - GridSpacing) continue;
             var pen = NearZero(y) ? axis : IsMajor(y) ? major : minor;
-            g.DrawLine(pen, 0, sy, ClientSize.Width, sy);
+            g.DrawLine(pen, contentLeft, sy, contentRight, sy);
         }
+
+        g.Restore(gridState);
     }
 
-    private void DrawAxisScale(Graphics g, PointF origin)
+    /// <summary>
+    /// 绘制悬浮标尺：固定在客户端左上角 36px 刻度带，刻度按网格间距对齐、随
+    /// 滚动平移（translateX/Y = -origin），与其余方案的悬浮标尺行为一致。不再随
+    /// 内容一起滚动（区别于旧的画在世界原点的 DrawAxisScale）。
+    /// </summary>
+    private void DrawFloatingRulers(Graphics g, PointF origin)
     {
-        var left = -origin.X;
-        var top = -origin.Y;
-        var right = left + ClientSize.Width;
-        var bottom = top + ClientSize.Height;
-        var axisX = origin.X;
-        var axisY = origin.Y;
+        // 与其余方案（WPF/Avalonia/MAUI/WinUI Demo）悬浮标尺完全一致：
+        //   - 标尺带 36px，世界原点默认落在内容边界，刻度“0”出现在内容交界处
+        //   - 顶部/左侧刻度分别裁剪到各自带内，左上角交界区不渲染刻度线或数字
+        //   - 顶部标签垂直居中 (ruler-13)/2，左侧标签 y+2；字号 13px
+        // 配色保持模板默认：标尺底 #252526 / 刻度 #555555 / 文字 #888888 / 分隔 #3A3D40 / 轴线 #4D4D4D。
+        using var rulerBrush = new SolidBrush(Color.FromArgb(37, 37, 38));
+        using var dividerPen = new Pen(Color.FromArgb(58, 61, 64), 1f);
+        using var tickPen = new Pen(Color.FromArgb(85, 85, 85), 1f);
+        using var axisPen = new Pen(Color.FromArgb(77, 77, 77), 1f);
+        using var textBrush = new SolidBrush(Color.FromArgb(136, 136, 136));
+        using var font = new Font("Segoe UI", 13f, GraphicsUnit.Pixel);
+        using var fmt = new StringFormat(StringFormat.GenericTypographic);
 
-        using var tickPen = new Pen(Color.FromArgb(100, 116, 139), 1f);
-        using var textBrush = new SolidBrush(Color.FromArgb(148, 163, 184));
-        using var font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
-        using var fmt = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Near, FormatFlags = StringFormatFlags.NoWrap };
+        var ruler = RulerThickness;
+        var cw = ClientSize.Width;
+        var ch = ClientSize.Height;
 
-        var startX = Math.Floor(left / GridSpacing) * GridSpacing;
-        var startY = Math.Floor(top / GridSpacing) * GridSpacing;
+        // 刻度带背景。
+        g.FillRectangle(rulerBrush, 0, 0, cw, ruler);
+        g.FillRectangle(rulerBrush, 0, 0, ruler, ch);
+        // 分隔线（把标尺与内容区隔开）。
+        g.DrawLine(dividerPen, ruler, 0, ruler, ch);
+        g.DrawLine(dividerPen, 0, ruler, cw, ruler);
 
-        if (axisY >= 0 && axisY <= ClientSize.Height)
+        // 顶部标尺：世界 x 轴。刻度 x = value + origin.X；仅内容区上方（x >= ruler）绘制，
+        // 左上角交界区不渲染刻度/数字。
+        var worldLeft = -origin.X;
+        var worldRight = worldLeft + cw;
+        var startX = Math.Floor(worldLeft / GridSpacing) * GridSpacing;
+        var topState = g.Save();
+        g.SetClip(new RectangleF(ruler, 0, cw - ruler, ruler));
+        for (var x = startX; x <= worldRight + GridSpacing; x += GridSpacing)
         {
-            for (var x = startX; x <= right + GridSpacing; x += GridSpacing)
+            var sx = (float)(x + origin.X);
+            var isMajor = IsMajor(x);
+            var tl = isMajor ? ruler - 6f : Math.Max(6f, (float)(ruler * 0.35));
+            g.DrawLine(NearZero(x) ? axisPen : tickPen, sx, ruler, sx, ruler - tl);
+            if (isMajor)
             {
-                var sx = (float)(x + origin.X);
-                var tl = IsMajor(x) ? TickLen : TickLen / 2f;
-                g.DrawLine(tickPen, sx, axisY - tl, sx, axisY + tl);
-                if (!NearZero(x) && IsMajor(x))
-                    g.DrawString(((int)Math.Round(x)).ToString(), font, textBrush,
-                        new RectangleF(sx + LabelPad, axisY + LabelPad, 64, 18), fmt);
+                g.DrawString(FormatGridValue(x), font, textBrush, sx + 3, (ruler - 13) / 2, fmt);
             }
         }
 
-        if (axisX >= 0 && axisX <= ClientSize.Width)
+        g.Restore(topState);
+
+        // 左侧标尺：世界 y 轴。仅内容区左侧（y >= ruler）绘制，左上角交界区不渲染刻度/数字。
+        var worldTop = -origin.Y;
+        var worldBottom = worldTop + ch;
+        var startY = Math.Floor(worldTop / GridSpacing) * GridSpacing;
+        var leftState = g.Save();
+        g.SetClip(new RectangleF(0, ruler, ruler, ch - ruler));
+        for (var y = startY; y <= worldBottom + GridSpacing; y += GridSpacing)
         {
-            for (var y = startY; y <= bottom + GridSpacing; y += GridSpacing)
+            var sy = (float)(y + origin.Y);
+            var isMajor = IsMajor(y);
+            var tl = isMajor ? ruler - 6f : Math.Max(6f, (float)(ruler * 0.35));
+            g.DrawLine(NearZero(y) ? axisPen : tickPen, ruler, sy, ruler - tl, sy);
+            if (isMajor)
             {
-                var sy = (float)(y + origin.Y);
-                var tl = IsMajor(y) ? TickLen : TickLen / 2f;
-                g.DrawLine(tickPen, axisX - tl, sy, axisX + tl, sy);
-                if (!NearZero(y) && IsMajor(y))
-                    g.DrawString(((int)Math.Round(y)).ToString(), font, textBrush,
-                        new RectangleF(axisX + LabelPad, sy + LabelPad, 64, 18), fmt);
+                g.DrawString(FormatGridValue(y), font, textBrush, 3, sy + 2, fmt);
             }
         }
+
+        g.Restore(leftState);
     }
 
     // ── 命中测试 ──────────────────────────────────────────────────────────────
@@ -751,9 +812,9 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     protected override void OnScroll(ScrollEventArgs se)
     {
         base.OnScroll(se);
-        // 滚动时同步连线叠层位置（LinksHost 本身不会被 AutoScroll 移动）。
-        PositionLinksHost();
+        // 连线渲染器不参与控件树，平移/滚动由画布 OnPaint 的 origin 变换统一处理。
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        SyncMinimap();
     }
 
     protected override void Dispose(bool disposing)
@@ -781,6 +842,23 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
 
     private static bool NearZero(double v) => Math.Abs(v) < Eps;
 
+    /// <summary>刻度数值格式，与模板 FormatGridValue 一致（万级 K、百万级 M）。</summary>
+    private static string FormatGridValue(double value)
+    {
+        var abs = Math.Abs(value);
+        if (abs < 10000)
+        {
+            return Math.Round(value).ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (abs < 1000000)
+        {
+            return Math.Round(value / 1000d, 1).ToString(CultureInfo.InvariantCulture) + "K";
+        }
+
+        return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
+    }
+
     private static GraphicsPath RoundRectF(RectangleF r, float radius)
     {
         var d = radius * 2f;
@@ -791,31 +869,5 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
         path.CloseFigure();
         return path;
-    }
-}
-
-/// <summary>
-/// 透明的连线叠层面板：承载池化的模板 LinkView 子控件。透明背景让画布的网格
-/// （画布 OnPaintBackground）透过显示；Enabled=false 使其不拦截鼠标（画布平移、
-/// 节点拖拽、槽位连线都由画布与卡片上的 Behavior 处理）。
-/// </summary>
-internal sealed class TransparentLinksHost : Panel
-{
-    public TransparentLinksHost()
-    {
-        DoubleBuffered = true;
-        BackColor = Color.Transparent;
-        Enabled = false;
-        TabStop = false;
-        SetStyle(
-            ControlStyles.AllPaintingInWmPaint |
-            ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.SupportsTransparentBackColor,
-            true);
-    }
-
-    protected override void OnPaintBackground(PaintEventArgs e)
-    {
-        // 不填充不透明背景，保持透明以显示画布网格。
     }
 }

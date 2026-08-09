@@ -93,8 +93,11 @@
   </Folder>
   <Folder Name="/Examples/Workflow/MAUI/">
     <Project Path="Examples/Workflow/MAUI/Demo/Demo.csproj">
-      <Deploy Solution="Release|Any CPU" />
+      <Deploy Solution="*|Any CPU" />
     </Project>
+  </Folder>
+  <Folder Name="/Examples/Workflow/Blazor Trimmed/">
+    <Project Path="Examples/Workflow/Blazor Trimmed/Demo/Demo.csproj" />
   </Folder>
   <Folder Name="/Examples/Workflow/Blazor/">
     <Project Path="Examples/Workflow/Blazor/Demo/Demo.Client/Demo.Client.csproj" />
@@ -102,8 +105,11 @@
   </Folder>
   <Folder Name="/Examples/Workflow/MAUI Trimmed/">
     <Project Path="Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj">
-      <Deploy Solution="Release|Any CPU" />
+      <Deploy Solution="*|Any CPU" />
     </Project>
+  </Folder>
+  <Folder Name="/Examples/Workflow/Winforms Trimmed/">
+    <Project Path="Examples/Workflow/WinForms Trimmed/Demo/Demo.csproj" />
   </Folder>
   <Folder Name="/Examples/Workflow/Winforms/">
     <Project Path="Examples/Workflow/WinForms/Demo/Demo.csproj" />
@@ -144,9 +150,9 @@
   <Folder Name="/Templates/">
     <Project Path="Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj" />
+    <Project Path="Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj" />
+    <Project Path="Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj" />
-    <Project Path="Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj" />
-    <Project Path="Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj" />
   </Folder>
 </Solution>

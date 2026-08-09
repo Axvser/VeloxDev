@@ -1,3 +1,4 @@
+// VeloxDev customization: Customize line geometry, color, and thickness via the override parameters below.
 using System.ComponentModel;
 using Microsoft.AspNetCore.Components;
 using VeloxDev.WorkflowSystem;
@@ -5,10 +6,9 @@ using VeloxDev.WorkflowSystem;
 namespace TemplateNamespace;
 
 /// <summary>
-/// A Blazor workflow link view rendered as an orthogonal polyline with golden-ratio
-/// stubs, mirroring the WPF template's geometry. Points derive from the endpoint slot
-/// anchors; the polyline spans the whole canvas so links are absolutely positioned
-/// (overflow visible) and redraw whenever the endpoints move.
+/// A Blazor link view rendered as an orthogonal polyline with golden-ratio stubs,
+/// mirroring the WPF template's geometry. Points derive from the endpoint slot anchors;
+/// the polyline spans the whole canvas and redraws whenever the endpoints move.
 /// </summary>
 public partial class TemplateClass : ComponentBase, IDisposable
 {
@@ -63,9 +63,8 @@ public partial class TemplateClass : ComponentBase, IDisposable
     }
 
     /// <summary>
-    /// Converts XAML-style <c>#AARRGGBB</c> color literals (as used by the template symbols)
-    /// into CSS color values, so symbol-driven colors work in Razor views. Also passes
-    /// through named colors and CSS <c>rgb()/rgba()</c> strings unchanged.
+    /// Converts XAML-style <c>#AARRGGBB</c> colors (template symbol defaults) to CSS color
+    /// values; passes named colors and <c>rgb()/rgba()</c> strings through unchanged.
     /// </summary>
     private static string ToCss(string value)
     {
@@ -181,23 +180,18 @@ public partial class TemplateClass : ComponentBase, IDisposable
         var receiver = link.Receiver;
         if (sender is null || receiver is null) return "";
 
+        // NaN gate: slot anchors are NaN until the GUI measures them; skip real links until
+        // ready (virtual-link placeholders, Parent is null, are exempt).
+        if (!WorkflowSlotUpdateGate.IsLinkRenderReady(link)) return "";
+
         double sx = sender.Anchor.Horizontal;
         double sy = sender.Anchor.Vertical;
         double ex = receiver.Anchor.Horizontal;
         double ey = receiver.Anchor.Vertical;
 
-        // Defensive fallback: unmeasured slots have a (0,0) anchor; use the node edge instead.
-        if (sx == 0 && sy == 0 && sender.Parent is { } sNode)
-        {
-            sx = sNode.Anchor.Horizontal + sNode.Size.Width;
-            sy = sNode.Anchor.Vertical + sNode.Size.Height / 2;
-        }
-
-        if (ex == 0 && ey == 0 && receiver.Parent is { } rNode)
-        {
-            ex = rNode.Anchor.Horizontal;
-            ey = rNode.Anchor.Vertical + rNode.Size.Height / 2;
-        }
+        // Virtual-link placeholders can still carry NaN anchors on reset frames; suppress
+        // until the coordinates are real.
+        if (double.IsNaN(sx) || double.IsNaN(sy) || double.IsNaN(ex) || double.IsNaN(ey)) return "";
 
         double dx = ex - sx;
         // Signed stub keeps the orthogonal bend on the correct side when dragging leftward.

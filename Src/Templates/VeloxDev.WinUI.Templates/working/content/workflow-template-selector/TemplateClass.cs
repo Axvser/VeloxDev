@@ -7,7 +7,7 @@ namespace TemplateNamespace;
 
 /// <summary>
 /// Assign the four DataTemplate properties in XAML resources, then use this
-/// selector with ViewPool.TemplateSelector or another items host.
+/// selector with behaviors:ViewPool.TemplateSelector or another items host.
 /// </summary>
 public sealed class TemplateClass : DataTemplateSelector
 {

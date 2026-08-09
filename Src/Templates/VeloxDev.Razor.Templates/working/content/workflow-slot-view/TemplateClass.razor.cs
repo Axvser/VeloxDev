@@ -1,3 +1,4 @@
+// VeloxDev customization: Add connector-specific parameters here only when the platform behavior does not already cover it.
 using System.ComponentModel;
 using Microsoft.AspNetCore.Components;
 using VeloxDev.WorkflowSystem;

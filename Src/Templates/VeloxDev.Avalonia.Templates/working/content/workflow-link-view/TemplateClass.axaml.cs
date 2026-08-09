@@ -19,7 +19,6 @@ public partial class TemplateClass : Control
     {
         InitializeComponent();
         IsHitTestVisible = false;
-        DataContextChanged += (_, _) => InvalidateVisual();
     }
 
     #region StyledProperty
@@ -106,14 +105,6 @@ public partial class TemplateClass : Control
 
     #endregion
 
-    private bool IsVirtualLink
-        => IsVirtual
-            || DataContext is IWorkflowLinkViewModel
-            {
-                Sender.Parent: null,
-                Receiver.Parent: null
-            };
-
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -137,6 +128,14 @@ public partial class TemplateClass : Control
         if (!IsVirtualLink)
             DrawArrowhead(context, points[^2], points[^1], color);
     }
+
+    private bool IsVirtualLink
+        => IsVirtual
+            || DataContext is IWorkflowLinkViewModel
+            {
+                Sender.Parent: null,
+                Receiver.Parent: null
+            };
 
     private IReadOnlyList<Point> BuildPoints()
     {

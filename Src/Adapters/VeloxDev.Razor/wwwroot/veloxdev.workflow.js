@@ -65,6 +65,16 @@ window.veloxdevWorkflow = (() => {
     // scroll + edge expansion through the same code path.
     const surfaceRegistry = {};
 
+    // The .NET minimap pushes its rendered content-fit mapping here by scroller id. Minimap
+    // drag/click navigation reads it so a drag tracks the on-screen viewport rectangle 1:1 even
+    // after the canvas has been edge-extended (the raw scroll-extent ratio would overshoot).
+    const minimapMappings = {};
+
+    function setMinimapMapping(scrollerId, scale, ox, oy, minX, minY) {
+        minimapMappings[scrollerId] =
+            (isFinite(scale) && scale > 0) ? { scale, ox, oy, minX, minY } : null;
+    }
+
     function initSurface(scrollerEl, canvasEl, dotnetRef) {
         if (!scrollerEl || !canvasEl) return null;
         let panState = null;
@@ -118,6 +128,19 @@ window.veloxdevWorkflow = (() => {
                     canvasEl.offsetWidth, canvasEl.offsetHeight,
                     offsets.x, offsets.y);
             }
+        }
+
+        // Syncs the JS offset state to the reserved ruler band. The .NET surface already reserves
+        // RulerThickness on the canvas width/height and positions the content wrapper at that offset
+        // (matching the XAML adapters), so this only aligns the local offset counter to the DOM —
+        // it must NOT grow the canvas again (that would double the reserve). The offset is grow-only
+        // afterward, so it never shrinks back when the user pans left/up.
+        function ensureRulerReserve() {
+            if (!contentEl) return;
+            const rx = contentEl.offsetLeft || 0;
+            const ry = contentEl.offsetTop || 0;
+            if (offsets.x < rx) offsets.x = rx;
+            if (offsets.y < ry) offsets.y = ry;
         }
 
         const onScroll = function () {
@@ -196,6 +219,10 @@ window.veloxdevWorkflow = (() => {
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
         scrollerEl.addEventListener('auxclick', function (e) { if (e.button === 1) e.preventDefault(); });
+
+        // Reserve the ruler band before the initial report so the viewport offset is correct
+        // from the first frame and the ruler ticks align with the grid.
+        ensureRulerReserve();
 
         // Initial report (fills viewport size before the user interacts).
         report();
@@ -480,17 +507,27 @@ window.veloxdevWorkflow = (() => {
                 const scroller = document.getElementById(scrollerId);
                 const scrollBy = surfaceRegistry[scrollerId];
                 if (scroller) {
-                    const rect = minimapEl.getBoundingClientRect();
-                    const maxSX = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-                    const maxSY = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-                    if (scrollBy) {
-                        // Route through the surface so dragging past a minimap edge expands the
-                        // canvas in that direction instead of just hitting a hard stop.
-                        scrollBy((dx / rect.width) * maxSX, (dy / rect.height) * maxSY);
+                    const m = minimapMappings[scrollerId];
+                    if (m) {
+                        // World-space delta: the minimap is a uniform scale of world coordinates,
+                        // so the viewport rect tracks the cursor when we scroll by dx/scale. This
+                        // stays correct after the canvas is edge-extended (unlike a ratio over the
+                        // raw scroll extent, which grows with the canvas and overshoots).
+                        scrollBy(dx / m.scale, dy / m.scale);
                     } else {
-                        // No surface registered (standalone minimap): fall back to direct scroll.
-                        scroller.scrollLeft += (dx / rect.width) * maxSX;
-                        scroller.scrollTop += (dy / rect.height) * maxSY;
+                        // No mapping pushed yet: fall back to a linear ratio over the scroll extent.
+                        const rect = minimapEl.getBoundingClientRect();
+                        const maxSX = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+                        const maxSY = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+                        if (scrollBy) {
+                            // Route through the surface so dragging past a minimap edge expands the
+                            // canvas in that direction instead of just hitting a hard stop.
+                            scrollBy((dx / rect.width) * maxSX, (dy / rect.height) * maxSY);
+                        } else {
+                            // No surface registered (standalone minimap): fall back to direct scroll.
+                            scroller.scrollLeft += (dx / rect.width) * maxSX;
+                            scroller.scrollTop += (dy / rect.height) * maxSY;
+                        }
                     }
                 }
                 dragState.startX = e.clientX;
@@ -501,9 +538,14 @@ window.veloxdevWorkflow = (() => {
             if (!dragState) return;
             if (!dragState.hasMoved && dotnetRef) {
                 const rect = minimapEl.getBoundingClientRect();
+                const scroller = document.getElementById(scrollerId);
+                // Send the clicked minimap pixel position (not a ratio) plus the current scroll, so
+                // .NET can invert its render mapping and convert it to an absolute scroll position.
                 dotnetRef.invokeMethodAsync('OnMinimapNavigate',
-                    (dragState.startX - rect.left) / rect.width,
-                    (dragState.startY - rect.top) / rect.height);
+                    dragState.startX - rect.left,
+                    dragState.startY - rect.top,
+                    scroller ? scroller.scrollLeft : 0,
+                    scroller ? scroller.scrollTop : 0);
             }
             dragState = null;
         };
@@ -524,6 +566,7 @@ window.veloxdevWorkflow = (() => {
         getViewportSize,
         scrollToRatio,
         scrollToPosition,
+        setMinimapMapping,
         initNodeDrag,
         initSlotConnection,
         initSlotLayout,
@@ -538,6 +581,7 @@ export const initSurface = window.veloxdevWorkflow.initSurface;
 export const getViewportSize = window.veloxdevWorkflow.getViewportSize;
 export const scrollToRatio = window.veloxdevWorkflow.scrollToRatio;
 export const scrollToPosition = window.veloxdevWorkflow.scrollToPosition;
+export const setMinimapMapping = window.veloxdevWorkflow.setMinimapMapping;
 export const initNodeDrag = window.veloxdevWorkflow.initNodeDrag;
 export const initSlotConnection = window.veloxdevWorkflow.initSlotConnection;
 export const initSlotLayout = window.veloxdevWorkflow.initSlotLayout;

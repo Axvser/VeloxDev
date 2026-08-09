@@ -11,16 +11,17 @@ public partial class WorkflowNodeView : ComponentBase, IDisposable
 
     private string _title = "";
     private string _duration = "";
-    private string _orderText = "";
-    private string _loadText = "";
+    private string _statusText = "";
+    private string _traceText = "";
     private int _delayMs;
     private int _priority;
     private bool _autoBroadcast;
     private bool _hasOrderBadge;
     private bool _hasLoadBadge;
+    private string _orderText = "";
+    private string _loadText = "";
 
-    private bool HasOrderBadge => _hasOrderBadge;
-    private bool HasLoadBadge => _hasLoadBadge;
+    private bool HasFeedback => _hasOrderBadge || _hasLoadBadge || !string.IsNullOrEmpty(_statusText);
 
     protected override void OnInitialized()
     {
@@ -43,6 +44,8 @@ public partial class WorkflowNodeView : ComponentBase, IDisposable
         if (Node is null) return;
         _title = Node.Title;
         _duration = Node.LastDuration;
+        _statusText = Node.LastStatus;
+        _traceText = Node.LastExecutionTrace;
         _orderText = Node.ExecutionOrderText;
         _loadText = Node.WorkLoadText;
         _delayMs = Node.DelayMilliseconds;

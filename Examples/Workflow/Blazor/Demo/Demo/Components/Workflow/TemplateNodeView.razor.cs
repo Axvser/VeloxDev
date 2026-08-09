@@ -65,11 +65,36 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     private INotifyPropertyChanged? _notifier;
     private string _title = "";
 
+    // Execution feedback: read reflectively from the node view-model (present on the demo's
+    // NodeViewModel, BoolSelector and EnumSelector) so any card can show which step it ran in
+    // (#N order badge) and glow while it is executing, mirroring the XAML adapters.
+    private bool _isRunning;
+    private bool _hasOrderBadge;
+    private string _orderText = "";
+    private bool _hasLoadBadge;
+    private string _loadText = "";
+
+    // Colors mirror NodeViewModel's running chrome (#FFD54A accent on amber-tinted surfaces) so
+    // the Blazor card matches the WinForms/WPF running look.
+    private const string RunningAccent = "#FFD54A";
+    private const string RunningHeader = "#413612";
+    private const string RunningCardBg = "#2D2817";
+    private const string RunningDivider = "rgba(255,213,74,0.35)";
+
+    private bool IsRunning => _isRunning;
+    private bool HasOrderBadge => _hasOrderBadge;
+    private string OrderText => _orderText;
+    private bool HasLoadBadge => _hasLoadBadge;
+    private string LoadText => _loadText;
+
     private string BackgroundCss => Background ?? ToCss("#DDFFFFFF");
     private string ForegroundCss => Foreground ?? ToCss("#DD1E1E1E");
-    private string BorderBrushCss => BorderBrush ?? ToCss("#331E1E1E");
+    private string BorderBrushCss => _isRunning ? RunningAccent : (BorderBrush ?? ToCss("#331E1E1E"));
     private string BorderThicknessCss => WithCssUnits(BorderThickness ?? "1", "px");
     private string CornerRadiusCss => WithCssUnits(CornerRadius ?? "6", "px");
+    private string CardBackgroundCss => _isRunning ? RunningCardBg : BackgroundCss;
+    private string HeaderBackgroundCss => _isRunning ? RunningHeader : "transparent";
+    private string HeaderDividerCss => _isRunning ? RunningDivider : "rgba(255,255,255,0.08)";
 
     /// <summary>
     /// Appends <paramref name="suffix"/> to a CSS length placeholder unless it already carries
@@ -126,6 +151,7 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     protected override void OnInitialized()
     {
         SyncTitle();
+        SyncExecutionState();
         if (Node is INotifyPropertyChanged n)
         {
             _notifier = n;
@@ -135,12 +161,41 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
 
     private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // Re-render on every property change, not just title/geometry: the execution state
+        // (IsRunning, LastExecutionOrder, RunCount/WaitCount) mutates during a run and must
+        // drive the step badge and the running highlight live. The node view-models raise one
+        // PropertyChanged per VeloxProperty, so this stays cheap and only touches this card.
         if (e.PropertyName is "Name" or "Title" or null or "")
         {
             SyncTitle();
-            InvokeAsync(StateHasChanged);
         }
+
+        SyncExecutionState();
+        InvokeAsync(StateHasChanged);
     }
+
+    /// <summary>
+    /// Reads the node's execution feedback state. <see cref="IWorkflowNodeViewModel"/> does not
+    /// expose it, so the common properties are looked up reflectively (same pattern as
+    /// <see cref="SyncTitle"/>); missing properties simply stay at their defaults.
+    /// </summary>
+    private void SyncExecutionState()
+    {
+        _isRunning = ReadBool("IsRunning");
+        _hasOrderBadge = ReadBool("HasExecutionOrder");
+        _orderText = ReadString("ExecutionOrderText");
+        _hasLoadBadge = ReadBool("HasWorkLoad");
+        _loadText = ReadString("WorkLoadText");
+    }
+
+    private object? Read(string property)
+        => Node?.GetType().GetProperty(property)?.GetValue(Node);
+
+    private bool ReadBool(string property)
+        => Read(property) is true;
+
+    private string ReadString(string property)
+        => Read(property)?.ToString() ?? "";
 
     /// <summary>
     /// Reads the display title from the node. <see cref="IWorkflowNodeViewModel"/> does not

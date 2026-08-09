@@ -2,10 +2,10 @@
 @using System.ComponentModel
 @implements IDisposable
 
+@* Body-only content rendered inside the generated TemplateNodeView (BodyContent).
+   The card header (node title) and border come from TemplateNodeView, so the inner
+   view no longer draws its own card/header. *@
 <div class="enum-root">
-    <div class="enum-header">
-        <span>@_title</span>
-    </div>
     <div class="enum-body">
         <label class="enum-label">Selected Method</label>
         <select class="enum-select" @onchange="OnValueChanged">

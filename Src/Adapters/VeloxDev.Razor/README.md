@@ -162,9 +162,9 @@ dragging past an edge expands the canvas through a shared surface registry.
 |-----------|---------|
 | `Viewport` (`SurfaceViewport`) | — |
 | `Width` / `Height` | `180` / `120` |
-| `Background` / `BorderColor` | `#1C2330` / `#475569` |
-| `NodeFill` / `NodeRadius` | `#38BDF8` / `2` |
-| `ViewportFill` / `ViewportStroke` / `ViewportStrokeWidth` | `rgba(255,255,255,0.15)` / `#FFFFFF` / `1.5` |
+| `Background` / `BorderColor` | `#D2141922` / `#DC94A3B8` |
+| `NodeFill` / `NodeRadius` | `#DC38BDF8` / `2` |
+| `ViewportFill` / `ViewportStroke` / `ViewportStrokeWidth` | `rgba(255,255,255,0.15)` (= `#28FFFFFF`, like the WPF/Avalonia/MAUI/WinUI adapters) / `#F0FFFFFF` / `1.5` |
 | `Padding` / `ScrollViewerId` | `6` / — |
 
 ---

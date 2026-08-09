@@ -36,7 +36,7 @@ public partial class SlotView : UserControl
             var state when state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver) => Brushes.Violet,
             var state when state.HasFlag(SlotState.Sender) => Brushes.Tomato,
             var state when state.HasFlag(SlotState.Receiver) => Brushes.Lime,
-            _ => Brushes.White,
+            _ => new SolidColorBrush((Color)ColorConverter.ConvertFromString("#DD1E1E1E")),
         };
     }
 

@@ -4,7 +4,33 @@
     <div class="veloxdev-wf-ruler-corner"
          style="width:@RulerThicknessCss;height:@RulerThicknessCss;background:@RulerBackground;border-right:1px solid @DividerColor;border-bottom:1px solid @DividerColor;"></div>
     <div class="veloxdev-wf-ruler-top"
-         style="height:@RulerThicknessCss;left:@RulerThicknessCss;background:@RulerBackground;border-bottom:1px solid @DividerColor;transform:@TopTransform;background-image:repeating-linear-gradient(to right, transparent calc(var(--veloxdev-rs,40px) - 1px), var(--veloxdev-rt,#555555) calc(var(--veloxdev-rs,40px) - 1px), var(--veloxdev-rt,#555555) var(--veloxdev-rs,40px)), linear-gradient(to bottom, transparent calc(100% - 6px), var(--veloxdev-rt,#555555) calc(100% - 6px));--veloxdev-rs:@SpacingCss;--veloxdev-rt:@TickColor;"></div>
+         style="height:@RulerThicknessCss;background:@RulerBackground;border-bottom:1px solid @DividerColor;">
+        <div class="veloxdev-wf-ruler-inner" style="transform:@TopTransform;">
+            @foreach (var tick in TopTicks)
+            {
+                <span class="veloxdev-wf-ruler-label" style="left:@tick.Pos.ToString("0.#")px;">
+                    <span class="veloxdev-wf-ruler-tickline" style="height:@TickLengthCss(tick.IsMajor);background:@(tick.IsZero ? AxisColorCss : TickColor);"></span>
+                    @if (tick.IsMajor)
+                    {
+                        <span class="veloxdev-wf-ruler-text" style="color:@LabelColor;">@FormatGridValue(tick.Pos)</span>
+                    }
+                </span>
+            }
+        </div>
+    </div>
     <div class="veloxdev-wf-ruler-left"
-         style="width:@RulerThicknessCss;top:@RulerThicknessCss;background:@RulerBackground;border-right:1px solid @DividerColor;transform:@LeftTransform;background-image:repeating-linear-gradient(to bottom, transparent calc(var(--veloxdev-rs,40px) - 1px), var(--veloxdev-rt,#555555) calc(var(--veloxdev-rs,40px) - 1px), var(--veloxdev-rt,#555555) var(--veloxdev-rs,40px)), linear-gradient(to right, transparent calc(100% - 6px), var(--veloxdev-rt,#555555) calc(100% - 6px));--veloxdev-rs:@SpacingCss;--veloxdev-rt:@TickColor;"></div>
+         style="width:@RulerThicknessCss;background:@RulerBackground;border-right:1px solid @DividerColor;">
+        <div class="veloxdev-wf-ruler-inner" style="transform:@LeftTransform;">
+            @foreach (var tick in LeftTicks)
+            {
+                <span class="veloxdev-wf-ruler-label" style="top:@tick.Pos.ToString("0.#")px;">
+                    <span class="veloxdev-wf-ruler-tickline" style="width:@TickLengthCss(tick.IsMajor);background:@(tick.IsZero ? AxisColorCss : TickColor);"></span>
+                    @if (tick.IsMajor)
+                    {
+                        <span class="veloxdev-wf-ruler-text" style="color:@LabelColor;">@FormatGridValue(tick.Pos)</span>
+                    }
+                </span>
+            }
+        </div>
+    </div>
 </div>

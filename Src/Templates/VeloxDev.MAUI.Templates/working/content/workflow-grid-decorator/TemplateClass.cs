@@ -7,24 +7,37 @@ namespace TemplateNamespace;
 public sealed class TemplateClass : Grid, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
-    private readonly GraphicsView _gridLayer;
+    private readonly GraphicsView _graphicsView;
 
-    public static readonly BindableProperty RulerThicknessProperty = RegisterProperty(nameof(RulerThickness), 28d);
-    public static readonly BindableProperty GridSpacingProperty = RegisterProperty(nameof(GridSpacing), TemplateGridSpacing);
-    public static readonly BindableProperty MajorLineEveryProperty = RegisterProperty(nameof(MajorLineEvery), TemplateMajorLineEvery);
-    public static readonly BindableProperty ScrollOffsetXProperty = RegisterProperty(nameof(ScrollOffsetX), 0d);
-    public static readonly BindableProperty ScrollOffsetYProperty = RegisterProperty(nameof(ScrollOffsetY), 0d);
-    public static readonly BindableProperty ContentOffsetXProperty = RegisterProperty(nameof(ContentOffsetX), 0d);
-    public static readonly BindableProperty ContentOffsetYProperty = RegisterProperty(nameof(ContentOffsetY), 0d);
+    public static readonly BindableProperty RulerThicknessProperty = BindableProperty.Create(
+        nameof(RulerThickness), typeof(double), typeof(TemplateClass), 28d, propertyChanged: OnVisualPropertyChanged);
+
+    public static readonly BindableProperty GridSpacingProperty = BindableProperty.Create(
+        nameof(GridSpacing), typeof(double), typeof(TemplateClass), TemplateGridSpacing, propertyChanged: OnVisualPropertyChanged);
+
+    public static readonly BindableProperty MajorLineEveryProperty = BindableProperty.Create(
+        nameof(MajorLineEvery), typeof(int), typeof(TemplateClass), TemplateMajorLineEvery, propertyChanged: OnVisualPropertyChanged);
+
+    public static readonly BindableProperty ScrollOffsetXProperty = BindableProperty.Create(
+        nameof(ScrollOffsetX), typeof(double), typeof(TemplateClass), 0d, propertyChanged: OnVisualPropertyChanged);
+
+    public static readonly BindableProperty ScrollOffsetYProperty = BindableProperty.Create(
+        nameof(ScrollOffsetY), typeof(double), typeof(TemplateClass), 0d, propertyChanged: OnVisualPropertyChanged);
+
+    public static readonly BindableProperty ContentOffsetXProperty = BindableProperty.Create(
+        nameof(ContentOffsetX), typeof(double), typeof(TemplateClass), 0d, propertyChanged: OnVisualPropertyChanged);
+
+    public static readonly BindableProperty ContentOffsetYProperty = BindableProperty.Create(
+        nameof(ContentOffsetY), typeof(double), typeof(TemplateClass), 0d, propertyChanged: OnVisualPropertyChanged);
 
     public TemplateClass()
     {
-        _gridLayer = new GraphicsView
+        _graphicsView = new GraphicsView
         {
             Drawable = new GridDrawable(this),
             InputTransparent = true
         };
-        Children.Add(_gridLayer);
+        Children.Add(_graphicsView);
     }
 
     public double RulerThickness
@@ -69,16 +82,13 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         set => SetValue(ContentOffsetYProperty, value);
     }
 
-    private static BindableProperty RegisterProperty(string name, object defaultValue)
-        => BindableProperty.Create(
-            name,
-            defaultValue.GetType(),
-            typeof(TemplateClass),
-            defaultValue,
-            propertyChanged: OnVisualPropertyChanged);
-
     private static void OnVisualPropertyChanged(BindableObject bindable, object? oldValue, object? newValue)
-        => ((TemplateClass)bindable)._gridLayer?.Invalidate();
+    {
+        if (bindable is TemplateClass decorator)
+        {
+            decorator._graphicsView.Invalidate();
+        }
+    }
 
     private sealed class GridDrawable(TemplateClass owner) : IDrawable
     {

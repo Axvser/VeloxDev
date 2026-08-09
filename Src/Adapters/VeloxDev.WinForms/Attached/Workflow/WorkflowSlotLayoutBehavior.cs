@@ -372,6 +372,12 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static void UpdatePropertyChangedSubscription(Control control, LayoutState state)
     {
+        var dataSource = ResolveDataSource(control);
+        if (ReferenceEquals(dataSource, state.PropertyChangedSource))
+        {
+            return;
+        }
+
         if (state.PropertyChangedSource is not null)
         {
             state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
@@ -379,7 +385,6 @@ public sealed class WorkflowSlotLayoutBehavior
             state.PropertyChangedHandler = null;
         }
 
-        var dataSource = ResolveDataSource(control);
         if (dataSource is INotifyPropertyChanged notify)
         {
             PropertyChangedEventHandler handler = (_, e) => OnNodePropertyChanged(control, e);
@@ -419,6 +424,18 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static void Sync(Control control)
     {
+        if (States.TryGetValue(control, out var state))
+        {
+            // (Re)establish the node PropertyChanged subscription. The initial
+            // Attach runs at ctor time when the node view-model is still null, so
+            // the subscription created there is a no-op — without re-running it
+            // here, slot anchors would only ever be measured once and links would
+            // never track node drags. The ReferenceEquals guard in
+            // UpdatePropertyChangedSubscription keeps this a cheap no-op once the
+            // correct source is subscribed.
+            UpdatePropertyChangedSubscription(control, state);
+        }
+
         var node = ResolveNode(control);
         if (node is null)
         {
@@ -432,7 +449,7 @@ public sealed class WorkflowSlotLayoutBehavior
         var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
         // Rebuild the set of property names that should trigger ScheduleSync on change.
-        if (States.TryGetValue(control, out var state))
+        if (state is not null)
         {
             state.SlotPropertyNames.Clear();
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
@@ -483,9 +500,25 @@ public sealed class WorkflowSlotLayoutBehavior
     private static void SyncNamedSlot(Control parentHost, Control host, Control? coordinateHost, IWorkflowNodeViewModel node, string slotName)
     {
         var slotControl = FindControlByName(parentHost, slotName);
-        if (slotControl is not null)
+        if (slotControl is null)
+        {
+            return;
+        }
+
+        // The named control may be the slot view itself, or a host panel that
+        // contains slot views (e.g. PART_InputSlot in the node template). Sync
+        // whichever SlotViews resolve under it — otherwise a container named as a
+        // slot never gets its child slot view measured, its anchor stays NaN, and
+        // the WorkflowSlotUpdateGate NaN check hides every link that ends there.
+        if (ResolveSlot(slotControl) is not null)
         {
             SyncSlot(host, coordinateHost, slotControl, node);
+            return;
+        }
+
+        foreach (var slotView in EnumerateDescendants(slotControl).Where(x => ResolveSlot(x) is not null))
+        {
+            SyncSlot(host, coordinateHost, slotView, node);
         }
     }
 

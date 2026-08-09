@@ -1,4 +1,4 @@
-<!-- Customize the content, but keep PART_* names synchronized with WorkflowSlotLayoutBehavior. -->
+<!-- VeloxDev customization: Customize the node content; keep PART_* names synchronized with WorkflowSlotLayoutBehavior. -->
 <UserControl xmlns="https://github.com/avaloniaui"
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -7,7 +7,10 @@
 			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 			 mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
 			 x:Class="TemplateNamespace.TemplateClass"
-			 behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True" behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot" behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots" behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
+			 behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots"
+			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 Foreground="TemplateNodeForeground"
 			 x:CompileBindings="False">
 			 <!-- Replace x:CompileBindings=False with a concrete x:DataType after defining your ViewModel. -->
@@ -21,10 +24,11 @@
 
 		<Grid behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas" behaviors:WorkflowNodeDragBehavior.IsEnabled="True"
 				Grid.Row="0"
-				Margin="12,0">
+				Background="Transparent">
 			<TextBlock Text="{Binding Name}"
 					   FontWeight="SemiBold"
-					   VerticalAlignment="Center" />
+					   VerticalAlignment="Center"
+					   Margin="12,0" />
 		</Grid>
 
 		<Grid Grid.Row="1" ZIndex="6" ClipToBounds="False">

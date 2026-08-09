@@ -47,7 +47,8 @@
                     }
                     else if (item is IWorkflowNodeViewModel n2)
                     {
-                        <NodeView Node="n2" Tree="Tree">
+                        var names = SlotNamesOf(n2);
+                        <NodeView Node="n2" Tree="Tree" AllowOverflow="true">
                             <InputSlots>
                                 @foreach (var slot in InputSlotsOf(n2))
                                 {
@@ -59,9 +60,14 @@
                             <OutputSlots>
                                 @foreach (var slot in OutputSlotsOf(n2))
                                 {
-                                    <WorkflowSlotConnectionBehavior Slot="slot" Tree="Tree">
-                                        <SlotView Slot="slot" Tree="Tree" SlotSize="14" />
-                                    </WorkflowSlotConnectionBehavior>
+                                    names.TryGetValue(slot, out var name);
+                                    <div style="display:flex;align-items:center;">
+                                        @if (name is not null)
+                                        {
+                                            <span style="margin-left:auto;margin-right:8px;color:@NodeForegroundCss;font-size:11px;white-space:nowrap;">@name</span>
+                                        }
+                                        <SlotView Slot="slot" Tree="Tree" SlotSize="14" Style="margin-right:-7px;" />
+                                    </div>
                                 }
                             </OutputSlots>
                         </NodeView>

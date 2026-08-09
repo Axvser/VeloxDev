@@ -1,3 +1,4 @@
+// VeloxDev customization: Add node-specific parameters or state here; workflow behavior is configured in the .razor markup.
 using System.ComponentModel;
 using Microsoft.AspNetCore.Components;
 using VeloxDev.WorkflowSystem;

@@ -1,0 +1,26 @@
+@page "/Error"
+@rendermode RenderMode.InteractiveServer
+@using System.Diagnostics
+
+<PageTitle>Error</PageTitle>
+
+<h1 class="text-danger">Error.</h1>
+<h2 class="text-danger">An error occurred while processing your request.</h2>
+
+@if (ShowRequestId)
+{
+    <p>
+        <strong>Request ID:</strong> <code>@RequestId</code>
+    </p>
+}
+
+<p>
+    <strong>Development Mode</strong> should not be enabled for deployed applications.
+</p>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? RequestId { get; set; }
+
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+}

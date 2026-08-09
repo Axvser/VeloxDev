@@ -63,11 +63,11 @@ public sealed class MinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapOv
             if (canvas is null) return;
 
             // Background
-            canvas.FillColor = Color.FromArgb("#141922");
+            canvas.FillColor = Color.FromArgb("#D2141922");
             canvas.FillRoundedRectangle(dirtyRect, 4);
 
             // Border
-            canvas.StrokeColor = Color.FromArgb("#94A3B8");
+            canvas.StrokeColor = Color.FromArgb("#DC94A3B8");
             canvas.StrokeSize = 1;
             canvas.DrawRoundedRectangle(dirtyRect, 4);
 
@@ -106,7 +106,7 @@ public sealed class MinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapOv
             float scale = Math.Min(drawW / contentW, drawH / contentH);
 
             // Draw nodes
-            canvas.FillColor = Color.FromArgb("#38BDF8");
+            canvas.FillColor = Color.FromArgb("#DC38BDF8");
             foreach (var node in tree.Nodes)
             {
                 float x = ((float)node.Anchor.Horizontal - minX + pad) * scale + pad;
@@ -121,7 +121,7 @@ public sealed class MinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapOv
             float vy = ((float)ScrollOffsetY - (float)ContentOffsetY - minY + pad) * scale + pad;
             float vw = Math.Max(4, (float)ViewportWidth * scale);
             float vh = Math.Max(4, (float)ViewportHeight * scale);
-            canvas.StrokeColor = Color.FromArgb("#FFFFFF");
+            canvas.StrokeColor = Color.FromArgb("#F0FFFFFF");
             canvas.StrokeSize = 1.5f;
             canvas.DrawRectangle(vx, vy, vw, vh);
         }

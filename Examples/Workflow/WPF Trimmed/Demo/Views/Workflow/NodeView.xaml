@@ -3,66 +3,65 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:Demo.Views.Workflow"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
-             ClipToBounds="False"
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
              behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots"
-             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid ClipToBounds="False" RowDefinitions="48,*">
+             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
+             ClipToBounds="False"
+             Foreground="#DD1E1E1E">
+    <Grid ClipToBounds="False">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="36" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
         <Border Grid.RowSpan="2"
-                Background="#2A1E35"
-                BorderBrush="#D6A0FF"
-                BorderThickness="1.5"
+                Background="#DDFFFFFF"
+                BorderBrush="#331E1E1E"
+                BorderThickness="1"
                 CornerRadius="6" />
-        <Grid Grid.RowSpan="2" Panel.ZIndex="6" ClipToBounds="False">
-            <local:SlotView x:Name="PART_InputSlot"
-                            Width="20"
-                            Height="20"
-                            Margin="-10,0,0,0"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Center"
-                            DataContext="{Binding InputSlot}"
-                            SlotState="{Binding State}" />
-        </Grid>
-        <Border Grid.Row="0"
-                Background="#3A2550"
-                CornerRadius="4,4,0,0"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+
+        <Grid behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas" behaviors:WorkflowNodeDragBehavior.IsEnabled="True"
+              Grid.Row="0"
+              Background="Transparent">
             <TextBlock Text="{Binding Name}"
-                       Foreground="White"
-                       FontWeight="Bold"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center" />
-        </Border>
-        <Border Grid.Row="1" Background="#2A1E35" CornerRadius="0,0,4,4">
-            <ItemsControl x:Name="PART_OutputSlots"
-                          Margin="14"
-                          ItemsSource="{Binding OutputSlots.Items}"
-                          VerticalAlignment="Center">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Margin="0,3" ClipToBounds="False">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="{Binding Name}"
-                                       Foreground="#D6A0FF"
-                                       FontWeight="SemiBold"
-                                       HorizontalAlignment="Right"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,10,0" />
-                            <local:SlotView Grid.Column="1"
-                                            Width="16"
-                                            Height="16"
-                                            Margin="0,0,-8,0"
-                                            DataContext="{Binding Slot}"
-                                            SlotState="{Binding Slot.State}" />
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </Border>
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"
+                       Margin="12,0" />
+        </Grid>
+
+        <Grid Grid.Row="1" Panel.ZIndex="6" ClipToBounds="False">
+            <local:SlotView x:Name="PART_InputSlot" DataContext="{Binding InputSlot}" SlotState="{Binding State}"
+                                    Width="18"
+                                    Height="18"
+                                    Margin="2,0,0,0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center" />
+        </Grid>
+
+        <ItemsControl x:Name="PART_OutputSlots" ItemsSource="{Binding OutputSlots.Items}"
+                      Grid.Row="1"
+                      Margin="12,6"
+                      VerticalAlignment="Center">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="0,3" ClipToBounds="False">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Name}"
+                                   Margin="0,0,10,0"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" />
+                        <local:SlotView DataContext="{Binding Slot}" SlotState="{Binding Slot.State}"
+                                                Grid.Column="1"
+                                                Width="14"
+                                                Height="14"
+                                                Margin="0" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
     </Grid>
 </UserControl>

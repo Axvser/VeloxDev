@@ -1,33 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- VeloxDev customization: Generate the Node, Slot, Link, selector, and grid-decorator templates, then update the local type names below if you renamed them. -->
+<!-- VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the local type names below if you renamed them. -->
 <UserControl x:Class="TemplateNamespace.TemplateClass"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:TemplateNamespace"
              xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
-             behaviors:WorkflowSurfaceBehavior.IsEnabled="True" behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer" behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas" behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator" behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
+             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+             behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+             behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+             behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
     <UserControl.Resources>
         <DataTemplate x:Key="NodeTemplate">
-            <local:NodeView Width="{Binding Size.Width}" Height="{Binding Size.Height}" Canvas.Left="{Binding Anchor.Horizontal}" Canvas.Top="{Binding Anchor.Vertical}" Canvas.ZIndex="{Binding Anchor.Layer}" />
+            <local:NodeView Width="{Binding Size.Width}"
+                            Height="{Binding Size.Height}"
+                            Canvas.Left="{Binding Anchor.Horizontal}"
+                            Canvas.Top="{Binding Anchor.Vertical}"
+                            Canvas.ZIndex="{Binding Anchor.Layer}" />
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
-            <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}" EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}" CanRender="{Binding IsVisible}" Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}" Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}" Canvas.ZIndex="-1" />
+            <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
+                            StartTop="{Binding Sender.Anchor.Vertical}"
+                            EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                            EndTop="{Binding Receiver.Anchor.Vertical}"
+                            CanRender="{Binding IsVisible}"
+                            LineColor="#DDFFFFFF"
+                            Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
+                            Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
+                            Canvas.ZIndex="-1" />
         </DataTemplate>
-        <local:TemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" LinkTemplate="{StaticResource LinkTemplate}" />
+        <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
+                                      NodeTemplate="{StaticResource NodeTemplate}"
+                                      LinkTemplate="{StaticResource LinkTemplate}" />
     </UserControl.Resources>
-    <Border x:Name="PART_SurfaceBorder"
-            Background="TemplateSurfaceBackground"
-            BorderBrush="TemplateSurfaceBorderBrush"
-            BorderThickness="TemplateSurfaceBorderThickness"
-            CornerRadius="TemplateSurfaceCornerRadius">
-        <local:GridDecorator x:Name="PART_GridDecorator">
-            <ScrollViewer x:Name="PART_ScrollViewer"
-                          HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Auto"
-                          ZoomMode="Disabled">
-                <Canvas x:Name="PART_Canvas" Width="{Binding Layout.ActualSize.Width}" Height="{Binding Layout.ActualSize.Height}" behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}" behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"
-                        Background="Transparent" />
-            </ScrollViewer>
-        </local:GridDecorator>
-    </Border>
+    <Grid>
+        <Border x:Name="PART_SurfaceBorder"
+                Background="TemplateSurfaceBackground"
+                BorderBrush="TemplateSurfaceBorderBrush"
+                BorderThickness="TemplateSurfaceBorderThickness"
+                CornerRadius="TemplateSurfaceCornerRadius">
+            <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+                <ScrollViewer x:Name="PART_ScrollViewer"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              ZoomMode="Disabled">
+                    <Canvas x:Name="PART_Canvas"
+                            Width="{Binding Layout.ActualSize.Width}"
+                            Height="{Binding Layout.ActualSize.Height}"
+                            Background="Transparent"
+                            behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                            behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}">
+
+                    </Canvas>
+                </ScrollViewer>
+            </local:WorkflowGridDecorator>
+        </Border>
+        <local:MinimapOverlay x:Name="PART_MinimapOverlay"
+                              HorizontalAlignment="Right"
+                              VerticalAlignment="Top"
+                              Margin="0,12,12,0"
+                              IsHitTestVisible="False" />
+    </Grid>
 </UserControl>

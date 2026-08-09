@@ -6,8 +6,7 @@ using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Windows.Forms;
 using VeloxDev.WorkflowSystem;
-// `Size` collides between System.Drawing and VeloxDev.WorkflowSystem; a drawing
-// alias keeps `new Size(...)` and `RectangleF(...)` usage unambiguous.
+// Alias Size so System.Drawing.Size doesn't clash with VeloxDev.WorkflowSystem.Size.
 using Size = System.Drawing.Size;
 
 namespace TemplateNamespace;
@@ -50,31 +49,46 @@ public sealed class TemplateClass : Control
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float StartLeft { get => _startLeft; set { _startLeft = value; Invalidate(); } }
+    public float StartLeft { get => _startLeft; set { _startLeft = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float StartTop { get => _startTop; set { _startTop = value; Invalidate(); } }
+    public float StartTop { get => _startTop; set { _startTop = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float EndLeft { get => _endLeft; set { _endLeft = value; Invalidate(); } }
+    public float EndLeft { get => _endLeft; set { _endLeft = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public float EndTop { get => _endTop; set { _endTop = value; Invalidate(); } }
+    public float EndTop { get => _endTop; set { _endTop = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool CanRender { get => _canRender; set { _canRender = value; Invalidate(); } }
+    public bool CanRender { get => _canRender; set { _canRender = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool IsVirtual { get => _isVirtual; set { _isVirtual = value; Invalidate(); } }
+    public bool IsVirtual { get => _isVirtual; set { _isVirtual = value; RequestPaint(); } }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color LineColor { get => _lineColor; set { _lineColor = value; Invalidate(); } }
+    public Color LineColor { get => _lineColor; set { _lineColor = value; RequestPaint(); } }
+
+    /// <summary>
+    /// Optional callback invoked instead of <see cref="Control.Invalidate"/> when link
+    /// geometry or visibility changes. Surfaces that render links inside their own
+    /// <c>OnPaint</c> use this to invalidate the host canvas instead.
+    /// </summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Action? ExternalInvalidate { get; set; }
+
+    private void RequestPaint()
+    {
+        if (ExternalInvalidate is { } external) external();
+        else Invalidate();
+    }
 
     /// <summary>Wires a link model so anchor/visibility changes repaint this view.</summary>
     public void Bind(IWorkflowLinkViewModel? link)
@@ -199,7 +213,7 @@ public sealed class TemplateClass : Control
         }
 
         IsVirtual = IsVirtualLink(_link);
-        Invalidate();
+        RequestPaint();
     }
 
     public void Sync(IWorkflowLinkViewModel? link)
@@ -210,8 +224,10 @@ public sealed class TemplateClass : Control
         SyncEndpoints();
     }
 
+    // Fresh compute, never a cached _isVirtual: a pooled view recycled from a virtual
+    // (gesture) link onto a real link must not keep painting dashed/arrowhead-less.
     private bool IsVirtualLink(IWorkflowLinkViewModel link)
-        => _isVirtual || (link.Sender?.Parent is null && link.Receiver?.Parent is null);
+        => link.Sender?.Parent is null && link.Receiver?.Parent is null;
 
     protected override void Dispose(bool disposing)
     {
@@ -231,9 +247,23 @@ public sealed class TemplateClass : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
+        Render(e.Graphics);
+    }
+
+    /// <summary>
+    /// Renders the connection geometry onto an arbitrary <see cref="Graphics"/> surface.
+    /// Hosts write all slot anchors first, then call this per link in world coordinates
+    /// (links are not child windows — WinForms clips overlapping siblings). A standalone
+    /// control's <c>OnPaint</c> uses the same path.
+    /// </summary>
+    public void Render(Graphics g)
+    {
         if (!_canRender) return;
 
-        var g = e.Graphics;
+        // NaN gate: slot anchors are NaN until the canvas measures them; skip real links
+        // until ready. Virtual-link placeholders (Parent is null) are exempt.
+        if (_link is not null && !WorkflowSlotUpdateGate.IsLinkRenderReady(_link)) return;
+
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         var points = BuildPoints();

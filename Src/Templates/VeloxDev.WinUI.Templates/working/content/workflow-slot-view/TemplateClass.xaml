@@ -9,15 +9,12 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"
-    Background="TemplateSlotBackground">
+    Background="TemplateSlotBackground"
+    behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
 
     <Grid Background="Transparent">
         <Viewbox>
             <Path x:Name="RootPath"
-                  Margin="1"
-                  Stroke="TemplateSlotBorderColor"
-                  StrokeThickness="1.5"
                   Data="TemplateSlotPath" />
         </Viewbox>
     </Grid>

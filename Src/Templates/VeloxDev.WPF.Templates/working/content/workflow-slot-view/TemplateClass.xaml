@@ -7,12 +7,12 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
              d:DesignHeight="20" d:DesignWidth="20"
+             Background="TemplateSlotBackground"
              behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"
-             Background="TemplateSlotBackground">
-    <Viewbox Margin="1">
+             MouseLeftButtonUp="OnPointerReleased"
+             MouseLeftButtonDown="OnPointerPressed">
+    <Viewbox>
         <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
-              Stroke="TemplateSlotBorderColor"
-              StrokeThickness="1.5"
               Data="TemplateSlotPath" />
     </Viewbox>
 </UserControl>

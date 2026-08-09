@@ -54,6 +54,13 @@
       "description": "Workflow surface corner radius.",
       "defaultValue": "3",
       "replaces": "TemplateSurfaceCornerRadius"
+    },
+    "nodeForeground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Output slot name text color.",
+      "defaultValue": "#DD1E1E1E",
+      "replaces": "TemplateNodeForeground"
     }
   },
   "primaryOutputs": [

@@ -2,10 +2,10 @@
 @using System.ComponentModel
 @implements IDisposable
 
-<div class="ctrl-root" style="@GetBorderStyle()">
-    <div class="ctrl-header">
-        <span>Network Flow Controller</span>
-    </div>
+@* Body-only content rendered inside the generated TemplateNodeView (BodyContent).
+   The card chrome — header title, border, background, active-state border — comes from
+   TemplateNodeView in Workflow.razor, so this view no longer draws its own card/header. *@
+<div class="ctrl-root">
     <div class="ctrl-body">
         <label class="ctrl-label">Seed</label>
         <input class="ctrl-input" type="text" value="@_seedValue" @onchange="OnSeedChanged" />

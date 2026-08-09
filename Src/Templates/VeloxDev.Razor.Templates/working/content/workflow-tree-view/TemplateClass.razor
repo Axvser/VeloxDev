@@ -2,6 +2,7 @@
 @using VeloxDev.WorkflowSystem
 @using VeloxDev.WorkflowSystem.AttachedBehaviors
 @using TemplateNamespace
+@* VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the type names below if you renamed them. *@
 
 @if (Tree is not null)
 {
@@ -17,8 +18,8 @@
                            RulerThickness="28"
                            GridSpacing="@GridSpacing"
                            RulerBackground="@RulerBackground"
-                           TickColor="@RulerTickColor"
-                           DividerColor="@RulerDividerColor" />
+                           RulerTickColor="@RulerTickColor"
+                           RulerDividerColor="@RulerDividerColor" />
         </GridDecorator>
         <Minimap Context="vp">
             <MinimapOverlay Viewport="vp"
@@ -38,36 +39,45 @@
                 }
             </div>
 
-            @* Nodes layer: pooled node views with generically-populated slot hosts. *@
-            <ViewPool ItemsSource="Tree.Nodes" KeySelector="n => n">
-                <ItemTemplate Context="item">
-                    @if (item is IWorkflowNodeViewModel n && NodeTemplate is not null)
-                    {
-                        @NodeTemplate(n)
-                    }
-                    else if (item is IWorkflowNodeViewModel n2)
-                    {
-                        <NodeView Node="n2" Tree="Tree">
-                            <InputSlots>
-                                @foreach (var slot in InputSlotsOf(n2))
-                                {
-                                    <WorkflowSlotConnectionBehavior Slot="slot" Tree="Tree">
-                                        <SlotView Slot="slot" Tree="Tree" SlotSize="18" />
-                                    </WorkflowSlotConnectionBehavior>
-                                }
-                            </InputSlots>
-                            <OutputSlots>
-                                @foreach (var slot in OutputSlotsOf(n2))
-                                {
-                                    <WorkflowSlotConnectionBehavior Slot="slot" Tree="Tree">
-                                        <SlotView Slot="slot" Tree="Tree" SlotSize="14" />
-                                    </WorkflowSlotConnectionBehavior>
-                                }
-                            </OutputSlots>
-                        </NodeView>
-                    }
-                </ItemTemplate>
-            </ViewPool>
+            @* Nodes layer: pooled node views dispatched by the template selector.
+               The selector uses the caller's NodeTemplate override, or falls back to the
+               generically-populated NodeView slot hosts below. *@
+            <TemplateSelector Items="Tree.Nodes" KeySelector="n => n"
+                              NodeTemplate="NodeTemplate ?? RenderGenericNode" />
         </ChildContent>
     </WorkflowSurfaceBehavior>
+}
+
+@code {
+    /// <summary>
+    /// Default node template used when the caller does not supply <see cref="TemplateClass.NodeTemplate"/>:
+    /// the generated <c>NodeView</c> with input/output slot hosts populated generically
+    /// from <c>Node.Slots</c> (channel-based input/output split).
+    /// </summary>
+    private RenderFragment<IWorkflowNodeViewModel> RenderGenericNode => node => @<text>
+        @{ var names = SlotNamesOf(node); }
+        <NodeView Node="node" Tree="Tree" AllowOverflow="true">
+            <InputSlots>
+                @foreach (var slot in InputSlotsOf(node))
+                {
+                    <WorkflowSlotConnectionBehavior Slot="slot" Tree="Tree">
+                        <SlotView Slot="slot" Tree="Tree" SlotSize="18" />
+                    </WorkflowSlotConnectionBehavior>
+                }
+            </InputSlots>
+            <OutputSlots>
+                @foreach (var slot in OutputSlotsOf(node))
+                {
+                    names.TryGetValue(slot, out var name);
+                    <div style="display:flex;align-items:center;">
+                        @if (name is not null)
+                        {
+                            <span style="margin-left:auto;margin-right:8px;color:@NodeForegroundCss;font-size:11px;white-space:nowrap;">@name</span>
+                        }
+                        <SlotView Slot="slot" Tree="Tree" SlotSize="14" />
+                    </div>
+                }
+            </OutputSlots>
+        </NodeView>
+    </text>;
 }

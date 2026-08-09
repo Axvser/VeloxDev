@@ -1,0 +1,46 @@
+@namespace Demo.Components.Workflow
+@using VeloxDev.WorkflowSystem
+@using VeloxDev.WorkflowSystem.AttachedBehaviors
+
+@if (Node is not null)
+{
+    <WorkflowSlotLayoutBehavior Node="Node">
+        <WorkflowNodeDragBehavior Node="Node" Style="@($"width:{Node.Size.Width:F0}px;height:{Node.Size.Height:F0}px;")">
+            <div class="veloxdev-wf-node-card"
+                 style="position:relative;width:100%;height:100%;
+                        background:@BackgroundCss;
+                        border:@BorderThicknessCss solid @BorderBrushCss;
+                        border-radius:@CornerRadiusCss;
+                        overflow:@(AllowOverflow ? "visible" : "hidden");">
+                <div class="veloxdev-wf-node-header"
+                     style="height:36px;display:flex;align-items:center;padding:0 12px;
+                            color:@ForegroundCss;font-weight:bold;font-size:13px;
+                            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    @(Title ?? FallbackTitle)
+                </div>
+                <div class="veloxdev-wf-node-body" style="position:absolute;left:0;right:0;top:36px;bottom:0;">
+                    @if (BodyContent is not null)
+                    {
+                        @BodyContent
+                    }
+
+                    @if (InputSlots is not null)
+                    {
+                        <div class="veloxdev-wf-node-input-host"
+                             style="position:absolute;left:2px;top:50%;transform:translateY(-50%);z-index:1;">
+                            @InputSlots
+                        </div>
+                    }
+
+                    @if (OutputSlots is not null)
+                    {
+                        <div class="veloxdev-wf-node-output-host"
+                             style="position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:1;">
+                            @OutputSlots
+                        </div>
+                    }
+                </div>
+            </div>
+        </WorkflowNodeDragBehavior>
+    </WorkflowSlotLayoutBehavior>
+}

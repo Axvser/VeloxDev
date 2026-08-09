@@ -1,0 +1,51 @@
+/* VeloxDev Workflow Blazor Trimmed Demo — minimal layout that lets the workflow
+   surface (veloxdev-wf-surface is 100%×100%) fill the page. No demo-specific
+   node/badge/toolbar styles: the item templates render their original forms. */
+html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f172a;
+    color: #e0e0e0;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ── Top bar ──────────────────────────────── */
+.wf-topbar {
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    height: 48px;
+    min-height: 48px;
+    background: #1a1a2e;
+    border-bottom: 1px solid #333344;
+}
+.wf-topbar-title {
+    color: #e0e0e0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* ── Body ──────────────────────────────────── */
+.wf-body {
+    height: calc(100vh - 48px);
+    overflow: hidden;
+}
+
+.wf-page {
+    height: 100%;
+    display: flex;
+}
+
+/* Sized flex container so the surface's .veloxdev-wf-scroll (flex:1;min-height:0)
+   has a real viewport to lay out against. */
+.wf-canvas {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    margin: 16px;
+    border: 1px solid #333;
+    border-radius: 4px;
+    overflow: hidden;
+}

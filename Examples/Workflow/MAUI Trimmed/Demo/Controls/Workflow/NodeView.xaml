@@ -8,65 +8,53 @@
              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
              behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid RowDefinitions="48,*">
+    <Grid RowDefinitions="36,*">
         <Border Grid.RowSpan="2"
-                Stroke="#D6A0FF"
-                StrokeThickness="1.5"
+                Stroke="#331E1E1E"
+                StrokeThickness="1"
                 StrokeShape="RoundRectangle 6"
-                BackgroundColor="#2A1E35" />
+                BackgroundColor="#DDFFFFFF" />
 
-        <Grid Grid.RowSpan="2" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">
-            <controls:SlotView x:Name="PART_InputSlot"
-                               WidthRequest="20"
-                               HeightRequest="20"
-                               HorizontalOptions="Start"
-                               VerticalOptions="Center"
-                               Margin="-10,0,0,0"
-                               BindingContext="{Binding InputSlot}"
-                               SlotState="{Binding State}" />
+        <Grid behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas" behaviors:WorkflowNodeDragBehavior.IsEnabled="True"
+              Grid.Row="0"
+              Background="Transparent">
+            <Label Text="{Binding Name}"
+                   TextColor="#DD1E1E1E"
+                   FontAttributes="Bold"
+                   VerticalTextAlignment="Center"
+                   Margin="12,0" />
         </Grid>
 
-        <Border Grid.Row="0"
-                BackgroundColor="#3A2550"
-                StrokeThickness="0"
-                StrokeShape="RoundRectangle 4,4,0,0"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-            <Label Text="{Binding Name}"
-                   TextColor="White"
-                   FontAttributes="Bold"
-                   HorizontalTextAlignment="Center"
-                   VerticalTextAlignment="Center" />
-        </Border>
+        <Grid Grid.Row="1" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">
+            <controls:SlotView x:Name="PART_InputSlot" BindingContext="{Binding InputSlot}" SlotState="{Binding State}"
+                                       WidthRequest="18"
+                                       HeightRequest="18"
+                                       HorizontalOptions="Start"
+                                       VerticalOptions="Center"
+                                       Margin="2,0,0,0" />
+        </Grid>
 
-        <Border Grid.Row="1"
-                BackgroundColor="#2A1E35"
-                StrokeThickness="0"
-                StrokeShape="RoundRectangle 0,0,4,4">
-            <VerticalStackLayout x:Name="PART_OutputSlots"
-                                 Margin="14"
-                                 Spacing="6"
-                                 VerticalOptions="Center"
-                                 BindableLayout.ItemsSource="{Binding OutputSlots.Items}">
-                <BindableLayout.ItemTemplate>
-                    <DataTemplate>
-                        <Grid ColumnDefinitions="*,Auto">
-                            <Label Text="{Binding Name}"
-                                   TextColor="#D6A0FF"
-                                   FontAttributes="Bold"
-                                   HorizontalTextAlignment="End"
-                                   VerticalTextAlignment="Center"
-                                   Margin="0,0,10,0" />
-                            <controls:SlotView Grid.Column="1"
-                                               WidthRequest="16"
-                                               HeightRequest="16"
-                                               Margin="0,0,-8,0"
-                                               BindingContext="{Binding Slot}"
-                                               SlotState="{Binding Slot.State}" />
-                        </Grid>
-                    </DataTemplate>
-                </BindableLayout.ItemTemplate>
-            </VerticalStackLayout>
-        </Border>
+        <VerticalStackLayout x:Name="PART_OutputSlots" BindableLayout.ItemsSource="{Binding OutputSlots.Items}"
+                             Grid.Row="1"
+                             Margin="12,6"
+                             Spacing="6"
+                             VerticalOptions="Center">
+            <BindableLayout.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Text="{Binding Name}"
+                               TextColor="#DD1E1E1E"
+                               HorizontalTextAlignment="End"
+                               VerticalTextAlignment="Center"
+                               Margin="0,0,10,0" />
+                        <controls:SlotView BindingContext="{Binding Slot}" SlotState="{Binding Slot.State}"
+                                                   Grid.Column="1"
+                                                   WidthRequest="14"
+                                                   HeightRequest="14"
+                                                   Margin="0" />
+                    </Grid>
+                </DataTemplate>
+            </BindableLayout.ItemTemplate>
+        </VerticalStackLayout>
     </Grid>
 </ContentView>
