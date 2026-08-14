@@ -1,4 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
@@ -9,7 +10,6 @@ public class TransitionSchedulerCore<
     where TUIThreadInspectorCore : IUIThreadInspector<TPriorityCore>, new()
     where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
 {
-    protected TTransitionInterpreterCore? interpreter = null;
     protected static readonly TUIThreadInspectorCore uIThreadInspector = new();
 
     public override async Task Execute(
@@ -36,24 +36,28 @@ public class TransitionSchedulerCore<
         }
         var newCts = externCts ?? new CancellationTokenSource();
         TTransitionInterpreterCore newInterpreter = new();
-        cts = newCts;
-        interpreter = newInterpreter;
-        var isUIThread = uIThreadInspector.IsUIThread();
-        uIThreadInspector.ProtectedInvoke(isUIThread, () =>
+        await _gate.WaitAsync();
+        try
         {
-            effect.InvokeAwake(target, newInterpreter.Args);
-        }, effect.Priority);
+            cts = newCts;
+            uIThreadInspector.ProtectedInvoke(target, () =>
+            {
+                effect.InvokeAwake(target, newInterpreter.Args);
+            }, effect.Priority);
 
-        var frames = interpolator.Interpolate(target, state, effect, isUIThread, uIThreadInspector);
-        if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
-        await newInterpreter.Execute(target, frames, effect, isUIThread, newCts);
+            var frames = interpolator.Interpolate(target, state, effect, uIThreadInspector);
+            if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
+            await newInterpreter.Execute(target, frames, effect, newCts);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public override void Exit()
     {
-        Interlocked.Exchange(ref interpreter, null);
-        var oldCts = Interlocked.Exchange(ref cts, null);
-        oldCts?.Cancel();
+        CancelCurrent();
     }
 
     public static ITransitionScheduler<TPriorityCore> FindOrCreate<T>(T source, bool CanMutualTask = true) where T : class
@@ -99,7 +103,6 @@ public class TransitionSchedulerCore<
     where TUIThreadInspectorCore : IUIThreadInspector, new()
     where TTransitionInterpreterCore : class, ITransitionInterpreter, new()
 {
-    protected TTransitionInterpreterCore? interpreter = null;
     protected static readonly TUIThreadInspectorCore uIThreadInspector = new();
 
     public override async Task Execute(
@@ -125,23 +128,27 @@ public class TransitionSchedulerCore<
         }
         var newCts = externCts ?? new CancellationTokenSource();
         TTransitionInterpreterCore newInterpreter = new();
-        cts = newCts;
-        interpreter = newInterpreter;
-        var isUIThread = uIThreadInspector.IsUIThread();
-        uIThreadInspector.ProtectedInvoke(isUIThread, () =>
+        await _gate.WaitAsync();
+        try
         {
-            effect.InvokeAwake(target, newInterpreter.Args);
-        });
-        var frames = interpolator.Interpolate(target, state, effect, isUIThread, uIThreadInspector);
-        if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
-        await newInterpreter.Execute(target, frames, effect, isUIThread, newCts);
+            cts = newCts;
+            uIThreadInspector.ProtectedInvoke(target, () =>
+            {
+                effect.InvokeAwake(target, newInterpreter.Args);
+            });
+            var frames = interpolator.Interpolate(target, state, effect, uIThreadInspector);
+            if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
+            await newInterpreter.Execute(target, frames, effect, newCts);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public override void Exit()
     {
-        Interlocked.Exchange(ref interpreter, null);
-        var oldCts = Interlocked.Exchange(ref cts, null);
-        oldCts?.Cancel();
+        CancelCurrent();
     }
 
     public static ITransitionScheduler FindOrCreate<T>(T source, bool CanMutualTask = true) where T : class
@@ -217,7 +224,20 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
         return NoMutualSchedulers.Remove(source);
     }
 
-    internal CancellationTokenSource? cts = null;
+    private CancellationTokenSource? _currentCts;
+    protected readonly SemaphoreSlim _gate = new(1, 1);
+
+    internal CancellationTokenSource? cts
+    {
+        get => Volatile.Read(ref _currentCts);
+        set => Interlocked.Exchange(ref _currentCts, value);
+    }
+
+    protected void CancelCurrent()
+    {
+        Interlocked.Exchange(ref _currentCts, null)?.Cancel();
+    }
+
     internal WeakReference<object>? targetref = null;
     public virtual WeakReference<object>? TargetRef
     {

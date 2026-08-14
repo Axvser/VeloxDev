@@ -73,11 +73,23 @@ namespace VeloxDev.TransitionSystem
             }
             public StateSnapshot Property(Expression<Func<T, Transform?>> propertyLambda, ICollection<Transform> newValue, object? interpolationOptions = null)
             {
-                var transformGroup = new TransformGroup()
+                // 单个变换直接赋值，保持运行时类型——否则包成 TransformGroup 会改变运行时类型，
+                // 破坏嵌套属性路径（例如 ((TranslateTransform)x.RenderTransform).X 依赖中间是 TranslateTransform）。
+                // 多个变换才包成 TransformGroup。
+                if (newValue is { Count: 1 })
                 {
-                    Children = [.. newValue]
-                };
-                state.SetValue(propertyLambda, transformGroup);
+                    Transform? single = null;
+                    foreach (var item in newValue) { single = item; break; }
+                    state.SetValue(propertyLambda, single);
+                }
+                else
+                {
+                    var transformGroup = new TransformGroup()
+                    {
+                        Children = [.. newValue]
+                    };
+                    state.SetValue(propertyLambda, transformGroup);
+                }
                 if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);
                 return this;
             }

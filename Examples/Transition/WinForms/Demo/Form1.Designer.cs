@@ -15,6 +15,10 @@ namespace Demo
         private Button btnStart;
         private Button btnReset;
         private Button btnExit;
+        private Button btnStartNonMutual;
+        private Button btnStartRepeatedMutual;
+        private Button btnStartMainThread;
+        private Button btnStartMainThreadNonMutual;
         private Label lblStatus;
 
         /// <summary>
@@ -39,8 +43,8 @@ namespace Demo
         {
             base.OnLoad(e);
 
-            // VeloxDev库在 WinForms 加载动画时，必须捕获一次主线程
-            UIThreadInspector.CaptureUIThread();
+            // 动画目标是 Control，库会直接用 Control.Invoke / BeginInvoke 编组到它的 UI 线程，
+            // 即便下方从后台线程（Task.Run）首次启动动画，也无需任何捕获。
         }
 
         #region Windows 窗体设计器生成的代码
@@ -99,7 +103,7 @@ namespace Demo
             // 创建按钮
             btnStart = new Button
             {
-                Text = "开始动画",
+                Text = "后台线程互斥",
                 Location = new Point(100, 250),
                 Size = new Size(100, 40),
                 BackColor = Color.LightBlue,
@@ -108,7 +112,7 @@ namespace Demo
 
             btnReset = new Button
             {
-                Text = "重置状态",
+                Text = "重置",
                 Location = new Point(220, 250),
                 Size = new Size(100, 40),
                 BackColor = Color.LightGreen,
@@ -117,10 +121,46 @@ namespace Demo
 
             btnExit = new Button
             {
-                Text = "停止动画",
+                Text = "停止全部",
                 Location = new Point(340, 250),
                 Size = new Size(100, 40),
                 BackColor = Color.LightCoral,
+                Font = new Font("微软雅黑", 10)
+            };
+
+            btnStartNonMutual = new Button
+            {
+                Text = "后台线程并发",
+                Location = new Point(460, 250),
+                Size = new Size(100, 40),
+                BackColor = Color.LightCyan,
+                Font = new Font("微软雅黑", 10)
+            };
+
+            btnStartRepeatedMutual = new Button
+            {
+                Text = "连续互斥",
+                Location = new Point(580, 250),
+                Size = new Size(100, 40),
+                BackColor = Color.MistyRose,
+                Font = new Font("微软雅黑", 10)
+            };
+
+            btnStartMainThread = new Button
+            {
+                Text = "主线程互斥",
+                Location = new Point(700, 250),
+                Size = new Size(100, 40),
+                BackColor = Color.LightGoldenrodYellow,
+                Font = new Font("微软雅黑", 10)
+            };
+
+            btnStartMainThreadNonMutual = new Button
+            {
+                Text = "主线程并发",
+                Location = new Point(820, 250),
+                Size = new Size(100, 40),
+                BackColor = Color.PaleGreen,
                 Font = new Font("微软雅黑", 10)
             };
 
@@ -148,6 +188,8 @@ namespace Demo
             this.Controls.AddRange(new Control[] {
                 panel1, panel2, panel3,
                 btnStart, btnReset, btnExit,
+                btnStartNonMutual, btnStartRepeatedMutual,
+                btnStartMainThread, btnStartMainThreadNonMutual,
                 lblStatus, lblDescription
             });
 
@@ -155,6 +197,10 @@ namespace Demo
             btnStart.Click += StartAnimations;
             btnReset.Click += ResetAnimations;
             btnExit.Click += ExitAnimations;
+            btnStartNonMutual.Click += StartAnimationsNonMutual;
+            btnStartRepeatedMutual.Click += StartRepeatedMutual;
+            btnStartMainThread.Click += StartAnimationsMainThread;
+            btnStartMainThreadNonMutual.Click += StartAnimationsMainThreadNonMutual;
 
             // 窗体加载事件
             this.Load += Form1_Load;
@@ -213,10 +259,10 @@ namespace Demo
 
         private void ResetAnimations(object sender, System.EventArgs e)
         {
-            // 停止所有动画
-            Transition.Exit(panel1);
-            Transition.Exit(panel2);
-            Transition.Exit(panel3);
+            // 停止所有动画（含非互斥）
+            Transition.Exit(panel1, IncludeMutual: true, IncludeNoMutual: true);
+            Transition.Exit(panel2, IncludeMutual: true, IncludeNoMutual: true);
+            Transition.Exit(panel3, IncludeMutual: true, IncludeNoMutual: true);
 
             // 重置到初始状态
             initialSnapshot1.Effect(TransitionEffects.Empty).Execute(panel1);
@@ -228,12 +274,71 @@ namespace Demo
 
         private void ExitAnimations(object sender, System.EventArgs e)
         {
-            // 停止所有动画
-            Transition.Exit(panel1);
-            Transition.Exit(panel2);
-            Transition.Exit(panel3);
+            // 停止所有动画（含非互斥）
+            Transition.Exit(panel1, IncludeMutual: true, IncludeNoMutual: true);
+            Transition.Exit(panel2, IncludeMutual: true, IncludeNoMutual: true);
+            Transition.Exit(panel3, IncludeMutual: true, IncludeNoMutual: true);
 
             lblStatus.Text = "动画已停止";
+        }
+
+        private void StartAnimationsNonMutual(object sender, System.EventArgs e)
+        {
+            // CanMutualTask: false —— 三段动画互不干扰地并发运行，不会被彼此取消
+            lblStatus.Text = "并发动画执行中（CanMutualTask: false）...";
+            btnStart.Enabled = false;
+
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    Animation0.Execute(panel1, CanMutualTask: false);
+                    Animation1.Execute(panel2, CanMutualTask: false);
+                    Animation2.Execute(panel3, CanMutualTask: false);
+
+                    this.Invoke(new Action(() =>
+                    {
+                        lblStatus.Text = "并发动画执行完成";
+                        btnStart.Enabled = true;
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    this.Invoke(new Action(() =>
+                    {
+                        lblStatus.Text = $"并发动画执行错误: {ex.Message}";
+                        btnStart.Enabled = true;
+                    }));
+                }
+            });
+        }
+
+        private void StartRepeatedMutual(object sender, System.EventArgs e)
+        {
+            // 每次点击都在 panel1 上启动互斥动画：新动画会取消上一次（测试调度器门控与取消）
+            lblStatus.Text = "连续互斥动画（每次点击替换上一次）...";
+            _ = Task.Run(() =>
+            {
+                Animation0.Execute(panel1); // CanMutualTask: true（默认）
+            });
+        }
+
+        private void StartAnimationsMainThread(object sender, System.EventArgs e)
+        {
+            // 主线程（UI 线程）直接启动，互斥（CanMutualTask: true 默认）
+            lblStatus.Text = "主线程互斥动画执行中...";
+            Animation0.Execute(panel1);
+            Animation1.Execute(panel2);
+            Animation2.Execute(panel3);
+        }
+
+        private void StartAnimationsMainThreadNonMutual(object sender, System.EventArgs e)
+        {
+            // 主线程 + CanMutualTask: false —— 并发运行，互不取消
+            lblStatus.Text = "主线程并发动画执行中（CanMutualTask: false）...";
+            Animation0.Execute(panel1, CanMutualTask: false);
+            Animation1.Execute(panel2, CanMutualTask: false);
+            Animation2.Execute(panel3, CanMutualTask: false);
         }
 
         // 动画定义

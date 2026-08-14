@@ -1,23 +1,18 @@
-﻿namespace VeloxDev.TransitionSystem.Abstractions;
+namespace VeloxDev.TransitionSystem.Abstractions;
 
 public abstract class InterpolatorOutputCore<TUIThreadInspectorCore, TPriorityCore> : InterpolatorOutputBase, IFrameSequence<TPriorityCore>
     where TUIThreadInspectorCore : IUIThreadInspectorCore, new()
 {
     private readonly TUIThreadInspectorCore inspector = new();
     public override bool CanSetValue() => inspector.IsAppAlive();
-    public override void Update(object target, int frameIndex, bool isUIAccess, object? priority = default)
+    public override void Update(object target, int frameIndex, object? priority = default)
     {
         if (priority is not TPriorityCore cvt_priority) throw new InvalidDataException($"The value of \"priority\" is not [ {typeof(TPriorityCore).FullName} ] !");
-        Update(target, frameIndex, isUIAccess, cvt_priority);
+        Update(target, frameIndex, cvt_priority);
     }
-    public virtual void Update(object target, int frameIndex, bool isUIAccess, TPriorityCore priority)
+    public virtual void Update(object target, int frameIndex, TPriorityCore priority)
     {
-        if (isUIAccess)
-        {
-            SetValues(target, frameIndex);
-            return;
-        }
-        inspector.ProtectedInvoke(inspector.IsUIThread(), () => { SetValues(target, frameIndex); }, priority);
+        inspector.ProtectedInvoke(target, () => { SetValues(target, frameIndex); }, priority);
     }
 }
 
@@ -26,18 +21,13 @@ public abstract class InterpolatorOutputCore<TUIThreadInspectorCore> : Interpola
 {
     private readonly TUIThreadInspectorCore inspector = new();
     public override bool CanSetValue() => inspector.IsAppAlive();
-    public override void Update(object target, int frameIndex, bool isUIAccess, object? priority = default)
+    public override void Update(object target, int frameIndex, object? priority = default)
     {
-        Update(target, frameIndex, isUIAccess);
+        Update(target, frameIndex);
     }
-    public virtual void Update(object target, int frameIndex, bool isUIAccess)
+    public virtual void Update(object target, int frameIndex)
     {
-        if (isUIAccess)
-        {
-            SetValues(target, frameIndex);
-            return;
-        }
-        inspector.ProtectedInvoke(inspector.IsUIThread(), () => { SetValues(target, frameIndex); });
+        inspector.ProtectedInvoke(target, () => { SetValues(target, frameIndex); });
     }
 }
 
@@ -46,7 +36,7 @@ public abstract class InterpolatorOutputBase : IFrameSequenceCore
     public abstract bool CanSetValue();
     public virtual Dictionary<ITransitionProperty, List<object?>> Frames { get; protected set; } = [];
     public virtual int Count { get; protected set; } = 0;
-    public abstract void Update(object target, int frameIndex, bool isUIAccess, object? priority = default);
+    public abstract void Update(object target, int frameIndex, object? priority = default);
     public virtual void AddPropertyInterpolations(ITransitionProperty propertyInfo, List<object?> objects)
     {
         if (Frames.TryGetValue(propertyInfo, out _))

@@ -21,7 +21,8 @@
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.8.0" />
 		<PackageReference Include="ModelContextProtocol" Version="1.4.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-		<PackageReference Include="VeloxDev.Core" Version="6.0.188" />
+		<ProjectReference Include="../VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="6.0.188" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -16,11 +16,13 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
             if (steps <= 1)
             {
-                result.Add(endBrush);
+                // 单帧（重置等）返回原始目标值：end 为 null 时就写 null，而不是 Brushes.Transparent。
+                // 否则 OpacityMask 会被设成透明画刷，导致整个元素不可见。
+                result.Add(end);
                 return result;
             }
 
-            // ȷ����ȷ����ʼ�ͽ���ֵ
+            // ȷ����ȷ����ʼ�ͽ���ֵ
             result.Add(startBrush);
 
             if (steps > 2)
@@ -77,7 +79,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             if (t <= 0.0) return start;
             if (t >= 1.0) return end;
 
-            // ʹ��RenderTargetBitmapʵ�־�ȷ���
+            // ʹ��RenderTargetBitmapʵ�־�ȷ���
             return CreateBlendedBrush(start, end, t);
         }
 
@@ -88,11 +90,11 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
             using (var ctx = bmp.CreateDrawingContext())
             {
-                // ���Ƶײ㻭ˢ
+                // ���Ƶײ㻭ˢ
                 using (ctx.PushOpacity(1 - t))
                     ctx.DrawRectangle(start, null, new Rect(0, 0, renderSize, renderSize));
 
-                // �����ϲ㻭ˢ
+                // �����ϲ㻭ˢ
                 using (ctx.PushOpacity(t))
                     ctx.DrawRectangle(end, null, new Rect(0, 0, renderSize, renderSize));
             }

@@ -26,7 +26,8 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.241114003" />
-		<PackageReference Include="VeloxDev.Core" Version="6.0.188" />
+		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="6.0.188" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 </Project>

@@ -21,11 +21,15 @@
             <RowDefinition Height="*"></RowDefinition>
         </Grid.RowDefinitions>
 
-        <HorizontalStackLayout Grid.Row="0">
-            <Button WidthRequest="150" HeightRequest="50" Text="Load Animations" Clicked="LoadAnimations"/>
-            <Button x:Name="btnReset" WidthRequest="150" HeightRequest="50" Text="Reset Rec0"/>
-            <Button WidthRequest="150" HeightRequest="50" Text="Exit Animations" Clicked="ExitAnimations"/>
-        </HorizontalStackLayout>
+        <FlexLayout Grid.Row="0" Direction="Row" Wrap="Wrap">
+            <Button WidthRequest="118" HeightRequest="38" Text="主线程互斥" Clicked="LoadMainThread"/>
+            <Button WidthRequest="118" HeightRequest="38" Text="后台线程互斥" Clicked="LoadBackground"/>
+            <Button WidthRequest="118" HeightRequest="38" Text="主线程并发" Clicked="LoadMainThreadNonMutual"/>
+            <Button WidthRequest="118" HeightRequest="38" Text="后台线程并发" Clicked="LoadBackgroundNonMutual"/>
+            <Button WidthRequest="110" HeightRequest="38" Text="连续互斥" Clicked="RepeatMutual"/>
+            <Button x:Name="btnReset" WidthRequest="110" HeightRequest="38" Text="重置"/>
+            <Button WidthRequest="110" HeightRequest="38" Text="停止全部" Clicked="ExitAll"/>
+        </FlexLayout>
 
         <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" WidthRequest="100" HeightRequest="100"/>
         <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" WidthRequest="100" HeightRequest="100"/>

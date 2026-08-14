@@ -1,9 +1,9 @@
-﻿namespace VeloxDev.WeakTypes
+namespace VeloxDev.WeakTypes
 {
     public sealed class WeakDelegate<TDelegate>
         where TDelegate : Delegate
     {
-        private TDelegate? _combinedDelegate;
+        private volatile TDelegate? _combinedDelegate;
         private readonly List<WeakReference<Delegate>> _handlers = [];
         private readonly object _lock = new();
 
@@ -13,7 +13,7 @@
             {
                 if (handler == null) return;
                 _handlers.Add(new WeakReference<Delegate>(handler));
-                if (CanUpdateCache) _combinedDelegate = GetInvocationList();
+                if (CanUpdateCache) RebuildCache();
             }
         }
 
@@ -26,32 +26,53 @@
                     if (_handlers[i].TryGetTarget(out var target) && target == handler)
                     {
                         _handlers.RemoveAt(i);
-                        if (CanUpdateCache) _combinedDelegate = GetInvocationList();
+                        if (CanUpdateCache) RebuildCache();
                     }
                 }
             }
         }
 
+        /// <summary>
+        /// 返回组合后的委托（用于类型化、无反射的调用）。
+        /// 热路径（每帧 InvokeUpdate/InvokeLateUpdate）走无锁快速通道：
+        /// 一旦缓存了组合委托，直接 volatile 读取，不再加锁、不再 DynamicInvoke。
+        /// </summary>
         public TDelegate? GetInvocationList()
         {
+            var combined = _combinedDelegate;
+            if (combined != null) return combined;
+
             lock (_lock)
             {
                 if (_combinedDelegate != null) return _combinedDelegate;
-
-                CleanupCollectedHandlers();
-
-                Delegate? combined = null;
-                foreach (var weakRef in _handlers)
-                {
-                    if (weakRef.TryGetTarget(out var handler))
-                    {
-                        combined = Delegate.Combine(combined, handler);
-                    }
-                }
-
-                _combinedDelegate = combined as TDelegate;
+                RebuildCache();
                 return _combinedDelegate;
             }
+        }
+
+        /// <summary>
+        /// 通用调用（未知委托签名时使用）。经无锁 <see cref="GetInvocationList"/> 取出组合委托再 DynamicInvoke；
+        /// 若已知签名，请改用 <see cref="GetInvocationList"/> 后直接类型化调用，避免反射开销。
+        /// </summary>
+        public void Invoke(object?[] objects)
+        {
+            GetInvocationList()?.DynamicInvoke(objects);
+        }
+
+        private void RebuildCache()
+        {
+            CleanupCollectedHandlers();
+
+            Delegate? combined = null;
+            foreach (var weakRef in _handlers)
+            {
+                if (weakRef.TryGetTarget(out var handler))
+                {
+                    combined = Delegate.Combine(combined, handler);
+                }
+            }
+
+            _combinedDelegate = combined as TDelegate;
         }
 
         private void CleanupCollectedHandlers()
@@ -62,14 +83,6 @@
                 {
                     _handlers.RemoveAt(i);
                 }
-            }
-        }
-
-        public void Invoke(object?[] objects)
-        {
-            lock (_lock)
-            {
-                _combinedDelegate?.DynamicInvoke(objects);
             }
         }
 

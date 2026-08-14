@@ -24,10 +24,18 @@
             <RowDefinition Height="*"></RowDefinition>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal">
-            <Button Width="150" Height="50" Content="Load Animations" Click="LoadAnimations"/>
-            <Button x:Name="btnReset" Width="150" Height="50" Content="Reset Rec0"/>
-            <Button Width="150" Height="50" Content="Exit Animations" Click="ExitAnimations"/>
+        <StackPanel Grid.Row="0">
+            <StackPanel Orientation="Horizontal">
+                <Button Width="118" Height="38" Margin="2" Content="主线程互斥" Click="LoadMainThread"/>
+                <Button Width="118" Height="38" Margin="2" Content="后台线程互斥" Click="LoadAnimations"/>
+                <Button Width="118" Height="38" Margin="2" Content="主线程并发" Click="LoadMainThreadNonMutual"/>
+                <Button Width="118" Height="38" Margin="2" Content="后台线程并发" Click="LoadAnimationsNonMutual"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Button Width="110" Height="38" Margin="2" Content="连续互斥" Click="LoadRepeatedMutual"/>
+                <Button x:Name="btnReset" Width="110" Height="38" Margin="2" Content="重置"/>
+                <Button Width="110" Height="38" Margin="2" Content="停止全部" Click="ExitAnimations"/>
+            </StackPanel>
         </StackPanel>
 
         <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>

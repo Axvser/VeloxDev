@@ -70,29 +70,37 @@ public partial class Home : ComponentBase, IDisposable
     // 初始快照（用于 Reset）
     // ---------------------------------------------------------------
     private Transition<BoxModel>.StateSnapshot _snapshot0 = default!;
+    private Transition<BoxModel>.StateSnapshot _snapshot1 = default!;
+    private Transition<BoxModel>.StateSnapshot _snapshot2 = default!;
 
     protected override void OnInitialized()
     {
-        // 在 Blazor Server circuit 线程上捕获 SynchronizationContext
-        // 供 VeloxDev UIThreadInspector 使用（每个组件实例独立初始化）
+        // Blazor 的动画目标是 POCO ViewModel，没有 dispatcher 亲和，后台线程无法反推 circuit
+        // 上下文，因此必须在此（OnInitialized，circuit 线程）捕获一次。这是 Blazor 模型的固有限制。
         UIThreadInspector.CaptureUIThread();
 
         // 订阅属性变更，驱动 Blazor 重渲染
         Box0.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
         Box1.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
         Box2.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
+    }
 
-        // 记录 Box0 的初始状态快照，用于 Reset
-        // VeloxDev 动画的核心概念是 "一切皆状态"
-        _snapshot0 = Box0.Snapshot(
-            b => b.X,
-            b => b.Y,
-            b => b.Color,
-            b => b.Opacity,
-            b => b.Width,
-            b => b.Height,
-            b => b.Scale,
-            b => b.Rotate);
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // 首次渲染完成后才拍摄重置快照，确保初始状态完整、不丢失信息
+        if (!firstRender) return;
+
+        _snapshot0 = Box0.SnapshotAll();
+        _snapshot1 = Box1.SnapshotAll();
+        _snapshot2 = Box2.SnapshotAll();
+    }
+
+    private void LoadMainThread()
+    {
+        // 主线程（circuit 线程）直接启动，互斥（CanMutualTask: true 默认）
+        Animation0.Execute(Box0);
+        Animation1.Execute(Box1);
+        Animation2.Execute(Box2);
     }
 
     private void LoadAnimations()
@@ -106,10 +114,41 @@ public partial class Home : ComponentBase, IDisposable
         });
     }
 
+    private void LoadMainThreadNonMutual()
+    {
+        // 主线程 + CanMutualTask: false —— 并发运行，互不取消
+        Animation0.Execute(Box0, CanMutualTask: false);
+        Animation1.Execute(Box1, CanMutualTask: false);
+        Animation2.Execute(Box2, CanMutualTask: false);
+    }
+
+    private void LoadAnimationsNonMutual()
+    {
+        // CanMutualTask: false —— 三段动画互不干扰地并发运行，不会被彼此取消
+        _ = Task.Run(() =>
+        {
+            Animation0.Execute(Box0, CanMutualTask: false);
+            Animation1.Execute(Box1, CanMutualTask: false);
+            Animation2.Execute(Box2, CanMutualTask: false);
+        });
+    }
+
+    private void LoadRepeatedMutual()
+    {
+        // 每次点击在 Box0 上启动互斥动画：新动画会取消上一次（测试调度器门控与取消）
+        _ = Task.Run(() => Animation0.Execute(Box0));
+    }
+
     private void ResetBox0()
     {
-        // 以零时长过渡立即恢复到快照记录的初始状态
+        // 重置全部：以零时长过渡立即恢复三个 Box 到快照记录的初始状态
+        Transition.Exit(Box0, IncludeMutual: true, IncludeNoMutual: true);
+        Transition.Exit(Box1, IncludeMutual: true, IncludeNoMutual: true);
+        Transition.Exit(Box2, IncludeMutual: true, IncludeNoMutual: true);
+
         _snapshot0.Effect(TransitionEffects.Empty).Execute(Box0);
+        _snapshot1.Effect(TransitionEffects.Empty).Execute(Box1);
+        _snapshot2.Effect(TransitionEffects.Empty).Execute(Box2);
     }
 
     private void ExitAnimations()
@@ -117,8 +156,8 @@ public partial class Home : ComponentBase, IDisposable
         // IncludeMutual   表示是否终结 CanMutualTask: true 的动画
         // IncludeNoMutual 表示是否终结 CanMutualTask: false 的动画
         Transition.Exit(Box0, IncludeMutual: true, IncludeNoMutual: true);
-        Transition.Exit(Box1);
-        Transition.Exit(Box2);
+        Transition.Exit(Box1, IncludeMutual: true, IncludeNoMutual: true);
+        Transition.Exit(Box2, IncludeMutual: true, IncludeNoMutual: true);
     }
 
     public void Dispose()

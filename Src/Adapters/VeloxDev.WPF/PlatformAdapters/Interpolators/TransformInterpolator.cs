@@ -17,7 +17,9 @@ namespace VeloxDev.Adapters.NativeInterpolators
             var startTransform = NormalizeInput(start);
             var endTransform = NormalizeInput(end);
 
-            if (steps <= 1) return [endTransform];
+            // 单帧（重置等）返回原始目标值：end 为 null 时就写 null，而不是归一化成空的 TransformGroup
+            // （空组在 WPF/Avalonia 会渲染成非恒等矩阵，导致元素塌缩不可见）。
+            if (steps <= 1) return [end];
 
             // 2. 解析有效变换
             var startTransforms = ParseTransforms(startTransform);

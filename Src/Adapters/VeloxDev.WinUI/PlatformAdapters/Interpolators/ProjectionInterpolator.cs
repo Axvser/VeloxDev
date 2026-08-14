@@ -13,7 +13,8 @@ namespace VeloxDev.Adapters.NativeInterpolators
             var s = Normalize(start);
             var e = Normalize(end);
 
-            if (steps <= 1) return [e];
+            // 单帧（重置等）返回原始目标值：end 为 null 时就写 null，而不是默认 PlaneProjection。
+            if (steps <= 1) return [end];
 
             List<object?> result = new(steps);
             for (var i = 0; i < steps; i++)

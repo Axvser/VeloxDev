@@ -16,7 +16,9 @@ namespace VeloxDev.Adapters.NativeInterpolators
             var s = Normalize(start);
             var e = Normalize(end);
 
-            if (steps <= 1) return [e];
+            // å•å¸§ï¼ˆé‡ç½®ç­‰ï¼‰è¿”å›žåŽŸå§‹ç›®æ ‡å€¼ï¼šend ä¸º null æ—¶å°±å†™ nullï¼Œè€Œä¸æ˜¯é€æ˜Žç”»åˆ·ã€‚
+            // å¦åˆ™ OpacityMask ä¼šè¢«è®¾æˆé€æ˜Žç”»åˆ·ï¼Œå¯¼è‡´æ•´ä¸ªå…ƒç´ ä¸å¯è§ã€‚
+            if (steps <= 1) return [end];
 
             (var alignedS, var alignedE) = AlignBrushTypes(s, e);
 
@@ -42,7 +44,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
         };
 
         /// <summary>
-        /// ³¢ÊÔ½«Á½¶Ë Brush ¶ÔÆëÎªÏàÍ¬ÀàÐÍ£¨ÈôÀàÐÍ²»Í¬£¬Ôò×ª»»ÎªÂß¼­µÈ¼ÛÐÎÌ¬£©
+        /// ï¿½ï¿½ï¿½Ô½ï¿½ï¿½ï¿½ï¿½ï¿½ Brush ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½Í¬ï¿½ï¿½ï¿½Í£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í²ï¿½Í¬ï¿½ï¿½ï¿½ï¿½×ªï¿½ï¿½Îªï¿½ß¼ï¿½ï¿½È¼ï¿½ï¿½ï¿½Ì¬ï¿½ï¿½
         /// </summary>
         private static (Brush, Brush) AlignBrushTypes(Brush s, Brush e)
         {
@@ -61,11 +63,11 @@ namespace VeloxDev.Adapters.NativeInterpolators
             if (e is SolidColorBrush eb2 && s is RadialGradientBrush rs)
                 return (s, ToRadialEquivalent(eb2, rs));
 
-            // ÀàÐÍ²»¿É¶ÔÆë ¡ú ±£ÁôÔ­Ñù
+            // ï¿½ï¿½ï¿½Í²ï¿½ï¿½É¶ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ô­ï¿½ï¿½
             return (s, e);
         }
 
-        //----------- ÏßÐÔ½¥±ä×ª»» -----------
+        //----------- ï¿½ï¿½ï¿½Ô½ï¿½ï¿½ï¿½×ªï¿½ï¿½ -----------
 
         private static LinearGradientBrush ToLinearEquivalent(SolidColorBrush solid, LinearGradientBrush template)
         {
@@ -83,7 +85,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return brush;
         }
 
-        //----------- ¾¶Ïò½¥±ä×ª»» -----------
+        //----------- ï¿½ï¿½ï¿½ò½¥±ï¿½×ªï¿½ï¿½ -----------
 
         private static RadialGradientBrush ToRadialEquivalent(SolidColorBrush solid, RadialGradientBrush template)
         {
@@ -103,7 +105,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return brush;
         }
 
-        //----------- Êµ¼Ê²åÖµÂß¼­ -----------
+        //----------- Êµï¿½Ê²ï¿½Öµï¿½ß¼ï¿½ -----------
 
         private static Brush InterpolateAligned(Brush s, Brush e, double t)
         {
@@ -124,7 +126,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
                         return InterpolateRadial(sr, er, t);
 
                     default:
-                        // »ìºÏÎªµ¥É«ÍË»¯
+                        // ï¿½ï¿½ï¿½Îªï¿½ï¿½É«ï¿½Ë»ï¿½
                         var c1 = ExtractRepresentativeColor(s);
                         var c2 = ExtractRepresentativeColor(e);
                         var mixed = LerpColorPremultiplied(c1, c2, t);
@@ -136,12 +138,12 @@ namespace VeloxDev.Adapters.NativeInterpolators
             }
             catch
             {
-                // ³ö´íÔò·µ»ØÄ©Ö¡
+                // ï¿½ï¿½ï¿½ï¿½ï¿½ò·µ»ï¿½Ä©Ö¡
                 return e;
             }
         }
 
-        //----------- ÏßÐÔ½¥±ä²åÖµ -----------
+        //----------- ï¿½ï¿½ï¿½Ô½ï¿½ï¿½ï¿½ï¿½Öµ -----------
 
         private static LinearGradientBrush InterpolateLinear(LinearGradientBrush s, LinearGradientBrush e, double t)
         {
@@ -166,7 +168,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return result;
         }
 
-        //----------- ¾¶Ïò½¥±ä²åÖµ -----------
+        //----------- ï¿½ï¿½ï¿½ò½¥±ï¿½ï¿½Öµ -----------
 
         private static RadialGradientBrush InterpolateRadial(RadialGradientBrush s, RadialGradientBrush e, double t)
         {
@@ -193,7 +195,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return result;
         }
 
-        //----------- »ù´¡¸¨Öú -----------
+        //----------- ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ -----------
 
         private static Point LerpPoint(Point a, Point b, double t)
             => new(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t));

@@ -1,4 +1,5 @@
-﻿using VeloxDev.TimeLine;
+using System.Diagnostics;
+using VeloxDev.TimeLine;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
@@ -13,7 +14,6 @@ public abstract class TransitionInterpreterCore<
         object target,
         IFrameSequenceCore frameSequence,
         ITransitionEffectCore effect,
-        bool isUIAccess,
         CancellationTokenSource cts)
     {
         if (frameSequence is not IFrameSequence<TPriorityCore> cvt_frameSequence) return;
@@ -22,7 +22,6 @@ public abstract class TransitionInterpreterCore<
             target,
             cvt_frameSequence,
             cvt_effect,
-            isUIAccess,
             cts);
     }
 
@@ -30,16 +29,17 @@ public abstract class TransitionInterpreterCore<
         object target,
         IFrameSequence<TPriorityCore> frameSequence,
         ITransitionEffect<TPriorityCore> effect,
-        bool isUIAccess,
         CancellationTokenSource cts)
     {
         this.cts = cts;
         var indexs = GetEaseIndex(effect, frameSequence.Count);
-        var span = (int)(effect.Duration.TotalMilliseconds / frameSequence.Count);
+        var frameMs = effect.Duration.TotalMilliseconds / frameSequence.Count;
         var foreverloop = effect.LoopTime == int.MaxValue;
         try
         {
             effect.InvokeStart(target, Args);
+            var stopwatch = Stopwatch.StartNew();
+            double frameCounter = 0;
             for (int loop = 0;
                 loop <= effect.LoopTime || foreverloop;
                 loop += foreverloop ? 0 : 1)
@@ -51,10 +51,9 @@ public abstract class TransitionInterpreterCore<
                     frameSequence.Update(
                         target,
                         indexs[index],
-                        isUIAccess,
                         effect.Priority);
                     effect.InvokeLateUpdate(target, Args);
-                    await Task.Delay(span, cts.Token);
+                    await WaitForFrameAsync(stopwatch, frameCounter++, frameMs, cts);
                 }
 
                 if (effect.IsAutoReverse)
@@ -66,10 +65,9 @@ public abstract class TransitionInterpreterCore<
                         frameSequence.Update(
                             target,
                             indexs[index],
-                            isUIAccess,
                             effect.Priority);
                         effect.InvokeLateUpdate(target, Args);
-                        await Task.Delay(span, cts.Token);
+                        await WaitForFrameAsync(stopwatch, frameCounter++, frameMs, cts);
                     }
                 }
             }
@@ -113,7 +111,6 @@ public abstract class TransitionInterpreterCore<
         object target,
         IFrameSequenceCore frameSequence,
         ITransitionEffectCore effect,
-        bool isUIAccess,
         CancellationTokenSource cts)
     {
         if (frameSequence is not IFrameSequence cvt_frameSequence) return;
@@ -121,7 +118,6 @@ public abstract class TransitionInterpreterCore<
             target,
             cvt_frameSequence,
             effect,
-            isUIAccess,
             cts);
     }
 
@@ -129,16 +125,17 @@ public abstract class TransitionInterpreterCore<
         object target,
         IFrameSequence frameSequence,
         ITransitionEffectCore effect,
-        bool isUIAccess,
         CancellationTokenSource cts)
     {
         this.cts = cts;
         var indexs = GetEaseIndex(effect, frameSequence.Count);
-        var span = (int)(effect.Duration.TotalMilliseconds / frameSequence.Count);
+        var frameMs = effect.Duration.TotalMilliseconds / frameSequence.Count;
         var foreverloop = effect.LoopTime == int.MaxValue;
         try
         {
             effect.InvokeStart(target, Args);
+            var stopwatch = Stopwatch.StartNew();
+            double frameCounter = 0;
             for (int loop = 0;
                 loop <= effect.LoopTime || foreverloop;
                 loop += foreverloop ? 0 : 1)
@@ -149,10 +146,9 @@ public abstract class TransitionInterpreterCore<
                     effect.InvokeUpdate(target, Args);
                     frameSequence.Update(
                         target,
-                        indexs[index],
-                        isUIAccess);
+                        indexs[index]);
                     effect.InvokeLateUpdate(target, Args);
-                    await Task.Delay(span, cts.Token);
+                    await WaitForFrameAsync(stopwatch, frameCounter++, frameMs, cts);
                 }
 
                 if (effect.IsAutoReverse)
@@ -163,10 +159,9 @@ public abstract class TransitionInterpreterCore<
                         effect.InvokeUpdate(target, Args);
                         frameSequence.Update(
                             target,
-                            indexs[index],
-                            isUIAccess);
+                            indexs[index]);
                         effect.InvokeLateUpdate(target, Args);
-                        await Task.Delay(span, cts.Token);
+                        await WaitForFrameAsync(stopwatch, frameCounter++, frameMs, cts);
                     }
                 }
             }
@@ -205,11 +200,27 @@ public abstract class TransitionInterpreterCore : ITransitionInterpreterCore, ID
     protected CancellationTokenSource? cts = null;
     public virtual TransitionEventArgs Args { get; set; } = new();
 
-    public abstract Task Execute(object target, IFrameSequenceCore frameSequence, ITransitionEffectCore effect, bool isUIAccess, CancellationTokenSource cts);
+    public abstract Task Execute(object target, IFrameSequenceCore frameSequence, ITransitionEffectCore effect, CancellationTokenSource cts);
 
     public virtual void Exit()
     {
         Dispose();
+    }
+
+    /// <summary>
+    /// 用 Stopwatch 校准的帧间隔等待：补偿 <see cref="Task.Delay(TimeSpan)"/> 的定时器抖动与
+    /// 漂移，避免动画随时间累积滞后、帧间隔忽长忽短造成的卡顿。
+    /// 落后于目标进度时立即返回，让动画追上计划时长。动画最终按时长精确结束。
+    /// </summary>
+    protected static async Task WaitForFrameAsync(Stopwatch stopwatch, double frameIndex, double frameMs, CancellationTokenSource cts)
+    {
+        if (frameMs <= 0) return;
+
+        var targetMs = (frameIndex + 1) * frameMs;
+        var remainingMs = targetMs - stopwatch.Elapsed.TotalMilliseconds;
+        if (remainingMs <= 0) return;
+
+        await Task.Delay(TimeSpan.FromMilliseconds(remainingMs), cts.Token);
     }
 
     public virtual void Dispose()

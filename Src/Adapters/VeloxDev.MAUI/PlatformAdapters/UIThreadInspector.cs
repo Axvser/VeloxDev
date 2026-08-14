@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.TransitionSystem
+namespace VeloxDev.TransitionSystem
 {
     public class UIThreadInspector() : UIThreadInspectorCore
     {
@@ -6,9 +6,9 @@
 
         public override bool IsUIThread() => Application.Current?.Dispatcher?.IsDispatchRequired == false;
 
-        public override object? ProtectedGetValue(bool isUIThread, object target, ITransitionProperty property)
+        public override object? ProtectedGetValue(object target, ITransitionProperty property)
         {
-            if (isUIThread)
+            if (IsUIThread())
                 return property.GetValue(target);
 
             var tcs = new TaskCompletionSource<object?>();
@@ -27,9 +27,9 @@
             return tcs.Task.GetAwaiter().GetResult();
         }
 
-        public override List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
+        public override List<object?> ProtectedInterpolate(object target, Func<List<object?>> interpolate)
         {
-            if (isUIThread)
+            if (IsUIThread())
                 return interpolate();
 
             var tcs = new TaskCompletionSource<List<object?>>();
@@ -47,33 +47,32 @@
             return tcs.Task.GetAwaiter().GetResult() ?? [];
         }
 
-        public override void ProtectedInvoke(bool isUIThread, Action action)
+        public override void ProtectedInvoke(object target, Action action)
         {
-            if (isUIThread)
+            if (IsUIThread())
             {
                 action.Invoke();
+                return;
             }
-            else
-            {
-                var tcs = new TaskCompletionSource<object?>();
-                if (Application.Current?.Dispatcher?.Dispatch(() =>
-                {
-                    try
-                    {
-                        action.Invoke();
-                        tcs.SetResult(null);
-                    }
-                    catch (Exception ex)
-                    {
-                        tcs.SetException(ex);
-                    }
-                }) != true)
-                {
-                    throw new InvalidOperationException("Failed to dispatch work to the MAUI UI thread.");
-                }
 
-                tcs.Task.GetAwaiter().GetResult();
+            var tcs = new TaskCompletionSource<object?>();
+            if (Application.Current?.Dispatcher?.Dispatch(() =>
+            {
+                try
+                {
+                    action.Invoke();
+                    tcs.SetResult(null);
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            }) != true)
+            {
+                throw new InvalidOperationException("Failed to dispatch work to the MAUI UI thread.");
             }
+
+            tcs.Task.GetAwaiter().GetResult();
         }
     }
 }

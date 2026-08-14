@@ -28,7 +28,8 @@
 		<PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
 		<PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
 		<PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
-		<PackageReference Include="VeloxDev.Core" Version="6.0.188" />
+		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="6.0.188" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 </Project>

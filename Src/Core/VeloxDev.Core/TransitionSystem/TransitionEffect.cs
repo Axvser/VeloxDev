@@ -86,31 +86,31 @@ public class TransitionEffectCore : ITransitionEffectCore
 
     public virtual void InvokeAwake(object sender, TransitionEventArgs e)
     {
-        _awaked.Invoke([sender, e]);
+        _awaked.GetInvocationList()?.Invoke(sender, e);
     }
     public virtual void InvokeStart(object sender, TransitionEventArgs e)
     {
-        _start.Invoke([sender, e]);
+        _start.GetInvocationList()?.Invoke(sender, e);
     }
     public virtual void InvokeUpdate(object sender, TransitionEventArgs e)
     {
-        _update.Invoke([sender, e]);
+        _update.GetInvocationList()?.Invoke(sender, e);
     }
     public virtual void InvokeLateUpdate(object sender, TransitionEventArgs e)
     {
-        _lateupdate.Invoke([sender, e]);
+        _lateupdate.GetInvocationList()?.Invoke(sender, e);
     }
     public virtual void InvokeCompleted(object sender, TransitionEventArgs e)
     {
-        _completed.Invoke([sender, e]);
+        _completed.GetInvocationList()?.Invoke(sender, e);
     }
     public virtual void InvokeCancled(object sender, TransitionEventArgs e)
     {
-        _cancled.Invoke([sender, e]);
+        _cancled.GetInvocationList()?.Invoke(sender, e);
     }
     public virtual void InvokeFinally(object sender, TransitionEventArgs e)
     {
-        _finally.Invoke([sender, e]);
+        _finally.GetInvocationList()?.Invoke(sender, e);
     }
 
     public ITransitionEffectCore Clone()

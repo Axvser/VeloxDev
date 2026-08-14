@@ -1,4 +1,4 @@
-﻿namespace VeloxDev.TransitionSystem
+namespace VeloxDev.TransitionSystem
 {
     public interface IFrameInterpolator<TPriorityCore> : IFrameInterpolatorCore
     {
@@ -6,7 +6,6 @@
             object target,
             IFrameState state,
             ITransitionEffect<TPriorityCore> effect,
-            bool isUIAccess,
             IUIThreadInspector<TPriorityCore> inspector);
     }
 
@@ -16,7 +15,6 @@
             object target,
             IFrameState state,
             ITransitionEffectCore effect,
-            bool isUIAccess,
             IUIThreadInspector inspector);
     }
 
@@ -26,7 +24,6 @@
             object target,
             IFrameState state,
             ITransitionEffectCore effect,
-            bool isUIAccess,
             IUIThreadInspectorCore inspector);
     }
 }

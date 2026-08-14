@@ -10,10 +10,11 @@ namespace VeloxDev.Adapters.NativeInterpolators
             var s = Normalize(start);
             var e = Normalize(end);
 
+            // å•å¸§ï¼ˆé‡ç½®ç­‰ï¼‰è¿”å›åŸå§‹ç›®æ ‡å€¼ï¼šend ä¸º null æ—¶å°±å†™ nullï¼Œè€Œä¸æ˜¯é€æ˜ç”»åˆ·ã€‚
             if (steps <= 1)
-                return [e];
+                return [end];
 
-            // ¶ÔÆë»­Ë¢ÀàĞÍ
+            // ï¿½ï¿½ï¿½ë»­Ë¢ï¿½ï¿½ï¿½ï¿½
             (var alignedS, var alignedE) = AlignBrushTypes(s, e);
 
             var result = new List<object?>(steps);
@@ -26,7 +27,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return result;
         }
 
-        #region ±ê×¼»¯ºÍ¶ÔÆë
+        #region ï¿½ï¿½×¼ï¿½ï¿½ï¿½Í¶ï¿½ï¿½ï¿½
 
         private static Brush Normalize(object? obj)
         {
@@ -87,7 +88,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
         #endregion
 
-        #region ºËĞÄ²åÖµÂß¼­
+        #region ï¿½ï¿½ï¿½Ä²ï¿½Öµï¿½ß¼ï¿½
 
         private static Brush InterpolateAligned(Brush s, Brush e, double t)
         {
@@ -96,7 +97,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
                 if (t <= 0.0) return CloneBrush(s);
                 if (t >= 1.0) return CloneBrush(e);
 
-                // ĞŞ¸´£ºÊ¹ÓÃisÄ£Ê½Æ¥Åä¶ø²»ÊÇswitch±í´ïÊ½
+                // ï¿½Ş¸ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½isÄ£Ê½Æ¥ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½switchï¿½ï¿½ï¿½ï¿½Ê½
                 if (s is SolidColorBrush startSolid && e is SolidColorBrush endSolid)
                     return InterpolateSolidColors(startSolid, endSolid, t);
 
@@ -264,7 +265,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
         #endregion
 
-        #region ÊıÑ§¸¨Öú·½·¨
+        #region ï¿½ï¿½Ñ§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 

@@ -1,4 +1,4 @@
-﻿using Avalonia.Threading;
+using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
 
@@ -10,9 +10,9 @@ namespace VeloxDev.TransitionSystem
 
         public override bool IsUIThread() => Dispatcher.UIThread?.CheckAccess() ?? default;
 
-        public override object? ProtectedGetValue(bool isUIThread, object target, ITransitionProperty property)
+        public override object? ProtectedGetValue(object target, ITransitionProperty property)
         {
-            if (isUIThread)
+            if (IsUIThread())
             {
                 return property.GetValue(target);
             }
@@ -22,9 +22,9 @@ namespace VeloxDev.TransitionSystem
             }
         }
 
-        public override List<object?> ProtectedInterpolate(bool isUIThread, Func<List<object?>> interpolate)
+        public override List<object?> ProtectedInterpolate(object target, Func<List<object?>> interpolate)
         {
-            if (isUIThread)
+            if (IsUIThread())
             {
                 return interpolate.Invoke();
             }
@@ -34,9 +34,9 @@ namespace VeloxDev.TransitionSystem
             }
         }
 
-        public override void ProtectedInvoke(bool isUIThread, Action action, DispatcherPriority priority)
+        public override void ProtectedInvoke(object target, Action action, DispatcherPriority priority)
         {
-            if (isUIThread)
+            if (IsUIThread())
             {
                 action.Invoke();
             }

@@ -11,9 +11,13 @@
     </p>
 
     <div class="demo-toolbar">
-        <button class="btn btn-primary" @onclick="LoadAnimations">▶ Load Animations</button>
-        <button class="btn btn-secondary" @onclick="ResetBox0">↩ Reset Box0</button>
-        <button class="btn btn-danger" @onclick="ExitAnimations">■ Exit Animations</button>
+        <button class="btn btn-primary" @onclick="LoadMainThread">主线程互斥</button>
+        <button class="btn btn-dark" @onclick="LoadAnimations">后台线程互斥</button>
+        <button class="btn btn-success" @onclick="LoadMainThreadNonMutual">主线程并发</button>
+        <button class="btn btn-info" @onclick="LoadAnimationsNonMutual">后台线程并发</button>
+        <button class="btn btn-warning" @onclick="LoadRepeatedMutual">连续互斥</button>
+        <button class="btn btn-secondary" @onclick="ResetBox0">重置</button>
+        <button class="btn btn-danger" @onclick="ExitAnimations">停止全部</button>
     </div>
 
     <div class="demo-stage">

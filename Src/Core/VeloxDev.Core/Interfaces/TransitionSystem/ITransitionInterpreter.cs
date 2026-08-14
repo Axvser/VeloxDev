@@ -1,4 +1,4 @@
-﻿using VeloxDev.TimeLine;
+using VeloxDev.TimeLine;
 
 namespace VeloxDev.TransitionSystem
 {
@@ -8,7 +8,6 @@ namespace VeloxDev.TransitionSystem
             object target,
             IFrameSequence<TPriorityCore> frameSequence,
             ITransitionEffect<TPriorityCore> effect,
-            bool isUIAccess,
             CancellationTokenSource cts);
     }
 
@@ -18,7 +17,6 @@ namespace VeloxDev.TransitionSystem
             object target,
             IFrameSequence frameSequence,
             ITransitionEffectCore effect,
-            bool isUIAccess,
             CancellationTokenSource cts);
     }
 
@@ -29,7 +27,6 @@ namespace VeloxDev.TransitionSystem
             object target,
             IFrameSequenceCore frameSequence,
             ITransitionEffectCore effect,
-            bool isUIAccess,
             CancellationTokenSource cts);
         public void Exit();
     }

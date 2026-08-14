@@ -13,7 +13,9 @@ namespace VeloxDev.Adapters.NativeInterpolators
         {
             var s = Normalize(start);
             var e = Normalize(end);
-            if (steps <= 1) return [e];
+            // 单帧（重置等）返回原始目标值：end 为 null 时就写 null，而不是归一化成空的 TransformGroup
+            // （空组会渲染成非恒等矩阵，导致元素塌缩不可见）。
+            if (steps <= 1) return [end];
 
             var startList = ExtractTransforms(s);
             var endList = ExtractTransforms(e);

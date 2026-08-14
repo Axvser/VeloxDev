@@ -11,6 +11,8 @@ namespace Demo
 {
     public sealed partial class MainWindow : Window
     {
+        private bool _resetInitialized;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -18,37 +20,52 @@ namespace Demo
             Rec0.RenderTransform = CreateRec0Transform();
             Rec0.Fill = CreateRec0Brush();
 
-            // VeloxDev库在 WinUI 执行动画时，必须手动获取主窗口
-            UIThreadInspector.SetWindow(this);
+            // 动画目标是 DependencyObject，库会直接用它的 DispatcherQueue 编组到所属 UI 线程，
+            // 即便下方从后台线程（Task.Run）首次启动动画，也无需任何捕获。
 
             // VeloxDev动画的核心概念是 "一切皆状态"
             // Snapshot(...) 记录显式指定的属性路径
             // SnapshotAll() 自动发现并记录当前对象中可动画的属性
 
-            var snapshot0 = Rec0.SnapshotAll();
-            var snapshot1 = Rec0.Snapshot(x => x.RenderTransform, x => x.Fill);
-            var snapshot2 = Rec0.SnapshotExcept(x => x.Visibility);
-
-            // 于是，可以加载指向 snapshot 的过渡效果
-            // 这里记录的快照是初始状态
-
-            btnReset.Click += (s, e) =>
+            // 重置快照在窗口激活（Activated）后才拍摄，避免初始状态尚未确立导致信息丢失。
+            // Rec0 的属性（RenderTransform.X、Fill.StartPoint/EndPoint）会被原地修改，
+            // 快照持有的引用会被污染，因此 Rec0 用新建对象重置；Rec1/Rec2 的 Fill 是整体替换（不突变），
+            // 用初始快照即可完整恢复。
+            ((FrameworkElement)Content).Loaded += (s, e) =>
             {
-                CreateRec0Reset().Execute(Rec0);
+                if (_resetInitialized) return;
+                _resetInitialized = true;
+
+                // Rec1/Rec2 的 Fill 是整体替换（不突变），初始快照稳定可复用
+                var reset1 = Rec1.SnapshotAll();
+                var reset2 = Rec2.SnapshotAll();
+
+                btnReset.Click += (s, e) =>
+                {
+                    Transition.Exit(Rec0, IncludeMutual: true, IncludeNoMutual: true);
+                    Transition.Exit(Rec1, IncludeMutual: true, IncludeNoMutual: true);
+                    Transition.Exit(Rec2, IncludeMutual: true, IncludeNoMutual: true);
+
+                    // Rec0 的 RenderTransform.X / Fill.StartPoint 会被动画原地修改，
+                    // 每次重置必须新建对象，避免快照引用被污染
+                    CreateRec0Reset().Execute(Rec0);
+                    reset1.Effect(TransitionEffects.Empty).Execute(Rec1);
+                    reset2.Effect(TransitionEffects.Empty).Execute(Rec2);
+                };
             };
+        }
+
+        private void LoadMainThread(object sender, RoutedEventArgs e)
+        {
+            // 主线程（UI 线程）直接启动，互斥（CanMutualTask: true 默认）
+            Animation0.Execute(Rec0);
+            Animation1.Execute(Rec1);
+            Animation2.Execute(Rec2);
         }
 
         private void LoadAnimations(object sender, RoutedEventArgs e)
         {
-            // 直接从 snapshot 对象启动过渡动画
-            // 默认对象只允许同时执行一个动画，即 CanMutualTask: true，新来的会打断正在执行的
-
-            //Animation0.Execute(Rec0, CanMutualTask: false);
-            //Animation1.Execute(Rec1);
-            //Animation2.Execute(Rec2);
-
-            // 也可以直接在非UI线程中启动动画，框架会自动切换到 UI 线程
-
+            // 非 UI 线程启动，框架自动切回 UI 线程（测试目标派生的线程编组）
             _ = Task.Run(() =>
             {
                 Animation0.Execute(Rec0);
@@ -57,15 +74,23 @@ namespace Demo
             });
         }
 
+        private void LoadMainThreadNonMutual(object sender, RoutedEventArgs e)
+        {
+            // 主线程 + CanMutualTask: false —— 并发运行，互不取消
+            Animation0.Execute(Rec0, CanMutualTask: false);
+            Animation1.Execute(Rec1, CanMutualTask: false);
+            Animation2.Execute(Rec2, CanMutualTask: false);
+        }
+
         private void ExitAnimations(object sender, RoutedEventArgs e)
         {
             // 终结对象持有的动画
             // IncludeMutual   表示是否终结设定了 CanMutualTask: true 的动画
             // IncludeNoMutual 表示是否终结设定了 CanMutualTask: false 的动画
 
-            Transition.Exit(Rec0, IncludeMutual: true, IncludeNoMutual: false);
-            Transition.Exit(Rec1);
-            Transition.Exit(Rec2);
+            Transition.Exit(Rec0, IncludeMutual: true, IncludeNoMutual: true);
+            Transition.Exit(Rec1, IncludeMutual: true, IncludeNoMutual: true);
+            Transition.Exit(Rec2, IncludeMutual: true, IncludeNoMutual: true);
 
             // 当然，也可以从核心库提供的方法寻找到动画的 Scheduler
             // Scheduler 对象拥有 Execute() 和 Exit() 的能力
@@ -79,6 +104,26 @@ namespace Demo
             //        scheduler.Exit();
             //    }
             //}
+        }
+
+        private void LoadAnimationsNonMutual(object sender, RoutedEventArgs e)
+        {
+            // CanMutualTask: false —— 三段动画互不干扰地并发运行，不会被彼此取消
+            _ = Task.Run(() =>
+            {
+                Animation0.Execute(Rec0, CanMutualTask: false);
+                Animation1.Execute(Rec1, CanMutualTask: false);
+                Animation2.Execute(Rec2, CanMutualTask: false);
+            });
+        }
+
+        private void LoadRepeatedMutual(object sender, RoutedEventArgs e)
+        {
+            // 每次点击都在 Rec0 上启动互斥动画：新动画会取消上一次（测试调度器门控与取消）
+            _ = Task.Run(() =>
+            {
+                Animation0.Execute(Rec0); // CanMutualTask: true（默认）
+            });
         }
     }
 
