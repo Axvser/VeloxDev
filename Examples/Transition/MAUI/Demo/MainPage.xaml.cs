@@ -20,7 +20,12 @@ namespace Demo
             if (_resetInitialized) return;
             _resetInitialized = true;
 
-            // 重置快照在页面出现（OnAppearing）后才拍摄，避免初始状态尚未确立导致信息丢失。
+            // 先显式初始化到确定状态，再拍快照，避免快照捕获到非初始的 3D/变换（时好时坏）
+            Rec0.Fill = CreateRec0Brush();
+            Rec0.RotationX = 0; Rec0.RotationY = 0; Rec0.Scale = 1; Rec0.TranslationX = 0; Rec0.TranslationY = 0;
+            Rec1.RotationX = 0; Rec1.RotationY = 0; Rec1.Scale = 1; Rec1.TranslationX = 0; Rec1.TranslationY = 0;
+            Rec2.RotationX = 0; Rec2.RotationY = 0; Rec2.Scale = 1; Rec2.TranslationX = 0; Rec2.TranslationY = 0;
+
             // Rec1/Rec2 的 Fill 是整体替换（不突变），初始快照稳定可复用。
             var reset1 = Rec1.SnapshotAll();
             var reset2 = Rec2.SnapshotAll();
@@ -31,10 +36,11 @@ namespace Demo
                 Transition.Exit(Rec1, IncludeMutual: true, IncludeNoMutual: true);
                 Transition.Exit(Rec2, IncludeMutual: true, IncludeNoMutual: true);
 
-                // Rec0 的 Fill.StartPoint/EndPoint 会被动画原地修改，每次重置必须新建对象，避免快照引用被污染
-                CreateRec0Reset().Execute(Rec0);
-                reset1.Effect(TransitionEffects.Empty).Execute(Rec1);
-                reset2.Effect(TransitionEffects.Empty).Execute(Rec2);
+                // 直接同步应用初始快照：绕过 async Execute 管线（其在部分平台对 Transform 重置不可靠），
+                // 且 Rec0 每次新建对象，避免快照引用被动画原地修改污染
+                ApplyReset(CreateRec0Reset(), Rec0);
+                ApplyReset(reset1, Rec1);
+                ApplyReset(reset2, Rec2);
             };
         }
 
@@ -127,6 +133,20 @@ namespace Demo
                 .Property(r => r.TranslationX, 0)
                 .Property(r => r.Fill, CreateRec0Brush())
                 .Effect(TransitionEffects.Empty);
+        }
+
+        // 直接同步应用快照值（绕过 async Execute 管线，确保 Transform/3D 重置确定可靠）。
+        // Projection 与 RenderTransform(Scale) 在部分平台互斥——先清除 Projection，再写其余。
+        private static void ApplyReset(Transition<Rectangle>.StateSnapshot snapshot, Rectangle target)
+        {
+            // 两遍：先清除 Projection（解除与 RenderTransform/Scale 的互斥），再写其余。
+            // 单个属性冲突（框架约束）不中断整个重置。
+            foreach (var kvp in snapshot.GetState().Values)
+                if (kvp.Key.Path.Contains("Projection"))
+                    try { kvp.Key.SetValue(target, kvp.Value); } catch { }
+            foreach (var kvp in snapshot.GetState().Values)
+                if (!kvp.Key.Path.Contains("Projection"))
+                    try { kvp.Key.SetValue(target, kvp.Value); } catch { }
         }
 
         // 延迟动画 - 旋转

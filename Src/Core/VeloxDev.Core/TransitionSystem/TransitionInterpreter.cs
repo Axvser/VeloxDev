@@ -32,6 +32,8 @@ public abstract class TransitionInterpreterCore<
         CancellationTokenSource cts)
     {
         this.cts = cts;
+        if (frameSequence is ICancellableFrameSequence cancellable)
+            cancellable.SetCancellation(cts);
         var indexs = GetEaseIndex(effect, frameSequence.Count);
         var frameMs = effect.Duration.TotalMilliseconds / frameSequence.Count;
         var foreverloop = effect.LoopTime == int.MaxValue;
@@ -128,6 +130,8 @@ public abstract class TransitionInterpreterCore<
         CancellationTokenSource cts)
     {
         this.cts = cts;
+        if (frameSequence is ICancellableFrameSequence cancellable)
+            cancellable.SetCancellation(cts);
         var indexs = GetEaseIndex(effect, frameSequence.Count);
         var frameMs = effect.Duration.TotalMilliseconds / frameSequence.Count;
         var foreverloop = effect.LoopTime == int.MaxValue;
