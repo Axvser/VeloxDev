@@ -120,6 +120,10 @@ namespace Demo.ViewModels.Workflow.Helper
             _viewModel = null;
         }
 
+        /// <summary>
+        /// 编译 / 无状态(Work) 模式共用入口：WorkCommand 以「非 WorkContext」参数触发。
+        /// 编译器按序驱动每个节点，或用户在卡片上点 Run 触发单个节点。
+        /// </summary>
         public override async Task WorkAsync(object? parameter, CancellationToken ct)
         {
             if (_viewModel is null)
@@ -127,8 +131,81 @@ namespace Demo.ViewModels.Workflow.Helper
                 return;
             }
 
+            // 编译执行：引擎传入 RuntimeContext。节点的编号在编译期已固定（CompileContext.Order），
+            // 运行期只推进状态，不重写徽标编号（避免每次运行都变成 #1）。
+            if (parameter is VeloxDev.Core.WorkflowSystem.CompilerEx.RuntimeContext)
+            {
+                await ExecuteCompiledStepAsync(ct);
+                return;
+            }
+
+            // 无状态模式：走原有 NetworkFlowContext 记录
+            await ExecuteStepAsync(NetworkFlowContext.From(parameter), "EXEC", ct);
+        }
+
+        /// <summary>编译执行下的节点步骤：只更新运行状态/耗时，不触碰编译期固定的编号徽标。</summary>
+        private async Task ExecuteCompiledStepAsync(CancellationToken ct)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                await UpdateViewModelStateAsync(
+                    status: "Running",
+                    duration: $"{_viewModel.DelayMilliseconds} ms",
+                    preview: $"Compiled step: simulating {_viewModel.DelayMilliseconds} ms...",
+                    error: string.Empty);
+
+                await Task.Delay(_viewModel.DelayMilliseconds, ct);
+                stopwatch.Stop();
+
+                await UpdateViewModelStateAsync(
+                    status: "Completed",
+                    duration: $"{stopwatch.ElapsedMilliseconds} ms",
+                    preview: $"{_viewModel.Title} completed after {stopwatch.ElapsedMilliseconds} ms.",
+                    error: string.Empty);
+            }
+            catch (OperationCanceledException ex)
+            {
+                stopwatch.Stop();
+                await UpdateViewModelStateAsync("Canceled", $"{stopwatch.ElapsedMilliseconds} ms", _viewModel.LastResponsePreview, ex.Message);
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                await UpdateViewModelStateAsync("Failed", $"{stopwatch.ElapsedMilliseconds} ms", _viewModel.LastResponsePreview, ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 无状态(ReceiveData) 模式：上游 Broadcast 把 WorkContext 推到本节点的输入口时，
+        /// NodeHelper 走 <see cref="ReceiveAsync"/> 消费数据（区别于编译器模式的 WorkAsync）。
+        /// 与 WorkAsync 共用同一套模拟负载，仅以 RECV 标记区分执行路径。
+        /// </summary>
+        public override async Task<object?> ReceiveAsync(object? parameter,
+            IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, CancellationToken ct)
+        {
+            if (_viewModel is null)
+            {
+                return parameter;
+            }
+
             var context = NetworkFlowContext.From(parameter);
-            var executionTrace = context.RecordExecution($"EXEC {_viewModel.Title}", out var executionOrder);
+            await ExecuteStepAsync(context, "RECV", ct);
+            return context;
+        }
+
+        /// <summary>
+        /// 模拟一段工作负载：记录执行轨迹、更新节点 UI 状态、按 DelayMilliseconds 延迟。
+        /// 编译器模式与无状态模式共用，避免两套几乎相同的状态推进逻辑。
+        /// </summary>
+        private async Task ExecuteStepAsync(NetworkFlowContext context, string mode, CancellationToken ct)
+        {
+            if (_viewModel is null)
+            {
+                return;
+            }
+
+            var executionTrace = context.RecordExecution($"{mode} {_viewModel.Title}", out var executionOrder);
             var stopwatch = Stopwatch.StartNew();
             try
             {
@@ -138,7 +215,7 @@ namespace Demo.ViewModels.Workflow.Helper
                 await UpdateViewModelStateAsync(
                     status: "Running",
                     duration: $"{_viewModel.DelayMilliseconds} ms",
-                    preview: $"Simulating {_viewModel.DelayMilliseconds} ms workload...",
+                    preview: $"{mode}: simulating {_viewModel.DelayMilliseconds} ms workload...",
                     error: string.Empty);
 
                 await Task.Delay(_viewModel.DelayMilliseconds, ct);

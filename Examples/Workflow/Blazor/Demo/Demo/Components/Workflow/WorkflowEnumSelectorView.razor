@@ -14,6 +14,13 @@
                 <option value="@opt" selected="@(opt == _selectedValue)">@opt</option>
             }
         </select>
+        <label class="enum-label">Compile Mode</label>
+        <select class="enum-select" @onchange="OnModeChanged">
+            @foreach (var opt in _modeOptions)
+            {
+                <option value="@opt" selected="@(opt == _compileMode)">@opt</option>
+            }
+        </select>
         <div class="selector-slots">
             @if (Selector?.OutputSlots is { } slots)
             {

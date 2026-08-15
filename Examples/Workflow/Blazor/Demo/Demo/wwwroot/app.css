@@ -404,7 +404,9 @@ html, body {
     cursor: pointer;
     text-align: center;
 }
+.btn-compile { background: #1e3a5f; }
 .btn-run { background: #166534; }
+.btn-stop { background: #5f1e1e; }
 .btn-close { background: #991b1b; }
 
 /* ── Bool Selector View (body-only; card chrome comes from TemplateNodeView) ── */
@@ -463,6 +465,8 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex: 1;
+    min-height: 0;
 }
 .selector-slot-row {
     display: flex;

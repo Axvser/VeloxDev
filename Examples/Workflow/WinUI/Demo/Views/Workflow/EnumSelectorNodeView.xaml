@@ -14,6 +14,10 @@
     behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
     mc:Ignorable="d">
 
+    <UserControl.Resources>
+        <local:BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </UserControl.Resources>
+
     <Grid Clip="{x:Null}">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
@@ -45,6 +49,10 @@
                 behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
                 <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
+                <Border Background="#1f3d1f" BorderBrush="#7bd97b" BorderThickness="1" CornerRadius="10" Padding="6,1"
+                        Visibility="{Binding HasExecutionOrder, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold"/>
+                </Border>
                 <Border Background="#2b1540" BorderBrush="#d6a0ff" BorderThickness="1" CornerRadius="10" Padding="6,1">
                     <TextBlock Text="{Binding LastRouted}" Foreground="#e4d8ff" FontWeight="Bold"/>
                 </Border>
@@ -56,6 +64,10 @@
                 <TextBlock Text="Selected Method" Foreground="#bfbfbf" FontSize="11"/>
                 <ComboBox ItemsSource="{Binding EnumValues}"
                           SelectedItem="{Binding SelectedValue, Mode=TwoWay}"
+                          HorizontalAlignment="Stretch"/>
+                <TextBlock Text="Compile Mode" Foreground="#bfbfbf" FontSize="11"/>
+                <ComboBox ItemsSource="{Binding CompileModeOptions}"
+                          SelectedItem="{Binding CompileMode, Mode=TwoWay}"
                           HorizontalAlignment="Stretch"/>
                 <TextBlock Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,6,0,0"/>
                 <ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList">

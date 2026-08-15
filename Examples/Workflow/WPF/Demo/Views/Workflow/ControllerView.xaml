@@ -20,7 +20,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="52" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="56" />
+            <RowDefinition Height="88" />
         </Grid.RowDefinitions>
 
         <Border Grid.RowSpan="3"
@@ -48,26 +48,6 @@
                 <TextBlock Text="Seed" Foreground="#DCDCDC" FontSize="11" />
                 <TextBox Margin="0,4,0,0" FontSize="11"
                          Text="{Binding SeedPayload, UpdateSourceTrigger=PropertyChanged}" />
-
-                <TextBlock Margin="0,6,0,0" Text="Mode" Foreground="#DCDCDC" FontSize="11" />
-                <ComboBox Margin="0,2,0,0" FontSize="11"
-                          ItemsSource="{Binding CompileModeOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                          SelectedItem="{Binding CompileMode}" />
-
-                <TextBlock Margin="0,6,0,0" Text="Direction" Foreground="#DCDCDC" FontSize="11" />
-                <ComboBox Margin="0,2,0,0" FontSize="11"
-                          ItemsSource="{Binding CompileDirectionOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                          SelectedItem="{Binding CompileDirection}" />
-
-                <TextBlock Margin="0,6,0,0" Text="Scope" Foreground="#DCDCDC" FontSize="11" />
-                <ComboBox Margin="0,2,0,0" FontSize="11"
-                          ItemsSource="{Binding CompileScopeOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                          SelectedItem="{Binding CompileScope}" />
-
-                <TextBlock Margin="0,6,0,0" Text="Cycle" Foreground="#DCDCDC" FontSize="11" />
-                <ComboBox Margin="0,2,0,0" FontSize="11"
-                          ItemsSource="{Binding CycleHandlingOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                          SelectedItem="{Binding CycleHandling}" />
             </StackPanel>
             </ScrollViewer>
         </Border>
@@ -77,17 +57,26 @@
                 CornerRadius="0,0,5,5"
                 Padding="8">
             <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Button Grid.Column="0"
-                        Margin="0,0,4,0"
-                        Content="Run Flow"
-                        Command="{Binding OpenWorkflowCommand}" />
-                <Button Grid.Column="1"
-                        Margin="4,0,0,0"
-                        Content="Close Tree"
+                <Button Grid.Row="0" Grid.Column="0" Margin="0,0,3,3"
+                        Content="Compile" Background="#1E3A5F" Foreground="White"
+                        Command="{Binding CompileCommand}" />
+                <Button Grid.Row="0" Grid.Column="1" Margin="3,0,0,3"
+                        Content="Run" Background="#1E5F2E" Foreground="White"
+                        IsEnabled="{Binding HasCompiledGraphs}"
+                        Command="{Binding RunCommand}" />
+                <Button Grid.Row="1" Grid.Column="0" Margin="0,3,3,0"
+                        Content="Stop" Background="#5F1E1E" Foreground="White"
+                        Command="{Binding StopCommand}" />
+                <Button Grid.Row="1" Grid.Column="1" Margin="3,3,0,0"
+                        Content="Close" Background="#1E1E1E" Foreground="White"
                         Command="{Binding CloseWorkflowCommand}" />
             </Grid>
         </Border>

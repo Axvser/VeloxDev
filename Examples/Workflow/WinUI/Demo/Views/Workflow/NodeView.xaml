@@ -13,6 +13,10 @@
     behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
     mc:Ignorable="d">
 
+    <UserControl.Resources>
+        <local:BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </UserControl.Resources>
+
     <Grid Clip="{x:Null}">
         <Grid.RowDefinitions>
             <RowDefinition Height="52" />
@@ -66,7 +70,7 @@
                             BorderBrush="#7BD97B"
                             BorderThickness="1"
                             CornerRadius="10"
-                            Visibility="Collapsed">
+                            Visibility="{Binding HasExecutionOrder, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#C8FFC8" FontWeight="Bold" VerticalAlignment="Center" />
                     </Border>
                     <Border x:Name="WorkLoadBadge"
@@ -75,7 +79,7 @@
                             BorderBrush="#B799FF"
                             BorderThickness="1"
                             CornerRadius="10"
-                            Visibility="Collapsed">
+                            Visibility="{Binding HasWorkLoad, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="{Binding WorkLoadText}" Foreground="#E4D8FF" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </Border>
                 </StackPanel>
@@ -100,19 +104,6 @@
                                    Maximum="10000"
                                    SmallChange="100"
                                    Value="{Binding DelayMilliseconds, Mode=TwoWay}" />
-                    </Grid>
-
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="110" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Priority" Foreground="#DCDCDC" VerticalAlignment="Center" />
-                        <NumberBox Grid.Column="1"
-                                   Minimum="-10"
-                                   Maximum="10"
-                                   SmallChange="1"
-                                   Value="{Binding CompilePriority, Mode=TwoWay}" />
                     </Grid>
 
                     <Grid>

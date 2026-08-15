@@ -14,7 +14,6 @@ public partial class WorkflowNodeView : ComponentBase, IDisposable
     private string _statusText = "";
     private string _traceText = "";
     private int _delayMs;
-    private int _priority;
     private bool _autoBroadcast;
     private bool _hasOrderBadge;
     private bool _hasLoadBadge;
@@ -49,7 +48,6 @@ public partial class WorkflowNodeView : ComponentBase, IDisposable
         _orderText = Node.ExecutionOrderText;
         _loadText = Node.WorkLoadText;
         _delayMs = Node.DelayMilliseconds;
-        _priority = Node.CompilePriority;
         _autoBroadcast = Node.AutoBroadcast;
         _hasOrderBadge = Node.HasExecutionOrder;
         _hasLoadBadge = Node.HasWorkLoad;
@@ -69,13 +67,6 @@ public partial class WorkflowNodeView : ComponentBase, IDisposable
         if (Node is null) return;
         if (int.TryParse(e.Value?.ToString(), out var ms))
             Node.DelayMilliseconds = ms;
-    }
-
-    private void OnPriorityChanged(ChangeEventArgs e)
-    {
-        if (Node is null) return;
-        if (int.TryParse(e.Value?.ToString(), out var p))
-            Node.CompilePriority = p;
     }
 
     private void OnTitleChanged(ChangeEventArgs e)

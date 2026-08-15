@@ -23,14 +23,6 @@ public partial class WorkflowView : ContentView
         InitializeComponent();
     }
 
-    public void LoadPerformanceTest()
-    {
-        // Set session from PerformanceTestSession tree
-        var perf = PerformanceTestSession.Create().Tree;
-        var session = WorkflowDemoSession.FromTree(perf);
-        Session = session;
-    }
-
     private void LoadNetworkDemo()
     {
         var session = WorkflowDemoSession.Create();
@@ -95,11 +87,6 @@ public partial class WorkflowView : ContentView
     private void OnLoadNetworkDemoClicked(object? sender, EventArgs e)
     {
         LoadNetworkDemo();
-    }
-
-    private void OnLoadPerformanceTestClicked(object? sender, EventArgs e)
-    {
-        LoadPerformanceTest();
     }
 
     public static readonly BindableProperty SessionProperty = BindableProperty.Create(

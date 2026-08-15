@@ -1,17 +1,104 @@
-﻿using VeloxDev.AI;
+using VeloxDev.AI;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.Compilation;
-using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace Demo.ViewModels;
 
 [AgentContext(AgentLanguages.Chinese, "派生的Node组件之一，作为任务发起者")]
 [AgentContext(AgentLanguages.English, "A derived Node component that acts as a workflow initiator/controller. Default size: 300×260. Never use Size(0,0).")]
 [WorkflowBuilder.Node<NodeHelper>]
-public partial class ControllerViewModel
+public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
 {
     public ControllerViewModel() => InitializeWorkflow();
+
+    // ── 编译 / 运行 ────────────────────────────────────────────────────────────
+    /// <summary>编译结果（以自身为起点的编译图）。</summary>
+    public CompilerViewModel Compiler { get; } = new();
+
+    /// <summary>当前运行期的执行会话（Run 时创建，UI 可绑定进度）。</summary>
+    public RuntimeContext? RuntimeContext { get; private set; }
+
+    private CancellationTokenSource? _runCts;
+
+    /// <summary>是否已编译出至少一张图（Run 按钮可用）。</summary>
+    public bool HasCompiledGraphs => Compiler.Graphs.Count > 0;
+
+    [AgentContext(AgentLanguages.Chinese, "编译：以自身为起点，把可达子图分解成编译图，并给各节点注入编译身份")]
+    [AgentContext(AgentLanguages.English, "Compile: decompose the reachable subgraph from this controller into compiled graphs.")]
+    [VeloxCommand]
+    private async Task Compile(object? parameters, CancellationToken ct)
+    {
+        await Compiler.CompileAsync(this);
+        OnPropertyChanged(nameof(HasCompiledGraphs));
+    }
+
+    [AgentContext(AgentLanguages.Chinese, "运行：用编译图 + 执行引擎驱动整条链")]
+    [AgentContext(AgentLanguages.English, "Run: drive the compiled graph with the execution engine.")]
+    [VeloxCommand]
+    private async Task Run(object? parameters, CancellationToken ct)
+    {
+        var graph = Compiler.Graphs.FirstOrDefault();
+        if (graph is null) return;
+
+        var context = new RuntimeContext { IsRunning = true };
+        RuntimeContext = context;
+        OnPropertyChanged(nameof(RuntimeContext));
+
+        _runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        try
+        {
+            await new CompilerEngine().RunAsync(graph, context, _runCts.Token);
+        }
+        finally
+        {
+            _runCts.Dispose();
+            _runCts = null;
+        }
+    }
+
+    [AgentContext(AgentLanguages.Chinese, "停止：取消当前运行")]
+    [AgentContext(AgentLanguages.English, "Stop: cancel the current run.")]
+    [VeloxCommand]
+    private Task Stop(object? parameters, CancellationToken ct)
+    {
+        _runCts?.Cancel();
+        return Task.CompletedTask;
+    }
+
+    [AgentContext(AgentLanguages.Chinese, "关闭工作流，释放所有正在运行的任务")]
+    [AgentContext(AgentLanguages.English, "Closes the workflow and releases all in-progress work items.")]
+    [VeloxCommand]
+    private async Task CloseWorkflow(object? parameters, CancellationToken ct)
+    {
+        if (Parent is null) return;
+        await Parent.GetHelper().CloseAsync();
+        if (Parent is TreeViewModel tree)
+        {
+            tree.EndWorkflowRun();
+        }
+    }
+
+    // ── 注入接口 ───────────────────────────────────────────────────────────────
+    /// <summary>编译期注入的编译身份（控制器是起点，Order 通常为 0）。</summary>
+    public CompileContext? CompileContext { get; private set; }
+
+    public void AttachCompileTimeContext(CompileContext context)
+    {
+        CompileContext = context;
+        OnPropertyChanged(nameof(CompileContext));
+        OnPropertyChanged(nameof(IsCompileStopped));
+    }
+
+    /// <summary>编译期是否处于绝对停止状态。</summary>
+    public bool IsCompileStopped => CompileContext is { Order: -1 };
+
+    /// <summary>运行期注入：引擎驱动本节点前，把当前执行会话交给它。</summary>
+    public void AttachRuntimeContext(RuntimeContext context)
+    {
+        RuntimeContext = context;
+        OnPropertyChanged(nameof(RuntimeContext));
+    }
 
     [AgentContext(AgentLanguages.Chinese, "输出口")]
     [AgentContext(AgentLanguages.English, "Output slot (sender). Connect this to the first downstream node's input slot to start the execution chain.")]
@@ -24,76 +111,4 @@ public partial class ControllerViewModel
     [AgentContext(AgentLanguages.Chinese, "种子负载，工作流执行时的初始数据")]
     [AgentContext(AgentLanguages.English, "Initial payload string injected into the workflow context when execution starts.")]
     [VeloxProperty] private string seedPayload = "demo-request-chain";
-
-    // ── 编译器四维度配置 ────────────────────────────────────────────────
-
-    [AgentContext(AgentLanguages.Chinese, "编译模式：BFS（广度优先）或 DFS（深度优先/前序）")]
-    [AgentContext(AgentLanguages.English, "Compile mode: BFS (breadth-first, level by level) or DFS (depth-first, pre-order).")]
-    [VeloxProperty] private CompileMode compileMode = CompileMode.BFS;
-
-    [AgentContext(AgentLanguages.Chinese, "边的遍历方向：Forward（顺流而下）或 Reverse（逆流而上）")]
-    [AgentContext(AgentLanguages.English, "Edge traversal direction: Forward (follow outputs downstream) or Reverse (follow inputs upstream).")]
-    [VeloxProperty] private CompileDirection compileDirection = CompileDirection.Forward;
-
-    [AgentContext(AgentLanguages.Chinese, "遍历范围：FromNode（从当前节点辐射）或 Omni（自动发现全图边界）")]
-    [AgentContext(AgentLanguages.English, "Traversal scope: FromNode (start from this node and radiate out) or Omni (auto-discover all graph boundary nodes).")]
-    [VeloxProperty] private CompileScope compileScope = CompileScope.FromNode;
-
-    [AgentContext(AgentLanguages.Chinese, "环路处理策略：Throw（抛异常）、Trim（修剪环路）、Allow（保留环路元数据）")]
-    [AgentContext(AgentLanguages.English, "Cycle handling: Throw (exception on cycle), Trim (traverse without revisiting), Allow (preserve loop metadata).")]
-    [VeloxProperty] private CycleHandling cycleHandling = CycleHandling.Throw;
-
-    // ── ComboBox 数据源（实例属性，避免跨平台 {x:Static} 问题） ──────
-    public CompileMode[] CompileModeOptions => [CompileMode.BFS, CompileMode.DFS];
-    public CompileDirection[] CompileDirectionOptions => [CompileDirection.Forward, CompileDirection.Reverse];
-    public CompileScope[] CompileScopeOptions => [CompileScope.FromNode, CompileScope.Omni];
-    public CycleHandling[] CycleHandlingOptions => [CycleHandling.Throw, CycleHandling.Trim, CycleHandling.Allow];
-
-    // ── ComboBox 数据源（跨平台 XAML 绑定用） ──────────────────────────
-
-    public static CompileMode[] CompileModeValues => [CompileMode.BFS, CompileMode.DFS];
-    public static CompileDirection[] CompileDirectionValues => [CompileDirection.Forward, CompileDirection.Reverse];
-    public static CompileScope[] CompileScopeValues => [CompileScope.FromNode, CompileScope.Omni];
-    public static CycleHandling[] CycleHandlingValues => [CycleHandling.Throw, CycleHandling.Trim, CycleHandling.Allow];
-
-    [AgentContext(AgentLanguages.Chinese, "启动工作流：以自身为起点，按四维度配置编译拓扑后按序执行")]
-    [AgentContext(AgentLanguages.English, "Compile the workflow graph with current 4-dimension settings, then execute in deterministic order.")]
-    [VeloxCommand]
-    private async Task OpenWorkflow(object? parameters, CancellationToken ct)
-    {
-        var tree = Parent as TreeViewModel;
-        tree?.BeginWorkflowRun();
-
-        try
-        {
-            var compiler = new WorkflowCompiler();
-            var context = NetworkFlowContext.Create(SeedPayload);
-
-            // 使用当前四维度配置编译
-            var results = compiler.Compile(this, CompileMode, CompileDirection, CompileScope, CycleHandling);
-            if (results.Count == 0) return;
-            var result = results[0];
-
-            // 按编译顺序执行，结果链自动传递
-            await result.ExecuteAsync(context, ct);
-        }
-        catch
-        {
-            tree?.EndWorkflowRun();
-            throw;
-        }
-    }
-
-    [AgentContext(AgentLanguages.Chinese, "停止工作流，关闭所有正在运行的任务")]
-    [AgentContext(AgentLanguages.English, "Stops the workflow and closes all in-progress work items.")]
-    [VeloxCommand]
-    private async Task CloseWorkflow(object? parameters, CancellationToken ct)
-    {
-        if (Parent is null) return;
-        await Parent.GetHelper().CloseAsync();
-        if (Parent is TreeViewModel tree)
-        {
-            tree.EndWorkflowRun();
-        }
-    }
 }

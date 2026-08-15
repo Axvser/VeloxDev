@@ -8,7 +8,7 @@
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid RowDefinitions="52,*,56">
+    <Grid RowDefinitions="52,*,88">
         <Border Grid.RowSpan="3"
                 Stroke="White"
                 StrokeThickness="1"
@@ -31,30 +31,29 @@
             <VerticalStackLayout Spacing="4">
                 <Label Text="Seed" TextColor="#DCDCDC" FontSize="11" />
                 <Entry Text="{Binding SeedPayload}" FontSize="11" />
-
-                <Label Text="Mode" TextColor="#DCDCDC" FontSize="11" />
-                <Picker ItemsSource="{Binding CompileModeOptions}"
-                        SelectedItem="{Binding CompileMode}" FontSize="11" />
-
-                <Label Text="Direction" TextColor="#DCDCDC" FontSize="11" />
-                <Picker ItemsSource="{Binding CompileDirectionOptions}"
-                        SelectedItem="{Binding CompileDirection}" FontSize="11" />
-
-                <Label Text="Scope" TextColor="#DCDCDC" FontSize="11" />
-                <Picker ItemsSource="{Binding CompileScopeOptions}"
-                        SelectedItem="{Binding CompileScope}" FontSize="11" />
-
-                <Label Text="Cycle" TextColor="#DCDCDC" FontSize="11" />
-                <Picker ItemsSource="{Binding CycleHandlingOptions}"
-                        SelectedItem="{Binding CycleHandling}" FontSize="11" />
             </VerticalStackLayout>
             </ScrollView>
         </Border>
 
         <Border Grid.Row="2" BackgroundColor="#2D2D2D" StrokeShape="RoundRectangle 0,0,5,5" Padding="8">
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                <Button Grid.Column="0" Text="Run Flow" Command="{Binding OpenWorkflowCommand}" />
-                <Button Grid.Column="1" Text="Close Tree" Command="{Binding CloseWorkflowCommand}" />
+            <Grid RowDefinitions="*,*" ColumnDefinitions="*,*" ColumnSpacing="6" RowSpacing="6">
+                <Button Grid.Row="0" Grid.Column="0" Text="Compile"
+                        BackgroundColor="#1E3A5F" TextColor="White"
+                        HorizontalOptions="Fill" VerticalOptions="Fill"
+                        Command="{Binding CompileCommand}" />
+                <Button Grid.Row="0" Grid.Column="1" Text="Run"
+                        BackgroundColor="#1E5F2E" TextColor="White"
+                        HorizontalOptions="Fill" VerticalOptions="Fill"
+                        IsEnabled="{Binding HasCompiledGraphs}"
+                        Command="{Binding RunCommand}" />
+                <Button Grid.Row="1" Grid.Column="0" Text="Stop"
+                        BackgroundColor="#5F1E1E" TextColor="White"
+                        HorizontalOptions="Fill" VerticalOptions="Fill"
+                        Command="{Binding StopCommand}" />
+                <Button Grid.Row="1" Grid.Column="1" Text="Close"
+                        BackgroundColor="#1E1E1E" TextColor="White"
+                        HorizontalOptions="Fill" VerticalOptions="Fill"
+                        Command="{Binding CloseWorkflowCommand}" />
             </Grid>
         </Border>
 

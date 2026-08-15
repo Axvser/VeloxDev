@@ -152,46 +152,30 @@ public class SlotGeneratorUndoProbeTests
     {
         var session = WorkflowDemoSession.Create();
         var tree = session.Tree;
-        var selector = tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
 
         // Contract (逐条引导步骤): the default sample is deliberately NOT a clean baseline.
-        // Create() keeps the ~62 bootstrap Submits — 15 × CreateNode, the 26 synchronous slot
-        // registrations, the 20 connections, and the mounted SetSelector — on the undo stack.
-        // Every Submit is synchronous in a deterministic order (the slot factories register via
-        // GetHelper().CreateSlot, and SetSelector is atomic), so Ctrl+Z tears the sample apart
-        // one setup step at a time and Redo re-builds it. These are intentional bootstrap steps,
-        // not phantom entries: each is a real setup operation the user may now undo/redo.
+        // Create() keeps every bootstrap Submit on the undo stack — CreateNode × N, the synchronous
+        // slot registrations, and the connections. Every Submit is synchronous in a deterministic
+        // order, so Ctrl+Z tears the sample apart one setup step at a time and Redo re-builds it.
+        // The compiled execution order is internal & fixed (not part of this undo surface).
 
-        // Top entry = the mounted SetSelector (WorkflowDemoSession → VoltageRange).
-        // VoltageRange is internal to Lib, so resolve it via reflection like the other repros.
-        var voltageRange = typeof(NetworkRequestMethod).Assembly.GetType("Demo.ViewModels.VoltageRange");
-        Assert.IsNotNull(voltageRange, "VoltageRange should exist in Lib");
-        Assert.AreEqual(voltageRange, selector.EnumType,
-            "bootstrap mounted the enum selector to VoltageRange");
-
-        // Undo #1 → reverts the selector mount (one step).
-        tree.GetHelper().Undo();
-        Assert.AreEqual(typeof(NetworkRequestMethod), selector.EnumType,
-            "one Undo reverts the last bootstrap step (the mounted SetSelector)");
-
-        // Undo #2 → pops the last bootstrap connection (handleDelete → finalize). Each Connect()
-        // is ONE Submit (StandardReceiveConnection → StandardCreateNewConnection); no redo in
-        // between, so the connection Submit sits directly under the selector mount.
+        // Top entry = the last bootstrap connection (deterministic). Undo pops it → link count -1.
         int linksBefore = tree.Links.Count;
         Assert.IsGreaterThan(0, linksBefore, "the demo graph carries connections");
         tree.GetHelper().Undo();
         Assert.AreEqual(linksBefore - 1, tree.Links.Count,
-            "a second Undo pops the last bootstrap connection (deterministic order)");
+            "Undo #1 pops the last bootstrap connection (deterministic order)");
 
-        // Redo #1 → re-applies the connection.
+        // Redo re-applies the connection.
         tree.GetHelper().Redo();
         Assert.AreEqual(linksBefore, tree.Links.Count,
             "Redo restores the connection");
 
-        // Redo #2 → re-applies the selector mount.
-        tree.GetHelper().Redo();
-        Assert.AreEqual(voltageRange, selector.EnumType,
-            "a final Redo restores the selector mount");
+        // 连续两步撤销仍是确定性的单步。
+        tree.GetHelper().Undo();
+        tree.GetHelper().Undo();
+        Assert.AreEqual(linksBefore - 2, tree.Links.Count,
+            "two Undos pop two bootstrap steps");
     }
 
     /// <summary>

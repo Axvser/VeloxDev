@@ -43,7 +43,6 @@
             summaryLabel = new Label();
             reloadButton = new Button();
             stopButton = new Button();
-            runButton = new Button();
             undoButton = new Button();
             redoButton = new Button();
             saveButton = new Button();
@@ -89,7 +88,6 @@
             toolbarPanel.Controls.Add(summaryLabel);
             toolbarPanel.Controls.Add(reloadButton);
             toolbarPanel.Controls.Add(stopButton);
-            toolbarPanel.Controls.Add(runButton);
             toolbarPanel.Controls.Add(undoButton);
             toolbarPanel.Controls.Add(redoButton);
             toolbarPanel.Controls.Add(saveButton);
@@ -157,17 +155,7 @@
             stopButton.Text = "停止工作流";
             stopButton.UseVisualStyleBackColor = true;
             stopButton.Click += StopWorkflow;
-            // 
-            // runButton
-            // 
-            runButton.Location = new Point(4, 78);
-            runButton.Name = "runButton";
-            runButton.Size = new Size(108, 32);
-            runButton.TabIndex = 5;
-            runButton.Text = "运行工作流";
-            runButton.UseVisualStyleBackColor = true;
-            runButton.Click += RunWorkflow;
-            // 
+            //
             // undoButton
             // 
             undoButton.Location = new Point(4, 122);
@@ -389,7 +377,6 @@
         private Label summaryLabel;
         private Button reloadButton;
         private Button stopButton;
-        private Button runButton;
         private Button undoButton;
         private Button redoButton;
         private Button saveButton;

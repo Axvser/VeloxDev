@@ -1,31 +1,21 @@
 using Demo.ViewModels.Workflow.Helper;
 using System.ComponentModel;
 using VeloxDev.AI;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.Compilation;
 
 namespace Demo.ViewModels;
 
 [AgentContext(AgentLanguages.Chinese, "枚举选择器节点，可将输入按枚举成员路由到多个执行路径。默认大小为 280×380。")]
 [AgentContext(AgentLanguages.English, "Enum selector node that routes input to multiple execution paths based on enum members. Default size: 280×380.")]
 [WorkflowBuilder.Node<EnumSelectorHelper>(workSemaphore: 1)]
-public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTimeNotifier
+public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTimeAware
 {
     public EnumSelectorNodeViewModel()
     {
         InitializeWorkflow();
         OutputSlots.SetSelector(typeof(NetworkRequestMethod));
-    }
-
-    /// <summary>
-    /// 编译期回调：编译瞬间获知自己的编译身份。
-    /// 正常编译（选中分支）写入顺序（+1 对齐运行时 1-based）；被略过时保持 0。
-    /// </summary>
-    public void OnCompiled(CompiledItem item)
-    {
-        IsCompileSkipped = item.IsSkipped;
-        LastExecutionOrder = item.IsSkipped ? 0 : item.Order + 1;
     }
 
     [AgentContext(AgentLanguages.Chinese, "输入口（接收端）")]
@@ -99,11 +89,8 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
             OnPropertyChanged(nameof(ExecutionOrderText));
         }
     }
-    public bool HasExecutionOrder => LastExecutionOrder > 0;
-    public string ExecutionOrderText => LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
-
-    /// <summary>本次编译中该节点是否因属于未选中条件分支而被略过（编译期判定）。</summary>
-    public bool IsCompileSkipped { get; private set; }
+    public bool HasExecutionOrder => LastExecutionOrder > 0 || IsCompileStopped;
+    public string ExecutionOrderText => IsCompileStopped ? "⊘" : LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
 
     public bool HasInputSlot => _inputSlot is not null;
 
@@ -130,39 +117,92 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
         return items[index].Slot?.ToString() ?? "?";
     }
 
-    public object? GetCurrentRouteKey()
-        => OutputSlots is not null ? OutputSlots.NormalizeSelectorValue(OutputSlots.CurrentValue) : null;
+    /// <summary>编译期注入的编译身份（Order = -1 表示绝对停止）。</summary>
+    public CompileContext? CompileContext { get; private set; }
+
+    /// <summary>编译期是否处于绝对停止状态（未选中静态分支 / 终止）。</summary>
+    public bool IsCompileStopped => CompileContext is { Order: -1 };
+
+    public void AttachCompileTimeContext(CompileContext context)
+    {
+        CompileContext = context;
+        LastExecutionOrder = context.Order >= 0 ? context.Order + 1 : 0;
+        OnPropertyChanged(nameof(CompileContext));
+        OnPropertyChanged(nameof(IsCompileStopped));
+        OnPropertyChanged(nameof(HasExecutionOrder));
+        OnPropertyChanged(nameof(ExecutionOrderText));
+    }
 
     /// <summary>
-    /// 编译时路由表：枚举值 → 对应的下游节点列表。
-    /// 单个分支可能扇出到多个目标（如 C→3 且 C→4），必须保留全部目标；
-    /// 旧的 1:1 赋值会让后写的目标覆盖先写的，导致丢失分支路径。
+    /// 编译模式：Static 编译期只返回当前选中分支；Dynamic 返回全部分支（运行期定 key）。
+    /// 不同的模式下 <see cref="GetRouteTable"/> 返回的字典不同。
     /// </summary>
-    public IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> GetRouteTable()
+    [VeloxProperty] private RouterCompileMode _compileMode = RouterCompileMode.Dynamic;
+
+    /// <summary>编译模式下拉数据源。</summary>
+    public RouterCompileMode[] CompileModeOptions => [RouterCompileMode.Static, RouterCompileMode.Dynamic];
+
+    /// <summary>
+    /// 统一路由入口：
+    /// - Static：key 由当前选中的枚举值决定（编译期可定）；
+    /// - Dynamic：编译期(null payload)返回 null → IsDynamic；运行期读共享字段 selector.value，否则回退当前选中值。
+    /// </summary>
+    public Task<object?> ResolveRouteKey(object? payload)
+    {
+        if (CompileMode == RouterCompileMode.Dynamic && payload is null)
+            return Task.FromResult<object?>(null);
+
+        if (payload is RuntimeContext ctx && ctx.TryGet("selector.value", out var v) && v is string s)
+            return Task.FromResult(OutputSlots is not null ? OutputSlots.NormalizeSelectorValue(s) : s);
+
+        return Task.FromResult(OutputSlots is not null
+            ? OutputSlots.NormalizeSelectorValue(OutputSlots.CurrentValue)
+            : null);
+    }
+
+    /// <summary>编译时路由表（随编译模式变化）：Static 只含当前选中分支；Dynamic 含全部分支（保留 1:N 扇出）。</summary>
+    public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
     {
         var dict = new Dictionary<object, List<IWorkflowNodeViewModel>>();
-        if (OutputSlots is null) return EmptyRouteTable();
+        if (OutputSlots is null)
+            return Task.FromResult(EmptyRouteTable());
 
-        foreach (var item in OutputSlots.Items)
+        if (CompileMode == RouterCompileMode.Static)
         {
-            var slot = item.Slot;
-            if (item.Value is null || slot.Targets.Count == 0) continue;
-
-            if (!dict.TryGetValue(item.Value, out var list))
-                dict[item.Value] = list = [];
-
-            foreach (var target in slot.Targets)
-                if (target.Parent is not null && !list.Contains(target.Parent))
-                    list.Add(target.Parent);
+            // 静态：只返回当前选中分支
+            var key = OutputSlots.NormalizeSelectorValue(OutputSlots.CurrentValue);
+            var slot = key is not null && OutputSlots.TrySelect(key, out var s) ? s : null;
+            if (slot is not null)
+                foreach (var target in slot.Targets)
+                    if (target.Parent is not null)
+                        AddTarget(dict, key, target.Parent);
         }
-        return ToReadOnly(dict);
+        else
+        {
+            // 动态：全部分支
+            foreach (var item in OutputSlots.Items)
+            {
+                var slot = item.Slot;
+                if (item.Value is null || slot.Targets.Count == 0) continue;
+                foreach (var target in slot.Targets)
+                    if (target.Parent is not null)
+                        AddTarget(dict, item.Value, target.Parent);
+            }
+        }
+
+        return Task.FromResult<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>>(
+            dict.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<IWorkflowNodeViewModel>)kv.Value.AsReadOnly()));
+    }
+
+    private static void AddTarget(Dictionary<object, List<IWorkflowNodeViewModel>> dict, object key,
+        IWorkflowNodeViewModel target)
+    {
+        if (!dict.TryGetValue(key, out var list))
+            dict[key] = list = [];
+        if (!list.Contains(target))
+            list.Add(target);
     }
 
     private static IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> EmptyRouteTable()
         => new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>();
-
-    private static IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> ToReadOnly(
-        Dictionary<object, List<IWorkflowNodeViewModel>> dict)
-        => dict.ToDictionary(kv => kv.Key,
-            kv => (IReadOnlyList<IWorkflowNodeViewModel>)kv.Value.AsReadOnly());
 }

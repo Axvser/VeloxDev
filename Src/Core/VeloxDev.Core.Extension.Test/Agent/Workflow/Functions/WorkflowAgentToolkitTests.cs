@@ -95,17 +95,19 @@ public class WorkflowAgentToolkitTests
 
         var initialType = node.EnumType;
         Assert.IsNotNull(initialType);
-        // The demo's initial selector is VoltageRange (internal to Lib); NetworkRequestMethod
-        // is public and guaranteed different, so the switch below is a real change.
-        Assert.AreNotEqual(typeof(NetworkRequestMethod), initialType);
+        // The demo's initial selector is NetworkRequestMethod; VoltageRange (internal to Lib)
+        // is guaranteed different, so the switch below is a real change.
+        var voltageRange = typeof(NetworkRequestMethod).Assembly.GetType("Demo.ViewModels.VoltageRange");
+        Assert.IsNotNull(voltageRange, "VoltageRange should exist in Lib");
+        Assert.AreNotEqual(voltageRange, initialType);
 
         var result = InvokeTool(toolkit, "SetEnumSlotCollection",
             ("nodeIndex", idx),
             ("propertyName", "OutputSlots"),
-            ("selectorTypeOrJson", typeof(NetworkRequestMethod).FullName!));
+            ("selectorTypeOrJson", voltageRange!.FullName!));
         var json = JObject.Parse(result);
         Assert.IsTrue(json["ok"]?.Value<bool>() ?? false, result);
-        Assert.AreEqual(typeof(NetworkRequestMethod), node.EnumType);
+        Assert.AreEqual(voltageRange, node.EnumType);
 
         // A single Undo must reverse the selector switch — the anchor refresh must NOT have
         // pushed phantom ±0.5px move entries onto the undo stack.

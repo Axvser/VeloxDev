@@ -43,13 +43,17 @@
         </Border>
 
         <Border Grid.Row="1" BackgroundColor="#1E2A35" StrokeShape="RoundRectangle 0,0,4,4">
-            <VerticalStackLayout Margin="14" Spacing="10">
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+            <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,*" ColumnDefinitions="*">
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*" ColumnSpacing="8">
                     <CheckBox IsChecked="{Binding Condition}" />
                     <Label Grid.Column="1" Text="Condition = True" TextColor="#DCDCDC" VerticalTextAlignment="Center" />
                 </Grid>
-                <Label Text="Output Slots" TextColor="#BFBFBF" FontSize="11" Margin="0,4,0,0" />
-                <VerticalStackLayout x:Name="PART_OutputSlotsList" BindableLayout.ItemsSource="{Binding OutputSlots.Items}" Spacing="4">
+                <Label Grid.Row="1" Text="Compile Mode" TextColor="#BFBFBF" FontSize="11" />
+                <Picker Grid.Row="2" Title="Compile Mode"
+                        ItemsSource="{Binding CompileModeOptions}"
+                        SelectedItem="{Binding CompileMode}" />
+                <Label Grid.Row="3" Text="Output Slots" TextColor="#BFBFBF" FontSize="11" Margin="0,4,0,0" />
+                <VerticalStackLayout Grid.Row="4" x:Name="PART_OutputSlotsList" BindableLayout.ItemsSource="{Binding OutputSlots.Items}" Spacing="4">
                     <BindableLayout.ItemTemplate>
                         <DataTemplate>
                             <Grid ColumnDefinitions="*,Auto">
@@ -72,7 +76,7 @@
                         </DataTemplate>
                     </BindableLayout.ItemTemplate>
                 </VerticalStackLayout>
-            </VerticalStackLayout>
+            </Grid>
         </Border>
     </Grid>
 </ContentView>

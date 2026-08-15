@@ -1,8 +1,8 @@
-﻿using Demo.ViewModels.Workflow.Helper;
+using Demo.ViewModels.Workflow.Helper;
 using VeloxDev.AI;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.Compilation;
 
 namespace Demo.ViewModels;
 
@@ -11,23 +11,33 @@ namespace Demo.ViewModels;
 [WorkflowBuilder.Node
     <HttpHelper<NodeViewModel>>
     (workSemaphore: 5)]
-public partial class NodeViewModel : ICompileTimePriority, ICompileTimeNotifier
+public partial class NodeViewModel : ICompileTimeAware, IRuntimeAware
 {
     public NodeViewModel() => InitializeWorkflow();
 
-    /// <summary>
-    /// 编译期回调：节点被编译的瞬间立即获知自己的编译身份。
-    /// - 正常编译（选中分支）：Order 与运行时执行顺序一致（BFS items 顺序），
-    ///   此处 +1 对齐运行时的 1-based 编号，让下游节点在「点击运行的一瞬」
-    ///   即可显示顺序，无需等节点真正开始执行。
-    /// - 被略过（未选中分支的独占节点）：item.IsSkipped 为 true，
-    ///   不写入流程顺序（LastExecutionOrder 保持 0，徽标不显示），
-    ///   但记录 IsCompileSkipped，让节点得知自己「被编译但被略过」。
-    /// </summary>
-    public void OnCompiled(CompiledItem item)
+    /// <summary>编译期注入的编译身份（Order = -1 表示绝对停止）。</summary>
+    public CompileContext? CompileContext { get; private set; }
+
+    /// <summary>编译期是否处于绝对停止状态（未选中静态分支 / 终止）。</summary>
+    public bool IsCompileStopped => CompileContext is { Order: -1 };
+
+    public void AttachCompileTimeContext(CompileContext context)
     {
-        IsCompileSkipped = item.IsSkipped;
-        LastExecutionOrder = item.IsSkipped ? 0 : item.Order + 1;
+        CompileContext = context;
+        LastExecutionOrder = context.Order >= 0 ? context.Order + 1 : 0;
+        OnPropertyChanged(nameof(CompileContext));
+        OnPropertyChanged(nameof(IsCompileStopped));
+        OnPropertyChanged(nameof(HasExecutionOrder));
+        OnPropertyChanged(nameof(ExecutionOrderText));
+    }
+
+    /// <summary>运行期注入的共享上下文（引擎驱动本节点前调用）。</summary>
+    public RuntimeContext? RuntimeContext { get; private set; }
+
+    public void AttachRuntimeContext(RuntimeContext context)
+    {
+        RuntimeContext = context;
+        OnPropertyChanged(nameof(RuntimeContext));
     }
 
     [AgentContext(AgentLanguages.Chinese, "输入口")]
@@ -59,18 +69,6 @@ public partial class NodeViewModel : ICompileTimePriority, ICompileTimeNotifier
     [VeloxProperty] private string lastExecutionTrace = "未执行";
     [VeloxProperty] private int runCount = 0;
     [VeloxProperty] private int waitCount = 0;
-    [VeloxProperty] private int compilePriority = 0;
-
-    public int CompilePriority
-    {
-        get => compilePriority;
-        set
-        {
-            if (compilePriority == value) return;
-            compilePriority = value;
-            OnPropertyChanged(nameof(CompilePriority));
-        }
-    }
 
     public bool HasInputSlot => _inputSlot is not null;
     public bool HasOutputSlot => _outputSlot is not null;
@@ -81,13 +79,10 @@ public partial class NodeViewModel : ICompileTimePriority, ICompileTimeNotifier
     public string ExecutionBackground => IsRunning ? "#2b2415" : "#1f1f1f";
     public string ExecutionBorderBrush => IsRunning ? "#ffd54a" : "Transparent";
     public string DurationForeground => IsRunning ? "#ffd54a" : "#7ec8ff";
-    public bool HasExecutionOrder => LastExecutionOrder > 0;
-    public string ExecutionOrderText => LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
+    public bool HasExecutionOrder => LastExecutionOrder > 0 || IsCompileStopped;
+    public string ExecutionOrderText => IsCompileStopped ? "⊘" : LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
     public bool HasWorkLoad => RunCount > 0 || WaitCount > 0;
     public string WorkLoadText => $"Run: {RunCount} · Queue: {WaitCount}";
-
-    /// <summary>本次编译中该节点是否因属于未选中条件分支而被略过（编译期判定）。</summary>
-    public bool IsCompileSkipped { get; private set; }
 
     partial void OnIsRunningChanged(bool oldValue, bool newValue)
     {

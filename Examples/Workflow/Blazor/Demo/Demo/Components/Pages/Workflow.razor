@@ -22,10 +22,6 @@
         <button class="sb-btn" title="Load workflow from JSON" @onclick="LoadWorkflow">
             📂 Load
         </button>
-        <button class="sb-btn" title="Load Performance Test (1000 nodes)" @onclick="LoadPerformanceTest">
-            🚀 Perf Test
-        </button>
-
         <div class="sb-divider"></div>
 
         <div class="sb-info">
@@ -85,9 +81,6 @@
     <!-- Main Canvas Area -->
     <main class="wf-main">
         <div class="wf-toolbar">
-            <button class="tb-btn tb-run" @onclick="RunWorkflow" disabled="@(_session?.Controller?.IsActive == true)">
-                ▶ Run Flow
-            </button>
             <button class="tb-btn tb-close" @onclick="StopWorkflow" disabled="@(_session?.Controller?.IsActive != true)">
                 ■ Close Tree
             </button>

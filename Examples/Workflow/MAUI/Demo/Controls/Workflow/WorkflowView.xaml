@@ -90,11 +90,6 @@
                         BackgroundColor="#0f3460"
                         TextColor="White"
                         Clicked="OnLoadNetworkDemoClicked" />
-                <Button Text="性能测试 (1000节点)"
-                        HeightRequest="40"
-                        BackgroundColor="#0f3460"
-                        TextColor="White"
-                        Clicked="OnLoadPerformanceTestClicked" />
                 <BoxView HeightRequest="1"
                          Color="#333344" />
                 <Label Text="节点总数："

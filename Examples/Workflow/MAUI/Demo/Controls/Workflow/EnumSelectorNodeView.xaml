@@ -48,6 +48,10 @@
                 <Picker Title="Select Method"
                         ItemsSource="{Binding EnumValues}"
                         SelectedItem="{Binding SelectedValue}" />
+                <Label Text="Compile Mode" TextColor="#BFBFBF" FontSize="11" />
+                <Picker Title="Compile Mode"
+                        ItemsSource="{Binding CompileModeOptions}"
+                        SelectedItem="{Binding CompileMode}" />
                 <Label Text="Output Slots" TextColor="#BFBFBF" FontSize="11" Margin="0,6,0,0" />
                 <VerticalStackLayout x:Name="PART_OutputSlotsList" BindableLayout.ItemsSource="{Binding OutputSlots.Items}" Spacing="2">
                     <BindableLayout.ItemTemplate>

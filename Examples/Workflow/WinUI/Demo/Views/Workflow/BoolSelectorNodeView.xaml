@@ -13,6 +13,10 @@
     behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
     mc:Ignorable="d">
 
+    <UserControl.Resources>
+        <local:BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </UserControl.Resources>
+
     <Grid Clip="{x:Null}">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
@@ -33,20 +37,6 @@
                             Margin="-10,0,0,0"
                             DataContext="{Binding InputSlot}"
                             SlotState="{Binding State}"/>
-            <local:SlotView x:Name="PART_TrueSlot"
-                            Width="20" Height="20"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Top"
-                            Margin="0,50,-10,0"
-                            DataContext="{Binding TrueSlot}"
-                            SlotState="{Binding State}"/>
-            <local:SlotView x:Name="PART_FalseSlot"
-                            Width="20" Height="20"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Bottom"
-                            Margin="0,0,-10,30"
-                            DataContext="{Binding FalseSlot}"
-                            SlotState="{Binding State}"/>
         </Grid>
 
         <Border Grid.Row="0"
@@ -58,6 +48,10 @@
                 behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
                 <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
+                <Border Background="#1f3d1f" BorderBrush="#7bd97b" BorderThickness="1" CornerRadius="10" Padding="6,1"
+                        Visibility="{Binding HasExecutionOrder, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold"/>
+                </Border>
                 <Border Background="#1f3d1f" BorderBrush="#7bd97b" BorderThickness="1" CornerRadius="10" Padding="6,1">
                     <TextBlock Text="{Binding LastRouted}" Foreground="#c8ffc8" FontWeight="Bold"/>
                 </Border>
@@ -65,31 +59,39 @@
         </Border>
 
         <Border Grid.Row="1" Background="#1e2a35" CornerRadius="0,0,4,4">
-            <StackPanel Margin="14" Spacing="10">
-                <CheckBox IsChecked="{Binding Condition, Mode=TwoWay}">
+            <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,*,*">
+                <CheckBox Grid.Row="0" IsChecked="{Binding Condition, Mode=TwoWay}">
                     <TextBlock Text="Condition = True" Foreground="#dcdcdc"/>
                 </CheckBox>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                <TextBlock Grid.Row="1" Text="Compile Mode" Foreground="#bfbfbf" FontSize="11"/>
+                <ComboBox Grid.Row="2" ItemsSource="{Binding CompileModeOptions}"
+                          SelectedItem="{Binding CompileMode, Mode=TwoWay}"
+                          HorizontalAlignment="Stretch"/>
+                <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto,Auto">
                     <TextBlock Text="True ●" Foreground="#7bd97b" VerticalAlignment="Center" FontWeight="Bold"/>
                     <Border Grid.Column="1" Height="1" Background="#3a3a3a" Margin="8,0"/>
                     <TextBlock Grid.Column="2" Text="→" Foreground="#7bd97b" VerticalAlignment="Center"/>
+                    <local:SlotView Grid.Column="3" x:Name="PART_TrueSlot"
+                                    Width="20" Height="20"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,-10,0"
+                                    DataContext="{Binding TrueSlot}"
+                                    SlotState="{Binding State}"/>
                 </Grid>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                <Grid Grid.Row="4" ColumnDefinitions="Auto,*,Auto,Auto">
                     <TextBlock Text="False ●" Foreground="#ff9b9b" VerticalAlignment="Center" FontWeight="Bold"/>
                     <Border Grid.Column="1" Height="1" Background="#3a3a3a" Margin="8,0"/>
                     <TextBlock Grid.Column="2" Text="→" Foreground="#ff9b9b" VerticalAlignment="Center"/>
+                    <local:SlotView Grid.Column="3" x:Name="PART_FalseSlot"
+                                    Width="20" Height="20"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,-10,0"
+                                    DataContext="{Binding FalseSlot}"
+                                    SlotState="{Binding State}"/>
                 </Grid>
-            </StackPanel>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

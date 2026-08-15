@@ -11,6 +11,13 @@
             <input type="checkbox" checked="@_condition" @onchange="OnConditionChanged" />
             Condition = True
         </label>
+        <label class="bool-label">Compile Mode</label>
+        <select class="bool-select" @onchange="OnModeChanged">
+            @foreach (var opt in _modeOptions)
+            {
+                <option value="@opt" selected="@(opt == _compileMode)">@opt</option>
+            }
+        </select>
         <div class="selector-slots">
             @if (Selector?.OutputSlots is { } slots)
             {

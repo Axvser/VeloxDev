@@ -4,8 +4,8 @@ using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.Compilation;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
@@ -48,13 +48,10 @@ internal sealed class WorkflowNodeCard : UserControl
     private Label? _errorLabel;
     private Label? _responseLabel;
     private TextBox? _seedBox;
-    private ComboBox? _modeCombo;
-    private ComboBox? _directionCombo;
-    private ComboBox? _scopeCombo;
-    private ComboBox? _cycleCombo;
     private Label? _controllerDesc;
     private CheckBox? _conditionCheck;
     private ComboBox? _enumCombo;
+    private ComboBox? _routerModeCombo;
     private TableLayoutPanel? _outputSlotsLayout;
     private readonly List<(Label label, Views.SlotView slot)> _dynamicSlotRows = [];
 
@@ -465,7 +462,7 @@ internal sealed class WorkflowNodeCard : UserControl
     // ── 布局：Controller ──────────────────────────────────────────────────────
     private void BuildController()
     {
-        SetRows(52F, 56F, true);
+        SetRows(52F, 88F, true);
 
         _titleLabel = MakeLabel(Color.White, 10.5F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleCenter, "Network Flow Controller");
         _titleLabel.Dock = DockStyle.Fill;
@@ -479,7 +476,7 @@ internal sealed class WorkflowNodeCard : UserControl
         var bodyTlp = new TableLayoutPanel
         {
             Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 1, RowCount = 11,
+            ColumnCount = 1, RowCount = 3,
             Margin = Padding.Empty, Padding = Padding.Empty, BackColor = DarkBody,
         };
         bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -488,43 +485,27 @@ internal sealed class WorkflowNodeCard : UserControl
         _seedBox = MakeTextBox();
         _seedBox.TextChanged += OnSeedTextChanged;
         bodyTlp.Controls.Add(_seedBox, 0, 1);
-        // Row 2-3: Mode
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Mode"), 0, 2);
-        _modeCombo = MakeComboBox();
-        _modeCombo.SelectedIndexChanged += OnModeChanged;
-        bodyTlp.Controls.Add(_modeCombo, 0, 3);
-        // Row 4-5: Direction
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Direction"), 0, 4);
-        _directionCombo = MakeComboBox();
-        _directionCombo.SelectedIndexChanged += OnDirectionChanged;
-        bodyTlp.Controls.Add(_directionCombo, 0, 5);
-        // Row 6-7: Scope
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Scope"), 0, 6);
-        _scopeCombo = MakeComboBox();
-        _scopeCombo.SelectedIndexChanged += OnScopeChanged;
-        bodyTlp.Controls.Add(_scopeCombo, 0, 7);
-        // Row 8-9: Cycle
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Cycle"), 0, 8);
-        _cycleCombo = MakeComboBox();
-        _cycleCombo.SelectedIndexChanged += OnCycleChanged;
-        bodyTlp.Controls.Add(_cycleCombo, 0, 9);
-        // Row 10: Description
+        // Row 2: Description
         _controllerDesc = MakeLabel(Color.FromArgb(189, 189, 189), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.TopLeft);
         _controllerDesc.Dock = DockStyle.Fill;
-        bodyTlp.Controls.Add(_controllerDesc, 0, 10);
+        bodyTlp.Controls.Add(_controllerDesc, 0, 2);
         bodyHost.Controls.Add(bodyTlp);
         _bodyPanel.Controls.Add(bodyHost);
 
-        var footerTlp = new TableLayoutPanel
+        var ctrlFooterTlp = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,
             Margin = Padding.Empty, Padding = new Padding(8), BackColor = DarkBody,
         };
-        footerTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        footerTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        footerTlp.Controls.Add(MakeCmdButton("Run Flow", nameof(ControllerViewModel.OpenWorkflowCommand)), 0, 0);
-        footerTlp.Controls.Add(MakeCmdButton("Close Tree", nameof(ControllerViewModel.CloseWorkflowCommand)), 1, 0);
-        _footerPanel.Controls.Add(footerTlp);
+        ctrlFooterTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        ctrlFooterTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        ctrlFooterTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        ctrlFooterTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        ctrlFooterTlp.Controls.Add(MakeCmdButton("Compile", nameof(ControllerViewModel.CompileCommand)), 0, 0);
+        ctrlFooterTlp.Controls.Add(MakeCmdButton("Run", nameof(ControllerViewModel.RunCommand)), 1, 0);
+        ctrlFooterTlp.Controls.Add(MakeCmdButton("Stop", nameof(ControllerViewModel.StopCommand)), 0, 1);
+        ctrlFooterTlp.Controls.Add(MakeCmdButton("Close", nameof(ControllerViewModel.CloseWorkflowCommand)), 1, 1);
+        _footerPanel.Controls.Add(ctrlFooterTlp);
 
         OutputSlotButton = AddSlotButton(null);
     }
@@ -548,10 +529,12 @@ internal sealed class WorkflowNodeCard : UserControl
 
         var bodyTlp = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5,
             Margin = Padding.Empty, Padding = new Padding(14), BackColor = Color.FromArgb(30, 42, 53),
         };
         bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
+        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
+        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
         bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
         bodyTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -564,7 +547,11 @@ internal sealed class WorkflowNodeCard : UserControl
         };
         _conditionCheck.CheckedChanged += OnConditionChanged;
         bodyTlp.Controls.Add(_conditionCheck, 0, 0);
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Output Slots"), 0, 1);
+        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Compile Mode"), 0, 1);
+        _routerModeCombo = MakeComboBox();
+        _routerModeCombo.SelectedIndexChanged += OnRouterModeChanged;
+        bodyTlp.Controls.Add(_routerModeCombo, 0, 2);
+        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Output Slots"), 0, 3);
 
         _outputSlotsLayout = new TableLayoutPanel
         {
@@ -573,7 +560,7 @@ internal sealed class WorkflowNodeCard : UserControl
         };
         _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
-        bodyTlp.Controls.Add(_outputSlotsLayout, 0, 2);
+        bodyTlp.Controls.Add(_outputSlotsLayout, 0, 4);
         _bodyPanel.Controls.Add(bodyTlp);
 
         InputSlotButton = AddSlotButton(null);
@@ -598,9 +585,11 @@ internal sealed class WorkflowNodeCard : UserControl
 
         var bodyTlp = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6,
             Margin = Padding.Empty, Padding = new Padding(14), BackColor = Color.FromArgb(42, 30, 53),
         };
+        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
+        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
         bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
         bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
         bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
@@ -610,7 +599,11 @@ internal sealed class WorkflowNodeCard : UserControl
         _enumCombo = MakeComboBox();
         _enumCombo.SelectedIndexChanged += OnEnumValueChanged;
         bodyTlp.Controls.Add(_enumCombo, 0, 1);
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Output Slots"), 0, 2);
+        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Compile Mode"), 0, 2);
+        _routerModeCombo = MakeComboBox();
+        _routerModeCombo.SelectedIndexChanged += OnRouterModeChanged;
+        bodyTlp.Controls.Add(_routerModeCombo, 0, 3);
+        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Output Slots"), 0, 4);
 
         _outputSlotsLayout = new TableLayoutPanel
         {
@@ -619,7 +612,7 @@ internal sealed class WorkflowNodeCard : UserControl
         };
         _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
-        bodyTlp.Controls.Add(_outputSlotsLayout, 0, 3);
+        bodyTlp.Controls.Add(_outputSlotsLayout, 0, 5);
         _bodyPanel.Controls.Add(bodyTlp);
 
         InputSlotButton = AddSlotButton(null);
@@ -652,11 +645,6 @@ internal sealed class WorkflowNodeCard : UserControl
     {
         SetText(_seedBox, c.SeedPayload);
 
-        PopulateCombo(_modeCombo, c.CompileModeOptions, c.CompileMode);
-        PopulateCombo(_directionCombo, c.CompileDirectionOptions, c.CompileDirection);
-        PopulateCombo(_scopeCombo, c.CompileScopeOptions, c.CompileScope);
-        PopulateCombo(_cycleCombo, c.CycleHandlingOptions, c.CycleHandling);
-
         if (_controllerDesc is not null)
         {
             _controllerDesc.Text = c.IsActive
@@ -682,8 +670,19 @@ internal sealed class WorkflowNodeCard : UserControl
         SetText(_routedBadge, b.LastRouted);
         SetVisible(_routedBadge, !string.IsNullOrEmpty(b.LastRouted) && b.LastRouted != "-");
         SetChecked(_conditionCheck, b.Condition);
+        PopulateRouterModeCombo(b.CompileMode);
         InputSlotButton!.ViewModel = b.InputSlot;
         RebuildBoolSlots(b);
+    }
+
+    /// <summary>填充路由编译模式下拉（Bool/Enum 卡片共用）。</summary>
+    private void PopulateRouterModeCombo(RouterCompileMode selected)
+    {
+        if (_routerModeCombo is null) return;
+        _routerModeCombo.Items.Clear();
+        foreach (var m in new[] { RouterCompileMode.Static, RouterCompileMode.Dynamic })
+            _routerModeCombo.Items.Add(m);
+        _routerModeCombo.SelectedItem = selected;
     }
 
     private void ApplyEnumSelector(EnumSelectorNodeViewModel e)
@@ -786,6 +785,8 @@ internal sealed class WorkflowNodeCard : UserControl
 
         if (!Equals(_enumCombo.SelectedItem, e.SelectedValue))
             _enumCombo.SelectedItem = e.SelectedValue;
+
+        PopulateRouterModeCombo(e.CompileMode);
     }
 
     // ── 用户输入事件 ──────────────────────────────────────────────────────────
@@ -823,34 +824,6 @@ internal sealed class WorkflowNodeCard : UserControl
             c.SeedPayload = _seedBox.Text;
     }
 
-    private void OnModeChanged(object? sender, EventArgs e)
-    {
-        if (_updatingFromVm || _node is not ControllerViewModel c || _modeCombo is null) return;
-        if (_modeCombo.SelectedItem is CompileMode mode && c.CompileMode != mode)
-            c.CompileMode = mode;
-    }
-
-    private void OnDirectionChanged(object? sender, EventArgs e)
-    {
-        if (_updatingFromVm || _node is not ControllerViewModel c || _directionCombo is null) return;
-        if (_directionCombo.SelectedItem is CompileDirection dir && c.CompileDirection != dir)
-            c.CompileDirection = dir;
-    }
-
-    private void OnScopeChanged(object? sender, EventArgs e)
-    {
-        if (_updatingFromVm || _node is not ControllerViewModel c || _scopeCombo is null) return;
-        if (_scopeCombo.SelectedItem is CompileScope scope && c.CompileScope != scope)
-            c.CompileScope = scope;
-    }
-
-    private void OnCycleChanged(object? sender, EventArgs e)
-    {
-        if (_updatingFromVm || _node is not ControllerViewModel c || _cycleCombo is null) return;
-        if (_cycleCombo.SelectedItem is CycleHandling cycle && c.CycleHandling != cycle)
-            c.CycleHandling = cycle;
-    }
-
     private void OnConditionChanged(object? sender, EventArgs e)
     {
         if (_updatingFromVm || _node is not BoolSelectorNodeViewModel node || _conditionCheck is null) return;
@@ -863,6 +836,17 @@ internal sealed class WorkflowNodeCard : UserControl
         if (_updatingFromVm || _node is not EnumSelectorNodeViewModel node || _enumCombo is null) return;
         if (!Equals(node.SelectedValue, _enumCombo.SelectedItem))
             node.SelectedValue = _enumCombo.SelectedItem;
+    }
+
+    private void OnRouterModeChanged(object? sender, EventArgs e)
+    {
+        if (_updatingFromVm || _routerModeCombo is null) return;
+        if (_routerModeCombo.SelectedItem is not RouterCompileMode mode) return;
+        switch (_node)
+        {
+            case BoolSelectorNodeViewModel b when b.CompileMode != mode: b.CompileMode = mode; break;
+            case EnumSelectorNodeViewModel en when en.CompileMode != mode: en.CompileMode = mode; break;
+        }
     }
 
     private async void OnCommandButtonClick(object? sender, EventArgs e)
@@ -910,7 +894,7 @@ internal sealed class WorkflowNodeCard : UserControl
         _delayBox = _titleBox = _seedBox = null;
         _autoBroadcastCheck = _conditionCheck = null;
         _enumCombo = null;
-        _modeCombo = _directionCombo = _scopeCombo = _cycleCombo = null;
+        _routerModeCombo = null;
         _runCountLabel = _waitCountLabel = _traceLabel = _statusLabel = _bodyDuration = null;
         _errorLabel = _responseLabel = _controllerDesc = null;
         _outputSlotsLayout = null;

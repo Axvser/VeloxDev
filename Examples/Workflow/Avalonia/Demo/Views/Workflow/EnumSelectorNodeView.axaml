@@ -58,6 +58,10 @@
 				<ComboBox ItemsSource="{Binding EnumValues}"
 						  SelectedValue="{Binding SelectedValue, Mode=TwoWay}"
 						  HorizontalAlignment="Stretch"/>
+				<TextBlock Text="Compile Mode" Foreground="#bfbfbf" FontSize="11"/>
+				<ComboBox ItemsSource="{Binding CompileModeOptions}"
+						  SelectedItem="{Binding CompileMode, Mode=TwoWay}"
+						  HorizontalAlignment="Stretch"/>
 				<TextBlock Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,6,0,0"/>
 				<ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList" ClipToBounds="False">
 					<ItemsControl.ItemTemplate>

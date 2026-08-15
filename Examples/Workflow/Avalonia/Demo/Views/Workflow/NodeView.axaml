@@ -69,18 +69,15 @@
 				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
 					<TextBlock Text="{Binding Title}" Foreground="White" VerticalAlignment="Center" FontWeight="Bold"/>
                    <Border Background="#1f3d1f"
-							BorderBrush="#7bd97b"
-							BorderThickness="1"
-							CornerRadius="10"
-							Padding="6,1"
-							IsVisible="{Binding HasExecutionOrder}">
-						<TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold" VerticalAlignment="Center"/>
-					</Border>
+                      BorderBrush="#7bd97b"
+                      BorderThickness="1"
+                      CornerRadius="10"
+                      Padding="6,1"
+                      IsVisible="{Binding HasExecutionOrder}">
+                      <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold" VerticalAlignment="Center"/>
+                   </Border>
                    <Border Background="#2b2440"
 							BorderBrush="#b799ff"
-							BorderThickness="1"
-							CornerRadius="10"
-							Padding="6,1"
 							IsVisible="{Binding HasWorkLoad}">
                      <TextBlock Text="{Binding WorkLoadText}" Foreground="#e4d8ff" FontWeight="SemiBold" VerticalAlignment="Center"/>
 					</Border>
@@ -102,14 +99,6 @@
 								   Maximum="10000"
 								   Increment="100"
 								   Value="{Binding DelayMilliseconds, Mode=TwoWay}"/>
-					</Grid>
-                    <Grid ColumnDefinitions="110,*">
-                      <TextBlock Text="Priority" Foreground="#dcdcdc" VerticalAlignment="Center"/>
-						<NumericUpDown Grid.Column="1"
-								   Minimum="-10"
-								   Maximum="10"
-								   Increment="1"
-								   Value="{Binding CompilePriority, Mode=TwoWay}"/>
 					</Grid>
                     <Border Background="{Binding ExecutionBackground}" BorderBrush="{Binding ExecutionBorderBrush}" BorderThickness="1.5" CornerRadius="4" Padding="10">
 						<StackPanel Spacing="4">

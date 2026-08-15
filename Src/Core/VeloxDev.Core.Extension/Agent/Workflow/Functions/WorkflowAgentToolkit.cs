@@ -2781,8 +2781,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     }
 
     /// <summary>
-    /// Dispatches a command and waits until it actually completes, mirroring the framework's own
-    /// compiled-execution loop (<c>CompilationResult.ExecuteItemAsync</c>). <c>VeloxCommand.ExecuteAsync</c>
+    /// Dispatches a command and waits until it actually completes. <c>VeloxCommand.ExecuteAsync</c>
     /// is fire-and-forget, so without this the Agent could never observe when node work really finished.
     /// Throws on failure (or cancellation) so the caller can return a structured error.
     /// </summary>

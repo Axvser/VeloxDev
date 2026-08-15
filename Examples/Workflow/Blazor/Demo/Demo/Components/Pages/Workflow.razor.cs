@@ -125,12 +125,6 @@ public partial class Workflow : ComponentBase, IDisposable
     private void OnVirtualLinkPropertyChanged(object? sender, PropertyChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
 
-    private async Task RunWorkflow()
-    {
-        if (_session is null) return;
-        await _session.Controller.OpenWorkflowCommand.ExecuteAsync(null);
-    }
-
     private async Task StopWorkflow()
     {
         if (_session is null) return;
@@ -196,19 +190,6 @@ public partial class Workflow : ComponentBase, IDisposable
             }
         }
         catch { }
-    }
-
-    private async Task LoadPerformanceTest()
-    {
-        UnsubscribeSession();
-        if (_session is not null)
-            await _session.Tree.GetHelper().CloseAsync();
-
-        var perfSession = PerformanceTestSession.Create();
-        _session = WorkflowDemoSession.FromTree(perfSession.Tree);
-        SubscribeSession();
-        UpdateCanvasSize();
-        StateHasChanged();
     }
 
     private async Task SendToAgent()

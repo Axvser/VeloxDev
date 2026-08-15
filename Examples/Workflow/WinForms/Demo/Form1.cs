@@ -26,9 +26,6 @@ namespace Demo
 
         private ControllerViewModel Controller => _demo!.Controller;
 
-        private async void RunWorkflow(object? sender, EventArgs e)
-            => await ExecuteAsync(() => Controller.OpenWorkflowCommand.ExecuteAsync(null), "运行工作流失败");
-
         private async void StopWorkflow(object? sender, EventArgs e)
             => await ExecuteAsync(() => Controller.CloseWorkflowCommand.ExecuteAsync(null), "停止工作流失败");
 
@@ -243,7 +240,6 @@ namespace Demo
         private void UpdateControllerState()
         {
             var isActive = _demo?.Controller.IsActive == true;
-            runButton.Enabled = !isActive;
             stopButton.Enabled = isActive;
             statusValueLabel.Text = isActive ? "运行中" : "空闲";
             nodeCountLabel.Text = (_demo?.Tree.Nodes.Count ?? 0).ToString();

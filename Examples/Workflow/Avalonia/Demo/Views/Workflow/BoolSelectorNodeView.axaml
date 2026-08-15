@@ -53,10 +53,15 @@
 			</StackPanel>
 		</Border>
 		<Border Grid.Row="1" Background="#1e2a35" CornerRadius="0,0,4,4">
-			<StackPanel Margin="14" Spacing="10">
-				<CheckBox IsChecked="{Binding Condition, Mode=TwoWay}" Content="Condition = True" Foreground="#dcdcdc"/>
-				<TextBlock Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,4,0,0"/>
-				<ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList" ClipToBounds="False">
+			<Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,*" ColumnDefinitions="*">
+				<CheckBox Grid.Row="0" IsChecked="{Binding Condition, Mode=TwoWay}" Content="Condition = True" Foreground="#dcdcdc"/>
+				<TextBlock Grid.Row="1" Text="Compile Mode" Foreground="#bfbfbf" FontSize="11" Margin="0,8,0,0"/>
+				<ComboBox Grid.Row="2" ItemsSource="{Binding CompileModeOptions}"
+						  SelectedItem="{Binding CompileMode, Mode=TwoWay}"
+						  HorizontalAlignment="Stretch"/>
+				<TextBlock Grid.Row="3" Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,8,0,0"/>
+				<ItemsControl Grid.Row="4" ItemsSource="{Binding OutputSlots.Items}"
+							  x:Name="PART_OutputSlotsList" ClipToBounds="False">
 					<ItemsControl.ItemTemplate>
 						<DataTemplate>
 							<Grid ColumnDefinitions="*,Auto" Margin="0,4" ClipToBounds="False">
@@ -77,7 +82,7 @@
 						</DataTemplate>
 					</ItemsControl.ItemTemplate>
 				</ItemsControl>
-			</StackPanel>
+			</Grid>
 		</Border>
 	</Grid>
 </UserControl>

@@ -12,7 +12,7 @@
 			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
 			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:ControllerViewModel">
-  <Grid RowDefinitions="52,*,56" ColumnDefinitions="*" ClipToBounds="False">
+  <Grid RowDefinitions="52,*,88" ColumnDefinitions="*" ClipToBounds="False">
 		<Border Grid.RowSpan="5"
              Grid.ColumnSpan="2"
 				BorderThickness="1"
@@ -37,36 +37,33 @@
 			<StackPanel Spacing="6">
                <TextBlock Text="Seed" Foreground="#dcdcdc" FontSize="11"/>
 				<TextBox Text="{Binding SeedPayload, Mode=TwoWay}" Watermark="payload" FontSize="11"/>
-
-               <TextBlock Text="Mode" Foreground="#dcdcdc" FontSize="11"/>
-				<ComboBox ItemsSource="{Binding CompileModeOptions}"
-						  SelectedItem="{Binding CompileMode}" FontSize="11"/>
-
-               <TextBlock Text="Direction" Foreground="#dcdcdc" FontSize="11"/>
-				<ComboBox ItemsSource="{Binding CompileDirectionOptions}"
-						  SelectedItem="{Binding CompileDirection}" FontSize="11"/>
-
-               <TextBlock Text="Scope" Foreground="#dcdcdc" FontSize="11"/>
-				<ComboBox ItemsSource="{Binding CompileScopeOptions}"
-						  SelectedItem="{Binding CompileScope}" FontSize="11"/>
-
-               <TextBlock Text="Cycle" Foreground="#dcdcdc" FontSize="11"/>
-				<ComboBox ItemsSource="{Binding CycleHandlingOptions}"
-						  SelectedItem="{Binding CycleHandling}" FontSize="11"/>
 			</StackPanel>
 			</ScrollViewer>
 		</Border>
 
 		<Border Grid.Row="2" Background="#2d2d2d" CornerRadius="0,0,5,5" Padding="8">
-			<Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-				<Button Grid.Column="0"
-						Content="Run Flow"
+			<Grid ColumnDefinitions="*,*" RowDefinitions="*,*" ColumnSpacing="6" RowSpacing="6">
+				<Button Grid.Row="0" Grid.Column="0"
+						Content="Compile"
 						VerticalContentAlignment="Center"
-						Background="#1e1e1e"
+						Background="#1e3a5f"
 						Foreground="White"
-						Command="{Binding OpenWorkflowCommand}"/>
-				<Button Grid.Column="1"
-						Content="Close Tree"
+						Command="{Binding CompileCommand}"/>
+				<Button Grid.Row="0" Grid.Column="1"
+						Content="Run"
+						VerticalContentAlignment="Center"
+						Background="#1e5f2e"
+						Foreground="White"
+						IsEnabled="{Binding HasCompiledGraphs}"
+						Command="{Binding RunCommand}"/>
+				<Button Grid.Row="1" Grid.Column="0"
+						Content="Stop"
+						VerticalContentAlignment="Center"
+						Background="#5f1e1e"
+						Foreground="White"
+						Command="{Binding StopCommand}"/>
+				<Button Grid.Row="1" Grid.Column="1"
+						Content="Close"
 						VerticalContentAlignment="Center"
 						Background="#1e1e1e"
 						Foreground="White"
