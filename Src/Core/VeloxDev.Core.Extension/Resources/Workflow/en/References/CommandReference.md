@@ -16,6 +16,7 @@
 | Delete node | DeleteNode | Node.DeleteCommand |
 | Delete slot | DeleteSlot | Slot.DeleteCommand |
 | Broadcast | BroadcastNode | Node.BroadcastCommand |
+| Execute node | ExecuteNode | Node.ReceiveCommand (ITaskContext) |
 | Any other | ExecuteCommandOnNode / ExecuteCommandById | Resolved by name |
 | Patch custom props | PatchNodeProperties / PatchComponentById | Direct (non-command props only) |
 | Add slot to collection | AddSlotToCollection | Collection lifecycle (OnWorkflowSlotAdded) |
@@ -34,10 +35,19 @@
 | Disconnect by IDs | DisconnectSlotsById | Link.DeleteCommand |
 | Set slot channel | SetSlotChannel | Slot.SetChannelCommand |
 | Inspect link | GetLinkDetail | Introspection (no mutation) |
-| Execute work on many | ExecuteWorkOnNodes | WorkCommand × N |
+| Execute node (many) | ExecuteNodes | Node.ReceiveCommand × N |
 | Node statistics | GetNodeStatistics | In/out degree, connected nodes |
 | List creatable types | ListCreatableTypes | Discover available node/slot types |
 | Validate workflow | ValidateWorkflow | Check for issues (zero size, isolated nodes) |
+
+## Context Hierarchy
+
+All node execution goes through the single receive path: **Node.ReceiveCommand → Helper.ReceiveAsync(ITaskContext, ct) → Task<object?>**.
+
+- `IContext` — root contract of the workflow context hierarchy.
+- `ITaskContext` — the task payload: `Data` / `Sender` / `Receiver` (all nullable). To actively invoke a node, construct it — e.g. `ExecuteNode`'s `parameter` becomes `ITaskContext.Data`.
+- `IRuntimeContext` — compiler runtime session (UID / logs / shared variables / status); injected by the engine during compiled runs.
+- `ICompileContext` — compile-time identity (Order / ChainIndex / Offset); attached by the Compiler.
 
 ## Slot Connection Safety Rules
 

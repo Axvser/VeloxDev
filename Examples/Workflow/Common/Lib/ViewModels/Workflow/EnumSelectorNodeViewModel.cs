@@ -65,6 +65,10 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     [AgentContext(AgentLanguages.Chinese, "标题")]
     [VeloxProperty] private string title = "Enum Selector";
 
+    [AgentContext(AgentLanguages.Chinese, "是否自动广播给下游节点")]
+    [AgentContext(AgentLanguages.English, "When true, the node automatically forwards the result to all connected downstream nodes after execution.")]
+    [VeloxProperty] private bool autoBroadcast = true;
+
     [AgentContext(AgentLanguages.Chinese, "当前选中的枚举值，决定路由到哪个输出口")]
     [AgentContext(AgentLanguages.English, "Currently selected enum value. Determines which output slot receives the routed input. Set to the desired enum member name (string) or its underlying integer value.")]
     public object? SelectedValue
@@ -169,21 +173,35 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
 
         if (CompileMode == RouterCompileMode.Static)
         {
-            // 静态：只返回当前选中分支
+            // 静态：只返回当前选中分支（无下游则登记为终端分支）
             var key = OutputSlots.NormalizeSelectorValue(OutputSlots.CurrentValue);
             var slot = key is not null && OutputSlots.TrySelect(key, out var s) ? s : null;
             if (slot is not null)
-                foreach (var target in slot.Targets)
-                    if (target.Parent is not null)
-                        AddTarget(dict, key, target.Parent);
+            {
+                if (slot.Targets.Count == 0)
+                {
+                    if (key is not null && !dict.ContainsKey(key)) dict[key] = [];
+                }
+                else
+                {
+                    foreach (var target in slot.Targets)
+                        if (target.Parent is not null)
+                            AddTarget(dict, key!, target.Parent);
+                }
+            }
         }
         else
         {
-            // 动态：全部分支
+            // 动态：全部分支（含无下游的终端分支，登记为空列表）
             foreach (var item in OutputSlots.Items)
             {
                 var slot = item.Slot;
-                if (item.Value is null || slot.Targets.Count == 0) continue;
+                if (item.Value is null || slot is null) continue;
+                if (slot.Targets.Count == 0)
+                {
+                    if (!dict.ContainsKey(item.Value)) dict[item.Value] = [];
+                    continue;
+                }
                 foreach (var target in slot.Targets)
                     if (target.Parent is not null)
                         AddTarget(dict, item.Value, target.Parent);

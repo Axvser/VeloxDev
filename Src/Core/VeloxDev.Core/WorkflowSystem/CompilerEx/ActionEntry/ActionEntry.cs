@@ -4,7 +4,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
 /// <summary>
 /// 执行条目基类：所有条目共享的 UI / 结构状态。
-/// 具体条目：<see cref="ExecuteEntry"/>（线性段）、<see cref="BranchEntry"/>（分支点）、<see cref="RetryEntry"/>（环路）。
+/// 具体条目：<see cref="ExecuteEntry"/>（线性段）、<see cref="BranchEntry"/>（分支点）、<see cref="ParallelEntry"/>（扇出组）。
 /// </summary>
 public abstract partial class ActionEntry
 {

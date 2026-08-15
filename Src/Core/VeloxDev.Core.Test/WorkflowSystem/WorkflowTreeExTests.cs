@@ -72,7 +72,7 @@ file sealed class StubNode : IWorkflowNodeViewModel
     public IVeloxCommand SetSizeCommand { get; } = new StubCommand();
     public IVeloxCommand CreateSlotCommand { get; } = new StubCommand();
     public IVeloxCommand DeleteCommand { get; } = new StubCommand();
-    public IVeloxCommand WorkCommand { get; } = new StubCommand();
+    public IVeloxCommand ReceiveCommand { get; } = new StubCommand();
     public IVeloxCommand BroadcastCommand { get; } = new StubCommand();
     public IVeloxCommand ReverseBroadcastCommand { get; } = new StubCommand();
     public IVeloxCommand CloseCommand { get; } = new StubCommand();

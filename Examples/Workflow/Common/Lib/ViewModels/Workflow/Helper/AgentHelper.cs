@@ -92,7 +92,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             .WithAutoDiscovery(assemblyName: "Lib") 
             .WithAutoMarkDirty(false)               // 视图是否自动标记为脏
             .WithMaxToolCalls(200)                  // 最大工具调用数
-            .WithAllowExecuteWork(true)             // 显式允许 Agent 执行节点业务代码（安全默认关闭，演示需要）
+            .WithAllowNodeExecution(true)           // 显式允许 Agent 执行节点业务代码（安全默认关闭，演示需要）
             .WithSynchronizationContext(SynchronizationContext.Current) // 工具调用 marshal 到 UI 线程（组件是 UI 绑定）
             .WithToolCallCallback(args =>           // 工具调用回调
             {

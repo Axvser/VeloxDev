@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
@@ -75,10 +76,10 @@ namespace Demo.ViewModels.Workflow.Helper
                     Interlocked.Increment(ref _counterVersion));
             };
 
-            _viewModel.WorkCommand.Started += _startedHandler;
-            _viewModel.WorkCommand.Exited += _exitedHandler;
-            _viewModel.WorkCommand.Enqueued += _enqueuedHandler;
-            _viewModel.WorkCommand.Dequeued += _dequeuedHandler;
+            _viewModel.ReceiveCommand.Started += _startedHandler;
+            _viewModel.ReceiveCommand.Exited += _exitedHandler;
+            _viewModel.ReceiveCommand.Enqueued += _enqueuedHandler;
+            _viewModel.ReceiveCommand.Dequeued += _dequeuedHandler;
         }
 
         public override void Uninstall(IWorkflowNodeViewModel node)
@@ -87,22 +88,22 @@ namespace Demo.ViewModels.Workflow.Helper
             {
                 if (_startedHandler is not null)
                 {
-                    _viewModel.WorkCommand.Started -= _startedHandler;
+                    _viewModel.ReceiveCommand.Started -= _startedHandler;
                 }
 
                 if (_exitedHandler is not null)
                 {
-                    _viewModel.WorkCommand.Exited -= _exitedHandler;
+                    _viewModel.ReceiveCommand.Exited -= _exitedHandler;
                 }
 
                 if (_enqueuedHandler is not null)
                 {
-                    _viewModel.WorkCommand.Enqueued -= _enqueuedHandler;
+                    _viewModel.ReceiveCommand.Enqueued -= _enqueuedHandler;
                 }
 
                 if (_dequeuedHandler is not null)
                 {
-                    _viewModel.WorkCommand.Dequeued -= _dequeuedHandler;
+                    _viewModel.ReceiveCommand.Dequeued -= _dequeuedHandler;
                 }
             }
 
@@ -121,26 +122,57 @@ namespace Demo.ViewModels.Workflow.Helper
         }
 
         /// <summary>
-        /// 编译 / 无状态(Work) 模式共用入口：WorkCommand 以「非 WorkContext」参数触发。
-        /// 编译器按序驱动每个节点，或用户在卡片上点 Run 触发单个节点。
+        /// 统一数据流入口：编译器按序驱动（IRuntimeContext）、广播投递（RECV）、
+        /// 手动 Run / AI 唤起（EXEC）都经 <see cref="ReceiveAsync"/> 消费。
         /// </summary>
-        public override async Task WorkAsync(object? parameter, CancellationToken ct)
+        public override async Task<object?> ReceiveAsync(ITaskContext context, CancellationToken ct)
         {
             if (_viewModel is null)
             {
-                return;
+                return null;
             }
 
-            // 编译执行：引擎传入 RuntimeContext。节点的编号在编译期已固定（CompileContext.Order），
-            // 运行期只推进状态，不重写徽标编号（避免每次运行都变成 #1）。
-            if (parameter is VeloxDev.Core.WorkflowSystem.CompilerEx.RuntimeContext)
+            // 编译执行：引擎把 RuntimeContext（IRuntimeContext + ITaskContext）直接传入。
+            // 节点的编号在编译期已固定（CompileContext.Order），运行期只推进状态，不重写徽标编号。
+            // 引擎绕过 ReceiveCommand，命令生命周期事件不会触发 —— 此处自补偿计数器/运行指示器。
+            if (context is IRuntimeContext)
             {
-                await ExecuteCompiledStepAsync(ct);
-                return;
+                Interlocked.Increment(ref _activeRuns);
+                _ = UpdateCountersAsync(
+                    IncrementCounter(ref _runCount),
+                    ReadCounter(ref _waitCount),
+                    Interlocked.Increment(ref _counterVersion));
+                StartRuntimeTicker();
+                try
+                {
+                    await ExecuteCompiledStepAsync(ct);
+                }
+                finally
+                {
+                    _ = UpdateCountersAsync(
+                        DecrementCounter(ref _runCount),
+                        ReadCounter(ref _waitCount),
+                        Interlocked.Increment(ref _counterVersion));
+                    if (Interlocked.Decrement(ref _activeRuns) <= 0)
+                    {
+                        Interlocked.Exchange(ref _activeRuns, 0);
+                        StopRuntimeTicker();
+                    }
+                }
+                return null;
             }
 
-            // 无状态模式：走原有 NetworkFlowContext 记录
-            await ExecuteStepAsync(NetworkFlowContext.From(parameter), "EXEC", ct);
+            // 无状态模式：广播（RECV，携带 sender/receiver）与手动 Run / AI（EXEC）共用
+            // NetworkFlowContext 记录，仅以模式标记区分执行路径。
+            var flow = NetworkFlowContext.From(context.Data);
+            await ExecuteStepAsync(flow, context.Sender is not null ? "RECV" : "EXEC", ct);
+
+            // 自动向下游传递：把处理结果沿输出槽广播到下游节点的 ReceiveCommand。
+            // 默认 true（AutoBroadcast 旗标）；取消勾选则退回手动 Forward 逐步推进。
+            if (_viewModel.AutoBroadcast)
+                await BroadcastAsync(flow, ct);
+
+            return flow;
         }
 
         /// <summary>编译执行下的节点步骤：只更新运行状态/耗时，不触碰编译期固定的编号徽标。</summary>
@@ -174,24 +206,6 @@ namespace Demo.ViewModels.Workflow.Helper
                 stopwatch.Stop();
                 await UpdateViewModelStateAsync("Failed", $"{stopwatch.ElapsedMilliseconds} ms", _viewModel.LastResponsePreview, ex.Message);
             }
-        }
-
-        /// <summary>
-        /// 无状态(ReceiveData) 模式：上游 Broadcast 把 WorkContext 推到本节点的输入口时，
-        /// NodeHelper 走 <see cref="ReceiveAsync"/> 消费数据（区别于编译器模式的 WorkAsync）。
-        /// 与 WorkAsync 共用同一套模拟负载，仅以 RECV 标记区分执行路径。
-        /// </summary>
-        public override async Task<object?> ReceiveAsync(object? parameter,
-            IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, CancellationToken ct)
-        {
-            if (_viewModel is null)
-            {
-                return parameter;
-            }
-
-            var context = NetworkFlowContext.From(parameter);
-            await ExecuteStepAsync(context, "RECV", ct);
-            return context;
         }
 
         /// <summary>

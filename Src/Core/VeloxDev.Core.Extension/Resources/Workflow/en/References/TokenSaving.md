@@ -18,7 +18,7 @@ Prefer read-side batching and stable handles over unnecessary re-reading:
 - **SearchForward / SearchReverse / SearchAllRelative** — graph traversal without walking connections manually.
 - **IsConnected** — check reachability in one call.
 - **FindPath** — shortest route between two nodes.
-- **ExecuteWorkOnNodes** — trigger work on multiple nodes at once.
+- **ExecuteNodes** — trigger the receive path on multiple nodes at once.
 - **ValidateWorkflow** — check for issues before prompting the user.
 - **ListCreatableTypes** — discover available node/slot types.
 - **ResolveSlotId** — get slot ID by property name without full GetNodeDetail.

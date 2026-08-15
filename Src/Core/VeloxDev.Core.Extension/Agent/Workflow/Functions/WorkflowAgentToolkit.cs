@@ -100,10 +100,10 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             T(Redo, nameof(Redo)),
             T(ClearHistory, nameof(ClearHistory)));
 
-        // ── Node execution (gated by WithAllowExecuteWork) ──
+        // ── Node execution (gated by WithAllowNodeExecution) ──
         Add(WorkflowToolCategory.Execution,
-            T(ExecuteWork, nameof(ExecuteWork)),
-            T(ExecuteWorkOnNodes, nameof(ExecuteWorkOnNodes)),
+            T(ExecuteNode, nameof(ExecuteNode)),
+            T(ExecuteNodes, nameof(ExecuteNodes)),
             T(BroadcastNode, nameof(BroadcastNode)),
             T(ReverseBroadcastNode, nameof(ReverseBroadcastNode)));
 
@@ -570,38 +570,38 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return Error("No connection found between the specified slots.");
     }
 
-    [Description("Executes WorkCommand on a node and WAITS until the node's work actually completes (fires Exited). Returns 'ok' only after real completion; returns an error if the work fails. Disabled by default: the host must call WithAllowExecuteWork(true) on the scope.")]
-    private async Task<string> ExecuteWork(
+    [Description("Executes ReceiveCommand on a node and WAITS until the node actually completes. Returns 'ok' only after real completion; returns an error if the receive fails. Disabled by default: the host must call WithAllowNodeExecution(true) on the scope.")]
+    private async Task<string> ExecuteNode(
         [Description("Node index.")] int nodeIndex,
-        [Description("Optional parameter.")] string? parameter = null,
+        [Description("Optional parameter (becomes ITaskContext.Data, nullable).")] string? parameter = null,
         CancellationToken cancellationToken = default)
     {
-        if (!_scope.AllowExecuteWork)
-            return Error("ExecuteWork is disabled by host policy. The host must enable node execution via WithAllowExecuteWork(true).");
+        if (!_scope.AllowNodeExecution)
+            return Error("ExecuteNode is disabled by host policy. The host must enable node execution via WithAllowNodeExecution(true).");
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
-            await WaitForCommandAsync(node!.WorkCommand, parameter, cancellationToken).ConfigureAwait(false);
-            return Ok($"Work on node {nodeIndex} completed.");
+            await WaitForCommandAsync(node!.ReceiveCommand, new TaskContext(data: parameter), cancellationToken).ConfigureAwait(false);
+            return Ok($"Receive on node {nodeIndex} completed.");
         }
         catch (OperationCanceledException)
         {
-            return Error($"Work on node {nodeIndex} was cancelled.");
+            return Error($"Receive on node {nodeIndex} was cancelled.");
         }
         catch (Exception ex)
         {
-            return Error($"Work on node {nodeIndex} failed: {ex.Message}");
+            return Error($"Receive on node {nodeIndex} failed: {ex.Message}");
         }
     }
 
-    [Description("Executes BroadcastCommand on a node to forward data along connections, and waits until the broadcast command completes (downstream dispatch itself is fire-and-forget). Disabled by default: requires WithAllowExecuteWork(true).")]
+    [Description("Executes BroadcastCommand on a node to forward data along connections, and waits until the broadcast command completes (downstream dispatch itself is fire-and-forget). Disabled by default: requires WithAllowNodeExecution(true).")]
     private async Task<string> BroadcastNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Optional parameter.")] string? parameter = null,
         CancellationToken cancellationToken = default)
     {
-        if (!_scope.AllowExecuteWork)
-            return Error("BroadcastNode is disabled by host policy. The host must enable node execution via WithAllowExecuteWork(true).");
+        if (!_scope.AllowNodeExecution)
+            return Error("BroadcastNode is disabled by host policy. The host must enable node execution via WithAllowNodeExecution(true).");
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
@@ -764,7 +764,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     [Description("Executes any command on a node by index. Use ListComponentCommands to discover available commands. Disabled by default: the host must allowlist the command via WithAllowedGenericCommands.")]
     private string ExecuteCommandOnNode(
         [Description("Node index.")] int nodeIndex,
-        [Description("Command name, e.g. 'WorkCommand'. 'Command' suffix optional.")] string commandName,
+        [Description("Command name, e.g. 'ReceiveCommand'. 'Command' suffix optional.")] string commandName,
         [Description("JSON parameter, or null.")] string? jsonParameter = null)
     {
         if (!_scope.IsGenericCommandAllowed(commandName))
@@ -1502,14 +1502,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Reverse Broadcast ──────────────────────────
 
-    [Description("Executes ReverseBroadcastCommand on a node to trigger WorkCommand on upstream (source) nodes, and waits until the reverse-broadcast command completes (upstream work itself is fire-and-forget). Disabled by default: requires WithAllowExecuteWork(true).")]
+    [Description("Executes ReverseBroadcastCommand on a node to trigger ReceiveCommand on upstream (source) nodes, and waits until the reverse-broadcast command completes (upstream dispatch itself is fire-and-forget). Disabled by default: requires WithAllowNodeExecution(true).")]
     private async Task<string> ReverseBroadcastNode(
         [Description("Node index.")] int nodeIndex,
         [Description("Optional parameter.")] string? parameter = null,
         CancellationToken cancellationToken = default)
     {
-        if (!_scope.AllowExecuteWork)
-            return Error("ReverseBroadcastNode is disabled by host policy. The host must enable node execution via WithAllowExecuteWork(true).");
+        if (!_scope.AllowNodeExecution)
+            return Error("ReverseBroadcastNode is disabled by host policy. The host must enable node execution via WithAllowNodeExecution(true).");
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
@@ -1727,14 +1727,14 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Bulk Operations ──────────────────────────
 
-    [Description("Executes WorkCommand on multiple nodes and WAITS for each to complete before returning. Optionally pass a parameter shared by all. Disabled by default: requires WithAllowExecuteWork(true).")]
-    private async Task<string> ExecuteWorkOnNodes(
+    [Description("Executes ReceiveCommand on multiple nodes and WAITS for each to complete before returning. Optionally pass a parameter shared by all. Disabled by default: requires WithAllowNodeExecution(true).")]
+    private async Task<string> ExecuteNodes(
         [Description("JSON array of node indices, e.g. [0,1,2].")] string nodeIndicesJson,
-        [Description("Optional parameter passed to each WorkCommand.")] string? parameter = null,
+        [Description("Optional parameter passed to each ReceiveCommand (becomes ITaskContext.Data).")] string? parameter = null,
         CancellationToken cancellationToken = default)
     {
-        if (!_scope.AllowExecuteWork)
-            return Error("ExecuteWorkOnNodes is disabled by host policy. The host must enable node execution via WithAllowExecuteWork(true).");
+        if (!_scope.AllowNodeExecution)
+            return Error("ExecuteNodes is disabled by host policy. The host must enable node execution via WithAllowNodeExecution(true).");
         int[] indices;
         try { indices = [.. JArray.Parse(nodeIndicesJson).Select(t => t.Value<int>())]; }
         catch (Exception ex) { return Error($"Invalid JSON array: {ex.Message}"); }
@@ -1750,7 +1750,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             }
             try
             {
-                await WaitForCommandAsync(Tree.Nodes[idx].WorkCommand, parameter, cancellationToken).ConfigureAwait(false);
+                await WaitForCommandAsync(Tree.Nodes[idx].ReceiveCommand, new TaskContext(data: parameter), cancellationToken).ConfigureAwait(false);
                 completed++;
             }
             catch (Exception ex)

@@ -12,7 +12,7 @@
    AddSlotToCollection
 4. ConnectSlots /       — 连接插槽（两端端点必须都已存在）
    ConnectByProperty
-5. ExecuteWork /        — 执行工作流逻辑（仅在拓扑完整后）
+5. ExecuteNode /        — 经接收路径执行节点逻辑（仅在拓扑完整后）
    BroadcastNode
 ```
 
@@ -25,7 +25,7 @@
 | PatchNodeProperties 在 CreateNode 之前 | 节点无 Parent；插槽生命周期钩子不触发（节点不在树中） |
 | ConnectSlots 在插槽存在之前 | 插槽 ID 查找失败，或连接到错误插槽 |
 | SetEnumSlotCollection 在 CreateNode 之前 | OutputSlots 被创建但 OnWorkflowSlotAdded 无法在树中注册它们 |
-| ExecuteWork 在连接建立之前 | 工作产生无下游效果 |
+| ExecuteNode 在连接建立之前 | 接收无下游效果 |
 
 ### ⚠ 静默跳过警告
 

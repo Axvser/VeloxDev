@@ -36,7 +36,8 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         [typeof(TreeDefaultViewModel), typeof(NodeDefaultViewModel), typeof(SlotDefaultViewModel), typeof(LinkDefaultViewModel)];
 
     internal static readonly Type[] FrameworkData =
-        [typeof(Anchor), typeof(Offset), typeof(Size)];
+        [typeof(Anchor), typeof(Offset), typeof(Size),
+         typeof(ITaskContext), typeof(TaskContext)];
 
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerEnums = [];
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerInterfaces = [];
@@ -209,23 +210,23 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     // ── Capability gates (enforced in code, not just prompt) ───────────────
 
     /// <summary>
-    /// Whether the node-execution tools (<c>ExecuteWork</c>, <c>ExecuteWorkOnNodes</c>,
+    /// Whether the node-execution tools (<c>ExecuteNode</c>, <c>ExecuteNodes</c>,
     /// <c>BroadcastNode</c>, <c>ReverseBroadcastNode</c>) are allowed.
     /// These tools run arbitrary node business code, so they are opt-in.
     /// Default: <c>false</c> (denied). Security is enforced here, not in prompt prose.
     /// </summary>
-    public WorkflowAgentScope WithAllowExecuteWork(bool enabled = false)
+    public WorkflowAgentScope WithAllowNodeExecution(bool enabled = false)
     {
-        AllowExecuteWork = enabled;
+        AllowNodeExecution = enabled;
         return this;
     }
 
-    internal bool AllowExecuteWork { get; private set; }
+    internal bool AllowNodeExecution { get; private set; }
 
     private readonly HashSet<string> _allowedGenericCommands = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Allowlists command names (e.g. <c>"WorkCommand"</c>) for the generic tools
+    /// Allowlists command names (e.g. <c>"ReceiveCommand"</c>) for the generic tools
     /// <c>ExecuteCommandOnNode</c> and <c>ExecuteCommandById</c>. The <c>"Command"</c> suffix is optional.
     /// When this is never called, generic command execution is disabled entirely (secure default).
     /// Calling it once restricts those tools to exactly the listed commands.
@@ -513,7 +514,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         sb.AppendLine("4. If a `hint` or `preferredAlternative` names another tool, switch to it.");
         sb.AppendLine("5. If you still cannot make progress after two attempts, stop and ask the user via `RequestConfirmation`, or report the blocker plainly in your reply. Do not loop silently.");
         sb.AppendLine();
-        sb.AppendLine("> Some tools may be **disabled by host policy** (e.g. `ExecuteWork`, `ExecuteCommandOnNode`, `ExecuteCommandById`). If a tool returns a `disabled by host policy` error, do not work around it — report it and let the user enable it if needed.");
+        sb.AppendLine("> Some tools may be **disabled by host policy** (e.g. `ExecuteNode`, `ExecuteCommandOnNode`, `ExecuteCommandById`). If a tool returns a `disabled by host policy` error, do not work around it — report it and let the user enable it if needed.");
         return sb.ToString();
     }
 

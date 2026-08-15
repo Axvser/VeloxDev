@@ -18,7 +18,7 @@ public enum WorkflowToolCategory
     /// <summary>Structural graph edits: move/resize/create/delete/connect/patch, slot collections, undo/redo.</summary>
     Mutation = 1 << 1,
 
-    /// <summary>Run node business code: ExecuteWork, ExecuteWorkOnNodes, BroadcastNode, ReverseBroadcastNode.</summary>
+    /// <summary>Run node business code: ExecuteNode, ExecuteNodes, BroadcastNode, ReverseBroadcastNode.</summary>
     Execution = 1 << 2,
 
     /// <summary>Generic allowlisted command execution: ExecuteCommandOnNode, ExecuteCommandById.</summary>

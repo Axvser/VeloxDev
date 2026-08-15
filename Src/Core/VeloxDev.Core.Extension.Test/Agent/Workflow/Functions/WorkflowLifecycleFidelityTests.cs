@@ -75,19 +75,19 @@ public class WorkflowLifecycleFidelityTests
     }
 
     [TestMethod]
-    public async Task ExecuteWork_WaitsForCommandCompletion()
+    public async Task ExecuteNode_WaitsForCommandCompletion()
     {
         var tree = new TreeDefaultViewModel();
         var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node); // synchronous mount
-        var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree).WithAllowExecuteWork(true));
+        var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree).WithAllowNodeExecution(true));
 
-        var result = await InvokeToolAsync(toolkit, "ExecuteWork", ("nodeIndex", 0), ("parameter", null));
+        var result = await InvokeToolAsync(toolkit, "ExecuteNode", ("nodeIndex", 0), ("parameter", null));
 
         var json = JObject.Parse(result);
         Assert.AreEqual("ok", json["status"]?.Value<string>());
         Assert.IsTrue((json["message"]?.Value<string>() ?? string.Empty).Contains("completed", StringComparison.OrdinalIgnoreCase),
-            "ExecuteWork should report actual completion, not mere dispatch");
+            "ExecuteNode should report actual completion, not mere dispatch");
     }
 
     [TestMethod]

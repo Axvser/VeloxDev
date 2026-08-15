@@ -65,16 +65,10 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
         return Task.CompletedTask;
     }
     [VeloxCommand]
-    private async Task Work(object? parameter, CancellationToken ct)
+    private async Task<object?> Receive(object? parameter, CancellationToken ct)
     {
-        if (parameter is IWorkContext ctx && ctx.Sender is not null && ctx.Receiver is not null)
-        {
-            await Helper.ReceiveAsync(ctx.Parameter, ctx.Sender, ctx.Receiver, ct);
-        }
-        else
-        {
-            await Helper.WorkAsync(parameter, ct);
-        }
+        var ctx = parameter as ITaskContext ?? new TaskContext(parameter);
+        return await Helper.ReceiveAsync(ctx, ct);
     }
     [VeloxCommand]
     private async Task Broadcast(object? parameter, CancellationToken ct)

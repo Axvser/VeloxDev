@@ -160,7 +160,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Button Grid.Column="0" Command="{Binding WorkCommand}">
+                <Button Grid.Column="0" Command="{Binding ReceiveCommand}">
                     <TextBlock Text="Run" Foreground="White" />
                 </Button>
                 <Button Grid.Column="1" Command="{Binding BroadcastCommand}">

@@ -130,7 +130,7 @@
 				Background="#2d2d2d"
 				CornerRadius="0,0,4,4">
           <Grid ColumnDefinitions="*,*,*">
-				<Button Grid.Column="0" Content="Run" Command="{Binding WorkCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
+				<Button Grid.Column="0" Content="Run" Command="{Binding ReceiveCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
 				<Button Grid.Column="1" Content="Forward" Command="{Binding BroadcastCommand}" Foreground="White" HorizontalAlignment="Stretch"/>
 			</Grid>
 		</Border>

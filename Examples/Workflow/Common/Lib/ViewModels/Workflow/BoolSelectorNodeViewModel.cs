@@ -35,6 +35,10 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     [AgentContext(AgentLanguages.English, "Routing condition. true routes to TrueSlot; false routes to FalseSlot.")]
     [VeloxProperty] private bool condition = true;
 
+    [AgentContext(AgentLanguages.Chinese, "是否自动广播给下游节点")]
+    [AgentContext(AgentLanguages.English, "When true, the node automatically forwards the result to all connected downstream nodes after execution.")]
+    [VeloxProperty] private bool autoBroadcast = true;
+
     [VeloxProperty] private string lastRouted = "-";
 
     // 执行序列号（手动实现，生成器暂未覆盖）
@@ -96,28 +100,35 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
         return Task.FromResult<object?>(Condition);
     }
 
-    /// <summary>编译时路由表（随模式变化）：Static 只含当前选中分支；Dynamic 含 True/False（保留 1:N 扇出）。</summary>
+    /// <summary>编译时路由表（随模式变化）：Static 只含当前选中分支；Dynamic 含 True/False（保留 1:N 扇出）。无下游的分支登记为终端分支（空列表）。</summary>
     public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
     {
         var dict = new Dictionary<object, List<IWorkflowNodeViewModel>>();
         if (CompileMode == RouterCompileMode.Static)
         {
-            var slot = Condition ? TrueSlot : FalseSlot;
-            if (slot is not null)
-                foreach (var target in slot.Targets)
-                    if (target.Parent is not null) AddTarget(dict, Condition, target.Parent);
+            AddBranch(dict, Condition, Condition ? TrueSlot : FalseSlot);
         }
         else
         {
-            if (TrueSlot is not null)
-                foreach (var target in TrueSlot.Targets)
-                    if (target.Parent is not null) AddTarget(dict, true, target.Parent);
-            if (FalseSlot is not null)
-                foreach (var target in FalseSlot.Targets)
-                    if (target.Parent is not null) AddTarget(dict, false, target.Parent);
+            AddBranch(dict, true, TrueSlot);
+            AddBranch(dict, false, FalseSlot);
         }
         return Task.FromResult<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>>(
             dict.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<IWorkflowNodeViewModel>)kv.Value.AsReadOnly()));
+    }
+
+    /// <summary>登记一个分支：有下游 → 活跃分支；无下游 → 终端分支（空列表，运行时选中即结束）。</summary>
+    private void AddBranch(Dictionary<object, List<IWorkflowNodeViewModel>> dict, object key, SlotViewModel? slot)
+    {
+        if (slot is null) return;
+        if (slot.Targets.Count == 0)
+        {
+            if (!dict.ContainsKey(key)) dict[key] = [];
+            return;
+        }
+        foreach (var target in slot.Targets)
+            if (target.Parent is not null)
+                AddTarget(dict, key, target.Parent);
     }
 
     private static void AddTarget(Dictionary<object, List<IWorkflowNodeViewModel>> dict, object key,

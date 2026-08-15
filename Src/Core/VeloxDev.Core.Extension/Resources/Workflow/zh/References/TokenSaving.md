@@ -16,7 +16,7 @@
 - **SearchForward / SearchReverse / SearchAllRelative**：通过图遍历发现相连节点，避免手动逐连接查找。
 - **IsConnected**：检查可达性，无需列出所有路径。
 - **FindPath**：查找两节点间的最短路径。
-- **ExecuteWorkOnNodes**：一次触发多个节点的工作。
+- **ExecuteNodes**：一次触发多个节点的接收路径。
 - **ValidateWorkflow**：在询问用户前先检查是否存在问题。
 - **ListCreatableTypes**：发现可用的节点/插槽类型。
 - **ResolveSlotId**：通过属性名直接获取插槽运行时 ID，避免为解析 ID 而调用 GetNodeDetail。

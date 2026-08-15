@@ -20,12 +20,12 @@ public sealed class WorkflowBuilder
     /// [ Generator ] Template Code For Workflow Node Component
     /// </summary>
     /// <typeparam name="T"> The Type Of Helper </typeparam>
-    /// <param name="workSemaphore"> The concurrent capacity of Work Task </param>
+    /// <param name="workSemaphore"> The concurrent capacity of the receive task </param>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public sealed class NodeAttribute<T>(int workSemaphore = 1) : Attribute
         where T : IWorkflowNodeViewModelHelper, new()
     {
-        public int WorkSemaphore { get; } = workSemaphore;
+        public int Semaphore { get; } = workSemaphore;
     }
 
     /// <summary>

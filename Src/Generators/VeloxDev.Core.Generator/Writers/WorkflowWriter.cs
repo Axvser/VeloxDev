@@ -193,7 +193,7 @@ namespace VeloxDev.Generators.Writers
                 model.HelperType = GetDefaultHelperType("Node") ?? throw new InvalidOperationException("Cannot resolve default Node helper type.");
             }
 
-            model.WorkSemaphore = GetConstructorArgumentAsInt(attribute, "workSemaphore", 0) ?? 1;
+            model.Semaphore = GetConstructorArgumentAsInt(attribute, "workSemaphore", 0) ?? 1;
 
             return model;
         }
@@ -802,16 +802,10 @@ namespace VeloxDev.Generators.Writers
                         Helper.Delete();
                         return {{TaskFullName}}.CompletedTask;
                     }
-                    protected virtual async {{TaskFullName}} Work({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
+                    protected virtual async {{TaskFullName}}<{{ObjectFullName}}?> Receive({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
-                        if (parameter is {{NAMESPACE_VELOX_WORKFLOW}}.IWorkContext ctx && ctx.Sender is not null && ctx.Receiver is not null)
-                        {
-                            await Helper.ReceiveAsync(ctx.Parameter, ctx.Sender, ctx.Receiver, ct);
-                        }
-                        else
-                        {
-                            await Helper.WorkAsync(parameter,ct);
-                        }
+                        var ctx = parameter as {{NAMESPACE_VELOX_WORKFLOW}}.ITaskContext ?? new {{NAMESPACE_VELOX_WORKFLOW}}.TaskContext(parameter);
+                        return await Helper.ReceiveAsync(ctx, ct);
                     }
                     protected virtual async {{TaskFullName}} Broadcast({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
@@ -971,16 +965,16 @@ namespace VeloxDev.Generators.Writers
                     }
                 """);
             sb.AppendLine($$"""
-                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_WorkCommand = null;
-                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand WorkCommand
+                    private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_ReceiveCommand = null;
+                    public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand ReceiveCommand
                     {
                        get
                        {
-                          _buffer_WorkCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
-                              command: Work,
+                          _buffer_ReceiveCommand ??= new {{NAMESPACE_VELOX_MVVM}}.VeloxCommand(
+                              command: Receive,
                               canExecute: _ => true,
-                              semaphore: {{model.WorkSemaphore}});
-                          return _buffer_WorkCommand;
+                              semaphore: {{model.Semaphore}});
+                          return _buffer_ReceiveCommand;
                        }
                     }
                 """);
@@ -1684,7 +1678,7 @@ namespace VeloxDev.Generators.Writers
 
         private class NodeAttributeModel : WorkflowAttributeModel
         {
-            public int WorkSemaphore { get; set; } = 1;
+            public int Semaphore { get; set; } = 1;
             public override int WorkflowType => 2;
         }
 

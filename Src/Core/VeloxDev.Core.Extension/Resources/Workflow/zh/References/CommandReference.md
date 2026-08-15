@@ -16,6 +16,7 @@
 | 删除节点 | DeleteNode | Node.DeleteCommand |
 | 删除插槽 | DeleteSlot | Slot.DeleteCommand |
 | 广播 | BroadcastNode | Node.BroadcastCommand |
+| 执行节点 | ExecuteNode | Node.ReceiveCommand（ITaskContext） |
 | 其他操作 | ExecuteCommandOnNode / ExecuteCommandById | 按名称解析 |
 | 修改自定义属性 | PatchNodeProperties / PatchComponentById | 直接设置（仅非命令属性） |
 | 向集合添加插槽 | AddSlotToCollection | 集合生命周期（OnWorkflowSlotAdded） |
@@ -34,10 +35,19 @@
 | 按 ID 断开连接 | DisconnectSlotsById | Link.DeleteCommand |
 | 设置插槽通道 | SetSlotChannel | Slot.SetChannelCommand |
 | 查看连接详情 | GetLinkDetail | 仅只读查询 |
-| 对多节点执行工作 | ExecuteWorkOnNodes | WorkCommand × N |
+| 对多节点执行（接收） | ExecuteNodes | Node.ReceiveCommand × N |
 | 节点统计 | GetNodeStatistics | 入度/出度、已连接节点 |
 | 列出可创建类型 | ListCreatableTypes | 发现可用节点/插槽类型 |
 | 验证工作流 | ValidateWorkflow | 检查问题（零尺寸、孤立节点等） |
+
+## 上下文层级
+
+所有节点执行都走唯一的接收路径：**Node.ReceiveCommand → Helper.ReceiveAsync(ITaskContext, ct) → Task<object?>**。
+
+- `IContext` — 工作流上下文体系的根契约。
+- `ITaskContext` — 任务载荷：`Data` / `Sender` / `Receiver`（均可空）。主动唤起节点时构造它——`ExecuteNode` 的 `parameter` 即成为 `ITaskContext.Data`。
+- `IRuntimeContext` — 编译器运行时会话（UID / 日志 / 共享变量 / 状态）；编译驱动时由引擎注入。
+- `ICompileContext` — 编译期身份（Order / ChainIndex / Offset）；由 Compiler 注入。
 
 ## 插槽连接安全规则
 

@@ -142,7 +142,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Button Grid.Column="0" Content="Run" Command="{Binding WorkCommand}" />
+                <Button Grid.Column="0" Content="Run" Command="{Binding ReceiveCommand}" />
                 <Button Grid.Column="1" Content="Forward" Command="{Binding BroadcastCommand}" />
             </Grid>
         </Border>

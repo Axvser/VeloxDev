@@ -389,7 +389,7 @@ internal sealed class WorkflowNodeCard : UserControl
         };
         footerTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         footerTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        footerTlp.Controls.Add(MakeCmdButton("Run", nameof(NodeViewModel.WorkCommand)), 0, 0);
+        footerTlp.Controls.Add(MakeCmdButton("Run", nameof(NodeViewModel.ReceiveCommand)), 0, 0);
         footerTlp.Controls.Add(MakeCmdButton("Forward", nameof(NodeViewModel.BroadcastCommand)), 1, 0);
         _footerPanel.Controls.Add(footerTlp);
 

@@ -53,8 +53,8 @@ public class WorkflowAgentToolkitTests
         Assert.IsTrue(query.Any(t => string.Equals(t.Name, "GetFullTopology", StringComparison.OrdinalIgnoreCase)));
         Assert.IsFalse(query.Any(t => string.Equals(t.Name, "CreateNode", StringComparison.OrdinalIgnoreCase)),
             "CreateNode is a mutation tool and must not appear in a Query-only set");
-        Assert.IsFalse(query.Any(t => string.Equals(t.Name, "ExecuteWork", StringComparison.OrdinalIgnoreCase)),
-            "ExecuteWork is an execution tool and must not appear in a Query-only set");
+        Assert.IsFalse(query.Any(t => string.Equals(t.Name, "ExecuteNode", StringComparison.OrdinalIgnoreCase)),
+            "ExecuteNode is an execution tool and must not appear in a Query-only set");
         Assert.IsFalse(query.Any(t => string.Equals(t.Name, "AutoLayout", StringComparison.OrdinalIgnoreCase)),
             "AutoLayout is no longer provided at all");
     }
@@ -69,7 +69,7 @@ public class WorkflowAgentToolkitTests
         Assert.HasCount(def.Count, all, "default CreateTools() must equal CreateTools(All)");
 
         Assert.IsTrue(all.Any(t => string.Equals(t.Name, "CreateNode", StringComparison.OrdinalIgnoreCase)));
-        Assert.IsTrue(all.Any(t => string.Equals(t.Name, "ExecuteWork", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(all.Any(t => string.Equals(t.Name, "ExecuteNode", StringComparison.OrdinalIgnoreCase)));
         Assert.IsTrue(all.Any(t => string.Equals(t.Name, "SearchForward", StringComparison.OrdinalIgnoreCase)));
         // Removed composite/bundled tools must never surface, even under All.
         Assert.IsFalse(all.Any(t => string.Equals(t.Name, "AutoLayout", StringComparison.OrdinalIgnoreCase)),

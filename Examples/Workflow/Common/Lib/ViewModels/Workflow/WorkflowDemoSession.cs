@@ -10,8 +10,7 @@ namespace Demo.Workflow;
 ///
 /// 当前示例（Compiler 机制由用户从零重写中，分支选择节点暂为普通节点，不再负责路由）：
 ///   A. 节点图能力 —— 基座图：Controller → worker → Bool/Enum 选择器（普通节点）→ 分支 → 汇合 → handler；
-///   E. 无状态执行 —— 卡片 Run=WorkAsync / Forward=BroadcastAsync → 下游 ReceiveAsync，
-///      全程不编译，展示 NodeHelper 走 Work+Broadcast / ReceiveData 两条路径。
+///   R. 链内回退 —— 线性链中实现 IRedirectable 的节点依据运行时上下文回退到某前驱编译状态。
 ///
 /// 布点约定：示例自左上 (0,0) 起逐行排布；示例内部连线尽量自左向右 / 自上而下。
 /// Method Router 保留在 NetworkRequestMethod 上（Get/Post/Put/Delete），其编译模式默认 Dynamic
@@ -154,37 +153,46 @@ public sealed class WorkflowDemoSession
         allNodes.AddRange([loadSeed, hot, cold, aggregate, handleGet, handlePost, handlePut, handleDelete, finalize]);
 
         // ─────────────────────────────────────────────────────────────────────
-        // 示例 E：无状态 —— 卡片 Run=WorkAsync / Forward=BroadcastAsync → 下游 ReceiveAsync。
-        // 可用 Controller 的 Run 手动逐节点驱动，展示 NodeHelper 走 Work+Broadcast / ReceiveData。
+        // 示例 R：链内回退 —— Controller → Start → Prepare → RedirectGate → Process → Sink。
+        // RedirectGate 实现 IRedirectable：前 FailCount 次链内通过回退到 RedirectBackSteps 步前
+        // （即 Prepare）重新执行，之后放行。回退目标落在中间可见检查点，重试过程清晰可见。
         // ─────────────────────────────────────────────────────────────────────
-        var statelessController = NewController("stateless-chain", 60, 1300);
-        var sStart = CreateNode("Stateless Start", 300, 400, 1300, priority: 1);
-        var sRecvA = CreateNode("Receive A", 300, 800, 1300, priority: 2);
-        var sRecvB = CreateNode("Receive B", 300, 1200, 1300, priority: 3);
-        var sRecvC = CreateNode("Receive C", 300, 1600, 1300, priority: 4);
-        var sSink = CreateNode("Stateless Sink", 400, 2000, 1300, priority: 5);
+        var redirectController = NewController("redirect-chain", 60, 1300);
+        var rStart = CreateNode("Start", 500, 400, 1300, priority: 1);
+        var rPrepare = CreateNode("Prepare", 500, 800, 1350, priority: 2);
+        var redirectGate = new RedirectGateNodeViewModel
+        {
+            Title = "Redirect Gate",
+            Size = new Size(300, 260),
+            Anchor = new Anchor(1200, 1300, 0),
+            FailCount = 2,
+            RedirectBackSteps = 1,
+        };
+        var rProcess = CreateNode("Process", 600, 1600, 1400, priority: 3);
+        var rSink = CreateNode("Redirect Sink", 400, 2050, 1650, priority: 4);
 
-        foreach (var n in new IWorkflowNodeViewModel[] { sStart, sRecvA, sRecvB, sRecvC, sSink })
+        foreach (var n in new IWorkflowNodeViewModel[] { rStart, rPrepare, redirectGate, rProcess, rSink })
             helper.CreateNode(n);
 
-        SetChannel(sStart.InputSlot, SlotChannel.OneSource);
-        SetChannel(sStart.OutputSlot, SlotChannel.OneTarget);
-        SetChannel(sRecvA.InputSlot, SlotChannel.OneSource);
-        SetChannel(sRecvA.OutputSlot, SlotChannel.OneTarget);
-        SetChannel(sRecvB.InputSlot, SlotChannel.OneSource);
-        SetChannel(sRecvB.OutputSlot, SlotChannel.OneTarget);
-        SetChannel(sRecvC.InputSlot, SlotChannel.OneSource);
-        SetChannel(sRecvC.OutputSlot, SlotChannel.OneTarget);
-        SetChannel(sSink.InputSlot, SlotChannel.OneSource);
-        SetChannel(statelessController.OutputSlot, SlotChannel.MultipleTargets);
+        SetChannel(redirectController.OutputSlot, SlotChannel.OneTarget);
+        SetChannel(rStart.InputSlot, SlotChannel.OneSource);
+        SetChannel(rStart.OutputSlot, SlotChannel.OneTarget);
+        SetChannel(rPrepare.InputSlot, SlotChannel.OneSource);
+        SetChannel(rPrepare.OutputSlot, SlotChannel.OneTarget);
+        SetChannel(redirectGate.InputSlot, SlotChannel.OneSource);
+        SetChannel(redirectGate.OutputSlot, SlotChannel.OneTarget);
+        SetChannel(rProcess.InputSlot, SlotChannel.OneSource);
+        SetChannel(rProcess.OutputSlot, SlotChannel.OneTarget);
+        SetChannel(rSink.InputSlot, SlotChannel.OneSource);
 
-        Connect(tree, statelessController.OutputSlot!, sStart.InputSlot!);
-        Connect(tree, sStart.OutputSlot!, sRecvA.InputSlot!);
-        Connect(tree, sRecvA.OutputSlot!, sRecvB.InputSlot!);
-        Connect(tree, sRecvB.OutputSlot!, sRecvC.InputSlot!);
-        Connect(tree, sRecvC.OutputSlot!, sSink.InputSlot!);
-        controllers.Add(statelessController);
-        allNodes.AddRange([sStart, sRecvA, sRecvB, sRecvC, sSink]);
+        Connect(tree, redirectController.OutputSlot!, rStart.InputSlot!);
+        Connect(tree, rStart.OutputSlot!, rPrepare.InputSlot!);
+        Connect(tree, rPrepare.OutputSlot!, redirectGate.InputSlot!);
+        Connect(tree, redirectGate.OutputSlot!, rProcess.InputSlot!);
+        Connect(tree, rProcess.OutputSlot!, rSink.InputSlot!);
+
+        controllers.Add(redirectController);
+        allNodes.AddRange([rStart, rPrepare, redirectGate, rProcess, rSink]);
 
         return new WorkflowDemoSession(tree, controller, controllers, allNodes);
     }

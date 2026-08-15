@@ -13,7 +13,7 @@ public static class WorkflowNodeEx
             component.SetSizeCommand,
             component.CreateSlotCommand,
             component.DeleteCommand,
-            component.WorkCommand,
+            component.ReceiveCommand,
             component.BroadcastCommand,
             component.ReverseBroadcastCommand
         ];
@@ -111,8 +111,8 @@ public static class WorkflowNodeEx
         foreach (var (node, sender, receiver) in nodes)
         {
             ct.ThrowIfCancellationRequested();
-            var ctx = new WorkContext(parameter, sender, receiver);
-            node.WorkCommand.Execute(ctx);
+            var ctx = new TaskContext(parameter, sender, receiver);
+            node.ReceiveCommand.Execute(ctx);
         }
     }
 
@@ -142,8 +142,8 @@ public static class WorkflowNodeEx
         foreach (var (node, sender, receiver) in nodes)
         {
             ct.ThrowIfCancellationRequested();
-            var ctx = new WorkContext(parameter, sender, receiver);
-            node.WorkCommand.Execute(ctx);
+            var ctx = new TaskContext(parameter, sender, receiver);
+            node.ReceiveCommand.Execute(ctx);
         }
     }
 

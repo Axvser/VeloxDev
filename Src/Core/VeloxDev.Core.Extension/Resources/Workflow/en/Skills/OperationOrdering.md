@@ -12,7 +12,7 @@ You MUST follow this lifecycle ordering — the same order a human developer use
    AddSlotToCollection
 4. ConnectSlots /         — connect slots (BOTH endpoints must already exist)
    ConnectByProperty
-5. ExecuteWork /          — run workflow logic (only after topology is complete)
+5. ExecuteNode /          — run node logic via the receive path (only after topology is complete)
    BroadcastNode
 ```
 
@@ -25,7 +25,7 @@ These are **single-step calls** — there is no composite tool. Perform each ste
 | PatchNodeProperties before CreateNode | Node has no Parent; slot lifecycle hooks do not fire |
 | ConnectSlots before slots exist | Slot ID lookup fails or connects wrong slot |
 | SetEnumSlotCollection before CreateNode | OutputSlots are created but OnWorkflowSlotAdded cannot register them |
-| ExecuteWork before connections | Work produces no downstream effects |
+| ExecuteNode before connections | Receive produces no downstream effects |
 
 ### ⚠ Silent Skip Warning
 

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using VeloxDev.MVVM;
+using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
@@ -7,8 +8,10 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// 一次运行期的执行会话（也是那个公有携带 UID 的 VM）：
 /// 上下文共享（UID / 顺序 / 日志 / 共享变量）+ 执行位置/决策状态（引擎维护、UI 绑定进度）。
 /// 节点实现 <see cref="IRuntimeAware"/>，由引擎在驱动前注入本对象。
+/// 继承 <see cref="ITaskContext"/>：编译器把本会话对象直接传入
+/// <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/>，并逐节点写 <see cref="Data"/>。
 /// </summary>
-public sealed partial class RuntimeContext
+public sealed partial class RuntimeContext : IRuntimeContext
 {
     // ── 上下文共享 ──
     [VeloxProperty] private Guid _uid = Guid.NewGuid();
@@ -29,8 +32,25 @@ public sealed partial class RuntimeContext
     /// </summary>
     [VeloxProperty] private int _currentOrder = -1;
 
+    // ── 数据流载荷（编译器驱动时逐节点注入；作为 ITaskContext 提供）──
+    [VeloxProperty] private object? _data;
+    [VeloxProperty] private IWorkflowSlotViewModel? _sender;
+    [VeloxProperty] private IWorkflowSlotViewModel? _receiver;
+
     // 共享变量（黑板）：节点/引擎/UI 都可读写，非直接 UI 绑定，走方法访问
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 节点是否在本次驱动中调用了 <see cref="Error"/> 或 <see cref="Warn"/>（请求重定向）。
+    /// 由引擎在每次驱动节点前清除、驱动后检查。
+    /// </summary>
+    public bool RedirectRequested { get; internal set; }
+
+    /// <summary>流程是否因「节点报错但未实现 <see cref="IRedirectable"/>」而提前结束（状态置为 -1）。</summary>
+    public bool EndedWithError { get; internal set; }
+
+    /// <summary>引擎请求的回退目标 Order（可为跨链）。RunAsync 读取后带该目标重跑整张图。</summary>
+    public int? PendingRedirectTarget { get; internal set; }
 
     /// <summary>取下一个执行顺序号（自增）。</summary>
     public int Next() => Interlocked.Increment(ref _sequence);
@@ -38,8 +58,19 @@ public sealed partial class RuntimeContext
     /// <summary>节点/引擎推送一条普通日志（带顺序前缀）。</summary>
     public void Log(string entry) => _logs.Add($"{Next():00}. {entry}");
 
-    /// <summary>节点/引擎推送一条异常/错误消息（带顺序前缀与 ✗ 标记）。</summary>
-    public void Error(string message) => _logs.Add($"{Next():00}. ✗ {message}");
+    /// <summary>节点/引擎推送一条异常/错误消息（带顺序前缀与 ✗ 标记）。同时请求重定向。</summary>
+    public void Error(string message)
+    {
+        _logs.Add($"{Next():00}. ✗ {message}");
+        RedirectRequested = true;
+    }
+
+    /// <summary>节点/引擎推送一条警告消息（带顺序前缀与 ⚠ 标记）。同时请求重定向。</summary>
+    public void Warn(string message)
+    {
+        _logs.Add($"{Next():00}. ⚠ {message}");
+        RedirectRequested = true;
+    }
 
     /// <summary>写入一个共享变量（key 为空则忽略）。</summary>
     public void Set(string key, object? value)

@@ -130,7 +130,7 @@
                 BackgroundColor="#2D2D2D"
                 StrokeShape="RoundRectangle 0,0,4,4">
             <Grid ColumnDefinitions="*,*">
-                <Button Grid.Column="0" Text="Run" Command="{Binding WorkCommand}" TextColor="White" />
+                <Button Grid.Column="0" Text="Run" Command="{Binding ReceiveCommand}" TextColor="White" />
                 <Button Grid.Column="1" Text="Forward" Command="{Binding BroadcastCommand}" TextColor="White" />
             </Grid>
         </Border>

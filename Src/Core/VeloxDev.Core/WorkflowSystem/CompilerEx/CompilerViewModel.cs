@@ -6,12 +6,13 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
 /// <summary>
 /// 编译入口：把一个起点（Controller）可达的子图分解成若干编译图（多图语义）。
-/// v1 分解算法：
+/// v1 分解算法（直接裁剪，无环路）：
 ///  - 线性段（单入单出）→ ExecuteEntry；
 ///  - 实现 <see cref="ICompileTimeRouter"/> 的节点 → BranchEntry（静态分支按当前 key 剪枝，动态分支全保留）；
+///  - 路由 key 指向多个下游 → ParallelEntry（扇出/汇聚）；无下游 → IsTerminal 终端分支；
 ///  - 分支后所有出口共同指向的节点 → 汇合点，作为父图下一段链的起点（序号带偏移，不归零）；
 ///  - 编译完给每个实现 <see cref="ICompileTimeAware"/> 的节点注入 <see cref="CompileContext"/>。
-/// 环路→RetryEntry 的生成留待后续（v1 以 visited 护栏防止死循环）。
+/// 运行期回退由节点实现 <see cref="IRedirectable"/>（链内回退）承担，编译图本身是无环的。
 /// </summary>
 public sealed partial class CompilerViewModel
 {
@@ -48,7 +49,7 @@ public sealed partial class CompilerViewModel
             if (!ReferenceEquals(node, start) && !resumedAfterBranch && HasMultipleInputs(node))
                 break;
 
-            // 环路护栏：已编译节点不再处理，避免死循环/重复编译。
+            // 已编译节点不再处理（无环图，避免重复编译）。
             if (!state.Visited.Add(node))
                 break;
             resumedAfterBranch = false;
@@ -65,22 +66,49 @@ public sealed partial class CompilerViewModel
                 var options = new ObservableCollection<BranchOption>();
                 var exits = new List<IWorkflowNodeViewModel?>();
 
-                // 路由表里的分支 = 活跃分支 → 编译成 BranchOption（分配 live orders）
+                // 通用路由编译：每个 key 的子图可能是 单一路径 / 扇出(ParallelEntry)。
+                // 无下游 → 终端分支；单目标 → 普通子图；多目标 → 扇出(并行组，汇聚点=CommonNext)。
                 foreach (var kv in routeTable)
                 {
-                    if (kv.Value is null) continue;
-                    foreach (var target in kv.Value)
+                    var label = kv.Key?.ToString() ?? "?";
+                    if (kv.Value is null || kv.Value.Count == 0)
                     {
+                        options.Add(new BranchOption { Key = kv.Key, Label = label, Graph = null, IsTerminal = true });
+                        continue;
+                    }
+                    if (kv.Value.Count == 1)
+                    {
+                        var target = kv.Value[0];
                         if (target is null) continue;
                         var sub = await CompileGraphAsync(target, state);
-                        options.Add(new BranchOption
-                        {
-                            Key = kv.Key,
-                            Label = kv.Key?.ToString() ?? "?",
-                            Graph = sub,
-                        });
+                        options.Add(new BranchOption { Key = kv.Key, Label = label, Graph = sub });
                         exits.Add(LastNode(sub));
+                        continue;
                     }
+                    // 多目标 → 扇出：每路子图编译进 ParallelEntry。
+                    var branches = new List<CompiledGraph>();
+                    var subExits = new List<IWorkflowNodeViewModel?>();
+                    foreach (var t in kv.Value)
+                    {
+                        if (t is null) continue;
+                        var sub = await CompileGraphAsync(t, state);
+                        branches.Add(sub);
+                        subExits.Add(LastNode(sub));
+                    }
+                    options.Add(new BranchOption
+                    {
+                        Key = kv.Key,
+                        Label = label,
+                        Graph = new CompiledGraph
+                        {
+                            Entries = new ObservableCollection<ActionEntry>
+                            {
+                                new ParallelEntry { Branches = new ObservableCollection<CompiledGraph>(branches) },
+                            }
+                        },
+                    });
+                    // 扇出各路的末尾节点加入出口；最终 CommonNext 会算出它们的公共下游（汇聚点）。
+                    exits.AddRange(subExits);
                 }
 
                 // 静态模式（编译期已知 key）：全拓扑里不在活跃分支的下游节点，走一遍并发「重置信号」
@@ -97,7 +125,15 @@ public sealed partial class CompilerViewModel
                     }
                 }
 
-                entries.Add(new BranchEntry { Router = node, Options = options, IsDynamic = isDynamic });
+                entries.Add(new BranchEntry
+                {
+                    Router = node,
+                    Options = options,
+                    IsDynamic = isDynamic,
+                    // 编译期锁定的路由 key：Static 下运行期以此为准（编译瞬间的选中值）；
+                    // Dynamic 下为 null，运行期重新解析。
+                    CompileKey = currentKey,
+                });
 
                 // 分支后的汇合点：所有活跃分支出口共同指向的下一个节点。
                 node = CommonNext(exits);
@@ -186,7 +222,7 @@ public sealed partial class CompilerViewModel
     {
         ExecuteEntry exec when exec.Nodes.Count > 0 => exec.Nodes[exec.Nodes.Count - 1],
         BranchEntry branch when branch.Options.Count > 0 => LastNode(branch.Options[branch.Options.Count - 1].Graph),
-        RetryEntry retry => LastNode(retry.Body),
+        ParallelEntry par when par.Branches.Count > 0 => LastNode(par.Branches[par.Branches.Count - 1]),
         _ => null,
     };
 
