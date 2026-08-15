@@ -253,6 +253,12 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         AutoScrollPosition = Point.Empty;
         _panOffset = new Point((int)Math.Round(-sx), (int)Math.Round(-sy));
         RelayoutAllCards();
+
+        // 小地图拖动期间鼠标捕获在小地图上，画布未持有 Capture —— Refresh 里
+        // host.Capture 的同步重绘分支不会触发，只有异步 Invalidate。高频拖动时
+        // WM_PAINT 被 WM_MOUSEMOVE 不断延后，节点旧位置与旧连线来不及擦除形成残影；
+        // 这里同步重绘画布（网格/标尺/连线），与 Trimmed 版 ApplyPan 的 Update 一致。
+        Update();
     }
 
     private void DetachSession(WorkflowDemoSession? s)
