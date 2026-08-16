@@ -250,14 +250,19 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     /// </summary>
     private void OnMinimapScrollRequested(double sx, double sy)
     {
-        AutoScrollPosition = Point.Empty;
-        _panOffset = new Point((int)Math.Round(-sx), (int)Math.Round(-sy));
+        // Compensate the pan for the current AutoScrollPosition instead of resetting it: resetting
+        // fires a (deferred) Scroll event that re-runs SyncMinimap from the pre-pan scroll and
+        // overwrites the minimap's ScrollOffset back to its old spot — the "stuck until you drag"
+        // symptom. With the compensation the total pan (panOffset + AutoScrollPosition) equals the
+        // requested ScrollOffset, so the block follows the very first press.
+        var scroll = AutoScrollPosition;
+        _panOffset = new Point(
+            (int)Math.Round(-sx - scroll.X),
+            (int)Math.Round(-sy - scroll.Y));
         RelayoutAllCards();
 
-        // AutoScrollPosition = Point.Empty 上方的 Scroll 事件会在 _panOffset 更新前触发
-        // SyncMinimap，而它的生效是异步的 —— RelayoutAllCards 里的 SyncMinimap 仍可能读到
-        // 旧的 AutoScrollPosition，把小地图 ScrollOffset 写回旧位置（块看起来"按下不动、
-        // 拖一下才动"）。这里直接把小地图同步到请求的滚动目标，块立刻跟随。
+        // RelayoutAllCards → SyncMinimap can still read the stale AutoScrollPosition, so force the
+        // minimap to the requested scroll now for immediate feedback; it converges on the pan.
         if (_minimap is WorkflowBehaviors.IWorkflowMinimapOverlay m)
         {
             m.ScrollOffsetX = sx;
