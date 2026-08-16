@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using VeloxDev.AI;
 using VeloxDev.MVVM.Serialization;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -24,6 +25,23 @@ public partial class WorkflowView : UserControl
         InitializeComponent();
         DataContext = _workflowViewModel;
         InitializeNetworkDemo();
+        InitializeMcp();
+    }
+
+    private void InitializeMcp()
+    {
+        if (_workflowViewModel.GetHelper() is not AgentHelper helper) return;
+
+        // 状态更新 marshal 到 UI 线程（ObservableCollection 绑定需同线程）。
+        helper.Mcp.WithSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher));
+        McpStatusPanel.DataContext = helper.Mcp.Status;
+        _ = helper.LoadMcpServersAsync();
+    }
+
+    private async void OnReloadMcp(object sender, RoutedEventArgs e)
+    {
+        if (_workflowViewModel.GetHelper() is AgentHelper helper)
+            await helper.LoadMcpServersAsync();
     }
 
     private async void SelectWorkflow(object sender, RoutedEventArgs e)

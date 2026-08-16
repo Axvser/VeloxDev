@@ -43,7 +43,7 @@ public class McpRemoteTests
     {
         var scope = new McpScope();
         var config = HttpConfig(configure: c =>
-            c.Headers = new Dictionary<string, string> { ["Authorization"] = "Bearer abc" });
+            c.Options = new { headers = new { Authorization = "Bearer abc" } });
 
         var options = scope.BuildHttpTransportOptions(config);
 
@@ -65,12 +65,16 @@ public class McpRemoteTests
             return Task.FromResult("http://localhost:1179/callback?code=abc123");
         });
         var config = HttpConfig(configure: c =>
-        {
-            c.OAuthClientId = "demo-client";
-            c.OAuthClientSecret = "demo-secret";
-            c.OAuthRedirectUri = "http://localhost:1179/callback";
-            c.OAuthScopes = ["mcp.read", "mcp.write"];
-        });
+            c.Options = new
+            {
+                oauth = new
+                {
+                    clientId = "demo-client",
+                    clientSecret = "demo-secret",
+                    redirectUri = "http://localhost:1179/callback",
+                    scopes = new[] { "mcp.read", "mcp.write" },
+                },
+            });
 
         var options = scope.BuildHttpTransportOptions(config);
 
@@ -102,6 +106,33 @@ public class McpRemoteTests
         Assert.IsNotNull(transport, "Http run mode must produce an HTTP client transport");
     }
 
+    // ── Dynamic loaded-tool registry (mid-session add/remove) ──
+
+    [TestMethod]
+    public async Task LoadAsync_FailedServers_LeaveLoadedToolsEmpty()
+    {
+        var scope = new McpScope();
+        await scope.LoadAsync([new McpServerConfiguration { Name = "bad", RunMode = McpServerRunMode.Http, Endpoint = null }]);
+
+        Assert.AreEqual(0, scope.LoadedTools.Count, "failed servers must not contribute tools");
+        Assert.AreEqual(McpServerStatus.Error, scope.Status.Servers.Single().State);
+    }
+
+    [TestMethod]
+    public void UnloadServer_ResetsStatus_AndReportsNoToolsWhenNoneLoaded()
+    {
+        var scope = new McpScope();
+        var config = new McpServerConfiguration { Name = "bad", RunMode = McpServerRunMode.Http, Endpoint = null };
+        _ = scope.LoadAsync([config]).GetAwaiter().GetResult();
+        Assert.AreEqual(McpServerStatus.Error, scope.Status.Servers.Single().State);
+
+        var removed = scope.UnloadServer("bad");
+
+        Assert.IsFalse(removed, "no tools were loaded, so UnloadServer reports nothing removed");
+        Assert.AreEqual(McpServerStatus.NotStarted, scope.Status.Servers.Single().State,
+            "UnloadServer must reset the server status to NotStarted");
+    }
+
     // ── Timeout & transport semantics ──
 
     [TestMethod]
@@ -118,12 +149,12 @@ public class McpRemoteTests
     public void PerServerConnectionTimeout_OverridesScopeDefault()
     {
         var scope = new McpScope().WithConnectionTimeout(TimeSpan.FromSeconds(7));
-        var config = HttpConfig(configure: c => c.ConnectionTimeout = TimeSpan.FromSeconds(2));
+        var config = HttpConfig(configure: c => c.Options = new { connectionTimeout = 2 }); // 秒
 
         var options = scope.BuildHttpTransportOptions(config);
 
         Assert.AreEqual(TimeSpan.FromSeconds(2), options.ConnectionTimeout,
-            "per-server ConnectionTimeout must override the scope default");
+            "per-server Options.connectionTimeout must override the scope default");
     }
 
     [TestMethod]
@@ -131,15 +162,39 @@ public class McpRemoteTests
     {
         var scope = new McpScope();
         var config = HttpConfig(configure: c =>
-        {
-            c.TransportMode = HttpTransportMode.StreamableHttp;
-            c.OwnsSession = true;
-        });
+            c.Options = new { transportMode = "StreamableHttp", ownsSession = true });
 
         var options = scope.BuildHttpTransportOptions(config);
 
         Assert.AreEqual(HttpTransportMode.StreamableHttp, options.TransportMode);
         Assert.IsTrue(options.OwnsSession);
+    }
+
+    [TestMethod]
+    public void UnknownOptionsKey_IsRejected()
+    {
+        var scope = new McpScope();
+        var config = HttpConfig(configure: c => c.Options = new { typoKey = "oops" });
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => scope.BuildHttpTransportOptions(config));
+    }
+
+    [TestMethod]
+    public void StdioOptions_Env_AndWorkingDirectory_Applied()
+    {
+        var config = new McpServerConfiguration
+        {
+            Name = "fs",
+            RunMode = McpServerRunMode.Npx,
+            Package = "@modelcontextprotocol/server-filesystem",
+            Options = new { env = new { FILESYSTEM_ROOT = "C:/data", API_KEY = "k" }, workingDirectory = "C:/data" },
+        };
+
+        var options = McpScope.BuildStdioTransportOptions(config, System.IO.Path.GetTempPath());
+
+        Assert.IsNotNull(options.EnvironmentVariables, "env must map to EnvironmentVariables");
+        Assert.AreEqual("C:/data", options.EnvironmentVariables!["FILESYSTEM_ROOT"]);
+        Assert.AreEqual("C:/data", options.WorkingDirectory);
     }
 
     [TestMethod]

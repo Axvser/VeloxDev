@@ -135,6 +135,11 @@ public partial class WorkflowView : ContentView
         if (newSession is not null)
         {
             SubscribeAutoScroll(newSession.Tree);
+            if (newSession.Tree.GetHelper() is AgentHelper helper)
+            {
+                helper.Mcp.WithSynchronizationContext(SynchronizationContext.Current);
+                _ = helper.LoadMcpServersAsync();
+            }
             newSession.Tree.Layout.UpdateCommand.Execute(null);
         }
 
@@ -368,6 +373,12 @@ public partial class WorkflowView : ContentView
     }
 
     // ── Agent Chat ──────────────────────────────────────────────────────────
+
+    private async void OnReloadMcp(object? sender, EventArgs e)
+    {
+        if (_workflowViewModel.GetHelper() is AgentHelper helper)
+            await helper.LoadMcpServersAsync();
+    }
 
     private async void OnSendToAgent(object? sender, EventArgs e)
     {

@@ -32,12 +32,23 @@ public partial class McpServerStatusViewModel
     /// <summary>加载失败（见 <see cref="Error"/>）。</summary>
     public bool IsError => State == McpServerStatus.Error;
 
+    /// <summary>状态的中文展示文本（UI / Agent 直接可用）。</summary>
+    public string StateText => State switch
+    {
+        McpServerStatus.Connected => "已连接",
+        McpServerStatus.Installing => "安装中",
+        McpServerStatus.Connecting => "连接中",
+        McpServerStatus.Error => "错误",
+        _ => "未启动",
+    };
+
     partial void OnStateChanged(McpServerStatus oldValue, McpServerStatus newValue)
     {
         OnPropertyChanged(nameof(IsConnected));
         OnPropertyChanged(nameof(IsInstalling));
         OnPropertyChanged(nameof(IsConnecting));
         OnPropertyChanged(nameof(IsError));
+        OnPropertyChanged(nameof(StateText));
     }
 }
 
@@ -85,6 +96,15 @@ public partial class McpStatusViewModel
     public void SetLoading(bool loading)
     {
         IsLoading = loading;
+        NotifyAggregates();
+    }
+
+    /// <summary>清空全部服务器状态（重载前调用）。</summary>
+    public void Reset()
+    {
+        foreach (var s in Servers)
+            s.PropertyChanged -= OnServerPropertyChanged;
+        Servers.Clear();
         NotifyAggregates();
     }
 

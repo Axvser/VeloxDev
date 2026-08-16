@@ -208,6 +208,49 @@
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
+
+                    <!-- MCP 服务器 -->
+                    <Border x:Name="McpStatusPanel"
+                            Margin="0,12,0,0"
+                            Padding="10"
+                            Background="#202020"
+                            BorderBrush="#4C4C4C"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <StackPanel Spacing="6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="MCP 服务器" Foreground="#7EC8FF" FontWeight="Bold" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="存活" Foreground="#6BFFB8" FontWeight="Bold" />
+                                    <TextBlock Text="{Binding Helper.Mcp.Status.ConnectedCount}" Foreground="#6BFFB8" FontWeight="Bold" />
+                                    <TextBlock Text="· 错误" Foreground="#FF6B6B" />
+                                    <TextBlock Text="{Binding Helper.Mcp.Status.ErrorCount}" Foreground="#FF6B6B" />
+                                    <Button Content="重载" FontSize="11" Click="OnReloadMcp" />
+                                </StackPanel>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding Helper.Mcp.Status.Servers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Spacing="2">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="{Binding Name}" Foreground="#E0E0E0" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding StateText}" Foreground="#A0A0A0" />
+                                                <TextBlock Text="·" Foreground="#6BFFB8" />
+                                                <TextBlock Text="{Binding ToolCount}" Foreground="#6BFFB8" />
+                                                <TextBlock Text="tools" Foreground="#6BFFB8" />
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Error}" Foreground="#FF6B6B" FontSize="11" TextWrapping="Wrap"
+                                                       Visibility="{Binding IsError, Converter={StaticResource BoolToVisibility}}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

@@ -53,9 +53,9 @@ public enum McpServerRunMode
     /// <summary>
     /// <b>Remote HTTP</b> — connects to a remote MCP server over HTTP (Streamable HTTP, with
     /// SSE fallback for legacy servers) using <see cref="McpServerConfiguration.Endpoint"/>.
-    /// No local process is launched. Optional <see cref="McpServerConfiguration.Headers"/>
-    /// (e.g. Bearer token) and OAuth 2.0 (Authorization Code + PKCE, via
-    /// <see cref="McpServerConfiguration.OAuthClientId"/>/<see cref="McpServerConfiguration.OAuthClientSecret"/>) are supported.
+    /// No local process is launched. Optional auth / custom fields go through
+    /// <see cref="McpServerConfiguration.Options"/> (e.g. <c>headers</c> for a Bearer token,
+    /// <c>oauth</c> for OAuth 2.0 Authorization Code + PKCE).
     /// </summary>
     Http,
 }

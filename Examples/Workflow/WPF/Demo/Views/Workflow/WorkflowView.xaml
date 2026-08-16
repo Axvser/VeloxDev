@@ -187,6 +187,78 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- MCP 服务器 -->
+                    <Border x:Name="McpStatusPanel"
+                            Margin="0,12,0,0"
+                            Padding="10"
+                            Background="#202020"
+                            BorderBrush="#4C4C4C"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="MCP 服务器" Foreground="#7EC8FF" FontWeight="Bold" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding ConnectedCount, StringFormat=存活 {0}}" Foreground="#6BFFB8" FontWeight="Bold" />
+                                    <TextBlock Text="{Binding ErrorCount, StringFormat= · 错误 {0}}" Foreground="#FF6B6B" Margin="6,0,0,0" />
+                                    <Button Content="重载" Margin="8,0,0,0" Padding="8,1" FontSize="11"
+                                            Background="#0F3460" Foreground="#7EC8FF" BorderBrush="#7EC8FF" BorderThickness="1"
+                                            Cursor="Hand" Click="OnReloadMcp" />
+                                </StackPanel>
+                            </Grid>
+                            <ListBox x:Name="McpServerList"
+                                     Margin="0,6,0,0"
+                                     MaxHeight="150"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     ItemsSource="{Binding Servers}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,3">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,6,0">
+                                                    <Ellipse.Style>
+                                                        <Style TargetType="Ellipse">
+                                                            <Setter Property="Fill" Value="#888888" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                                                    <Setter Property="Fill" Value="#6BFFB8" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsError}" Value="True">
+                                                                    <Setter Property="Fill" Value="#FF6B6B" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsInstalling}" Value="True">
+                                                                    <Setter Property="Fill" Value="#FFD166" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsConnecting}" Value="True">
+                                                                    <Setter Property="Fill" Value="#7EC8FF" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Ellipse.Style>
+                                                </Ellipse>
+                                                <TextBlock Text="{Binding Name}" Foreground="#E0E0E0" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding StateText}" Foreground="#A0A0A0" Margin="6,0,0,0" />
+                                                <TextBlock Text="{Binding ToolCount, StringFormat=· {0} tools}" Foreground="#6BFFB8" Margin="6,0,0,0" />
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Error}"
+                                                       Foreground="#FF6B6B"
+                                                       TextWrapping="Wrap"
+                                                       FontSize="11"
+                                                       Margin="14,1,0,0"
+                                                       Visibility="{Binding IsError, Converter={StaticResource BoolToVisibility}}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Border>
+
                     <!-- 执行记录 -->
                     <Border Margin="0,12,0,0"
                             Padding="10"

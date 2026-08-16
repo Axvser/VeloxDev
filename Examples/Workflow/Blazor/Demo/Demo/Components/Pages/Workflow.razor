@@ -76,6 +76,34 @@
                 }
             </div>
         </div>
+
+        <!-- MCP Server Status Panel -->
+        <div class="sb-panel">
+            <div class="sb-panel-header">
+                <span>MCP 服务器</span>
+            </div>
+            <div class="sb-exec-log">
+                @if (McpStatus is { } mcp)
+                {
+                    <div class="sb-log-entry">存活 @mcp.ConnectedCount · 错误 @mcp.ErrorCount · 安装/连接 @mcp.WorkingCount</div>
+                    @foreach (var s in mcp.Servers)
+                    {
+                        <div class="sb-log-entry">
+                            <span>@s.Name — @s.StateText</span>
+                            @if (s.ToolCount > 0)
+                            {
+                                <span> · @s.ToolCount tools</span>
+                            }
+                        </div>
+                        @if (s.IsError && !string.IsNullOrEmpty(s.Error))
+                        {
+                            <div class="sb-log-entry" style="color:#ff6b6b">@s.Error</div>
+                        }
+                    }
+                    <button class="sb-action-btn" @onclick="ReloadMcpAsync">重载</button>
+                }
+            </div>
+        </div>
     </aside>
 
     <!-- Main Canvas Area -->

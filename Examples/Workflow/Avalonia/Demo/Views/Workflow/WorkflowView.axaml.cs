@@ -14,8 +14,10 @@ using Demo.Workflow;
 using System;
 using System.Collections.Specialized;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
+using VeloxDev.AI.MCP;
 using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
@@ -36,6 +38,21 @@ public partial class WorkflowView : UserControl
 
         SubscribeAutoScroll(_workflowViewModel);
         InitializeNetworkDemo();
+        InitializeMcp();
+    }
+
+    private void InitializeMcp()
+    {
+        if (_workflowViewModel.GetHelper() is not AgentHelper helper) return;
+        helper.Mcp.WithSynchronizationContext(SynchronizationContext.Current);
+        McpStatusPanel.DataContext = helper.Mcp.Status;
+        _ = helper.LoadMcpServersAsync();
+    }
+
+    private async void OnReloadMcp(object? sender, RoutedEventArgs e)
+    {
+        if (_workflowViewModel.GetHelper() is AgentHelper helper)
+            await helper.LoadMcpServersAsync();
     }
 
     private async void SaveWorkflow(object? sender, RoutedEventArgs e)

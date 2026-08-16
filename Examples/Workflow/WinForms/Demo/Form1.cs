@@ -119,6 +119,7 @@ namespace Demo
             _demo.Tree.AgentLog.CollectionChanged += OnAgentLogCollectionChanged;
             _demo.Tree.Nodes.CollectionChanged += OnNodesCollectionChanged;
             SubscribeHelper(_demo);
+            SetupMcpStatusTab();
 
             _controllerBindingSource.DataSource = _demo.Controller;
 
@@ -147,6 +148,90 @@ namespace Demo
             helper.ConfirmationHandler = null;
             helper.ToolCalled -= OnAgentToolCalled;
             helper.VisualRefreshRequested -= OnAgentToolCalled;
+            helper.Mcp.Status.PropertyChanged -= OnMcpStatusChanged;
+        }
+
+        // ── MCP 服务器状态 ─────────────────────────────────────────────────
+
+        private TabPage? _mcpStatusTab;
+        private FlowLayoutPanel? _mcpStatusPanel;
+
+        private void SetupMcpStatusTab()
+        {
+            if (_demo?.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+
+            if (_mcpStatusTab is null)
+            {
+                _mcpStatusTab = new TabPage("MCP 服务器状态");
+                _mcpStatusPanel = new FlowLayoutPanel
+                {
+                    Dock = DockStyle.Fill,
+                    FlowDirection = FlowDirection.TopDown,
+                    WrapContents = false,
+                    AutoScroll = true,
+                    Padding = new Padding(10),
+                };
+                _mcpStatusTab.Controls.Add(_mcpStatusPanel);
+                logTabControl.TabPages.Add(_mcpStatusTab);
+            }
+
+            // 状态更新 marshal 到 UI 线程（ObservableCollection 绑定需同线程）。
+            helper.Mcp.WithSynchronizationContext(SynchronizationContext.Current);
+            helper.Mcp.Status.PropertyChanged += OnMcpStatusChanged;
+
+            RefreshMcpStatusPanel(helper);
+            _ = helper.LoadMcpServersAsync();
+        }
+
+        private void OnMcpStatusChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (_demo?.Tree.GetHelper() is not ViewModels.Workflow.Helper.AgentHelper helper) return;
+            if (InvokeRequired) { BeginInvoke(() => OnMcpStatusChanged(sender, e)); return; }
+            RefreshMcpStatusPanel(helper);
+        }
+
+        private void RefreshMcpStatusPanel(ViewModels.Workflow.Helper.AgentHelper helper)
+        {
+            if (_mcpStatusPanel is null) return;
+            var status = helper.Mcp.Status;
+
+            _mcpStatusPanel.Controls.Clear();
+            _mcpStatusPanel.Controls.Add(new Label
+            {
+                Text = $"MCP: 存活 {status.ConnectedCount} · 错误 {status.ErrorCount} · 安装/连接 {status.WorkingCount}",
+                AutoSize = true,
+                Font = new Font(Font, FontStyle.Bold),
+            });
+
+            foreach (var s in status.Servers)
+            {
+                var line = $"{s.Name} — {s.StateText}" + (s.ToolCount > 0 ? $" ({s.ToolCount} tools)" : string.Empty);
+                _mcpStatusPanel.Controls.Add(new Label
+                {
+                    Text = line,
+                    AutoSize = true,
+                    ForeColor = s.IsError ? Color.Red
+                        : s.IsConnected ? Color.FromArgb(80, 220, 130)
+                        : Color.Gray,
+                });
+                if (s.IsError && !string.IsNullOrEmpty(s.Error))
+                    _mcpStatusPanel.Controls.Add(new Label
+                    {
+                        Text = "    " + s.Error,
+                        AutoSize = true,
+                        ForeColor = Color.Red,
+                    });
+            }
+
+            var reload = new Button { Text = "重载", AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+            reload.Click += OnReloadMcp;
+            _mcpStatusPanel.Controls.Add(reload);
+        }
+
+        private async void OnReloadMcp(object? sender, EventArgs e)
+        {
+            if (_demo?.Tree.GetHelper() is ViewModels.Workflow.Helper.AgentHelper helper)
+                await helper.LoadMcpServersAsync();
         }
 
         private void OnAgentToolCalled()

@@ -1,4 +1,5 @@
 using Demo.ViewModels;
+using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -18,6 +19,9 @@ public partial class Workflow : ComponentBase, IDisposable
     private WorkflowDemoSession? _session;
     private string _agentMessage = "";
     private bool _useStreaming = true;
+
+    private VeloxDev.AI.MCP.McpStatusViewModel? McpStatus
+        => (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;
     private string _canvasLayoutSize = "";
     private INotifyPropertyChanged? _subscribedVirtualLink;
 
@@ -45,6 +49,23 @@ public partial class Workflow : ComponentBase, IDisposable
             vp.PropertyChanged += OnVirtualLinkPropertyChanged;
             _subscribedVirtualLink = vp;
         }
+        if (_session.Tree.GetHelper() is AgentHelper helper)
+        {
+            helper.Mcp.Status.PropertyChanged += OnMcpStatusChanged;
+            _ = helper.LoadMcpServersAsync();
+        }
+    }
+
+    private void OnMcpStatusChanged(object? sender, PropertyChangedEventArgs e)
+        => _ = InvokeAsync(StateHasChanged);
+
+    private async Task ReloadMcpAsync()
+    {
+        if (_session?.Tree.GetHelper() is AgentHelper helper)
+        {
+            await helper.LoadMcpServersAsync();
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private void UnsubscribeSession()
@@ -62,6 +83,8 @@ public partial class Workflow : ComponentBase, IDisposable
             _subscribedVirtualLink.PropertyChanged -= OnVirtualLinkPropertyChanged;
             _subscribedVirtualLink = null;
         }
+        if (_session.Tree.GetHelper() is AgentHelper helper)
+            helper.Mcp.Status.PropertyChanged -= OnMcpStatusChanged;
     }
 
     private void UpdateCanvasSize()

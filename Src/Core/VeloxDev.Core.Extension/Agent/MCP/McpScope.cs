@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Authentication;
 using ModelContextProtocol.Client;
+using Newtonsoft.Json.Linq;
 
 namespace VeloxDev.AI.MCP;
 
@@ -60,7 +61,7 @@ public class McpScope
     /// <summary>
     /// 全局连接超时（仅 Http 模式）。作为远程服务器的传输层连接超时 + MCP 初始化超时，并由
     /// 宿主侧 CTS 硬兜底（SDK 2.x 对部分远程服务器的内部超时可能失灵——见 csharp-sdk#784）。
-    /// 逐服务器可用 <see cref="McpServerConfiguration.ConnectionTimeout"/> 覆盖。
+    /// 逐服务器可用 <see cref="McpServerConfiguration.Options"/>（<c>connectionTimeout</c> 键）覆盖。
     /// </summary>
     public McpScope WithConnectionTimeout(TimeSpan? timeout)
     {
@@ -77,6 +78,44 @@ public class McpScope
     /// 每个服务器的存活/安装中/连接中/错误状态。<see cref="LoadAsync"/> 过程中实时驱动。
     /// </summary>
     public McpStatusViewModel Status { get; } = new();
+
+    // ── 已加载的 MCP 服务器工具（动态，供中途增删）────────────────────────
+
+    private readonly object _loadedToolsLock = new();
+    private readonly Dictionary<string, IReadOnlyList<AITool>> _loadedToolSets = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 当前已连接 MCP 服务器的全部工具（按服务器聚合）。服务器中途加载成功（<see cref="LoadAsync"/>）
+    /// 后其工具即刻可用；卸载（<see cref="UnloadServer"/>）后自动消失。Agent 每次对话以
+    /// “基础工具 + <see cref="LoadedTools"/>”组装 <c>ChatOptions.Tools</c>，即可中途加/移除工具。
+    /// </summary>
+    public IReadOnlyList<AITool> LoadedTools
+    {
+        get
+        {
+            lock (_loadedToolsLock)
+                return _loadedToolSets.Values.SelectMany(v => v).ToArray();
+        }
+    }
+
+    /// <summary>
+    /// 卸载一个服务器（中途移除）：移除其工具集，并把状态置为 <see cref="McpServerStatus.NotStarted"/>。
+    /// 返回是否确实存在已加载的工具。
+    /// </summary>
+    public bool UnloadServer(string name)
+    {
+        bool removed;
+        lock (_loadedToolsLock)
+            removed = _loadedToolSets.Remove(name);
+
+        UpdateStatus(() =>
+        {
+            var status = Status.Servers.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (status is not null)
+                status.State = McpServerStatus.NotStarted;
+        });
+        return removed;
+    }
 
     /// <summary>
     /// UI 线程上下文（可选）。注册后所有状态更新会 marshal 到该上下文，供 WPF/Avalonia 等
@@ -128,61 +167,91 @@ public class McpScope
             AppContext.BaseDirectory, McpRootRelative));
         Directory.CreateDirectory(mcpRoot);
 
-        var allTools = new List<AITool>();
-
-        UpdateStatus(() => Status.SetLoading(true));
+        UpdateStatus(() => { Status.Reset(); Status.SetLoading(true); });
+        lock (_loadedToolsLock)
+            _loadedToolSets.Clear();
         try
         {
+            var allTools = new List<AITool>();
             foreach (var config in servers)
             {
                 if (config is null) continue;
-
-                var status = TrackServer(config);
-                try
-                {
-                    // 本地模式：先安装/准备运行时（Installing），再连接（Connecting）。
-                    if (config.RunMode is McpServerRunMode.Npm or McpServerRunMode.Pip)
-                    {
-                        SetServerState(status, McpServerStatus.Installing);
-                        if (config.RunMode == McpServerRunMode.Npm)
-                            await EnsureNpmPackageAsync(config.Package, config.Version, mcpRoot, ct);
-                        else
-                            await EnsurePipPackageAsync(config.Package, config.Version, mcpRoot, ct);
-                    }
-
-                    SetServerState(status, McpServerStatus.Connecting);
-                    var tools = await ConnectServerAsync(config, mcpRoot, ct);
-
-                    UpdateStatus(() =>
-                    {
-                        status.ToolCount = tools.Length;
-                        status.State = McpServerStatus.Connected;
-                    });
-                    allTools.AddRange(tools);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    UpdateStatus(() =>
-                    {
-                        status.Error = ex.Message;
-                        status.State = McpServerStatus.Error;
-                    });
-                    ServerError?.Invoke(config, ex);
-                }
+                allTools.AddRange(await LoadOneAsync(config, mcpRoot, ct));
             }
+            return [.. allTools];
         }
         finally
         {
             UpdateStatus(() => Status.SetLoading(false));
         }
+    }
 
-        return [.. allTools];
+    private async Task<AITool[]> LoadOneAsync(McpServerConfiguration config, string mcpRoot, CancellationToken ct)
+    {
+        var status = TrackServer(config);
+        try
+        {
+            // 本地模式：先安装/准备运行时（Installing），再连接（Connecting）。
+            if (config.RunMode is McpServerRunMode.Npm or McpServerRunMode.Pip)
+            {
+                SetServerState(status, McpServerStatus.Installing);
+                if (config.RunMode == McpServerRunMode.Npm)
+                    await EnsureNpmPackageAsync(config.Package, config.Version, mcpRoot, ct);
+                else
+                    await EnsurePipPackageAsync(config.Package, config.Version, mcpRoot, ct);
+            }
+
+            SetServerState(status, McpServerStatus.Connecting);
+            var tools = await ConnectServerAsync(config, mcpRoot, ct);
+
+            UpdateStatus(() =>
+            {
+                status.ToolCount = tools.Length;
+                status.State = McpServerStatus.Connected;
+            });
+            lock (_loadedToolsLock)
+                _loadedToolSets[config.Name] = tools;
+            return tools;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            UpdateStatus(() =>
+            {
+                status.Error = ex.Message;
+                status.State = McpServerStatus.Error;
+            });
+            ServerError?.Invoke(config, ex);
+            return [];
+        }
+    }
+
+    /// <summary>某个已连接服务器的工具（未连接返回空）。</summary>
+    public IReadOnlyList<AITool> GetServerTools(string name)
+    {
+        lock (_loadedToolsLock)
+            return _loadedToolSets.TryGetValue(name, out var tools) ? tools : [];
     }
 
     // ── Status driving helpers ─────────────────────────────────────────────
 
     private McpServerStatusViewModel TrackServer(McpServerConfiguration config)
     {
+        // 重载同名单服务器时更新既有状态条目，避免重复添加。
+        var existing = Status.Servers.FirstOrDefault(s => string.Equals(s.Name, config.Name, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            UpdateStatus(() =>
+            {
+                existing.Description = config.Description;
+                existing.RunMode = config.RunMode;
+                existing.Endpoint = config.Endpoint;
+                existing.Error = null;
+                existing.ToolCount = 0;
+                existing.State = McpServerStatus.NotStarted;
+            });
+            return existing;
+        }
+
         var status = new McpServerStatusViewModel
         {
             Name = config.Name,
@@ -313,7 +382,7 @@ public class McpScope
             ? (IClientTransport)CreateHttpTransport(config)
             : CreateStdioTransport(config, mcpRoot);
 
-        var effectiveTimeout = config.ConnectionTimeout ?? ConnectionTimeout;
+        var effectiveTimeout = GetEffectiveConnectionTimeout(config);
 
         // 宿主侧硬兜底：SDK 2.x 对部分远程服务器的内部超时可能失灵（csharp-sdk#784），
         // 用 linked CTS 保证连接/初始化不无限挂起。仅当是我们自己的超时触发（而非调用方
@@ -344,6 +413,10 @@ public class McpScope
     }
 
     private static IClientTransport CreateStdioTransport(McpServerConfiguration config, string mcpRoot)
+        => new StdioClientTransport(BuildStdioTransportOptions(config, mcpRoot));
+
+    /// <summary>构建 stdio transport 选项：命令行 + Options（env / workingDirectory）。internal 供测试。</summary>
+    internal static StdioClientTransportOptions BuildStdioTransportOptions(McpServerConfiguration config, string mcpRoot)
     {
         var (cmd, args) = config.RunMode switch
         {
@@ -355,12 +428,21 @@ public class McpScope
             _                       => BuildNpmArgs(config, mcpRoot),
         };
 
-        return new StdioClientTransport(new StdioClientTransportOptions
+        var stdioOptions = new StdioClientTransportOptions
         {
             Name = config.Name,
             Command = cmd,
             Arguments = [.. args],
-        });
+        };
+
+        var j = ParseOptions(config.Options);
+        EnsureKnownKeys(j, StdioOptionKeys, config.Name);
+        if (TryGetOption(j, "env", out var env))
+            stdioOptions.EnvironmentVariables = env.ToObject<Dictionary<string, string>>();
+        if (TryGetOption(j, "workingDirectory", out var wd))
+            stdioOptions.WorkingDirectory = wd.Value<string>();
+
+        return stdioOptions;
     }
 
     /// <summary>
@@ -372,9 +454,10 @@ public class McpScope
         => new(BuildHttpTransportOptions(config), null);
 
     /// <summary>
-    /// Builds the <see cref="HttpClientTransportOptions"/> for a remote server: endpoint, custom
-    /// headers, and (when OAuth credentials are configured) <see cref="ClientOAuthOptions"/> wired to
-    /// the host's <see cref="WithOAuthAuthorizationRedirect"/> handler.
+    /// Builds the <see cref="HttpClientTransportOptions"/> for a remote server: endpoint (structural),
+    /// plus the flexible <see cref="McpServerConfiguration.Options"/> blob — known keys map to
+    /// <c>headers</c> / <c>oauth</c> / <c>connectionTimeout</c> / <c>transportMode</c> / <c>ownsSession</c>;
+    /// unknown keys are rejected.
     /// </summary>
     internal HttpClientTransportOptions BuildHttpTransportOptions(McpServerConfiguration config)
     {
@@ -387,30 +470,90 @@ public class McpScope
             Name = config.Name,
         };
 
-        if (config.Headers is { Count: > 0 })
-            options.AdditionalHeaders = config.Headers;
+        var j = ParseOptions(config.Options);
+        EnsureKnownKeys(j, HttpOptionKeys, config.Name);
 
-        if (config.OAuthClientId is not null || config.OAuthClientSecret is not null || config.OAuthRedirectUri is not null)
+        if (TryGetOption(j, "headers", out var headersToken))
+            options.AdditionalHeaders = headersToken.ToObject<Dictionary<string, string>>() ?? [];
+
+        if (TryGetOption(j, "oauth", out var oauthToken) && oauthToken is JObject o)
         {
             options.OAuth = new ClientOAuthOptions
             {
-                ClientId = config.OAuthClientId ?? string.Empty,
-                ClientSecret = config.OAuthClientSecret,
-                RedirectUri = config.OAuthRedirectUri is { } ru ? new Uri(ru) : null,
-                Scopes = config.OAuthScopes is { Length: > 0 } ? [.. config.OAuthScopes] : null,
+                ClientId = o["clientId"]?.Value<string>() ?? string.Empty,
+                ClientSecret = o["clientSecret"]?.Value<string>(),
+                RedirectUri = o["redirectUri"]?.Value<string>() is { } ru ? new Uri(ru) : null,
+                Scopes = o["scopes"]?.ToObject<string[]>(),
                 AuthorizationRedirectDelegate = _oauthAuthorizationRedirect,
             };
         }
 
-        // 超时（逐服务器覆盖全局）、传输模式、会话所有权——均可选，缺省用 SDK 默认。
-        if ((config.ConnectionTimeout ?? ConnectionTimeout) is { } timeout)
-            options.ConnectionTimeout = timeout;
-        if (config.TransportMode is { } mode)
+        // 连接超时：Options.connectionTimeout 优先，否则用 scope 全局 WithConnectionTimeout。
+        if (TryGetOption(j, "connectionTimeout", out var ct))
+            options.ConnectionTimeout = ParseTimeSpan(ct);
+        else if (ConnectionTimeout is { } globalTimeout)
+            options.ConnectionTimeout = globalTimeout;
+        if (TryGetOption(j, "transportMode", out var tm)
+            && Enum.TryParse<HttpTransportMode>(tm.Value<string>(), ignoreCase: true, out var mode))
             options.TransportMode = mode;
-        if (config.OwnsSession is { } owns)
-            options.OwnsSession = owns;
+        if (TryGetOption(j, "ownsSession", out var os))
+            options.OwnsSession = os.Value<bool>();
 
         return options;
+    }
+
+    // ── McpServerConfiguration.Options (anonymous-object JSON blob) ────────
+
+    private static readonly string[] HttpOptionKeys = ["headers", "oauth", "connectionTimeout", "transportMode", "ownsSession"];
+    private static readonly string[] StdioOptionKeys = ["env", "workingDirectory"];
+
+    /// <summary>解析 Options（匿名对象或 JSON 字符串）为 JObject；null → 空对象。</summary>
+    private static JObject ParseOptions(object? options)
+    {
+        if (options is null) return new JObject();
+        JToken token = options is string s ? JToken.Parse(s) : JToken.FromObject(options);
+        if (token is not JObject obj)
+            throw new InvalidOperationException("McpServerConfiguration.Options 必须是对象（匿名对象），不能是标量或数组。");
+        return obj;
+    }
+
+    private static bool TryGetOption(JObject j, string key, out JToken token)
+    {
+        if (j.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var value) && value.Type != JTokenType.Null)
+        {
+            token = value;
+            return true;
+        }
+        token = JValue.CreateNull();
+        return false;
+    }
+
+    private static void EnsureKnownKeys(JObject j, IEnumerable<string> allowed, string serverName)
+    {
+        var unknown = j.Properties()
+            .Select(p => p.Name)
+            .Where(n => !allowed.Contains(n, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        if (unknown.Count > 0)
+            throw new InvalidOperationException(
+                $"MCP server '{serverName}' has unknown Options key(s): {string.Join(", ", unknown)}. Allowed: {string.Join(", ", allowed)}.");
+    }
+
+    private static TimeSpan ParseTimeSpan(JToken token)
+    {
+        if (token.Type is JTokenType.Integer or JTokenType.Float)
+            return TimeSpan.FromSeconds(token.Value<double>());
+        var s = token.Value<string>();
+        if (s is not null && TimeSpan.TryParse(s, out var ts))
+            return ts;
+        throw new InvalidOperationException($"Invalid connectionTimeout value: {token}.");
+    }
+
+    /// <summary>逐服务器的连接超时：Options.connectionTimeout（秒或 TimeSpan 字符串）覆盖全局。</summary>
+    internal TimeSpan? GetEffectiveConnectionTimeout(McpServerConfiguration config)
+    {
+        var j = ParseOptions(config.Options);
+        return TryGetOption(j, "connectionTimeout", out var ct) ? ParseTimeSpan(ct) : ConnectionTimeout;
     }
 
     // ── npm: npm install + node ────────────────────────────────────────────

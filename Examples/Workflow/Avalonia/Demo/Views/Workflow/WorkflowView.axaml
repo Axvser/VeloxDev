@@ -8,6 +8,7 @@
 			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 			 xmlns:vm="using:Demo.ViewModels"
 			 xmlns:workflow="using:VeloxDev.WorkflowSystem"
+			 xmlns:mcp="using:VeloxDev.AI.MCP"
 			 x:DataType="vm:TreeViewModel"
              behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
 			 behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
@@ -183,6 +184,34 @@
 											Margin="4,0,0,0"
 											Click="OnSendToAgent"/>
 								</Grid>
+							</StackPanel>
+						</Border>
+						<!-- MCP 服务器 -->
+						<Border x:Name="McpStatusPanel" x:DataType="mcp:McpStatusViewModel" Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
+							<StackPanel Spacing="6">
+								<Grid ColumnDefinitions="*,Auto">
+									<TextBlock Text="MCP 服务器" Foreground="#7ec8ff" FontWeight="Bold" VerticalAlignment="Center"/>
+									<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+										<TextBlock Text="{Binding ConnectedCount, StringFormat=存活 {0}}" Foreground="#6bffb8" FontWeight="Bold"/>
+										<TextBlock Text="{Binding ErrorCount, StringFormat=· 错误 {0}}" Foreground="#ff6b6b"/>
+										<Button Content="重载" FontSize="11" Click="OnReloadMcp"/>
+									</StackPanel>
+								</Grid>
+								<ItemsControl ItemsSource="{Binding Servers}">
+									<ItemsControl.ItemTemplate>
+										<DataTemplate x:DataType="mcp:McpServerStatusViewModel">
+											<StackPanel Spacing="2">
+												<StackPanel Orientation="Horizontal" Spacing="6">
+													<TextBlock Text="{Binding Name}" Foreground="#e0e0e0" FontWeight="SemiBold"/>
+													<TextBlock Text="{Binding StateText}" Foreground="#a0a0a0"/>
+													<TextBlock Text="{Binding ToolCount, StringFormat=· {0} tools}" Foreground="#6bffb8"/>
+												</StackPanel>
+												<TextBlock Text="{Binding Error}" Foreground="#ff6b6b" FontSize="11" TextWrapping="Wrap"
+														   IsVisible="{Binding IsError}" Margin="14,0,0,0"/>
+											</StackPanel>
+										</DataTemplate>
+									</ItemsControl.ItemTemplate>
+								</ItemsControl>
 							</StackPanel>
 						</Border>
 						<!-- 执行记录 -->

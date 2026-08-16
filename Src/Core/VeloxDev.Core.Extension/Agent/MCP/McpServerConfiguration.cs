@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using ModelContextProtocol.Client;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.AI.MCP;
@@ -35,10 +32,8 @@ public partial class McpServerConfiguration
     /// </summary>
     [VeloxProperty] public partial string? Version { get; set; }
 
-    /// <summary>传给服务器进程的额外参数</summary>
+    /// <summary>传给服务器进程的额外参数（如文件系统服务器的允许目录集）</summary>
     [VeloxProperty] public partial string[] Arguments { get; set; }
-
-    // ── 远程（McpServerRunMode.Http）──
 
     /// <summary>
     /// 远程 MCP 端点 URL（仅 <see cref="McpServerRunMode.Http"/> 模式），如 "https://mcp.example.com/mcp"。
@@ -46,36 +41,22 @@ public partial class McpServerConfiguration
     /// </summary>
     public string? Endpoint { get; set; }
 
-    /// <summary>远程请求附加 HTTP 头（如 Bearer 令牌、自定义头）。仅 Http 模式。</summary>
-    public Dictionary<string, string>? Headers { get; set; }
-
-    /// <summary>OAuth 2.0 客户端 ID（可选）。设置后远程连接启用 OAuth Authorization Code + PKCE。</summary>
-    public string? OAuthClientId { get; set; }
-
-    /// <summary>OAuth 2.0 客户端密钥（可选）。</summary>
-    public string? OAuthClientSecret { get; set; }
-
-    /// <summary>OAuth 重定向 URI（可选）。授权跳转由宿主经 <c>McpScope.WithOAuthAuthorizationRedirect</c> 处理。</summary>
-    public string? OAuthRedirectUri { get; set; }
-
-    /// <summary>OAuth 请求的 scopes（可选）。</summary>
-    public string[]? OAuthScopes { get; set; }
-
     /// <summary>
-    /// 连接超时（可选，仅 Http 模式）。覆盖 <see cref="McpScope.WithConnectionTimeout"/> 的全局默认；
-    /// 同时作为传输层连接超时与 MCP 初始化超时（<see cref="McpClientOptions.InitializationTimeout"/>）。
+    /// 任意服务器选项——匿名对象序列化结果。宿主直接传匿名对象即可：
+    /// <code>
+    /// Options = new
+    /// {
+    ///     headers = new { Authorization = "Bearer x", "X-Custom" = "v" },   // HTTP 附加头
+    ///     env = new { FILESYSTEM_ROOT = "C:/data", API_KEY = "k" },          // stdio 逐服务器环境变量
+    ///     connectionTimeout = 30,                                            // 秒（或 TimeSpan 字符串），覆盖 McpScope.WithConnectionTimeout
+    ///     transportMode = "StreamableHttp",                                  // Http: AutoDetect/StreamableHttp/Sse
+    ///     ownsSession = true,                                                // Http: 是否持有 MCP 会话（有状态）
+    ///     workingDirectory = "C:/data",                                      // stdio 工作目录
+    ///     oauth = new { clientId = "id", clientSecret = "s",                 // Http: OAuth 2.0（PKCE）
+    ///                  redirectUri = "http://localhost:1179/cb", scopes = new[] { "read" } },
+    /// };
+    /// </code>
+    /// 未知 key 会被 <see cref="McpScope"/> 拒绝（报错而非静默忽略），保证拼写错误立刻暴露。
     /// </summary>
-    public TimeSpan? ConnectionTimeout { get; set; }
-
-    /// <summary>
-    /// HTTP 传输模式（可选，仅 Http 模式）：AutoDetect（默认，先试 Streamable HTTP 再回退 SSE）、
-    /// StreamableHttp、Sse。缺省用 SDK 默认（AutoDetect）。
-    /// </summary>
-    public HttpTransportMode? TransportMode { get; set; }
-
-    /// <summary>
-    /// 是否由传输层拥有 MCP 会话（可选，仅 Http 模式）。2.x 默认无状态（stateless，不维护
-    /// <c>Mcp-Session-Id</c>）；设为 <c>true</c> 可让传输层持有会话（有状态）。缺省用 SDK 默认。
-    /// </summary>
-    public bool? OwnsSession { get; set; }
+    public object? Options { get; set; }
 }

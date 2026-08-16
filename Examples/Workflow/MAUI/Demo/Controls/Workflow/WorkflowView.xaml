@@ -151,6 +151,44 @@
                             TextColor="White"
                             Clicked="OnSendToAgent" />
                 </Grid>
+
+                <!-- MCP 服务器 -->
+                <Border x:Name="McpStatusPanel"
+                        Margin="0,12,0,0"
+                        Padding="10"
+                        BackgroundColor="#202020"
+                        Stroke="#4C4C4C"
+                        StrokeThickness="1"
+                        StrokeShape="RoundRectangle 4">
+                    <VerticalStackLayout Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="MCP 服务器" TextColor="#7EC8FF" FontAttributes="Bold" VerticalOptions="Center"/>
+                            <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
+                                <Label Text="{Binding Helper.Mcp.Status.ConnectedCount, StringFormat='存活 {0}'}" TextColor="#6BFFB8" FontAttributes="Bold"/>
+                                <Label Text="{Binding Helper.Mcp.Status.ErrorCount, StringFormat='· 错误 {0}'}" TextColor="#FF6B6B"/>
+                                <Button Text="重载" FontSize="11" Clicked="OnReloadMcp"/>
+                            </HorizontalStackLayout>
+                        </Grid>
+                        <CollectionView ItemsSource="{Binding Helper.Mcp.Status.Servers}" HeightRequest="140">
+                            <CollectionView.ItemsLayout>
+                                <LinearItemsLayout Orientation="Vertical" ItemSpacing="2"/>
+                            </CollectionView.ItemsLayout>
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <VerticalStackLayout Spacing="2">
+                                        <HorizontalStackLayout Spacing="6">
+                                            <Label Text="{Binding Name}" TextColor="#E0E0E0" FontAttributes="Bold"/>
+                                            <Label Text="{Binding StateText}" TextColor="#A0A0A0"/>
+                                            <Label Text="{Binding ToolCount, StringFormat='· {0} tools'}" TextColor="#6BFFB8"/>
+                                        </HorizontalStackLayout>
+                                        <Label Text="{Binding Error}" TextColor="#FF6B6B" FontSize="11"
+                                               IsVisible="{Binding IsError}"/>
+                                    </VerticalStackLayout>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+                </Border>
             </VerticalStackLayout>
         </ScrollView>
 

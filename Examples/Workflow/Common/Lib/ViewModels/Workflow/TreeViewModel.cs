@@ -53,7 +53,7 @@ public partial class TreeViewModel
             }
 
             var response = await helper.Agent.RunAsync(
-                message, helper.Session);
+                message, helper.Session, helper.BuildRunOptions());
 
             if (response is not null)
             {
@@ -84,7 +84,7 @@ public partial class TreeViewModel
         var isFirstLine = true;
 
         await foreach (var response in helper.Agent!.RunStreamingAsync(
-            message, helper.Session!))
+            message, helper.Session!, helper.BuildRunOptions()))
         {
             var text = response.Text;
             if (string.IsNullOrEmpty(text))

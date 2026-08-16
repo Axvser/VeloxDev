@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.MVVM.Serialization;
@@ -158,8 +159,19 @@ namespace Demo.Views
             ViewModel = WorkflowDemoSession.Create().Tree;
             DataContext = ViewModel;
             SubscribeAutoScroll(ViewModel);
+            if (ViewModel.GetHelper() is AgentHelper helper)
+            {
+                helper.Mcp.WithSynchronizationContext(SynchronizationContext.Current);
+                _ = helper.LoadMcpServersAsync();
+            }
             ViewModel.Layout.UpdateCommand.Execute(null);
             WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+        }
+
+        private async void OnReloadMcp(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.GetHelper() is AgentHelper helper)
+                await helper.LoadMcpServersAsync();
         }
 
         private IntPtr GetActiveWindowHandle()
