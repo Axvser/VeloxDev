@@ -43,6 +43,11 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
     private IJSObjectReference? _handle;
     private IWorkflowNodeViewModel? _subscribedNode;
 
+    // True while the pointer is dragging this node. JS owns the wrapper position during a drag
+    // (immediate, compositor-friendly), so the Anchor PropertyChanged handler must NOT reposition or
+    // re-render mid-drag — that would snap the node back to a stale .NET value each frame.
+    private bool _isDragging;
+
     private string WrapperStyle
     {
         get
@@ -77,9 +82,34 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor))
         {
+            // JS moves the wrapper live during a drag; for external moves (undo/redo, layout
+            // commands) reposition it directly via JS — no re-render, mirroring the XAML adapters'
+            // ViewManager.ApplyLayout (Canvas.SetLeft/Top only).
+            if (!_isDragging)
+            {
+                SyncPosition();
+            }
+        }
+        else if (e.PropertyName is nameof(IWorkflowNodeViewModel.Size))
+        {
+            // Size changes are rare (selector swapping content); a re-render is fine.
             InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Repositions the wrapper element to the node's current anchor via JS, without a Blazor
+    /// re-render. Used for external anchor changes; during an active drag the JS already owns the
+    /// position and this is skipped.
+    /// </summary>
+    private void SyncPosition()
+    {
+        if (_module is not null && Node is not null && !string.IsNullOrEmpty(_element.Id))
+        {
+            _ = _module.InvokeVoidAsync("setNodePosition",
+                _element, Node.Anchor.Horizontal, Node.Anchor.Vertical);
         }
     }
 
@@ -104,6 +134,7 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
             return;
         }
 
+        _isDragging = true;
         var offset = new Offset(dx, dy);
         if (Node.MoveCommand.CanExecute(offset))
         {
@@ -114,6 +145,9 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
     [JSInvokable]
     public void OnNodeDragEnd()
     {
+        _isDragging = false;
+        // Snap the wrapper to the final .NET anchor so it agrees with undo/redo and serialization.
+        SyncPosition();
     }
 
     /// <inheritdoc />

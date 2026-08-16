@@ -74,7 +74,12 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     public double RulerThickness { get; set; } = 28;
 
     private ElementReference _scroller;
+    private ElementReference _canvasHost;
     private ElementReference _canvas;
+    private ElementReference _grid;
+    private ElementReference _axisX;
+    private ElementReference _axisY;
+    private ElementReference _content;
     private IJSObjectReference? _module;
     private DotNetObjectReference<WorkflowSurfaceBehavior>? _dotNetRef;
     private IJSObjectReference? _handle;
@@ -85,6 +90,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private double _viewportH = 600;
     private double _canvasW = 1600;
     private double _canvasH = 1200;
+    private double _lastContentX;
+    private double _lastContentY;
 
     // Content translate for left/top canvas expansion. The canvas element grows in all four
     // directions; the content wrapper is shifted right/down by this offset so world (node/slot)
@@ -93,78 +100,27 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private double _offsetY;
     private SurfaceViewport _viewport = null!;
 
+    // Broadcasts the latest viewport snapshot to cheap overlay consumers (grid decorator) so they
+    // can re-render without dragging the node/link content subtree along. See SurfaceViewportFeed.
+    private readonly SurfaceViewportFeed _feed = new();
+
     private double ContentWidth => Math.Max(1, _canvasW - _offsetX);
     private double ContentHeight => Math.Max(1, _canvasH - _offsetY);
 
-    private string CanvasStyle
+    /// <summary>
+    /// Solid canvas background plus the grid CSS variables. The grid itself is a separate
+    /// JS-positioned layer (see veloxdev.workflow.js), so the canvas carries no grid gradients and
+    /// no size — the canvas host owns the size and is managed only by JS. Blazor re-renders of this
+    /// style string therefore can never disturb the grid or shrink the canvas.
+    /// </summary>
+    private string CanvasBackgroundStyle
     {
         get
         {
             var spacing = Math.Max(8, GridSpacing);
-            var majorStep = spacing * Math.Max(1, MajorLineEvery);
-
-            // The canvas is painted in its own coordinates: world v sits at canvas x = _offsetX + v
-            // (the content wrapper is translated by _offsetX/_offsetY, so world 0 lands on the
-            // ruler/content boundary). Each grid layer is a repeating-linear-gradient whose tile
-            // spans [0, period] and whose 1px line sits at `phase` = offset % period, so lines land
-            // on world multiples of spacing (minor) / majorStep (major). The FIRST stop MUST be at
-            // 0 and the LAST at `period` (both transparent); otherwise the repeating segment
-            // collapses to just the 1px line and paints the entire canvas solid — the bug that hid
-            // the grid behind a flat gray fill. Layers are ordered axis-first so the world-0 axis
-            // (#4D4D4D) wins where it overlaps the coincident major/minor lines, then major > minor.
-            var minorPhaseX = Mod(_offsetX, spacing);
-            var minorPhaseY = Mod(_offsetY, spacing);
-            var majorPhaseX = Mod(_offsetX, majorStep);
-            var majorPhaseY = Mod(_offsetY, majorStep);
-
-            return $"width:{_canvasW.ToString("0")}px;height:{_canvasH.ToString("0")}px;background-color:{Background};" +
-                   "background-image:" +
-                   // axis at world 0 (canvas-local x = _offsetX / y = _offsetY). A plain linear-gradient
-                   // continues with its LAST color past the final stop, so each axis gradient must end on a
-                   // transparent stop — otherwise the single 1px line becomes a solid fill that paints the canvas gray.
-                   $"linear-gradient(to right, transparent calc({_offsetX.ToString("0.##")}px - 0.6px), " +
-                   $"var(--veloxdev-ac,#4D4D4D) calc({_offsetX.ToString("0.##")}px - 0.6px), " +
-                   $"var(--veloxdev-ac,#4D4D4D) calc({_offsetX.ToString("0.##")}px + 0.6px), transparent calc({_offsetX.ToString("0.##")}px + 0.6px))," +
-                   $"linear-gradient(to bottom, transparent calc({_offsetY.ToString("0.##")}px - 0.6px), " +
-                   $"var(--veloxdev-ac,#4D4D4D) calc({_offsetY.ToString("0.##")}px - 0.6px), " +
-                   $"var(--veloxdev-ac,#4D4D4D) calc({_offsetY.ToString("0.##")}px + 0.6px), transparent calc({_offsetY.ToString("0.##")}px + 0.6px))," +
-                   // vertical major grid (period = majorStep = spacing * MajorLineEvery)
-                   $"repeating-linear-gradient(to right, transparent 0, transparent {majorPhaseX.ToString("0.##")}px, " +
-                   $"var(--veloxdev-mgc,#3A3D40) {majorPhaseX.ToString("0.##")}px, " +
-                   $"var(--veloxdev-mgc,#3A3D40) calc({majorPhaseX.ToString("0.##")}px + 1px), " +
-                   $"transparent calc({majorPhaseX.ToString("0.##")}px + 1px), transparent {majorStep.ToString("0.##")}px)," +
-                   // horizontal major grid
-                   $"repeating-linear-gradient(to bottom, transparent 0, transparent {majorPhaseY.ToString("0.##")}px, " +
-                   $"var(--veloxdev-mgc,#3A3D40) {majorPhaseY.ToString("0.##")}px, " +
-                   $"var(--veloxdev-mgc,#3A3D40) calc({majorPhaseY.ToString("0.##")}px + 1px), " +
-                   $"transparent calc({majorPhaseY.ToString("0.##")}px + 1px), transparent {majorStep.ToString("0.##")}px)," +
-                   // vertical minor grid (period = spacing)
-                   $"repeating-linear-gradient(to right, transparent 0, transparent {minorPhaseX.ToString("0.##")}px, " +
-                   $"var(--veloxdev-gc,#2A2D2E) {minorPhaseX.ToString("0.##")}px, " +
-                   $"var(--veloxdev-gc,#2A2D2E) calc({minorPhaseX.ToString("0.##")}px + 1px), " +
-                   $"transparent calc({minorPhaseX.ToString("0.##")}px + 1px), transparent {spacing.ToString("0.##")}px)," +
-                   // horizontal minor grid
-                   $"repeating-linear-gradient(to bottom, transparent 0, transparent {minorPhaseY.ToString("0.##")}px, " +
-                   $"var(--veloxdev-gc,#2A2D2E) {minorPhaseY.ToString("0.##")}px, " +
-                   $"var(--veloxdev-gc,#2A2D2E) calc({minorPhaseY.ToString("0.##")}px + 1px), " +
-                   $"transparent calc({minorPhaseY.ToString("0.##")}px + 1px), transparent {spacing.ToString("0.##")}px);" +
+            return $"background-color:{Background};" +
                    $"--veloxdev-gs:{spacing.ToString("0.#")}px;" +
                    $"--veloxdev-gc:{GridColor};--veloxdev-mgc:{MajorGridColor};--veloxdev-ac:{AxisColor};";
-        }
-    }
-
-    private static double Mod(double value, double mod)
-    {
-        var r = value % mod;
-        return r < 0 ? r + mod : r;
-    }
-
-    private string ContentStyle
-    {
-        get
-        {
-            return $"position:absolute;left:{_offsetX.ToString("0")}px;top:{_offsetY.ToString("0")}px;" +
-                   $"width:{ContentWidth.ToString("0")}px;height:{ContentHeight.ToString("0")}px;";
         }
     }
 
@@ -197,7 +153,11 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         {
             _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/VeloxDev.Razor/veloxdev.workflow.js");
             _dotNetRef = DotNetObjectReference.Create(this);
-            _handle = await _module.InvokeAsync<IJSObjectReference>("initSurface", _scroller, _canvas, _dotNetRef);
+            var layout = Tree?.Layout;
+            var contentX = layout?.ActualOffset.Horizontal ?? 0;
+            var contentY = layout?.ActualOffset.Vertical ?? 0;
+            _handle = await _module.InvokeAsync<IJSObjectReference>("initSurface",
+                _scroller, _canvasHost, _dotNetRef, _canvasW, _canvasH, contentX, contentY, _offsetX, _offsetY);
         }
     }
 
@@ -212,24 +172,29 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         // Keep the .NET-side canvas size and content translate in sync with JS-side auto-expansion
         // (grow-only), so subsequent re-renders never shrink the canvas back after it was expanded
         // near an edge, and never reset the left/top offset while the user is panning.
+        var grew = false;
         if (canvasW > _canvasW)
         {
             _canvasW = canvasW;
+            grew = true;
         }
 
         if (canvasH > _canvasH)
         {
             _canvasH = canvasH;
+            grew = true;
         }
 
         if (offsetX > _offsetX)
         {
             _offsetX = offsetX;
+            grew = true;
         }
 
         if (offsetY > _offsetY)
         {
             _offsetY = offsetY;
+            grew = true;
         }
 
         if (Tree is not null)
@@ -256,7 +221,49 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             }
 
             _viewport = BuildViewport();
-            InvokeAsync(StateHasChanged);
+
+            // Cheap overlays (grid decorator) update via the feed; the node/link content subtree is
+            // untouched by plain scrolling. The canvas host/grid/axis are JS-owned, so the grid no
+            // longer depends on a re-render. Only canvas growth (edge expansion) changes the links-
+            // layer size (SurfaceCanvas context), so only then do we re-render the whole surface.
+            _feed.Publish(_viewport);
+            PushMinimapViewport(viewportX, viewportY);
+            PushSurfaceLayout(contentX, contentY);
+            if (grew)
+            {
+                InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pushes the current viewport world rect to the minimap's JS, which moves the viewport-block
+    /// indicator directly (no .NET re-render). No-op when no minimap has registered that scroller id.
+    /// </summary>
+    private void PushMinimapViewport(double worldX, double worldY)
+    {
+        if (_module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
+        {
+            _ = _module.InvokeVoidAsync("setMinimapViewport",
+                ScrollViewerId, worldX, worldY, _viewportW, _viewportH);
+        }
+    }
+
+    /// <summary>
+    /// Pushes the content translate (layout.ActualOffset) to JS so the grid/axis layers can align
+    /// with world 0. The JS already tracks the edge-expansion offset (offsets.x/y); this supplies
+    /// the layout offset on top. Only pushed when it changes (rare).
+    /// </summary>
+    private void PushSurfaceLayout(double contentX, double contentY)
+    {
+        if (_module is not null
+            && !string.IsNullOrWhiteSpace(ScrollViewerId)
+            && (Math.Abs(contentX - _lastContentX) > double.Epsilon
+                || Math.Abs(contentY - _lastContentY) > double.Epsilon))
+        {
+            _lastContentX = contentX;
+            _lastContentY = contentY;
+            _ = _module.InvokeVoidAsync("setSurfaceLayout", ScrollViewerId, contentX, contentY);
         }
     }
 

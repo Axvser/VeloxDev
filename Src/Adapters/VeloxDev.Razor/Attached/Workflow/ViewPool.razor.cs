@@ -31,6 +31,7 @@ public partial class ViewPool : ComponentBase, IDisposable
 
     private IReadOnlyList<object>? _items;
     private INotifyCollectionChanged? _notifier;
+    private object? _lastSource;
 
     private IReadOnlyList<object>? Items => _items;
 
@@ -54,11 +55,21 @@ public partial class ViewPool : ComponentBase, IDisposable
             }
         }
 
-        _items = ItemsSource is null ? null : ItemsSource.Cast<object>().ToArray();
+        // Snapshot the source only when the collection reference changes; re-snapshotting on every
+        // parent re-render allocated a fresh O(N) array per scroll frame. Content mutations are
+        // caught by OnCollectionChanged below, which re-snapshots explicitly.
+        if (!ReferenceEquals(ItemsSource, _lastSource))
+        {
+            _lastSource = ItemsSource;
+            _items = ItemsSource is null ? null : ItemsSource.Cast<object>().ToArray();
+        }
     }
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => InvokeAsync(StateHasChanged);
+    {
+        _items = ItemsSource is null ? null : ItemsSource.Cast<object>().ToArray();
+        InvokeAsync(StateHasChanged);
+    }
 
     /// <inheritdoc />
     public void Dispose()

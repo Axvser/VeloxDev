@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using VeloxDev.WorkflowSystem;
@@ -11,7 +14,14 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// Minimap overlay that renders a thumbnail overview of all nodes plus the visible viewport
 /// rectangle. Consumes a <see cref="SurfaceViewport"/> context and implements
 /// <see cref="IWorkflowMinimapOverlay"/> for API parity with the XAML adapters.
-/// Click to jump; drag to pan the surface (via <see cref="ScrollViewerId"/>).
+///
+/// Mirrors the XAML adapters' architecture: the content-fit mapping and node rects are recomputed
+/// only when the tree content changes (nodes added/removed/moved — debounced 16ms), never on plain
+/// scroll. The viewport-block indicator is moved directly by JavaScript as the surface scrolls, so
+/// scrolling costs one tiny interop instead of a full .NET re-render of every node rect.
+///
+/// Navigation is grab-the-block (matching the other adapters): pressing must land on the viewport
+/// block; the grab point is centered on the surface viewport, and dragging pans with edge expansion.
 /// </summary>
 public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOverlay, IAsyncDisposable
 {
@@ -108,9 +118,22 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     private double _mapOy;
     private double _minX;
     private double _minY;
+    private double _maxX;
+    private double _maxY;
+
+    private double _lastWidth;
+    private double _lastHeight;
+
+    // Event-driven content tracking: the mapping/node rects are recomputed (debounced) only when
+    // nodes are added/removed/moved, exactly like the XAML adapters' MarkDirty + 16ms timer.
+    private IWorkflowTreeViewModel? _subscribedTree;
+    private INotifyCollectionChanged? _nodesNotifier;
+    private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
+    private readonly object _rebuildLock = new();
+    private bool _rebuildScheduled;
+    private CancellationTokenSource? _throttleCts;
 
     private IReadOnlyList<Mapped>? MappedNodes { get; set; }
-    private Mapped? MappedViewport { get; set; }
 
     // Unitless lengths are invalid inside a CSS style="" attribute (the browser drops them,
     // collapsing the element to 0×0). These feed the inline width/height style; the px suffix is
@@ -125,6 +148,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     {
         base.OnParametersSet();
 
+        var recompute = false;
         if (Viewport is { } vp)
         {
             ScrollOffsetX = vp.ScrollLeft;
@@ -133,10 +157,29 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             ContentOffsetY = vp.ContentOffsetY;
             ViewportWidth = vp.ViewportWidth;
             ViewportHeight = vp.ViewportHeight;
-            WorkflowTree = vp.Tree;
+
+            if (!ReferenceEquals(_subscribedTree, vp.Tree))
+            {
+                WorkflowTree = vp.Tree;
+                ResubscribeTree(vp.Tree);
+                recompute = true;
+            }
         }
 
-        Recompute();
+        if (Math.Abs(Width - _lastWidth) > double.Epsilon
+            || Math.Abs(Height - _lastHeight) > double.Epsilon)
+        {
+            _lastWidth = Width;
+            _lastHeight = Height;
+            recompute = true;
+        }
+
+        // Content-fit mapping depends only on node bounds + minimap size, never on scroll. Scroll is
+        // handled by JS moving the viewport block, so we do NOT recompute on every viewport change.
+        if (recompute)
+        {
+            Recompute();
+        }
     }
 
     /// <inheritdoc />
@@ -151,7 +194,142 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             _handle = await _module.InvokeAsync<IJSObjectReference>("initMinimap", _element, ScrollViewerId, _dotNetRef);
             PushMapping();
         }
+
+        // Re-sync the JS-owned viewport block after every re-render: a re-render rewrites the block
+        // from stale .NET state (MappedViewport), and refreshMinimapViewport re-applies the current
+        // world rect the surface last pushed, so the block never jumps away during a pan.
+        if (_module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
+        {
+            _ = _module.InvokeVoidAsync("refreshMinimapViewport", ScrollViewerId);
+        }
     }
+
+    // ── Content tracking (event-driven, mirrors the XAML adapters) ──────────
+
+    private void ResubscribeTree(IWorkflowTreeViewModel? tree)
+    {
+        if (_nodesNotifier is not null)
+        {
+            _nodesNotifier.CollectionChanged -= OnNodesChanged;
+            _nodesNotifier = null;
+        }
+
+        foreach (var node in _subscribedNodes)
+        {
+            if (node is INotifyPropertyChanged npc)
+            {
+                npc.PropertyChanged -= OnNodePropertyChanged;
+            }
+        }
+
+        _subscribedNodes.Clear();
+        _subscribedTree = tree;
+
+        if (tree?.Nodes is { } nodes)
+        {
+            if (nodes is INotifyCollectionChanged nc)
+            {
+                _nodesNotifier = nc;
+                nc.CollectionChanged += OnNodesChanged;
+            }
+
+            foreach (var node in nodes)
+            {
+                if (node is INotifyPropertyChanged npc)
+                {
+                    npc.PropertyChanged += OnNodePropertyChanged;
+                    _subscribedNodes.Add(node);
+                }
+            }
+        }
+    }
+
+    private void OnNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems is not null)
+        {
+            foreach (var item in e.NewItems)
+            {
+                if (item is IWorkflowNodeViewModel node && node is INotifyPropertyChanged npc)
+                {
+                    npc.PropertyChanged += OnNodePropertyChanged;
+                    _subscribedNodes.Add(node);
+                }
+            }
+        }
+
+        if (e.OldItems is not null)
+        {
+            foreach (var item in e.OldItems)
+            {
+                if (item is IWorkflowNodeViewModel node
+                    && _subscribedNodes.Remove(node)
+                    && node is INotifyPropertyChanged npc)
+                {
+                    npc.PropertyChanged -= OnNodePropertyChanged;
+                }
+            }
+        }
+
+        MarkDirty();
+    }
+
+    private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        {
+            MarkDirty();
+        }
+    }
+
+    /// <summary>
+    /// Throttles rapid content changes (e.g. a node being dragged fires Anchor changes every frame)
+    /// to at most one rebuild per 16ms — the same fixed-interval timer the XAML adapters' minimaps
+    /// use, so the node rects keep tracking a live drag instead of waiting for it to stop.
+    /// </summary>
+    private void MarkDirty()
+    {
+        lock (_rebuildLock)
+        {
+            if (_rebuildScheduled)
+            {
+                return;
+            }
+
+            _rebuildScheduled = true;
+        }
+
+        _throttleCts?.Cancel();
+        _throttleCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _throttleCts = cts;
+        _ = RebuildAfterThrottleAsync(cts.Token);
+    }
+
+    private async Task RebuildAfterThrottleAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(16, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        lock (_rebuildLock)
+        {
+            _rebuildScheduled = false;
+        }
+
+        await InvokeAsync(() =>
+        {
+            Recompute();
+            StateHasChanged();
+        });
+    }
+
+    // ── Mapping ──────────────────────────────────────────────────────────────
 
     private void Recompute()
     {
@@ -159,7 +337,6 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         if (tree is null)
         {
             MappedNodes = null;
-            MappedViewport = null;
             return;
         }
 
@@ -167,7 +344,6 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         if (nodes.Length == 0)
         {
             MappedNodes = Array.Empty<Mapped>();
-            MappedViewport = null;
             return;
         }
 
@@ -194,6 +370,8 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         _mapOy = oy;
         _minX = minX;
         _minY = minY;
+        _maxX = maxX;
+        _maxY = maxY;
         PushMapping();
 
         MappedNodes = nodes.Select(n =>
@@ -203,105 +381,36 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             return new Mapped(x, y, Math.Max(1, n.Size.Width * scale), Math.Max(1, n.Size.Height * scale));
         }).ToArray();
 
-        var vw = Math.Max(1, ViewportWidth);
-        var vh = Math.Max(1, ViewportHeight);
-        var vx = ScrollOffsetX - ContentOffsetX;
-        var vy = ScrollOffsetY - ContentOffsetY;
-        var mx = ox + (vx - minX) * scale;
-        var my = oy + (vy - minY) * scale;
-        var mw = Math.Max(2, vw * scale);
-        var mh = Math.Max(2, vh * scale);
-        // Clamp the viewport rect inside the minimap so the draggable handle never leaves the
-        // bounds. When the user pushes it past an edge, the surface's edge-expansion takes over.
-        mw = Math.Min(mw, Width);
-        mh = Math.Min(mh, Height);
-        mx = Math.Max(0, Math.Min(mx, Width - mw));
-        my = Math.Max(0, Math.Min(my, Height - mh));
-        MappedViewport = new Mapped(mx, my, mw, mh);
+        // The viewport block is NOT computed/rendered here: it is owned entirely by JS
+        // (setMinimapViewport), so a .NET rebuild can never write stale coordinates over it.
     }
 
     /// <summary>
     /// Pushes the content-fit mapping used to render the minimap to JS, so drag/click
-    /// navigation inverts the SAME scale instead of a raw scroll-extent ratio (which diverges
-    /// once the canvas is edge-extended and overshoots by n×). Called on every Recompute and
-    /// once more on first render so JS has a mapping before the user can interact.
+    /// navigation and the JS-driven viewport block invert the SAME scale instead of a raw
+    /// scroll-extent ratio (which diverges once the canvas is edge-extended and overshoots by n×).
+    /// Called on every content rebuild.
     /// </summary>
     private void PushMapping()
     {
         if (_module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
         {
-            _ = _module.InvokeVoidAsync("setMinimapMapping", ScrollViewerId, _scale, _mapOx, _mapOy, _minX, _minY);
+            _ = _module.InvokeVoidAsync("setMinimapMapping", ScrollViewerId, _scale, _mapOx, _mapOy, _minX, _minY, _maxX, _maxY);
         }
-    }
-
-    /// <summary>
-    /// Called from JS on minimap <c>mousedown</c>. Navigates immediately: if the current viewport
-    /// already contains the fit-all bounds (the minimum range that shows every node), jump straight
-    /// to the pressed world coordinate; otherwise jump to the fit-all viewport first, so a single
-    /// press snaps back to a valid area that shows all nodes (no second click needed).
-    /// </summary>
-    [JSInvokable]
-    public void OnMinimapPress(double x, double y, double currentScrollLeft, double currentScrollTop)
-    {
-        if (string.IsNullOrWhiteSpace(ScrollViewerId) || _module is null || _scale <= 0)
-        {
-            return;
-        }
-
-        var offsetX = currentScrollLeft - ScrollOffsetX;
-        var offsetY = currentScrollTop - ScrollOffsetY;
-        var worldX = _minX + (x - _mapOx) / _scale;
-        var worldY = _minY + (y - _mapOy) / _scale;
-
-        // Fit-all bounds in world coordinates (mirrors Recompute): the minimum rectangle that
-        // contains every node.
-        double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
-        if (WorkflowTree?.Nodes is { } nodes)
-        {
-            foreach (var n in nodes)
-            {
-                minX = Math.Min(minX, n.Anchor.Horizontal);
-                minY = Math.Min(minY, n.Anchor.Vertical);
-                maxX = Math.Max(maxX, n.Anchor.Horizontal + n.Size.Width);
-                maxY = Math.Max(maxY, n.Anchor.Vertical + n.Size.Height);
-            }
-        }
-
-        if (minX > maxX || minY > maxY)
-        {
-            // No nodes: fall back to a plain jump to the pressed point.
-            _ = JS.InvokeVoidAsync("veloxdevWorkflow.scrollToPosition", ScrollViewerId,
-                worldX + offsetX + ContentOffsetX, worldY + offsetY + ContentOffsetY);
-            return;
-        }
-
-        // Current viewport world rect (from the surface viewport: ScrollOffsetX = scrollLeft - offset).
-        var vx = ScrollOffsetX - ContentOffsetX;
-        var vy = ScrollOffsetY - ContentOffsetY;
-        var vw = Math.Max(1, ViewportWidth);
-        var vh = Math.Max(1, ViewportHeight);
-
-        if (vx <= minX && vy <= minY && vx + vw >= maxX && vy + vh >= maxY)
-        {
-            // Viewport already covers every node: jump to the pressed point as today.
-            _ = JS.InvokeVoidAsync("veloxdevWorkflow.scrollToPosition", ScrollViewerId,
-                worldX + offsetX + ContentOffsetX, worldY + offsetY + ContentOffsetY);
-            return;
-        }
-
-        // Viewport is outside the fit-all area: center it on the nodes' bounds so one press snaps
-        // back to a valid viewport that shows all nodes. Clamp to >= 0; the surface's edge
-        // expansion grows the canvas if the target exceeds the current scroll extent.
-        var cx = (minX + maxX) / 2;
-        var cy = (minY + maxY) / 2;
-        var targetX = cx - vw / 2 + offsetX + ContentOffsetX;
-        var targetY = cy - vh / 2 + offsetY + ContentOffsetY;
-        _ = JS.InvokeVoidAsync("veloxdevWorkflow.scrollToPosition", ScrollViewerId, targetX, targetY);
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        _throttleCts?.Cancel();
+        _throttleCts?.Dispose();
+        lock (_rebuildLock)
+        {
+            _rebuildScheduled = false;
+        }
+
+        ResubscribeTree(null);
+
         if (_handle is not null)
         {
             try

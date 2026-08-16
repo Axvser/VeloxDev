@@ -15,12 +15,12 @@
                               fill="@NodeFill" rx="@NodeRadiusCss" />
                     }
                 }
-                @if (MappedViewport is { } vr)
-                {
-                    <rect x="@vr.XCss" y="@vr.YCss" width="@vr.WCss" height="@vr.HCss"
-                          fill="@ViewportFill" stroke="@ViewportStroke"
-                          stroke-width="@ViewportStrokeWidthCss" rx="2" />
-                }
+                @* The viewport block: x/y/width/height are owned entirely by JS (setMinimapViewport),
+                   so a .NET re-render never writes stale coordinates that would make the block jitter
+                   while the surface is being panned or navigated. *@
+                <rect class="veloxdev-wf-minimap-viewport"
+                      fill="@ViewportFill" stroke="@ViewportStroke"
+                      stroke-width="@ViewportStrokeWidthCss" rx="2" />
             </svg>
         </div>
     </div>

@@ -70,32 +70,145 @@ window.veloxdevWorkflow = (() => {
     // after the canvas has been edge-extended (the raw scroll-extent ratio would overshoot).
     const minimapMappings = {};
 
-    function setMinimapMapping(scrollerId, scale, ox, oy, minX, minY) {
+    // The minimap's viewport-block <rect> plus its pixel dimensions, keyed by scroller id and
+    // registered by initMinimap. The surface's OnSurfaceScroll pushes the current viewport world
+    // rect here and we move the block directly — no .NET re-render per scroll frame.
+    const minimapRects = {};
+
+    // Last viewport world rect pushed per scroller id. Used by refreshMinimapViewport to re-apply
+    // the block position after a .NET re-render would otherwise overwrite it with stale data.
+    const minimapLastWorld = {};
+
+    function setMinimapMapping(scrollerId, scale, ox, oy, minX, minY, maxX, maxY) {
         minimapMappings[scrollerId] =
-            (isFinite(scale) && scale > 0) ? { scale, ox, oy, minX, minY } : null;
+            (isFinite(scale) && scale > 0) ? { scale, ox, oy, minX, minY, maxX, maxY } : null;
     }
 
-    function initSurface(scrollerEl, canvasEl, dotnetRef) {
-        if (!scrollerEl || !canvasEl) return null;
+    // Positions a node wrapper at an absolute world coordinate (canvas-content-relative). Used by the
+    // node-drag behavior for external anchor changes (undo/redo, layout commands); during a live drag
+    // the drag handler owns the position directly.
+    function setNodePosition(nodeEl, x, y) {
+        if (!nodeEl) return;
+        nodeEl.style.left = x + 'px';
+        nodeEl.style.top = y + 'px';
+    }
+
+    // Moves the minimap's viewport-block <rect> to the current viewport world rect. Inverts the same
+    // content-fit mapping used to render the minimap and applies the same clamp, so the block stays
+    // inside the minimap even when the viewport is larger than the fitted content. Also stores the
+    // pushed world rect so refreshMinimapViewport can re-apply it after a .NET re-render.
+    function setMinimapViewport(scrollerId, worldX, worldY, vw, vh) {
+        minimapLastWorld[scrollerId] = { x: worldX, y: worldY, w: vw, h: vh };
+        const reg = minimapRects[scrollerId];
+        if (!reg) return;
+        const m = minimapMappings[scrollerId];
+        if (!m || !(m.scale > 0)) return;
+        let x = m.ox + (worldX - m.minX) * m.scale;
+        let y = m.oy + (worldY - m.minY) * m.scale;
+        let w = Math.max(2, vw * m.scale);
+        let h = Math.max(2, vh * m.scale);
+        w = Math.min(w, reg.width);
+        h = Math.min(h, reg.height);
+        x = Math.max(0, Math.min(x, reg.width - w));
+        y = Math.max(0, Math.min(y, reg.height - h));
+        reg.rect.setAttribute('x', x.toFixed(1));
+        reg.rect.setAttribute('y', y.toFixed(1));
+        reg.rect.setAttribute('width', w.toFixed(1));
+        reg.rect.setAttribute('height', h.toFixed(1));
+    }
+
+    // Re-applies the last pushed viewport world rect to the minimap block. Called by the minimap
+    // component after every .NET re-render, because a re-render rewrites the block from stale .NET
+    // state (MappedViewport); this restores the JS-owned, current position.
+    function refreshMinimapViewport(scrollerId) {
+        const last = minimapLastWorld[scrollerId];
+        if (!last) return;
+        setMinimapViewport(scrollerId, last.x, last.y, last.w, last.h);
+    }
+
+    // Scrolls a surface by a world delta, routing through the surface's edge-aware scrollBy so a
+    // drag past a minimap edge grows the canvas instead of clamping. Falls back to direct scroll.
+    function scrollByDelta(scrollerId, dx, dy) {
+        const el = document.getElementById(scrollerId);
+        if (!el) return;
+        const scrollBy = surfaceRegistry[scrollerId];
+        if (scrollBy) {
+            scrollBy(dx, dy);
+            return;
+        }
+        el.scrollLeft += dx;
+        el.scrollTop += dy;
+    }
+
+    // Updates a surface's grid/axis layers for a new layout (content) offset. Called by .NET when
+    // layout.ActualOffset changes (rare). The edge-expansion offset is read from the content
+    // wrapper's inline position, so this needs no per-surface closure state.
+    function setSurfaceLayout(scrollerId, contentX, contentY) {
+        const el = document.getElementById(scrollerId);
+        if (!el) return;
+        const host = el.querySelector('.veloxdev-wf-canvas-host');
+        if (!host) return;
+        const contentEl = host.querySelector('.veloxdev-wf-canvas-content');
+        const offL = parseFloat(contentEl && contentEl.style.left) || 0;
+        const offT = parseFloat(contentEl && contentEl.style.top) || 0;
+        const gx = offL + (contentX || 0);
+        const gy = offT + (contentY || 0);
+        const gridEl = host.querySelector('.veloxdev-wf-grid');
+        if (gridEl) gridEl.style.backgroundPosition = gx + 'px ' + gy + 'px';
+        const axisXEl = host.querySelector('.veloxdev-wf-axis-x');
+        if (axisXEl) axisXEl.style.left = gx + 'px';
+        const axisYEl = host.querySelector('.veloxdev-wf-axis-y');
+        if (axisYEl) axisYEl.style.top = gy + 'px';
+    }
+
+    function initSurface(scrollerEl, canvasHostEl, dotnetRef, initialW, initialH, contentX, contentY, initialOffsetX, initialOffsetY) {
+        if (!scrollerEl || !canvasHostEl) return null;
         let panState = null;
         let spaceHeld = false;
 
-        // The canvas-content wrapper is translated by the "negative offset" so the canvas can
-        // expand in all four directions. Growing right/down enlarges the canvas itself; growing
-        // left/up enlarges the canvas AND shifts the content wrapper right/down by the same amount.
-        const contentEl = canvasEl.querySelector('.veloxdev-wf-canvas-content');
-        const offsets = { x: 0, y: 0 };
+        // The canvas host owns the pixel size (set here + grown by edge expansion) so a Blazor
+        // re-render never writes it. The content wrapper inside is translated by the "negative
+        // offset" so the canvas can expand in all four directions: growing right/down enlarges the
+        // host; growing left/up enlarges the host AND shifts the content wrapper right/down.
+        const canvasEl = canvasHostEl.querySelector('.veloxdev-wf-canvas');
+        const contentEl = canvasHostEl.querySelector('.veloxdev-wf-canvas-content');
+        const gridEl = canvasHostEl.querySelector('.veloxdev-wf-grid');
+        const axisXEl = canvasHostEl.querySelector('.veloxdev-wf-axis-x');
+        const axisYEl = canvasHostEl.querySelector('.veloxdev-wf-axis-y');
+        const offsets = { x: initialOffsetX || 0, y: initialOffsetY || 0 };
+        const layoutOffsets = { x: contentX || 0, y: contentY || 0 };
+
+        canvasHostEl.style.width = (initialW || 0) + 'px';
+        canvasHostEl.style.height = (initialH || 0) + 'px';
+        // Reserve the ruler band: world 0 sits at the content boundary (right/below the ruler), so
+        // grid lines and ruler ticks align with node anchors. Grow-only afterward.
+        if (contentEl) {
+            contentEl.style.left = offsets.x + 'px';
+            contentEl.style.top = offsets.y + 'px';
+        }
+
+        // Aligns the grid pattern + world-0 axis with world coordinates. The grid is canvas-fixed
+        // (world-fixed), so it scrolls naturally; it only re-positions when the edge offset or the
+        // layout offset changes (rare). background-position = edge offset + layout offset.
+        function applyGridPosition() {
+            const gx = offsets.x + layoutOffsets.x;
+            const gy = offsets.y + layoutOffsets.y;
+            if (gridEl) gridEl.style.backgroundPosition = gx + 'px ' + gy + 'px';
+            if (axisXEl) axisXEl.style.left = gx + 'px';
+            if (axisYEl) axisYEl.style.top = gy + 'px';
+        }
 
         function growContent(axis, amount) {
             if (axis === 'x') {
                 offsets.x += amount;
-                canvasEl.style.width = (canvasEl.offsetWidth + amount) + 'px';
+                canvasHostEl.style.width = (canvasHostEl.offsetWidth + amount) + 'px';
                 if (contentEl) contentEl.style.left = offsets.x + 'px';
             } else {
                 offsets.y += amount;
-                canvasEl.style.height = (canvasEl.offsetHeight + amount) + 'px';
+                canvasHostEl.style.height = (canvasHostEl.offsetHeight + amount) + 'px';
                 if (contentEl) contentEl.style.top = offsets.y + 'px';
             }
+            applyGridPosition();
             report();
         }
 
@@ -108,14 +221,20 @@ window.veloxdevWorkflow = (() => {
             const remH = scrollerEl.scrollHeight - scrollerEl.scrollTop - ch;
             let changed = false;
             if (remW < 400) {
-                const iw = parseFloat(canvasEl.style.width) || canvasEl.offsetWidth || 0;
-                canvasEl.style.width = (iw + 800) + 'px';
+                const iw = parseFloat(canvasHostEl.style.width) || canvasHostEl.offsetWidth || 0;
+                canvasHostEl.style.width = (iw + 800) + 'px';
                 changed = true;
             }
             if (remH < 400) {
-                const ih = parseFloat(canvasEl.style.height) || canvasEl.offsetHeight || 0;
-                canvasEl.style.height = (ih + 800) + 'px';
+                const ih = parseFloat(canvasHostEl.style.height) || canvasHostEl.offsetHeight || 0;
+                canvasHostEl.style.height = (ih + 800) + 'px';
                 changed = true;
+            }
+            if (changed) {
+                // A canvas-size change must reach .NET so the links-layer size (SurfaceCanvas
+                // context) can follow. expandCanvas can run without a follow-up scroll event (e.g.
+                // minimap drag pinned at an edge), so schedule a report rather than relying on scroll.
+                scheduleReport();
             }
             return changed;
         }
@@ -125,22 +244,33 @@ window.veloxdevWorkflow = (() => {
                 dotnetRef.invokeMethodAsync('OnSurfaceScroll',
                     scrollerEl.scrollLeft, scrollerEl.scrollTop,
                     scrollerEl.clientWidth, scrollerEl.clientHeight,
-                    canvasEl.offsetWidth, canvasEl.offsetHeight,
+                    parseFloat(canvasHostEl.style.width) || canvasHostEl.offsetWidth || 0,
+                    parseFloat(canvasHostEl.style.height) || canvasHostEl.offsetHeight || 0,
                     offsets.x, offsets.y);
             }
         }
 
-        // Syncs the JS offset state to the reserved ruler band. The .NET surface already reserves
-        // RulerThickness on the canvas width/height and positions the content wrapper at that offset
-        // (matching the XAML adapters), so this only aligns the local offset counter to the DOM —
-        // it must NOT grow the canvas again (that would double the reserve). The offset is grow-only
-        // afterward, so it never shrinks back when the user pans left/up.
+        // Syncs the JS offset state to the reserved ruler band. The content wrapper is positioned
+        // at the ruler offset, so read it from the DOM and align the local offset counter. The
+        // offset is grow-only afterward, so it never shrinks back when the user pans left/up.
         function ensureRulerReserve() {
             if (!contentEl) return;
             const rx = contentEl.offsetLeft || 0;
             const ry = contentEl.offsetTop || 0;
             if (offsets.x < rx) offsets.x = rx;
             if (offsets.y < ry) offsets.y = ry;
+            applyGridPosition();
+        }
+
+        // Coalesce bursty scroll/pan/mutation events into one .NET report per frame.
+        let pendingReport = null;
+        function scheduleReport() {
+            if (!pendingReport) {
+                pendingReport = requestAnimationFrame(function () {
+                    pendingReport = null;
+                    report();
+                });
+            }
         }
 
         const onScroll = function () {
@@ -148,7 +278,7 @@ window.veloxdevWorkflow = (() => {
                 scrollerEl.scrollTop + scrollerEl.clientHeight >= scrollerEl.scrollHeight - 50) {
                 expandCanvas();
             }
-            report();
+            scheduleReport();
         };
 
         // Applies a scroll delta with edge expansion in all four directions. Used by panning and
@@ -235,6 +365,7 @@ window.veloxdevWorkflow = (() => {
                 document.removeEventListener('keyup', keyup);
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
+                if (pendingReport) cancelAnimationFrame(pendingReport);
                 scrollerEl.style.cursor = '';
             }
         };
@@ -267,13 +398,27 @@ window.veloxdevWorkflow = (() => {
     function initNodeDrag(nodeEl, dotnetRef) {
         if (!nodeEl) return null;
         let dragState = null;
+        let pendingDelta = null;
 
         nodeEl.addEventListener('mousedown', function (e) {
             if (e.button !== 0) return;
             if (e.target.closest('select, option, input, button, textarea, .veloxdev-wf-slot')) return;
+            // preventDefault stops the browser's default text/element selection from starting on
+            // this mousedown, so dragging a node never selects surrounding content.
+            e.preventDefault();
             e.stopPropagation();
             dragState = { startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY };
         });
+
+        const flushDelta = function () {
+            if (!pendingDelta || !dotnetRef) return;
+            const d = pendingDelta;
+            pendingDelta = null;
+            dotnetRef.invokeMethodAsync('OnNodeDrag', d.dx, d.dy);
+            // Let the enclosing slot-layout behavior re-measure slots live while dragging,
+            // so links follow the node in real time (not just after the drop).
+            nodeEl.dispatchEvent(new CustomEvent('veloxdev-node-drag-move', { bubbles: true }));
+        };
 
         const onMove = function (e) {
             if (!dragState) return;
@@ -282,16 +427,34 @@ window.veloxdevWorkflow = (() => {
             const dy = e.clientY - dragState.lastY;
             dragState.lastX = e.clientX;
             dragState.lastY = e.clientY;
-            if (dotnetRef && (dx !== 0 || dy !== 0)) {
-                dotnetRef.invokeMethodAsync('OnNodeDrag', dx, dy);
-                // Let the enclosing slot-layout behavior re-measure slots live while dragging,
-                // so links follow the node in real time (not just after the drop).
-                nodeEl.dispatchEvent(new CustomEvent('veloxdev-node-drag-move', { bubbles: true }));
+            if (dx === 0 && dy === 0) return;
+
+            // Position the element immediately (compositor-friendly); read the live style each move
+            // so an external re-render mid-drag cannot desync the tracked position. Tell .NET at
+            // most once per frame (accumulated delta).
+            const curLeft = parseFloat(nodeEl.style.left) || nodeEl.offsetLeft || 0;
+            const curTop = parseFloat(nodeEl.style.top) || nodeEl.offsetTop || 0;
+            nodeEl.style.left = (curLeft + dx) + 'px';
+            nodeEl.style.top = (curTop + dy) + 'px';
+
+            if (!pendingDelta) {
+                pendingDelta = { dx: 0, dy: 0 };
+                requestAnimationFrame(flushDelta);
             }
+            pendingDelta.dx += dx;
+            pendingDelta.dy += dy;
         };
         const onUp = function () {
             if (!dragState) return;
             dragState = null;
+            // Flush any not-yet-sent delta before OnNodeDragEnd so .NET's final anchor matches the
+            // DOM position (OnNodeDragEnd then syncs the wrapper to that anchor).
+            if (pendingDelta) {
+                const d = pendingDelta;
+                pendingDelta = null;
+                if (dotnetRef) dotnetRef.invokeMethodAsync('OnNodeDrag', d.dx, d.dy);
+                nodeEl.dispatchEvent(new CustomEvent('veloxdev-node-drag-move', { bubbles: true }));
+            }
             if (dotnetRef) dotnetRef.invokeMethodAsync('OnNodeDragEnd');
             // Let the enclosing slot-layout behavior re-measure this node's slots now that they moved.
             nodeEl.dispatchEvent(new CustomEvent('veloxdev-node-drag-end', { bubbles: true }));
@@ -303,6 +466,7 @@ window.veloxdevWorkflow = (() => {
             dispose: function () {
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
+                pendingDelta = null;
             }
         };
     }
@@ -487,29 +651,76 @@ window.veloxdevWorkflow = (() => {
     }
 
     // ════════════════════════════════════════════════════════════
-    // MINIMAP — drag to scroll (in JS), click to jump (via .NET).
+    // MINIMAP — grab-the-block drag navigation (matching the XAML adapters).
+    // Press must land on the viewport block; .NET centers the surface viewport on the grab
+    // point, then dragging pans. The block itself is moved directly on scroll.
     // ════════════════════════════════════════════════════════════
     function initMinimap(minimapEl, scrollerId, dotnetRef) {
         if (!minimapEl || !scrollerId) return null;
         let dragState = null;
 
+        // Register the viewport-block <rect> so the surface can move it directly on scroll (no .NET
+        // re-render). Its dimensions come from the SVG width/height attributes (= the minimap size).
+        const vpRect = minimapEl.querySelector('.veloxdev-wf-minimap-viewport');
+        if (vpRect) {
+            const svg = vpRect.closest('svg');
+            minimapRects[scrollerId] = {
+                rect: vpRect,
+                width: svg ? parseFloat(svg.getAttribute('width')) || 0 : 0,
+                height: svg ? parseFloat(svg.getAttribute('height')) || 0 : 0
+            };
+        }
+
         minimapEl.addEventListener('mousedown', function (e) {
             e.preventDefault();
+            const mmRect = minimapEl.getBoundingClientRect();
+            const mx = e.clientX - mmRect.left;
+            const my = e.clientY - mmRect.top;
             dragState = { startX: e.clientX, startY: e.clientY, hasMoved: false };
-            if (dotnetRef) {
-                const rect = minimapEl.getBoundingClientRect();
-                const scroller = document.getElementById(scrollerId);
-                // Navigate on press, not release: when the viewport is outside the fit-all area the
-                // adapter centers it on all nodes immediately, so a single press snaps back to a
-                // valid area instead of requiring a second click on the cluster. The async result
-                // is deliberately ignored — navigation always happens on press (to the clicked
-                // point when the viewport already shows all nodes, else to the fit-all viewport).
-                dotnetRef.invokeMethodAsync('OnMinimapPress',
-                    e.clientX - rect.left,
-                    e.clientY - rect.top,
-                    scroller ? scroller.scrollLeft : 0,
-                    scroller ? scroller.scrollTop : 0);
+            const scroller = document.getElementById(scrollerId);
+            const m = scroller ? minimapMappings[scrollerId] : null;
+            const last = scroller ? minimapLastWorld[scrollerId] : null;
+            if (!scroller || !m || !(m.scale > 0) || !last) return;
+
+            const vw = scroller.clientWidth, vh = scroller.clientHeight;
+            // The surface pushes the true viewport world-left every scroll; it yields the
+            // edge + layout offset, exact even when the block is clamped at the minimap edge.
+            const offX = scroller.scrollLeft - last.x;
+            const offY = scroller.scrollTop - last.y;
+
+            // Current block rect.
+            const bx = parseFloat(vpRect.getAttribute('x')) || 0;
+            const by = parseFloat(vpRect.getAttribute('y')) || 0;
+            const bw = parseFloat(vpRect.getAttribute('width')) || 0;
+            const bh = parseFloat(vpRect.getAttribute('height')) || 0;
+
+            // The block is the anchor; the viewport follows it. Target block CENTER:
+            //  - Pressing ON the block: the block does not move — the viewport aligns to the
+            //    visible area the block currently maps to (target = the block's current center).
+            //  - Pressing ELSEWHERE in the minimap: the block's center moves to the cursor,
+            //    retreating to just inside the minimap if that would push it over an edge.
+            let cx, cy;
+            const onBlock = mx >= bx && mx <= bx + bw && my >= by && my <= by + bh;
+            if (onBlock) {
+                cx = bx + bw / 2;
+                cy = by + bh / 2;
+            } else {
+                const reg = minimapRects[scrollerId];
+                const mmW = reg ? reg.width : 0, mmH = reg ? reg.height : 0;
+                const tlX = Math.max(0, Math.min(mmW - bw, mx - bw / 2));
+                const tlY = Math.max(0, Math.min(mmH - bh, my - bh / 2));
+                cx = tlX + bw / 2;
+                cy = tlY + bh / 2;
             }
+
+            // Center the viewport on the block center's world point, then position the block
+            // synchronously so it never lags a frame behind the scroll.
+            const worldX = m.minX + (cx - m.ox) / m.scale;
+            const worldY = m.minY + (cy - m.oy) / m.scale;
+            const targetScrollX = worldX - vw / 2 + offX;
+            const targetScrollY = worldY - vh / 2 + offY;
+            scrollByDelta(scrollerId, targetScrollX - scroller.scrollLeft, targetScrollY - scroller.scrollTop);
+            setMinimapViewport(scrollerId, worldX - vw / 2, worldY - vh / 2, vw, vh);
         });
 
         const onMove = function (e) {
@@ -522,12 +733,23 @@ window.veloxdevWorkflow = (() => {
                 const scrollBy = surfaceRegistry[scrollerId];
                 if (scroller) {
                     const m = minimapMappings[scrollerId];
+                    const last = minimapLastWorld[scrollerId];
+                    const scrollBeforeX = scroller.scrollLeft;
+                    const scrollBeforeY = scroller.scrollTop;
                     if (m) {
                         // World-space delta: the minimap is a uniform scale of world coordinates,
                         // so the viewport rect tracks the cursor when we scroll by dx/scale. This
                         // stays correct after the canvas is edge-extended (unlike a ratio over the
                         // raw scroll extent, which grows with the canvas and overshoots).
                         scrollBy(dx / m.scale, dy / m.scale);
+                        // Move the block synchronously from the ACTUAL scroll change (exact even
+                        // when an edge expansion clamps the pan) so it never lags behind the drag.
+                        if (last) {
+                            setMinimapViewport(scrollerId,
+                                scroller.scrollLeft - (scrollBeforeX - last.x),
+                                scroller.scrollTop - (scrollBeforeY - last.y),
+                                scroller.clientWidth, scroller.clientHeight);
+                        }
                     } else {
                         // No mapping pushed yet: fall back to a linear ratio over the scroll extent.
                         const rect = minimapEl.getBoundingClientRect();
@@ -549,7 +771,7 @@ window.veloxdevWorkflow = (() => {
             }
         };
         const onUp = function () {
-            // Navigation already happened on mousedown (OnMinimapPress); nothing to do here.
+            // Navigation already happened on mousedown; nothing to do here.
             dragState = null;
         };
         document.addEventListener('mousemove', onMove);
@@ -559,6 +781,7 @@ window.veloxdevWorkflow = (() => {
             dispose: function () {
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
+                if (minimapRects[scrollerId]) delete minimapRects[scrollerId];
             }
         };
     }
@@ -570,6 +793,11 @@ window.veloxdevWorkflow = (() => {
         scrollToRatio,
         scrollToPosition,
         setMinimapMapping,
+        setNodePosition,
+        setMinimapViewport,
+        refreshMinimapViewport,
+        scrollByDelta,
+        setSurfaceLayout,
         initNodeDrag,
         initSlotConnection,
         initSlotLayout,
@@ -585,6 +813,11 @@ export const getViewportSize = window.veloxdevWorkflow.getViewportSize;
 export const scrollToRatio = window.veloxdevWorkflow.scrollToRatio;
 export const scrollToPosition = window.veloxdevWorkflow.scrollToPosition;
 export const setMinimapMapping = window.veloxdevWorkflow.setMinimapMapping;
+export const setNodePosition = window.veloxdevWorkflow.setNodePosition;
+export const setMinimapViewport = window.veloxdevWorkflow.setMinimapViewport;
+export const refreshMinimapViewport = window.veloxdevWorkflow.refreshMinimapViewport;
+export const scrollByDelta = window.veloxdevWorkflow.scrollByDelta;
+export const setSurfaceLayout = window.veloxdevWorkflow.setSurfaceLayout;
 export const initNodeDrag = window.veloxdevWorkflow.initNodeDrag;
 export const initSlotConnection = window.veloxdevWorkflow.initSlotConnection;
 export const initSlotLayout = window.veloxdevWorkflow.initSlotLayout;

@@ -161,10 +161,16 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
 
     private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Re-render on every property change, not just title/geometry: the execution state
-        // (IsRunning, LastExecutionOrder, RunCount/WaitCount) mutates during a run and must
-        // drive the step badge and the running highlight live. The node view-models raise one
-        // PropertyChanged per VeloxProperty, so this stays cheap and only touches this card.
+        // Skip geometry: Anchor/Size fires every frame while the node is dragged (MoveCommand +
+        // slot re-measure). The position is owned by WorkflowNodeDragBehavior via JS, and the card
+        // does not depend on it, so re-rendering here is pure waste. Everything else re-renders so
+        // the execution state (IsRunning, LastExecutionOrder, RunCount/WaitCount) drives the step
+        // badge and running highlight live during a run.
+        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        {
+            return;
+        }
+
         if (e.PropertyName is "Name" or "Title" or null or "")
         {
             SyncTitle();

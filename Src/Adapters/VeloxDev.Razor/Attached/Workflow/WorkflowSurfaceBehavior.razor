@@ -1,22 +1,32 @@
 @namespace VeloxDev.WorkflowSystem.AttachedBehaviors
 
-<div class="veloxdev-wf-surface">
-    <div id="@ScrollViewerId" class="veloxdev-wf-scroll" @ref="_scroller">
-        <div id="@CanvasId" class="veloxdev-wf-canvas" style="@CanvasStyle" @ref="_canvas">
-            <div class="veloxdev-wf-canvas-content" style="@ContentStyle">
-                @if (ChildContent is not null)
-                {
-                    @ChildContent(new SurfaceCanvas(ContentWidth, ContentHeight))
-                }
+<CascadingValue TValue="SurfaceViewportFeed" Value="_feed">
+    <div class="veloxdev-wf-surface">
+        <div id="@ScrollViewerId" class="veloxdev-wf-scroll" @ref="_scroller">
+            @* Canvas host owns the pixel size (grows via edge expansion) and is set ONLY by JS, so a
+               Blazor re-render can never shrink the canvas under the content. The canvas inside is
+               solid-background only; the grid and axis are separate JS-positioned layers. *@
+            <div class="veloxdev-wf-canvas-host" @ref="_canvasHost">
+                <div id="@CanvasId" class="veloxdev-wf-canvas" style="@CanvasBackgroundStyle" @ref="_canvas">
+                    <div class="veloxdev-wf-grid" @ref="_grid"></div>
+                    <div class="veloxdev-wf-axis veloxdev-wf-axis-x" @ref="_axisX"></div>
+                    <div class="veloxdev-wf-axis veloxdev-wf-axis-y" @ref="_axisY"></div>
+                    <div class="veloxdev-wf-canvas-content" @ref="_content">
+                        @if (ChildContent is not null)
+                        {
+                            @ChildContent(new SurfaceCanvas(ContentWidth, ContentHeight))
+                        }
+                    </div>
+                </div>
             </div>
         </div>
+        @if (GridDecorator is not null && _viewport is not null)
+        {
+            @GridDecorator(_viewport)
+        }
+        @if (Minimap is not null && _viewport is not null)
+        {
+            @Minimap(_viewport)
+        }
     </div>
-    @if (GridDecorator is not null && _viewport is not null)
-    {
-        @GridDecorator(_viewport)
-    }
-    @if (Minimap is not null && _viewport is not null)
-    {
-        @Minimap(_viewport)
-    }
-</div>
+</CascadingValue>

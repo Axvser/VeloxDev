@@ -8,6 +8,10 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    /* Diagram surfaces are not text; block the browser's default selection that a node/canvas
+       drag would otherwise trigger on surrounding content. */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .veloxdev-wf-scroll {
@@ -18,17 +22,71 @@
     cursor: default;
 }
 
+/* Canvas host: the scroll content. Its pixel size is set ONLY by JS (grows via edge expansion),
+   so a Blazor re-render can never shrink the canvas under the content. */
+.veloxdev-wf-canvas-host {
+    position: relative;
+    width: 0;
+    height: 0;
+}
+
 .veloxdev-wf-canvas {
     position: relative;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
     transform-origin: 0 0;
 }
 
-/* Content wrapper: shifted by the negative offset so the canvas can expand left/up. */
+/* Grid layer inside the canvas. The pattern is tiled via background-size (calc from the
+   --veloxdev-gs spacing variable) and shifted via background-position = edge offset + layout
+   offset (world 0). Both set by JS. The layer is canvas-fixed (world-fixed), so it scrolls
+   naturally with the canvas and only re-positions when the canvas edge-expands. */
+.veloxdev-wf-grid {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    background-image:
+        linear-gradient(to right, var(--veloxdev-mgc, #3A3D40) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--veloxdev-mgc, #3A3D40) 1px, transparent 1px),
+        linear-gradient(to right, var(--veloxdev-gc, #2A2D2E) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--veloxdev-gc, #2A2D2E) 1px, transparent 1px);
+    background-size:
+        calc(var(--veloxdev-gs, 40px) * 5) calc(var(--veloxdev-gs, 40px) * 5),
+        calc(var(--veloxdev-gs, 40px) * 5) calc(var(--veloxdev-gs, 40px) * 5),
+        var(--veloxdev-gs, 40px) var(--veloxdev-gs, 40px),
+        var(--veloxdev-gs, 40px) var(--veloxdev-gs, 40px);
+    background-position: 0 0, 0 0, 0 0, 0 0;
+}
+
+/* World-0 axis lines. Positioned by JS at the edge + layout offset. */
+.veloxdev-wf-axis {
+    position: absolute;
+    pointer-events: none;
+    background: var(--veloxdev-ac, #4D4D4D);
+}
+
+.veloxdev-wf-axis-x {
+    top: 0;
+    bottom: 0;
+    width: 2px;
+}
+
+.veloxdev-wf-axis-y {
+    left: 0;
+    right: 0;
+    height: 2px;
+}
+
+/* Content wrapper: shifted by JS (edge expansion) so the canvas can expand left/up. */
 .veloxdev-wf-canvas-content {
     position: absolute;
     left: 0;
     top: 0;
+    z-index: 1;
 }
 
 /* Ruler overlay (grid decorator) — anchored top-left of the surface.

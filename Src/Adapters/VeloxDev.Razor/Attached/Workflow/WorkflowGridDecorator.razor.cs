@@ -11,11 +11,21 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// context and implements <see cref="IWorkflowGridDecorator"/> for API parity with the
 /// XAML adapters.
 /// </summary>
-public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorator
+public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorator, IDisposable
 {
     /// <summary>Gets or sets the surface viewport context pushed by <see cref="WorkflowSurfaceBehavior"/>.</summary>
     [Parameter]
     public SurfaceViewport? Viewport { get; set; }
+
+    /// <summary>
+    /// Gets or sets the surface viewport feed pushed by <see cref="WorkflowSurfaceBehavior"/>. When set,
+    /// the decorator subscribes and re-renders its cheap tick layer on every viewport change without
+    /// dragging the surface's node/link content along.
+    /// </summary>
+    [CascadingParameter]
+    public SurfaceViewportFeed? ViewportFeed { get; set; }
+
+    private SurfaceViewportFeed? _subscribedFeed;
 
     /// <summary>Gets or sets the ruler thickness in pixels.</summary>
     [Parameter]
@@ -76,6 +86,27 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
     private string AxisColorCss => string.IsNullOrEmpty(AxisColor) ? TickColor : AxisColor;
 
     /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        if (ViewportFeed is not null)
+        {
+            _subscribedFeed = ViewportFeed;
+            ViewportFeed.Changed += OnFeedChanged;
+        }
+    }
+
+    private void OnFeedChanged(SurfaceViewport vp)
+    {
+        ScrollOffsetX = vp.ScrollLeft;
+        ScrollOffsetY = vp.ScrollTop;
+        ContentOffsetX = vp.ContentOffsetX;
+        ContentOffsetY = vp.ContentOffsetY;
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <inheritdoc />
     protected override void OnParametersSet()
     {
         base.OnParametersSet();
@@ -86,6 +117,16 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
             ScrollOffsetY = vp.ScrollTop;
             ContentOffsetX = vp.ContentOffsetX;
             ContentOffsetY = vp.ContentOffsetY;
+        }
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_subscribedFeed is not null)
+        {
+            _subscribedFeed.Changed -= OnFeedChanged;
+            _subscribedFeed = null;
         }
     }
 

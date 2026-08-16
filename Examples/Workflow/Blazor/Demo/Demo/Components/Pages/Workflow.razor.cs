@@ -19,7 +19,6 @@ public partial class Workflow : ComponentBase, IDisposable
     private string _agentMessage = "";
     private bool _useStreaming = true;
     private string _canvasLayoutSize = "";
-    private readonly List<IWorkflowNodeViewModel> _subscribedNodes = [];
     private INotifyPropertyChanged? _subscribedVirtualLink;
 
     protected override void OnInitialized()
@@ -40,13 +39,12 @@ public partial class Workflow : ComponentBase, IDisposable
         if (_session.Tree.Layout is INotifyPropertyChanged lp)
             lp.PropertyChanged += OnLayoutPropertyChanged;
         // The VirtualLink raises its own PropertyChanged (Send/Receive/Reset only mutate the
-        // VirtualLink object, not the tree), so subscribe directly to redraw the gesture.
+        // VirtualLink object, not the tree), so subscribe directly to add/remove the gesture view.
         if (_session.Tree.VirtualLink is INotifyPropertyChanged vp)
         {
             vp.PropertyChanged += OnVirtualLinkPropertyChanged;
             _subscribedVirtualLink = vp;
         }
-        SubscribeNodeChanges();
     }
 
     private void UnsubscribeSession()
@@ -64,37 +62,6 @@ public partial class Workflow : ComponentBase, IDisposable
             _subscribedVirtualLink.PropertyChanged -= OnVirtualLinkPropertyChanged;
             _subscribedVirtualLink = null;
         }
-        UnsubscribeNodeChanges();
-    }
-
-    private void SubscribeNodeChanges()
-    {
-        if (_session?.Tree?.Nodes is null) return;
-        foreach (var node in _session.Tree.Nodes)
-        {
-            if (node is INotifyPropertyChanged npc)
-            {
-                npc.PropertyChanged += OnNodePropertyChanged;
-                _subscribedNodes.Add(node);
-            }
-        }
-    }
-
-    private void UnsubscribeNodeChanges()
-    {
-        foreach (var node in _subscribedNodes)
-        {
-            if (node is INotifyPropertyChanged npc)
-                npc.PropertyChanged -= OnNodePropertyChanged;
-        }
-        _subscribedNodes.Clear();
-    }
-
-    private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        // Live node position + link updates while dragging (Anchor/Size changes).
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
-            InvokeAsync(StateHasChanged);
     }
 
     private void UpdateCanvasSize()
@@ -105,16 +72,17 @@ public partial class Workflow : ComponentBase, IDisposable
 
     private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        UpdateCanvasSize();
-        InvokeAsync(StateHasChanged);
+        // Only the canvas size affects the sidebar label. ViewportOffset is written by the surface
+        // on every scroll — re-rendering the page for it would re-render the whole tree each frame.
+        if (e.PropertyName is nameof(CanvasLayout.ActualSize))
+        {
+            UpdateCanvasSize();
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     private void OnNodesOrLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        UnsubscribeNodeChanges();
-        SubscribeNodeChanges();
-        InvokeAsync(StateHasChanged);
-    }
+        => InvokeAsync(StateHasChanged);
 
     private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
         => InvokeAsync(StateHasChanged);
@@ -123,7 +91,14 @@ public partial class Workflow : ComponentBase, IDisposable
         => InvokeAsync(StateHasChanged);
 
     private void OnVirtualLinkPropertyChanged(object? sender, PropertyChangedEventArgs e)
-        => InvokeAsync(StateHasChanged);
+    {
+        // The per-move coordinate changes are handled by the VirtualLink's own TemplateLinkView
+        // subscription; the page only needs to add/remove the gesture view when IsVisible flips.
+        if (e.PropertyName is nameof(IWorkflowLinkViewModel.IsVisible) or null or "")
+        {
+            InvokeAsync(StateHasChanged);
+        }
+    }
 
     private async Task StopWorkflow()
     {
