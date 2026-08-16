@@ -383,12 +383,30 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
             if (e.Touches is null || e.Touches.Length == 0) return;
             var pt = e.Touches[0];
-            if (!GetViewportHitTest(pt.X, pt.Y)) return;
-
             var (l, t, w, h) = GetClampedViewportRect();
-            _dragOffsetX = pt.X - (l + w / 2);
-            _dragOffsetY = pt.Y - (t + h / 2);
-            NavigateToWorld(pt.X - _dragOffsetX, pt.Y - _dragOffsetY);
+            if (w <= 0 || h <= 0) return;
+
+            // The block is the anchor; the viewport follows it (matches the Razor adapter):
+            //  - Pressing ON the block keeps it where it is and aligns the viewport to it.
+            //  - Pressing ELSEWHERE moves the block's center to the cursor, retreating to just
+            //    inside the minimap if that would push the block over an edge.
+            float targetCenterX, targetCenterY;
+            if (GetViewportHitTest(pt.X, pt.Y))
+            {
+                targetCenterX = l + w / 2;
+                targetCenterY = t + h / 2;
+            }
+            else
+            {
+                var tlX = Math.Max(0f, Math.Min(_mmW - w, pt.X - w / 2));
+                var tlY = Math.Max(0f, Math.Min(_mmH - h, pt.Y - h / 2));
+                targetCenterX = tlX + w / 2;
+                targetCenterY = tlY + h / 2;
+            }
+
+            _dragOffsetX = pt.X - targetCenterX;
+            _dragOffsetY = pt.Y - targetCenterY;
+            NavigateToWorld(targetCenterX, targetCenterY);
             _isDragging = true;
 
             SubscribeDragCapture();

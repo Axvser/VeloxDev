@@ -482,13 +482,32 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
 
         var pt = e.GetPosition(this);
         var vpRect = GetViewportRectInMinimap();
+        if (vpRect is null) return;
 
-        if (vpRect is null || !vpRect.Value.Contains(pt)) return;
+        // The block is the anchor; the viewport follows it (matches the Razor adapter):
+        //  - Pressing ON the block keeps it where it is and aligns the viewport to it.
+        //  - Pressing ELSEWHERE moves the block's center to the cursor, retreating to just
+        //    inside the minimap if that would push the block over an edge.
+        double targetCenterX, targetCenterY;
+        if (vpRect.Value.Contains(pt))
+        {
+            targetCenterX = vpRect.Value.X + vpRect.Value.Width / 2;
+            targetCenterY = vpRect.Value.Y + vpRect.Value.Height / 2;
+        }
+        else
+        {
+            var (_, _, mmW, mmH, _) = ComputeTransform(_lastGlobalBounds);
+            var bw = vpRect.Value.Width;
+            var bh = vpRect.Value.Height;
+            var tlX = Math.Max(0, Math.Min(mmW - bw, pt.X - bw / 2));
+            var tlY = Math.Max(0, Math.Min(mmH - bh, pt.Y - bh / 2));
+            targetCenterX = tlX + bw / 2;
+            targetCenterY = tlY + bh / 2;
+        }
 
-        _dragOffsetX = pt.X - (vpRect.Value.X + vpRect.Value.Width / 2);
-        _dragOffsetY = pt.Y - (vpRect.Value.Y + vpRect.Value.Height / 2);
-
-        NavigateToWorld(pt.X - _dragOffsetX, pt.Y - _dragOffsetY);
+        _dragOffsetX = pt.X - targetCenterX;
+        _dragOffsetY = pt.Y - targetCenterY;
+        NavigateToWorld(targetCenterX, targetCenterY);
 
         _isDragging = true;
         e.Pointer.Capture(this);

@@ -159,11 +159,29 @@ public sealed class MinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowMi
         var layout = ComputeLayout();
         if (layout is null) return;
         var l = layout.Value;
-
-        // Grab the viewport at a fixed offset from the cursor. Dragging anywhere on
-        // the minimap keeps that offset, so the viewport follows the pointer.
         var vp = ViewportRect(l);
-        _dragOffset = new Point((int)(e.X - vp.X), (int)(e.Y - vp.Y));
+
+        // The block is the anchor; the viewport follows it (matches the Razor adapter):
+        //  - Pressing ON the block keeps it where it is and aligns the viewport to it.
+        //  - Pressing ELSEWHERE moves the block's center to the cursor, retreating to just
+        //    inside the minimap if that would push the block over an edge.
+        double targetCenterX, targetCenterY;
+        if (vp.Contains(e.Location))
+        {
+            targetCenterX = vp.X + vp.Width / 2;
+            targetCenterY = vp.Y + vp.Height / 2;
+        }
+        else
+        {
+            var tlX = Math.Max(0, Math.Min(Width - vp.Width, e.X - vp.Width / 2));
+            var tlY = Math.Max(0, Math.Min(Height - vp.Height, e.Y - vp.Height / 2));
+            targetCenterX = tlX + vp.Width / 2;
+            targetCenterY = tlY + vp.Height / 2;
+        }
+
+        // Grab the block at a fixed offset from its target center; dragging keeps that offset so
+        // the block follows the pointer (offset ~0 when the press re-centered it on the cursor).
+        _dragOffset = new Point((int)(e.X - targetCenterX), (int)(e.Y - targetCenterY));
         _dragging = true;
         Capture = true;
         UpdateViewportFromPointer(e.X, e.Y, l);
@@ -201,15 +219,14 @@ public sealed class MinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowMi
 
     private void UpdateViewportFromPointer(int x, int y, MinimapLayout l)
     {
-        // Invert the paint mapping (viewport top-left in minimap pixels -> desired
-        // world-space ScrollOffset) through the same centered content-fit transform
-        // the paint uses, matching WPF/Avalonia/WinUI/MAUI/Razor. No content clamp:
-        // the surface grows instead, so the block can be dragged to the minimap edge
-        // and pan the surface into empty space.
-        double vx = x - _dragOffset.X;
-        double vy = y - _dragOffset.Y;
-        double sx = (vx - l.Ox) / l.Scale + l.MinX + ContentOffsetX;
-        double sy = (vy - l.Oy) / l.Scale + l.MinY + ContentOffsetY;
+        // The block's center tracks the cursor (minus the fixed grab offset); the viewport centers
+        // on whatever world point that center maps to, matching WPF/Avalonia/WinUI/MAUI/Razor.
+        // No content clamp: the surface grows instead, so the block can be dragged to the minimap
+        // edge and pan the surface into empty space.
+        double cx = x - _dragOffset.X;
+        double cy = y - _dragOffset.Y;
+        double sx = (cx - l.Ox) / l.Scale + l.MinX - ViewportWidth / 2 + ContentOffsetX;
+        double sy = (cy - l.Oy) / l.Scale + l.MinY - ViewportHeight / 2 + ContentOffsetY;
 
         ViewportScrollRequested?.Invoke(sx, sy);
         Invalidate();
