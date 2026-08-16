@@ -254,6 +254,19 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         _panOffset = new Point((int)Math.Round(-sx), (int)Math.Round(-sy));
         RelayoutAllCards();
 
+        // AutoScrollPosition = Point.Empty 上方的 Scroll 事件会在 _panOffset 更新前触发
+        // SyncMinimap，而它的生效是异步的 —— RelayoutAllCards 里的 SyncMinimap 仍可能读到
+        // 旧的 AutoScrollPosition，把小地图 ScrollOffset 写回旧位置（块看起来"按下不动、
+        // 拖一下才动"）。这里直接把小地图同步到请求的滚动目标，块立刻跟随。
+        if (_minimap is WorkflowBehaviors.IWorkflowMinimapOverlay m)
+        {
+            m.ScrollOffsetX = sx;
+            m.ScrollOffsetY = sy;
+            m.ViewportWidth = ClientSize.Width;
+            m.ViewportHeight = ClientSize.Height;
+            _minimap.Invalidate();
+        }
+
         // 小地图拖动期间鼠标捕获在小地图上，画布未持有 Capture —— Refresh 里
         // host.Capture 的同步重绘分支不会触发，只有异步 Invalidate。高频拖动时
         // WM_PAINT 被 WM_MOUSEMOVE 不断延后，节点旧位置与旧连线来不及擦除形成残影；

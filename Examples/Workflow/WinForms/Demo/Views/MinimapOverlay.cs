@@ -228,8 +228,13 @@ public sealed class MinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowMi
         double sx = (cx - l.Ox) / l.Scale + l.MinX - ViewportWidth / 2 + ContentOffsetX;
         double sy = (cy - l.Oy) / l.Scale + l.MinY - ViewportHeight / 2 + ContentOffsetY;
 
-        ViewportScrollRequested?.Invoke(sx, sy);
+        // Reflect the target immediately so the block moves on the very first press/drag event,
+        // before the canvas round-trip applies (the canvas sync then confirms/settles it).
+        ScrollOffsetX = sx;
+        ScrollOffsetY = sy;
         Invalidate();
+
+        ViewportScrollRequested?.Invoke(sx, sy);
     }
 
     /// <summary>
