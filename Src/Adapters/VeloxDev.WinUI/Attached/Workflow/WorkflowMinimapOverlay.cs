@@ -403,8 +403,11 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
         var l = ox + (vp.Left - gb.Left) * sc;
         var t = oy + (vp.Top - gb.Top) * sc;
-        var w = Math.Max(2.0, vp.Width * sc);
-        var h = Math.Max(2.0, vp.Height * sc);
+        // Clamp the block to the minimap so it never overflows when the viewport
+        // is larger than the fitted content (small workflows). Position clamping
+        // below then stays meaningful and the block keeps tracking the scroll.
+        var w = Math.Min(mmW, Math.Max(2.0, vp.Width * sc));
+        var h = Math.Min(mmH, Math.Max(2.0, vp.Height * sc));
         l = Math.Max(0, Math.Min(mmW - w, l));
         t = Math.Max(0, Math.Min(mmH - h, t));
         return new Rect(l, t, w, h);
@@ -589,8 +592,10 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
             }
             var vpx = ox + (vp.Left - gb.Left) * sc;
             var vpy = oy + (vp.Top - gb.Top) * sc;
-            var vpw = Math.Max(2.0, vp.Width * sc);
-            var vph = Math.Max(2.0, vp.Height * sc);
+            // Same clamp as GetViewportRectInMinimap: keep the block inside the
+            // minimap when the viewport exceeds the fitted content.
+            var vpw = Math.Min(mmW, Math.Max(2.0, vp.Width * sc));
+            var vph = Math.Min(mmH, Math.Max(2.0, vp.Height * sc));
             vpx = Math.Max(0, Math.Min(mmW - vpw, vpx));
             vpy = Math.Max(0, Math.Min(mmH - vph, vpy));
             SetLeft(_viewportRect, vpx);

@@ -8,8 +8,7 @@
              behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
              behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
-             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
-             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
+             behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
     <UserControl.Resources>
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView Width="{Binding Size.Width}"
@@ -55,6 +54,13 @@
                               HorizontalAlignment="Right"
                               VerticalAlignment="Top"
                               Margin="0,12,12,0"
-                              ScrollViewerName="PART_ScrollViewer" />
+                              ScrollViewerName="PART_ScrollViewer"
+                              WorkflowTree="{Binding}"
+                              ScrollOffsetX="{Binding ScrollOffsetX, ElementName=PART_GridDecorator}"
+                              ScrollOffsetY="{Binding ScrollOffsetY, ElementName=PART_GridDecorator}"
+                              ContentOffsetX="{Binding ContentOffsetX, ElementName=PART_GridDecorator}"
+                              ContentOffsetY="{Binding ContentOffsetY, ElementName=PART_GridDecorator}"
+                              ViewportWidth="{Binding ActualWidth, ElementName=PART_SurfaceBorder}"
+                              ViewportHeight="{Binding ActualHeight, ElementName=PART_SurfaceBorder}" />
     </Grid>
 </UserControl>
