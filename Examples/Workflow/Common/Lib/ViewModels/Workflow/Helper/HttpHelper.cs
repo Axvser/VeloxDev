@@ -219,11 +219,15 @@ namespace Demo.ViewModels.Workflow.Helper
                 return;
             }
 
-            var executionTrace = context.RecordExecution($"{mode} {_viewModel.Title}", out var executionOrder);
+            // 非编译器路径的全局单调序号，只用于执行日志的轨迹文本。节点的编号徽标
+            // （LastExecutionOrder / LastExecutionTrace）是编译机器的专属顺序（CompileContext.Order），
+            // 独立启动（EXEC/RECV）只记录活动日志，绝不扰动编译编号。
+            var executionOrder = (_viewModel.Parent as TreeViewModel)?.NextExecutionSequence()
+                ?? context.NextOrder();
+            var executionTrace = context.RecordExecution($"{mode} {_viewModel.Title}", out _, executionOrder);
             var stopwatch = Stopwatch.StartNew();
             try
             {
-                await UpdateExecutionTraceAsync(executionOrder, executionTrace);
                 await AppendExecutionLogAsync(executionTrace);
 
                 await UpdateViewModelStateAsync(
@@ -298,22 +302,6 @@ namespace Demo.ViewModels.Workflow.Helper
                 {
                     tree.RefreshWorkflowRunningState();
                 }
-            }
-
-            return RunOnUiThreadAsync(UpdateState);
-        }
-
-        private Task UpdateExecutionTraceAsync(int executionOrder, string executionTrace)
-        {
-            if (_viewModel is null)
-            {
-                return Task.CompletedTask;
-            }
-
-            void UpdateState()
-            {
-                _viewModel.LastExecutionOrder = executionOrder;
-                _viewModel.LastExecutionTrace = executionTrace;
             }
 
             return RunOnUiThreadAsync(UpdateState);

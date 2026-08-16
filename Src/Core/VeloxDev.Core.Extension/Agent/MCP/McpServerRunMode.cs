@@ -49,4 +49,13 @@ public enum McpServerRunMode
     /// The file must have execute permission (Unix) or be a recognized executable (Windows).
     /// </summary>
     Exe,
+
+    /// <summary>
+    /// <b>Remote HTTP</b> — connects to a remote MCP server over HTTP (Streamable HTTP, with
+    /// SSE fallback for legacy servers) using <see cref="McpServerConfiguration.Endpoint"/>.
+    /// No local process is launched. Optional <see cref="McpServerConfiguration.Headers"/>
+    /// (e.g. Bearer token) and OAuth 2.0 (Authorization Code + PKCE, via
+    /// <see cref="McpServerConfiguration.OAuthClientId"/>/<see cref="McpServerConfiguration.OAuthClientSecret"/>) are supported.
+    /// </summary>
+    Http,
 }

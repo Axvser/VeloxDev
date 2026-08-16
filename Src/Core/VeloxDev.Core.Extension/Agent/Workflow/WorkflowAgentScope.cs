@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.Workflow.Functions;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.AI.Workflow;
@@ -25,7 +26,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     private const string SystemName = "Workflow";
 
     internal static readonly Type[] FrameworkEnums =
-        [typeof(SlotChannel), typeof(SlotState)];
+        [typeof(SlotChannel), typeof(SlotState), typeof(RouterCompileMode)];
 
     internal static bool IsFrameworkEnum(Type t) => FrameworkEnums.Contains(t);
 
@@ -37,7 +38,10 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     internal static readonly Type[] FrameworkData =
         [typeof(Anchor), typeof(Offset), typeof(Size),
-         typeof(ITaskContext), typeof(TaskContext)];
+         typeof(ITaskContext), typeof(TaskContext),
+         // Compiler contexts: rendered as data so the Agent understands compile identity
+         // (Order/ChainIndex/Offset) and the runtime session contract during compiled runs.
+         typeof(ICompileContext), typeof(IRuntimeContext)];
 
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerEnums = [];
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerInterfaces = [];
@@ -604,11 +608,15 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         var linkBase     = typeof(IWorkflowLinkViewModel);
         var treeBase     = typeof(IWorkflowTreeViewModel);
 
-        // Pass 1: register components and [AgentContext] data types
+        // Pass 1: register components and [AgentContext] data types.
+        // Only types actually registered here are marked in _globallyDiscoveredTypes.
+        // Enums / interfaces / data referenced by component members are marked by TryRegister*
+        // during Pass 2 — if Pass 1 marked every concrete type, Pass 2's "already registered?"
+        // guard would reject them all and no member-inferred type would ever register.
         foreach (var type in assembly.GetTypes())
         {
             if (type.IsAbstract || type.IsInterface) continue;
-            if (!_globallyDiscoveredTypes.Add(type)) continue; // already discovered by a prior call
+            if (_globallyDiscoveredTypes.Contains(type)) continue; // already registered by a prior call
 
             bool isWorkflowComponent = nodeBase.IsAssignableFrom(type)
                 || slotBase.IsAssignableFrom(type)
@@ -616,9 +624,33 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
                 || treeBase.IsAssignableFrom(type);
 
             if (isWorkflowComponent)
-                WithComponents([type], lang);
-            else if (type.GetCustomAttributes<AgentContextAttribute>().Any())
+            {
+                // Framework built-ins (e.g. NodeDefaultViewModel when scanning VeloxDev.Core)
+                // are never "customer" components — skip them so they do not pollute the
+                // customer context or get deep-scanned as if they were host-authored.
+                if (!IsFrameworkBuiltin(type))
+                {
+                    _globallyDiscoveredTypes.Add(type);
+                    WithComponents([type], lang);
+                }
+            }
+            else if (type.IsEnum && type.GetCustomAttributes<AgentContextAttribute>().Any())
+            {
+                // [AgentContext]-annotated enums are rendered by GetEnumContext — never as data
+                // (GetDataContext would present an enum's members as properties). Register them
+                // as enums here so their documentation surfaces even if no component member
+                // references them. Unannotated enums are discovered during Pass 2 member scanning.
+                if (!IsFrameworkBuiltin(type))
+                {
+                    _globallyDiscoveredTypes.Add(type);
+                    WithEnums([type], lang);
+                }
+            }
+            else if (type.GetCustomAttributes<AgentContextAttribute>().Any() && !IsFrameworkBuiltin(type))
+            {
+                _globallyDiscoveredTypes.Add(type);
                 WithData([type], lang);
+            }
         }
 
         // Pass 2: deep-scan every registered component to infer Enums / Interfaces / Data
@@ -778,7 +810,18 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         foreach (var fi in FrameworkInterfaces) if (fi == type) return true;
         foreach (var fc in FrameworkComponents) if (fc == type) return true;
         var ns = type.Namespace ?? string.Empty;
-        return ns.StartsWith("System") || ns.StartsWith("Microsoft") || ns.StartsWith("VeloxDev.WorkflowSystem");
+        return ns.StartsWith("System")
+            || ns.StartsWith("Microsoft")
+            || ns.StartsWith("VeloxDev.WorkflowSystem")
+            // Framework MVVM plumbing (VeloxDev.MVVM: IVeloxCommand, base view models, …) must
+            // never surface as a customer interface when a component's command properties are
+            // deep-scanned.
+            || ns.StartsWith("VeloxDev.MVVM")
+            // Compiler/engine plumbing under VeloxDev.Core.WorkflowSystem (e.g. CompilerEx enums
+            // like RouterCompileMode, RuntimeContext, CompileContext) is framework-internal — it
+            // must never surface in the Agent's customer context. Note this is a distinct prefix
+            // from VeloxDev.WorkflowSystem (the public component namespace) — both are excluded.
+            || ns.StartsWith("VeloxDev.Core.WorkflowSystem");
     }
 
     /// <summary>

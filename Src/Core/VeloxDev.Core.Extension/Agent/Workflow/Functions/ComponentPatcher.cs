@@ -60,15 +60,18 @@ public static class ComponentPatcher
 
         var type = target.GetType();
 
-        // The patch must be undoable, which requires the component to be mounted in a Tree
-        // (undo history lives on the tree). Reject unmounted targets explicitly instead of
-        // mutating state outside the command/lifecycle pipeline.
+        // Reject unmounted targets explicitly instead of mutating state outside the
+        // command/lifecycle pipeline: an unmounted component has no parent chain, so the
+        // change would bypass lifecycle hooks and view synchronization and be invisible.
+        // (Undo is NOT the concern here — undo is Core's command pipeline's job. Direct
+        // property writes are intentionally non-undoable; changes that must be undoable go
+        // through their backing command, which the command-backed rejection below routes to.)
         var tree = ResolveTree(target);
         if (tree is null)
             return JsonConvert.SerializeObject(new
             {
                 status = "error",
-                message = "Patch rejected: the target is not mounted in a Tree, so the change cannot be recorded in undo history. Mount the component first (e.g. create and add the node), then retry.",
+                message = "Patch rejected: the target is not mounted in a Tree (no parent chain), so the change would bypass the component lifecycle and view synchronization. Mount the component first (e.g. create and add the node), then retry.",
             });
 
         var results = new JArray();
@@ -176,11 +179,11 @@ public static class ComponentPatcher
             }
         }
 
-        // Properties are set directly (already done above). The Agent toolkit must NOT produce
-        // Submit(WorkflowActionPair) entries — undo/redo is exclusively owned by Core's commands.
-        // Direct property writes that need to be undoable must go through their backing command
-        // (e.g. Anchor → SetAnchorCommand), which the command-backed-property rejection above
-        // already routes there. Unmounted-target rejection (tree is null) is still enforced above.
+        // Properties are written directly (done above). This is intentionally non-undoable:
+        // undo/redo is exclusively owned by Core's IVeloxCommand pipeline. A patch that must be
+        // undoable is rejected above and routed to its backing command (e.g. Anchor →
+        // SetAnchorCommand). Never wrap these direct writes in Submit(WorkflowActionPair).
+        // Unmounted-target rejection (tree is null) is still enforced above.
 
         return JsonConvert.SerializeObject(new
         {

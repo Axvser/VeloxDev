@@ -80,6 +80,8 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     }
 
     /// <summary>编译模式：Static 只返回当前选中分支；Dynamic 返回 True/False 全部分支。</summary>
+    [AgentContext(AgentLanguages.Chinese, "编译模式：Static 编译期锁定当前路由条件（未选中分支被剪除，其下游节点 Order = -1 绝对停止）；Dynamic 运行期按数据负载重新路由（True/False 分支全存活）。通过 PatchNodeProperties 设置，如 {\"CompileMode\":\"Static\"}。")]
+    [AgentContext(AgentLanguages.English, "Compile mode: Static locks the current routing condition at compile time (the unselected branch is pruned; its downstream nodes get Order = -1 / absolute stop); Dynamic re-routes at runtime from the data payload (both True/False branches stay alive). Set via PatchNodeProperties, e.g. {\"CompileMode\":\"Static\"}.")]
     [VeloxProperty] private RouterCompileMode _compileMode = RouterCompileMode.Dynamic;
 
     /// <summary>编译模式下拉数据源。</summary>

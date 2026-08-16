@@ -19,7 +19,7 @@
 		<PackageReference Include="CliWrap" Version="3.10.2" />
 		<PackageReference Include="Microsoft.Agents.AI" Version="1.13.0" />
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.8.0" />
-		<PackageReference Include="ModelContextProtocol" Version="1.4.0" />
+		<PackageReference Include="ModelContextProtocol" Version="2.2.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<ProjectReference Include="../VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
 		<PackageReference Include="VeloxDev.Core" Version="7.0.0" Condition="'$(Configuration)' != 'Debug'" />
@@ -40,6 +40,10 @@
 	  <EmbeddedResource Include="Resources\**\*">
 		<WithCulture>false</WithCulture>
 	  </EmbeddedResource>
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="VeloxDev.Core.Extension.Test" />
 	</ItemGroup>
 
 </Project>

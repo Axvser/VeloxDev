@@ -24,8 +24,8 @@ public class BoolSelectorHelper : NodeHelper<BoolSelectorNodeViewModel>
             : Component.Condition;
 
         Component.LastRouted = condition ? "→ True" : "→ False";
-        context.RecordExecution(Component.LastRouted, out var order);
-        Component.LastExecutionOrder = order;
+        // 只记路由轨迹；不写 LastExecutionOrder —— 编号徽标是编译机器专属，非编译器启动不扰动。
+        context.RecordExecution(Component.LastRouted, out _);
 
         // 自动向下游传递（AutoBroadcast，默认 true）：沿全部输出槽（True/False）扇出到下游。
         if (Component.AutoBroadcast)

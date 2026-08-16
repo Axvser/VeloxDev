@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
+using ModelContextProtocol.Authentication;
 using ModelContextProtocol.Client;
 
 namespace VeloxDev.AI.MCP;
@@ -56,6 +57,68 @@ public class McpScope
         return this;
     }
 
+    /// <summary>
+    /// 全局连接超时（仅 Http 模式）。作为远程服务器的传输层连接超时 + MCP 初始化超时，并由
+    /// 宿主侧 CTS 硬兜底（SDK 2.x 对部分远程服务器的内部超时可能失灵——见 csharp-sdk#784）。
+    /// 逐服务器可用 <see cref="McpServerConfiguration.ConnectionTimeout"/> 覆盖。
+    /// </summary>
+    public McpScope WithConnectionTimeout(TimeSpan? timeout)
+    {
+        ConnectionTimeout = timeout;
+        return this;
+    }
+
+    internal TimeSpan? ConnectionTimeout { get; private set; }
+
+    // ── Global bindable status ─────────────────────────────────────────────
+
+    /// <summary>
+    /// 全局可绑定的服务器状态视图模型。宿主 UI 绑定 <see cref="McpStatusViewModel.Servers"/> 以展示
+    /// 每个服务器的存活/安装中/连接中/错误状态。<see cref="LoadAsync"/> 过程中实时驱动。
+    /// </summary>
+    public McpStatusViewModel Status { get; } = new();
+
+    /// <summary>
+    /// UI 线程上下文（可选）。注册后所有状态更新会 marshal 到该上下文，供 WPF/Avalonia 等
+    /// UI 线程绑定的宿主使用；未注册时在调用方线程更新。
+    /// </summary>
+    public McpScope WithSynchronizationContext(SynchronizationContext? context)
+    {
+        UIContext = context;
+        return this;
+    }
+
+    internal SynchronizationContext? UIContext { get; private set; }
+
+    /// <summary>把状态更新 marshal 到 UI 线程（若已注册且当前不在该线程上）。</summary>
+    private void UpdateStatus(Action update)
+    {
+        var ui = UIContext;
+        if (ui is null || ReferenceEquals(ui, SynchronizationContext.Current))
+        {
+            update();
+            return;
+        }
+        ui.Post(_ => update(), null);
+    }
+
+    // ── Remote (Http) OAuth redirect ─────────────────────────────────────────
+
+    private AuthorizationRedirectDelegate? _oauthAuthorizationRedirect;
+
+    /// <summary>
+    /// Registers the OAuth authorization-redirect handler for remote (<see cref="McpServerRunMode.Http"/>)
+    /// servers. The handler receives the <paramref name="authorizationUri"/> to open in the user's browser
+    /// and the expected <paramref name="redirectUri"/>, waits for authorization, and returns the final
+    /// redirect URL carrying the auth code (as a string). When not set, the MCP SDK's default console-input
+    /// handler is used (headless scenarios should always register this). Replaces any previously registered handler.
+    /// </summary>
+    public McpScope WithOAuthAuthorizationRedirect(Func<Uri, Uri, CancellationToken, Task<string>> handler)
+    {
+        _oauthAuthorizationRedirect = handler is null ? null : new AuthorizationRedirectDelegate(handler);
+        return this;
+    }
+
     // ── Execution ──────────────────────────────────────────────────────────
 
     public async Task<AITool[]> LoadAsync(
@@ -67,28 +130,72 @@ public class McpScope
 
         var allTools = new List<AITool>();
 
-        foreach (var config in servers)
+        UpdateStatus(() => Status.SetLoading(true));
+        try
         {
-            if (config is null) continue;
-
-            try
+            foreach (var config in servers)
             {
-                if (config.RunMode == McpServerRunMode.Npm)
-                    await EnsureNpmPackageAsync(config.Package, config.Version, mcpRoot, ct);
-                else if (config.RunMode == McpServerRunMode.Pip)
-                    await EnsurePipPackageAsync(config.Package, config.Version, mcpRoot, ct);
+                if (config is null) continue;
 
-                var tools = await ConnectServerAsync(config, mcpRoot, ct);
-                allTools.AddRange(tools);
+                var status = TrackServer(config);
+                try
+                {
+                    // 本地模式：先安装/准备运行时（Installing），再连接（Connecting）。
+                    if (config.RunMode is McpServerRunMode.Npm or McpServerRunMode.Pip)
+                    {
+                        SetServerState(status, McpServerStatus.Installing);
+                        if (config.RunMode == McpServerRunMode.Npm)
+                            await EnsureNpmPackageAsync(config.Package, config.Version, mcpRoot, ct);
+                        else
+                            await EnsurePipPackageAsync(config.Package, config.Version, mcpRoot, ct);
+                    }
+
+                    SetServerState(status, McpServerStatus.Connecting);
+                    var tools = await ConnectServerAsync(config, mcpRoot, ct);
+
+                    UpdateStatus(() =>
+                    {
+                        status.ToolCount = tools.Length;
+                        status.State = McpServerStatus.Connected;
+                    });
+                    allTools.AddRange(tools);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    UpdateStatus(() =>
+                    {
+                        status.Error = ex.Message;
+                        status.State = McpServerStatus.Error;
+                    });
+                    ServerError?.Invoke(config, ex);
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                ServerError?.Invoke(config, ex);
-            }
+        }
+        finally
+        {
+            UpdateStatus(() => Status.SetLoading(false));
         }
 
         return [.. allTools];
     }
+
+    // ── Status driving helpers ─────────────────────────────────────────────
+
+    private McpServerStatusViewModel TrackServer(McpServerConfiguration config)
+    {
+        var status = new McpServerStatusViewModel
+        {
+            Name = config.Name,
+            Description = config.Description,
+            RunMode = config.RunMode,
+            Endpoint = config.Endpoint,
+        };
+        UpdateStatus(() => Status.Track(status));
+        return status;
+    }
+
+    private void SetServerState(McpServerStatusViewModel status, McpServerStatus state)
+        => UpdateStatus(() => status.State = state);
 
     // ── Runtime directory helpers ──────────────────────────────────────────
 
@@ -199,8 +306,44 @@ public class McpScope
 
     // ── MCP protocol connection ────────────────────────────────────────────
 
-    private static async Task<AITool[]> ConnectServerAsync(
+    private async Task<AITool[]> ConnectServerAsync(
         McpServerConfiguration config, string mcpRoot, CancellationToken ct)
+    {
+        var transport = config.RunMode == McpServerRunMode.Http
+            ? (IClientTransport)CreateHttpTransport(config)
+            : CreateStdioTransport(config, mcpRoot);
+
+        var effectiveTimeout = config.ConnectionTimeout ?? ConnectionTimeout;
+
+        // 宿主侧硬兜底：SDK 2.x 对部分远程服务器的内部超时可能失灵（csharp-sdk#784），
+        // 用 linked CTS 保证连接/初始化不无限挂起。仅当是我们自己的超时触发（而非调用方
+        // 取消）时，包装成 TimeoutException 交回 LoadAsync 按服务器错误处理。
+        using var timeoutCts = effectiveTimeout is { } t && config.RunMode == McpServerRunMode.Http
+            ? CancellationTokenSource.CreateLinkedTokenSource(ct)
+            : null;
+        if (timeoutCts is not null)
+            timeoutCts.CancelAfter(effectiveTimeout!.Value);
+
+        var connectCt = timeoutCts?.Token ?? ct;
+        var options = effectiveTimeout is { } to && config.RunMode == McpServerRunMode.Http
+            ? new McpClientOptions { InitializationTimeout = to }
+            : null;
+
+        try
+        {
+            var client = await McpClient.CreateAsync(transport, options, null, connectCt);
+            var tools = await client.ListToolsAsync();
+            return [.. tools.Cast<AITool>()];
+        }
+        catch (OperationCanceledException) when (
+            timeoutCts is { IsCancellationRequested: true } && !ct.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"MCP server '{config.Name}' connection timed out after {effectiveTimeout}.");
+        }
+    }
+
+    private static IClientTransport CreateStdioTransport(McpServerConfiguration config, string mcpRoot)
     {
         var (cmd, args) = config.RunMode switch
         {
@@ -212,16 +355,62 @@ public class McpScope
             _                       => BuildNpmArgs(config, mcpRoot),
         };
 
-        var client = await McpClient.CreateAsync(new StdioClientTransport(
-            new StdioClientTransportOptions
-            {
-                Name = config.Name,
-                Command = cmd,
-                Arguments = [.. args],
-            }));
+        return new StdioClientTransport(new StdioClientTransportOptions
+        {
+            Name = config.Name,
+            Command = cmd,
+            Arguments = [.. args],
+        });
+    }
 
-        var tools = await client.ListToolsAsync();
-        return [.. tools.Cast<AITool>()];
+    /// <summary>
+    /// Builds an HTTP (Streamable HTTP, SSE fallback) client transport for a remote
+    /// <see cref="McpServerRunMode.Http"/> server. The 2-arg transport constructor owns its own
+    /// <see cref="HttpClient"/>; extra headers come from <see cref="HttpClientTransportOptions.AdditionalHeaders"/>.
+    /// </summary>
+    internal HttpClientTransport CreateHttpTransport(McpServerConfiguration config)
+        => new(BuildHttpTransportOptions(config), null);
+
+    /// <summary>
+    /// Builds the <see cref="HttpClientTransportOptions"/> for a remote server: endpoint, custom
+    /// headers, and (when OAuth credentials are configured) <see cref="ClientOAuthOptions"/> wired to
+    /// the host's <see cref="WithOAuthAuthorizationRedirect"/> handler.
+    /// </summary>
+    internal HttpClientTransportOptions BuildHttpTransportOptions(McpServerConfiguration config)
+    {
+        if (string.IsNullOrWhiteSpace(config.Endpoint))
+            throw new InvalidOperationException($"MCP Http run mode requires an Endpoint URL. Server '{config.Name}' has none.");
+
+        var options = new HttpClientTransportOptions
+        {
+            Endpoint = new Uri(config.Endpoint),
+            Name = config.Name,
+        };
+
+        if (config.Headers is { Count: > 0 })
+            options.AdditionalHeaders = config.Headers;
+
+        if (config.OAuthClientId is not null || config.OAuthClientSecret is not null || config.OAuthRedirectUri is not null)
+        {
+            options.OAuth = new ClientOAuthOptions
+            {
+                ClientId = config.OAuthClientId ?? string.Empty,
+                ClientSecret = config.OAuthClientSecret,
+                RedirectUri = config.OAuthRedirectUri is { } ru ? new Uri(ru) : null,
+                Scopes = config.OAuthScopes is { Length: > 0 } ? [.. config.OAuthScopes] : null,
+                AuthorizationRedirectDelegate = _oauthAuthorizationRedirect,
+            };
+        }
+
+        // 超时（逐服务器覆盖全局）、传输模式、会话所有权——均可选，缺省用 SDK 默认。
+        if ((config.ConnectionTimeout ?? ConnectionTimeout) is { } timeout)
+            options.ConnectionTimeout = timeout;
+        if (config.TransportMode is { } mode)
+            options.TransportMode = mode;
+        if (config.OwnsSession is { } owns)
+            options.OwnsSession = owns;
+
+        return options;
     }
 
     // ── npm: npm install + node ────────────────────────────────────────────

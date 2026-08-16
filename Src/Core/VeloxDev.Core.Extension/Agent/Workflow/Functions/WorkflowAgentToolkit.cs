@@ -9,6 +9,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
@@ -65,7 +66,10 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             T(GetLinkDetail, nameof(GetLinkDetail)),
             T(ListCreatableTypes, nameof(ListCreatableTypes)),
             T(ValidateWorkflow, nameof(ValidateWorkflow)),
-            T(GetFullTopology, nameof(GetFullTopology)));
+            T(GetFullTopology, nameof(GetFullTopology)),
+            T(CompileWorkflow, nameof(CompileWorkflow)),
+            T(GetCompileStatus, nameof(GetCompileStatus)),
+            T(GetExecutionLog, nameof(GetExecutionLog)));
 
         // ── State tracking / diff / dirty ──
         Add(WorkflowToolCategory.State,
@@ -105,7 +109,10 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             T(ExecuteNode, nameof(ExecuteNode)),
             T(ExecuteNodes, nameof(ExecuteNodes)),
             T(BroadcastNode, nameof(BroadcastNode)),
-            T(ReverseBroadcastNode, nameof(ReverseBroadcastNode)));
+            T(ReverseBroadcastNode, nameof(ReverseBroadcastNode)),
+            // Chain-level entry: drives the compiled graph with the execution engine
+            // (the demo's Run path). Distinct from ExecuteNode (node-level EXEC).
+            T(RunCompiledWorkflow, nameof(RunCompiledWorkflow)));
 
         // ── Generic command execution (gated by WithAllowedGenericCommands) ──
         Add(WorkflowToolCategory.Command,
@@ -244,6 +251,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         "GetEnumSlotByValue", "GetLinkDetail", "GetNodeStatistics", "ListCreatableTypes",
         "ValidateWorkflow", "SearchForward", "SearchReverse", "SearchAllRelative",
         "IsConnected", "FindPath", "RequestSelection", "RequestConfirmation",
+        "CompileWorkflow", "GetCompileStatus", "GetExecutionLog",
     };
 
     /// <summary>
@@ -1764,356 +1772,56 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return result.ToString(Formatting.None);
     }
 
-    // ────────────────────────── Layout Functions ──────────────────────────
+    // ────────────────────────── Chain Execution (Compiler) ──────────────────────────
 
-    [Description("Aligns nodes to a common edge or center. Alignment: 'left','right','top','bottom','centerH','centerV'.")]
-    private async Task<string> AlignNodes(
-        [Description("JSON array of node indices, e.g. [0,1,2].")] string nodeIndicesJson,
-        [Description("Alignment: 'left','right','top','bottom','centerH','centerV'.")] string alignment,
+    /// <summary>
+    /// Compiles the sub-graph reachable from a start node (typically a controller) and runs it
+    /// through the execution engine (<see cref="CompilerEngine"/>), exactly like the demo's Run
+    /// button. The engine drives the CHAIN: it injects a <see cref="RuntimeContext"/> session into
+    /// every <see cref="IRuntimeAware"/> node, selects branches via <see cref="ICompileTimeRouter"/>,
+    /// and handles redirects — the node's own ReceiveAsync executes in "compiled-step" mode and does
+    /// NOT auto-broadcast (the engine owns downstream dispatch). This is the chain-level entry,
+    /// distinct from <see cref="ExecuteNode"/> (node-level EXEC via ReceiveCommand).
+    /// </summary>
+    [Description("Runs the compiled workflow (chain-level execution) from a start node, typically a controller. Compiles the reachable sub-graph, creates a runtime session (RuntimeContext), and drives the whole chain via the execution engine — the same entry the demo's Run button uses. Nodes execute their ReceiveAsync with an IRuntimeContext (compiled-step semantics; no auto-broadcast — the engine drives the chain). Returns the session outcome: runStatus (Completed/Stopped), execution log, final data, attempts, and whether it ended with an error. DIFFERENT from ExecuteNode, which executes a single node via ReceiveCommand (node-level EXEC). Disabled by default: requires WithAllowNodeExecution(true).")]
+    private async Task<string> RunCompiledWorkflow(
+        [Description("Node index of the compile entry point (usually a controller).")] int startNodeIndex,
+        [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,
         CancellationToken cancellationToken = default)
     {
-        _ = cancellationToken; // Unused; alignment is computed and applied node-by-node.
-        return await Task.FromResult(Error("AlignNodes is no longer provided. Move each node individually via MoveNode/SetNodePosition (each one SetAnchorCommand).")).ConfigureAwait(false);
+        if (!_scope.AllowNodeExecution)
+            return Error("RunCompiledWorkflow is disabled by host policy. The host must enable node execution via WithAllowNodeExecution(true).");
+        if (!TryGetNode(startNodeIndex, out var node, out var error)) return error;
+
+        try
+        {
+            var compiler = new CompilerViewModel();
+            var graphs = await compiler.CompileAsync(node!).ConfigureAwait(false);
+            if (graphs.Count == 0)
+                return Error("Compile produced no graphs from this start node.");
+
+            var context = new RuntimeContext { Data = seed };
+            await new CompilerEngine().RunAsync(graphs[0], context, cancellationToken).ConfigureAwait(false);
+
+            return new JObject
+            {
+                ["status"] = "ok",
+                ["runStatus"] = context.Status,
+                ["endedWithError"] = context.EndedWithError,
+                ["attempts"] = context.Attempt,
+                ["data"] = context.Data is not null ? JToken.FromObject(context.Data) : JValue.CreateNull(),
+                ["logs"] = new JArray(context.Logs),
+            }.ToString(Formatting.None);
+        }
+        catch (OperationCanceledException)
+        {
+            return Error("Run was cancelled.");
+        }
+        catch (Exception ex)
+        {
+            return Error($"Run failed: {ex.Message}");
+        }
     }
-#if false
-    private async Task<string> AlignNodes_Removed(
-        [Description("JSON array of node indices, e.g. [0,1,2].")] string nodeIndicesJson,
-        [Description("Alignment: 'left','right','top','bottom','centerH','centerV'.")] string alignment,
-        CancellationToken cancellationToken = default)
-    {
-        int[] indices;
-        try { indices = [.. JArray.Parse(nodeIndicesJson).Select(t => t.Value<int>())]; }
-        catch (Exception ex) { return Error($"Invalid JSON array: {ex.Message}"); }
-
-        var nodes = new List<IWorkflowNodeViewModel>();
-        foreach (var idx in indices)
-        {
-            if (idx < 0 || idx >= Tree.Nodes.Count) return Error($"Index {idx} out of range.");
-            nodes.Add(Tree.Nodes[idx]);
-        }
-        if (nodes.Count < 2) return Error("Need at least 2 nodes to align.");
-
-        var changes = new List<(IWorkflowNodeViewModel Node, Anchor NewAnchor)>();
-        switch (alignment.ToLowerInvariant())
-        {
-            case "left":
-                var minX = nodes.Min(n => n.Anchor.Horizontal);
-                foreach (var n in nodes) changes.Add((n, new Anchor(minX, n.Anchor.Vertical, n.Anchor.Layer)));
-                break;
-            case "right":
-                var maxRight = nodes.Max(n => n.Anchor.Horizontal + n.Size.Width);
-                foreach (var n in nodes) changes.Add((n, new Anchor(maxRight - n.Size.Width, n.Anchor.Vertical, n.Anchor.Layer)));
-                break;
-            case "top":
-                var minY = nodes.Min(n => n.Anchor.Vertical);
-                foreach (var n in nodes) changes.Add((n, new Anchor(n.Anchor.Horizontal, minY, n.Anchor.Layer)));
-                break;
-            case "bottom":
-                var maxBottom = nodes.Max(n => n.Anchor.Vertical + n.Size.Height);
-                foreach (var n in nodes) changes.Add((n, new Anchor(n.Anchor.Horizontal, maxBottom - n.Size.Height, n.Anchor.Layer)));
-                break;
-            case "centerh":
-                var avgX = nodes.Average(n => n.Anchor.Horizontal + n.Size.Width / 2);
-                foreach (var n in nodes) changes.Add((n, new Anchor(avgX - n.Size.Width / 2, n.Anchor.Vertical, n.Anchor.Layer)));
-                break;
-            case "centerv":
-                var avgY = nodes.Average(n => n.Anchor.Vertical + n.Size.Height / 2);
-                foreach (var n in nodes) changes.Add((n, new Anchor(n.Anchor.Horizontal, avgY - n.Size.Height / 2, n.Anchor.Layer)));
-                break;
-            default:
-                return Error($"Unknown alignment '{alignment}'. Valid: left, right, top, bottom, centerH, centerV.");
-        }
-        return await ApplyAnchorLayoutAsync($"Aligned {nodes.Count} nodes by '{alignment}'", changes, cancellationToken).ConfigureAwait(false);
-    }
-#endif
-
-    [Description("Evenly distributes nodes along an axis. Axis: 'horizontal' or 'vertical'. Nodes are sorted by current position and spacing is equalized.")]
-    private async Task<string> DistributeNodes(
-        [Description("JSON array of node indices, e.g. [0,1,2].")] string nodeIndicesJson,
-        [Description("Axis: 'horizontal' or 'vertical'.")] string axis,
-        CancellationToken cancellationToken = default)
-    {
-        _ = cancellationToken; // Unused; distribution is computed and applied node-by-node.
-        return await Task.FromResult(Error("DistributeNodes is no longer provided. Move each node individually via MoveNode/SetNodePosition (each one SetAnchorCommand).")).ConfigureAwait(false);
-    }
-#if false
-    private async Task<string> DistributeNodes_Removed(
-        [Description("JSON array of node indices, e.g. [0,1,2].")] string nodeIndicesJson,
-        [Description("Axis: 'horizontal' or 'vertical'.")] string axis,
-        CancellationToken cancellationToken = default)
-    {
-        int[] indices;
-        try { indices = [.. JArray.Parse(nodeIndicesJson).Select(t => t.Value<int>())]; }
-        catch (Exception ex) { return Error($"Invalid JSON array: {ex.Message}"); }
-
-        var nodes = new List<IWorkflowNodeViewModel>();
-        foreach (var idx in indices)
-        {
-            if (idx < 0 || idx >= Tree.Nodes.Count) return Error($"Index {idx} out of range.");
-            nodes.Add(Tree.Nodes[idx]);
-        }
-        if (nodes.Count < 3) return Error("Need at least 3 nodes to distribute.");
-
-        var changes = new List<(IWorkflowNodeViewModel Node, Anchor NewAnchor)>();
-        if (axis.Equals("horizontal", StringComparison.OrdinalIgnoreCase))
-        {
-            nodes.Sort((a, b) => a.Anchor.Horizontal.CompareTo(b.Anchor.Horizontal));
-            var first = nodes[0].Anchor.Horizontal;
-            var last = nodes[nodes.Count - 1].Anchor.Horizontal;
-            var step = (last - first) / (nodes.Count - 1);
-            for (int i = 1; i < nodes.Count - 1; i++)
-            {
-                var n = nodes[i];
-                changes.Add((n, new Anchor(first + step * i, n.Anchor.Vertical, n.Anchor.Layer)));
-            }
-        }
-        else if (axis.Equals("vertical", StringComparison.OrdinalIgnoreCase))
-        {
-            nodes.Sort((a, b) => a.Anchor.Vertical.CompareTo(b.Anchor.Vertical));
-            var first = nodes[0].Anchor.Vertical;
-            var last = nodes[^1].Anchor.Vertical;
-            var step = (last - first) / (nodes.Count - 1);
-            for (int i = 1; i < nodes.Count - 1; i++)
-            {
-                var n = nodes[i];
-                changes.Add((n, new Anchor(n.Anchor.Horizontal, first + step * i, n.Anchor.Layer)));
-            }
-        }
-        else
-        {
-            return Error($"Unknown axis '{axis}'. Valid: horizontal, vertical.");
-        }
-        return await ApplyAnchorLayoutAsync($"Distributed {nodes.Count} nodes along '{axis}'", changes, cancellationToken).ConfigureAwait(false);
-    }
-#endif
-
-    [Description("Sugiyama-style layered layout of all nodes (sources→layers, barycenter ordering, size-aware, disconnected subgraphs handled). Direction: 'horizontal' (L→R) or 'vertical' (T→B). Coordinates: origin top-left, +X right, +Y down.")]
-    private async Task<string> AutoLayout(
-        [Description("Start X position of the layout bounding box. Default 20.")] double startX = 20,
-        [Description("Start Y position of the layout bounding box. Default 20.")] double startY = 20,
-        [Description("Horizontal gap between layers (horizontal) or nodes within a layer (vertical).")] double gapX = 80,
-        [Description("Vertical gap between nodes within a layer (horizontal) or between layers (vertical).")] double gapY = 40,
-        [Description("Direction: 'horizontal' (left-to-right) or 'vertical' (top-to-bottom).")] string direction = "horizontal",
-        CancellationToken cancellationToken = default)
-    {
-        _ = cancellationToken; // CancellationToken unused; layout commits via SetAnchorCommand below.
-        return await Task.FromResult(Error("AutoLayout is no longer provided. Layout operates node-by-node via MoveNode/SetNodePosition (each one SetAnchorCommand), never as a bundled multi-node Submit gesture.")).ConfigureAwait(false);
-    }
-#if false
-    private async Task<string> AutoLayout_Removed(
-        [Description("Start X position of the layout bounding box. Default 20.")] double startX = 20,
-        [Description("Start Y position of the layout bounding box. Default 20.")] double startY = 20,
-        [Description("Horizontal gap between layers (horizontal) or nodes within a layer (vertical).")] double gapX = 80,
-        [Description("Vertical gap between nodes within a layer (horizontal) or between layers (vertical).")] double gapY = 40,
-        [Description("Direction: 'horizontal' (left-to-right) or 'vertical' (top-to-bottom).")] string direction = "horizontal",
-        CancellationToken cancellationToken = default)
-    {
-        var nodes = Tree.Nodes;
-        if (nodes.Count == 0) return Ok("No nodes to layout.");
-
-        bool horizontal = !direction.Equals("vertical", StringComparison.OrdinalIgnoreCase);
-
-        // Build adjacency: node → set of downstream nodes (via slot.Targets)
-        var forward = new Dictionary<IWorkflowNodeViewModel, HashSet<IWorkflowNodeViewModel>>();
-        var backward = new Dictionary<IWorkflowNodeViewModel, HashSet<IWorkflowNodeViewModel>>();
-        var allNodes = new HashSet<IWorkflowNodeViewModel>();
-
-        foreach (var node in nodes)
-        {
-            allNodes.Add(node);
-            if (!forward.ContainsKey(node)) forward[node] = [];
-            if (!backward.ContainsKey(node)) backward[node] = [];
-        }
-
-        foreach (var node in nodes)
-        {
-            foreach (var slot in node.Slots)
-            {
-                foreach (var target in slot.Targets)
-                {
-                    if (target.Parent != null && allNodes.Contains(target.Parent) && target.Parent != node)
-                    {
-                        forward[node].Add(target.Parent);
-                        if (!backward.ContainsKey(target.Parent))
-                            backward[target.Parent] = [];
-                        backward[target.Parent].Add(node);
-                    }
-                }
-            }
-        }
-
-        // Find connected components via BFS
-        var visited = new HashSet<IWorkflowNodeViewModel>();
-        var components = new List<List<IWorkflowNodeViewModel>>();
-        foreach (var node in nodes)
-        {
-            if (visited.Contains(node)) continue;
-            var component = new List<IWorkflowNodeViewModel>();
-            var queue = new Queue<IWorkflowNodeViewModel>();
-            queue.Enqueue(node);
-            visited.Add(node);
-            while (queue.Count > 0)
-            {
-                var curr = queue.Dequeue();
-                component.Add(curr);
-                foreach (var next in forward[curr])
-                {
-                    if (visited.Add(next)) queue.Enqueue(next);
-                }
-                if (backward.ContainsKey(curr))
-                {
-                    foreach (var prev in backward[curr])
-                    {
-                        if (visited.Add(prev)) queue.Enqueue(prev);
-                    }
-                }
-            }
-            components.Add(component);
-        }
-
-        // For each component: assign layers via longest-path from sources
-        // Then position layers
-        double globalOffsetX = startX;
-        double globalOffsetY = startY;
-        int totalMoved = 0;
-        var layoutChanges = new List<(IWorkflowNodeViewModel Node, Anchor NewAnchor)>();
-
-        foreach (var component in components)
-        {
-            var compSet = new HashSet<IWorkflowNodeViewModel>(component);
-
-            // Find source nodes (in-degree = 0 within this component)
-            var sources = new List<IWorkflowNodeViewModel>();
-            foreach (var n in component)
-            {
-                bool hasIncoming = false;
-                if (backward.ContainsKey(n))
-                {
-                    foreach (var prev in backward[n])
-                    {
-                        if (compSet.Contains(prev)) { hasIncoming = true; break; }
-                    }
-                }
-                if (!hasIncoming) sources.Add(n);
-            }
-            // If cyclic (no source), pick the node with lowest in-degree
-            if (sources.Count == 0)
-            {
-                sources.Add(component.OrderBy(n => backward.ContainsKey(n) ? backward[n].Count(compSet.Contains) : 0).First());
-            }
-
-            // Assign layers via BFS longest-path from sources
-            var layerOf = new Dictionary<IWorkflowNodeViewModel, int>();
-            foreach (var n in component) layerOf[n] = 0;
-
-            // Topological relaxation: repeat until stable
-            bool changed = true;
-            int iterations = 0;
-            while (changed && iterations < component.Count + 1)
-            {
-                changed = false;
-                iterations++;
-                foreach (var n in component)
-                {
-                    foreach (var next in forward[n])
-                    {
-                        if (compSet.Contains(next) && layerOf[next] <= layerOf[n])
-                        {
-                            layerOf[next] = layerOf[n] + 1;
-                            changed = true;
-                        }
-                    }
-                }
-            }
-
-            // Group by layer
-            var layers = new SortedDictionary<int, List<IWorkflowNodeViewModel>>();
-            foreach (var n in component)
-            {
-                var l = layerOf[n];
-                if (!layers.ContainsKey(l)) layers[l] = [];
-                layers[l].Add(n);
-            }
-
-            // Order within each layer: barycenter heuristic (average position of connected nodes in previous layer)
-            List<IWorkflowNodeViewModel>? prevLayer = null;
-            foreach (var kvp in layers)
-            {
-                if (prevLayer != null && prevLayer.Count > 0)
-                {
-                    var prevPositions = new Dictionary<IWorkflowNodeViewModel, int>();
-                    for (int i = 0; i < prevLayer.Count; i++)
-                        prevPositions[prevLayer[i]] = i;
-
-                    kvp.Value.Sort((a, b) =>
-                    {
-                        double baryA = GetBarycenter(a, backward, prevPositions);
-                        double baryB = GetBarycenter(b, backward, prevPositions);
-                        return baryA.CompareTo(baryB);
-                    });
-                }
-                prevLayer = kvp.Value;
-            }
-
-            // Compute positions respecting node sizes
-            double layerPos = horizontal ? globalOffsetX : globalOffsetY; // advancing axis
-            double maxCrossExtent = 0; // track max extent in cross axis for component offset
-
-            foreach (var kvp in layers)
-            {
-                var layerNodes = kvp.Value;
-                double crossPos = horizontal ? globalOffsetY : globalOffsetX; // cross axis
-                double maxLayerExtent = 0; // max width (horizontal) or height (vertical) in this layer
-
-                foreach (var n in layerNodes)
-                {
-                    double nx = horizontal ? layerPos : crossPos;
-                    double ny = horizontal ? crossPos : layerPos;
-                    layoutChanges.Add((n, new Anchor(nx, ny, n.Anchor.Layer)));
-                    totalMoved++;
-
-                    double nodeMain = horizontal ? n.Size.Width : n.Size.Height;
-                    double nodeCross = horizontal ? n.Size.Height : n.Size.Width;
-
-                    if (nodeMain > maxLayerExtent) maxLayerExtent = nodeMain;
-                    crossPos += nodeCross + gapY;
-                }
-
-                double totalCross = crossPos - (horizontal ? globalOffsetY : globalOffsetX) - gapY;
-                if (totalCross > maxCrossExtent) maxCrossExtent = totalCross;
-
-                layerPos += maxLayerExtent + gapX;
-            }
-
-            // Offset next component below/right of this one
-            if (horizontal)
-                globalOffsetY += maxCrossExtent + gapY * 2;
-            else
-                globalOffsetX += maxCrossExtent + gapX * 2;
-        }
-
-        return await ApplyAnchorLayoutAsync($"Auto-layout: {totalMoved} nodes arranged in {components.Count} subgraph(s), direction={direction}.", layoutChanges, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static double GetBarycenter(
-        IWorkflowNodeViewModel node,
-        Dictionary<IWorkflowNodeViewModel, HashSet<IWorkflowNodeViewModel>> backward,
-        Dictionary<IWorkflowNodeViewModel, int> prevPositions)
-    {
-        if (!backward.ContainsKey(node)) return 0;
-        double sum = 0;
-        int count = 0;
-        foreach (var prev in backward[node])
-        {
-            if (prevPositions.TryGetValue(prev, out var pos))
-            {
-                sum += pos;
-                count++;
-            }
-        }
-        return count > 0 ? sum / count : 0;
-    }
-#endif
 
     // ────────────────────────── Analytics Functions ──────────────────────────
 
@@ -2261,6 +1969,135 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             ["warningCount"] = warnings.Count,
             ["warnings"] = warnings,
         }.ToString(Formatting.None);
+    }
+
+    // ────────────────────────── Compiler Functions ──────────────────────────
+
+    [Description("Compiles the workflow sub-graph reachable from a start node (typically the controller/entry node) and returns the compiled plan: execution entries, routing branches with their options/skipped/terminal flags, fan-out groups, and every compile-aware node's Order / ChainIndex / Offset. Order = -1 means the node is on a pruned static branch — absolute stop (do NOT drive it as part of the live chain). Compiling also attaches compile identity to nodes (updates IsCompileStopped badges). Use GetCompileStatus afterwards to read the identity without recompiling.")]
+    private async Task<string> CompileWorkflow(
+        [Description("Node index of the compile entry point (usually the controller/entry node).")] int startNodeIndex,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetNode(startNodeIndex, out var node, out var error)) return error;
+        try
+        {
+            var compiler = new CompilerViewModel();
+            var graphs = await compiler.CompileAsync(node!).ConfigureAwait(false);
+
+            var entries = new JArray();
+            foreach (var g in graphs)
+                AppendGraphEntries(entries, g, 0);
+
+            return new JObject
+            {
+                ["status"] = "ok",
+                ["graphCount"] = graphs.Count,
+                ["entries"] = entries,
+                ["nodeOrders"] = BuildCompileOrders(),
+            }.ToString(Formatting.None);
+        }
+        catch (Exception ex)
+        {
+            return Error($"Compile failed: {ex.Message}");
+        }
+    }
+
+    [Description("Returns the current compile identity of every compile-aware node (Order / ChainIndex / Offset, isStopped = Order == -1) WITHOUT recompiling. Call CompileWorkflow first to populate it.")]
+    private string GetCompileStatus()
+    {
+        var orders = BuildCompileOrders();
+        return new JObject { ["status"] = "ok", ["compiledNodes"] = orders.Count, ["nodes"] = orders }.ToString(Formatting.None);
+    }
+
+    [Description("Returns the tree's aggregate execution log — the chronological record of direct (non-compiler) executions appended by nodes (e.g. '01. EXEC Load Seed'). For the compiler run-session log (with sequence numbers and WARN ⚠ / ERROR ✗ markers), use RunCompiledWorkflow's 'logs' field instead. Pure query.")]
+    private string GetExecutionLog()
+    {
+        var logs = new JArray();
+        try
+        {
+            // The tree's execution log is a convention-named public property on the concrete
+            // tree view model (e.g. TreeViewModel.ExecutionLog). Read it if present.
+            var prop = Tree.GetType().GetProperty("ExecutionLog");
+            if (prop?.GetValue(Tree) is System.Collections.IEnumerable entries)
+            {
+                foreach (var e in entries)
+                    if (e is not null) logs.Add(e.ToString());
+            }
+        }
+        catch { /* tree exposes no ExecutionLog — return empty */ }
+
+        return new JObject { ["status"] = "ok", ["entryCount"] = logs.Count, ["entries"] = logs }.ToString(Formatting.None);
+    }
+
+    private JArray BuildCompileOrders()
+    {
+        var arr = new JArray();
+        for (int i = 0; i < Tree.Nodes.Count; i++)
+        {
+            var n = Tree.Nodes[i];
+            if (n is ICompileTimeAware aware && aware.CompileContext is { } cc)
+            {
+                arr.Add(new JObject
+                {
+                    ["i"] = i,
+                    ["id"] = GetComponentId(n),
+                    ["t"] = n.GetType().Name,
+                    ["order"] = cc.Order,
+                    ["chainIndex"] = cc.ChainIndex,
+                    ["offset"] = cc.Offset,
+                    ["isStopped"] = cc.Order == -1,
+                });
+            }
+        }
+        return arr;
+    }
+
+    private static void AppendGraphEntries(JArray entries, CompiledGraph graph, int depth)
+    {
+        foreach (var entry in graph.Entries)
+            AppendEntry(entries, entry, depth);
+    }
+
+    private static void AppendEntry(JArray entries, ActionEntry entry, int depth)
+    {
+        var obj = new JObject { ["depth"] = depth };
+        switch (entry)
+        {
+            case ExecuteEntry exec:
+                obj["type"] = "Execute";
+                obj["nodes"] = new JArray(exec.Nodes.Select(n => n.GetType().Name));
+                break;
+            case BranchEntry branch:
+                obj["type"] = "Branch";
+                obj["router"] = branch.Router?.GetType().Name;
+                obj["isDynamic"] = branch.IsDynamic;
+                if (branch.CompileKey is { } ck) obj["compileKey"] = ck.ToString();
+                var options = new JArray();
+                foreach (var o in branch.Options)
+                {
+                    options.Add(new JObject
+                    {
+                        ["key"] = o.Key?.ToString(),
+                        ["label"] = o.Label,
+                        ["isSkipped"] = o.IsSkipped,
+                        ["isTerminal"] = o.IsTerminal,
+                    });
+                    if (o.Graph is not null)
+                        AppendGraphEntries(entries, o.Graph, depth + 1);
+                }
+                obj["options"] = options;
+                break;
+            case ParallelEntry parallel:
+                obj["type"] = "Parallel";
+                obj["branches"] = parallel.Branches.Count;
+                foreach (var g in parallel.Branches)
+                    AppendGraphEntries(entries, g, depth + 1);
+                break;
+            default:
+                obj["type"] = entry.GetType().Name;
+                break;
+        }
+        entries.Add(obj);
     }
 
     // ────────────────────────── Interaction Tools ──────────────────────────

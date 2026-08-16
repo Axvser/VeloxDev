@@ -23,6 +23,16 @@ public partial class TreeViewModel
 
     [VeloxProperty] private bool useStreamingAgentResponse = true;
 
+    /// <summary>
+    /// 非编译器路径的全局单调执行序号。单独启动某个节点（节点卡片 Run → ReceiveCommand）不再
+    /// 每次从 01 复位——每次独立启动都在同一画布上继续递增，徽标与执行日志保持有序。
+    /// 编译器路径不受影响（它用 CompileContext.Order 固定编号）。
+    /// </summary>
+    private long _executionSequence;
+
+    /// <summary>取下一个全局执行序号（非编译器路径）。</summary>
+    public int NextExecutionSequence() => (int)Interlocked.Increment(ref _executionSequence);
+
     [VeloxCommand]
     public async Task AskAsync(object? parameter, CancellationToken ct)
     {
@@ -137,6 +147,7 @@ public partial class TreeViewModel
     public void ResetExecutionLog()
     {
         ExecutionLog.Clear();
+        _executionSequence = 0;
 
         foreach (var node in Nodes.OfType<NodeViewModel>())
         {

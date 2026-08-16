@@ -56,9 +56,20 @@ public sealed class NetworkFlowContext
         History.Add(new NetworkFlowRecord(captureKey, method, url, statusCode, responseSummary));
     }
 
-    public string RecordExecution(string nodeTitle, out int order)
+    /// <summary>
+    /// 取下一个执行序号。demo 现在把整棵树的执行编号交给 TreeViewModel.NextExecutionSequence()
+    /// （全局单调，独立启动节点不再复位）；本方法仅作为无树时的回退。
+    /// </summary>
+    public int NextOrder() => Interlocked.Increment(ref _executionSequence);
+
+    /// <summary>
+    /// 记录一次执行。
+    /// <paramref name="globalOrder"/> 非 null 时用它作为序号（demo 传入树的全局序号），
+    /// 否则用本 flow 的私有计数器回退。
+    /// </summary>
+    public string RecordExecution(string nodeTitle, out int order, int? globalOrder = null)
     {
-        order = Interlocked.Increment(ref _executionSequence);
+        order = globalOrder ?? Interlocked.Increment(ref _executionSequence);
         var entry = $"{order:00}. {nodeTitle}";
 
         lock (_syncRoot)

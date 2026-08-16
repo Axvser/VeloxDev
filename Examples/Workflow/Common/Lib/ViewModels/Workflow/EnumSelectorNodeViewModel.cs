@@ -141,6 +141,8 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     /// 编译模式：Static 编译期只返回当前选中分支；Dynamic 返回全部分支（运行期定 key）。
     /// 不同的模式下 <see cref="GetRouteTable"/> 返回的字典不同。
     /// </summary>
+    [AgentContext(AgentLanguages.Chinese, "编译模式：Static 编译期锁定当前选中分支（未选中分支被剪除，其下游节点 Order = -1 绝对停止）；Dynamic 运行期按数据负载重新选分支（全部分支存活，编译期 payload 为 null 时 ResolveRouteKey 返回 null）。通过 PatchNodeProperties 设置，如 {\"CompileMode\":\"Static\"}。")]
+    [AgentContext(AgentLanguages.English, "Compile mode: Static locks the currently selected branch at compile time (unselected branches are pruned; their downstream nodes get Order = -1 / absolute stop); Dynamic re-selects the branch at runtime from the data payload (all branches stay alive; ResolveRouteKey returns null for a null compile-time payload). Set via PatchNodeProperties, e.g. {\"CompileMode\":\"Static\"}.")]
     [VeloxProperty] private RouterCompileMode _compileMode = RouterCompileMode.Dynamic;
 
     /// <summary>编译模式下拉数据源。</summary>
