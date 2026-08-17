@@ -1777,13 +1777,13 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// <summary>
     /// Compiles the sub-graph reachable from a start node (typically a controller) and runs it
     /// through the execution engine (<see cref="CompilerEngine"/>), exactly like the demo's Run
-    /// button. The engine drives the CHAIN: it injects a <see cref="RuntimeContext"/> session into
+    /// button. The engine drives the CHAIN: it injects an <see cref="IRuntimeContext"/> session into
     /// every <see cref="IRuntimeAware"/> node, selects branches via <see cref="ICompileTimeRouter"/>,
     /// and handles redirects — the node's own ReceiveAsync executes in "compiled-step" mode and does
     /// NOT auto-broadcast (the engine owns downstream dispatch). This is the chain-level entry,
     /// distinct from <see cref="ExecuteNode"/> (node-level EXEC via ReceiveCommand).
     /// </summary>
-    [Description("Runs the compiled workflow (chain-level execution) from a start node, typically a controller. Compiles the reachable sub-graph, creates a runtime session (RuntimeContext), and drives the whole chain via the execution engine — the same entry the demo's Run button uses. Nodes execute their ReceiveAsync with an IRuntimeContext (compiled-step semantics; no auto-broadcast — the engine drives the chain). Returns the session outcome: runStatus (Completed/Stopped), execution log, final data, attempts, and whether it ended with an error. DIFFERENT from ExecuteNode, which executes a single node via ReceiveCommand (node-level EXEC). Disabled by default: requires WithAllowNodeExecution(true).")]
+    [Description("Runs the compiled workflow (chain-level execution) from a start node, typically a controller. Compiles the reachable sub-graph, creates a runtime session (IRuntimeContext), and drives the whole chain via the execution engine — the same entry the demo's Run button uses. Nodes execute their ReceiveAsync with an IRuntimeContext (compiled-step semantics; no auto-broadcast — the engine drives the chain). Returns the session outcome: runStatus (Completed/Stopped), execution log, final data, attempts, and whether it ended with an error. DIFFERENT from ExecuteNode, which executes a single node via ReceiveCommand (node-level EXEC). Disabled by default: requires WithAllowNodeExecution(true).")]
     private async Task<string> RunCompiledWorkflow(
         [Description("Node index of the compile entry point (usually a controller).")] int startNodeIndex,
         [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,

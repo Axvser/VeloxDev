@@ -38,9 +38,9 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     internal static readonly Type[] FrameworkData =
         [typeof(Anchor), typeof(Offset), typeof(Size),
-         typeof(ITaskContext), typeof(TaskContext),
-         // Compiler contexts: rendered as data so the Agent understands compile identity
-         // (Order/ChainIndex/Offset) and the runtime session contract during compiled runs.
+         typeof(IAccessContext), typeof(ITaskContext), typeof(TaskContext),
+         // Compiler contexts: rendered as data so the Agent understands the dataflow access edge gate,
+         // compile identity (Order/ChainIndex/Offset) and the runtime session contract during compiled runs.
          typeof(ICompileContext), typeof(IRuntimeContext)];
 
     private readonly Dictionary<AgentLanguages, HashSet<Type>> CustomerEnums = [];

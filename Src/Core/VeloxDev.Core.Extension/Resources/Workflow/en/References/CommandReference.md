@@ -44,9 +44,10 @@
 
 All node execution goes through the single receive path: **Node.ReceiveCommand → Helper.ReceiveAsync(ITaskContext, ct) → Task<object?>**.
 
-- `IContext` — root contract of the workflow context hierarchy.
-- `ITaskContext` — the task payload: `Data` / `Sender` / `Receiver` (all nullable). To actively invoke a node, construct it — e.g. `ExecuteNode`'s `parameter` becomes `ITaskContext.Data`.
-- `IRuntimeContext` — compiler runtime session (UID / logs / shared variables / status); injected by the engine during compiled runs.
+- `IContext` — root contract of the workflow context hierarchy, carrying the universal payload `Data` (real at runtime, null at compile identity).
+- `IAccessContext` — a dataflow access (edge): `IsCompilePhase` (true = compile-time static check, false = runtime real-time), `Sender` / `Receiver`; the parameter of the node's `AccessAsync` gate.
+- `ITaskContext` — the task payload: `Data` / `Sender` / `Receiver` (all nullable, inherited from `IAccessContext`). To actively invoke a node, construct it — e.g. `ExecuteNode`'s `parameter` becomes `ITaskContext.Data`.
+- `IRuntimeContext` — compiler runtime session (UID / logs / shared variables / status / redirect state; writable `Data`); injected by the engine during compiled runs.
 - `ICompileContext` — compile-time identity (Order / ChainIndex / Offset); attached by the Compiler.
 
 ## Slot Connection Safety Rules

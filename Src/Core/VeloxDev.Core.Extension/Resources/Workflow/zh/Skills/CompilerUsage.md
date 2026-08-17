@@ -7,7 +7,7 @@ WorkflowSystem 内置编译器：把控制器可达的子图分解为编译计�
 | 入口 | 工具 | 驱动对象 | 语义 |
 |---|---|---|---|
 | **节点级** | `ExecuteNode` / `ExecuteNodes` | 单个节点（其自身 `ReceiveAsync`，经 `ReceiveCommand`） | `EXEC`/`RECV`；若节点 `AutoBroadcast` 开启，可能级联下游。 |
-| **链级** | `RunCompiledWorkflow(startNodeIndex)` | 整条编译链（执行引擎驱动） | 注入 `RuntimeContext` 会话、选分支、处理回退；下游派发由引擎接管（不自动广播）。 |
+| **链级** | `RunCompiledWorkflow(startNodeIndex)` | 整条编译链（执行引擎驱动） | 注入 `IRuntimeContext` 会话、选分支、处理回退；下游派发由引擎接管（不自动广播）。 |
 
 任务语义是"运行工作流 / 执行整条链"时用 `RunCompiledWorkflow`；只有确实想单独触发某个节点的逻辑时才用 `ExecuteNode`。
 
@@ -15,7 +15,7 @@ WorkflowSystem 内置编译器：把控制器可达的子图分解为编译计�
 
 ### 编译身份（ICompileContext）
 
-每个实现 `ICompileTimeAware` 的节点在编译完成后都会拿到一个 `CompileContext`：
+每个实现 `ICompileTimeAware` 的节点在编译完成后都会拿到一个 `ICompileContext`：
 
 | 成员 | 含义 |
 |---|---|
@@ -34,7 +34,7 @@ WorkflowSystem 内置编译器：把控制器可达的子图分解为编译计�
 
 ### 读取节点编译状态
 
-- `CompileContext` —— 只读；节点的 `Order` / `ChainIndex` / `Offset`。
+- `ICompileContext` —— 只读；节点的 `Order` / `ChainIndex` / `Offset`。
 - `IsCompileStopped` —— `Order == -1` 时为 `true`（被剪除的静态分支）。
 - `CompileMode` —— 路由节点的编译模式（`Static` / `Dynamic`），**可写**：通过 `PatchNodeProperties` 设置。
 

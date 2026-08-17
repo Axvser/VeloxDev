@@ -7,7 +7,7 @@ The WorkflowSystem has a compiler that decomposes the controller-reachable sub-g
 | Entry | Tool | What it drives | Semantics |
 |---|---|---|---|
 | **Node-level** | `ExecuteNode` / `ExecuteNodes` | One node (its own `ReceiveAsync` via `ReceiveCommand`) | `EXEC`/`RECV`; the node may auto-broadcast downstream if its `AutoBroadcast` flag is on. |
-| **Chain-level** | `RunCompiledWorkflow(startNodeIndex)` | The whole compiled chain via the execution engine | Injects a `RuntimeContext` session, selects branches, handles redirects; the engine owns downstream dispatch (no auto-broadcast). |
+| **Chain-level** | `RunCompiledWorkflow(startNodeIndex)` | The whole compiled chain via the execution engine | Injects an `IRuntimeContext` session, selects branches, handles redirects; the engine owns downstream dispatch (no auto-broadcast). |
 
 Choose `RunCompiledWorkflow` when the task is "run the workflow / execute the chain". Choose `ExecuteNode` only when you need to poke exactly one node's logic in isolation.
 
@@ -15,7 +15,7 @@ Choose `RunCompiledWorkflow` when the task is "run the workflow / execute the ch
 
 ### Compile identity (ICompileContext)
 
-Every node implementing `ICompileTimeAware` receives a `CompileContext` after compilation:
+Every node implementing `ICompileTimeAware` receives an `ICompileContext` after compilation:
 
 | Member | Meaning |
 |---|---|
@@ -34,7 +34,7 @@ Query it with `GetCompileStatus` (returns `{i, id, t, order, chainIndex, offset,
 
 ### Reading compile state on a node
 
-- `CompileContext` — read-only; the node's `Order` / `ChainIndex` / `Offset`.
+- `ICompileContext` — read-only; the node's `Order` / `ChainIndex` / `Offset`.
 - `IsCompileStopped` — `true` when `Order == -1` (pruned static branch).
 - `CompileMode` — the router's compile mode (`Static` / `Dynamic`), **writable** via `PatchNodeProperties`.
 

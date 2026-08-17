@@ -44,9 +44,10 @@
 
 所有节点执行都走唯一的接收路径：**Node.ReceiveCommand → Helper.ReceiveAsync(ITaskContext, ct) → Task<object?>**。
 
-- `IContext` — 工作流上下文体系的根契约。
-- `ITaskContext` — 任务载荷：`Data` / `Sender` / `Receiver`（均可空）。主动唤起节点时构造它——`ExecuteNode` 的 `parameter` 即成为 `ITaskContext.Data`。
-- `IRuntimeContext` — 编译器运行时会话（UID / 日志 / 共享变量 / 状态）；编译驱动时由引擎注入。
+- `IContext` — 工作流上下文体系的根契约，统一携带负载 `Data`（运行期为真实数据、编译身份为 null）。
+- `IAccessContext` — 一次数据流访问（边）：`IsCompilePhase`（true = 编译期静态检测，false = 运行期实时检测）、`Sender` / `Receiver`；节点的 `AccessAsync` 门禁入参。
+- `ITaskContext` — 任务载荷：`Data` / `Sender` / `Receiver`（均可空，继承自 `IAccessContext`）。主动唤起节点时构造它——`ExecuteNode` 的 `parameter` 即成为 `ITaskContext.Data`。
+- `IRuntimeContext` — 编译器运行时会话（UID / 日志 / 共享变量 / 状态 / 重定向状态；可写 `Data`）；编译驱动时由引擎注入。
 - `ICompileContext` — 编译期身份（Order / ChainIndex / Offset）；由 Compiler 注入。
 
 ## 插槽连接安全规则
