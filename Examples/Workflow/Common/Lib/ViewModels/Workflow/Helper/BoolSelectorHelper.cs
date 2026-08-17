@@ -27,9 +27,9 @@ public class BoolSelectorHelper : NodeHelper<BoolSelectorNodeViewModel>
         // 只记路由轨迹；不写 LastExecutionOrder —— 编号徽标是编译机器专属，非编译器启动不扰动。
         context.RecordExecution(Component.LastRouted, out _);
 
-        // 自动向下游传递（AutoBroadcast，默认 true）：沿全部输出槽（True/False）扇出到下游。
+        // 自动向下游传递（AutoBroadcast，默认 true）：无状态只沿**当前选中分支**（True/False 之一）广播。
         if (Component.AutoBroadcast)
-            await BroadcastAsync(context, ct);
+            await SelectorBroadcast.ToSlotAsync(Component, condition ? Component.TrueSlot : Component.FalseSlot, context, ct);
 
         return context;
     }

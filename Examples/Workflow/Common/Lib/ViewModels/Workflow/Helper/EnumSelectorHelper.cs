@@ -31,9 +31,9 @@ public class EnumSelectorHelper : NodeHelper<EnumSelectorNodeViewModel>
         // 只记路由轨迹；不写 LastExecutionOrder —— 编号徽标是编译机器专属，非编译器启动不扰动。
         context.RecordExecution(Component.LastRouted, out _);
 
-        // 自动向下游传递（AutoBroadcast，默认 true）：沿全部输出槽扇出到下游。
-        if (Component.AutoBroadcast)
-            await BroadcastAsync(context, ct);
+        // 自动向下游传递（AutoBroadcast，默认 true）：无状态只沿**当前选中值对应分支**广播。
+        if (Component.AutoBroadcast && routeValue is not null)
+            await SelectorBroadcast.ToSlotAsync(Component, Component.GetSlotForValue(routeValue), context, ct);
 
         return context;
     }
