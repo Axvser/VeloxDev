@@ -64,12 +64,12 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     public SlotViewModel? FalseSlot => OutputSlots?.TrySelect(false, out var s) == true ? s : null;
 
     /// <summary>编译期注入的编译身份（Order = -1 表示绝对停止）。</summary>
-    public CompileContext? CompileContext { get; private set; }
+    public ICompileContext? CompileContext { get; private set; }
 
     /// <summary>编译期是否处于绝对停止状态（未选中静态分支 / 终止）。</summary>
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
-    public void AttachCompileTimeContext(CompileContext context)
+    public void AttachCompileTimeContext(ICompileContext context)
     {
         CompileContext = context;
         LastExecutionOrder = context.Order >= 0 ? context.Order + 1 : 0;
@@ -96,7 +96,7 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
         if (CompileMode == RouterCompileMode.Dynamic && payload is null)
             return Task.FromResult<object?>(null);
 
-        if (payload is RuntimeContext ctx && ctx.TryGet("selector.bool", out var v) && v is string s)
+        if (payload is IRuntimeContext ctx && ctx.TryGet("selector.bool", out var v) && v is string s)
             return Task.FromResult<object?>(bool.TryParse(s, out var b) ? b : Condition);
 
         return Task.FromResult<object?>(Condition);

@@ -16,12 +16,12 @@ public partial class NodeViewModel : ICompileTimeAware, IRuntimeAware
     public NodeViewModel() => InitializeWorkflow();
 
     /// <summary>编译期注入的编译身份（Order = -1 表示绝对停止）。</summary>
-    public CompileContext? CompileContext { get; private set; }
+    public ICompileContext? CompileContext { get; private set; }
 
     /// <summary>编译期是否处于绝对停止状态（未选中静态分支 / 终止）。</summary>
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
-    public void AttachCompileTimeContext(CompileContext context)
+    public void AttachCompileTimeContext(ICompileContext context)
     {
         CompileContext = context;
         LastExecutionOrder = context.Order >= 0 ? context.Order + 1 : 0;
@@ -32,9 +32,9 @@ public partial class NodeViewModel : ICompileTimeAware, IRuntimeAware
     }
 
     /// <summary>运行期注入的共享上下文（引擎驱动本节点前调用）。</summary>
-    public RuntimeContext? RuntimeContext { get; private set; }
+    public IRuntimeContext? RuntimeContext { get; private set; }
 
-    public void AttachRuntimeContext(RuntimeContext context)
+    public void AttachRuntimeContext(IRuntimeContext context)
     {
         RuntimeContext = context;
         OnPropertyChanged(nameof(RuntimeContext));

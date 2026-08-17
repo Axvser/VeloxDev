@@ -9,9 +9,13 @@ namespace Demo.ViewModels.Workflow.Helper
     public partial class HttpHelper<T> : NodeHelper<T>
         where T : NodeViewModel
     {
-        public override Task<bool> ValidateBroadcastAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, object? parameter, CancellationToken ct)
+        // 数据流访问上下文（IAccessContext）在两阶段复用：
+        //   context.IsCompilePhase == true  → 编译期静态检测，context.Data 为 null；
+        //   context.IsCompilePhase == false → 运行期实时检测，context.Data 为本次广播负载。
+        //   context.Sender / context.Receiver 携带这条边的两端槽。
+        public override Task<bool> AccessAsync(IAccessContext context, CancellationToken ct)
         {
-            return base.ValidateBroadcastAsync(sender, receiver, parameter, ct);
+            return base.AccessAsync(context, ct);
         }
 
         private NodeViewModel? _viewModel;

@@ -17,7 +17,7 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     public CompilerViewModel Compiler { get; } = new();
 
     /// <summary>当前运行期的执行会话（Run 时创建，UI 可绑定进度）。</summary>
-    public RuntimeContext? RuntimeContext { get; private set; }
+    public IRuntimeContext? RuntimeContext { get; private set; }
 
     private CancellationTokenSource? _runCts;
 
@@ -81,9 +81,9 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
 
     // ── 注入接口 ───────────────────────────────────────────────────────────────
     /// <summary>编译期注入的编译身份（控制器是起点，Order 通常为 0）。</summary>
-    public CompileContext? CompileContext { get; private set; }
+    public ICompileContext? CompileContext { get; private set; }
 
-    public void AttachCompileTimeContext(CompileContext context)
+    public void AttachCompileTimeContext(ICompileContext context)
     {
         CompileContext = context;
         OnPropertyChanged(nameof(CompileContext));
@@ -94,7 +94,7 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
     /// <summary>运行期注入：引擎驱动本节点前，把当前执行会话交给它。</summary>
-    public void AttachRuntimeContext(RuntimeContext context)
+    public void AttachRuntimeContext(IRuntimeContext context)
     {
         RuntimeContext = context;
         OnPropertyChanged(nameof(RuntimeContext));

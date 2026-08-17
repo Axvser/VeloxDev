@@ -89,7 +89,7 @@ public static class WorkflowNodeEx
     {
         var helper = component?.GetHelper() ?? throw new ArgumentException($"Failed to obtain the Helper instance.");
 
-        List<(IWorkflowNodeViewModel Node, IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver)> nodes = [];
+        List<(IWorkflowNodeViewModel Node, ITaskContext Context)> nodes = [];
         foreach (var sender in component.Slots.ToArray())
         {
             ct.ThrowIfCancellationRequested();
@@ -101,17 +101,18 @@ public static class WorkflowNodeEx
                 var receiverNode = receiver.Parent;
                 if (receiverNode is null) continue;
 
-                if (!await helper.ValidateBroadcastAsync(sender, receiver, parameter, ct).ConfigureAwait(false))
+                // 先构建本次投递的任务上下文，再以它做运行期实时校验（校验不通过视为未连接）。
+                var ctx = new TaskContext(parameter, sender, receiver);
+                if (!await helper.AccessAsync(ctx, ct).ConfigureAwait(false))
                     continue;
 
-                nodes.Add((receiverNode, sender, receiver));
+                nodes.Add((receiverNode, ctx));
             }
         }
 
-        foreach (var (node, sender, receiver) in nodes)
+        foreach (var (node, ctx) in nodes)
         {
             ct.ThrowIfCancellationRequested();
-            var ctx = new TaskContext(parameter, sender, receiver);
             node.ReceiveCommand.Execute(ctx);
         }
     }
@@ -120,7 +121,7 @@ public static class WorkflowNodeEx
     {
         var helper = component?.GetHelper() ?? throw new ArgumentException($"Failed to obtain the Helper instance.");
 
-        List<(IWorkflowNodeViewModel Node, IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver)> nodes = [];
+        List<(IWorkflowNodeViewModel Node, ITaskContext Context)> nodes = [];
         foreach (var receiver in component.Slots.ToArray())
         {
             ct.ThrowIfCancellationRequested();
@@ -132,17 +133,18 @@ public static class WorkflowNodeEx
                 var senderNode = sender.Parent;
                 if (senderNode is null) continue;
 
-                if (!await helper.ValidateBroadcastAsync(sender, receiver, parameter, ct).ConfigureAwait(false))
+                // 先构建本次投递的任务上下文，再以它做运行期实时校验（校验不通过视为未连接）。
+                var ctx = new TaskContext(parameter, sender, receiver);
+                if (!await helper.AccessAsync(ctx, ct).ConfigureAwait(false))
                     continue;
 
-                nodes.Add((senderNode, sender, receiver));
+                nodes.Add((senderNode, ctx));
             }
         }
 
-        foreach (var (node, sender, receiver) in nodes)
+        foreach (var (node, ctx) in nodes)
         {
             ct.ThrowIfCancellationRequested();
-            var ctx = new TaskContext(parameter, sender, receiver);
             node.ReceiveCommand.Execute(ctx);
         }
     }

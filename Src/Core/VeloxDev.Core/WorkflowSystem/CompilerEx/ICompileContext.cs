@@ -9,7 +9,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// </summary>
 [AgentContext(AgentLanguages.Chinese, "编译期身份上下文：固定编号 Order / 链内索引 ChainIndex / 子图偏移 Offset")]
 [AgentContext(AgentLanguages.English, "Compile-time identity context: fixed Order / in-chain index ChainIndex / sub-graph Offset")]
-public interface ICompileContext : IContext
+public interface ICompileContext : IAccessContext
 {
     /// <summary>编译期固定执行编号（-1 = 绝对停止）。</summary>
     int Order { get; set; }

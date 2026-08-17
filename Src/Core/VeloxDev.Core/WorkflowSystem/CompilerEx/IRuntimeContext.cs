@@ -43,6 +43,22 @@ public interface IRuntimeContext : ITaskContext
     /// <summary>当前执行状态码 = 编译期固定编号。</summary>
     int CurrentOrder { get; set; }
 
+    /// <summary>
+    /// 链式传递结果（遮蔽 <see cref="IContext.Data"/> 增加 setter）：引擎逐节点驱动后把
+    /// <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/> 的返回值写回，供下游节点读取。
+    /// 基础数据流载体 <see cref="ITaskContext"/> 保持只读，只有运行时会话可写。
+    /// </summary>
+    new object? Data { get; set; }
+
+    /// <summary>节点是否在本次驱动中请求了重定向（调用了 <see cref="Error"/> 或 <see cref="Warn"/>）。引擎每次驱动前清除、驱动后检查。</summary>
+    bool RedirectRequested { get; set; }
+
+    /// <summary>流程是否因「节点报错但未实现 <see cref="IRedirectable"/>」而提前结束（状态置为 -1）。</summary>
+    bool EndedWithError { get; set; }
+
+    /// <summary>引擎请求的回退目标 Order（可为跨链）。<see cref="CompilerEngine.RunAsync"/> 读取后带该目标重跑整张图。</summary>
+    int? PendingRedirectTarget { get; set; }
+
     /// <summary>推送一条普通日志（带顺序前缀）。</summary>
     void Log(string entry);
 

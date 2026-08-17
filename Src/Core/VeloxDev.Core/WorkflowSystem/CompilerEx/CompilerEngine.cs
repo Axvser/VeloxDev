@@ -9,15 +9,15 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 ///  - ExecuteEntry：线性段逐个驱动节点；
 ///  - BranchEntry：先驱动 router 自身，再经 <see cref="ICompileTimeRouter.ResolveRouteKey"/> 选分支，驱动选中分支子图；
 ///  - ParallelEntry：扇出组，顺序执行各分支（顺序即"等待所有上游"的汇聚语义）。
-/// 节点在 ReceiveAsync 中调用 <see cref="RuntimeContext.Error"/>/<see cref="RuntimeContext.Warn"/> 或抛异常
+/// 节点在 ReceiveAsync 中调用 <see cref="IRuntimeContext.Error"/>/<see cref="IRuntimeContext.Warn"/> 或抛异常
 /// 都视为请求重定向：若节点实现 <see cref="IRedirectable"/>，引擎按它返回的编译状态（CompileContext.Order）
 /// 带该目标**重跑整张图**（跳过目标之前的节点，可跨链）；目标是 Router 时只重新路由、不重新计算。
 /// 若节点未实现 IRedirectable，则整个流程结束，状态标记为标准 -1。
-/// 每次驱动前给 <see cref="IRuntimeAware"/> 节点注入 <see cref="RuntimeContext"/>。
+/// 每次驱动前给 <see cref="IRuntimeAware"/> 节点注入 <see cref="IRuntimeContext"/>。
 /// </summary>
 public sealed class CompilerEngine
 {
-    public async Task RunAsync(CompiledGraph graph, RuntimeContext context, CancellationToken ct)
+    public async Task RunAsync(CompiledGraph graph, IRuntimeContext context, CancellationToken ct)
     {
         if (graph is null || context is null) return;
         const int MaxRedirects = 50;
@@ -60,7 +60,7 @@ public sealed class CompilerEngine
     }
 
     /// <summary>驱动一张图的所有条目。返回 true 表示运行到此结束（终端分支或报错终止）。</summary>
-    private async Task<bool> RunGraphAsync(CompiledGraph? graph, RuntimeContext? context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunGraphAsync(CompiledGraph? graph, IRuntimeContext? context, CancellationToken ct, int? redirectTarget)
     {
         if (graph is null || context is null) return false;
         foreach (var entry in graph.Entries)
@@ -90,10 +90,10 @@ public sealed class CompilerEngine
 
     /// <summary>
     /// 驱动一条线性链。跨链回退时跳过 Order &lt; 目标 的节点；节点报错（Error/Warn/抛异常）则视为请求重定向：
-    /// 有 <see cref="IRedirectable"/> → 由其返回回退目标（可跨链），置 <see cref="RuntimeContext.PendingRedirectTarget"/>
+    /// 有 <see cref="IRedirectable"/> → 由其返回回退目标（可跨链），置 <see cref="IRuntimeContext.PendingRedirectTarget"/>
     /// 由 RunAsync 带目标重跑整张图；无 → 流程结束、状态 -1。返回 true 表示流程提前结束。
     /// </summary>
-    private async Task<bool> RunExecuteAsync(ExecuteEntry exec, RuntimeContext context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunExecuteAsync(ExecuteEntry exec, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
         for (int i = 0; i < exec.Nodes.Count; i++)
         {
@@ -151,7 +151,7 @@ public sealed class CompilerEngine
     /// 驱动分支。跨链回退时：目标在分支之前 → 跳过整个分支；目标恰好是 router → **只重新路由**，
     /// 不重新计算（不驱动 router 的 ReceiveAsync），直接按运行期键选分支。
     /// </summary>
-    private async Task<bool> RunBranchAsync(BranchEntry branch, RuntimeContext context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunBranchAsync(BranchEntry branch, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
         if (branch.Router is null) return false;
         var routerOrder = NodeOrder(branch.Router);
@@ -184,9 +184,9 @@ public sealed class CompilerEngine
 
     /// <summary>
     /// 扇出组：顺序执行所有分支子图——顺序即"等待所有上游到达"的汇聚语义
-    /// （共享 RuntimeContext 黑板非线程安全，不做真并行）。任一分支内部命中终端分支 → 终止整个运行。
+    /// （共享 IRuntimeContext 黑板非线程安全，不做真并行）。任一分支内部命中终端分支 → 终止整个运行。
     /// </summary>
-    private async Task<bool> RunParallelAsync(ParallelEntry parallel, RuntimeContext context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunParallelAsync(ParallelEntry parallel, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
         foreach (var branch in parallel.Branches)
         {
@@ -200,12 +200,12 @@ public sealed class CompilerEngine
         => (node as ICompileTimeAware)?.CompileContext?.Order ?? -1;
 
     /// <summary>
-    /// 驱动单个节点：注入 RuntimeContext，经统一数据流入口
+    /// 驱动单个节点：注入 IRuntimeContext，经统一数据流入口
     /// <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/> 执行节点并拿到返回值，
-    /// 写回 <see cref="RuntimeContext.Data"/> 供下游链式传递。
-    /// 节点异常经 <see cref="RuntimeContext.Error"/> 推送到日志后向上抛出（由 RunExecuteAsync 捕获处理）。
+    /// 写回 <see cref="IRuntimeContext.Data"/> 供下游链式传递。
+    /// 节点异常经 <see cref="IRuntimeContext.Error"/> 推送到日志后向上抛出（由 RunExecuteAsync 捕获处理）。
     /// </summary>
-    private static async Task DriveAsync(IWorkflowNodeViewModel node, RuntimeContext context, CancellationToken ct)
+    private static async Task DriveAsync(IWorkflowNodeViewModel node, IRuntimeContext context, CancellationToken ct)
     {
         if (node is null || context is null) return;
         if (node is IRuntimeAware aware)

@@ -10,6 +10,9 @@ namespace VeloxDev.WorkflowSystem;
 [AgentContext(AgentLanguages.English, "Readonly struct carrier of ITaskContext with nullable data/sender/receiver")]
 public readonly struct TaskContext : ITaskContext
 {
+    /// <summary>运行期数据流载体，恒为 false（编译期才有 true）。</summary>
+    public bool IsCompilePhase => false;
+
     /// <summary>负载/输入数据，可为空。</summary>
     [AgentContext(AgentLanguages.Chinese, "负载数据（可空）")]
     [AgentContext(AgentLanguages.English, "Payload data (nullable)")]

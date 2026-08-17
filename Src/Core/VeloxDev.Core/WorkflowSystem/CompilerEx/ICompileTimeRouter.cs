@@ -14,6 +14,6 @@ public interface ICompileTimeRouter
     /// <summary>分支表：key → 下游节点。一个分支可扇出到多个目标。</summary>
     Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable();
 
-    /// <summary>给定当前数据负载（运行期为 RuntimeContext 实例，编译期为 null），返回路由 key。</summary>
+    /// <summary>给定当前数据负载（运行期为 <see cref="IRuntimeContext"/> 实例，编译期为 null），返回路由 key。</summary>
     Task<object?> ResolveRouteKey(object? payload);
 }

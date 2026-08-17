@@ -18,7 +18,7 @@ public sealed partial class CompilerViewModel
 {
     [VeloxProperty] private ObservableCollection<CompiledGraph> _graphs = [];
 
-    public async Task<IReadOnlyList<CompiledGraph>> CompileAsync<T>(T component)
+    public async Task<IReadOnlyList<CompiledGraph>> CompileAsync<T>(T component, CancellationToken ct = default)
         where T : IWorkflowViewModel
     {
         if (component is not IWorkflowNodeViewModel start)
@@ -26,7 +26,7 @@ public sealed partial class CompilerViewModel
                 $"CompileAsync 需要 IWorkflowNodeViewModel 作为起点，收到 {component?.GetType().Name}。");
 
         var state = new CompileState();
-        var graphs = new List<CompiledGraph> { await CompileGraphAsync(start, state) };
+        var graphs = new List<CompiledGraph> { await CompileGraphAsync(start, state, ct) };
 
         _graphs.Clear();
         foreach (var g in graphs) _graphs.Add(g);
@@ -34,7 +34,7 @@ public sealed partial class CompilerViewModel
     }
 
     private async Task<CompiledGraph> CompileGraphAsync(
-        IWorkflowNodeViewModel start, CompileState state)
+        IWorkflowNodeViewModel start, CompileState state, CancellationToken ct)
     {
         var entries = new List<ActionEntry>();
         var chain = new List<IWorkflowNodeViewModel>();
@@ -80,7 +80,7 @@ public sealed partial class CompilerViewModel
                     {
                         var target = kv.Value[0];
                         if (target is null) continue;
-                        var sub = await CompileGraphAsync(target, state);
+                        var sub = await CompileGraphAsync(target, state, ct);
                         options.Add(new BranchOption { Key = kv.Key, Label = label, Graph = sub });
                         exits.Add(LastNode(sub));
                         continue;
@@ -91,7 +91,7 @@ public sealed partial class CompilerViewModel
                     foreach (var t in kv.Value)
                     {
                         if (t is null) continue;
-                        var sub = await CompileGraphAsync(t, state);
+                        var sub = await CompileGraphAsync(t, state, ct);
                         branches.Add(sub);
                         subExits.Add(LastNode(sub));
                     }
@@ -143,7 +143,7 @@ public sealed partial class CompilerViewModel
 
             // 线性节点
             chain.Add(node);
-            var next = SingleTarget(node);
+            var next = await SingleTargetValidAsync(node, state, ct);
             if (next is null || ReferenceEquals(next, node))
             {
                 FlushChain(entries, chain, state, offset);
@@ -258,6 +258,45 @@ public sealed partial class CompilerViewModel
             .Distinct()
             .ToList();
         return targets.Count == 1 ? targets[0] : null;
+    }
+
+    /// <summary>
+    /// 链续接的「合法性」版 <see cref="SingleTarget"/>：返回经由合法输出边唯一可达的下游节点
+    /// （去重后恰一个）；否则 null。每条输出边在编译期都以 <see cref="ICompileContext"/> 走一遍
+    /// <see cref="IWorkflowNodeViewModelHelper.AccessAsync"/> 静态检测——非法边按运行期
+    /// 广播语义跳过（视为未连接），不进入编译图。
+    /// </summary>
+    private async Task<IWorkflowNodeViewModel?> SingleTargetValidAsync(
+        IWorkflowNodeViewModel node, CompileState state, CancellationToken ct)
+    {
+        var validTargets = new List<IWorkflowNodeViewModel>();
+        foreach (var sender in node.Slots.Where(s => s is not null))
+        {
+            foreach (var receiver in sender!.Targets ?? [])
+            {
+                ct.ThrowIfCancellationRequested();
+                var target = receiver.Parent as IWorkflowNodeViewModel;
+                if (target is null) continue;
+
+                var helper = node.GetHelper();
+                if (helper is null) continue;
+
+                // 编译期占位身份：Order 取当前游标（发送节点尚未编号），Sender/Receiver 填待校验的边。
+                var compileCtx = new CompileContext
+                {
+                    Order = state.Counter,
+                    ChainIndex = -1,
+                    Offset = 0,
+                    Sender = sender,
+                    Receiver = receiver,
+                };
+                if (!await helper.AccessAsync(compileCtx, ct).ConfigureAwait(false))
+                    continue;
+                validTargets.Add(target);
+            }
+        }
+        var distinct = validTargets.Distinct().ToList();
+        return distinct.Count == 1 ? distinct[0] : null;
     }
 
     /// <summary>编译游标：全局序号计数器 + 已访问集合（避免 ref 参数，供异步递归共享）。</summary>

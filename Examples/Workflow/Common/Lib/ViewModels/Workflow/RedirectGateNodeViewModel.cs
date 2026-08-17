@@ -29,7 +29,7 @@ public partial class RedirectGateNodeViewModel : NodeViewModel, IRedirectable
     [VeloxProperty] private int redirectBackSteps = 1;
 
     /// <summary>回退到 `RedirectBackSteps` 步前的编译状态（Order）。仅当节点已调用 Warn/Error 时由引擎调用。</summary>
-    public Task<int?> ResolveRedirectAsync(RuntimeContext context, CancellationToken ct)
+    public Task<int?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
     {
         if (CompileContext is { } cc)
             return Task.FromResult<int?>(cc.Order - RedirectBackSteps);

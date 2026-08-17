@@ -9,6 +9,18 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// </summary>
 public sealed partial class CompileContext : ICompileContext
 {
+    /// <summary>编译期身份，恒为 true（静态检测阶段）。</summary>
+    public bool IsCompilePhase => true;
+
+    /// <summary>编译期无数据负载，恒为 null。</summary>
+    public object? Data => null;
+
+    /// <summary>待校验边的发送端输出槽；节点自身持有的身份实例上为 null，仅编译器构造的边实例填入。</summary>
+    public IWorkflowSlotViewModel? Sender { get; set; }
+
+    /// <summary>待校验边的接收端输入槽；节点自身持有的身份实例上为 null，仅编译器构造的边实例填入。</summary>
+    public IWorkflowSlotViewModel? Receiver { get; set; }
+
     [VeloxProperty] private int _order = -1;         // 全局计算序号；-1 = 绝对停止状态
     [VeloxProperty] private int _chainIndex = -1;    // 在所属链路内的序号（从 0 起）
     [VeloxProperty] private int _offset = 0;         // 进入本图的起点偏移（Router 下游 > 0）

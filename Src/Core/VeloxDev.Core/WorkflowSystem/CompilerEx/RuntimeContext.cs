@@ -13,6 +13,9 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// </summary>
 public sealed partial class RuntimeContext : IRuntimeContext
 {
+    /// <summary>运行期执行会话，恒为 false（编译期才有 true）。</summary>
+    public bool IsCompilePhase => false;
+
     // ── 上下文共享 ──
     [VeloxProperty] private Guid _uid = Guid.NewGuid();
     [VeloxProperty] private int _sequence = 0;
@@ -42,15 +45,15 @@ public sealed partial class RuntimeContext : IRuntimeContext
 
     /// <summary>
     /// 节点是否在本次驱动中调用了 <see cref="Error"/> 或 <see cref="Warn"/>（请求重定向）。
-    /// 由引擎在每次驱动节点前清除、驱动后检查。
+    /// 由引擎在每次驱动节点前清除、驱动后检查。经 <see cref="IRuntimeContext"/> 读写。
     /// </summary>
-    public bool RedirectRequested { get; internal set; }
+    public bool RedirectRequested { get; set; }
 
     /// <summary>流程是否因「节点报错但未实现 <see cref="IRedirectable"/>」而提前结束（状态置为 -1）。</summary>
-    public bool EndedWithError { get; internal set; }
+    public bool EndedWithError { get; set; }
 
     /// <summary>引擎请求的回退目标 Order（可为跨链）。RunAsync 读取后带该目标重跑整张图。</summary>
-    public int? PendingRedirectTarget { get; internal set; }
+    public int? PendingRedirectTarget { get; set; }
 
     /// <summary>取下一个执行顺序号（自增）。</summary>
     public int Next() => Interlocked.Increment(ref _sequence);
