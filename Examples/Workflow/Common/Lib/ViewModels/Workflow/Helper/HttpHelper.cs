@@ -182,6 +182,7 @@ namespace Demo.ViewModels.Workflow.Helper
         /// <summary>编译执行下的节点步骤：只更新运行状态/耗时，不触碰编译期固定的编号徽标。</summary>
         private async Task ExecuteCompiledStepAsync(CancellationToken ct)
         {
+            if (_viewModel is null) return;
             var stopwatch = Stopwatch.StartNew();
             try
             {

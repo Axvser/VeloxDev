@@ -126,8 +126,9 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
             try
             {
                 var names = new HashSet<string>(
-                    JArray.Parse(namesJson)
+                    JArray.Parse(namesJson!)
                         .Select(t => t.Value<string>())
+                        .OfType<string>()
                         .Where(n => !string.IsNullOrWhiteSpace(n)),
                     StringComparer.OrdinalIgnoreCase);
                 subset = _servers.Where(s => names.Contains(s.Name)).ToArray();

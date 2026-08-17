@@ -152,7 +152,7 @@ public class McpScope
     /// redirect URL carrying the auth code (as a string). When not set, the MCP SDK's default console-input
     /// handler is used (headless scenarios should always register this). Replaces any previously registered handler.
     /// </summary>
-    public McpScope WithOAuthAuthorizationRedirect(Func<Uri, Uri, CancellationToken, Task<string>> handler)
+    public McpScope WithOAuthAuthorizationRedirect(Func<Uri, Uri, CancellationToken, Task<string?>> handler)
     {
         _oauthAuthorizationRedirect = handler is null ? null : new AuthorizationRedirectDelegate(handler);
         return this;
@@ -438,7 +438,7 @@ public class McpScope
         var j = ParseOptions(config.Options);
         EnsureKnownKeys(j, StdioOptionKeys, config.Name);
         if (TryGetOption(j, "env", out var env))
-            stdioOptions.EnvironmentVariables = env.ToObject<Dictionary<string, string>>();
+            stdioOptions.EnvironmentVariables = env.ToObject<Dictionary<string, string?>>();
         if (TryGetOption(j, "workingDirectory", out var wd))
             stdioOptions.WorkingDirectory = wd.Value<string>();
 
@@ -478,11 +478,13 @@ public class McpScope
 
         if (TryGetOption(j, "oauth", out var oauthToken) && oauthToken is JObject o)
         {
+            var redirectUri = o["redirectUri"]?.Value<string>();
             options.OAuth = new ClientOAuthOptions
             {
                 ClientId = o["clientId"]?.Value<string>() ?? string.Empty,
                 ClientSecret = o["clientSecret"]?.Value<string>(),
-                RedirectUri = o["redirectUri"]?.Value<string>() is { } ru ? new Uri(ru) : null,
+                // RedirectUri is a `required` member of ClientOAuthOptions; fall back to a loopback default when the config omits it.
+                RedirectUri = redirectUri is not null ? new Uri(redirectUri) : new Uri("http://localhost/oauth/callback"),
                 Scopes = o["scopes"]?.ToObject<string[]>(),
                 AuthorizationRedirectDelegate = _oauthAuthorizationRedirect,
             };

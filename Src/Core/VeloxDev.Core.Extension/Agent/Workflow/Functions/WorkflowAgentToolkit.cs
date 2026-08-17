@@ -1686,6 +1686,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             if (receiver == null) return Error($"Slot '{receiverSlot}' is null");
         }
 
+        if (receiver is null) return Error($"Receiver '{receiverSlot}' could not be resolved");
         await SendReceiveAsync(sender, receiver, cancellationToken);
 
         bool connected = receiver is not null && VerifyConnection(sender, receiver);

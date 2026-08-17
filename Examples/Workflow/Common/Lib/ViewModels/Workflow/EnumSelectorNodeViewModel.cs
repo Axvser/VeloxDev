@@ -112,7 +112,10 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     }
 
     public SlotViewModel? GetSlotForValue(object value)
-        => OutputSlots?.TrySelect(OutputSlots.NormalizeSelectorValue(value), out var slot) == true ? slot : null;
+    {
+        var key = OutputSlots?.NormalizeSelectorValue(value);
+        return key is not null && OutputSlots?.TrySelect(key, out var slot) == true ? slot : null;
+    }
 
     public string GetSlotLabel(int index)
     {
