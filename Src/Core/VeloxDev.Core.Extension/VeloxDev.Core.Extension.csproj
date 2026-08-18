@@ -24,7 +24,7 @@
 		<PackageReference Include="ModelContextProtocol" Version="2.2.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<ProjectReference Include="../VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.Core" Version="7.0.0" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="7.0.142" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 	<ItemGroup>
