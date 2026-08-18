@@ -9,6 +9,7 @@
 			 xmlns:vm="using:Demo.ViewModels"
 			 xmlns:workflow="using:VeloxDev.WorkflowSystem"
 			 xmlns:mcp="using:VeloxDev.AI.MCP"
+			 xmlns:md="clr-namespace:AvalonMarkdown.Views;assembly=AvalonMarkdown"
 			 x:DataType="vm:TreeViewModel"
              behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
 			 behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
@@ -155,26 +156,15 @@
 												  FontSize="11"
 												  Margin="0,-6,0,-6"/>
 								</Grid>
-								<ListBox MaxHeight="300" x:Name="AgentLogScroller"
-										 VerticalAlignment="Stretch"
-										 ScrollViewer.VerticalScrollBarVisibility="Auto"
-										 ItemsSource="{Binding AgentLog}"
-										 Background="Transparent" BorderThickness="0">
-										<ListBox.ItemsPanel>
-											<ItemsPanelTemplate>
-												<VirtualizingStackPanel/>
-											</ItemsPanelTemplate>
-										</ListBox.ItemsPanel>
-										<ListBox.ItemTemplate>
-											<DataTemplate>
-												<TextBlock Text="{Binding .}" Foreground="#d8d8d8" TextWrapping="Wrap" Margin="0,2"/>
-											</DataTemplate>
-										</ListBox.ItemTemplate>
-									</ListBox>
+								<!-- MarkdownView 自带内部滚动，直接放入面板，不要套在 ScrollViewer 里 -->
+								<md:MarkdownView Text="{Binding ConversationMarkdown}"
+												 Height="360"
+												 HorizontalAlignment="Stretch"
+												 VerticalAlignment="Stretch"/>
 								<Grid ColumnDefinitions="*,Auto">
 									<TextBox x:Name="AgentInput"
 											 Grid.Column="0"
-											 Watermark="输入消息..."
+											 PlaceholderText="输入消息..."
 											 Background="#2d2d2d"
 											 Foreground="White"
 											 AcceptsReturn="False"

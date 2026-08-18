@@ -1,5 +1,6 @@
 ﻿using Demo.ViewModels.Workflow.Helper;
 using System.Collections.ObjectModel;
+using System.Text;
 using VeloxDev.AI;
 using VeloxDev.AI.Workflow;
 using VeloxDev.MVVM;
@@ -19,6 +20,8 @@ public partial class TreeViewModel
 
     [VeloxProperty] private ObservableCollection<string> executionLog = [];
     [VeloxProperty] private ObservableCollection<string> agentLog = [];
+    [VeloxProperty] private ObservableCollection<AgentMessageViewModel> agentMessages = [];
+    [VeloxProperty] private string conversationMarkdown = "";
     [VeloxProperty] private bool isWorkflowRunning = false;
 
     [VeloxProperty] private bool useStreamingAgentResponse = true;
@@ -119,11 +122,19 @@ public partial class TreeViewModel
         if (isFirstLine)
         {
             AgentLog.Add($"🤖 {line}");
+            AgentMessages.Add(new AgentMessageViewModel(AgentMessageRole.Assistant, line));
             isFirstLine = false;
         }
         else
         {
             AgentLog.Add($"    {line}");
+
+            // 把流式的后续片段追加到当前助手消息，使 Markdown（代码块/列表等）能跨行完整渲染。
+            if (AgentMessages.Count > 0 &&
+                AgentMessages[AgentMessages.Count - 1].Role == AgentMessageRole.Assistant)
+            {
+                AgentMessages[AgentMessages.Count - 1].Text += $"\n{line}";
+            }
         }
     }
 
@@ -180,6 +191,68 @@ public partial class TreeViewModel
             return;
         }
         AgentLog.Add(entry);
+        AgentMessages.Add(AgentMessageViewModel.FromLogLine(entry));
+    }
+
+    // ── 会话 Markdown 转录（供 Avalonia Full Demo 直接喂给 AvalonMarkdown MarkdownView） ──
+
+    partial void OnItemAddedToAgentMessages(IEnumerable<AgentMessageViewModel> items)
+    {
+        foreach (var msg in items)
+            msg.PropertyChanged += OnAgentMessageTextChanged;
+        RebuildConversationMarkdown();
+    }
+
+    partial void OnItemRemovedFromAgentMessages(IEnumerable<AgentMessageViewModel> items)
+    {
+        foreach (var msg in items)
+            msg.PropertyChanged -= OnAgentMessageTextChanged;
+        RebuildConversationMarkdown();
+    }
+
+    partial void OnItemMovedInAgentMessages(IEnumerable<AgentMessageViewModel> items)
+    {
+        RebuildConversationMarkdown();
+    }
+
+    partial void OnItemsResetInAgentMessages()
+    {
+        RebuildConversationMarkdown();
+    }
+
+    private void OnAgentMessageTextChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AgentMessageViewModel.Text))
+            RebuildConversationMarkdown();
+    }
+
+    private void RebuildConversationMarkdown()
+    {
+        var sb = new StringBuilder();
+
+        foreach (var msg in AgentMessages)
+        {
+            if (sb.Length > 0)
+                sb.Append("\n\n---\n\n");
+
+            switch (msg.Role)
+            {
+                case AgentMessageRole.User:
+                    sb.Append("**🧑 你：** ").Append(msg.Text);
+                    break;
+                case AgentMessageRole.Assistant:
+                    sb.Append("**🤖 助手：**\n\n").Append(msg.Text);
+                    break;
+                case AgentMessageRole.Error:
+                    sb.Append("**❌ 错误：** ").Append(msg.Text);
+                    break;
+                default:
+                    sb.Append(msg.Text);
+                    break;
+            }
+        }
+
+        ConversationMarkdown = sb.ToString();
     }
 
     [VeloxCommand]

@@ -165,7 +165,6 @@ public partial class WorkflowView : UserControl
 
     private void SubscribeAutoScroll(TreeViewModel vm)
     {
-        vm.AgentLog.CollectionChanged += OnAgentLogChanged;
         vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
         {
@@ -179,7 +178,6 @@ public partial class WorkflowView : UserControl
 
     private void UnsubscribeAutoScroll(TreeViewModel vm)
     {
-        vm.AgentLog.CollectionChanged -= OnAgentLogChanged;
         vm.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
         {
@@ -498,20 +496,9 @@ public partial class WorkflowView : UserControl
         Dispatcher.UIThread.Post(() => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this), DispatcherPriority.Background);
     }
 
-    private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        Dispatcher.UIThread.Post(() => ScrollListToEnd(AgentLogScroller), DispatcherPriority.Background);
-    }
-
     private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         ScrollToEnd(ExecutionLogScroller);
-    }
-
-    private static void ScrollListToEnd(ListBox? listBox)
-    {
-        if (listBox is null || listBox.ItemCount == 0) return;
-        listBox.ScrollIntoView(listBox.ItemCount - 1);
     }
 
     private static void ScrollToEnd(ScrollViewer? scroller)

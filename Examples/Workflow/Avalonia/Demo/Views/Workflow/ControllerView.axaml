@@ -36,7 +36,7 @@
 			<ScrollViewer>
 			<StackPanel Spacing="6">
                <TextBlock Text="Seed" Foreground="#dcdcdc" FontSize="11"/>
-				<TextBox Text="{Binding SeedPayload, Mode=TwoWay}" Watermark="payload" FontSize="11"/>
+				<TextBox Text="{Binding SeedPayload, Mode=TwoWay}" PlaceholderText="payload" FontSize="11"/>
 			</StackPanel>
 			</ScrollViewer>
 		</Border>
