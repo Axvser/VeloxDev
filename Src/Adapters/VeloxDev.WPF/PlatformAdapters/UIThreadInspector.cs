@@ -10,8 +10,8 @@ namespace VeloxDev.TransitionSystem
         public override bool IsUIThread() => Application.Current?.Dispatcher?.CheckAccess() ?? default;
 
         /// <summary>
-        /// 目标对象（<see cref="DispatcherObject"/>)优先：UI 元素携带它所属的
-        /// <see cref="Dispatcher"/>，从任意线程可直接编组；否则回退到 <see cref="Application.Current"/>。
+        /// The target object (<see cref="DispatcherObject"/>) takes priority: a UI element carries its owning
+        /// <see cref="Dispatcher"/>, so it can be marshaled directly from any thread; otherwise fall back to <see cref="Application.Current"/>.
         /// </summary>
         private static Dispatcher? DispatcherFor(object target)
             => target is DispatcherObject dispatcherObject ? dispatcherObject.Dispatcher : Application.Current?.Dispatcher;

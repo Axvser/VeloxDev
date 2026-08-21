@@ -27,10 +27,10 @@ namespace Demo
         private ControllerViewModel Controller => _demo!.Controller;
 
         private async void StopWorkflow(object? sender, EventArgs e)
-            => await ExecuteAsync(() => Controller.CloseWorkflowCommand.ExecuteAsync(null), "停止工作流失败");
+            => await ExecuteAsync(() => Controller.CloseWorkflowCommand.ExecuteAsync(null), "Failed to stop workflow");
 
         private async void ReloadWorkflow(object? sender, EventArgs e)
-            => await ExecuteAsync(ReloadWorkflowInternalAsync, "重置示例失败");
+            => await ExecuteAsync(ReloadWorkflowInternalAsync, "Failed to reset demo");
 
         private void UndoWorkflow(object? sender, EventArgs e)
             => _demo?.Tree.UndoCommand.Execute(null);
@@ -72,17 +72,17 @@ namespace Demo
                     result.Layout = result.Layout.AdaptTo(
                         new VeloxDev.WorkflowSystem.Size(1920, 1080));
                     LoadDemo(WorkflowDemoSession.FromTree(result));
-                    MessageBox.Show(this, $"工作流已从 {dialog.FileName} 加载成功。", "加载成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(this, $"Workflow loaded successfully from {dialog.FileName}.", "Load Succeeded", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, $"加载文件失败：{ex.GetType().Name}\n{ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(this, $"Failed to load file: {ex.GetType().Name}\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
         }
 
         private async void LoadNetworkDemo(object? sender, EventArgs e)
-            => await ExecuteAsync(ReloadWorkflowInternalAsync, "加载示例失败");
+            => await ExecuteAsync(ReloadWorkflowInternalAsync, "Failed to load demo");
 
         private async void OnFormClosing(object? sender, FormClosingEventArgs e)
         {
@@ -151,7 +151,7 @@ namespace Demo
             helper.Mcp.Status.PropertyChanged -= OnMcpStatusChanged;
         }
 
-        // ── MCP 服务器状态 ─────────────────────────────────────────────────
+        // ── MCP server status ─────────────────────────────────────────────────
 
         private TabPage? _mcpStatusTab;
         private FlowLayoutPanel? _mcpStatusPanel;
@@ -175,7 +175,7 @@ namespace Demo
                 logTabControl.TabPages.Add(_mcpStatusTab);
             }
 
-            // 状态更新 marshal 到 UI 线程（ObservableCollection 绑定需同线程）。
+            // Marshal status updates to the UI thread (ObservableCollection bindings require the same thread).
             helper.Mcp.WithSynchronizationContext(SynchronizationContext.Current);
             helper.Mcp.Status.PropertyChanged += OnMcpStatusChanged;
 

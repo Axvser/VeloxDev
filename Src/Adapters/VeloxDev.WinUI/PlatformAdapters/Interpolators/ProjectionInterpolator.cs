@@ -13,7 +13,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             var s = Normalize(start);
             var e = Normalize(end);
 
-            // 单帧（重置等）返回原始目标值：end 为 null 时就写 null，而不是默认 PlaneProjection。
+            // Single-frame (reset, etc.) returns the raw target value: write null when end is null rather than the default PlaneProjection.
             if (steps <= 1) return [end];
 
             List<object?> result = new(steps);
@@ -72,7 +72,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             if (obj is PlaneProjection p)
                 return p;
 
-            // 默认初始状态：无旋转、无偏移
+            // Default initial state: no rotation, no offset.
             return new PlaneProjection
             {
                 RotationX = 0,

@@ -41,33 +41,33 @@ namespace Demo
             _teamData.Aop().Reset();
         }
 
-        /* 无需修改 ViewModel 源码 — Aop() 自动缓存并返回 AOP 代理 */
+        /* No need to modify the ViewModel source — Aop() automatically caches and returns an AOP proxy */
         private static void ConfigureAOP(TeamViewModel data)
         {
             var p = data.Aop();
 
-            /* 前置钩子：Name 被读取[前] */
+            /* Before hook: before Name is read */
             p.SetProxy(ProxyMembers.Getter,
                 nameof(TeamViewModel.Name),
                 (_, _) => { MessageBox.Show($"a read operation happened at [{DateTime.Now}]"); return null; },
                 null,
                 null);
 
-            /* 后置钩子：Name 被更改[后] */
+            /* After hook: after Name is changed */
             p.SetProxy(ProxyMembers.Setter,
                 nameof(TeamViewModel.Name),
                 null,
                 null,
                 (p, _) => { MessageBox.Show($"the name of team has been changed to {p?[0]}"); return null; });
 
-            /* 覆写原逻辑：Reset() 被调用[时] */
+            /* Override original logic: when Reset() is called */
             p.SetProxy(ProxyMembers.Method,
                 nameof(TeamViewModel.Reset),
                 null,
                 (_, _) => { MessageBox.Show($"the default Reset() has been cancelled"); return null; },
                 null);
 
-            /* 扩展：Members 有成员被添加时 */
+            /* Extension: when a member is added to Members */
             p.SetProxy(ProxyMembers.Method,
                 nameof(TeamViewModel.AOP_OnMemberAdded),
                 null,
@@ -80,7 +80,7 @@ namespace Demo
                     return null;
                 });
 
-            /* 扩展：Members 有成员被移除时 */
+            /* Extension: when a member is removed from Members */
             p.SetProxy(ProxyMembers.Method,
                 nameof(TeamViewModel.AOP_OnMemberRemoved),
                 null,

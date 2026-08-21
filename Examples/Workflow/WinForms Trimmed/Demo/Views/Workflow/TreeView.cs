@@ -661,8 +661,9 @@ public sealed class TreeView : UserControl
 
         PART_Canvas.Invalidate();
 
-        // Invalidate 只是排队，高频平移时 WM_PAINT 被延后，节点旧位置与旧连线
-        // 来不及擦除形成残影；同步重绘画布（连线）与网格装饰器，保证每帧干净。
+        // Invalidate only queues; during high-frequency panning WM_PAINT is deferred, so old
+        // node positions and old links are not erased in time and leave ghost trails. Sync-redraw
+        // the canvas (links) and grid decorator to keep every frame clean.
         PART_Canvas.Update();
         PART_GridDecorator.Update();
 

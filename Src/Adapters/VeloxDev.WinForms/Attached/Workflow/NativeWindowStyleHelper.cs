@@ -6,15 +6,15 @@ using System.Windows.Forms;
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// 为工作流宿主编排 Win32 窗口样式，消除 WinForms 自绘画布与子窗口（节点卡片）
-/// 重绘分离导致的闪烁/残影：
-///   - <c>WS_CLIPCHILDREN</c>：父窗口重绘时裁剪子窗口区域，避免父缓冲 BitBlt 覆盖
-///     子窗口后再由子窗口异步重绘恢复——这是"拖动时所有节点闪烁"的根源。
-///   - <c>WS_EX_COMPOSITED</c>：顶级窗体启用窗口合成，整个窗体树（画布、卡片、卡片
-///     内部控件、半透明槽位）由 DWM 统一双缓冲，从根上消除父子窗口重绘分离。
-/// 样式无法通过 <see cref="Control.CreateParams"/> 从外部注入（该属性受保护），只能
-/// 在窗口句柄创建后通过 <c>SetWindowLong</c> 应用；句柄重建（RecreateHandle）后样式
-/// 会重置，因此通过 <c>HandleCreated</c> 事件在每次句柄创建时重新应用。
+/// Orchestrates Win32 window styles for the workflow host to eliminate flicker/ghosting caused
+/// by the repaint separation between the WinForms self-drawn canvas and its child windows (node cards):
+///   - <c>WS_CLIPCHILDREN</c>: clips the child-window region while the parent repaints, preventing the parent's BitBlt buffer from
+///     covering child windows before they asynchronously repaint — this is the root cause of "all nodes flicker while dragging".
+///   - <c>WS_EX_COMPOSITED</c>: enables window composition on the top-level form so the whole form tree (canvas, cards,
+///     in-card controls, semi-transparent slots) is double-buffered by DWM as a unit, eliminating the parent/child repaint
+///     separation from the root. The style cannot be injected from outside via <see cref="Control.CreateParams"/>
+///     (that property is protected); it can only be applied with <c>SetWindowLong</c> after the window handle is created.
+///     After a handle rebuild (RecreateHandle) the styles reset, so they are re-applied on each handle creation via <c>HandleCreated</c>.
 /// </summary>
 internal static class NativeWindowStyleHelper
 {
@@ -23,8 +23,8 @@ internal static class NativeWindowStyleHelper
     private const int WS_CLIPCHILDREN = 0x02000000;
     private const int WS_EX_COMPOSITED = 0x02000000;
 
-    // SetWindowPos 标志：设置样式后强制系统重读（SWP_FRAMECHANGED），使运行时
-    // 通过 SetWindowLong/SetWindowLongPtr 应用的样式立即生效。
+    // SetWindowPos flags: force the system to re-read the styles after they are set (SWP_FRAMECHANGED) so styles applied at runtime
+    // via SetWindowLong/SetWindowLongPtr take effect immediately.
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOZORDER = 0x0004;
@@ -32,14 +32,14 @@ internal static class NativeWindowStyleHelper
     private const uint SWP_FRAMECHANGED = 0x0020;
     private const uint SWP_NOOWNERZORDER = 0x0200;
 
-    // WS_EX_COMPOSITED 让 DWM 为窗体内每个子窗口维护重定向表面并统一合成；子窗口
-    // 越多开销越大。对含大量标准控件的复杂窗体（SplitContainer/TabControl/ListBox/
-    // 工具栏 + 复杂节点卡片，数百子窗口）启用会明显卡顿，而对纯工作流宿主（模板）
-    // 的子窗口数量（十余个）无感。超过此阈值时跳过 composited，闪烁改由已生效的
-    // WS_CLIPCHILDREN + 拖动手势内的同步重绘消除。
+    // WS_EX_COMPOSITED lets DWM maintain a redirected surface per child window and composite them as one; the more child
+    // windows, the higher the cost. On complex forms with many standard controls (SplitContainer/TabControl/ListBox/
+    // toolbars + complex node cards, hundreds of child windows) it visibly stutters, while a plain workflow host (template)
+    // has only a dozen or so child windows and is unaffected. Above this threshold composited is skipped and flicker is
+    // instead eliminated by the already-applied WS_CLIPCHILDREN plus synchronous repaint within the drag gesture.
     private const int CompositedMaxControlCount = 100;
 
-    // 弱引用跟踪：不阻止控件回收；同时保证每个控件只订阅一次 HandleCreated。
+    // Weak-reference tracking: does not prevent control collection and guarantees each control subscribes to HandleCreated only once.
     private static readonly ConditionalWeakTable<Control, object> ClipChildrenTracked = new();
     private static readonly ConditionalWeakTable<Control, object> CompositedTracked = new();
     private static readonly ConditionalWeakTable<Control, object> CompositedForms = new();
@@ -60,7 +60,7 @@ internal static class NativeWindowStyleHelper
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
     /// <summary>
-    /// 确保控件窗口带有 <c>WS_CLIPCHILDREN</c>，使父窗口重绘不覆盖其子控件。
+    /// Ensures the control's window carries <c>WS_CLIPCHILDREN</c> so parent repaints do not cover its child controls.
     /// </summary>
     public static void EnsureClipChildren(Control control)
     {
@@ -83,9 +83,9 @@ internal static class NativeWindowStyleHelper
     }
 
     /// <summary>
-    /// 确保控件的顶级窗体带有 <c>WS_EX_COMPOSITED</c>，让整个窗体树统一合成缓冲。
-    /// 窗体句柄未创建时订阅其 <c>HandleCreated</c>，保证窗口一创建即应用（越早
-    /// 启用合成，已绘制的非合成帧越少）。
+    /// Ensures the control's top-level form carries <c>WS_EX_COMPOSITED</c> so the whole form tree is composited into one buffer.
+    /// When the form handle is not yet created, subscribes to its <c>HandleCreated</c> so the style is applied as soon as
+    /// the window is created (the earlier composition is enabled, the fewer non-composited frames are drawn).
     /// </summary>
     public static void EnsureComposited(Control control)
     {
@@ -125,23 +125,23 @@ internal static class NativeWindowStyleHelper
 
     private static void ApplyCompositedToTopLevel(Control control)
     {
-        // FindForm 返回控件所在的顶级 Form；对本身就是顶级窗体的控件返回其自身。
+        // FindForm returns the top-level Form containing the control; for a control that is already top-level it returns itself.
         var top = control.FindForm() ?? control.TopLevelControl;
         if (top is null)
         {
             return;
         }
 
-        // 复杂窗体树（大量标准控件 + 复杂节点卡片）跳过 composited：DWM 为每个
-        // 子窗口维护重定向表面并合成，数百子窗口下开销使整个窗体（含 ListBox、
-        // TextBox、TabControl 等）卡顿。工作流区域自身的无闪烁由 WS_CLIPCHILDREN
-        // + 拖动同步重绘保证，与模板一致。
+        // Skip composited for complex form trees (many standard controls + complex node cards): DWM maintains a
+        // redirected surface per child window and composites them, and with hundreds of child windows the cost makes
+        // the whole form (including ListBox, TextBox, TabControl, etc.) stutter. The workflow area's flicker-free
+        // rendering is guaranteed by WS_CLIPCHILDREN plus synchronous repaint while dragging, matching the template.
         if (CountDescendants(top) > CompositedMaxControlCount)
         {
             return;
         }
 
-        // 绑定到顶级窗体自身的 HandleCreated，句柄重建后自动恢复。
+        // Bind to the top-level form's own HandleCreated so it is restored automatically after a handle rebuild.
         if (CompositedForms.TryGetValue(top, out _))
         {
             return;
@@ -204,8 +204,8 @@ internal static class NativeWindowStyleHelper
         {
             SetLong(hwnd, index, new IntPtr(value | style));
 
-            // SWP_FRAMECHANGED：通知系统窗口样式已变更，强制重新计算/重读样式，
-            // 否则运行时设置的样式（尤其 WS_EX_COMPOSITED）可能不生效。
+            // SWP_FRAMECHANGED: notifies the system that the window styles changed and forces a recompute/re-read of the
+            // styles; otherwise styles set at runtime (especially WS_EX_COMPOSITED) may not take effect.
             SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         }

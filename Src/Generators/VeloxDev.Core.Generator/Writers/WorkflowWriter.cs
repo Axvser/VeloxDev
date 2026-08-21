@@ -1025,7 +1025,7 @@ namespace VeloxDev.Generators.Writers
         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel? parent = null;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel channel = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel.MultipleBoth;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState state = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState.StandBy;
-        // Slot 锚点默认 NaN(无值):链接在双端锚点被 GUI 测量(写入真实坐标)前不渲染。
+        // Slot anchor defaults to NaN (no value): links don't render until both anchors are measured by the GUI (written with real coordinates).
         private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = new(global::System.Double.NaN, global::System.Double.NaN, 0);
 
         protected virtual {{TaskFullName}} SetChannel({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
@@ -1306,7 +1306,7 @@ namespace VeloxDev.Generators.Writers
     """);
         }
 
-        #region RuntimeId 与 Node 默认布局
+        #region RuntimeId and Node default layout
 
         /// <summary>
         /// True when the target class (or any base) already exposes a RuntimeId member or implements
@@ -1452,7 +1452,7 @@ namespace VeloxDev.Generators.Writers
 
         #endregion
 
-        #region InitializeWorkflow 辅助方法
+        #region InitializeWorkflow helper methods
 
         private static bool IsPartialProperty(IPropertySymbol propertySymbol)
         {
@@ -1658,7 +1658,7 @@ namespace VeloxDev.Generators.Writers
 
         #endregion
 
-        #region 内部模型定义
+        #region Internal model definitions
 
         private abstract class WorkflowAttributeModel
         {

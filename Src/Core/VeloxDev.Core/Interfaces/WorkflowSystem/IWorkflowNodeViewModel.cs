@@ -95,11 +95,14 @@ public interface IWorkflowNodeViewModelHelper : IWorkflowHelper
     public Task ReverseBroadcastAsync(object? parameter, CancellationToken ct);
 
     /// <summary>
-    /// 数据流访问校验：同一条钩子在两阶段复用，入参为数据流访问上下文 <see cref="IAccessContext"/>
-    /// （携带两端槽 Sender/Receiver 与负载 Data）。
-    /// - 编译期：<see cref="IAccessContext.IsCompilePhase"/> 为 true、Data 为 null，做无数据静态检测；
-    /// - 运行期：<see cref="IAccessContext.IsCompilePhase"/> 为 false、Data 携带负载，做实时检测。
-    /// 返回 false 时该连接按「未连接」跳过（运行期广播不投递、编译期不进编译图）。
+    /// Dataflow access validation: the same hook is reused across both phases, taking a dataflow access context
+    /// <see cref="IAccessContext"/> (carrying the two end slots Sender/Receiver and the payload Data).
+    /// - Compile phase: <see cref="IAccessContext.IsCompilePhase"/> is true and Data is null, doing static detection
+    ///   without data;
+    /// - Runtime phase: <see cref="IAccessContext.IsCompilePhase"/> is false and Data carries the payload, doing
+    ///   real-time detection.
+    /// Returning false skips that connection as "unconnected" (runtime broadcast does not deliver; the compile
+    /// phase does not include it in the compiled graph).
     /// </summary>
     public Task<bool> AccessAsync(IAccessContext context, CancellationToken ct);
 

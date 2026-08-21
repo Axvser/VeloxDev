@@ -5,16 +5,16 @@ using VeloxDev.WorkflowSystem;
 namespace Demo.Workflow;
 
 /// <summary>
-/// Demo 是一张**大画布上的多个示例**，画布原点 (0,0) 在左上角，各示例按行列排布、互不重叠。
-/// 每个示例有自己独立的启动节点（Controller）。
+/// The demo is **multiple examples on one large canvas**; the canvas origin (0,0) is at the top-left, examples
+/// are laid out row by row without overlapping. Each example has its own initiator node (Controller).
 ///
-/// 当前示例（Compiler 机制由用户从零重写中，分支选择节点暂为普通节点，不再负责路由）：
-///   A. 节点图能力 —— 基座图：Controller → worker → Bool/Enum 选择器（普通节点）→ 分支 → 汇合 → handler；
-///   R. 链内回退 —— 线性链中实现 IRedirectable 的节点依据运行时上下文回退到某前驱编译状态。
+/// Current examples (the Compiler mechanism is being rewritten from scratch, so branch selectors are ordinary
+///   nodes for now and no longer handle routing): A. Node-graph capability — base graph: Controller → worker →
+///   Bool/Enum selector (ordinary node) → branch → join → handler; R. In-chain fallback — a node implementing
 ///
-/// 布点约定：示例自左上 (0,0) 起逐行排布；示例内部连线尽量自左向右 / 自上而下。
-/// Method Router 保留在 NetworkRequestMethod 上（Get/Post/Put/Delete），其编译模式默认 Dynamic
-/// （编译图保留全部分支，运行期按选中值路由）；可在卡片下拉切换为 Static（只编译当前选中分支）。
+///   IRedirectable in a linear chain falls back to an earlier compile state from the runtime context.
+/// Layout: examples start at (0,0) and fill row by row; links flow left-to-right / top-to-bottom where possible.
+/// Method Router stays on NetworkRequestMethod (Get/Post/Put/Delete); compile mode defaults to Dynamic (keeps all branches, routes at runtime by the selected value), switchable to Static (compile only the selected branch) via the card dropdown.
 /// </summary>
 public sealed class WorkflowDemoSession
 {
@@ -28,9 +28,9 @@ public sealed class WorkflowDemoSession
     }
 
     public TreeViewModel Tree { get; }
-    /// <summary>主控制器（示例 A：节点图能力），供向后兼容 / 单图宿主使用。</summary>
+    /// <summary>Primary controller (example A: node-graph capability), for backward compatibility / single-graph hosts.</summary>
     public ControllerViewModel Controller { get; }
-    /// <summary>所有示例各自的启动节点（Controller）。</summary>
+    /// <summary>Each example's own initiator node (Controller).</summary>
     public IReadOnlyList<ControllerViewModel> Controllers { get; }
     public ObservableCollection<NodeViewModel> Nodes { get; }
 
@@ -53,7 +53,7 @@ public sealed class WorkflowDemoSession
                 Anchor = new Anchor(left, top, 0),
             };
 
-        // 建一个示例：创建 Controller（启动节点）并注册进树（输出口在示例各节点 slot 创建后再建）。
+        // Build one example: create the Controller (initiator node) and register it into the tree (its output slot is created after the example nodes' slots).
         ControllerViewModel NewController(string seed, double left, double top)
         {
             var c = new ControllerViewModel
@@ -67,7 +67,7 @@ public sealed class WorkflowDemoSession
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // 示例 A：节点图能力 —— Controller → worker → Bool/Enum 选择器（普通节点）→ 分支 + 汇合 + handler
+        // Example A: node-graph capability — Controller → worker → Bool/Enum selector (ordinary node) → branch + join + handler
         // ─────────────────────────────────────────────────────────────────────
         var controller = NewController("demo-request-chain", 60, 60);
 
@@ -99,15 +99,15 @@ public sealed class WorkflowDemoSession
         var handleDelete = CreateNode("DELETE Handler", 500, 2260, 880, priority: 4);
         var finalize = CreateNode("Finalize", 700, 2660, 460, priority: 0);
 
-        // 注意：controller 已由 NewController 创建过，绝不能再次 CreateNode——重复创建会 Delete+重建，清空其 slot 的 Parent。
+        // Note: the controller was already created by NewController — never CreateNode it again. Re-creating would Delete + rebuild and clear the Parent of its slots.
         foreach (var n in new IWorkflowNodeViewModel[]
         {
             loadSeed, boolSelector, hot, cold, aggregate, enumSelector,
             handleGet, handlePost, handlePut, handleDelete, finalize,
         })
-            helper.CreateNode(n);   // 先注册节点（安装 helper），再创建 slot
+            helper.CreateNode(n);   // register the node first (installs the helper), then create slots
 
-        // 用生成器预置的默认 InputSlot/OutputSlot + SetChannelCommand 配置通道（不新建替换，避免幽灵撤销/重做）
+        // Configure channels with the generator-preset default InputSlot/OutputSlot + SetChannelCommand (do not replace them with new ones, to avoid ghost undo/redo entries)
         SetChannel(controller.OutputSlot, SlotChannel.MultipleTargets);
         SetChannel(loadSeed.InputSlot, SlotChannel.OneSource);
         SetChannel(loadSeed.OutputSlot, SlotChannel.OneTarget);
@@ -153,9 +153,9 @@ public sealed class WorkflowDemoSession
         allNodes.AddRange([loadSeed, hot, cold, aggregate, handleGet, handlePost, handlePut, handleDelete, finalize]);
 
         // ─────────────────────────────────────────────────────────────────────
-        // 示例 R：链内回退 —— Controller → Start → Prepare → RedirectGate → Process → Sink。
-        // RedirectGate 实现 IRedirectable：前 FailCount 次链内通过回退到 RedirectBackSteps 步前
-        // （即 Prepare）重新执行，之后放行。回退目标落在中间可见检查点，重试过程清晰可见。
+        // Example R: in-chain fallback — Controller → Start → Prepare → RedirectGate → Process → Sink.
+        // RedirectGate implements IRedirectable: the first FailCount passes fall back RedirectBackSteps (to Prepare)
+        // and re-execute, then pass through; the target is a visible mid-chain checkpoint so retries are clear.
         // ─────────────────────────────────────────────────────────────────────
         var redirectController = NewController("redirect-chain", 60, 1300);
         var rStart = CreateNode("Start", 500, 400, 1300, priority: 1);
@@ -198,9 +198,9 @@ public sealed class WorkflowDemoSession
     }
 
     /// <summary>
-    /// 用节点生成器预置的默认 slot + SetChannelCommand 配置通道。
-    /// 不要新建 SlotViewModel 替换默认值——那会触发 setter 的 Remove→DeleteCommand，产生幽灵撤销/重做条目。
-    /// SetChannelCommand 是标准命令路径、非撤销（无 undo 条目）。
+    /// Configures channels with the generator-preset default slot + SetChannelCommand.
+    /// Never replace the default with a new SlotViewModel — that triggers the setter's Remove→DeleteCommand
+    /// and produces ghost undo/redo entries. SetChannelCommand is a standard command path, non-undoable (no undo entry).
     /// </summary>
     private static void SetChannel(SlotViewModel slot, SlotChannel channel)
     {

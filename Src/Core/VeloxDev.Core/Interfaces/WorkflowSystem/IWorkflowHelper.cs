@@ -2,8 +2,8 @@
 {
     public interface IWorkflowHelper
     {
-        public void Closing();    // 关闭前
-        public Task CloseAsync(); // 安全地关闭
-        public void Closed();     // 关闭后
+        public void Closing();    // Before closing
+        public Task CloseAsync(); // Close safely
+        public void Closed();     // After closing
     }
 }

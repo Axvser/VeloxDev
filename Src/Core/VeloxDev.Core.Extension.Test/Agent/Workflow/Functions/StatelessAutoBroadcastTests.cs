@@ -4,9 +4,10 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// 验证无状态模式下 AutoBroadcast 的自动向下游级联：
-/// 触发链头 ReceiveCommand → 每个节点处理完自动广播 → 级联到达 Sink（无需手动 Forward）。
-/// 用自建线性链，不依赖 demo 会话。
+/// Verifies the automatic downstream cascade of AutoBroadcast in stateless mode:
+/// triggering the chain head's ReceiveCommand → each node auto-broadcasts after processing → the
+/// cascade reaches Sink (no manual Forward needed). Uses a self-built linear chain, independent of
+/// the demo session.
 /// </summary>
 [TestClass]
 public class StatelessAutoBroadcastTests
@@ -32,7 +33,7 @@ public class StatelessAutoBroadcastTests
 
         Assert.IsTrue(start.AutoBroadcast, "AutoBroadcast defaults to true");
 
-        // 等价于卡片 Run：触发链头 ReceiveCommand（data 即 ITaskContext.Data）。
+        // Equivalent to the card's Run: trigger the chain head's ReceiveCommand (data is ITaskContext.Data).
         start.ReceiveCommand.Execute(new TaskContext(data: "seed"));
 
         var deadline = DateTime.UtcNow.AddSeconds(10);

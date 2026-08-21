@@ -15,7 +15,7 @@
 
             List<object?> result = new(steps);
 
-            // 处理边界情况：起始值和结束值相同
+            // Handle the boundary case where start and end values are equal
             if (l1 == l2)
             {
                 for (int i = 0; i < steps; i++)
@@ -25,7 +25,7 @@
                 return result;
             }
 
-            // 使用decimal进行中间计算以避免溢出
+            // Use decimal for intermediate calculations to avoid overflow
             var delta = (decimal)l2 - (decimal)l1;
 
             for (int i = 0; i < steps; i++)
@@ -36,7 +36,7 @@
                 result.Add(value);
             }
 
-            // 保证首尾帧精确
+            // Ensure the first and last frames are exact
             result[0] = start;
             result[steps - 1] = end;
 

@@ -32,7 +32,7 @@ namespace VeloxDev.Generators.Writers
             return $"{Syntax.Identifier.Text}_{Symbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_AOP.g.cs";
         }
 
-        // ── 输出 1: 分部类（保留接口实现契约）──
+        // ── Output 1: partial class (preserves the interface implementation contract) ──
 
         public override string[] GenerateBaseInterfaces() =>
         [
@@ -42,7 +42,7 @@ namespace VeloxDev.Generators.Writers
 
         public override string GenerateBody() => string.Empty;
 
-        // ── 输出 2: 扩展方法类 ──
+        // ── Output 2: extension method class ──
 
         public string GetExtensionFileName()
         {

@@ -620,10 +620,10 @@ namespace VeloxDev.Generators.Writers
             if (symbol == null || symbol.SpecialType == SpecialType.System_Object)
                 return false;
 
-            // 首先检查显式的工作流特性
+            // First, check for an explicit workflow attribute
             if (HasWorkflowAttribute(symbol)) return true;
 
-            // 其次检查类型及其基类是否实现了任一工作流接口（Tree/Node/Slot/Link）
+            // Next, check whether the type or any base implements a workflow interface (Tree/Node/Slot/Link)
             INamedTypeSymbol? treeInterface = null;
             INamedTypeSymbol? nodeInterface = null;
             INamedTypeSymbol? slotInterface = null;
@@ -646,7 +646,7 @@ namespace VeloxDev.Generators.Writers
                 if (slotInterface != null && current.AllInterfaces.Any(i => comparer.Equals(i, slotInterface))) return true;
                 if (linkInterface != null && current.AllInterfaces.Any(i => comparer.Equals(i, linkInterface))) return true;
 
-                // 回退到字符串比较，以防解析失败
+                // Fall back to string comparison in case resolution fails
                 if (current.AllInterfaces.Any(i =>
                     i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).StartsWith(NAMESPACE_VELOX_IWORKFLOW)))
                 {
@@ -656,7 +656,7 @@ namespace VeloxDev.Generators.Writers
                 current = current.BaseType;
             }
 
-            // 继续递归检查基类上的特性（保持原有行为）
+            // Continue recursively checking attributes on base classes (preserves existing behavior)
             return HasWorkflowAttributeInHierarchy(symbol.BaseType);
         }
         private bool HasWorkflowNodeAttributeInHierarchy(INamedTypeSymbol? symbol)
@@ -667,10 +667,10 @@ namespace VeloxDev.Generators.Writers
             var current = symbol;
             while (current != null && current.SpecialType != SpecialType.System_Object)
             {
-                // 1) 显式 Node 特性
+                // 1) Explicit Node attribute
                 if (HasWorkflowNodeAttribute(current)) return true;
 
-                // 2) 检查当前类型是否直接实现了 IWorkflowNodeViewModel（接口名匹配或符号匹配）
+                // 2) Check whether the current type directly implements IWorkflowNodeViewModel (interface name or symbol match)
                 foreach (var iface in current.Interfaces)
                 {
                     var ifaceName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -678,7 +678,7 @@ namespace VeloxDev.Generators.Writers
                         return true;
                 }
 
-                // 3) 检查当前类型或其基类实现的所有接口（防止显式基类接口未出现在 Interfaces 列表）
+                // 3) Check all interfaces implemented by the current type or its bases (in case an explicit base interface isn't in the Interfaces list)
                 foreach (var iface in current.AllInterfaces)
                 {
                     var ifaceName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -713,7 +713,7 @@ namespace VeloxDev.Generators.Writers
 
         private bool IsWorkflowSlotViewModelType(ITypeSymbol typeSymbol)
         {
-            // 1) 尝试解析 SlotAttribute 符号以进行符号比较
+            // 1) Try to resolve the SlotAttribute symbol for symbol comparison
             INamedTypeSymbol? slotAttributeSymbol = null;
             if (Symbol != null)
             {
@@ -749,7 +749,7 @@ namespace VeloxDev.Generators.Writers
                 }
             }
 
-            // 2) 检查是否实现了 IWorkflowSlotViewModel 接口（使用符号比较优先）
+            // 2) Check whether it implements the IWorkflowSlotViewModel interface (symbol comparison first)
             INamedTypeSymbol? slotInterface = null;
             if (Symbol != null)
             {

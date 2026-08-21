@@ -7,6 +7,6 @@ namespace Demo.ViewModels.Workflow
     {
         public SlotViewModel() => InitializeWorkflow();
 
-        // ↓ 扩展视图模型
+        // ↓ Extend the view model
     }
 }

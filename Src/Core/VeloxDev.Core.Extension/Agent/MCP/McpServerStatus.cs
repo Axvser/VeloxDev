@@ -1,23 +1,23 @@
 namespace VeloxDev.AI.MCP;
 
 /// <summary>
-/// 单个 MCP 服务器的连接生命周期状态。
-/// 宿主 UI 通过 <see cref="McpStatusViewModel"/> 绑定以展示存活/安装中/连接中/错误。
+/// Connection lifecycle status of a single MCP server.
+/// The host UI binds via <see cref="McpStatusViewModel"/> to show alive/installing/connecting/error.
 /// </summary>
 public enum McpServerStatus
 {
-    /// <summary>尚未开始加载。</summary>
+    /// <summary>Loading has not started yet.</summary>
     NotStarted,
 
-    /// <summary>正在安装/准备运行时（npm/pip 等本地模式）。远程 Http 模式跳过此态。</summary>
+    /// <summary>Installing/preparing the runtime (local modes such as npm/pip). Remote Http mode skips this state.</summary>
     Installing,
 
-    /// <summary>正在连接（启动本地进程或握手远程服务器）。</summary>
+    /// <summary>Connecting (launching the local process or handshaking with the remote server).</summary>
     Connecting,
 
-    /// <summary>连接成功，工具可用。</summary>
+    /// <summary>Connected; tools are available.</summary>
     Connected,
 
-    /// <summary>加载/连接失败（见 <see cref="McpServerStatusViewModel.Error"/>）。</summary>
+    /// <summary>Load/connection failed (see <see cref="McpServerStatusViewModel.Error"/>).</summary>
     Error,
 }

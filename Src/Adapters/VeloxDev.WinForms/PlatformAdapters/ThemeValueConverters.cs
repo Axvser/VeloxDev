@@ -62,7 +62,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 逗号分隔的字符串 "x,y"
+                // Format 1: comma-separated string "x,y"
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -72,7 +72,7 @@ namespace VeloxDev.DynamicTheme
                         return new Point(x, y);
                 }
 
-                // 格式2: 两个独立参数 [x, y]
+                // Format 2: two separate parameters [x, y]
                 if (parameters.Length >= 2)
                 {
                     int x = System.Convert.ToInt32(parameters[0]);
@@ -94,7 +94,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 逗号分隔的字符串 "x,y"
+                // Format 1: comma-separated string "x,y"
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -104,7 +104,7 @@ namespace VeloxDev.DynamicTheme
                         return new PointF(x, y);
                 }
 
-                // 格式2: 两个独立参数 [x, y]
+                // Format 2: two separate parameters [x, y]
                 if (parameters.Length >= 2)
                 {
                     float x = System.Convert.ToSingle(parameters[0]);
@@ -126,7 +126,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 逗号分隔的字符串 "width,height"
+                // Format 1: comma-separated string "width,height"
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -136,7 +136,7 @@ namespace VeloxDev.DynamicTheme
                         return new Size(width, height);
                 }
 
-                // 格式2: 两个独立参数 [width, height]
+                // Format 2: two separate parameters [width, height]
                 if (parameters.Length >= 2)
                 {
                     int width = System.Convert.ToInt32(parameters[0]);
@@ -158,7 +158,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 逗号分隔的字符串 "width,height"
+                // Format 1: comma-separated string "width,height"
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -168,7 +168,7 @@ namespace VeloxDev.DynamicTheme
                         return new SizeF(width, height);
                 }
 
-                // 格式2: 两个独立参数 [width, height]
+                // Format 2: two separate parameters [width, height]
                 if (parameters.Length >= 2)
                 {
                     float width = System.Convert.ToSingle(parameters[0]);
@@ -190,7 +190,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 逗号分隔的字符串 "x,y,width,height"
+                // Format 1: comma-separated string "x,y,width,height"
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -202,7 +202,7 @@ namespace VeloxDev.DynamicTheme
                         return new Rectangle(x, y, width, height);
                 }
 
-                // 格式2: 四个独立参数 [x, y, width, height]
+                // Format 2: four separate parameters [x, y, width, height]
                 if (parameters.Length >= 4)
                 {
                     int x = System.Convert.ToInt32(parameters[0]);
@@ -226,7 +226,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 逗号分隔的字符串 "x,y,width,height"
+                // Format 1: comma-separated string "x,y,width,height"
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -238,7 +238,7 @@ namespace VeloxDev.DynamicTheme
                         return new RectangleF(x, y, width, height);
                 }
 
-                // 格式2: 四个独立参数 [x, y, width, height]
+                // Format 2: four separate parameters [x, y, width, height]
                 if (parameters.Length >= 4)
                 {
                     float x = System.Convert.ToSingle(parameters[0]);
@@ -262,7 +262,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 逗号分隔的字符串
+                // Format 1: comma-separated string
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -281,7 +281,7 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // 格式2: 数值参数集合
+                // Format 2: numeric parameter list
                 return parameters.Length switch
                 {
                     1 => new Padding(System.Convert.ToInt32(parameters[0])),
@@ -310,26 +310,26 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 颜色名称或HEX字符串
+                // Format 1: color name or HEX string
                 if (parameters[0] is string colorString)
                 {
-                    // 使用ColorConverter转换颜色名称或HEX值
+                    // Use ColorConverter to convert a color name or HEX value.
                     var converter = new System.Drawing.ColorConverter();
                     if (converter.ConvertFromString(colorString) is Color color)
                         return color;
 
-                    // 尝试从已知颜色名称转换
+                    // Try converting from a known color name.
                     if (Enum.TryParse<KnownColor>(colorString, true, out KnownColor knownColor))
                         return Color.FromKnownColor(knownColor);
                 }
 
-                // 格式2: 整数值 (ARGB)
+                // Format 2: integer value (ARGB)
                 if (parameters[0] is int argb)
                 {
                     return Color.FromArgb(argb);
                 }
 
-                // 格式3: 单独分量
+                // Format 3: individual components
                 if (parameters.Length >= 3)
                 {
                     byte a = parameters.Length >= 4 ? System.Convert.ToByte(parameters[0]) : (byte)255;
@@ -353,7 +353,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 字体描述字符串 "字体名,大小,样式"
+                // Format 1: font description string "fontName,size,style"
                 if (parameters[0] is string fontString)
                 {
                     var parts = fontString.Split(',');
@@ -373,14 +373,14 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // 格式2: 系统字体名称
+                // Format 2: system font name
                 if (parameters[0] is string systemFontName)
                 {
                     var systemFont = GetSystemFont(systemFontName);
                     if (systemFont != null) return systemFont;
                 }
 
-                // 格式3: 单独参数 [字体名, 大小, 样式(可选)]
+                // Format 3: separate parameters [fontName, size, style(optional)]
                 if (parameters.Length >= 2)
                 {
                     string fontFamily = parameters[0]?.ToString() ?? "Microsoft Sans Serif";
@@ -418,13 +418,13 @@ namespace VeloxDev.DynamicTheme
     {
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
-            // 参数验证
+            // Parameter validation
             if (parameters == null || parameters.Length != 1 || parameters[0] is not string strValue)
                 return null;
 
             try
             {
-                // 特殊处理Brush类型
+                // Special-case the Brush type.
                 if (typeof(Brush).IsAssignableFrom(targetType))
                 {
                     var colorConverter = new System.Drawing.ColorConverter();
@@ -434,35 +434,35 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // 特殊处理Color类型
+                // Special-case the Color type.
                 if (targetType == typeof(Color))
                 {
                     var colorConverter = new System.Drawing.ColorConverter();
                     return colorConverter.ConvertFromString(strValue);
                 }
 
-                // 特殊处理Font类型 - 使用FontConverter的正确方法
+                // Special-case the Font type - use the correct FontConverter method.
                 if (targetType == typeof(Font))
                 {
                     var fontConverter = new System.Drawing.FontConverter();
                     return fontConverter.ConvertFromString(strValue);
                 }
 
-                // 获取目标类型的TypeConverter
+                // Get the target type's TypeConverter.
                 TypeConverter converter = TypeDescriptor.GetConverter(targetType);
 
-                // 支持文化不敏感的转换
+                // Support culture-insensitive conversion.
                 if (converter.CanConvertFrom(typeof(string)))
                 {
                     return converter.ConvertFromString(null, CultureInfo.InvariantCulture, strValue);
                 }
 
-                // 回退到默认转换
+                // Fall back to default conversion.
                 return converter.ConvertFrom(strValue);
             }
             catch (NotSupportedException)
             {
-                // WinForms没有Application.Current.Resources，但可以尝试其他资源查找方式
+                // WinForms has no Application.Current.Resources, but other resource lookup paths can be tried.
                 return null;
             }
             catch

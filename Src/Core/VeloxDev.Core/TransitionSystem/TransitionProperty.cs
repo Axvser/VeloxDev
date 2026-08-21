@@ -39,10 +39,11 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
     public IReadOnlyList<PropertyInfo> Segments => _segments;
 
     /// <summary>
-    /// 属性路径对当前目标无效（中间对象的运行时类型不匹配，例如 RenderTransform 是
-    /// RotateTransform 却要读 TranslateTransform.X）时，<see cref="GetValue"/> 返回此哨兵。
-    /// 调用方应跳过该属性，而不是把它当作 null 值去插值——否则会把无效路径当作 0/恒等，
-    /// 造成失真（例如旋转/3D 变换被错误地当作从恒等开始）。
+    /// When the property path is invalid for the current target (the intermediate object's runtime type does not
+    /// match, e.g. RenderTransform is a RotateTransform but TranslateTransform.X is being read),
+    /// <see cref="GetValue"/> returns this sentinel. Callers should skip the property rather than interpolate it
+    /// as a null value — otherwise the invalid path would be treated as 0/identity, causing distortion (e.g.
+    /// rotation/3D transforms incorrectly treated as starting from identity).
     /// </summary>
     public static readonly object UnreadablePath = new();
 
@@ -67,13 +68,16 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
     }
 
     /// <summary>
-    /// 把"逐段反射 GetValue + 类型/空检查"编译成单个委托，消除每帧每属性的反射开销
-    /// （<c>InterpolatorOutputBase.SetValues</c> / <c>ProtectedGetValue</c> 的热路径）。
+    /// Compiles the "per-segment reflective GetValue + type/null checks" into a single delegate, eliminating
+    /// per-frame per-property reflection overhead (the hot path of <c>InterpolatorOutputBase.SetValues</c> /
+    /// <c>ProtectedGetValue</c>).
     ///
-    /// 语义区分两种"读不到"：
-    /// - 中间对象为 null（值本来就为 null）→ 返回 null，插值器从恒等/默认开始。
-    /// - 中间对象非空但类型不匹配（路径对当前目标无效）→ 返回 <see cref="UnreadablePath"/>，
-    ///   调用方跳过该属性，避免把它当作 null 值插值造成失真。
+    /// The semantics distinguish two kinds of "cannot read":
+    /// - The intermediate object is null (the value is genuinely null) → returns null, and the interpolator starts
+    ///   from identity/default.
+    /// - The intermediate object is non-null but the type does not match (the path is invalid for the current
+    ///   target) → returns <see cref="UnreadablePath"/>, and the caller skips the property to avoid distorting
+    ///   interpolation by treating it as a null value.
     /// </summary>
     private Func<object, object?> CompileGetter()
     {
@@ -98,7 +102,7 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
                 Expression.Property(typed, segment),
                 typeof(object));
 
-            // 当前对象非空但类型不匹配 → 路径无效，返回哨兵（调用方跳过）
+            // Current object is non-null but type does not match → path invalid, return the sentinel (caller skips)
             var invalid = Expression.AndAlso(
                 Expression.Not(isNull),
                 Expression.Not(isCorrectType));
@@ -113,8 +117,9 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
     }
 
     /// <summary>
-    /// 把"逐段导航 + 最终 SetValue + 类型/空检查"编译成单个委托。
-    /// 保留原语义：中间对象类型不匹配或为 null 时返回 false，而非抛 TargetException。
+    /// Compiles the "per-segment navigation + final SetValue + type/null checks" into a single delegate.
+    /// Preserves the original semantics: returns false when an intermediate object's type does not match or is
+    /// null, instead of throwing TargetException.
     /// </summary>
     private Func<object, object?, bool> CompileSetter()
     {

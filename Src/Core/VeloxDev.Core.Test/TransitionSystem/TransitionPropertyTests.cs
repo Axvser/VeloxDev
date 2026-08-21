@@ -152,9 +152,9 @@ public class TransitionPropertyTests
     [TestMethod]
     public void GetValue_IntermediateTypeMismatch_ReturnsUnreadablePath_NotTargetException()
     {
-        // 路径 [ShapeContainer.Shape, CircleShape.Radius]，但 Shape 的运行时类型是 BaseShape
-        // 而非 CircleShape——旧实现会抛 System.Reflection.TargetException，现在应返回 UnreadablePath。
-        // 调用方据此跳过该属性，而不是把它当 null 值插值造成失真。
+        // Path [ShapeContainer.Shape, CircleShape.Radius], but Shape's runtime type is BaseShape,
+        // not CircleShape — the old implementation threw System.Reflection.TargetException; it must
+        // now return UnreadablePath so the caller skips the property instead of interpolating it as a null value and distorting the result.
         var property = new TransitionProperty(new[]
         {
             typeof(ShapeContainer).GetProperty(nameof(ShapeContainer.Shape))!,
@@ -169,8 +169,9 @@ public class TransitionPropertyTests
     [TestMethod]
     public void GetValue_NullIntermediate_ReturnsNull_NotUnreadable()
     {
-        // 中间对象为 null → 值本来就为 null → 返回 null（区别于哨兵）。
-        // 这样 Interpolate 会把它交给插值器从恒等/默认开始（而非跳过），保证 3D 等从 null 起点的动画正常。
+        // A null intermediate object → the value is genuinely null → return null (unlike the sentinel).
+        // This lets Interpolate hand it to the interpolator to start from identity/default (rather than skipping),
+        // so animations like 3D that start from null work correctly.
         var property = new TransitionProperty(new[]
         {
             typeof(ShapeContainer).GetProperty(nameof(ShapeContainer.Shape))!,
@@ -191,7 +192,7 @@ public class TransitionPropertyTests
     [TestMethod]
     public void SetValue_WriteReferenceProperty_Works()
     {
-        // 模拟 RenderTransform 这类引用属性：把 null 写成具体值
+        // Simulates reference properties like RenderTransform: writing a concrete value over null
         var container = new ShapeContainer { Shape = null };
         var prop = TransitionProperty.FromProperty(typeof(ShapeContainer).GetProperty(nameof(ShapeContainer.Shape))!);
 
@@ -204,7 +205,7 @@ public class TransitionPropertyTests
     [TestMethod]
     public void SetValue_ClearReferenceProperty_ToNull_Works()
     {
-        // 模拟重置：把引用属性清回 null（初始状态）
+        // Simulates a reset: clearing the reference property back to null (the initial state)
         var container = new ShapeContainer { Shape = new CircleShape { Radius = 3 } };
         var prop = TransitionProperty.FromProperty(typeof(ShapeContainer).GetProperty(nameof(ShapeContainer.Shape))!);
 

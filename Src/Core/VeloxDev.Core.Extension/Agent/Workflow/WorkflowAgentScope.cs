@@ -509,7 +509,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     private string BuildFailureHandlingProtocol(AgentLanguages language)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("## 🛠 Failure Handling Protocol (apply on every error/rejection)");
+        sb.AppendLine("## Failure Handling Protocol (apply on every error/rejection)");
         sb.AppendLine();
         sb.AppendLine("When a tool returns `error` or `rejected`:");
         sb.AppendLine("1. Read `message`, `reasons`, `hint`, and `preferredAlternative` — they name the cause and the recommended next tool.");
@@ -1039,7 +1039,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         }
 
         result.AppendLine();
-        result.AppendLine("## 📋 Registered Component Summaries (one line each)");
+        result.AppendLine("## Registered Component Summaries (one line each)");
         result.AppendLine();
         result.AppendLine("One-line summaries only. The full property/command tables are intentionally NOT preloaded to keep the prompt small and accurate.");
         result.AppendLine();

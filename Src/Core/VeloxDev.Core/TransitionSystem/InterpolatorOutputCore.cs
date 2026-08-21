@@ -7,8 +7,8 @@ public abstract class InterpolatorOutputCore<TUIThreadInspectorCore, TPriorityCo
 {
     private readonly TUIThreadInspectorCore inspector = new();
 
-    // 缓存可复用的帧写入委托：只捕获 this（对象是每个动画一个实例，target 固定），
-    // 帧索引存 volatile 字段，避免每帧分配闭包对象。
+    // Cache a reusable frame-write delegate: it only captures this (one instance per animation, target fixed),
+    // and the frame index is stored in a volatile field, avoiding a closure allocation per frame.
     private Action? _cachedUpdate;
     private object? _cachedTarget;
     private volatile int _cachedFrameIndex;
@@ -58,9 +58,11 @@ public abstract class InterpolatorOutputCore<TUIThreadInspectorCore> : Interpola
 }
 
 /// <summary>
-/// 让帧序列携带动画的取消令牌：动画被取消（如重置时 <c>Transition.Exit</c>）后，
-/// 已入队到 UI 线程的旧帧会在 <see cref="InterpolatorOutputBase.SetValues"/> 处跳过写入，
-/// 避免它们覆盖重置结果（此前是"时好时坏"的根因：点重置时正在运行的动画的残留帧覆盖了重置值）。
+/// Lets a frame sequence carry the animation's cancellation token: after the animation is cancelled (e.g.
+/// <c>Transition.Exit</c> on reset), stale frames already queued to the UI thread skip writing at
+/// <see cref="InterpolatorOutputBase.SetValues"/>, preventing them from overwriting the reset result (previously
+/// the root cause of the intermittent bug: residual frames from a running animation overwrote the reset value
+/// when reset was clicked).
 /// </summary>
 internal interface ICancellableFrameSequence
 {
@@ -94,7 +96,7 @@ public abstract class InterpolatorOutputBase : IFrameSequenceCore, ICancellableF
     }
     public virtual void SetValues(object target, int frameIndex)
     {
-        // 动画已取消 → 跳过写入，避免已入队的旧帧覆盖重置结果
+        // Animation cancelled → skip the write to avoid stale queued frames overwriting the reset result
         if (_cts?.IsCancellationRequested == true) return;
 
         foreach (var kvp in Frames)

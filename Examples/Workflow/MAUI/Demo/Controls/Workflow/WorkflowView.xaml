@@ -152,7 +152,7 @@
                             Clicked="OnSendToAgent" />
                 </Grid>
 
-                <!-- MCP 服务器 -->
+                <!-- MCP servers -->
                 <Border x:Name="McpStatusPanel"
                         Margin="0,12,0,0"
                         Padding="10"

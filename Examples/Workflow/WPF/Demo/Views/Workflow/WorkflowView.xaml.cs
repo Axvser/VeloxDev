@@ -32,7 +32,7 @@ public partial class WorkflowView : UserControl
     {
         if (_workflowViewModel.GetHelper() is not AgentHelper helper) return;
 
-        // 状态更新 marshal 到 UI 线程（ObservableCollection 绑定需同线程）。
+        // Marshal status updates to the UI thread (ObservableCollection bindings require the same thread).
         helper.Mcp.WithSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher));
         McpStatusPanel.DataContext = helper.Mcp.Status;
         _ = helper.LoadMcpServersAsync();
@@ -95,12 +95,12 @@ public partial class WorkflowView : UserControl
                     }
                 }, System.Windows.Threading.DispatcherPriority.Loaded);
 
-                MessageBox.Show($"工作流已从 {dialog.FileName} 加载成功。", "加载成功",
+                MessageBox.Show($"Workflow loaded successfully from {dialog.FileName}.", "Load succeeded",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"加载文件失败：{ex.GetType().Name}\n{ex.Message}", "错误",
+                MessageBox.Show($"Failed to load file: {ex.GetType().Name}\n{ex.Message}", "Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -209,7 +209,7 @@ public partial class WorkflowView : UserControl
             var headerStack = new StackPanel { Margin = new Thickness(18, 14, 18, 14) };
             headerStack.Children.Add(new TextBlock
             {
-                Text = isMulti ? "☑️  Agent · 请多选" : "🤖  Agent · 请选择",
+                Text = isMulti ? "Agent · 请多选" : "Agent · 请选择",
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
                 FontSize = 13,
                 FontWeight = FontWeights.Bold,
@@ -323,7 +323,7 @@ public partial class WorkflowView : UserControl
 
                 var confirmBtn = new System.Windows.Controls.Button
                 {
-                    Content = "✓  确认选择",
+                    Content = "确认选择",
                     Padding = new Thickness(14, 8, 14, 8),
                     FontSize = 11,
                     Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0f3460")),
@@ -425,7 +425,7 @@ public partial class WorkflowView : UserControl
             var headerStack = new StackPanel { Margin = new Thickness(18, 14, 18, 14) };
             headerStack.Children.Add(new TextBlock
             {
-                Text = "⚠️  Agent · 操作确认",
+                Text = "Agent · 操作确认",
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#ffd166")),
                 FontSize = 13,
                 FontWeight = FontWeights.Bold,
@@ -475,9 +475,9 @@ public partial class WorkflowView : UserControl
                     BorderThickness = new Thickness(1),
                 };
 
-            var denyBtn   = MakeBtn("✕  拒绝",            "#3b0000", "#ff6b6b", "#ff6b6b");
-            var onceBtn   = MakeBtn("✓  仅同意一次",       "#0f3460", "#7ec8ff", "#7ec8ff");
-            var alwaysBtn = MakeBtn("✓✓  本次会话始终同意", "#0d3b1a", "#6bffb8", "#6bffb8");
+            var denyBtn   = MakeBtn("拒绝",            "#3b0000", "#ff6b6b", "#ff6b6b");
+            var onceBtn   = MakeBtn("仅同意一次",       "#0f3460", "#7ec8ff", "#7ec8ff");
+            var alwaysBtn = MakeBtn("本次会话始终同意", "#0d3b1a", "#6bffb8", "#6bffb8");
 
             denyBtn.Click   += (_, _) => { result = AgentConfirmationResult.Deny;        win.Close(); };
             onceBtn.Click   += (_, _) => { result = AgentConfirmationResult.AllowOnce;   win.Close(); };

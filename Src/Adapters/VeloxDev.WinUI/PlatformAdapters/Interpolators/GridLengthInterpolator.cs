@@ -14,10 +14,10 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
             List<object?> result = new(steps);
 
-            // 处理不同类型的GridLength
+            // Handle GridLength values of different types.
             if (g1.GridUnitType != g2.GridUnitType)
             {
-                // 单位类型不同，直接切换到目标值
+                // If the unit types differ, switch directly to the target value.
                 for (int i = 0; i < steps; i++)
                 {
                     result.Add(i == steps - 1 ? g2 : g1);
@@ -25,7 +25,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             }
             else
             {
-                // 相同单位类型，进行插值
+                // With the same unit type, interpolate.
                 var delta = g2.Value - g1.Value;
 
                 for (int i = 0; i < steps; i++)

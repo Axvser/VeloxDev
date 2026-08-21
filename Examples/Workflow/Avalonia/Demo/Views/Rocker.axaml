@@ -6,13 +6,13 @@
 			 x:Class="Demo.Rocker"
 			 x:Name="Self">
   <Grid x:Name="PART_BOARD" Background="Transparent">
-    <!-- 背景圆：占满整个 Grid -->
+    <!-- Background circle: fills the whole Grid -->
     <Ellipse x:Name="PART_BG"
              Stroke="{Binding ElementName=Self,Path=Foreground}"
              StrokeThickness="2"
              Fill="Transparent"/>
 
-    <!-- 前景摇杆点：初始居中，通过 Margin 精确定位 -->
+    <!-- Foreground joystick knob: initially centered, positioned precisely via Margin -->
     <Ellipse x:Name="PART_FG"
              Fill="{Binding ElementName=Self,Path=Foreground}"
              HorizontalAlignment="Left"

@@ -6,7 +6,7 @@ using VeloxDev.AI;
 namespace Demo;
 
 /// <summary>
-/// 供 AgentHelper.ConfirmationHandler 使用的深色风格确认对话框。
+/// Dark-styled confirmation dialog used by AgentHelper.ConfirmationHandler.
 /// </summary>
 internal sealed class AgentConfirmationDialog : Form
 {
@@ -45,7 +45,7 @@ internal sealed class AgentConfirmationDialog : Form
 
         var titleLabel = new Label
         {
-            Text = "⚠️  Agent · 操作确认",
+            Text = "Agent · 操作确认",
             ForeColor = Gold,
             Font = new Font("Segoe UI", 11f, FontStyle.Bold, GraphicsUnit.Point),
             AutoSize = true,
@@ -117,11 +117,11 @@ internal sealed class AgentConfirmationDialog : Form
             WrapContents = false,
         };
 
-        var alwaysBtn = MakeBtn("✓✓  本次会话始终同意",
+        var alwaysBtn = MakeBtn("本次会话始终同意",
             Color.FromArgb(0x0d, 0x3b, 0x1a), Color.FromArgb(0x6b, 0xff, 0xb8), Color.FromArgb(0x6b, 0xff, 0xb8));
-        var onceBtn   = MakeBtn("✓  仅同意一次",
+        var onceBtn   = MakeBtn("仅同意一次",
             Color.FromArgb(0x0f, 0x34, 0x60), Color.FromArgb(0x7e, 0xc8, 0xff), Color.FromArgb(0x7e, 0xc8, 0xff));
-        var denyBtn   = MakeBtn("✕  拒绝",
+        var denyBtn   = MakeBtn("拒绝",
             Color.FromArgb(0x3b, 0x00, 0x00), Color.FromArgb(0xff, 0x6b, 0x6b), Color.FromArgb(0xff, 0x6b, 0x6b));
 
         alwaysBtn.Click += (_, _) => { Result = AgentConfirmationResult.AllowAlways; DialogResult = DialogResult.OK; Close(); };

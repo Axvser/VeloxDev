@@ -3,27 +3,27 @@ using VeloxDev.AI;
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
-/// <see cref="ITaskContext"/> 的轻量只读载体：广播投递、手动 Run、AI 主动唤起节点时
-/// 构造的数据流上下文。成员均可空。
+/// Lightweight read-only carrier of <see cref="ITaskContext"/>: the dataflow context constructed for broadcast
+/// delivery, manual Run, or AI-driven node activation. All members are nullable.
 /// </summary>
 [AgentContext(AgentLanguages.Chinese, "ITaskContext 的只读结构体载体，可空 data/sender/receiver")]
 [AgentContext(AgentLanguages.English, "Readonly struct carrier of ITaskContext with nullable data/sender/receiver")]
 public readonly struct TaskContext : ITaskContext
 {
-    /// <summary>运行期数据流载体，恒为 false（编译期才有 true）。</summary>
+    /// <summary>Runtime dataflow carrier, always false (only the compile phase is true).</summary>
     public bool IsCompilePhase => false;
 
-    /// <summary>负载/输入数据，可为空。</summary>
+    /// <summary>Payload / input data, nullable.</summary>
     [AgentContext(AgentLanguages.Chinese, "负载数据（可空）")]
     [AgentContext(AgentLanguages.English, "Payload data (nullable)")]
     public object? Data { get; }
 
-    /// <summary>上游输出槽（发送端），可为空。</summary>
+    /// <summary>Upstream output slot (sender), nullable.</summary>
     [AgentContext(AgentLanguages.Chinese, "上游输出槽（发送端），可为空")]
     [AgentContext(AgentLanguages.English, "Upstream output slot (sender), nullable")]
     public IWorkflowSlotViewModel? Sender { get; }
 
-    /// <summary>本节点输入槽（接收端），可为空。</summary>
+    /// <summary>This node's input slot (receiver), nullable.</summary>
     [AgentContext(AgentLanguages.Chinese, "本节点输入槽（接收端），可为空")]
     [AgentContext(AgentLanguages.English, "This node's input slot (receiver), nullable")]
     public IWorkflowSlotViewModel? Receiver { get; }

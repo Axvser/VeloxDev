@@ -9,8 +9,8 @@ namespace VeloxDev.TransitionSystem
         private static volatile bool _isAppAlive = true;
 
         /// <summary>
-        /// 显式在 UI 线程上捕获（可选）。惰性捕获（<see cref="EnsureCaptured"/>）和
-        /// 目标对象派生的 <see cref="Control"/> 编组已覆盖绝大多数场景，本方法仅作兜底。
+        /// Optionally capture on the UI thread. Lazy capture (<see cref="EnsureCaptured"/>) and
+        /// target-derived <see cref="Control"/> marshaling already cover most scenarios; this method is only a fallback.
         /// </summary>
         public static void CaptureUIThread()
         {
@@ -22,8 +22,8 @@ namespace VeloxDev.TransitionSystem
         }
 
         /// <summary>
-        /// 惰性捕获：首次从 UI 线程触碰本类时自动记录 <see cref="SynchronizationContext"/>
-        /// 与线程 id。后台线程（SynchronizationContext 非 WinForms 上下文）调用时无副作用。
+        /// Lazy capture: records the <see cref="SynchronizationContext"/> and thread id the first time this class is
+        /// touched from the UI thread. Calling from a background thread (a non-WinForms SynchronizationContext) has no side effects.
         /// </summary>
         private static void EnsureCaptured()
         {
@@ -40,9 +40,9 @@ namespace VeloxDev.TransitionSystem
         }
 
         /// <summary>
-        /// 目标对象（<see cref="Control"/>）优先：控件自身知道它所属的 UI 线程，
-        /// 从任意线程用 <see cref="Control.Invoke(Delegate)"/> / <see cref="Control.BeginInvoke(Delegate)"/>
-        /// 编组即可，后台首启动也无需任何显式捕获。
+        /// The target object (<see cref="Control"/>) takes priority: the control itself knows its owning UI thread,
+        /// so it can be marshaled from any thread with <see cref="Control.Invoke(Delegate)"/> / <see cref="Control.BeginInvoke(Delegate)"/>
+        /// — no explicit capture is needed even for a background first start.
         /// </summary>
         private static Control? ControlDispatcher(object target)
             => target is Control control && control.IsHandleCreated ? control : null;

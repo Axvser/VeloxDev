@@ -15,12 +15,12 @@ namespace VeloxDev.Adapters.NativeInterpolators
             var matrix1 = m1.Value;
             var matrix2 = m2.Value;
 
-            // 确保初始和结束状态准确
+            // Ensure accurate initial and end states.
             if (steps > 1)
             {
-                result.Add(m1); // 第一步使用原始值
+                result.Add(m1); // First step uses the original value.
 
-                // 中间步骤
+                // Intermediate steps.
                 for (var i = 1; i < steps - 1; i++)
                 {
                     var t = (double)i / (steps - 1);
@@ -37,7 +37,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
                     result.Add(transform);
                 }
 
-                result.Add(m2); // 最后一步使用目标值
+                result.Add(m2); // Last step uses the target value.
             }
 
             return result;

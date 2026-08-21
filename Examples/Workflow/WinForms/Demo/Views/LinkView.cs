@@ -254,11 +254,12 @@ public sealed class LinkView : Control
     }
 
     /// <summary>
-    /// 将连线几何绘制到任意 <see cref="Graphics"/> 表面。画布在 OnPaint 中先把所有
-    /// Slot 锚点写回，再 TranslateTransform(origin) 后按世界坐标统一调用本方法 ——
-    /// 连线不再各自作为透明叠层子控件，规避 WinForms 中重叠全尺寸兄弟窗口被
-    /// WS_CLIPSIBLINGS 裁掉（仅最上层可绘制）导致连线不可见的问题。作为独立控件
-    /// 使用时 OnPaint 走同一路径。
+    /// Draws the link geometry onto an arbitrary <see cref="Graphics"/> surface. In OnPaint the
+    /// canvas first writes back all slot anchors, then calls this method uniformly in world
+    /// coordinates after TranslateTransform(origin) — links are no longer separate transparent
+    /// overlay child controls, avoiding the WinForms issue where overlapping full-size sibling
+    /// windows are clipped by WS_CLIPSIBLINGS (only the topmost is drawn) and links become
+    /// invisible. When used as a standalone control, OnPaint takes the same path.
     /// </summary>
     public void Render(Graphics g)
     {

@@ -5,8 +5,9 @@ using Microsoft.UI.Xaml.Media;
 namespace Demo.Views
 {
     /// <summary>
-    /// CanvasItemsControl 的容器会把模板/子元素上的 Canvas.Left/Top 同步到容器自身，
-    /// 以保证在 ItemsPanel 为 Canvas 时，绑定到子元素的 Canvas.Left/Top 能生效。
+    /// CanvasItemsControl's container synchronizes the Canvas.Left/Top on the template/child
+    /// element onto the container itself, so that when the ItemsPanel is a Canvas, the
+    /// Canvas.Left/Top bound on the child element actually takes effect.
     /// </summary>
     public sealed partial class CanvasItemsControl : ItemsControl
     {
@@ -15,8 +16,9 @@ namespace Demo.Views
         protected override bool IsItemItsOwnContainerOverride(object item) => item is CanvasItemContainer;
 
         /// <summary>
-        /// Container：查找 ContentPresenter 下生成的视觉子元素（DataTemplate 的根），
-        /// 监听该元素的 Canvas.Left/Top，并把值同步到容器自身（Container 在 ItemsPanel 的 Canvas 上定位）。
+        /// Container: finds the generated visual child under the ContentPresenter (the root of the
+        /// DataTemplate), listens for its Canvas.Left/Top changes, and syncs the values onto the
+        /// container itself (the container is positioned on the ItemsPanel's Canvas).
         /// </summary>
         private sealed partial class CanvasItemContainer : ContentPresenter
         {
@@ -29,7 +31,7 @@ namespace Demo.Views
             {
                 Loaded += OnLoaded;
                 Unloaded += OnUnloaded;
-                // 也监听 Content 变化（ItemsControl 里 DataContext 或 ConditionalSlot 被替换时）
+                // Also listen for Content changes (when DataContext or a ConditionalSlot is replaced in ItemsControl)
                 RegisterPropertyChangedCallback(ContentProperty, (_, __) => OnContentChanged());
             }
 
@@ -49,7 +51,7 @@ namespace Demo.Views
                 TryHookGeneratedChild();
             }
 
-            // 有时模板还未生成视觉子树，尝试通过 LayoutUpdated 重试直到找到
+            // Sometimes the template has not generated its visual subtree yet; retry via LayoutUpdated until found
             private void TryHookGeneratedChild()
             {
                 if (_isHooked) return;
@@ -61,7 +63,7 @@ namespace Demo.Views
                     return;
                 }
 
-                // 如果还没生成，等待 LayoutUpdated 一次性重试
+                // If not generated yet, wait for a one-shot retry on LayoutUpdated
                 LayoutUpdated += OnLayoutUpdatedRetry;
             }
 
@@ -75,15 +77,15 @@ namespace Demo.Views
 
             private FrameworkElement? FindGeneratedChild()
             {
-                // 通常 ContentPresenter 的第 0 个视觉子项就是模板根
+                // Usually the 0th visual child of the ContentPresenter is the template root
                 if (VisualTreeHelper.GetChildrenCount(this) > 0)
                 {
                     var first = VisualTreeHelper.GetChild(this, 0) as FrameworkElement;
                     return first;
                 }
 
-                // 另外一种情形：Content 是直接 UIElement（例如你直接把 UIElement 放到 Items），
-                // 在这种情形该元素可能就是 this.Content，尝试返回它
+                // Another case: Content is a direct UIElement (e.g. you put a UIElement directly into Items);
+                // in that case the element may be this.Content, so try returning it
                 if (Content is FrameworkElement fe) return fe;
 
                 return null;
@@ -97,12 +99,12 @@ namespace Demo.Views
 
                 _childElement = child;
 
-                // 注册 Canvas.Left/Top 附加属性变化回调（WinUI 的 API：返回 token）
+                // Register Canvas.Left/Top attached-property change callbacks (WinUI API returns a token)
                 _leftToken = _childElement.RegisterPropertyChangedCallback(Canvas.LeftProperty, OnAttachedPositionChanged);
                 _topToken = _childElement.RegisterPropertyChangedCallback(Canvas.TopProperty, OnAttachedPositionChanged);
 
-                // 同步一次位置（如果绑定已生效，这里会把值读出来）
-                // 还要在 child Loaded 时再同步一次，防止绑定完成在 Loaded 之后
+                // Sync the position once (if the binding has taken effect, this reads the value)
+                // Also re-sync when the child is Loaded, in case the binding completes after Loaded
                 _childElement.Loaded += Child_Loaded;
 
                 UpdatePositionFromChild();
@@ -130,7 +132,7 @@ namespace Demo.Views
                 }
                 catch
                 {
-                    // 忽略可能的异常（已卸载等）
+                    // Ignore possible exceptions (e.g. already unloaded)
                 }
 
                 _childElement = null;
@@ -139,13 +141,13 @@ namespace Demo.Views
 
             private void Child_Loaded(object? s, RoutedEventArgs e)
             {
-                // 绑定可能在 Loaded 后才推送值，确保再次同步
+                // The binding may push values only after Loaded; ensure another sync
                 UpdatePositionFromChild();
             }
 
             private void OnAttachedPositionChanged(DependencyObject dp, DependencyProperty prop)
             {
-                // 当 child 的 Canvas.Left/Top 发生变化时，马上同步到容器
+                // When the child's Canvas.Left/Top changes, sync immediately to the container
                 UpdatePositionFromChild();
             }
 
@@ -156,7 +158,7 @@ namespace Demo.Views
                 double x = Canvas.GetLeft(_childElement);
                 double y = Canvas.GetTop(_childElement);
 
-                // 若子元素上未设置（NaN），不强制为 0（但通常希望 0），这里按照原始期望：NaN -> 0
+                // If the child does not set it (NaN), do not force 0 (though 0 is usually desired); here follow the original intent: NaN -> 0
                 if (double.IsNaN(x)) x = 0;
                 if (double.IsNaN(y)) y = 0;
 

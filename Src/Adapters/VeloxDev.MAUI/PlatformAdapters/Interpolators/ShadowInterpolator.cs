@@ -4,7 +4,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
     {
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
-            // 创建默认阴影值
+            // Create default shadow values.
             var defaultShadow = new Shadow
             {
                 Offset = new Point(0, 0),
@@ -21,7 +21,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
             List<object?> result = new(steps);
 
-            // 处理Brush为null的情况
+            // Handle the case where Brush is null.
             var brush1 = s1.Brush ?? new SolidColorBrush(Colors.Transparent);
             var brush2 = s2.Brush ?? new SolidColorBrush(Colors.Transparent);
 
@@ -42,7 +42,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
                     ),
                     Radius = s1.Radius + deltaRadius * t,
                     Opacity = Math.Max(0, Math.Min(1, s1.Opacity + deltaOpacity * t)),
-                    Brush = t >= 0.5 ? brush2 : brush1 // 简单处理Brush过渡
+                    Brush = t >= 0.5 ? brush2 : brush1 // Simple transition handling.
                 };
 
                 result.Add(shadow);

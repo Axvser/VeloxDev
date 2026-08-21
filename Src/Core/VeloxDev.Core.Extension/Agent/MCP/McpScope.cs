@@ -59,9 +59,10 @@ public class McpScope
     }
 
     /// <summary>
-    /// 全局连接超时（仅 Http 模式）。作为远程服务器的传输层连接超时 + MCP 初始化超时，并由
-    /// 宿主侧 CTS 硬兜底（SDK 2.x 对部分远程服务器的内部超时可能失灵——见 csharp-sdk#784）。
-    /// 逐服务器可用 <see cref="McpServerConfiguration.Options"/>（<c>connectionTimeout</c> 键）覆盖。
+    /// Global connection timeout (Http mode only). Acts as the remote server's transport-layer
+    /// connection timeout + MCP initialization timeout, with a hard fallback via the host-side CTS
+    /// (SDK 2.x internal timeouts may fail for some remote servers — see csharp-sdk#784).
+    /// Per-server override via <see cref="McpServerConfiguration.Options"/> (the <c>connectionTimeout</c> key).
     /// </summary>
     public McpScope WithConnectionTimeout(TimeSpan? timeout)
     {
@@ -74,20 +75,22 @@ public class McpScope
     // ── Global bindable status ─────────────────────────────────────────────
 
     /// <summary>
-    /// 全局可绑定的服务器状态视图模型。宿主 UI 绑定 <see cref="McpStatusViewModel.Servers"/> 以展示
-    /// 每个服务器的存活/安装中/连接中/错误状态。<see cref="LoadAsync"/> 过程中实时驱动。
+    /// Globally bindable server status view-model. The host UI binds <see cref="McpStatusViewModel.Servers"/> to show
+    /// each server's alive/installing/connecting/error status. Driven live during <see cref="LoadAsync"/>.
     /// </summary>
     public McpStatusViewModel Status { get; } = new();
 
-    // ── 已加载的 MCP 服务器工具（动态，供中途增删）────────────────────────
+    // ── Loaded MCP server tools (dynamic, supports mid-session add/remove) ──
 
     private readonly object _loadedToolsLock = new();
     private readonly Dictionary<string, IReadOnlyList<AITool>> _loadedToolSets = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// 当前已连接 MCP 服务器的全部工具（按服务器聚合）。服务器中途加载成功（<see cref="LoadAsync"/>）
-    /// 后其工具即刻可用；卸载（<see cref="UnloadServer"/>）后自动消失。Agent 每次对话以
-    /// “基础工具 + <see cref="LoadedTools"/>”组装 <c>ChatOptions.Tools</c>，即可中途加/移除工具。
+    /// All tools of currently connected MCP servers (aggregated per server). Once a server loads
+    /// successfully mid-session (<see cref="LoadAsync"/>), its tools are immediately available; they
+    /// disappear automatically after unloading (<see cref="UnloadServer"/>). Each Agent conversation
+    /// assembles <c>ChatOptions.Tools</c> as "base tools + <see cref="LoadedTools"/>", so tools can be
+    /// added/removed mid-session.
     /// </summary>
     public IReadOnlyList<AITool> LoadedTools
     {
@@ -99,8 +102,8 @@ public class McpScope
     }
 
     /// <summary>
-    /// 卸载一个服务器（中途移除）：移除其工具集，并把状态置为 <see cref="McpServerStatus.NotStarted"/>。
-    /// 返回是否确实存在已加载的工具。
+    /// Unloads a server (mid-session removal): removes its tool set and resets its status to
+    /// <see cref="McpServerStatus.NotStarted"/>. Returns whether any loaded tools were present.
     /// </summary>
     public bool UnloadServer(string name)
     {
@@ -118,8 +121,9 @@ public class McpScope
     }
 
     /// <summary>
-    /// UI 线程上下文（可选）。注册后所有状态更新会 marshal 到该上下文，供 WPF/Avalonia 等
-    /// UI 线程绑定的宿主使用；未注册时在调用方线程更新。
+    /// UI thread context (optional). When registered, all status updates marshal to this context,
+    /// for hosts that bind on a UI thread (WPF/Avalonia, etc.); when not registered, updates run
+    /// on the caller's thread.
     /// </summary>
     public McpScope WithSynchronizationContext(SynchronizationContext? context)
     {
@@ -129,7 +133,7 @@ public class McpScope
 
     internal SynchronizationContext? UIContext { get; private set; }
 
-    /// <summary>把状态更新 marshal 到 UI 线程（若已注册且当前不在该线程上）。</summary>
+    /// <summary>Marshals a status update to the UI thread (when registered and not already on it).</summary>
     private void UpdateStatus(Action update)
     {
         var ui = UIContext;
@@ -191,7 +195,7 @@ public class McpScope
         var status = TrackServer(config);
         try
         {
-            // 本地模式：先安装/准备运行时（Installing），再连接（Connecting）。
+            // Local mode: first install/prepare the runtime (Installing), then connect (Connecting).
             if (config.RunMode is McpServerRunMode.Npm or McpServerRunMode.Pip)
             {
                 SetServerState(status, McpServerStatus.Installing);
@@ -225,7 +229,7 @@ public class McpScope
         }
     }
 
-    /// <summary>某个已连接服务器的工具（未连接返回空）。</summary>
+    /// <summary>The tools of a connected server (empty when not connected).</summary>
     public IReadOnlyList<AITool> GetServerTools(string name)
     {
         lock (_loadedToolsLock)
@@ -236,7 +240,7 @@ public class McpScope
 
     private McpServerStatusViewModel TrackServer(McpServerConfiguration config)
     {
-        // 重载同名单服务器时更新既有状态条目，避免重复添加。
+        // When reloading a same-named server, update the existing status entry to avoid duplicates.
         var existing = Status.Servers.FirstOrDefault(s => string.Equals(s.Name, config.Name, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
         {
@@ -357,7 +361,7 @@ public class McpScope
                         "Failed to create venv:\n" + createResult.StandardError);
             }
 
-            // Step 2: pip install 到 venv 内
+            // Step 2: pip install into the venv
             var ver = version ?? "";
             var installResult = await Cli.Wrap(pythonExe)
                 .WithArguments($"-m pip install {package}{ver} --quiet")
@@ -384,9 +388,10 @@ public class McpScope
 
         var effectiveTimeout = GetEffectiveConnectionTimeout(config);
 
-        // 宿主侧硬兜底：SDK 2.x 对部分远程服务器的内部超时可能失灵（csharp-sdk#784），
-        // 用 linked CTS 保证连接/初始化不无限挂起。仅当是我们自己的超时触发（而非调用方
-        // 取消）时，包装成 TimeoutException 交回 LoadAsync 按服务器错误处理。
+        // Host-side hard fallback: SDK 2.x internal timeouts may fail for some remote servers
+        // (csharp-sdk#784). Use a linked CTS so connection/initialization can never hang forever.
+        // Only when OUR timeout fires (not caller cancellation) wrap it as a TimeoutException and
+        // hand it back to LoadAsync to be handled as a per-server error.
         using var timeoutCts = effectiveTimeout is { } t && config.RunMode == McpServerRunMode.Http
             ? CancellationTokenSource.CreateLinkedTokenSource(ct)
             : null;
@@ -415,7 +420,7 @@ public class McpScope
     private static IClientTransport CreateStdioTransport(McpServerConfiguration config, string mcpRoot)
         => new StdioClientTransport(BuildStdioTransportOptions(config, mcpRoot));
 
-    /// <summary>构建 stdio transport 选项：命令行 + Options（env / workingDirectory）。internal 供测试。</summary>
+    /// <summary>Builds the stdio transport options: command line + Options (env / workingDirectory). Internal for tests.</summary>
     internal static StdioClientTransportOptions BuildStdioTransportOptions(McpServerConfiguration config, string mcpRoot)
     {
         var (cmd, args) = config.RunMode switch
@@ -490,7 +495,7 @@ public class McpScope
             };
         }
 
-        // 连接超时：Options.connectionTimeout 优先，否则用 scope 全局 WithConnectionTimeout。
+        // Connection timeout: Options.connectionTimeout takes priority, otherwise the scope-wide WithConnectionTimeout.
         if (TryGetOption(j, "connectionTimeout", out var ct))
             options.ConnectionTimeout = ParseTimeSpan(ct);
         else if (ConnectionTimeout is { } globalTimeout)
@@ -509,13 +514,13 @@ public class McpScope
     private static readonly string[] HttpOptionKeys = ["headers", "oauth", "connectionTimeout", "transportMode", "ownsSession"];
     private static readonly string[] StdioOptionKeys = ["env", "workingDirectory"];
 
-    /// <summary>解析 Options（匿名对象或 JSON 字符串）为 JObject；null → 空对象。</summary>
+    /// <summary>Parses Options (an anonymous object or JSON string) into a JObject; null → an empty object.</summary>
     private static JObject ParseOptions(object? options)
     {
         if (options is null) return new JObject();
         JToken token = options is string s ? JToken.Parse(s) : JToken.FromObject(options);
         if (token is not JObject obj)
-            throw new InvalidOperationException("McpServerConfiguration.Options 必须是对象（匿名对象），不能是标量或数组。");
+            throw new InvalidOperationException("McpServerConfiguration.Options must be an object (anonymous object), not a scalar or an array.");
         return obj;
     }
 
@@ -551,7 +556,7 @@ public class McpScope
         throw new InvalidOperationException($"Invalid connectionTimeout value: {token}.");
     }
 
-    /// <summary>逐服务器的连接超时：Options.connectionTimeout（秒或 TimeSpan 字符串）覆盖全局。</summary>
+    /// <summary>Per-server connection timeout: Options.connectionTimeout (seconds or a TimeSpan string) overrides the global value.</summary>
     internal TimeSpan? GetEffectiveConnectionTimeout(McpServerConfiguration config)
     {
         var j = ParseOptions(config.Options);

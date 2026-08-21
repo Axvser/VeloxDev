@@ -149,7 +149,7 @@ public class McpRemoteTests
     public void PerServerConnectionTimeout_OverridesScopeDefault()
     {
         var scope = new McpScope().WithConnectionTimeout(TimeSpan.FromSeconds(7));
-        var config = HttpConfig(configure: c => c.Options = new { connectionTimeout = 2 }); // 秒
+        var config = HttpConfig(configure: c => c.Options = new { connectionTimeout = 2 }); // seconds
 
         var options = scope.BuildHttpTransportOptions(config);
 

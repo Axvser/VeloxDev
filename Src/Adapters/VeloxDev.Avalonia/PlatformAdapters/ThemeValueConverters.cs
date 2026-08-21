@@ -14,7 +14,7 @@ namespace VeloxDev.DynamicTheme
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // 使用Avalonia内置类型转换系统
+            // Use Avalonia's built-in type conversion system.
             if (TypeUtilities.TryConvert(targetType, parameters[0], CultureInfo.InvariantCulture, out var result))
             {
                 return result;
@@ -37,13 +37,13 @@ namespace VeloxDev.DynamicTheme
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // 使用Avalonia内置的点解析
+            // Use Avalonia's built-in point parsing.
             if (parameters[0] is string strValue)
             {
                 return Point.Parse(strValue);
             }
 
-            // 多参数构造
+            // Multi-parameter construction.
             try
             {
                 if (parameters.Length >= 2)
@@ -65,13 +65,13 @@ namespace VeloxDev.DynamicTheme
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // 使用Avalonia内置的厚度解析
+            // Use Avalonia's built-in thickness parsing.
             if (parameters[0] is string strValue)
             {
                 return Thickness.Parse(strValue);
             }
 
-            // 多参数构造
+            // Multi-parameter construction.
             try
             {
                 return parameters.Length switch
@@ -98,13 +98,13 @@ namespace VeloxDev.DynamicTheme
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // 使用Avalonia内置的圆角解析
+            // Use Avalonia's built-in corner-radius parsing.
             if (parameters[0] is string strValue)
             {
                 return CornerRadius.Parse(strValue);
             }
 
-            // 多参数构造
+            // Multi-parameter construction.
             try
             {
                 return parameters.Length switch
@@ -128,7 +128,7 @@ namespace VeloxDev.DynamicTheme
         {
             if (parameters == null || parameters.Length < 1) return null;
 
-            // 使用Avalonia内置的颜色解析
+            // Use Avalonia's built-in color parsing.
             if (parameters[0] is string colorString)
             {
                 if (Color.TryParse(colorString, out var color))
@@ -139,13 +139,13 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 整数值 (ARGB)
+                // Integer value (ARGB)
                 if (parameters[0] is int argb)
                 {
                     return Color.FromUInt32((uint)argb);
                 }
 
-                // 单独分量
+                // Individual components
                 if (parameters.Length >= 3)
                 {
                     byte a = parameters.Length >= 4 ? System.Convert.ToByte(parameters[0]) : (byte)255;
@@ -169,14 +169,14 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 1. 直接传递笔刷
+                // 1. Pass a brush directly
                 if (parameters[0] is IBrush brush)
                     return brush;
 
-                // 2. 资源键查找
+                // 2. Resource-key lookup
                 if (parameters[0] is string resourceKey)
                 {
-                    // 使用Avalonia内置的资源查找
+                    // Use Avalonia's built-in resource lookup.
                     var app = Application.Current;
                     if (app != null)
                     {
@@ -187,17 +187,17 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // 3. 颜色字符串
+                // 3. Color string
                 if (parameters[0] is string colorString)
                 {
-                    // 使用内置颜色解析
+                    // Use built-in color parsing.
                     if (Color.TryParse(colorString, out var color1))
                     {
                         return new SolidColorBrush(color1);
                     }
                 }
 
-                // 4. 委托给颜色转换器
+                // 4. Delegate to the color converter
                 var colorConverter = new ColorConverter();
                 if (colorConverter.Convert(typeof(Color), propertyName, parameters) is Color color)
                 {
@@ -214,13 +214,13 @@ namespace VeloxDev.DynamicTheme
     {
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
-            // 参数验证
+            // Parameter validation
             if (parameters == null || parameters.Length != 1 || parameters[0] is not string strValue)
                 return null;
 
             try
             {
-                // 1. 尝试资源查找
+                // 1. Try resource lookup
                 var app = Application.Current;
                 if (app != null)
                 {
@@ -230,20 +230,20 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // 2. 使用Avalonia内置类型转换系统
+                // 2. Use Avalonia's built-in type conversion system
                 if (TypeUtilities.TryConvert(targetType, strValue, CultureInfo.InvariantCulture, out var result))
                 {
                     return result;
                 }
 
-                // 3. 特殊处理Brush类型
+                // 3. Special-case the Brush type
                 if (typeof(IBrush).IsAssignableFrom(targetType))
                 {
                     var brushConverter = new BrushConverter();
                     return brushConverter.Convert(targetType, propertyName, parameters);
                 }
 
-                // 4. 使用.NET类型转换器作为回退
+                // 4. Fall back to the .NET type converter
                 TypeConverter converter = TypeDescriptor.GetConverter(targetType);
                 if (converter.CanConvertFrom(typeof(string)))
                 {

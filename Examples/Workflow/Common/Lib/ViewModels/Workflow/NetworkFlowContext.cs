@@ -57,15 +57,16 @@ public sealed class NetworkFlowContext
     }
 
     /// <summary>
-    /// 取下一个执行序号。demo 现在把整棵树的执行编号交给 TreeViewModel.NextExecutionSequence()
-    /// （全局单调，独立启动节点不再复位）；本方法仅作为无树时的回退。
+    /// Returns the next execution sequence number. The demo now delegates the whole tree's numbering to
+    /// TreeViewModel.NextExecutionSequence() (globally monotonic; standalone starts no longer reset it);
+    /// this method only serves as a fallback when there is no tree.
     /// </summary>
     public int NextOrder() => Interlocked.Increment(ref _executionSequence);
 
     /// <summary>
-    /// 记录一次执行。
-    /// <paramref name="globalOrder"/> 非 null 时用它作为序号（demo 传入树的全局序号），
-    /// 否则用本 flow 的私有计数器回退。
+    /// Records one execution.
+    /// When <paramref name="globalOrder"/> is non-null it is used as the sequence number (the demo passes the
+    /// tree's global sequence); otherwise this flow's private counter is used as a fallback.
     /// </summary>
     public string RecordExecution(string nodeTitle, out int order, int? globalOrder = null)
     {

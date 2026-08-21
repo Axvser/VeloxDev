@@ -20,10 +20,10 @@ public sealed partial class LinkView : UserControl
         IsHitTestVisible = true;
         Canvas.SetZIndex(this, -100);
 
-        // 创建主容器
+        // Create the main container
         var container = new Grid();
 
-        // 创建路径用于绘制贝塞尔曲线
+        // Create a path for drawing the B茅zier curve
         _path = new Path
         {
             Stroke = _strokeBrush,
@@ -31,7 +31,7 @@ public sealed partial class LinkView : UserControl
             IsHitTestVisible = false
         };
 
-        // 创建箭头路径
+        // Create the arrow path
         _arrowPath = new Path
         {
             Fill = _arrowBrush,
@@ -63,7 +63,7 @@ public sealed partial class LinkView : UserControl
     private bool _updatePending;
     private bool _isLoaded;
 
-    // 依赖属性
+    // Dependency property
     public static readonly DependencyProperty StartLeftProperty =
         DependencyProperty.Register(
             nameof(StartLeft),
@@ -250,11 +250,11 @@ public sealed partial class LinkView : UserControl
             return;
         }
 
-        // 计算差距
+        // Compute the distance
         var diffx = EndLeft - StartLeft;
         var diffy = EndTop - StartTop;
 
-        // 基于点位差距计算控制点
+        // Compute control points based on the endpoint distance
         var cp1 = new Point(
             StartLeft + diffx * 0.618,
             StartTop + diffy * 0.1);
@@ -263,13 +263,13 @@ public sealed partial class LinkView : UserControl
             EndLeft - diffx * 0.618,
             EndTop - diffy * 0.1);
 
-        // 创建贝塞尔曲线几何图形
+        // Create the B茅zier curve geometry
         _pathFigure.StartPoint = new Point(StartLeft, StartTop);
         _bezierSegment.Point1 = cp1;
         _bezierSegment.Point2 = cp2;
         _bezierSegment.Point3 = new Point(EndLeft, EndTop);
 
-        // 设置线条样式
+        // Set the line style
         var lineColor = IsHighlighted ? Microsoft.UI.Colors.OrangeRed : LineColor;
         var strokeThickness = IsHighlighted ? 3.5 : 2.0;
         _strokeBrush.Color = lineColor;
@@ -278,16 +278,16 @@ public sealed partial class LinkView : UserControl
 
         if (IsVirtual)
         {
-            _path.StrokeDashArray = VirtualStrokeDashArray; // 虚线样式
+            _path.StrokeDashArray = VirtualStrokeDashArray; // dashed style
         }
         else
         {
-            _path.StrokeDashArray = null; // 实线
+            _path.StrokeDashArray = null; // solid
         }
 
         _path.Data = _pathGeometry;
 
-        // 绘制箭头
+        // Draw the arrow
         DrawArrow();
     }
 
@@ -296,7 +296,7 @@ public sealed partial class LinkView : UserControl
         const double arrowLength = 10;
         const double arrowWidth = 6;
 
-        // 计算终点处的切线方向（贝塞尔曲线终点导数）
+        // Compute the tangent direction at the end point (B茅zier curve end derivative)
         var diffx = EndLeft - StartLeft;
         var diffy = EndTop - StartTop;
 
@@ -308,11 +308,11 @@ public sealed partial class LinkView : UserControl
             EndLeft - diffx * 0.618,
             EndTop - diffy * 0.1);
 
-        // 计算贝塞尔曲线在终点的切线方向
+        // Compute the B茅zier curve's tangent direction at the end point
         var tangentX = 3 * (EndLeft - cp2.X);
         var tangentY = 3 * (EndTop - cp2.Y);
 
-        // 归一化切线向量
+        // Normalize the tangent vector
         var length = Math.Sqrt(tangentX * tangentX + tangentY * tangentY);
         if (length <= double.Epsilon)
         {
@@ -323,11 +323,11 @@ public sealed partial class LinkView : UserControl
         var unitTangentX = tangentX / length;
         var unitTangentY = tangentY / length;
 
-        // 计算法线向量（旋转90度）
+        // Compute the normal vector (rotate 90 degrees)
         var unitNormalX = -unitTangentY;
         var unitNormalY = unitTangentX;
 
-        // 计算箭头三个点
+        // Compute the three arrow points
         var arrowTip = new Point(EndLeft, EndTop);
         var arrowLeft = new Point(
             EndLeft - arrowLength * unitTangentX + arrowWidth * unitNormalX,
@@ -336,7 +336,7 @@ public sealed partial class LinkView : UserControl
             EndLeft - arrowLength * unitTangentX - arrowWidth * unitNormalX,
             EndTop - arrowLength * unitTangentY - arrowWidth * unitNormalY);
 
-        // 创建箭头几何图形
+        // Create the arrow geometry
         _arrowFigure.StartPoint = arrowTip;
         _arrowLeftSegment.Point = arrowLeft;
         _arrowRightSegment.Point = arrowRight;

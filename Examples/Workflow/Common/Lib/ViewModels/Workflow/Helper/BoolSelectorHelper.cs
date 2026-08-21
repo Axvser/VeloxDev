@@ -9,8 +9,8 @@ public class BoolSelectorHelper : NodeHelper<BoolSelectorNodeViewModel>
     {
         if (Component is null) return null;
 
-        // 编译执行：引擎传入 RuntimeContext（IRuntimeContext + ITaskContext），编号编译期固定；
-        // 只记录路由方向，不重写徽标。
+        // Compiled execution: the engine passes RuntimeContext (IRuntimeContext + ITaskContext); the sequence number is fixed at compile time.
+        // Only record the routing direction; do not rewrite the badge.
         if (ctx is IRuntimeContext)
         {
             Component.LastRouted = Component.Condition ? "→ True" : "→ False";
@@ -24,10 +24,10 @@ public class BoolSelectorHelper : NodeHelper<BoolSelectorNodeViewModel>
             : Component.Condition;
 
         Component.LastRouted = condition ? "→ True" : "→ False";
-        // 只记路由轨迹；不写 LastExecutionOrder —— 编号徽标是编译机器专属，非编译器启动不扰动。
+        // Record the routing trace only; do not write LastExecutionOrder — the number badge belongs to the compiled run, and non-compiler starts must not disturb it.
         context.RecordExecution(Component.LastRouted, out _);
 
-        // 自动向下游传递（AutoBroadcast，默认 true）：无状态只沿**当前选中分支**（True/False 之一）广播。
+        // Auto-forward downstream (AutoBroadcast, default true): in stateless mode, broadcast only along the **currently selected branch** (one of True/False).
         if (Component.AutoBroadcast)
             await SelectorBroadcast.ToSlotAsync(Component, condition ? Component.TrueSlot : Component.FalseSlot, context, ct);
 

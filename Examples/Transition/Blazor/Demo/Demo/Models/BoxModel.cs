@@ -4,9 +4,9 @@ using System.Runtime.CompilerServices;
 namespace Demo.Models;
 
 /// <summary>
-/// 代表一个可动画的"矩形"状态对象
-/// VeloxDev 动画直接作用于此 ViewModel 的属性
-/// Blazor 通过 PropertyChanged 事件驱动 UI 重渲染
+/// Represents an animatable "rectangle" state object
+/// VeloxDev animations act directly on this ViewModel's properties
+/// Blazor drives UI re-rendering through the PropertyChanged event
 /// </summary>
 public class BoxModel : INotifyPropertyChanged
 {
@@ -49,28 +49,28 @@ public class BoxModel : INotifyPropertyChanged
         set { _opacity = value; OnPropertyChanged(); }
     }
 
-    /// <summary>旋转角度（度）</summary>
+    /// <summary>Rotation angle (degrees)</summary>
     public double Rotate
     {
         get => _rotate;
         set { _rotate = value; OnPropertyChanged(); }
     }
 
-    /// <summary>缩放比例</summary>
+    /// <summary>Scale factor</summary>
     public double Scale
     {
         get => _scale;
         set { _scale = value; OnPropertyChanged(); }
     }
 
-    /// <summary>CSS 颜色字符串，例如 "#00bcd4" 或 "rgba(255,0,0,0.5)"</summary>
+    /// <summary>CSS color string, e.g. "#00bcd4" or "rgba(255,0,0,0.5)"</summary>
     public string Color
     {
         get => _color;
         set { _color = value; OnPropertyChanged(); }
     }
 
-    /// <summary>生成对应的 CSS inline style 字符串</summary>
+    /// <summary>Builds the corresponding CSS inline style string</summary>
     public string Style =>
         $"width:{Width:F1}px;" +
         $"height:{Height:F1}px;" +

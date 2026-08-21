@@ -10,11 +10,11 @@ namespace VeloxDev.Adapters.NativeInterpolators
             var s = Normalize(start);
             var e = Normalize(end);
 
-            // 单帧（重置等）返回原始目标值：end 为 null 时就写 null，而不是透明画刷。
+            // Single-frame (reset, etc.) returns the raw target value: write null when end is null rather than a transparent brush.
             if (steps <= 1)
                 return [end];
 
-            // ���뻭ˢ����
+            // Align brush types.
             (var alignedS, var alignedE) = AlignBrushTypes(s, e);
 
             var result = new List<object?>(steps);
@@ -27,7 +27,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return result;
         }
 
-        #region ��׼���Ͷ���
+        #region Standard type alignment
 
         private static Brush Normalize(object? obj)
         {
@@ -88,7 +88,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
         #endregion
 
-        #region ���Ĳ�ֵ�߼�
+        #region Core interpolation logic
 
         private static Brush InterpolateAligned(Brush s, Brush e, double t)
         {
@@ -97,7 +97,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
                 if (t <= 0.0) return CloneBrush(s);
                 if (t >= 1.0) return CloneBrush(e);
 
-                // �޸���ʹ��isģʽƥ�������switch����ʽ
+                // Use is pattern matching instead of a switch expression.
                 if (s is SolidColorBrush startSolid && e is SolidColorBrush endSolid)
                     return InterpolateSolidColors(startSolid, endSolid, t);
 
@@ -265,7 +265,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
         #endregion
 
-        #region ��ѧ��������
+        #region Math helper methods
 
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 

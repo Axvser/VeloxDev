@@ -35,7 +35,7 @@ public abstract class InterpolatorCore<
         foreach (var kvp in state.Values)
         {
             var currentValue = inspector.ProtectedGetValue(target, kvp.Key);
-            // 路径对当前目标无效（中间类型不匹配）→ 跳过该属性，避免把它当作 null 值插值造成失真
+            // The path is invalid for the current target (intermediate type mismatch) → skip this property to avoid distorting interpolation by treating it as a null value.
             if (ReferenceEquals(currentValue, TransitionProperty.UnreadablePath)) continue;
             var newValue = kvp.Value;
             state.TryGetOptions(kvp.Key, out var options);
@@ -94,7 +94,7 @@ public abstract class InterpolatorCore<TOutputCore> : InterpolatorCore, IFrameIn
         foreach (var kvp in state.Values)
         {
             var currentValue = inspector.ProtectedGetValue(target, kvp.Key);
-            // 路径对当前目标无效（中间类型不匹配）→ 跳过该属性，避免把它当作 null 值插值造成失真
+            // The path is invalid for the current target (intermediate type mismatch) → skip this property to avoid distorting interpolation by treating it as a null value.
             if (ReferenceEquals(currentValue, TransitionProperty.UnreadablePath)) continue;
             var newValue = kvp.Value;
             state.TryGetOptions(kvp.Key, out var options);

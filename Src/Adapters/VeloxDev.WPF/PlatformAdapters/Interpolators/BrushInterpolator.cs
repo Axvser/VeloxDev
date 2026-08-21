@@ -16,8 +16,8 @@ namespace VeloxDev.Adapters.NativeInterpolators
             Brush startBrush = start as Brush ?? Brushes.Transparent;
             Brush endBrush = end as Brush ?? Brushes.Transparent;
 
-            // 单帧（重置等）返回原始目标值：end 为 null 时就写 null，而不是 Brushes.Transparent。
-            // 否则 OpacityMask 会被设成透明画刷，导致整个元素不可见。
+            // Single-frame (reset, etc.) returns the raw target value: write null when end is null rather than Brushes.Transparent.
+            // Otherwise OpacityMask would be set to a transparent brush, making the whole element invisible.
             if (steps == 1)
                 return [end];
 
@@ -69,12 +69,12 @@ namespace VeloxDev.Adapters.NativeInterpolators
             var drawingVisual = new DrawingVisual();
             using (var drawingContext = drawingVisual.RenderOpen())
             {
-                // ����start��ˢ(��͸����)
+                // Draw the start brush with semi-transparency.
                 drawingContext.PushOpacity(1 - t);
                 drawingContext.DrawRectangle(start, null, new Rect(0, 0, RenderSize, RenderSize));
                 drawingContext.Pop();
 
-                // ����end��ˢ(��͸����)
+                // Draw the end brush with semi-transparency.
                 drawingContext.PushOpacity(t);
                 drawingContext.DrawRectangle(end, null, new Rect(0, 0, RenderSize, RenderSize));
                 drawingContext.Pop();

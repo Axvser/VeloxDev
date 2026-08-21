@@ -15,10 +15,10 @@ public partial class NodeViewModel : ICompileTimeAware, IRuntimeAware
 {
     public NodeViewModel() => InitializeWorkflow();
 
-    /// <summary>编译期注入的编译身份（Order = -1 表示绝对停止）。</summary>
+    /// <summary>Compile-time identity injected by the compiler (Order = -1 means absolute stop).</summary>
     public ICompileContext? CompileContext { get; private set; }
 
-    /// <summary>编译期是否处于绝对停止状态（未选中静态分支 / 终止）。</summary>
+    /// <summary>Whether the node is in the compile-time absolute stop state (unselected static branch / terminated).</summary>
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
     public void AttachCompileTimeContext(ICompileContext context)
@@ -31,7 +31,7 @@ public partial class NodeViewModel : ICompileTimeAware, IRuntimeAware
         OnPropertyChanged(nameof(ExecutionOrderText));
     }
 
-    /// <summary>运行期注入的共享上下文（引擎驱动本节点前调用）。</summary>
+    /// <summary>Shared context injected at runtime (called before the engine drives this node).</summary>
     public IRuntimeContext? RuntimeContext { get; private set; }
 
     public void AttachRuntimeContext(IRuntimeContext context)

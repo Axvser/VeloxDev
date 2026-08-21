@@ -6,8 +6,8 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// 验证 IRedirectable 链内回退：RedirectGate 前 FailCount 次链内通过回退到链头重新执行，
-/// 之后放行；回退超限抛异常。
+/// Verifies IRedirectable in-chain redirects: a RedirectGate redirects to the chain head for the first
+/// FailCount runs, then passes; exceeding the redirect cap throws.
 /// </summary>
 [TestClass]
 public class RedirectTests
@@ -24,7 +24,7 @@ public class RedirectTests
         Assert.AreEqual(3, context.Attempt, "3 chain passes (2 redirects + 1 success)");
         Assert.AreEqual("Completed", work.LastStatus, "Work ran");
         Assert.AreEqual("Completed", sink.LastStatus, "Sink ran after the gate stopped redirecting");
-        Assert.IsTrue(context.Logs.Any(l => l.Contains("回退")), "redirects logged by the engine");
+        Assert.IsTrue(context.Logs.Any(l => l.Contains("Redirecting")), "redirects logged by the engine");
         Assert.IsTrue(gate.RuntimeContext is not null, "IRuntimeAware injection still works");
     }
 
@@ -32,7 +32,7 @@ public class RedirectTests
     public async Task RedirectGate_ExceedsCap_Throws()
     {
         var (_, graph, gate, _, _) = BuildRedirectGraph();
-        gate.FailCount = 99;   // 始终回退 → 触发引擎回退上限
+        gate.FailCount = 99;   // always redirects → hits the engine's redirect cap
 
         var context = new RuntimeContext();
         Exception? caught = null;
@@ -43,7 +43,7 @@ public class RedirectTests
         catch (Exception ex) { caught = ex; }
 
         Assert.IsInstanceOfType<InvalidOperationException>(caught, "redirect cap exceeded → throws");
-        Assert.IsTrue(context.Logs.Any(l => l.Contains("放弃")), "cap exhaustion logged");
+        Assert.IsTrue(context.Logs.Any(l => l.Contains("Aborting")), "cap exhaustion logged");
     }
 
     [TestMethod]
@@ -66,7 +66,7 @@ public class RedirectTests
     [TestMethod]
     public async Task RedirectCrossChain_SkipsPriorAndReruns()
     {
-        // 图: Controller → Pre → Bool(True → [B, Gate, Sink])。Gate 回退 3 步 = Pre(前一条 ExecuteEntry)。
+        // Graph: Controller → Pre → Bool(True → [B, Gate, Sink]). Gate redirects back 3 steps = Pre (the previous ExecuteEntry).
         var (_, graph, gate, _, sink) = BuildBranchRedirectGraph(redirectBackSteps: 3, failCount: 1);
 
         var context = new RuntimeContext();
@@ -74,15 +74,15 @@ public class RedirectTests
 
         Assert.AreEqual(2, context.Attempt, "two graph passes (one redirect across chains)");
         Assert.AreEqual("Completed", sink.LastStatus, "flow recovered after the cross-chain fall back");
-        Assert.IsTrue(context.Logs.Any(l => l.Contains("回退到编译状态 #1")),
+        Assert.IsTrue(context.Logs.Any(l => l.Contains("compile state #1")),
             "redirect crossed into the prior chain (Pre, Order #1)");
     }
 
     [TestMethod]
     public async Task RedirectToRouter_ReroutesWithoutRecompute()
     {
-        // 图同上。Gate 回退 2 步 = BoolSelector(router) 的 Order。
-        // 重跑时 router 只重新路由、不重新计算（不驱动 ReceiveAsync）。
+        // Graph as above. Gate redirects back 2 steps = BoolSelector(router)'s Order.
+        // On the re-run the router only re-routes, without recomputing (ReceiveAsync is not driven).
         var (_, graph, _, _, sink) = BuildBranchRedirectGraph(redirectBackSteps: 2, failCount: 1);
 
         var context = new RuntimeContext();
@@ -92,7 +92,7 @@ public class RedirectTests
         Assert.AreEqual(1, context.Logs.Count(l => l.Contains("BoolSelectorNodeViewModel")),
             "router driven exactly once — re-routed on the re-run, not recomputed");
         Assert.AreEqual("Completed", sink.LastStatus, "flow recovered after re-routing at the router");
-        Assert.IsTrue(context.Logs.Any(l => l.Contains("回退到编译状态 #2")),
+        Assert.IsTrue(context.Logs.Any(l => l.Contains("compile state #2")),
             "redirect targeted the router's compile state (Order #2)");
     }
 
@@ -243,7 +243,7 @@ public class RedirectTests
     }
 }
 
-/// <summary>测试节点：调用 Warn() 请求重定向但不实现 IRedirectable → 流程应结束且状态 -1。</summary>
+/// <summary>Test node: calls Warn() to request a redirect but does not implement IRedirectable → the flow should end with status -1.</summary>
 [WorkflowBuilder.Node<WarnOnlyHelper>(workSemaphore: 1)]
 public partial class WarnOnlyNodeViewModel : NodeViewModel { }
 
@@ -252,12 +252,12 @@ public class WarnOnlyHelper : HttpHelper<NodeViewModel>
     public override Task<object?> ReceiveAsync(ITaskContext ctx, CancellationToken ct)
     {
         if (ctx is IRuntimeContext rt && rt.Attempt <= 1)
-            rt.Warn("模拟故障：不支持重定向");
+            rt.Warn("Simulated failure: redirect not supported");
         return base.ReceiveAsync(ctx, ct);
     }
 }
 
-/// <summary>测试节点：ReceiveAsync 抛异常（不实现 IRedirectable）→ 流程应结束且状态 -1。</summary>
+/// <summary>Test node: ReceiveAsync throws (does not implement IRedirectable) → the flow should end with status -1.</summary>
 [WorkflowBuilder.Node<ThrowOnlyHelper>(workSemaphore: 1)]
 public partial class ThrowOnlyNodeViewModel : NodeViewModel { }
 
@@ -266,7 +266,7 @@ public class ThrowOnlyHelper : HttpHelper<NodeViewModel>
     public override Task<object?> ReceiveAsync(ITaskContext ctx, CancellationToken ct)
     {
         if (ctx is IRuntimeContext rt && rt.Attempt <= 1)
-            throw new InvalidOperationException("模拟故障：抛异常且不支持重定向");
+            throw new InvalidOperationException("Simulated failure: threw an exception and redirect not supported");
         return base.ReceiveAsync(ctx, ct);
     }
 }

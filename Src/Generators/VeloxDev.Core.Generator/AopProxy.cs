@@ -26,12 +26,12 @@ namespace VeloxDev.Generators
                 writer.Initialize(kvp.Value, kvp.Key);
                 if (!writer.CanWrite()) continue;
 
-                // Source 1: 分部类（保留接口实现契约）
+                // Source 1: partial class (preserves the interface implementation contract)
                 context.AddSource(
                     writer.GetFileName(),
                     SourceText.From(writer.Write(), Encoding.UTF8));
 
-                // Source 2: 扩展方法（Aop() 入口）
+                // Source 2: extension method (the Aop() entry point)
                 context.AddSource(
                     writer.GetExtensionFileName(),
                     SourceText.From(writer.WriteExtension(), Encoding.UTF8));

@@ -261,7 +261,7 @@ public static class WorkflowSpatialEx
     }
 }
 
-/// <summary>引用身份相等的比较器（node VM 不重写 Equals；汇合登记表 / 产物表按引用身份聚键）。</summary>
+/// <summary>Reference-identity equality comparer (node VMs do not override Equals; join registries / output tables key by reference identity).</summary>
 internal sealed class WorkflowReferenceEqualityComparer<T> : IEqualityComparer<T>
     where T : class
 {

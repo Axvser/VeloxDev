@@ -3,8 +3,8 @@ using VeloxDev.TimeLine;
 namespace VeloxDev.Core.Test.TimeLine;
 
 /// <summary>
-/// MonoBehaviourManager 操作共享静态状态（_channels 字典），
-/// 因此测试不能并行运行。
+/// MonoBehaviourManager operates on shared static state (the _channels dictionary),
+/// so these tests cannot run in parallel.
 /// </summary>
 [TestClass]
 [DoNotParallelize]
@@ -14,7 +14,7 @@ public class MonoBehaviourManagerTests
     private static readonly string UniqueChannel = $"MBBTest_{Guid.NewGuid():N}";
 
     /// <summary>
-    /// 确保每个测试结束后通道被停止，避免线程泄漏影响后续测试。
+    /// Ensures every channel is stopped after each test, so thread leakage cannot affect later tests.
     /// </summary>
     [TestCleanup]
     public async Task Cleanup()
@@ -22,7 +22,7 @@ public class MonoBehaviourManagerTests
         if (MonoBehaviourManager.IsRunning(TestChannel))
             await MonoBehaviourManager.StopAsync(TestChannel);
 
-        // 清理所有该测试类创建的额外通道
+        // Clean up any extra channels this test class created
         if (MonoBehaviourManager.IsRunning(UniqueChannel))
             await MonoBehaviourManager.StopAsync(UniqueChannel);
     }
@@ -32,14 +32,14 @@ public class MonoBehaviourManagerTests
     [TestMethod]
     public void SetUseAsyncLoop_BeforeStart_Succeeds()
     {
-        // 通道未启动时设置覆盖 → 不应抛出异常
+        // Setting the override before the channel starts → must not throw
         MonoBehaviourManager.SetUseAsyncLoop(true, TestChannel);
     }
 
     [TestMethod]
     public void SetUseAsyncLoop_BeforeStart_MultipleCalls_Succeeds()
     {
-        // 多次设置覆盖 → 不应抛出异常
+        // Setting the override multiple times → must not throw
         MonoBehaviourManager.SetUseAsyncLoop(true, TestChannel);
         MonoBehaviourManager.SetUseAsyncLoop(false, TestChannel);
         MonoBehaviourManager.SetUseAsyncLoop(true, TestChannel);
@@ -48,11 +48,11 @@ public class MonoBehaviourManagerTests
     [TestMethod]
     public async Task SetUseAsyncLoop_AfterStart_ThrowsInvalidOperationException()
     {
-        // 使用独立通道避免与其他测试冲突
+        // Use a dedicated channel to avoid colliding with other tests
         const string ch = "MBBTest_AfterStart_Throws";
         MonoBehaviourManager.Start(ch);
 
-        // 通道已启动时设置覆盖 → 应抛出 InvalidOperationException
+        // Setting the override after the channel started → must throw InvalidOperationException
         Assert.Throws<InvalidOperationException>(() =>
             MonoBehaviourManager.SetUseAsyncLoop(true, ch));
 
@@ -66,7 +66,7 @@ public class MonoBehaviourManagerTests
         MonoBehaviourManager.Start(ch);
         await MonoBehaviourManager.StopAsync(ch);
 
-        // 通道停止后设置覆盖 → 不应抛出异常
+        // Setting the override after the channel stopped → must not throw
         MonoBehaviourManager.SetUseAsyncLoop(true, ch);
     }
 
@@ -75,7 +75,7 @@ public class MonoBehaviourManagerTests
     {
         const string ch = "MBBTest_Recycle";
 
-        // 验证停止后修改覆盖再启动不抛异常（覆盖值在启动时生效）
+        // Verifies that modifying the override after a stop and restarting does not throw (the override takes effect at start)
         MonoBehaviourManager.SetUseAsyncLoop(true, ch);
         MonoBehaviourManager.Start(ch);
         await MonoBehaviourManager.StopAsync(ch);
@@ -91,14 +91,14 @@ public class MonoBehaviourManagerTests
     public void ClearUseAsyncLoopOverride_BeforeStart_Succeeds()
     {
         MonoBehaviourManager.SetUseAsyncLoop(true, TestChannel);
-        // 清除覆盖 → 不应抛出异常
+        // Clearing the override → must not throw
         MonoBehaviourManager.ClearUseAsyncLoopOverride(TestChannel);
     }
 
     [TestMethod]
     public void ClearUseAsyncLoopOverride_WithoutSetting_DoesNotThrow()
     {
-        // 从未设置覆盖时清除 → 不应抛出异常
+        // Clearing when no override was ever set → must not throw
         MonoBehaviourManager.ClearUseAsyncLoopOverride(TestChannel);
     }
 
@@ -107,11 +107,11 @@ public class MonoBehaviourManagerTests
     {
         const string ch = "MBBTest_Clear_AfterStart";
 
-        // 先设置覆盖
+        // Set the override first
         MonoBehaviourManager.SetUseAsyncLoop(true, ch);
         MonoBehaviourManager.Start(ch);
 
-        // 通道已启动时清除覆盖 → 应抛出 InvalidOperationException
+        // Clearing the override after the channel started → must throw InvalidOperationException
         Assert.Throws<InvalidOperationException>(() =>
             MonoBehaviourManager.ClearUseAsyncLoopOverride(ch));
 
@@ -127,11 +127,11 @@ public class MonoBehaviourManagerTests
         MonoBehaviourManager.Start(ch);
         await MonoBehaviourManager.StopAsync(ch);
 
-        // 通道停止后清除覆盖 → 不应抛出异常
+        // Clearing the override after the channel stopped → must not throw
         MonoBehaviourManager.ClearUseAsyncLoopOverride(ch);
     }
 
-    // ───────── 通道隔离 ─────────
+    // ───────── Channel isolation ─────────
 
     [TestMethod]
     public async Task SetUseAsyncLoop_ChannelIsolation_DifferentChannels()
@@ -141,11 +141,11 @@ public class MonoBehaviourManagerTests
 
         MonoBehaviourManager.Start(chA);
 
-        // 通道 A 已运行 → 应抛出异常
+        // Channel A is running → must throw
         Assert.Throws<InvalidOperationException>(() =>
             MonoBehaviourManager.SetUseAsyncLoop(true, chA));
 
-        // 通道 B 未运行 → 应成功
+        // Channel B is not running → must succeed
         MonoBehaviourManager.SetUseAsyncLoop(false, chB);
 
         await MonoBehaviourManager.StopAsync(chA);
@@ -157,15 +157,15 @@ public class MonoBehaviourManagerTests
         const string chA = "MBBTest_Isolation_Clear_A";
         const string chB = "MBBTest_Isolation_Clear_B";
 
-        // 通道 B 设置覆盖
+        // Set an override on channel B
         MonoBehaviourManager.SetUseAsyncLoop(true, chB);
         MonoBehaviourManager.Start(chA);
 
-        // 通道 A 未设覆盖但已运行 → 清除也应抛出
+        // Channel A has no override but is running → clearing must also throw
         Assert.Throws<InvalidOperationException>(() =>
             MonoBehaviourManager.ClearUseAsyncLoopOverride(chA));
 
-        // 通道 B 未启动但设了覆盖 → 清除应成功
+        // Channel B is not started but has an override → clearing must succeed
         MonoBehaviourManager.ClearUseAsyncLoopOverride(chB);
 
         await MonoBehaviourManager.StopAsync(chA);

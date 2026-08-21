@@ -11,18 +11,19 @@ using System.Threading.Tasks;
 namespace VeloxDev.AI.MCP;
 
 /// <summary>
-/// Agent 可调用的 MCP 管理工具：列出服务器状态、加载（安装并连接）宿主预注册的服务器。
-/// 服务器配置由宿主预先提供（<see cref="McpServerConfiguration"/>），Agent 不构造任意配置——
-/// 安全边界与工作流工具一致：“宿主注册、Agent 操作”。经
-/// <c>WorkflowAgentScope.WithTools(...)</c> 注册即可获得与其他工具相同的 UI 线程 marshal /
-/// 调用计数 / 交互安全提示。
+/// MCP management tools callable by the Agent: list server status, load (install and connect) the
+/// host pre-registered servers. Server configuration is provided in advance by the host
+/// (<see cref="McpServerConfiguration"/>); the Agent does not construct arbitrary configs — the
+/// security boundary matches the workflow tools: "host registers, Agent operates". Registered via
+/// <c>WorkflowAgentScope.WithTools(...)</c>, they get the same UI-thread marshalling / call counting /
+/// interaction-safety hints as the other tools.
 /// </summary>
 public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfiguration> servers)
 {
     private readonly McpScope _scope = scope ?? throw new ArgumentNullException(nameof(scope));
     private readonly IReadOnlyList<McpServerConfiguration> _servers = servers ?? [];
 
-    /// <summary>创建 MCP 管理工具：查询 / 加载 / 卸载 / 描述能力（只读 + 限制性操作；配置加载一次后不可变）。</summary>
+    /// <summary>Creates the MCP management tools: query / load / unload / describe capabilities (read-only + restricted operations; configuration is immutable once loaded).</summary>
     public IList<AITool> CreateTools()
     {
         return
@@ -57,7 +58,7 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
                 ["name"] = tool.Name,
                 ["description"] = tool.Description,
             };
-            // MCP 工具的 JSON Schema（参数结构）可由 AIFunction 的 Declaration 导出；此处给出名称+描述即足够作为提示词。
+            // An MCP tool's JSON Schema (parameter structure) can be exported from AIFunction's Declaration; here the name + description are sufficient as a prompt.
             arr.Add(obj);
         }
         return new JObject { ["status"] = "ok", ["server"] = serverName, ["toolCount"] = arr.Count, ["tools"] = arr }.ToString(Formatting.None);

@@ -54,7 +54,7 @@ public partial class WorkflowView : ContentView
 
             if (!success || tree is null)
             {
-                await MainPage.DisplayAlert("加载失败", "文件格式不正确或解析失败。", "确定");
+                await MainPage.DisplayAlert("Load Failed", "The file format is invalid or could not be parsed.", "OK");
                 return;
             }
 
@@ -65,7 +65,7 @@ public partial class WorkflowView : ContentView
         }
         catch (Exception ex)
         {
-            await MainPage.DisplayAlert("错误", $"加载文件失败：{ex.Message}", "确定");
+            await MainPage.DisplayAlert("Error", $"Failed to load file: {ex.Message}", "OK");
         }
     }
 
@@ -76,11 +76,11 @@ public partial class WorkflowView : ContentView
             var filePath = Path.Combine(FileSystem.AppDataDirectory, "Workflow.json");
             if (_workflowViewModel.SaveCommand is ICommand cmd)
                 cmd.Execute(filePath);
-            await MainPage.DisplayAlert("保存成功", $"工作流已保存到：{filePath}", "确定");
+            await MainPage.DisplayAlert("Save Succeeded", $"Workflow saved to: {filePath}", "OK");
         }
         catch (Exception ex)
         {
-            await MainPage.DisplayAlert("错误", $"保存文件失败：{ex.Message}", "确定");
+            await MainPage.DisplayAlert("Error", $"Failed to save file: {ex.Message}", "OK");
         }
     }
 
@@ -229,7 +229,7 @@ public partial class WorkflowView : ContentView
             var page = new ContentPage
             {
                 BackgroundColor = Color.FromArgb("#1a1a2e"),
-                Title = isMulti ? "☑️  Agent · 请多选" : "🤖  Agent · 请选择",
+                Title = isMulti ? "Agent · 请多选" : "Agent · 请选择",
             };
 
             var stack = new VerticalStackLayout
@@ -297,7 +297,7 @@ public partial class WorkflowView : ContentView
             {
                 var confirmBtn = new Button
                 {
-                    Text = "✓  确认选择",
+                    Text = "确认选择",
                     BackgroundColor = Color.FromArgb("#0f3460"),
                     TextColor = Color.FromArgb("#7ec8ff"),
                     BorderColor = Color.FromArgb("#7ec8ff"),
@@ -336,12 +336,12 @@ public partial class WorkflowView : ContentView
         => MainThread.InvokeOnMainThreadAsync(async () =>
         {
             var allow = await MainPage.DisplayAlertAsync(
-                "⚠️ Agent · 操作确认", $"[操作] {args.OperationKey}\n\n{args.Description}", "允许", "拒绝");
+                "Agent · 操作确认", $"[Operation] {args.OperationKey}\n\n{args.Description}", "允许", "拒绝");
 
             if (!allow) { args.Result = AgentConfirmationResult.Deny; return; }
 
             args.Result = await MainPage.DisplayAlertAsync(
-                "⚠️ Agent · 授权范围", "是否在本次会话中始终允许该操作？", "始终允许", "仅同意一次")
+                "Agent · 授权范围", "是否在本次会话中始终允许该操作？", "始终允许", "仅同意一次")
                 ? AgentConfirmationResult.AllowAlways : AgentConfirmationResult.AllowOnce;
         });
 
@@ -395,7 +395,7 @@ public partial class WorkflowView : ContentView
         }
         catch (Exception ex)
         {
-            _workflowViewModel.AppendAgentLog($"❌ 发送失败：{ex.Message}");
+            _workflowViewModel.AppendAgentLog($"[Error] Send failed: {ex.Message}");
         }
     }
 

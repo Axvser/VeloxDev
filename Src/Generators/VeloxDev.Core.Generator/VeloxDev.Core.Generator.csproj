@@ -11,14 +11,14 @@
 		<Version>7.0.0</Version>
 		<Authors>Axvser</Authors>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
-		<!-- 不要把 Roslyn 的 DLL 放进 lib -->
+		<!-- Don't put the Roslyn DLLs into lib -->
 		<IncludeBuildOutput>false</IncludeBuildOutput>
 		<AnalyzerLanguage>cs</AnalyzerLanguage>
 		<!-- NU5128: analyzer-only packages intentionally have no lib folder -->
 		<NoWarn>$(NoWarn);NU5128</NoWarn>
 	</PropertyGroup>
 
-	<!-- Roslyn 依赖不导出；最低要求 4.3.0（ForAttributeWithMetadataName），兼容 VS 2022 17.3+ -->
+	<!-- Roslyn dependencies aren't exported; minimum 4.3.0 (ForAttributeWithMetadataName), compatible with VS 2022 17.3+ -->
 	<ItemGroup>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" PrivateAssets="all" />
 	</ItemGroup>
@@ -27,12 +27,12 @@
 		<None Include="..\..\..\Assets\veloxdev-logo.png" Pack="true" PackagePath="\" Visible="false" />
 	</ItemGroup>
 
-	<!-- 打包到 analyzers 文件夹 -->
+	<!-- Pack into the analyzers folder -->
 	<ItemGroup>
 		<None Include="bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 	</ItemGroup>
 
-	<!-- .targets 随包分发：在用户项目构建时检测 Roslyn 版本并给出诊断 -->
+	<!-- .targets ships with the package: detects the Roslyn version when building the consumer project and emits a diagnostic -->
 	<ItemGroup>
 		<None Include="VeloxDev.Core.Generator.targets" Pack="true" PackagePath="build/VeloxDev.Core.Generator.targets" Visible="false" />
 		<None Include="VeloxDev.Core.Generator.targets" Pack="true" PackagePath="buildMultiTargeting/VeloxDev.Core.Generator.targets" Visible="false" />

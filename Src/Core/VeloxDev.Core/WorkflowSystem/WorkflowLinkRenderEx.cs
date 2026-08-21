@@ -1,22 +1,25 @@
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
-/// Link 渲染就绪契约。
+/// The render-readiness contract for Links.
 ///
-/// 虚拟化画布中,Link 与其双端节点在 ViewManager 的相邻批次中实现;Slot 锚点由各 GUI 的
-/// 槽布局行为在渲染优先级异步测量后写入 <c>slot.Anchor</c>。若 Link 在测量落地前渲染,
-/// 会读到默认"无值"锚点(<see cref="double.NaN"/>),画出一帧错位后跳回,即视觉闪烁。
+/// On the virtualized canvas, a Link and its two endpoint nodes are realized in adjacent batches by the
+/// ViewManager; each GUI's slot-layout behavior asynchronously measures and writes the Slot anchors into
+/// <c>slot.Anchor</c> at render priority. If a Link renders before the measurement lands, it reads the default
+/// "no value" anchor (<see cref="double.NaN"/>), drawing a misaligned frame that then jumps back — visual flicker.
 ///
-/// 机制在核心(<see cref="WorkflowSlotUpdateGate"/>):Slot 锚点默认即 NaN(未测量),链接
-/// 渲染前检查双端端点锚点是否已就位。锚点由 GUI 测量写入真实坐标后,现有锚点绑定自动
-/// 更新视图并重绘到正确位置 —— 无事件订阅、无时间戳、无 GUI 显式通知。
+/// The mechanism lives in the core (<see cref="WorkflowSlotUpdateGate"/>): a Slot anchor defaults to NaN
+/// (unmeasured), and before rendering a link both endpoint anchors are checked. Once the GUI measurement writes
+/// real coordinates into the anchor, the existing anchor bindings automatically update the view and redraw at the
+/// correct position — no event subscription, no timestamps, no explicit GUI notification.
 /// </summary>
 public static class WorkflowLinkRenderEx
 {
     /// <summary>
-    /// 链接是否可渲染:可见,且双端端点锚点均已就位(<see cref="WorkflowSlotUpdateGate.IsLinkRenderReady"/>。
+    /// Whether the link is renderable: visible, and both endpoint anchors are in place
+    /// (<see cref="WorkflowSlotUpdateGate.IsLinkRenderReady"/>).
     ///
-    /// 消费方式(各 GUI 的 link view OnRender 顶部一行):
+    /// How to consume it (first line of each GUI's link view OnRender):
     /// <code>
     /// if (DataContext is IWorkflowLinkViewModel link &amp;&amp; !link.IsRenderReady()) return;
     /// </code>

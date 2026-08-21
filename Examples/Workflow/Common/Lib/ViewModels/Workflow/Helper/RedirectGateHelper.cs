@@ -4,16 +4,16 @@ using VeloxDev.WorkflowSystem;
 namespace Demo.ViewModels.Workflow.Helper;
 
 /// <summary>
-/// <see cref="RedirectGateNodeViewModel"/> 的 helper：编译模式下前 <c>FailCount</c> 次链内通过
-/// 调用 <see cref="RuntimeContext.Warn"/> 请求重定向（引擎随后经节点自身的 <see cref="IRedirectable"/>
-/// 决定回退目标）；之后放行走 <see cref="HttpHelper{T}"/> 正常路径。无状态模式等同普通节点。
+/// <see cref="RedirectGateNodeViewModel"/> helper: under compiled mode the first <c>FailCount</c> passes call
+/// <see cref="RuntimeContext.Warn"/> to request a redirect (the engine then decides the fall-back target via the
+/// node's <see cref="IRedirectable"/>); afterwards it takes the normal <see cref="HttpHelper{T}"/> path; stateless mode is ordinary.
 /// </summary>
 public class RedirectGateHelper : HttpHelper<NodeViewModel>
 {
     public override Task<object?> ReceiveAsync(ITaskContext ctx, CancellationToken ct)
     {
         if (Component is RedirectGateNodeViewModel gate && ctx is IRuntimeContext rt && rt.Attempt <= gate.FailCount)
-            rt.Warn($"第 {rt.Attempt} 次通过需回退（模拟故障）");
+            rt.Warn($"Pass {rt.Attempt} must redirect (simulated fault)");
         return base.ReceiveAsync(ctx, ct);
     }
 }

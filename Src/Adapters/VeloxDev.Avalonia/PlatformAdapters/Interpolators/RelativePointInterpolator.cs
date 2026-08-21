@@ -13,7 +13,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
             List<object?> result = new(steps);
 
-            // 如果单位不同，无法插值，直接使用目标值
+            // If units differ, interpolation is impossible; use the target value directly.
             if (p1.Unit != p2.Unit)
             {
                 for (int i = 0; i < steps; i++)

@@ -22,14 +22,14 @@ namespace Demo
         private Label lblStatus;
 
         /// <summary>
-        /// 必需的设计器变量。
+        /// Required designer variable.
         /// </summary>
         private System.ComponentModel.IContainer components = null;
 
         /// <summary>
-        /// 清理所有正在使用的资源。
+        /// Clean up any resources being used.
         /// </summary>
-        /// <param name="disposing">如果应释放托管资源，为 true；否则为 false。</param>
+        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
@@ -43,28 +43,29 @@ namespace Demo
         {
             base.OnLoad(e);
 
-            // 动画目标是 Control，库会直接用 Control.Invoke / BeginInvoke 编组到它的 UI 线程，
-            // 即便下方从后台线程（Task.Run）首次启动动画，也无需任何捕获。
+            // The animation targets a Control; the library marshals directly to its UI thread via
+            // Control.Invoke / BeginInvoke, so no capture is needed even when the animation is first
+            // started from a background thread (Task.Run) below.
         }
 
-        #region Windows 窗体设计器生成的代码
+        #region Windows Form Designer generated code
 
         /// <summary>
-        /// 设计器支持所需的方法 - 不要修改
-        /// 使用代码编辑器修改此方法的内容。
+        /// Required method for Designer support - do not modify
+        /// the contents of this method with the code editor.
         /// </summary>
         private void InitializeComponent()
         {
             this.SuspendLayout();
 
-            // 窗体设置
+            // Form settings
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1000, 700);
             this.Text = "VeloxDev WinForms 动画演示";
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.White;
 
-            // 创建控件
+            // Create controls
             CreateControls();
 
             this.ResumeLayout(false);
@@ -72,7 +73,7 @@ namespace Demo
 
         private void CreateControls()
         {
-            // 创建三个演示面板
+            // Create the three demo panels
             panel1 = new Panel
             {
                 Name = "panel1",
@@ -100,7 +101,7 @@ namespace Demo
                 BorderStyle = BorderStyle.FixedSingle
             };
 
-            // 创建按钮
+            // Create buttons
             btnStart = new Button
             {
                 Text = "后台线程互斥",
@@ -164,7 +165,7 @@ namespace Demo
                 Font = new Font("微软雅黑", 10)
             };
 
-            // 状态标签
+            // Status label
             lblStatus = new Label
             {
                 Text = "点击“开始动画”按钮启动演示",
@@ -174,7 +175,7 @@ namespace Demo
                 ForeColor = Color.DarkBlue
             };
 
-            // 说明标签
+            // Description label
             var lblDescription = new Label
             {
                 Text = "VeloxDev动画演示 - 红色面板：移动 + 父容器背景色(嵌套属性)，绿色面板：缩放动画，蓝色面板：组合动画",
@@ -184,7 +185,7 @@ namespace Demo
                 ForeColor = Color.Gray
             };
 
-            // 添加控件到窗体
+            // Add controls to the form
             this.Controls.AddRange(new Control[] {
                 panel1, panel2, panel3,
                 btnStart, btnReset, btnExit,
@@ -193,7 +194,7 @@ namespace Demo
                 lblStatus, lblDescription
             });
 
-            // 注册事件
+            // Register events
             btnStart.Click += StartAnimations;
             btnReset.Click += ResetAnimations;
             btnExit.Click += ExitAnimations;
@@ -202,7 +203,7 @@ namespace Demo
             btnStartMainThread.Click += StartAnimationsMainThread;
             btnStartMainThreadNonMutual.Click += StartAnimationsMainThreadNonMutual;
 
-            // 窗体加载事件
+            // Form load event
             this.Load += Form1_Load;
         }
 
@@ -211,7 +212,8 @@ namespace Demo
         private void Form1_Load(object sender, System.EventArgs e)
         {
 
-            // Snapshot(...) 记录显式指定的属性路径，SnapshotAll() 自动记录当前对象中可动画的属性
+            // Snapshot(...) records explicitly specified property paths; SnapshotAll() automatically
+            // records all animatable properties of the current object
             initialSnapshot1 = panel1.Snapshot(x => x.Location, x => x.BackColor, x => x.Parent.BackColor);
             initialSnapshot2 = panel2.SnapshotAll();
             initialSnapshot3 = panel3.SnapshotAll();
@@ -219,7 +221,7 @@ namespace Demo
             lblStatus.Text = "系统就绪，可以开始动画演示";
         }
 
-        // 保存初始快照用于重置
+        // Save initial snapshots for reset
         private Transition<Panel>.StateSnapshot initialSnapshot1;
         private Transition<Panel>.StateSnapshot initialSnapshot2;
         private Transition<Panel>.StateSnapshot initialSnapshot3;
@@ -229,17 +231,17 @@ namespace Demo
             lblStatus.Text = "动画执行中...";
             btnStart.Enabled = false;
 
-            // 在非UI线程中执行动画（框架会自动切换到UI线程）
+            // Run animations on a non-UI thread (the framework switches to the UI thread automatically)
             _ = Task.Run(() =>
             {
                 try
                 {
-                    // 执行三个面板的动画
+                    // Run the animations for the three panels
                     Animation0.Execute(panel1);
                     Animation1.Execute(panel2);
                     Animation2.Execute(panel3);
 
-                    // 动画完成后更新状态
+                    // Update the status after the animations complete
                     this.Invoke(new Action(() =>
                     {
                         lblStatus.Text = "动画执行完成";
@@ -259,12 +261,12 @@ namespace Demo
 
         private void ResetAnimations(object sender, System.EventArgs e)
         {
-            // 停止所有动画（含非互斥）
+            // Stop all animations (including non-mutual)
             Transition.Exit(panel1, IncludeMutual: true, IncludeNoMutual: true);
             Transition.Exit(panel2, IncludeMutual: true, IncludeNoMutual: true);
             Transition.Exit(panel3, IncludeMutual: true, IncludeNoMutual: true);
 
-            // 重置到初始状态
+            // Reset to the initial state
             initialSnapshot1.Effect(TransitionEffects.Empty).Execute(panel1);
             initialSnapshot2.Effect(TransitionEffects.Empty).Execute(panel2);
             initialSnapshot3.Effect(TransitionEffects.Empty).Execute(panel3);
@@ -274,7 +276,7 @@ namespace Demo
 
         private void ExitAnimations(object sender, System.EventArgs e)
         {
-            // 停止所有动画（含非互斥）
+            // Stop all animations (including non-mutual)
             Transition.Exit(panel1, IncludeMutual: true, IncludeNoMutual: true);
             Transition.Exit(panel2, IncludeMutual: true, IncludeNoMutual: true);
             Transition.Exit(panel3, IncludeMutual: true, IncludeNoMutual: true);
@@ -284,7 +286,8 @@ namespace Demo
 
         private void StartAnimationsNonMutual(object sender, System.EventArgs e)
         {
-            // CanMutualTask: false —— 三段动画互不干扰地并发运行，不会被彼此取消
+            // CanMutualTask: false — the three animations run concurrently without interference and
+            // are not cancelled by one another
             lblStatus.Text = "并发动画执行中（CanMutualTask: false）...";
             btnStart.Enabled = false;
 
@@ -315,17 +318,18 @@ namespace Demo
 
         private void StartRepeatedMutual(object sender, System.EventArgs e)
         {
-            // 每次点击都在 panel1 上启动互斥动画：新动画会取消上一次（测试调度器门控与取消）
+            // Each click starts a mutually-exclusive animation on panel1: the new animation cancels
+            // the previous one (tests scheduler gating and cancellation).
             lblStatus.Text = "连续互斥动画（每次点击替换上一次）...";
             _ = Task.Run(() =>
             {
-                Animation0.Execute(panel1); // CanMutualTask: true（默认）
+                Animation0.Execute(panel1); // CanMutualTask: true (default)
             });
         }
 
         private void StartAnimationsMainThread(object sender, System.EventArgs e)
         {
-            // 主线程（UI 线程）直接启动，互斥（CanMutualTask: true 默认）
+            // Start directly on the main (UI) thread; mutual exclusion (CanMutualTask: true by default)
             lblStatus.Text = "主线程互斥动画执行中...";
             Animation0.Execute(panel1);
             Animation1.Execute(panel2);
@@ -334,19 +338,19 @@ namespace Demo
 
         private void StartAnimationsMainThreadNonMutual(object sender, System.EventArgs e)
         {
-            // 主线程 + CanMutualTask: false —— 并发运行，互不取消
+            // Main thread + CanMutualTask: false — run concurrently, neither cancels the other
             lblStatus.Text = "主线程并发动画执行中（CanMutualTask: false）...";
             Animation0.Execute(panel1, CanMutualTask: false);
             Animation1.Execute(panel2, CanMutualTask: false);
             Animation2.Execute(panel3, CanMutualTask: false);
         }
 
-        // 动画定义
+        // Animation definitions
         private static readonly Transition<Control>.StateSnapshot Animation0 =
             Transition<Control>.Create()
-                .Property(c => c.Location, new Point(600, 100))  // 移动到右侧
-                .Property(c => c.Parent.BackColor, Color.Moccasin) // 演示嵌套属性动画
-                .Property(c => c.BackColor, Color.Orange)         // 变为橙色
+                .Property(c => c.Location, new Point(600, 100))  // move to the right
+                .Property(c => c.Parent.BackColor, Color.Moccasin) // demonstrates nested property animation
+                .Property(c => c.BackColor, Color.Orange)         // turns orange
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(3),
@@ -357,9 +361,9 @@ namespace Demo
 
         private static readonly Transition<Control>.StateSnapshot Animation1 =
             Transition<Control>.Create()
-                .Await(TimeSpan.FromSeconds(1))  // 延迟1秒开始
-                .Property(c => c.Size, new Size(150, 150))  // 放大
-                .Property(c => c.BackColor, Color.LightGreen)  // 变为浅绿色
+                .Await(TimeSpan.FromSeconds(1))  // starts after a 1 second delay
+                .Property(c => c.Size, new Size(150, 150))  // enlarge
+                .Property(c => c.BackColor, Color.LightGreen)  // turns light green
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(2),
@@ -370,23 +374,23 @@ namespace Demo
 
         private static readonly Transition<Control>.StateSnapshot Animation2 =
             Transition<Control>.Create()
-                .Property(c => c.Location, new Point(400, 400))  // 移动到右下角
+                .Property(c => c.Location, new Point(400, 400))  // move to the bottom right
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(2),
                     Ease = Eases.Circ.InOut
                 })
-                .AwaitThen(TimeSpan.FromSeconds(1))  // 等待1秒
-                .Property(c => c.Size, new Size(120, 120))  // 稍微缩小
-                .Property(c => c.BackColor, Color.Purple)   // 变为紫色
+                .AwaitThen(TimeSpan.FromSeconds(1))  // wait 1 second
+                .Property(c => c.Size, new Size(120, 120))  // shrink slightly
+                .Property(c => c.BackColor, Color.Purple)   // turns purple
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(1.5),
                     Ease = Eases.Sine.In
                 })
-                .AwaitThen(TimeSpan.FromSeconds(0.5))  // 再等待0.5秒
-                .Property(c => c.Location, new Point(100, 400))  // 移动到左下角
-                .Property(c => c.BackColor, Color.Teal)  // 变为青绿色
+                .AwaitThen(TimeSpan.FromSeconds(0.5))  // wait another 0.5 seconds
+                .Property(c => c.Location, new Point(100, 400))  // move to the bottom left
+                .Property(c => c.BackColor, Color.Teal)  // turns teal
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(2),

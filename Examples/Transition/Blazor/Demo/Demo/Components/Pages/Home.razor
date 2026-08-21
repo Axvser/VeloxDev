@@ -21,7 +21,7 @@
     </div>
 
     <div class="demo-stage">
-        <!-- Box0: 简单动画 — 位移 + 颜色 + 透明度 -->
+        <!-- Box0: simple animation — translate + color + opacity -->
         <div class="box-row">
             <span class="box-label">Box0 · 位移 + 颜色 + 透明度</span>
             <div class="box-track">
@@ -29,7 +29,7 @@
             </div>
         </div>
 
-        <!-- Box1: 延迟动画 — 等待 2s 后旋转 + 缩放 -->
+        <!-- Box1: delayed animation — rotate + scale after a 2s wait -->
         <div class="box-row">
             <span class="box-label">Box1 · 延迟 2s · 旋转 + 缩放</span>
             <div class="box-track">
@@ -37,7 +37,7 @@
             </div>
         </div>
 
-        <!-- Box2: 拼接动画 — 先移动，等待后再变色 + 缩小 -->
+        <!-- Box2: combined animation — move first, wait, then recolor + shrink -->
         <div class="box-row">
             <span class="box-label">Box2 · 拼接 · 移动 → 等待 → 变色 + 缩小</span>
             <div class="box-track">
@@ -47,9 +47,9 @@
     </div>
 
     <div class="demo-tips">
-        <p>💡 <code>Snapshot()</code> — 记录显式指定的属性路径（初始状态）</p>
-        <p>💡 <code>SnapshotAll()</code> — 自动发现并记录当前对象中所有可动画的属性</p>
-        <p>💡 <code>Transition.Exit()</code> — 终止对象持有的动画</p>
+        <p><code>Snapshot()</code> — 记录显式指定的属性路径（初始状态）</p>
+        <p><code>SnapshotAll()</code> — 自动发现并记录当前对象中所有可动画的属性</p>
+        <p><code>Transition.Exit()</code> — 终止对象持有的动画</p>
     </div>
 </div>
 
@@ -78,7 +78,7 @@
         top: 10px;
         left: 10px;
         border-radius: 6px;
-        transition: none; /* 完全由 VeloxDev 控制，禁用 CSS transition */
+        transition: none; /* Fully controlled by VeloxDev; CSS transition disabled */
     }
     .demo-tips {
         margin-top: 2rem;

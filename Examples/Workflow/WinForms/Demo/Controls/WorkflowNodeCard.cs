@@ -11,27 +11,27 @@ using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 namespace Demo.Controls;
 
 /// <summary>
-/// 单个工作流节点的卡片控件。
+/// Card control for a single workflow node.
 /// </summary>
 internal sealed class WorkflowNodeCard : UserControl
 {
-    // ── 外观常量 ──────────────────────────────────────────────────────────────
+    // ── Appearance constants ──────────────────────────────────────────────────────────────
     private static readonly Color DarkBody = Color.FromArgb(37, 37, 37);
     private static readonly Color DarkHeader = Color.FromArgb(45, 45, 45);
     private static readonly Color DarkExec = Color.FromArgb(31, 31, 31);
 
-    // ── 布局 ──────────────────────────────────────────────────────────────────
+    // ── Layout ──────────────────────────────────────────────────────────────────
     private readonly TableLayoutPanel _rootLayout;
     private readonly Panel _headerPanel;
     private readonly Panel _bodyPanel;
     private readonly Panel _footerPanel;
 
-    // ── ViewModel 订阅 ────────────────────────────────────────────────────────
+    // ── ViewModel subscription ────────────────────────────────────────────────────────
     private IWorkflowNodeViewModel? _node;
     private INotifyPropertyChanged? _nodeNotifier;
     private bool _updatingFromVm;
 
-    // ── 动态控件引用 ──────────────────────────────────────────────────────────
+    // ── Dynamic control references ──────────────────────────────────────────────────────────
     private Label? _titleLabel;
     private Label? _orderBadge;
     private Label? _loadBadge;
@@ -55,17 +55,17 @@ internal sealed class WorkflowNodeCard : UserControl
     private TableLayoutPanel? _outputSlotsLayout;
     private readonly List<(Label label, Views.SlotView slot)> _dynamicSlotRows = [];
 
-    // ── 主槽位按钮（边缘固定的槽位视图，由 WorkflowCanvas 计算屏幕位置）────
+    // ── Main slot buttons (edge-anchored slot views; screen position computed by WorkflowCanvas) ────
     internal Views.SlotView? InputSlotButton { get; private set; }
     internal Views.SlotView? OutputSlotButton { get; private set; }
 
-    // ── 事件 ──────────────────────────────────────────────────────────────────
+    // ── Events ──────────────────────────────────────────────────────────────────
     /// <summary>
     /// Gets the bound node view model.
     /// </summary>
     internal IWorkflowNodeViewModel? ViewModel => _node;
 
-    // ── 构造 ──────────────────────────────────────────────────────────────────
+    // ── Constructor ──────────────────────────────────────────────────────────────────
     internal WorkflowNodeCard()
     {
         DoubleBuffered = true;
@@ -105,9 +105,9 @@ internal sealed class WorkflowNodeCard : UserControl
         _rootLayout.Controls.Add(_footerPanel, 0, 2);
     }
 
-    // ── 公开绑定 API ──────────────────────────────────────────────────────────
+    // ── Public binding API ──────────────────────────────────────────────────────────
 
-    /// <summary>将卡片绑定到新的节点 ViewModel。</summary>
+    /// <summary>Binds the card to a new node view model.</summary>
     internal void Bind(IWorkflowNodeViewModel node)
     {
         ArgumentNullException.ThrowIfNull(node);
@@ -127,7 +127,7 @@ internal sealed class WorkflowNodeCard : UserControl
         Refresh(node);
     }
 
-    /// <summary>解除绑定，重置卡片到空状态。</summary>
+    /// <summary>Unbinds and resets the card to an empty state.</summary>
     internal void Unbind()
     {
         UnsubscribeVm();
@@ -142,7 +142,7 @@ internal sealed class WorkflowNodeCard : UserControl
         ResetRefs();
     }
 
-    /// <summary>从 ViewModel 刷新所有显示值（不重建布局）。</summary>
+    /// <summary>Refreshes all displayed values from the view model (without rebuilding the layout).</summary>
     internal void Refresh(IWorkflowNodeViewModel node)
     {
         ArgumentNullException.ThrowIfNull(node);
@@ -165,7 +165,7 @@ internal sealed class WorkflowNodeCard : UserControl
         RefreshVisual();
     }
 
-    /// <summary>仅刷新边框颜色、区块背景等视觉状态。</summary>
+    /// <summary>Refreshes only visual state such as border color and section backgrounds.</summary>
     internal void RefreshVisual()
     {
         if (_node is null) return;
@@ -213,7 +213,7 @@ internal sealed class WorkflowNodeCard : UserControl
         Invalidate();
     }
 
-    // ── 绘制（圆角边框）────────────────────────────────────────────────────────
+    // ── Drawing (rounded border) ─────────────────────────────────────────────────────────
     private Color _borderColor = Color.FromArgb(75, 85, 99);
 
     protected override void OnPaint(PaintEventArgs e)
@@ -232,7 +232,7 @@ internal sealed class WorkflowNodeCard : UserControl
         PositionOverlaySlotButtons();
     }
 
-    /// <summary>将悬浮槽位按钮定位到卡片左中 / 右中边缘。</summary>
+    /// <summary>Positions the floating slot buttons at the card's left-center / right-center edges.</summary>
     private void PositionOverlaySlotButtons()
     {
         if (InputSlotButton is not null)
@@ -256,7 +256,7 @@ internal sealed class WorkflowNodeCard : UserControl
         base.Dispose(disposing);
     }
 
-    // ── 槽位按钮管理 ──────────────────────────────────────────────────────────
+    // ── Slot button management ──────────────────────────────────────────────────────────
 
     private Views.SlotView AddSlotButton(IWorkflowSlotViewModel? slot)
     {
@@ -289,7 +289,7 @@ internal sealed class WorkflowNodeCard : UserControl
         }
     }
 
-    // ── 布局构建 ──────────────────────────────────────────────────────────────
+    // ── Layout building ──────────────────────────────────────────────────────────────
 
     private void BuildLayout(IWorkflowNodeViewModel node)
     {
@@ -320,7 +320,7 @@ internal sealed class WorkflowNodeCard : UserControl
         _rootLayout.ResumeLayout();
     }
 
-    // ── 布局：Worker 节点 ─────────────────────────────────────────────────────
+    // ── Layout: Worker node ─────────────────────────────────────────────────────
     private void BuildWorker()
     {
         SetRows(52F, 54F, true);
@@ -459,7 +459,7 @@ internal sealed class WorkflowNodeCard : UserControl
         e.Graphics.DrawRectangle(pen, rect);
     }
 
-    // ── 布局：Controller ──────────────────────────────────────────────────────
+    // ── Layout: Controller ──────────────────────────────────────────────────────
     private void BuildController()
     {
         SetRows(52F, 88F, true);
@@ -510,7 +510,7 @@ internal sealed class WorkflowNodeCard : UserControl
         OutputSlotButton = AddSlotButton(null);
     }
 
-    // ── 布局：BoolSelector ────────────────────────────────────────────────────
+    // ── Layout: BoolSelector ────────────────────────────────────────────────────
     private void BuildBoolSelector()
     {
         SetRows(48F, 0F, false);
@@ -566,7 +566,7 @@ internal sealed class WorkflowNodeCard : UserControl
         InputSlotButton = AddSlotButton(null);
     }
 
-    // ── 布局：EnumSelector ────────────────────────────────────────────────────
+    // ── Layout: EnumSelector ────────────────────────────────────────────────────
     private void BuildEnumSelector()
     {
         SetRows(48F, 0F, false);
@@ -618,7 +618,7 @@ internal sealed class WorkflowNodeCard : UserControl
         InputSlotButton = AddSlotButton(null);
     }
 
-    // ── 数据应用 ──────────────────────────────────────────────────────────────
+    // ── Data application ──────────────────────────────────────────────────────────────
     private void ApplyWorker(NodeViewModel n)
     {
         SetText(_titleLabel, n.Title);
@@ -675,7 +675,7 @@ internal sealed class WorkflowNodeCard : UserControl
         RebuildBoolSlots(b);
     }
 
-    /// <summary>填充路由编译模式下拉（Bool/Enum 卡片共用）。</summary>
+    /// <summary>Populates the route compile-mode dropdown (shared by Bool/Enum cards).</summary>
     private void PopulateRouterModeCombo(RouterCompileMode selected)
     {
         if (_routerModeCombo is null) return;
@@ -695,7 +695,7 @@ internal sealed class WorkflowNodeCard : UserControl
         RebuildEnumSlots(e);
     }
 
-    // ── 动态 Slot 行（BoolSelector）──────────────────────────────────────────
+    // ── Dynamic slot rows (BoolSelector) ──────────────────────────────────────────
     private void RebuildBoolSlots(BoolSelectorNodeViewModel b)
     {
         if (_outputSlotsLayout is null) return;
@@ -729,7 +729,7 @@ internal sealed class WorkflowNodeCard : UserControl
     {
         if (_outputSlotsLayout is null) return;
 
-        // 尝试复用：只有数量相同时才复用
+        // Try to reuse: only reuse when the row count matches
         if (_dynamicSlotRows.Count == entries.Count)
         {
             for (var i = 0; i < entries.Count; i++)
@@ -742,7 +742,7 @@ internal sealed class WorkflowNodeCard : UserControl
             return;
         }
 
-        // 重建
+        // Rebuild
         foreach (var (_, slot) in _dynamicSlotRows)
         {
             _outputSlotsLayout.Controls.Remove(slot);
@@ -789,7 +789,7 @@ internal sealed class WorkflowNodeCard : UserControl
         PopulateRouterModeCombo(e.CompileMode);
     }
 
-    // ── 用户输入事件 ──────────────────────────────────────────────────────────
+    // ── User input events ──────────────────────────────────────────────────────────
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (InvokeRequired) { BeginInvoke(new PropertyChangedEventHandler(OnNodePropertyChanged), sender, e); return; }
@@ -878,7 +878,7 @@ internal sealed class WorkflowNodeCard : UserControl
         cmd.GetType().GetMethod("Execute", [typeof(object)])?.Invoke(cmd, [null]);
     }
 
-    // ── 辅助 ──────────────────────────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────────────
     private void UnsubscribeVm()
     {
         if (_nodeNotifier is not null)
@@ -947,7 +947,7 @@ internal sealed class WorkflowNodeCard : UserControl
         return path;
     }
 
-    // ── 控件工厂 ──────────────────────────────────────────────────────────────
+    // ── Control factory ──────────────────────────────────────────────────────────────
     private static Panel MakeSection()
         => new() { Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = Padding.Empty, BackColor = DarkBody };
 

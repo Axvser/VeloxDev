@@ -37,7 +37,7 @@ public sealed class ViewManager(Panel panel)
             ClearAllViews();
         }
 
-        // 检查是否可枚举（必须！）
+        // Check that the collection is enumerable (required!).
         if (collection is not IEnumerable enumerable)
             throw new ArgumentException("Collection must implement IEnumerable to support enumeration.", nameof(collection));
 

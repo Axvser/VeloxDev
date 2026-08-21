@@ -5,12 +5,14 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// 补充无状态（Push/广播）执行模式的覆盖：
-/// 1) ReverseBroadcastAsync 反向单跳传播（沿 Sources 触发上游 ReceiveCommand，不自动级联）；
-/// 2) 广播运行期 AccessAsync 边门禁（校验失败视为「未连接」，跳过该接收端）；
-/// 3) 扇出广播（一个 MultipleTargets 输出口 → 多个下游目标全部收到）；
-/// 4) AutoBroadcast=false 时级联停止，需手动 BroadcastCommand 才继续推进。
-/// 编译（Pull/引擎驱动）模式已由 CompilerExTests / ParallelFanOutTests / RedirectTests 覆盖。
+/// Additional coverage for the stateless (Push/broadcast) execution mode:
+/// 1) ReverseBroadcastAsync reverse single-hop propagation (walks Sources to trigger the upstream
+///    ReceiveCommand; no automatic cascade);
+/// 2) The broadcast runtime AccessAsync edge gate (a failed check is treated as "not connected" —
+///    that receiver is skipped);
+/// 3) Fan-out broadcast (one MultipleTargets output slot → every downstream target receives);
+/// 4) With AutoBroadcast=false the cascade stops and requires a manual BroadcastCommand to proceed.
+/// The compile (Pull/engine-driven) mode is already covered by CompilerExTests / ParallelFanOutTests / RedirectTests.
 /// </summary>
 [TestClass]
 public class BroadcastModeTests
@@ -34,7 +36,7 @@ public class BroadcastModeTests
         Connect(tree, start.OutputSlot!, mid.InputSlot!);
         Connect(tree, mid.OutputSlot!, sink.InputSlot!);
 
-        // 反向广播：Sink 沿其 InputSlot.Sources（即 Mid.OutputSlot）反向触发 Mid 的 ReceiveCommand。
+        // Reverse broadcast: Sink walks its InputSlot.Sources (i.e. Mid.OutputSlot) to trigger Mid's ReceiveCommand.
         sink.ReverseBroadcastCommand.Execute(new TaskContext(data: "pull"));
 
         Assert.IsTrue(await WaitUntilAsync(() => mid.LastStatus == "Completed"),
@@ -65,7 +67,7 @@ public class BroadcastModeTests
         Connect(tree, gate.OutputSlot!, allowed.InputSlot!);
         Connect(tree, gate.OutputSlot!, denied.InputSlot!);
 
-        // 运行期门禁：Gate 拒绝流向 Denied 的那条边（AccessAsync 返回 false → 视为未连接）。
+        // Runtime gate: Gate rejects the edge toward Denied (AccessAsync returns false → treated as not connected).
         ((DenyGateHelper)gate.GetHelper()).DeniedReceiver = denied;
 
         start.ReceiveCommand.Execute(new TaskContext(data: "seed"));
@@ -132,7 +134,7 @@ public class BroadcastModeTests
         Assert.AreEqual("Idle", mid.LastStatus,
             "AutoBroadcast=false stops the cascade — downstream nodes stay idle");
 
-        // 手动 Forward：触发 BroadcastCommand 显式广播后，级联恢复直至 Sink。
+        // Manual forward: after explicitly broadcasting via BroadcastCommand, the cascade resumes to Sink.
         start.BroadcastCommand.Execute(new TaskContext(data: "manual"));
 
         Assert.IsTrue(await WaitUntilAsync(() => sink.LastStatus == "Completed"),
@@ -158,13 +160,13 @@ public class BroadcastModeTests
     }
 }
 
-/// <summary>测试节点：运行期 AccessAsync 门禁按 Receiver 拒绝指定下游（校验失败视为未连接）。</summary>
+/// <summary>Test node: the runtime AccessAsync gate rejects a specified downstream receiver (a failed check is treated as not connected).</summary>
 [WorkflowBuilder.Node<DenyGateHelper>(workSemaphore: 1)]
 public partial class DenyGateNodeViewModel : NodeViewModel { }
 
 public class DenyGateHelper : HttpHelper<NodeViewModel>
 {
-    /// <summary>被拒绝的下游节点：指向它的那条边 AccessAsync 返回 false。</summary>
+    /// <summary>The rejected downstream node: the edge pointing to it returns false from AccessAsync.</summary>
     public IWorkflowNodeViewModel? DeniedReceiver { get; set; }
 
     public override Task<bool> AccessAsync(IAccessContext context, CancellationToken ct)

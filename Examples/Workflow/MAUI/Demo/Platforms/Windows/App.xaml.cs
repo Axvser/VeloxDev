@@ -9,12 +9,12 @@ namespace Demo.WinUI
         {
             this.InitializeComponent();
 
-            // MAUI/WinUI 的 UnhandledException 事件频繁因以下已知原因触发：
-            //   • IDispatcherTimer.Tick 回调中未捕获的异常 (dotnet/maui #12245)
-            //   • XAML 绑定链路异常（类型转换失败，非致命）
-            //   • ScrollToAsync 布局过渡期异常
-            // 这些异常大部分来自 MAUI 内部的跨平台抽象泄漏，不影响应用状态。
-            // 记录它们以便排查，但不传播崩溃。
+            // The MAUI/WinUI UnhandledException event fires frequently for these known reasons:
+            //   • Uncaught exceptions in IDispatcherTimer.Tick callbacks (dotnet/maui #12245)
+            //   • XAML binding-chain exceptions (type-conversion failures, non-fatal)
+            //   • Exceptions during ScrollToAsync layout transitions
+            // Most of these come from MAUI's internal cross-platform abstraction leaks and do not
+            // affect application state. They are logged for diagnosis but not propagated as crashes.
             this.UnhandledException += (sender, e) =>
             {
                 System.Diagnostics.Debug.WriteLine(
@@ -25,8 +25,9 @@ namespace Demo.WinUI
                         $"[WinUI]   Exception: {e.Exception.GetType().Name}: {e.Exception.Message}");
                 }
 
-                // 始终标记为已处理 — MAUI 内部异常的默认行为是让应用继续运行。
-                // 只有真正的致命错误（如 NullReferenceException）通过 Debugger.Break 捕获。
+                // Always mark as handled — the default behavior for MAUI internal exceptions is to
+                // let the app keep running. Only truly fatal errors (such as NullReferenceException)
+                // are caught via Debugger.Break.
                 e.Handled = true;
             };
         }

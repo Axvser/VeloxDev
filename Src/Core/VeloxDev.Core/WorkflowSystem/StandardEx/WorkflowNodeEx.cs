@@ -101,7 +101,7 @@ public static class WorkflowNodeEx
                 var receiverNode = receiver.Parent;
                 if (receiverNode is null) continue;
 
-                // 先构建本次投递的任务上下文，再以它做运行期实时校验（校验不通过视为未连接）。
+                // First build the task context for this delivery, then use it for runtime real-time validation (a failed validation is treated as unconnected).
                 var ctx = new TaskContext(parameter, sender, receiver);
                 if (!await helper.AccessAsync(ctx, ct).ConfigureAwait(false))
                     continue;
@@ -133,7 +133,7 @@ public static class WorkflowNodeEx
                 var senderNode = sender.Parent;
                 if (senderNode is null) continue;
 
-                // 先构建本次投递的任务上下文，再以它做运行期实时校验（校验不通过视为未连接）。
+                // First build the task context for this delivery, then use it for runtime real-time validation (a failed validation is treated as unconnected).
                 var ctx = new TaskContext(parameter, sender, receiver);
                 if (!await helper.AccessAsync(ctx, ct).ConfigureAwait(false))
                     continue;
@@ -252,7 +252,7 @@ public static class WorkflowNodeEx
         var tree = component.Parent;
         var oldParent = component.Parent;
 
-        // 方案2核心修改：只收集"有效"的连接（两端节点都存在的连接）
+        // Core change of approach 2: collect only "valid" connections (connections where both endpoint nodes exist)
         var connectionsToRemove = new List<IWorkflowLinkViewModel>();
         var slotConnections = new Dictionary<IWorkflowSlotViewModel, (HashSet<IWorkflowSlotViewModel> Targets, HashSet<IWorkflowSlotViewModel> Sources)>();
 
@@ -261,10 +261,10 @@ public static class WorkflowNodeEx
             var validTargets = new HashSet<IWorkflowSlotViewModel>();
             var validSources = new HashSet<IWorkflowSlotViewModel>();
 
-            // 只收集目标节点存在且在同一Tree中的连接
+            // Only collect connections whose target node exists in the same tree
             foreach (var target in slot.Targets)
             {
-                if (target.Parent?.Parent == tree) // 关键检查：确保目标节点在同一个Tree中且存在
+                if (target.Parent?.Parent == tree) // key check: ensure the target node exists in the same tree
                 {
                     if (tree.LinksMap.TryGetValue(slot, out var dic) && dic.TryGetValue(target, out var link))
                     {
@@ -274,10 +274,10 @@ public static class WorkflowNodeEx
                 }
             }
 
-            // 只收集源节点存在且在同一Tree中的连接
+            // Only collect connections whose source node exists in the same tree
             foreach (var source in slot.Sources)
             {
-                if (source.Parent?.Parent == tree) // 关键检查：确保源节点在同一个Tree中且存在
+                if (source.Parent?.Parent == tree) // key check: ensure the source node exists in the same tree
                 {
                     if (tree.LinksMap.TryGetValue(source, out var dic) && dic.TryGetValue(slot, out var link))
                     {
@@ -290,17 +290,17 @@ public static class WorkflowNodeEx
             slotConnections[slot] = (validTargets, validSources);
         }
 
-        // 去重连接
+        // Deduplicate the connections
         var distinctConnections = connectionsToRemove.Distinct().ToList();
 
-        // 使用单个原子操作处理所有删除
+        // Handle all deletions with a single atomic operation
         tree.GetHelper().Submit(new WorkflowActionPair(
-            // Redo: 执行删除
+            // Redo: perform the deletion
             () =>
             {
                 ExecuteNodeDeletion(tree, component, distinctConnections);
             },
-            // Undo: 撤销删除
+            // Undo: undo the deletion
             () =>
             {
                 RestoreNode(tree, component, oldParent, distinctConnections, slotConnections);
@@ -313,7 +313,7 @@ public static class WorkflowNodeEx
         IWorkflowNodeViewModel node,
         List<IWorkflowLinkViewModel> connections)
     {
-        // 第一阶段：解除所有连接关系
+        // Phase 1: break all connection relations
         foreach (var link in connections)
         {
             var sender = link.Sender;
@@ -334,17 +334,17 @@ public static class WorkflowNodeEx
             link.IsVisible = false;
         }
 
-        // 第二阶段：解除Slot的父子关系
+        // Phase 2: break the slots' parent-child relations
         foreach (var slot in node.Slots.ToArray())
         {
             slot.Parent = null;
         }
 
-        // 第三阶段：删除Node自身
+        // Phase 3: delete the node itself
         tree.Nodes.Remove(node);
         node.Parent = null;
 
-        // 第四阶段：批量更新所有受影响组件状态
+        // Phase 4: batch-update the state of all affected components
         UpdateAllAffectedStates(connections, node.Slots);
     }
 
@@ -355,14 +355,14 @@ public static class WorkflowNodeEx
         List<IWorkflowLinkViewModel> connections,
         Dictionary<IWorkflowSlotViewModel, (HashSet<IWorkflowSlotViewModel> Targets, HashSet<IWorkflowSlotViewModel> Sources)> slotConnections)
     {
-        // 第一阶段：恢复Node自身
+        // Phase 1: restore the node itself
         node.Parent = oldParent;
         if (!tree.Nodes.Contains(node))
         {
             tree.Nodes.Add(node);
         }
 
-        // 第二阶段：恢复Slot的父子关系
+        // Phase 2: restore the slots' parent-child relations
         foreach (var slot in node.Slots)
         {
             slot.Parent = node;
@@ -393,26 +393,26 @@ public static class WorkflowNodeEx
             }
         }
 
-        // 第三阶段：恢复所有连接（现在可以安全恢复，因为都是有效连接）
+        // Phase 3: restore all connections (now safe because they are all valid)
         foreach (var link in connections)
         {
             var sender = link.Sender;
             var receiver = link.Receiver;
 
-            // 恢复映射关系
+            // Restore the mapping
             if (!tree.LinksMap.ContainsKey(sender))
             {
                 tree.LinksMap[sender] = [];
             }
             tree.LinksMap[sender][receiver] = link;
 
-            // 恢复集合
+            // Restore the collections
             if (!tree.Links.Contains(link))
             {
                 tree.Links.Add(link);
             }
 
-            // 恢复双向关系（避免重复添加）
+            // Restore the bidirectional relations (avoiding duplicates)
             if (!sender.Targets.Contains(receiver))
             {
                 sender.Targets.Add(receiver);
@@ -422,14 +422,14 @@ public static class WorkflowNodeEx
                 receiver.Sources.Add(sender);
             }
 
-            // 显示连接
+            // Show the link
             link.IsVisible = true;
         }
 
-        // 第四阶段：批量更新所有受影响组件状态
+        // Phase 4: batch-update the state of all affected components
         UpdateAllAffectedStates(connections, node.Slots);
 
-        // 触发属性变更通知
+        // Raise property-changed notifications
         node.OnPropertyChanged(nameof(node.Slots));
         foreach (var slot in node.Slots)
         {

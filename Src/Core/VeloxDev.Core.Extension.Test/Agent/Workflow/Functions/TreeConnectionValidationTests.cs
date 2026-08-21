@@ -4,10 +4,13 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// 覆盖建连期（设计期）的连接校验层 —— <see cref="IWorkflowTreeViewModelHelper.ValidateConnection"/>。
-/// 与运行期 <see cref="IAccessContext"/>（AccessAsync 边门禁，见 BroadcastModeTests）不同：
-/// 树助手在画布拖线时否决一条边（返回 false → 连线不建立、虚拟连接复位），
-/// 这是数据进入任何节点之前的第一道闸。默认实现恒 true，demo 亦未覆写 —— 需要测试本地助手触达。
+/// Covers the connection-validation layer at connection-build (design) time —
+/// <see cref="IWorkflowTreeViewModelHelper.ValidateConnection"/>. Unlike the runtime
+/// <see cref="IAccessContext"/> (the AccessAsync edge gate, see BroadcastModeTests): the tree
+/// helper vetoes an edge when the user drags a link on the canvas (returns false → no link is
+/// created, the virtual connection resets). This is the first gate before data enters any node.
+/// The default implementation always returns true, and the demo does not override it — a local
+/// helper is needed to exercise this.
 /// </summary>
 [TestClass]
 public class TreeConnectionValidationTests
@@ -26,7 +29,7 @@ public class TreeConnectionValidationTests
         start.OutputSlot.SetChannelCommand.Execute(SlotChannel.OneTarget);
         sink.InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
 
-        // 树助手否决这条边：拒绝连接 start.OutputSlot → sink.InputSlot。
+        // The tree helper vetoes this edge: reject connecting start.OutputSlot → sink.InputSlot.
         ((RejectingTreeHelper)helper).RejectSender = start.OutputSlot!;
 
         helper.SendConnection(start.OutputSlot!);
@@ -54,7 +57,7 @@ public class TreeConnectionValidationTests
         start.OutputSlot.SetChannelCommand.Execute(SlotChannel.OneTarget);
         sink.InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
 
-        // 控制组：不否决 —— 同一条边照常建立。
+        // Control group: no veto — the same edge connects normally.
         helper.SendConnection(start.OutputSlot!);
         helper.ReceiveConnection(sink.InputSlot!);
 
@@ -79,16 +82,16 @@ public class TreeConnectionValidationTests
         a.InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
         b.InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
 
-        // 只拒绝 start → b 这条边。
+        // Reject only the start → b edge.
         ((RejectingTreeHelper)helper).RejectSender = start.OutputSlot!;
         ((RejectingTreeHelper)helper).RejectReceiver = b.InputSlot!;
 
         helper.SendConnection(start.OutputSlot!);
-        helper.ReceiveConnection(a.InputSlot!);   // 允许 → 建立
+        helper.ReceiveConnection(a.InputSlot!);   // allowed → connects
         Assert.AreEqual(1, tree.Links.Count, "first edge connected");
 
         helper.SendConnection(start.OutputSlot!);
-        helper.ReceiveConnection(b.InputSlot!);   // 否决 → 不建立
+        helper.ReceiveConnection(b.InputSlot!);   // vetoed → does not connect
 
         Assert.AreEqual(1, tree.Links.Count, "second edge vetoed — only the first link remains");
         Assert.IsFalse(tree.VirtualLink.IsVisible, "virtual connection reset after the veto");
@@ -96,9 +99,9 @@ public class TreeConnectionValidationTests
 }
 
 /// <summary>
-/// 测试用树助手：按 (Sender, Receiver) 组合否决连接。
-/// 默认放行；只拒绝 <see cref="RejectSender"/>（任意接收端）或
-/// <see cref="RejectSender"/> + <see cref="RejectReceiver"/> 的组合。
+/// Test tree helper: vetoes connections by (Sender, Receiver) combination.
+/// Allows by default; only rejects <see cref="RejectSender"/> (any receiver) or the combination of
+/// <see cref="RejectSender"/> + <see cref="RejectReceiver"/>.
 /// </summary>
 public class RejectingTreeHelper : TreeHelper
 {
@@ -111,7 +114,7 @@ public class RejectingTreeHelper : TreeHelper
     {
         if (RejectSender is null || !ReferenceEquals(sender, RejectSender))
             return true;
-        // 命中被拒发送端：未指定 RejectReceiver 时拒绝全部目标；否则只拒绝精确配对。
+        // Rejected sender matched: with no RejectReceiver, reject all targets; otherwise reject only the exact pair.
         return RejectReceiver is not null && !ReferenceEquals(receiver, RejectReceiver);
     }
 }

@@ -718,14 +718,14 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     {
         try
         {
-            // MAUI GraphicsView 的 Draw 回调在 WinUI 上无异常保护
-            // (dotnet/maui #14567)。 渲染调用若抛出（例如 NaN 坐标），
-            // 异常会直接泄漏到 WinUI UnhandledException。
+            // The MAUI GraphicsView Draw callback has no exception protection on WinUI
+            // (dotnet/maui #14567). If a render call throws (e.g. NaN coordinates),
+            // the exception leaks directly into the WinUI UnhandledException.
             if (!IsMinimapVisible) return;
             if (_pendingRefresh) RefreshMinimapData();
 
-            // dirtyRect.Width/Height 可能为 NaN（已知 MAUI WinUI 问题）。
-            // float/double.IsNaN 是必需的：NaN > 0 返回 false, NaN <= 0 也返回 false.
+            // dirtyRect.Width/Height may be NaN (a known MAUI WinUI issue).
+            // float/double.IsNaN is required: NaN > 0 is false, and NaN <= 0 is also false.
             var dw = dirtyRect.Width;
             var dh = dirtyRect.Height;
             var w = (!float.IsNaN(dw) && dw > 0)

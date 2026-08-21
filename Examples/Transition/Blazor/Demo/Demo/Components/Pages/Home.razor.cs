@@ -7,17 +7,17 @@ namespace Demo.Components.Pages;
 public partial class Home : ComponentBase, IDisposable
 {
     // ---------------------------------------------------------------
-    // ViewModel 实例 — 动画直接操作这些对象的属性
+    // ViewModel instances — animations operate directly on their properties
     // ---------------------------------------------------------------
     private BoxModel Box0 { get; } = new() { Color = "#00bcd4" };
     private BoxModel Box1 { get; } = new() { Color = "#66bb6a" };
     private BoxModel Box2 { get; } = new() { Color = "#ab47bc" };
 
     // ---------------------------------------------------------------
-    // 动画定义（对标 WPF/Avalonia Demo 的三段动画）
+    // Animation definitions (mirroring the three animations of the WPF/Avalonia Demo)
     // ---------------------------------------------------------------
 
-    // Animation0：简单动画 — 位移 + 颜色 + 透明度，自动往返循环
+    // Animation0: simple animation — translate + color + opacity, auto reverse loop
     private static readonly Transition<BoxModel>.StateSnapshot Animation0 =
         Transition<BoxModel>.Create()
             .Property(b => b.X, 500)
@@ -31,7 +31,7 @@ public partial class Home : ComponentBase, IDisposable
                 Ease = Eases.Sine.InOut,
             });
 
-    // Animation1：延迟动画 — 等待 2 秒后旋转 + 缩放
+    // Animation1: delayed animation — rotate + scale after a 2 second wait
     private static readonly Transition<BoxModel>.StateSnapshot Animation1 =
         Transition<BoxModel>.Create()
             .Await(TimeSpan.FromSeconds(2))
@@ -46,7 +46,7 @@ public partial class Home : ComponentBase, IDisposable
                 Ease = Eases.Circ.InOut,
             });
 
-    // Animation2：拼接动画 — 先向右移动，等待 3s 后再变色 + 缩小
+    // Animation2: combined animation — move right first, then recolor + shrink after a 3s wait
     private static readonly Transition<BoxModel>.StateSnapshot Animation2 =
         Transition<BoxModel>.Create()
             .Property(b => b.X, 400)
@@ -67,7 +67,7 @@ public partial class Home : ComponentBase, IDisposable
             });
 
     // ---------------------------------------------------------------
-    // 初始快照（用于 Reset）
+    // Initial snapshots (used for Reset)
     // ---------------------------------------------------------------
     private Transition<BoxModel>.StateSnapshot _snapshot0 = default!;
     private Transition<BoxModel>.StateSnapshot _snapshot1 = default!;
@@ -75,11 +75,12 @@ public partial class Home : ComponentBase, IDisposable
 
     protected override void OnInitialized()
     {
-        // Blazor 的动画目标是 POCO ViewModel，没有 dispatcher 亲和，后台线程无法反推 circuit
-        // 上下文，因此必须在此（OnInitialized，circuit 线程）捕获一次。这是 Blazor 模型的固有限制。
+        // Blazor animation targets POCO ViewModels with no dispatcher affinity, so a background
+        // thread cannot infer the circuit context. It must be captured here (OnInitialized, on the
+        // circuit thread). This is an inherent limitation of the Blazor model.
         UIThreadInspector.CaptureUIThread();
 
-        // 订阅属性变更，驱动 Blazor 重渲染
+        // Subscribe to property changes to drive Blazor re-rendering
         Box0.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
         Box1.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
         Box2.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
@@ -87,7 +88,8 @@ public partial class Home : ComponentBase, IDisposable
 
     protected override void OnAfterRender(bool firstRender)
     {
-        // 首次渲染完成后才拍摄重置快照，确保初始状态完整、不丢失信息
+        // Take the reset snapshots only after the first render, so the initial state is complete
+        // and no information is lost
         if (!firstRender) return;
 
         _snapshot0 = Box0.SnapshotAll();
@@ -97,7 +99,7 @@ public partial class Home : ComponentBase, IDisposable
 
     private void LoadMainThread()
     {
-        // 主线程（circuit 线程）直接启动，互斥（CanMutualTask: true 默认）
+        // Start directly on the main (circuit) thread; mutual exclusion (CanMutualTask: true by default)
         Animation0.Execute(Box0);
         Animation1.Execute(Box1);
         Animation2.Execute(Box2);
@@ -105,7 +107,7 @@ public partial class Home : ComponentBase, IDisposable
 
     private void LoadAnimations()
     {
-        // 也可以在非 UI 线程中启动，框架会自动切换
+        // Can also be started from a non-UI thread; the framework switches automatically
         _ = Task.Run(() =>
         {
             Animation0.Execute(Box0);
@@ -116,7 +118,7 @@ public partial class Home : ComponentBase, IDisposable
 
     private void LoadMainThreadNonMutual()
     {
-        // 主线程 + CanMutualTask: false —— 并发运行，互不取消
+        // Main thread + CanMutualTask: false — run concurrently, neither cancels the other
         Animation0.Execute(Box0, CanMutualTask: false);
         Animation1.Execute(Box1, CanMutualTask: false);
         Animation2.Execute(Box2, CanMutualTask: false);
@@ -124,7 +126,8 @@ public partial class Home : ComponentBase, IDisposable
 
     private void LoadAnimationsNonMutual()
     {
-        // CanMutualTask: false —— 三段动画互不干扰地并发运行，不会被彼此取消
+        // CanMutualTask: false — the three animations run concurrently without interference and
+        // are not cancelled by one another
         _ = Task.Run(() =>
         {
             Animation0.Execute(Box0, CanMutualTask: false);
@@ -135,13 +138,15 @@ public partial class Home : ComponentBase, IDisposable
 
     private void LoadRepeatedMutual()
     {
-        // 每次点击在 Box0 上启动互斥动画：新动画会取消上一次（测试调度器门控与取消）
+        // Each click starts a mutually-exclusive animation on Box0: the new animation cancels the
+        // previous one (tests scheduler gating and cancellation).
         _ = Task.Run(() => Animation0.Execute(Box0));
     }
 
     private void ResetBox0()
     {
-        // 重置全部：以零时长过渡立即恢复三个 Box 到快照记录的初始状态
+        // Reset all: restore the three boxes to the snapshot initial state immediately with a
+        // zero-duration transition
         Transition.Exit(Box0, IncludeMutual: true, IncludeNoMutual: true);
         Transition.Exit(Box1, IncludeMutual: true, IncludeNoMutual: true);
         Transition.Exit(Box2, IncludeMutual: true, IncludeNoMutual: true);
@@ -153,8 +158,8 @@ public partial class Home : ComponentBase, IDisposable
 
     private void ExitAnimations()
     {
-        // IncludeMutual   表示是否终结 CanMutualTask: true 的动画
-        // IncludeNoMutual 表示是否终结 CanMutualTask: false 的动画
+        // IncludeMutual   indicates whether to end animations configured with CanMutualTask: true
+        // IncludeNoMutual indicates whether to end animations configured with CanMutualTask: false
         Transition.Exit(Box0, IncludeMutual: true, IncludeNoMutual: true);
         Transition.Exit(Box1, IncludeMutual: true, IncludeNoMutual: true);
         Transition.Exit(Box2, IncludeMutual: true, IncludeNoMutual: true);

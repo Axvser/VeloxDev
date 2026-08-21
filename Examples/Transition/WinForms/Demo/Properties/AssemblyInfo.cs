@@ -1,9 +1,9 @@
 ﻿using System.Reflection;
 using System.Runtime.InteropServices;
 
-// 有关程序集的一般信息由以下
-// 控制。更改这些特性值可修改
-// 与程序集关联的信息。
+// General Information about an assembly is controlled through the following
+// set of attributes. Change these attribute values to modify the information
+// associated with an assembly.
 [assembly: AssemblyTitle("Demo")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
@@ -13,20 +13,20 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
-// 将 ComVisible 设置为 false 会使此程序集中的类型
-//对 COM 组件不可见。如果需要从 COM 访问此程序集中的类型
-//请将此类型的 ComVisible 特性设置为 true。
+// Setting ComVisible to false makes the types in this assembly not visible
+// to COM components. If you need to access a type in this assembly from COM,
+// set the ComVisible attribute on that type to true.
 [assembly: ComVisible(false)]
 
-// 如果此项目向 COM 公开，则下列 GUID 用于类型库的 ID
+// If this project is exposed to COM, the following GUID is for the ID of the typelib
 [assembly: Guid("b0e14b70-2f7c-4c6f-a28d-71139dd26760")]
 
-// 程序集的版本信息由下列四个值组成: 
+// Version information for an assembly consists of the following four values:
 //
-//      主版本
-//      次版本
-//      生成号
-//      修订号
+//      Major Version
+//      Minor Version
+//      Build Number
+//      Revision
 //
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]

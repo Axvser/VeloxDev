@@ -212,9 +212,10 @@ public abstract class TransitionInterpreterCore : ITransitionInterpreterCore, ID
     }
 
     /// <summary>
-    /// 用 Stopwatch 校准的帧间隔等待：补偿 <see cref="Task.Delay(TimeSpan)"/> 的定时器抖动与
-    /// 漂移，避免动画随时间累积滞后、帧间隔忽长忽短造成的卡顿。
-    /// 落后于目标进度时立即返回，让动画追上计划时长。动画最终按时长精确结束。
+    /// Stopwatch-calibrated frame-interval wait: compensates for <see cref="Task.Delay(TimeSpan)"/> timer jitter and
+    /// drift, avoiding animation lag that accumulates over time and stutter from uneven frame intervals.
+    /// Returns immediately when behind the target schedule so the animation catches up to the planned duration.
+    /// The animation ends precisely on time.
     /// </summary>
     protected static async Task WaitForFrameAsync(Stopwatch stopwatch, double frameIndex, double frameMs, CancellationTokenSource cts)
     {

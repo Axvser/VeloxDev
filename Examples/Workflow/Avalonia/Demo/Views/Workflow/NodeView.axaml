@@ -57,7 +57,7 @@
 						 SlotState="{Binding State}"/>
 		</Grid>
 
-		<!-- 标题栏 -->
+		<!-- Title bar -->
 		<Border Grid.Row="0"
                 Background="{Binding HeaderBackground}"
 				CornerRadius="4,4,0,0"
@@ -124,7 +124,7 @@
 			</ScrollViewer>
 		</Border>
 
-		<!-- 功能按键 -->
+		<!-- Action buttons -->
         <Border Grid.Row="2"
 				Padding="1"
 				Background="#2d2d2d"

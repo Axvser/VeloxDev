@@ -153,7 +153,7 @@ public class SlotGeneratorUndoProbeTests
         var session = WorkflowDemoSession.Create();
         var tree = session.Tree;
 
-        // Contract (逐条引导步骤): the default sample is deliberately NOT a clean baseline.
+        // Contract (step-by-step bootstrap steps): the default sample is deliberately NOT a clean baseline.
         // Create() keeps every bootstrap Submit on the undo stack — CreateNode × N, the synchronous
         // slot registrations, and the connections. Every Submit is synchronous in a deterministic
         // order, so Ctrl+Z tears the sample apart one setup step at a time and Redo re-builds it.
@@ -171,7 +171,7 @@ public class SlotGeneratorUndoProbeTests
         Assert.AreEqual(linksBefore, tree.Links.Count,
             "Redo restores the connection");
 
-        // 连续两步撤销仍是确定性的单步。
+        // Two consecutive undos are still deterministic single steps.
         tree.GetHelper().Undo();
         tree.GetHelper().Undo();
         Assert.AreEqual(linksBefore - 2, tree.Links.Count,

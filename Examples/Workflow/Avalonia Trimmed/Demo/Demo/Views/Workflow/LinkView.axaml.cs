@@ -20,7 +20,7 @@ public partial class LinkView : Control
         IsHitTestVisible = false;
     }
 
-    #region Avalonia 属性定义
+    #region Avalonia property definitions
 
     public static readonly StyledProperty<double> StartLeftProperty =
         AvaloniaProperty.Register<LinkView, double>(nameof(StartLeft));

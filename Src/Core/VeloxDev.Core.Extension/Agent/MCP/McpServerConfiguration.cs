@@ -19,44 +19,45 @@ public partial class McpServerConfiguration
     [VeloxProperty] public partial McpServerRunMode RunMode { get; set; }
 
     /// <summary>
-    /// 包名/目录名。
-    /// Npm/Npx/Uvx/Pip: NPM 或 PyPI 包名；
-    /// Dotnet: mcpRoot 下 DLL 路径，如 "sharp-email-mcp/SharpEmailMcp.dll"；
-    /// Exe: mcpRoot 下可执行文件路径，如 "tools/my-tool.exe"。
+    /// Package name / directory name.
+    /// Npm/Npx/Uvx/Pip: an NPM or PyPI package name;
+    /// Dotnet: a DLL path under mcpRoot, e.g. "sharp-email-mcp/SharpEmailMcp.dll";
+    /// Exe: an executable path under mcpRoot, e.g. "tools/my-tool.exe".
     /// </summary>
     [VeloxProperty] public partial string Package { get; set; }
 
     /// <summary>
-    /// 版本标签。为 null 时使用 "latest"。
-    /// 对 <see cref="McpServerRunMode.Npm"/> 和 <see cref="McpServerRunMode.Pip"/> 模式生效。
+    /// Version tag. When null, "latest" is used.
+    /// Applies to <see cref="McpServerRunMode.Npm"/> and <see cref="McpServerRunMode.Pip"/> modes.
     /// </summary>
     [VeloxProperty] public partial string? Version { get; set; }
 
-    /// <summary>传给服务器进程的额外参数（如文件系统服务器的允许目录集）</summary>
+    /// <summary>Extra arguments passed to the server process (e.g. an allowed-directory set for a filesystem server)</summary>
     [VeloxProperty] public partial string[] Arguments { get; set; }
 
     /// <summary>
-    /// 远程 MCP 端点 URL（仅 <see cref="McpServerRunMode.Http"/> 模式），如 "https://mcp.example.com/mcp"。
-    /// 通过 Streamable HTTP（旧服务器自动回退 SSE）连接。
+    /// Remote MCP endpoint URL (only for <see cref="McpServerRunMode.Http"/> mode), e.g. "https://mcp.example.com/mcp".
+    /// Connects via Streamable HTTP (older servers fall back to SSE automatically).
     /// </summary>
     public string? Endpoint { get; set; }
 
     /// <summary>
-    /// 任意服务器选项——匿名对象序列化结果。宿主直接传匿名对象即可：
+    /// Arbitrary server options — the serialized result of an anonymous object. The host can pass an
+    /// anonymous object directly:
     /// <code>
     /// Options = new
     /// {
-    ///     headers = new { Authorization = "Bearer x", "X-Custom" = "v" },   // HTTP 附加头
-    ///     env = new { FILESYSTEM_ROOT = "C:/data", API_KEY = "k" },          // stdio 逐服务器环境变量
-    ///     connectionTimeout = 30,                                            // 秒（或 TimeSpan 字符串），覆盖 McpScope.WithConnectionTimeout
+    ///     headers = new { Authorization = "Bearer x", "X-Custom" = "v" },   // HTTP extra headers
+    ///     env = new { FILESYSTEM_ROOT = "C:/data", API_KEY = "k" },          // stdio per-server environment variables
+    ///     connectionTimeout = 30,                                            // seconds (or a TimeSpan string); overrides McpScope.WithConnectionTimeout
     ///     transportMode = "StreamableHttp",                                  // Http: AutoDetect/StreamableHttp/Sse
-    ///     ownsSession = true,                                                // Http: 是否持有 MCP 会话（有状态）
-    ///     workingDirectory = "C:/data",                                      // stdio 工作目录
-    ///     oauth = new { clientId = "id", clientSecret = "s",                 // Http: OAuth 2.0（PKCE）
+    ///     ownsSession = true,                                                // Http: whether to hold the MCP session (stateful)
+    ///     workingDirectory = "C:/data",                                      // stdio working directory
+    ///     oauth = new { clientId = "id", clientSecret = "s",                 // Http: OAuth 2.0 (PKCE)
     ///                  redirectUri = "http://localhost:1179/cb", scopes = new[] { "read" } },
     /// };
     /// </code>
-    /// 未知 key 会被 <see cref="McpScope"/> 拒绝（报错而非静默忽略），保证拼写错误立刻暴露。
+    /// Unknown keys are rejected by <see cref="McpScope"/> (an error rather than a silent ignore), so typos surface immediately.
     /// </summary>
     public object? Options { get; set; }
 }

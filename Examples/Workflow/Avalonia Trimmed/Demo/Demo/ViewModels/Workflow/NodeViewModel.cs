@@ -8,7 +8,7 @@ namespace Demo.ViewModels.Workflow
     {
         public NodeViewModel() => InitializeWorkflow();
 
-        // ↓ 扩展视图模型
+        // ↓ Extend the view model
 
         [VeloxProperty] private string _name = string.Empty;
 

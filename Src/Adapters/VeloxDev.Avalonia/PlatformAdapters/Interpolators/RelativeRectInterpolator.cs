@@ -14,7 +14,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
             List<object?> result = new(steps);
 
-            // 如果单位不同，无法插值
+            // If units differ, interpolation is impossible.
             if (r1.Unit != r2.Unit)
             {
                 for (int i = 0; i < steps; i++)

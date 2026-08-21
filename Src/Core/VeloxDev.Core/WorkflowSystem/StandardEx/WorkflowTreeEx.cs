@@ -104,7 +104,7 @@ public static class WorkflowTreeEx
             return;
         }
 
-        // 1. 检查发送端能力
+        // 1. Check the sender's capability
         bool canBeSender = slot.StandardCanBeSender();
         if (!canBeSender)
         {
@@ -113,15 +113,15 @@ public static class WorkflowTreeEx
             return;
         }
 
-        // 2. 根据发送端通道类型智能清理连接
+        // 2. Clean up connections smartly based on the sender's channel type
         component.StandardSmartCleanupSenderConnections(slot);
 
-        // 3. 设置虚拟连接
+        // 3. Set up the virtual link
         component.VirtualLink.Sender.Anchor = slot.Anchor;
         component.VirtualLink.Receiver.Anchor = slot.Anchor;
         component.VirtualLink.IsVisible = true;
 
-        // 4. 更新状态
+        // 4. Update state
         cache.CurrentSender = slot;
         slot.State = SlotState.PreviewSender;
         slot.GetHelper().UpdateState();
@@ -132,7 +132,7 @@ public static class WorkflowTreeEx
         var cache = GetCache(component);
         if (cache.CurrentSender == null) return;
 
-        // 检查接收端能力
+        // Check the receiver's capability
         bool canBeReceiver = slot.StandardCanBeReceiver();
         if (!canBeReceiver)
         {
@@ -140,7 +140,7 @@ public static class WorkflowTreeEx
             return;
         }
 
-        // 检查用户自定义验证逻辑
+        // Check the user-custom validation logic
         if (!component.GetHelper().ValidateConnection(cache.CurrentSender, slot))
         {
             component.StandardResetVirtualLink();
@@ -148,7 +148,7 @@ public static class WorkflowTreeEx
             return;
         }
 
-        // 检查同节点内连接
+        // Check for connections within the same node
         if (cache.CurrentSender.Parent == slot.Parent)
         {
             component.StandardResetVirtualLink();
@@ -156,16 +156,16 @@ public static class WorkflowTreeEx
             return;
         }
 
-        // 启用硬性规定：检查并清理同向连接冲突
+        // Enforce the hard rule: check and clean up same-direction connection conflicts
         component.StandardCleanupSameDirectionConnections(cache.CurrentSender, slot);
 
-        // 根据接收端通道类型智能清理连接
+        // Clean up connections smartly based on the receiver's channel type
         component.StandardSmartCleanupReceiverConnections(slot);
 
-        // 创建新连接
+        // Create the new connection
         component.StandardCreateNewConnection(cache.CurrentSender, slot);
 
-        // 重置状态
+        // Reset state
         component.StandardResetVirtualLink();
         cache.CurrentSender = null;
     }
@@ -174,7 +174,7 @@ public static class WorkflowTreeEx
     {
         var cache = GetCache(component);
 
-        // 重置为"无值"(NaN),而非原点 (0,0,0):虚拟链接端点在拖拽前没有有效坐标。
+        // Reset to "no value" (NaN) rather than the origin (0,0,0): the virtual-link endpoints have no valid coordinates before a drag.
         component.VirtualLink.Sender.Anchor = new Anchor(double.NaN, double.NaN, 0);
         component.VirtualLink.Receiver.Anchor = new Anchor(double.NaN, double.NaN, 0);
         component.VirtualLink.IsVisible = false;
@@ -263,10 +263,10 @@ public static class WorkflowTreeEx
     {
         if (component == null) return;
 
-        // 收集所有需要清理的连接
+        // Collect all connections that need to be removed
         var connectionsToRemove = new List<(IWorkflowSlotViewModel, IWorkflowSlotViewModel, IWorkflowLinkViewModel)>();
 
-        // 1. 清理发送端作为源头的连接（发送到目标的连接）
+        // 1. Remove connections where the sender is the source (connections sent to targets)
         if (component.LinksMap.TryGetValue(sender, out var targetLinks))
         {
             foreach (var kvp in targetLinks)
@@ -275,10 +275,10 @@ public static class WorkflowTreeEx
             }
         }
 
-        // 2. 对于OneBoth通道，还需要清理发送端作为目标的连接（从其他Slot接收的连接）
+        // 2. For OneBoth channels, also remove connections where the sender is the target (connections received from other slots)
         if (sender.Channel.HasFlag(SlotChannel.OneBoth))
         {
-            // 查找所有以这个Slot为目标的连接
+            // Find all connections targeting this slot
             foreach (var sourceDict in component.LinksMap)
             {
                 if (sourceDict.Value.TryGetValue(sender, out var link))
@@ -288,7 +288,7 @@ public static class WorkflowTreeEx
             }
         }
 
-        // 根据发送端通道类型决定是否清理
+        // Decide whether to clean up based on the sender's channel type
         bool shouldCleanup = ShouldCleanupConnections(sender.Channel, isSender: true, existingConnections: connectionsToRemove.Count);
 
         if (shouldCleanup && connectionsToRemove.Count > 0)
@@ -301,10 +301,10 @@ public static class WorkflowTreeEx
     {
         if (component == null) return;
 
-        // 收集所有需要清理的连接
+        // Collect all connections that need to be removed
         var connectionsToRemove = new List<(IWorkflowSlotViewModel, IWorkflowSlotViewModel, IWorkflowLinkViewModel)>();
 
-        // 1. 清理接收端作为目标的连接（从其他Slot接收的连接）
+        // 1. Remove connections where the receiver is the target (connections received from other slots)
         foreach (var senderDict in component.LinksMap)
         {
             if (senderDict.Value.TryGetValue(receiver, out var link))
@@ -313,10 +313,10 @@ public static class WorkflowTreeEx
             }
         }
 
-        // 2. 对于OneBoth通道，还需要清理接收端作为源头的连接（发送到其他Slot的连接）
+        // 2. For OneBoth channels, also remove connections where the receiver is the source (connections sent to other slots)
         if (receiver.Channel.HasFlag(SlotChannel.OneBoth))
         {
-            // 查找所有从这个Slot出发的连接
+            // Find all connections originating from this slot
             if (component.LinksMap.TryGetValue(receiver, out var targetLinks))
             {
                 foreach (var kvp in targetLinks)
@@ -326,7 +326,7 @@ public static class WorkflowTreeEx
             }
         }
 
-        // 根据接收端通道类型决定是否清理
+        // Decide whether to clean up based on the receiver's channel type
         bool shouldCleanup = ShouldCleanupConnections(receiver.Channel, isSender: false, existingConnections: connectionsToRemove.Count);
 
         if (shouldCleanup && connectionsToRemove.Count > 0)
@@ -343,10 +343,10 @@ public static class WorkflowTreeEx
         var senderNode = newSender.Parent;
         var receiverNode = newReceiver.Parent;
 
-        // 收集需要清理的同向连接
+        // Collect same-direction connections that need to be removed
         var sameDirectionConnections = new List<(IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver, IWorkflowLinkViewModel Link)>();
 
-        // 查找所有从senderNode到receiverNode的连接
+        // Find all connections from senderNode to receiverNode
         foreach (var potentialSender in senderNode.Slots)
         {
             if (component.LinksMap.TryGetValue(potentialSender, out var targetLinks))
@@ -355,7 +355,7 @@ public static class WorkflowTreeEx
                 {
                     if (targetLinks.TryGetValue(potentialReceiver, out var existingLink))
                     {
-                        // 排除当前正在创建的新连接
+                        // Exclude the new connection currently being created
                         if (!(potentialSender == newSender && potentialReceiver == newReceiver))
                         {
                             sameDirectionConnections.Add((potentialSender, potentialReceiver, existingLink));
@@ -365,7 +365,7 @@ public static class WorkflowTreeEx
             }
         }
 
-        // 执行清理（保留最新的连接）
+        // Perform the cleanup (keeping the newest connection)
         if (sameDirectionConnections.Count > 0)
         {
             component.StandardRemoveConnections(sameDirectionConnections);
@@ -377,13 +377,13 @@ public static class WorkflowTreeEx
     {
         if (component is null || sender is null || receiver is null) return;
 
-        // 检查是否已存在连接（经过清理后应该不存在）
+        // Check whether a connection already exists (should not exist after cleanup)
         bool connectionExists = component.LinksMap.TryGetValue(sender, out var existingLinks) &&
                                existingLinks.ContainsKey(receiver);
 
         if (connectionExists) return;
 
-        // 创建新连接
+        // Create the new connection
         var newLink = component.GetHelper().CreateLink(sender, receiver);
         newLink.IsVisible = true;
 
@@ -436,7 +436,7 @@ public static class WorkflowTreeEx
         var redoActions = new List<Action>();
         var undoActions = new List<Action>();
 
-        // 收集所有受影响的插槽，用于统一状态更新
+        // Collect all affected slots for unified state updates
         var affectedSlots = new HashSet<IWorkflowSlotViewModel>();
 
         foreach (var (sender, receiver, link) in connectionsToRemove)
@@ -446,10 +446,10 @@ public static class WorkflowTreeEx
 
             redoActions.Add(() =>
             {
-                // 从 Links 集合中移除连接
+                // Remove the link from the Links collection
                 component.Links.Remove(link);
 
-                // 从 LinksMap 中移除连接映射
+                // Remove the link mapping from LinksMap
                 if (component.LinksMap.TryGetValue(sender, out var receiverLinks))
                 {
                     receiverLinks.Remove(receiver);
@@ -459,48 +459,48 @@ public static class WorkflowTreeEx
                     }
                 }
 
-                // 更新发送端的目标集合
+                // Update the sender's target collection
                 sender.Targets.Remove(receiver);
 
-                // 更新接收端的源集合
+                // Update the receiver's source collection
                 receiver.Sources.Remove(sender);
 
-                // 隐藏连接线
+                // Hide the link
                 link.IsVisible = false;
             });
 
             undoActions.Add(() =>
             {
-                // 确保 LinksMap 中存在发送端的字典
+                // Ensure LinksMap has a dictionary for the sender
                 if (!component.LinksMap.ContainsKey(sender))
                 {
                     component.LinksMap[sender] = [];
                 }
 
-                // 恢复连接映射
+                // Restore the link mapping
                 component.LinksMap[sender][receiver] = link;
 
-                // 恢复 Links 集合中的连接
+                // Restore the link in the Links collection
                 component.Links.Add(link);
 
-                // 恢复发送端的目标集合
+                // Restore the sender's target collection
                 if (!sender.Targets.Contains(receiver))
                 {
                     sender.Targets.Add(receiver);
                 }
 
-                // 恢复接收端的源集合
+                // Restore the receiver's source collection
                 if (!receiver.Sources.Contains(sender))
                 {
                     receiver.Sources.Add(sender);
                 }
 
-                // 显示连接线
+                // Show the link
                 link.IsVisible = true;
             });
         }
 
-        // 添加状态更新操作到 redo/undo 中
+        // Add state-update actions to the redo/undo
         redoActions.Add(() =>
         {
             foreach (var slot in affectedSlots)
@@ -517,13 +517,13 @@ public static class WorkflowTreeEx
             }
         });
 
-        // 创建完整的操作对
+        // Build the complete action pair
         var actionPair = new WorkflowActionPair(
             () => { foreach (var action in redoActions) action(); },
             () => { foreach (var action in undoActions) action(); }
         );
 
-        // 提交到撤销/重做栈
+        // Submit to the undo/redo stack
         component.StandardSubmit(actionPair);
     }
 
@@ -532,7 +532,7 @@ public static class WorkflowTreeEx
         if (channel == SlotChannel.None)
             return false;
 
-        // 发送端逻辑
+        // Sender logic
         if (isSender)
         {
             if (channel.HasFlag(SlotChannel.OneTarget) && existingConnections > 0)
@@ -543,7 +543,7 @@ public static class WorkflowTreeEx
 
             return false;
         }
-        // 接收端逻辑
+        // Receiver logic
         else
         {
             if (channel.HasFlag(SlotChannel.OneSource) && existingConnections > 0)

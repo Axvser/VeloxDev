@@ -46,7 +46,7 @@
                 </Border>
 
                 <!-- Global Statistics -->
-                <GroupBox Header="📊 Global Timeline Statistics" Background="#E8F6F3">
+                <GroupBox Header="Global Timeline Statistics" Background="#E8F6F3">
                     <StackPanel Margin="10">
                         <TextBlock x:Name="txtActiveComponents" Text="Active Components: 0" FontWeight="Bold"/>
                         <TextBlock x:Name="txtTotalUpdates" Text="Total Updates: 0"/>
@@ -55,7 +55,7 @@
                 </GroupBox>
 
                 <!-- Real-time Performance Parameters -->
-                <GroupBox Header="⚡ Real-time Performance" Background="#F4ECF7">
+                <GroupBox Header="Real-time Performance" Background="#F4ECF7">
                     <StackPanel Margin="10">
                         <TextBlock x:Name="txtDeltaTime" Text="Delta Time: 0 ms"/>
                         <TextBlock x:Name="txtTotalTime" Text="Total Time: 0 s"/>
@@ -67,7 +67,7 @@
                 </GroupBox>
 
                 <!-- Component Running Statistics -->
-                <GroupBox Header="🔧 Component Statistics" Background="#EBF5FB">
+                <GroupBox Header="Component Statistics" Background="#EBF5FB">
                     <StackPanel Margin="10">
                         <TextBlock x:Name="txtWindowStats" Text="Window Component: Not loaded" FontWeight="Bold"/>
                         <TextBlock x:Name="txtPhysicsStats" Text="Physics Component: Not loaded" Foreground="#27AE60"/>
@@ -77,25 +77,25 @@
                 </GroupBox>
 
                 <!-- Test Control Panel -->
-                <GroupBox Header="🎮 Test Control Panel" Background="#FDEDEC">
+                <GroupBox Header="Test Control Panel" Background="#FDEDEC">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="10">
-                        <Button x:Name="btnAddComponent" Content="➕ Add Component" Click="BtnAddComponent_Click" Background="#2ECC71"/>
-                        <Button x:Name="btnStart" Content="▶️ Start" Click="BtnStart_Click" Background="Blue"/>
-                        <Button x:Name="btnResetStats" Content="🔄 Reset Stats" Click="BtnResetStats_Click" Background="#3498DB"/>
-                        <Button x:Name="btnPause" Content="⏸️ Pause" Click="BtnPause_Click" Background="#E67E22"/>
-                        <Button x:Name="btnResume" Content="▶️ Resume" Click="BtnResume_Click" Background="#9B59B6"/>
-                        <Button x:Name="btnStop" Content="🛑 Stop" Click="BtnStop_Click" Background="#E74C3C"/>
+                        <Button x:Name="btnAddComponent" Content="Add Component" Click="BtnAddComponent_Click" Background="#2ECC71"/>
+                        <Button x:Name="btnStart" Content="Start" Click="BtnStart_Click" Background="Blue"/>
+                        <Button x:Name="btnResetStats" Content="Reset Stats" Click="BtnResetStats_Click" Background="#3498DB"/>
+                        <Button x:Name="btnPause" Content="Pause" Click="BtnPause_Click" Background="#E67E22"/>
+                        <Button x:Name="btnResume" Content="Resume" Click="BtnResume_Click" Background="#9B59B6"/>
+                        <Button x:Name="btnStop" Content="Stop" Click="BtnStop_Click" Background="#E74C3C"/>
                     </StackPanel>
                 </GroupBox>
 
                 <!-- System Status Indicator -->
                 <Border Background="#34495E" CornerRadius="5" Margin="0,10" Padding="10">
-                    <TextBlock x:Name="txtSystemStatus" Text="🟢 System Running Normally" 
+                    <TextBlock x:Name="txtSystemStatus" Text="System Running Normally"
                           Foreground="White" FontWeight="Bold" TextAlignment="Center" FontSize="14"/>
                 </Border>
 
                 <!-- System Description -->
-                <GroupBox Header="📋 System Architecture" Background="#FEF9E7">
+                <GroupBox Header="System Architecture" Background="#FEF9E7">
                     <StackPanel Margin="10">
                         <TextBlock TextWrapping="Wrap" TextAlignment="Left" LineHeight="20">
                         <Run FontWeight="Bold">System Features:</Run>

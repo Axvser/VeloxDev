@@ -168,7 +168,7 @@ public partial class WorkflowView : UserControl
         vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
         if (vm.GetHelper() is AgentHelper helper)
         {
-            // 直接内联：工具始终已注册，handler 在此赋值后即可触发
+            // Inlined directly: the tool is always registered, so the handler fires as soon as it is assigned here
             helper.SelectionHandler = ShowSelectionDialogAsync;
             helper.ConfirmationHandler = ShowConfirmationDialogAsync;
             helper.ToolCalled += OnAgentToolCalled;
@@ -213,7 +213,7 @@ public partial class WorkflowView : UserControl
             var headerPanel = new StackPanel { Spacing = 4, Margin = new Thickness(18, 14) };
             headerPanel.Children.Add(new TextBlock
             {
-                Text = isMulti ? "☑️  Agent · 请多选" : "🤖  Agent · 请选择",
+                Text = isMulti ? "Agent · 请多选" : "Agent · 请选择",
                 Foreground = new SolidColorBrush(Color.Parse("#7ec8ff")),
                 FontSize = 13,
                 FontWeight = FontWeight.Bold,
@@ -301,7 +301,7 @@ public partial class WorkflowView : UserControl
             {
                 var confirmBtn = new Button
                 {
-                    Content = "✓  确认选择",
+                    Content = "确认选择",
                     HorizontalAlignment = HorizontalAlignment.Right,
                     Padding = new Thickness(16, 9),
                     FontSize = 12,
@@ -405,7 +405,7 @@ public partial class WorkflowView : UserControl
             var headerPanel = new StackPanel { Spacing = 4, Margin = new Thickness(18, 14) };
             headerPanel.Children.Add(new TextBlock
             {
-                Text = "⚠️  Agent · 操作确认",
+                Text = "Agent · 操作确认",
                 Foreground = new SolidColorBrush(Color.Parse("#ffd166")),
                 FontSize = 13,
                 FontWeight = FontWeight.Bold,
@@ -455,9 +455,9 @@ public partial class WorkflowView : UserControl
                 CornerRadius = new CornerRadius(6),
             };
 
-            var denyBtn   = MakeBtn("✕  拒绝",            "#3b0000", "#ff6b6b", "#ff6b6b");
-            var onceBtn   = MakeBtn("✓  仅同意一次",       "#0f3460", "#7ec8ff", "#7ec8ff");
-            var alwaysBtn = MakeBtn("✓✓  本次会话始终同意", "#0d3b1a", "#6bffb8", "#6bffb8");
+            var denyBtn   = MakeBtn("拒绝",            "#3b0000", "#ff6b6b", "#ff6b6b");
+            var onceBtn   = MakeBtn("仅同意一次",       "#0f3460", "#7ec8ff", "#7ec8ff");
+            var alwaysBtn = MakeBtn("本次会话始终同意", "#0d3b1a", "#6bffb8", "#6bffb8");
 
             denyBtn.Click   += (_, _) => { result = AgentConfirmationResult.Deny;        dialog.Close(); };
             onceBtn.Click   += (_, _) => { result = AgentConfirmationResult.AllowOnce;   dialog.Close(); };

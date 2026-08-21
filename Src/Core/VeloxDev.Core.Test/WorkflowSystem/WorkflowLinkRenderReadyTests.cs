@@ -3,11 +3,12 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Test.WorkflowSystem;
 
 /// <summary>
-/// 核心 NaN 值判定下 Link 渲染就绪契约的单元测试。
+/// Unit tests for the link render-ready contract driven by core NaN value checks.
 ///
-/// 契约:链接可见,且双端端点锚点均已就位 —— slot 锚点默认水平/垂直坐标为
-/// <see cref="double.NaN"/>(无值 / 待 GUI 测量),真实 GUI 测量写入非 NaN 坐标后才放行。
-/// 测试直接设置 slot.Anchor 模拟 GUI 测量;不依赖任何事件、时间戳或 GUI 通知。
+/// Contract: the link is visible and both endpoint anchors are in place — a slot's anchor defaults its
+/// horizontal/vertical coordinates to <see cref="double.NaN"/> (no value / awaiting GUI measurement), and is only
+/// released after real GUI measurement writes non-NaN coordinates.
+/// The tests set slot.Anchor directly to simulate GUI measurement; they rely on no events, timestamps, or GUI notifications.
 /// </summary>
 [TestClass]
 public class WorkflowLinkRenderReadyTests
@@ -43,7 +44,7 @@ public class WorkflowLinkRenderReadyTests
     [TestMethod]
     public void DefaultAnchor_NotReady()
     {
-        // 默认锚点为 NaN(未测量) → 不渲染,避免读到"无值"坐标的错位帧。
+        // Default anchor is NaN (unmeasured) → not rendered, avoiding a mispositioned frame read from "no-value" coordinates.
         var a = NodeWithSlots(Slot());
         var b = NodeWithSlots(Slot());
         var link = Link(a.Slots[0], b.Slots[0]);
@@ -55,7 +56,8 @@ public class WorkflowLinkRenderReadyTests
     [TestMethod]
     public void PlaceholderEndpoint_Ready()
     {
-        // 未挂载到节点的占位端点(Parent 空,如拖拽预览/虚拟链接占位端点)没有可等待的布局 → 就绪。
+        // A placeholder endpoint not attached to a node (empty Parent, e.g. drag-preview/virtual-link placeholders)
+        // has no layout to wait on → ready.
         var link = Link(Slot(), Slot());
         Assert.IsTrue(link.IsRenderReady());
     }
@@ -84,7 +86,7 @@ public class WorkflowLinkRenderReadyTests
     [TestMethod]
     public void MeasuredThenDefaulted_NotReady()
     {
-        // 锚点从已测量值回到默认 NaN(如虚拟链接重置) → 不再就绪。
+        // Anchor returns from a measured value to the default NaN (e.g. a virtual-link reset) → not ready.
         var a = NodeWithSlots(Slot());
         var b = NodeWithSlots(Slot());
         var link = Link(a.Slots[0], b.Slots[0]);
@@ -99,8 +101,8 @@ public class WorkflowLinkRenderReadyTests
     [TestMethod]
     public void OriginAnchor_IsMeasured()
     {
-        // 真实测量可能恰好是原点 (0,0,0)(节点在画布原点),此时应视为已就绪。
-        // NaN 判定与 (0,0) 无关 —— 这是纯值判定(判 0)做不到的。
+        // Real measurement can land exactly on the origin (0,0,0) (a node at the canvas origin) — this must count as ready.
+        // The NaN check is unrelated to (0,0) — a pure value check (testing for 0) cannot express this.
         var a = NodeWithSlots(Slot());
         var b = NodeWithSlots(Slot());
         var link = Link(a.Slots[0], b.Slots[0]);
@@ -112,7 +114,7 @@ public class WorkflowLinkRenderReadyTests
     [TestMethod]
     public void HorizontalNaNOnly_NotReady()
     {
-        // 只有水平坐标 NaN 也视为未就绪(任一分量未测量即拦截)。
+        // NaN in only the horizontal coordinate is still not ready (any unmeasured component blocks rendering).
         var a = NodeWithSlots(Slot());
         var b = NodeWithSlots(Slot());
         var link = Link(a.Slots[0], b.Slots[0]);
@@ -135,7 +137,7 @@ public class WorkflowLinkRenderReadyTests
     [TestMethod]
     public void MeasurementResumed_Ready()
     {
-        // 离开(重置为 NaN)后再测量 → 恢复就绪。
+        // Leaving (resetting to NaN) then measuring again → ready again.
         var a = NodeWithSlots(Slot());
         var b = NodeWithSlots(Slot());
         var link = Link(a.Slots[0], b.Slots[0]);
@@ -153,7 +155,7 @@ public class WorkflowLinkRenderReadyTests
     [TestMethod]
     public void NodeWithoutSlots_LinkNotReady()
     {
-        // 链接端点引用节点上不存在的 slot → 无测量来源,拦截渲染。
+        // A link endpoint references a slot that does not exist on its node → no measurement source, rendering is blocked.
         var a = NodeWithSlots();
         var b = NodeWithSlots(Slot());
         var link = Link(new SlotDefaultViewModel { Parent = a }, b.Slots[0]);
@@ -163,7 +165,7 @@ public class WorkflowLinkRenderReadyTests
     [TestMethod]
     public void DynamicSlot_MeasuredAfterCreation_Ready()
     {
-        // 节点创建后动态新增的 slot,测量后即就绪,无订阅依赖。
+        // A slot dynamically added after the node was created becomes ready once measured, with no subscription dependency.
         var node = NodeWithSlots();
         var b = NodeWithSlots(Slot());
         var dynamicSlot = Slot();

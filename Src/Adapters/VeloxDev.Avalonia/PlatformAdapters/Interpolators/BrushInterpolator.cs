@@ -16,13 +16,13 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
             if (steps <= 1)
             {
-                // 单帧（重置等）返回原始目标值：end 为 null 时就写 null，而不是 Brushes.Transparent。
-                // 否则 OpacityMask 会被设成透明画刷，导致整个元素不可见。
+                // Single-frame (reset, etc.) returns the raw target value: write null when end is null rather than Brushes.Transparent.
+                // Otherwise OpacityMask would be set to a transparent brush, making the whole element invisible.
                 result.Add(end);
                 return result;
             }
 
-            // ȷ����ȷ����ʼ�ͽ���ֵ
+            // Ensure accurate start and end values.
             result.Add(startBrush);
 
             if (steps > 2)
@@ -79,7 +79,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             if (t <= 0.0) return start;
             if (t >= 1.0) return end;
 
-            // ʹ��RenderTargetBitmapʵ�־�ȷ���
+            // Use RenderTargetBitmap for a precise cross-fade.
             return CreateBlendedBrush(start, end, t);
         }
 
@@ -90,11 +90,11 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
             using (var ctx = bmp.CreateDrawingContext())
             {
-                // ���Ƶײ㻭ˢ
+                // Draw the bottom brush.
                 using (ctx.PushOpacity(1 - t))
                     ctx.DrawRectangle(start, null, new Rect(0, 0, renderSize, renderSize));
 
-                // �����ϲ㻭ˢ
+                // Draw the upper brush.
                 using (ctx.PushOpacity(t))
                     ctx.DrawRectangle(end, null, new Rect(0, 0, renderSize, renderSize));
             }

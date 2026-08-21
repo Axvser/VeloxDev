@@ -40,7 +40,7 @@ public partial class Rocker : UserControl
     }
 
     private bool _isDragging = false;
-    private Point _dragOffset; // 指针相对于小圆中心的偏移（像素）
+    private Point _dragOffset; // pointer offset relative to the small circle center (pixels)
 
     public Rocker()
     {
@@ -103,7 +103,7 @@ public partial class Rocker : UserControl
         _isDragging = true;
         var pointerPos = e.GetPosition(PART_BOARD);
 
-        // 获取当前小圆中心（像素）
+        // Get the current small circle center (pixels)
         var bounds = PART_BOARD.Bounds;
         double size = Math.Min(bounds.Width, bounds.Height);
         double maxMove = Math.Max(0, size / 2 * (1 - Scale));
@@ -157,7 +157,7 @@ public partial class Rocker : UserControl
         double boardCenterX = bounds.Width / 2;
         double boardCenterY = bounds.Height / 2;
 
-        // 减去 drag offset 得到期望的小圆中心位置
+        // Subtract the drag offset to get the desired small circle center position
         double targetCenterX = pointerPos.X - _dragOffset.X;
         double targetCenterY = pointerPos.Y - _dragOffset.Y;
 
@@ -174,12 +174,12 @@ public partial class Rocker : UserControl
             double len = Math.Sqrt(dx * dx + dy * dy);
             if (len > maxMove)
             {
-                // 归一化到圆边界
+                // Normalize to the circle boundary
                 dx = dx * maxMove / len;
                 dy = dy * maxMove / len;
             }
 
-            // 转换为 [-1, 1] 范围
+            // Convert to the [-1, 1] range
             X = dx / maxMove;
             Y = dy / maxMove;
         }

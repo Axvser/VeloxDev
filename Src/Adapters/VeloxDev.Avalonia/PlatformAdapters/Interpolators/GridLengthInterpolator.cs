@@ -14,7 +14,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
             List<object?> result = new(steps);
 
-            // 如果网格单位不同，无法插值
+            // If grid units differ, interpolation is impossible.
             if (g1.GridUnitType != g2.GridUnitType)
             {
                 for (int i = 0; i < steps; i++)

@@ -155,7 +155,7 @@ namespace VeloxDev.DynamicTheme
             var updates = new Queue<Action>(steps);
             if (steps <= 0) return updates;
 
-            // 预计算缓动曲线映射的帧索引
+            // Pre-compute the frame indices mapped by the easing curve
             var easedFrameIndices = new int[steps];
             for (int i = 0; i < steps; i++)
             {
@@ -168,11 +168,11 @@ namespace VeloxDev.DynamicTheme
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"[CalculateFrames] Error calculating eased frame index: {ex.Message}");
-                    easedFrameIndices[i] = i; // 回退到线性索引
+                    easedFrameIndices[i] = i; // fall back to linear index
                 }
             }
 
-            // 为每个目标对象和属性预先计算所有帧的值
+            // Pre-compute all frame values for each target object and property
             var allFrames = new Dictionary<IThemeObject, Dictionary<PropertyInfo, object?[]>>();
 
             foreach (var target in targets)
@@ -201,7 +201,7 @@ namespace VeloxDev.DynamicTheme
 
                     var propertyFrames = new Dictionary<PropertyInfo, object?[]>();
 
-                    // 处理每个属性
+                    // Process each property
                     foreach (var propEntry in staticCache)
                     {
                         PropertyInfo? propertyInfo = null;
@@ -218,17 +218,17 @@ namespace VeloxDev.DynamicTheme
                             continue;
                         }
 
-                        // 获取当前值（优先动态缓存）
+                        // Get the current value (dynamic cache first)
                         object? currentValue = null;
                         bool hasCurrentValue = false;
 
                         try
                         {
-                            // 根据StartModel决定获取方式
+                            // Choose the retrieval method based on StartModel
                             switch (StartModel)
                             {
                                 case StartModel.Reflect:
-                                    // 反射模式
+                                    // Reflect mode
                                     try
                                     {
                                         currentValue = propertyInfo.GetValue(target);
@@ -242,7 +242,7 @@ namespace VeloxDev.DynamicTheme
                                     break;
 
                                 case StartModel.Cache:
-                                    // 缓存模式
+                                    // Cache mode
                                     if (activeCache.TryGetValue(propEntry.Key, out var activePropCache) &&
                                         activePropCache.TryGetValue(propertyInfo, out var activeTypeCache) &&
                                         activeTypeCache.TryGetValue(Current, out currentValue))
@@ -267,7 +267,7 @@ namespace VeloxDev.DynamicTheme
                             continue;
                         }
 
-                        // 获取目标值（优先动态缓存，使用明确的targetThemeType）
+                        // Get the target value (dynamic cache first, using the explicit targetThemeType)
                         object? targetValue = null;
                         bool hasTargetValue = false;
 
@@ -295,7 +295,7 @@ namespace VeloxDev.DynamicTheme
                             continue;
                         }
 
-                        // 计算过渡帧
+                        // Compute the transition frames
                         var frames = new object?[steps];
                         bool framesCalculated = false;
 
@@ -359,7 +359,7 @@ namespace VeloxDev.DynamicTheme
                 }
             }
 
-            // 构建每一帧的更新操作
+            // Build the update action for each frame
             for (int frameIndex = 0; frameIndex < steps; frameIndex++)
             {
                 try

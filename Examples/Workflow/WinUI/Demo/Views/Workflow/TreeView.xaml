@@ -138,7 +138,7 @@
                     <TextBlock Margin="0,8,0,0" Text="可见组件数：( Node / Link )" Foreground="White" />
                     <TextBlock Text="{Binding Helper.VisibleItems.Count}" Foreground="White" />
 
-                    <!-- Agent 对话 -->
+                    <!-- Agent chat -->
                     <Border Margin="0,12,0,0"
                             Padding="10"
                             Background="#202020"
@@ -181,7 +181,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- 执行记录 -->
+                    <!-- Execution log -->
                     <Border Margin="0,12,0,0"
                             Padding="10"
                             Background="#202020"
@@ -209,7 +209,7 @@
                         </ScrollViewer>
                     </Border>
 
-                    <!-- MCP 服务器 -->
+                    <!-- MCP servers -->
                     <Border x:Name="McpStatusPanel"
                             Margin="0,12,0,0"
                             Padding="10"

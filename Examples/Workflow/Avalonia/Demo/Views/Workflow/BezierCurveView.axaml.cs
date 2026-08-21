@@ -24,7 +24,7 @@ public partial class BezierCurveView : Control
         };
     }
 
-    #region Avalonia 属性定义
+    #region Avalonia property definitions
 
     public static readonly StyledProperty<double> StartLeftProperty =
         AvaloniaProperty.Register<BezierCurveView, double>(nameof(StartLeft));
@@ -137,7 +137,7 @@ public partial class BezierCurveView : Control
 
         DrawBezierLine(context, geometry);
 
-        // 如果不是虚线，绘制箭头
+        // If it is not a dashed line, draw the arrow
         if (!IsVirtual && (DashArray == null || DashArray.Count == 0))
         {
             DrawArrowhead(context);
@@ -174,7 +174,7 @@ public partial class BezierCurveView : Control
     {
         var diffx = EndLeft - StartLeft;
 
-        // 计算控制点（三阶贝塞尔曲线需要两个控制点）
+        // Compute the control points (a cubic Bézier curve needs two control points)
         var cp1 = new Point(StartLeft + diffx * 0.3, StartTop);
         var cp2 = new Point(EndLeft - diffx * 0.3, EndTop);
 
@@ -194,7 +194,7 @@ public partial class BezierCurveView : Control
     {
         var diffx = EndLeft - StartLeft;
 
-        // 计算箭头方向（使用曲线末端的方向）
+        // Compute the arrow direction (using the direction at the end of the curve)
         var cp2 = new Point(EndLeft - diffx * 0.3, EndTop);
         var arrowTip = new Point(EndLeft, EndTop);
 

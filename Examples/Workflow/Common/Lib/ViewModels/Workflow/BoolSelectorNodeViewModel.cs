@@ -41,7 +41,7 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
 
     [VeloxProperty] private string lastRouted = "-";
 
-    // 执行序列号（手动实现，生成器暂未覆盖）
+    // Execution sequence number (hand-written; the generator does not cover this yet)
     private int lastExecutionOrder;
     public int LastExecutionOrder
     {
@@ -63,10 +63,10 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     public SlotViewModel? TrueSlot => OutputSlots?.TrySelect(true, out var s) == true ? s : null;
     public SlotViewModel? FalseSlot => OutputSlots?.TrySelect(false, out var s) == true ? s : null;
 
-    /// <summary>编译期注入的编译身份（Order = -1 表示绝对停止）。</summary>
+    /// <summary>Compile-time identity injected by the compiler (Order = -1 means absolute stop).</summary>
     public ICompileContext? CompileContext { get; private set; }
 
-    /// <summary>编译期是否处于绝对停止状态（未选中静态分支 / 终止）。</summary>
+    /// <summary>Whether the node is in the compile-time absolute stop state (unselected static branch / terminated).</summary>
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
     public void AttachCompileTimeContext(ICompileContext context)
@@ -79,17 +79,17 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
         OnPropertyChanged(nameof(ExecutionOrderText));
     }
 
-    /// <summary>编译模式：Static 只返回当前选中分支；Dynamic 返回 True/False 全部分支。</summary>
+    /// <summary>Compile mode: Static returns only the currently selected branch; Dynamic returns all True/False branches.</summary>
     [AgentContext(AgentLanguages.Chinese, "编译模式：Static 编译期锁定当前路由条件（未选中分支被剪除，其下游节点 Order = -1 绝对停止）；Dynamic 运行期按数据负载重新路由（True/False 分支全存活）。通过 PatchNodeProperties 设置，如 {\"CompileMode\":\"Static\"}。")]
     [AgentContext(AgentLanguages.English, "Compile mode: Static locks the current routing condition at compile time (the unselected branch is pruned; its downstream nodes get Order = -1 / absolute stop); Dynamic re-routes at runtime from the data payload (both True/False branches stay alive). Set via PatchNodeProperties, e.g. {\"CompileMode\":\"Static\"}.")]
     [VeloxProperty] private RouterCompileMode _compileMode = RouterCompileMode.Dynamic;
 
-    /// <summary>编译模式下拉数据源。</summary>
+    /// <summary>Options for the compile-mode dropdown.</summary>
     public RouterCompileMode[] CompileModeOptions => [RouterCompileMode.Static, RouterCompileMode.Dynamic];
 
     /// <summary>
-    /// 统一路由入口：Static → Condition（编译期可定）；Dynamic → 编译期(null)返回 null（IsDynamic），
-    /// 运行期读共享字段 selector.bool，否则回退 Condition。
+    /// Unified route-key entry point: Static → Condition (decidable at compile time); Dynamic returns null for a
+    /// null compile-time payload (IsDynamic) and reads the shared "selector.bool" field at runtime, else falls back to Condition.
     /// </summary>
     public Task<object?> ResolveRouteKey(object? payload)
     {
@@ -102,7 +102,7 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
         return Task.FromResult<object?>(Condition);
     }
 
-    /// <summary>编译时路由表（随模式变化）：Static 只含当前选中分支；Dynamic 含 True/False（保留 1:N 扇出）。无下游的分支登记为终端分支（空列表）。</summary>
+    /// <summary>Compile-time route table (changes with mode): Static contains only the currently selected branch; Dynamic contains True/False (preserving 1:N fan-out). Branches with no downstream are registered as terminal branches (empty lists).</summary>
     public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
     {
         var dict = new Dictionary<object, List<IWorkflowNodeViewModel>>();
@@ -119,7 +119,7 @@ public partial class BoolSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
             dict.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<IWorkflowNodeViewModel>)kv.Value.AsReadOnly()));
     }
 
-    /// <summary>登记一个分支：有下游 → 活跃分支；无下游 → 终端分支（空列表，运行时选中即结束）。</summary>
+    /// <summary>Registers a branch: with downstream → active branch; without downstream → terminal branch (empty list, ends the run when selected).</summary>
     private void AddBranch(Dictionary<object, List<IWorkflowNodeViewModel>> dict, object key, SlotViewModel? slot)
     {
         if (slot is null) return;

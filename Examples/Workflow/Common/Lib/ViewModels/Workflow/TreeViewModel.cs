@@ -16,7 +16,7 @@ public partial class TreeViewModel
 {
     public TreeViewModel() => InitializeWorkflow();
 
-    // …… 自由扩展您的工作流树视图模型
+    // …… freely extend your workflow tree view-model
 
     [VeloxProperty] private ObservableCollection<string> executionLog = [];
     [VeloxProperty] private ObservableCollection<string> agentLog = [];
@@ -27,13 +27,14 @@ public partial class TreeViewModel
     [VeloxProperty] private bool useStreamingAgentResponse = true;
 
     /// <summary>
-    /// 非编译器路径的全局单调执行序号。单独启动某个节点（节点卡片 Run → ReceiveCommand）不再
-    /// 每次从 01 复位——每次独立启动都在同一画布上继续递增，徽标与执行日志保持有序。
-    /// 编译器路径不受影响（它用 CompileContext.Order 固定编号）。
+    /// Global monotonic execution sequence number for the non-compiler path. Starting a node on its own
+    /// (node card Run → ReceiveCommand) no longer resets from 01 each time — every independent start keeps
+    /// incrementing on the same canvas, so badges and the execution log stay ordered.
+    /// The compiler path is unaffected (it uses fixed CompileContext.Order numbers).
     /// </summary>
     private long _executionSequence;
 
-    /// <summary>取下一个全局执行序号（非编译器路径）。</summary>
+    /// <summary>Gets the next global execution sequence number (non-compiler path).</summary>
     public int NextExecutionSequence() => (int)Interlocked.Increment(ref _executionSequence);
 
     [VeloxCommand]
@@ -47,7 +48,7 @@ public partial class TreeViewModel
 
         try
         {
-            AppendAgentLog($"🧑 {message}");
+            AppendAgentLog($"[User] {message}");
 
             if (UseStreamingAgentResponse)
             {
@@ -61,7 +62,7 @@ public partial class TreeViewModel
             if (response is not null)
             {
                 var text = response.Text;
-                AppendAgentLog($"🤖 {text ?? string.Empty}");
+                AppendAgentLog($"[Agent] {text ?? string.Empty}");
             }
         }
         catch (OperationCanceledException)
@@ -69,7 +70,7 @@ public partial class TreeViewModel
         }
         catch (Exception ex)
         {
-            AppendAgentLog($"❌ Error: {ex.Message}");
+            AppendAgentLog($"[Error] {ex.Message}");
         }
     }
 
@@ -121,7 +122,7 @@ public partial class TreeViewModel
 
         if (isFirstLine)
         {
-            AgentLog.Add($"🤖 {line}");
+            AgentLog.Add($"[Agent] {line}");
             AgentMessages.Add(new AgentMessageViewModel(AgentMessageRole.Assistant, line));
             isFirstLine = false;
         }
@@ -129,7 +130,8 @@ public partial class TreeViewModel
         {
             AgentLog.Add($"    {line}");
 
-            // 把流式的后续片段追加到当前助手消息，使 Markdown（代码块/列表等）能跨行完整渲染。
+            // Append the following streaming fragments to the current assistant message so that Markdown
+            // (code blocks, lists, etc.) renders completely across lines.
             if (AgentMessages.Count > 0 &&
                 AgentMessages[AgentMessages.Count - 1].Role == AgentMessageRole.Assistant)
             {
@@ -194,7 +196,7 @@ public partial class TreeViewModel
         AgentMessages.Add(AgentMessageViewModel.FromLogLine(entry));
     }
 
-    // ── 会话 Markdown 转录（供 Avalonia Full Demo 直接喂给 AvalonMarkdown MarkdownView） ──
+    // ── Session Markdown transcript (fed directly to the AvalonMarkdown MarkdownView in the Avalonia Full Demo) ──
 
     partial void OnItemAddedToAgentMessages(IEnumerable<AgentMessageViewModel> items)
     {
@@ -238,13 +240,13 @@ public partial class TreeViewModel
             switch (msg.Role)
             {
                 case AgentMessageRole.User:
-                    sb.Append("**🧑 你：** ").Append(msg.Text);
+                    sb.Append("**你：** ").Append(msg.Text);
                     break;
                 case AgentMessageRole.Assistant:
-                    sb.Append("**🤖 助手：**\n\n").Append(msg.Text);
+                    sb.Append("**助手：**\n\n").Append(msg.Text);
                     break;
                 case AgentMessageRole.Error:
-                    sb.Append("**❌ 错误：** ").Append(msg.Text);
+                    sb.Append("**错误：** ").Append(msg.Text);
                     break;
                 default:
                     sb.Append(msg.Text);

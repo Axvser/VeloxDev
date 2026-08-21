@@ -13,22 +13,22 @@ namespace VeloxDev.Adapters.NativeInterpolators
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
             var direction = options is RotationDirection d ? d : RotationDirection.Auto;
-            // 1. 统一预处理
+            // 1. Unified preprocessing
             var startTransform = NormalizeInput(start);
             var endTransform = NormalizeInput(end);
 
-            // 单帧（重置等）返回原始目标值：end 为 null 时就写 null，而不是归一化成空的 TransformGroup
-            // （空组在 WPF/Avalonia 会渲染成非恒等矩阵，导致元素塌缩不可见）。
+            // Single-frame (reset, etc.) returns the raw target value: write null when end is null rather than normalizing to an empty TransformGroup
+            // (An empty group renders as a non-identity matrix in WPF/Avalonia, collapsing the element to nothing.)
             if (steps <= 1) return [end];
 
-            // 2. 解析有效变换
+            // 2. Parse effective transforms
             var startTransforms = ParseTransforms(startTransform);
             var endTransforms = ParseTransforms(endTransform);
 
-            // 3. 创建匹配对
+            // 3. Create matched pairs
             var transformPairs = CreateTransformPairs(startTransforms, endTransforms);
 
-            // 4. 生成插值序列
+            // 4. Generate the interpolation sequence
             var result = new List<object?>(steps);
             for (int i = 0; i < steps; i++)
             {
@@ -36,7 +36,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
                 result.Add(InterpolateTransformPairs(transformPairs, t, direction));
             }
 
-            // 5. 确保首尾精确匹配
+            // 5. Ensure the first/last steps match exactly
             result[0] = startTransform;
             result[steps - 1] = endTransform;
             return result;
@@ -44,7 +44,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
         private static Transform NormalizeInput(object? input)
         {
-            // 统一将null/Identity转为空TransformGroup
+            // Normalize null/Identity into an empty TransformGroup.
             if (input == null || (input is Transform transform && transform == Transform.Identity))
                 return new TransformGroup();
             return (Transform)input;
@@ -56,7 +56,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
             if (transform is TransformGroup group && group.Children.Count > 0)
             {
-                // 保留每种类型的最后一个变换
+                // Keep the last transform of each type.
                 var lastOfType = new Dictionary<Type, Transform>();
                 foreach (var child in group.Children)
                 {
@@ -112,7 +112,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
 
         protected virtual Transform? InterpolateSingleTransformPair(Transform? start, Transform? end, double t, RotationDirection direction)
         {
-            // 获取默认变换（确保从无到有的过渡平滑）
+            // Get the default transform (ensures a smooth transition from nothing).
             static Transform GetDefaultTransform(Transform? transform) => transform switch
             {
                 TranslateTransform _ => new TranslateTransform(0, 0),
@@ -125,14 +125,14 @@ namespace VeloxDev.Adapters.NativeInterpolators
             start ??= GetDefaultTransform(end);
             end ??= GetDefaultTransform(start);
 
-            // 类型不匹配时回退到矩阵插值
+            // On type mismatch, fall back to matrix interpolation.
             if (start.GetType() != end.GetType())
             {
                 return new MatrixTransform(
                     LerpMatrix(start.Value, end.Value, t));
             }
 
-            // 具体类型插值
+            // Per-type interpolation.
             return start switch
             {
                 TranslateTransform st when end is TranslateTransform et =>

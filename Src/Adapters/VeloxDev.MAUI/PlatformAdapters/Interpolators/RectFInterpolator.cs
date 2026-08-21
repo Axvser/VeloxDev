@@ -6,7 +6,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
     {
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
-            // 处理空值，提供默认值
+            // Handle null values by providing defaults.
             var r1 = (RectangleF)(start ?? RectangleF.Empty);
             var r2 = (RectangleF)(end ?? RectangleF.Empty);
 

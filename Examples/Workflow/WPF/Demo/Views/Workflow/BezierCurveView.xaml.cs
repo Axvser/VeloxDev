@@ -26,7 +26,7 @@ public partial class BezierCurveView : UserControl
         MouseMove += OnHoverMouseMove;
     }
 
-    #region 原有的依赖属性
+    #region Original dependency properties
 
     public static readonly DependencyProperty StartLeftProperty =
         DependencyProperty.Register(
@@ -121,7 +121,7 @@ public partial class BezierCurveView : UserControl
 
     #endregion
 
-    #region 新增流光效果属性
+    #region Flow-effect properties
 
     public static readonly DependencyProperty IsFlowEnabledProperty =
         DependencyProperty.Register(
@@ -177,7 +177,7 @@ public partial class BezierCurveView : UserControl
 
     #endregion
 
-    #region 属性变更处理
+    #region Property-change handling
 
     private static void OnRenderPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -230,19 +230,19 @@ public partial class BezierCurveView : UserControl
         var deltaTime = (currentTime - _lastRenderTime).TotalSeconds;
         _lastRenderTime = currentTime;
 
-        // 关键修复：正确理解虚线偏移的工作原理
-        // 虚线偏移量增加时，虚线图案会向左移动（从终点向起点方向流动）
-        // 所以我们需要减小偏移量来实现从起点向终点的流动
+        // Key fix: correctly understand how the dash offset works
+        // When the dash offset increases, the dash pattern moves left (flowing from end to start)
+        // So we need to decrease the offset to flow from start to end
         _dashOffset -= FlowSpeed * deltaTime * 10;
 
-        // 计算虚线总长度
+        // Compute the total dash length
         double dashLength = 0;
         foreach (double segment in FlowDashArray)
         {
             dashLength += segment;
         }
 
-        // 循环偏移量
+        // Loop the offset
         if (dashLength > 0)
         {
             _dashOffset = (_dashOffset % dashLength + dashLength) % dashLength;
@@ -253,7 +253,7 @@ public partial class BezierCurveView : UserControl
 
     #endregion
 
-    #region 渲染逻辑
+    #region Rendering logic
 
     protected override void OnRender(DrawingContext context)
     {
@@ -280,33 +280,33 @@ public partial class BezierCurveView : UserControl
     }
 
     /// <summary>
-    /// 绘制流光效果 - 修复流动方向
+    /// Draws the flow effect - fixes the flow direction
     /// </summary>
     private void DrawFlowEffect(DrawingContext context, PathGeometry pathGeometry)
     {
-        // 计算总虚线长度
+        // Compute the total dash length
         double totalDashLength = 0;
         foreach (double segment in FlowDashArray)
         {
             totalDashLength += segment;
         }
 
-        // 关键理解：DashOffset 的工作原理
-        // 当 DashOffset 增加时，虚线图案向左移动（视觉上从右向左流动）
-        // 当 DashOffset 减小时，虚线图案向右移动（视觉上从左向右流动）
+        // Key understanding: how DashOffset works
+        // When DashOffset increases, the dash pattern moves left (visually flowing right to left)
+        // When DashOffset decreases, the dash pattern moves right (visually flowing left to right)
 
-        // 我们想要从起点流向终点，所以使用负的偏移量变化
-        // 这里直接使用计算好的 _dashOffset（在 OnRendering 中已经做了减法）
+        // We want to flow from start to end, so we use a negative offset change
+        // Here we use the pre-computed _dashOffset (already subtracted in OnRendering)
 
-        // 底层：光晕效果（稍微滞后）
+        // Bottom layer: glow effect (slightly lagging)
         var glowBrush = new SolidColorBrush(Color.FromArgb(80, FlowColor.R, FlowColor.G, FlowColor.B));
         var glowPen = new Pen(glowBrush, 5);
-        double glowOffset = _dashOffset + 3; // 滞后效果
+        double glowOffset = _dashOffset + 3; // lagging effect
         if (glowOffset >= totalDashLength) glowOffset -= totalDashLength;
         glowPen.DashStyle = new DashStyle(FlowDashArray, glowOffset);
         context.DrawGeometry(null, glowPen, pathGeometry);
 
-        // 中层：主流光
+        // Middle layer: main flow
         var mainBrush = new SolidColorBrush(FlowColor);
         var mainPen = new Pen(mainBrush, 3)
         {
@@ -314,20 +314,20 @@ public partial class BezierCurveView : UserControl
         };
         context.DrawGeometry(null, mainPen, pathGeometry);
 
-        // 上层：高光效果（稍微超前）
+        // Top layer: highlight effect (slightly ahead)
         var highlightBrush = new SolidColorBrush(Color.FromArgb(150, 255, 255, 255));
         var highlightPen = new Pen(highlightBrush, 1);
-        double highlightOffset = _dashOffset - 2; // 超前效果
+        double highlightOffset = _dashOffset - 2; // ahead effect
         if (highlightOffset < 0) highlightOffset += totalDashLength;
         highlightPen.DashStyle = new DashStyle(FlowDashArray, highlightOffset);
         context.DrawGeometry(null, highlightPen, pathGeometry);
 
-        // 绘制流动指示箭头
+        // Draw the flow-direction arrow
         DrawFlowArrow(context, pathGeometry);
     }
 
     /// <summary>
-    /// 绘制流动箭头指示器
+    /// Draws the flow arrow indicator
     /// </summary>
     private void DrawFlowArrow(DrawingContext context, PathGeometry pathGeometry)
     {
@@ -338,10 +338,10 @@ public partial class BezierCurveView : UserControl
         if (pathFigure.Segments.Count == 0 || pathFigure.Segments[0] is not BezierSegment bezierSegment)
             return;
 
-        // 在曲线的终点绘制箭头（表示从起点流向终点）
+        // Draw the arrow at the curve's end point (indicating flow from start to end)
         Point arrowTip = bezierSegment.Point3;
 
-        // 计算曲线在终点的切线方向
+        // Compute the tangent direction at the curve's end point
         Vector tangentDirection = new(
             bezierSegment.Point3.X - bezierSegment.Point2.X,
             bezierSegment.Point3.Y - bezierSegment.Point2.Y);
@@ -355,7 +355,7 @@ public partial class BezierCurveView : UserControl
             tangentDirection.Normalize();
         }
 
-        // 绘制箭头
+        // Draw the arrow
         double arrowLength = 10;
         double arrowWidth = 6;
 
@@ -386,7 +386,7 @@ public partial class BezierCurveView : UserControl
     }
 
     /// <summary>
-    /// 绘制虚拟线条
+    /// Draws a virtual line
     /// </summary>
     private void DrawVirtualLine(DrawingContext context, PathGeometry pathGeometry)
     {
@@ -399,7 +399,7 @@ public partial class BezierCurveView : UserControl
     }
 
     /// <summary>
-    /// 绘制普通线条
+    /// Draws a normal line
     /// </summary>
     private void DrawNormalLine(DrawingContext context, PathGeometry pathGeometry)
     {
@@ -449,7 +449,7 @@ public partial class BezierCurveView : UserControl
 
     #endregion
 
-    #region 箭头绘制
+    #region Arrow drawing
 
     private static void DrawArrowhead(DrawingContext context, PathGeometry pathGeometry, Pen pen)
     {
@@ -499,7 +499,7 @@ public partial class BezierCurveView : UserControl
 
     #endregion
 
-    #region 清理资源
+    #region Resource cleanup
 
     protected override void OnVisualParentChanged(DependencyObject oldParent)
     {

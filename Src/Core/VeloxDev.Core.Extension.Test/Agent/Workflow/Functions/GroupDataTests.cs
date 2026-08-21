@@ -6,13 +6,14 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// 验证 GroupData 数据汇合：多输入汇合点从 context.Data 读到「来源 Node → 产物」只读字典。
-/// 冻结设计：链式/单输入节点 InputNodes 为空 → 保持裸 Data；多输入汇合（Count &gt; 1）注入字典。
+/// Verifies GroupData data join: a multi-input join point reads a read-only "source Node → output"
+/// dictionary from context.Data. Frozen design: chain/single-input nodes have an empty InputNodes →
+/// keep bare Data; a multi-input join (Count &gt; 1) injects the dictionary.
 /// </summary>
 [TestClass]
 public class GroupDataTests
 {
-    /// <summary>扇出（ParallelEntry）→ 汇合：各分支的产物都进入字典。</summary>
+    /// <summary>Fan-out (ParallelEntry) → join: each branch's output enters the dictionary.</summary>
     [TestMethod]
     public async Task FanOutJoin_ReceivesGroupedInputs()
     {
@@ -33,12 +34,12 @@ public class GroupDataTests
         Assert.IsTrue(group.TryGetValue(b, out var vb) && Equals(20, vb), "branch B output is present with its value");
     }
 
-    /// <summary>分支 → 汇合（动态模式只驱动选中分支）：未执行分支的来源不在字典中（TryGetValue false）。</summary>
+    /// <summary>Branch → join (dynamic mode drives only the selected branch): an un-executed branch's source is absent from the dictionary (TryGetValue false).</summary>
     [TestMethod]
     public async Task BranchToJoin_IncludesOnlyTakenBranch()
     {
         var (tree, controller, sel, taken, untaken, join) = BuildBranchJoinGraph();
-        sel.Condition = true;   // 只驱动 True 分支（False 分支不驱动、不登记）
+        sel.Condition = true;   // drive only the True branch (False branch is neither driven nor registered)
 
         var compiler = new CompilerViewModel();
         compiler.CompileAsync(controller).GetAwaiter().GetResult();
@@ -56,7 +57,7 @@ public class GroupDataTests
             "untaken branch output must be absent — its node never ran this run");
     }
 
-    /// <summary>纯线性链：不注入汇合字典，保持裸 Data 链式语义（现有节点零改动）。</summary>
+    /// <summary>Pure linear chain: no join dictionary injected — bare Data chain semantics are preserved (existing nodes need zero changes).</summary>
     [TestMethod]
     public async Task SingleInputChain_KeepsBareData()
     {
@@ -73,7 +74,7 @@ public class GroupDataTests
         Assert.AreEqual(5, sink.LastData, "bare Data flows through the chain (5 from the upstream node)");
     }
 
-    /// <summary>分支切换（重定向回路由器重跑）：pass 2 未走的旧分支来源被剔除——陈旧产物不再进入汇合字典。</summary>
+    /// <summary>Branch switch (redirect back to the router and re-run): on pass 2 the old un-taken branch source is dropped — stale output no longer enters the join dictionary.</summary>
     [TestMethod]
     public async Task RedirectBranchSwitchJoin_ExcludesStaleSource()
     {
@@ -86,7 +87,7 @@ public class GroupDataTests
         var context = new RuntimeContext();
         await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
 
-        // pass 1 走 True（FlipGate 把路由切到 False 并回退到路由器），pass 2 走 False（只有 Y 被重驱动登记）。
+        // pass 1 takes True (FlipGate switches the route to False and redirects back to the router); pass 2 takes False (only Y is re-driven and registered).
         Assert.AreEqual(2, context.Attempt, "branch flip happens on attempt 1; pass 2 re-runs toward the router");
 
         var group = Assert.IsInstanceOfType<IGroupData>(join.LastGroupData,
@@ -98,7 +99,7 @@ public class GroupDataTests
             "the un-re-run True branch (FlipGate) output must be absent — stale, not contract-preserved");
     }
 
-    /// <summary>重定向越过汇合点：目标之前的 prefix 来源按 resume 契约保留（防止「每 pass 全清」的激进方案丢合法旧产物）。</summary>
+    /// <summary>Redirect past the join point: prefix sources before the target are preserved per the resume contract (so an aggressive "clear everything each pass" scheme cannot drop legitimate old outputs).</summary>
     [TestMethod]
     public async Task RedirectPastJoin_PreservesSkippedPrefix()
     {
@@ -111,7 +112,7 @@ public class GroupDataTests
         var context = new RuntimeContext();
         await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
 
-        // gate(5) 第 1 次 Warn 回退到 join(4)；pass 2 跳过 Order<4 的整段 prefix（含未重驱动的 True 分支 A）。
+        // gate(5) warns on the 1st time and redirects back to join(4); pass 2 skips the whole Order<4 prefix (including the not-re-driven True branch A).
         Assert.AreEqual(2, context.Attempt, "gate warns on attempt 1 and redirects back to the join");
 
         var group = Assert.IsInstanceOfType<IGroupData>(join.LastGroupData,
@@ -123,7 +124,7 @@ public class GroupDataTests
             "B never ran this run — must stay absent");
     }
 
-    // ── 构图（仿 ParallelFanOutTests.BuildFanOutGraph）──
+    // ── Graph construction (mirrors ParallelFanOutTests.BuildFanOutGraph) ──
 
     private static (TreeDefaultViewModel Tree, ControllerViewModel Controller, BoolSelectorNodeViewModel Sel,
         TraceNodeViewModel A, TraceNodeViewModel B, TraceNodeViewModel Join) BuildFanOutJoinGraph()
@@ -149,7 +150,7 @@ public class GroupDataTests
         join.InputSlot.SetChannelCommand.Execute(SlotChannel.MultipleSources);
 
         Connect(tree, controller.OutputSlot!, sel.InputSlot!);
-        Connect(tree, sel.TrueSlot!, a.InputSlot!);   // 扇出：True → [A, B]
+        Connect(tree, sel.TrueSlot!, a.InputSlot!);   // fan-out: True → [A, B]
         Connect(tree, sel.TrueSlot!, b.InputSlot!);
         Connect(tree, a.OutputSlot!, join.InputSlot!);
         Connect(tree, b.OutputSlot!, join.InputSlot!);
@@ -288,16 +289,16 @@ public class GroupDataTests
     }
 }
 
-/// <summary>测试节点：编译态返回 <see cref="Value"/>；收到汇合字典（IGroupData）时记录到 <see cref="LastGroupData"/>。</summary>
+/// <summary>Test node: returns <see cref="Value"/> in compile mode; when it receives a join dictionary (IGroupData), records it to <see cref="LastGroupData"/>.</summary>
 [WorkflowBuilder.Node<TraceNodeHelper>(workSemaphore: 1)]
 public partial class TraceNodeViewModel : NodeViewModel
 {
-    public int Value { get; set; }            // 纯 CLR 属性，不依赖生成器
-    public object? LastData { get; set; }     // 最近一次驱动时的 context.Data（汇合前为裸值）
-    public object? LastGroupData { get; set; } // 最近一次驱动收到 IGroupData 时记录（非汇合为 null）
+    public int Value { get; set; }            // plain CLR property, does not rely on the generator
+    public object? LastData { get; set; }     // context.Data from the most recent drive (bare value before the join)
+    public object? LastGroupData { get; set; } // recorded when the most recent drive received an IGroupData (null when not a join)
 }
 
-/// <summary>TraceNode 助手：非汇合输入返回 Value；汇合输入记录字典并透传。</summary>
+/// <summary>TraceNode helper: returns Value for non-join input; for join input, records the dictionary and passes it through.</summary>
 public class TraceNodeHelper : HttpHelper<TraceNodeViewModel>
 {
     public override Task<object?> ReceiveAsync(ITaskContext ctx, CancellationToken ct)
@@ -305,8 +306,9 @@ public class TraceNodeHelper : HttpHelper<TraceNodeViewModel>
         if (Component is not null && ctx is IRuntimeContext rt)
         {
             Component.LastData = rt.Data;
-            // 按编译身份识别汇合点（与引擎注入条件一致）：InputNodes.Count > 1 的节点才是汇合点，
-            // 而非「Data 恰好是字典」——重跑 pass 时 Data 可能是上一 pass 残留的汇合字典。
+            // Identify the join point by compile identity (matching the engine's injection condition):
+            // a node with InputNodes.Count > 1 is a join point, not "Data happens to be a dictionary" —
+            // on a re-run pass, Data may be a leftover join dictionary from the previous pass.
             if (Component.CompileContext?.InputNodes is { Count: > 1 } && rt.Data is IGroupData group)
             {
                 Component.LastGroupData = group;
@@ -318,27 +320,27 @@ public class TraceNodeHelper : HttpHelper<TraceNodeViewModel>
     }
 }
 
-/// <summary>测试节点：第 1 次驱动时把路由器切到另一分支并请求重定向回路由器（验证分支切换下陈旧产物被剔除）。</summary>
+/// <summary>Test node: on the first drive it switches the router to another branch and requests a redirect back to the router (verifies that stale outputs are dropped on a branch switch).</summary>
 [WorkflowBuilder.Node<BranchFlipHelper>(workSemaphore: 1)]
 public partial class BranchFlipNodeViewModel : NodeViewModel, IRedirectable
 {
-    /// <summary>要翻转的路由器（helper 在第 1 次驱动时把它的 Condition 改为 false）。</summary>
+    /// <summary>The router to flip (the helper sets its Condition to false on the first drive).</summary>
     public BoolSelectorNodeViewModel? TargetRouter { get; set; }
 
-    /// <summary>回退到前一节点（即路由器本身），触发「只重新路由」的 reRouteOnly 重跑。</summary>
+    /// <summary>Redirects back to the previous node (the router itself), triggering a reRouteOnly re-run.</summary>
     public Task<int?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
         => CompileContext is { } cc ? Task.FromResult<int?>(cc.Order - 1) : Task.FromResult<int?>(null);
 }
 
-/// <summary>BranchFlip 助手：第 1 次驱动时切分支并请求重定向，之后放行。</summary>
+/// <summary>BranchFlip helper: switches branches and requests a redirect on the first drive, then lets it pass.</summary>
 public class BranchFlipHelper : HttpHelper<BranchFlipNodeViewModel>
 {
     public override Task<object?> ReceiveAsync(ITaskContext ctx, CancellationToken ct)
     {
         if (Component is { } c && ctx is IRuntimeContext rt && rt.Attempt <= 1)
         {
-            if (c.TargetRouter is not null) c.TargetRouter.Condition = false;   // pass 2 走 False 分支
-            rt.Warn("模拟故障:切分支并回退到路由器");
+            if (c.TargetRouter is not null) c.TargetRouter.Condition = false;   // pass 2 takes the False branch
+            rt.Warn("Simulated failure: switched branches and redirected back to the router");
         }
         return base.ReceiveAsync(ctx, ct);
     }

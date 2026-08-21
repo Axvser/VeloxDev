@@ -3,14 +3,14 @@
 public enum CommandEventType : int
 {
     None = 0,
-    Created,   // 已创建
-    Enqueued,  // 入队等待
-    Dequeued,  // 出队准备执行
-    Started,   // 实际开始执行
-    Completed, // 执行成功
-    Failed,    // 执行失败
-    Canceled,  // 被取消
-    Exited     // 生命周期结束
+    Created,   // Created
+    Enqueued,  // Enqueued, waiting to run
+    Dequeued,  // Dequeued, ready to execute
+    Started,   // Execution actually started
+    Completed, // Executed successfully
+    Failed,    // Execution failed
+    Canceled,  // Cancelled
+    Exited     // Lifecycle ended
 }
 
 public sealed class VeloxCommand(Func<object?, CancellationToken, Task> command,

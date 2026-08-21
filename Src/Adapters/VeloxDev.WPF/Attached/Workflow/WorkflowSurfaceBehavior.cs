@@ -253,7 +253,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        // 仅当点击在空白背景上（而非节点/Slot/Link 等交互元素）时启动画布平移
+        // Start canvas panning only when the click lands on blank background (not on nodes/slots/links or other interactive elements).
         if (e.OriginalSource is not DependencyObject originalSource
             || !IsSurfaceBlankInteraction(originalSource, state))
         {
@@ -525,7 +525,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return false;
         }
 
-        // 点击 ScrollViewer 的滚动条（Thumb/Track/RepeatButton/ScrollBar）时不启动画布平移
+        // Do not start canvas panning when clicking the ScrollViewer's scroll bar (Thumb/Track/RepeatButton/ScrollBar).
         if (source is System.Windows.Controls.Primitives.ScrollBar
             || ancestors.Any(x => x is System.Windows.Controls.Primitives.ScrollBar))
         {

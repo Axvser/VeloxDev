@@ -33,9 +33,9 @@ namespace VeloxDev.WeakTypes
         }
 
         /// <summary>
-        /// 返回组合后的委托（用于类型化、无反射的调用）。
-        /// 热路径（每帧 InvokeUpdate/InvokeLateUpdate）走无锁快速通道：
-        /// 一旦缓存了组合委托，直接 volatile 读取，不再加锁、不再 DynamicInvoke。
+        /// Returns the combined delegate (for typed, reflection-free invocation).
+        /// The hot path (per-frame InvokeUpdate/InvokeLateUpdate) goes through a lock-free fast lane:
+        /// once the combined delegate is cached, it is read directly as volatile — no locking, no DynamicInvoke.
         /// </summary>
         public TDelegate? GetInvocationList()
         {
@@ -51,8 +51,9 @@ namespace VeloxDev.WeakTypes
         }
 
         /// <summary>
-        /// 通用调用（未知委托签名时使用）。经无锁 <see cref="GetInvocationList"/> 取出组合委托再 DynamicInvoke；
-        /// 若已知签名，请改用 <see cref="GetInvocationList"/> 后直接类型化调用，避免反射开销。
+        /// Generic invocation (used when the delegate signature is unknown). Retrieves the combined delegate via the
+        /// lock-free <see cref="GetInvocationList"/> and then DynamicInvokes it; if the signature is known, use
+        /// <see cref="GetInvocationList"/> and invoke it directly in a typed way to avoid reflection overhead.
         /// </summary>
         public void Invoke(object?[] objects)
         {

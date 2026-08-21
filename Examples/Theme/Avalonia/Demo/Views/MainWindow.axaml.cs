@@ -7,11 +7,13 @@ using VeloxDev.TransitionSystem;
 
 namespace Demo.Views;
 
-/* ÎÒÃÇ½¨ÒéÄú½«Ö÷ÌâÏà¹ØµÄ²Ù×÷µ¥¶À¶¨ÒåÔÚÒ»¸ö·Ö²¿ÖĞ£¬ÕâÑù£¬µ±Äú´¦Àí½»»¥Âß¼­Ê±£¬²»»áÊÜµ½ÎŞ¹Ø´úÂëµÄ´òÈÅ */
-/* ×¢Òâ£ºµ±ÄúÊ¹ÓÃRiderÊ±£¬ÕâÃ´×ö¿ÉÄÜ»á³öÏÖÎŞ·¨Ê¶±ğµ½Éú³ÉÄÚÈİµÄÎÊÌâ£¬²»Ó°Ïì±àÒë£¬µ«ÊÇ¿ÉÄÜÖ»ÓĞÖØÆôRider²ÅÄÜ»Ö¸´Ê¶±ğ */
+/* We recommend defining theme-related operations in a separate partial class, so interaction logic
+   is not cluttered by unrelated code */
+/* Note: when using Rider, this may cause generated content to be unrecognized. It does not affect
+   compilation, but Rider may need to be restarted to recover recognition. */
 
 //------------------------------------------------------------------------------------------------------------------
-// User Part ¡ı
+// User Part â†“
 
 [ThemeConfig<ObjectConverter, Dark, Light>(nameof(Background), ["#1e1e1e"], ["#ffffff"])]
 [ThemeConfig<ObjectConverter, Dark, Light>(nameof(Foreground), ["#ffffff"], ["#1e1e1e"])]
@@ -36,29 +38,31 @@ public partial class MainWindow
 {
     private void LoadTheme()
     {
-        InitializeTheme(); // Õâ¾ä»°±ØĞëµ÷ÓÃ,ÇÒ±ØĞëÍíÓÚInitializeComponent()
+        InitializeTheme(); // this call is required and must come after InitializeComponent()
 
-        // [ È«¾ÖÉúĞ§ ]
-        // Èç¹ûÄú²»Ê¹ÓÃ´ø¹ı¶ÉĞ§¹ûµÄÖ÷ÌâÇĞ»»£¬ÄÇÃ´¿ÉÒÔ²»ÅäÖÃ²åÖµÆ÷£¬·ñÔò£¬Õâ¾ä»°ÊÇ±ØĞëµ÷ÓÃµÄ
+        // [ Applies globally ]
+        // If you do not use themed transitions, the interpolator does not need to be configured;
+        // otherwise this call is mandatory.
         ThemeManager.SetPlatformInterpolator(new Interpolator());
 
-        // [ È«¾ÖÉúĞ§ ]
-        // µ±Ö÷Ìâ·¢Éú±ä»¯£¬ÄúÏ£Íû¶¯»­µÄÆğÊ¼×´Ì¬ÊÇ´Ó»º´æ»ñÈ¡ÄØ£¿»¹ÊÇ·´Éä»ñÈ¡µ±Ç°×´Ì¬×÷ÎªÆğÊ¼ÄØ£¿
+        // [ Applies globally ]
+        // When the theme changes, should the animation's starting state come from the cache, or
+        // should reflection read the current state as the starting point?
         ThemeManager.StartModel = StartModel.Cache;
     }
 
     /// <summary>
-    /// Ö÷ÌâÇĞ»»¾ß±¸»Øµ÷
+    /// Theme switching has a callback
     /// </summary>
-    /// <param name="oldValue">ÇĞ»»Ç°µÄÖµ</param>
-    /// <param name="newValue">ÇĞ»»ºóµÄÖµ</param>
+    /// <param name="oldValue">The value before switching</param>
+    /// <param name="newValue">The value after switching</param>
     partial void OnThemeChanged(Type? oldValue, Type? newValue)
     {
         _message.Show(new Notification("Message", $"Theme changed from {oldValue?.Name} to {newValue?.Name}"));
     }
 
     /// <summary>
-    /// ÕâÖÖÖ÷ÌâÇĞ»»»á¼ÓÔØ½¥±ä¶¯»­
+    /// This kind of theme switch loads a gradient animation
     /// </summary>
     private static void ReverseThemeWithAnimation()
     {
@@ -74,7 +78,7 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// ÕâÖÖÖ÷ÌâÇĞ»»Ã»ÓĞ½¥±ä¶¯»­
+    /// This kind of theme switch has no gradient animation
     /// </summary>
     private static void ReverseThemeWithOutAnimation()
     {
@@ -90,31 +94,33 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Ìá¹©Ò»×é»ñÈ¡¡¢±à¼­Ö÷Ìâ×ÊÔ´°üµÄÀ©Õ¹£¬ÕâĞ©·½·¨ÊÇ×Ô¶¯Éú³ÉµÄ£¬ÀıÈç´Ë´¦ËüÃÇ¶¼ÊÇMainWindowµÄ·½·¨
+    /// Provides a set of extensions for getting and editing theme resource packages. These methods
+    /// are auto-generated; here, for example, they all belong to MainWindow.
     /// </summary>
     private void ThemeValueEx()
     {
-        // ¶¯Ì¬±à¼­Ö÷Ìâ×ÊÔ´Öµ
+        // Dynamically edit theme resource values
         SetThemeValue<Light>(nameof(Background), new object?[] { "#ffffff" });
-        // ¿ÉÒÔ»Ö¸´Îª³õÊ¼×´Ì¬
+        // Can be restored to the initial state
         RestoreThemeValue<Light>(nameof(Foreground));
 
-        // »ñÈ¡¾²Ì¬×ÊÔ´
+        // Get the static resources
         var staticCache = GetStaticThemeCache();
-        // »ñÈ¡¶¯Ì¬×ÊÔ´
+        // Get the dynamic resources
         var dynamicCache = GetActiveThemeCache();
 
-        /* ´Ë´¦µÄ¡°×ÊÔ´¡±ÊÇÒ»¸ö×Ô¶¯Éú³ÉµÄ¸´ÔÓ½á¹¹
-           Ö»ÓĞ±»ĞŞ¸Ä¹ıµÄÊôĞÔ²Å»á´æ´¢ÔÚ¶¯Ì¬×ÊÔ´ÖĞ£¬·ñÔò×ÊÔ´ÄÚ²»»á´æ´¢¶«Î÷£¬ÇĞ»»Ö÷ÌâÊ±£¬¶¯Ì¬ÄÚÈİ½«¸²¸Ç¾²Ì¬ÄÚÈİ
+        /* The "resource" here is a complex auto-generated structure.
+           Only modified properties are stored in the dynamic resources; otherwise nothing is stored.
+           When the theme switches, dynamic content overrides static content.
            Dictionary<string,Dictionary<PropertyInfo,Dictionary<Type,object?>>>
 
-           ´Ó×óÍùÓÒ
+           From left to right
            string       -> name of property
            PropertyInfo -> target to use theme change
            Type         -> theme
            object?      -> value of property at the theme
 
-           ËüÌá¹©ÁËÍêÈ«·ÃÎÊÖ÷Ìâ×ÊÔ´µÄÄÜÁ¦
+           It provides full access to the theme resources.
          */
     }
 }

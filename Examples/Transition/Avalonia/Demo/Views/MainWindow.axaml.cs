@@ -19,20 +19,23 @@ public partial class MainWindow : Window
 
         Rec0.RenderTransform = new TranslateTransform();
 
-        // 重置快照在窗口打开后（Opened）才拍摄，避免初始状态尚未确立导致信息丢失。
-        // Rec0 的 RenderTransform.X / Fill 会被原地修改，快照持有的引用会被污染，
-        // 因此 Rec0 用新建对象重置；Rec1/Rec2 的 Fill 是整体替换（不突变），用初始快照即可完整恢复。
+        // Reset snapshots are taken only after the window is Opened, avoiding information loss from
+        // an initial state that has not yet been established.
+        // Rec0's RenderTransform.X / Fill are modified in place, which would pollute the references
+        // held by the snapshot, so Rec0 is reset with a new object; Rec1/Rec2 Fills are replaced
+        // wholesale (not mutated), so the initial snapshots fully restore them.
         Loaded += (s, e) =>
         {
             if (_resetInitialized) return;
             _resetInitialized = true;
 
-            // 先显式初始化到确定状态，再拍快照，避免快照捕获到非初始的 3D/变换（时好时坏）
+            // Explicitly initialize to a definite state first, then take the snapshot, so it does
+            // not capture non-initial 3D/transform state (which is unreliable).
             Rec0.RenderTransform = new TranslateTransform();
             Rec1.RenderTransform = null;
             Rec2.RenderTransform = null;
 
-            // Rec1/Rec2 的 Fill 是整体替换（不突变），初始快照稳定可复用
+            // Rec1/Rec2 Fills are replaced wholesale (not mutated), so the initial snapshots are stable and reusable
             var reset1 = Rec1.SnapshotAll();
             var reset2 = Rec2.SnapshotAll();
 
@@ -42,8 +45,9 @@ public partial class MainWindow : Window
                 Transition.Exit(Rec1, IncludeMutual: true, IncludeNoMutual: true);
                 Transition.Exit(Rec2, IncludeMutual: true, IncludeNoMutual: true);
 
-                // 直接同步应用初始快照：绕过 async Execute 管线（其在部分平台对 Transform 重置不可靠），
-                // 且 Rec0 每次新建对象，避免快照引用被动画原地修改污染
+                // Apply the initial snapshots synchronously: bypasses the async Execute pipeline
+                // (unreliable for Transform reset on some platforms), and Rec0 gets a fresh object
+                // each time so its snapshot references are not polluted by in-place animation edits.
                 ApplyReset(CreateResetRec0(), Rec0);
                 ApplyReset(reset1, Rec1);
                 ApplyReset(reset2, Rec2);
@@ -53,7 +57,8 @@ public partial class MainWindow : Window
 
     private void LoadMainThread(object sender, RoutedEventArgs e)
     {
-        // 主线程（UI 线程）直接启动，CanMutualTask: true（默认）——互斥，新动画打断旧动画
+        // Start directly on the main (UI) thread; CanMutualTask: true (default) — mutually
+        // exclusive, the new animation interrupts the old one
         Animation0.Execute(Rec0);
         Animation1.Execute(Rec1);
         Animation2.Execute(Rec2);
@@ -61,7 +66,8 @@ public partial class MainWindow : Window
 
     private void LoadBackground(object sender, RoutedEventArgs e)
     {
-        // 非 UI 线程启动，框架自动切回 UI 线程（测试目标派生的线程编组）
+        // Started from a non-UI thread; the framework automatically switches back to the UI thread
+        // (thread marshaling derived from the target).
         _ = Task.Run(() =>
         {
             Animation0.Execute(Rec0);
@@ -72,7 +78,7 @@ public partial class MainWindow : Window
 
     private void LoadMainThreadNonMutual(object sender, RoutedEventArgs e)
     {
-        // 主线程 + CanMutualTask: false —— 并发运行，互不取消
+        // Main thread + CanMutualTask: false — run concurrently, neither cancels the other
         Animation0.Execute(Rec0, CanMutualTask: false);
         Animation1.Execute(Rec1, CanMutualTask: false);
         Animation2.Execute(Rec2, CanMutualTask: false);
@@ -80,7 +86,7 @@ public partial class MainWindow : Window
 
     private void LoadBackgroundNonMutual(object sender, RoutedEventArgs e)
     {
-        // 非 UI 线程 + CanMutualTask: false —— 并发运行
+        // Non-UI thread + CanMutualTask: false — run concurrently
         _ = Task.Run(() =>
         {
             Animation0.Execute(Rec0, CanMutualTask: false);
@@ -91,14 +97,15 @@ public partial class MainWindow : Window
 
     private void RepeatMutual(object sender, RoutedEventArgs e)
     {
-        // 每次点击在 Rec0 上启动互斥动画，新动画取消上一次（测试调度器门控与取消）
+        // Each click starts a mutually-exclusive animation on Rec0, and the new animation cancels
+        // the previous one (tests scheduler gating and cancellation).
         _ = Task.Run(() => Animation0.Execute(Rec0));
     }
 
     private void ExitAll(object sender, RoutedEventArgs e)
     {
-        // IncludeMutual   表示是否终结 CanMutualTask: true 的动画
-        // IncludeNoMutual 表示是否终结 CanMutualTask: false 的动画
+        // IncludeMutual   indicates whether to end animations configured with CanMutualTask: true
+        // IncludeNoMutual indicates whether to end animations configured with CanMutualTask: false
         Transition.Exit(Rec0, IncludeMutual: true, IncludeNoMutual: true);
         Transition.Exit(Rec1, IncludeMutual: true, IncludeNoMutual: true);
         Transition.Exit(Rec2, IncludeMutual: true, IncludeNoMutual: true);
@@ -107,12 +114,15 @@ public partial class MainWindow : Window
 
 public partial class MainWindow
 {
-    // 直接同步应用快照值（绕过 async Execute 管线，确保 Transform/3D 重置确定可靠）。
-    // Projection 与 RenderTransform(Scale) 在部分平台互斥——先清除 Projection，再写其余。
+    // Apply snapshot values synchronously (bypassing the async Execute pipeline so Transform/3D
+    // resets are deterministic and reliable).
+    // Projection and RenderTransform(Scale) are mutually exclusive on some platforms — clear
+    // Projection first, then write the rest.
     private static void ApplyReset(Transition<Rectangle>.StateSnapshot snapshot, Rectangle target)
     {
-        // 两遍：先清除 Projection（解除与 RenderTransform/Scale 的互斥），再写其余。
-        // 单个属性冲突（框架约束）不中断整个重置。
+        // Two passes: clear Projection first (releasing the mutual exclusion with
+        // RenderTransform/Scale), then write everything else.
+        // A single property conflict (framework constraint) does not abort the whole reset.
         foreach (var kvp in snapshot.GetState().Values)
             if (kvp.Key.Path.Contains("Projection"))
                 try { kvp.Key.SetValue(target, kvp.Value); } catch { }
@@ -121,7 +131,7 @@ public partial class MainWindow
                 try { kvp.Key.SetValue(target, kvp.Value); } catch { }
     }
 
-    // Rec0 的 RenderTransform.X / Fill 会被原地修改，重置必须用新建对象
+    // Rec0's RenderTransform.X / Fill are modified in place, so reset must use a new object
     private static Transition<Rectangle>.StateSnapshot CreateResetRec0()
     {
         return Transition<Rectangle>.Create()
@@ -130,7 +140,7 @@ public partial class MainWindow
             .Effect(TransitionEffects.Empty);
     }
 
-    // 简单动画：演示嵌套属性路径，直接修改 RenderTransform.X
+    // Simple animation: demonstrates a nested property path, directly modifying RenderTransform.X
     private static readonly Transition<Rectangle>.StateSnapshot Animation0 =
         Transition<Rectangle>.Create()
             .Property(r => ((TranslateTransform)r.RenderTransform!).X, 400)
@@ -153,7 +163,7 @@ public partial class MainWindow
                 Ease = Eases.Sine.InOut
             });
 
-    // 延迟动画：反转旋转+移动+背景渐变
+    // Delayed animation: reverse rotation + movement + background gradient
     private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(5))
@@ -177,7 +187,7 @@ public partial class MainWindow
                 LoopTime = 4,
             });
 
-    // 拼接动画：反转三维旋转 + 放缩 + 再切换渐变背景
+    // Combined animation: reverse 3D rotation + scaling + switch to a new gradient background
     private static readonly Transition<Rectangle>.StateSnapshot Animation2 =
         Transition<Rectangle>.Create()
             .Property(r => r.RenderTransform,

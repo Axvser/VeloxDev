@@ -5,7 +5,8 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// 单条首尾不衔接的有序节点集合视为一个执行条目（线性段）。
+/// An ordered collection of nodes forming a single linear segment (with no link between its first and last nodes)
+/// is treated as one execution entry.
 /// </summary>
 public sealed partial class ExecuteEntry : ActionEntry
 {

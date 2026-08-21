@@ -4,7 +4,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
     {
         public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
         {
-            // 处理空值，提供默认值
+            // Handle null values by providing defaults.
             var r1 = (Rect)(start ?? new Rect(0, 0, 0, 0));
             var r2 = (Rect)(end ?? new Rect(0, 0, 0, 0));
 

@@ -10,5 +10,5 @@ public partial class SlotViewModel
 {
     public SlotViewModel() => InitializeWorkflow();
 
-    // …… 自由扩展您的输入/输出口视图模型
+    // ... extend your input/output slot view-models freely here
 }

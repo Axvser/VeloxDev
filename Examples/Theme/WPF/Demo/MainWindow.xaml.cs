@@ -4,8 +4,10 @@ using VeloxDev.TransitionSystem;
 
 namespace Demo
 {
-    /* 我们建议您将主题相关的操作单独定义在一个分部中，这样，当您处理交互逻辑时，不会受到无关代码的打扰 */
-    /* 注意：当您使用Rider时，这么做可能会出现无法识别到生成内容的问题，不影响编译，但是可能只有重启Rider才能恢复识别 */
+    /* We recommend defining theme-related operations in a separate partial class, so interaction logic
+       is not cluttered by unrelated code */
+    /* Note: when using Rider, this may cause generated content to be unrecognized. It does not affect
+       compilation, but Rider may need to be restarted to recover recognition. */
 
     //------------------------------------------------------------------------------------------------------------------
     // User Part ↓
@@ -27,37 +29,41 @@ namespace Demo
     //------------------------------------------------------------------------------------------------------------------
     // Theme Part ↓
 
-    /* BrushConverter等其它Converter均由平台适配层（如VeloxDev.WPF）提供，可以将字符或其它形式的构造参数转换为具体的值 */
-    /* ThemeConfig至少包含一个Converter和两个Theme（如Dark/Light），最多同时具备一个Converter外加7个Theme */
+    /* BrushConverter and other Converters are provided by the platform adapter layer (e.g.
+       VeloxDev.WPF) and convert character or other forms of constructor arguments into concrete values */
+    /* ThemeConfig requires at least one Converter and two Themes (e.g. Dark/Light), and supports at
+       most one Converter plus seven Themes */
     [ThemeConfig<BrushConverter, Light, Dark>(nameof(Background), ["#ffffff"], ["#1e1e1e"])]
     [ThemeConfig<BrushConverter, Light, Dark>(nameof(Foreground), ["#1e1e1e"], ["#ffffff"])]
     public partial class MainWindow
     {
         private void LoadTheme()
         {
-            InitializeTheme(); // 这句话必须调用,且必须晚于InitializeComponent()
+            InitializeTheme(); // this call is required and must come after InitializeComponent()
 
-            // [ 全局生效 ]
-            // 如果您不使用带过渡效果的主题切换，那么可以不配置插值器，否则，这句话是必须调用的
+            // [ Applies globally ]
+            // If you do not use themed transitions, the interpolator does not need to be configured;
+            // otherwise this call is mandatory.
             ThemeManager.SetPlatformInterpolator(new Interpolator());
 
-            // [ 全局生效 ]
-            // 当主题发生变化，您希望动画的起始状态是从缓存获取呢？还是反射获取当前状态作为起始呢？
+            // [ Applies globally ]
+            // When the theme changes, should the animation's starting state come from the cache, or
+            // should reflection read the current state as the starting point?
             ThemeManager.StartModel = StartModel.Cache;
         }
 
         /// <summary>
-        /// 主题切换具备回调
+        /// Theme switching has a callback
         /// </summary>
-        /// <param name="oldValue">切换前的值</param>
-        /// <param name="newValue">切换后的值</param>
+        /// <param name="oldValue">The value before switching</param>
+        /// <param name="newValue">The value after switching</param>
         partial void OnThemeChanged(Type? oldValue, Type? newValue)
         {
             MessageBox.Show($"Theme changed from {oldValue?.Name} to {newValue?.Name}");
         }
 
         /// <summary>
-        /// 这种主题切换会加载渐变动画
+        /// This kind of theme switch loads a gradient animation
         /// </summary>
         private static void ReverseThemeWithAnimation()
         {
@@ -73,7 +79,7 @@ namespace Demo
         }
 
         /// <summary>
-        /// 这种主题切换没有渐变动画
+        /// This kind of theme switch has no gradient animation
         /// </summary>
         private static void ReverseThemeWithOutAnimation()
         {
@@ -89,31 +95,33 @@ namespace Demo
         }
 
         /// <summary>
-        /// 提供一组获取、编辑主题资源包的扩展，这些方法是自动生成的，例如此处它们都是MainWindow的方法
+        /// Provides a set of extensions for getting and editing theme resource packages. These methods
+        /// are auto-generated; here, for example, they all belong to MainWindow.
         /// </summary>
         private void ThemeValueEx()
         {
-            // 动态编辑主题资源值
+            // Dynamically edit theme resource values
             SetThemeValue<Light>(nameof(Background), new object?[] { "#ffffff" });
-            // 可以恢复为初始状态
+            // Can be restored to the initial state
             RestoreThemeValue<Light>(nameof(Foreground));
 
-            // 获取静态资源
+            // Get the static resources
             var staticCache = GetStaticThemeCache();
-            // 获取动态资源
+            // Get the dynamic resources
             var dynamicCache = GetActiveThemeCache();
 
-            /* 此处的“资源”是一个自动生成的复杂结构
-               只有被修改过的属性才会存储在动态资源中，否则资源内不会存储东西，切换主题时，动态内容将覆盖静态内容
+            /* The "resource" here is a complex auto-generated structure.
+               Only modified properties are stored in the dynamic resources; otherwise nothing is stored.
+               When the theme switches, dynamic content overrides static content.
                Dictionary<string,Dictionary<PropertyInfo,Dictionary<Type,object?>>>
-               
-               从左往右
+
+               From left to right
                string       -> name of property
                PropertyInfo -> target to use theme change
                Type         -> theme
                object?      -> value of property at the theme
-               
-               它提供了完全访问主题资源的能力
+
+               It provides full access to the theme resources.
              */
         }
     }

@@ -7,7 +7,7 @@ namespace VeloxDev.TimeLine
 {
     public static class MonoBehaviourManager
     {
-        #region 常量定义
+        #region Constants
 
         private const int MIN_SLEEP_MS = 1;
         private const int DEFAULT_PAUSE_DELAY_MS = 10;
@@ -30,14 +30,14 @@ namespace VeloxDev.TimeLine
         private const int MIN_UPDATE_INTERVAL_MS = 1;
         private const int MAX_UPDATE_INTERVAL_MS = 1000;
 
-        // 自旋阈值：低于此毫秒数用纯自旋，高于则 Thread.Sleep(1) + 尾部自旋
+        // Spin threshold: below this millisecond count use pure spinning; above use Thread.Sleep(1) + tail spin
         private const int SPIN_ONLY_THRESHOLD_MS = 2;
 
         public const string DEFAULT_CHANNEL = "default";
 
         #endregion
 
-        #region 内部类
+        #region Internal classes
 
         private sealed class BehaviorWrapper
         {
@@ -136,11 +136,11 @@ namespace VeloxDev.TimeLine
             private volatile bool _isFixedUpdateThreadActive;
             private long _updateThreadLastActivityTimestamp;
             private long _fixedUpdateThreadLastActivityTimestamp;
-            // WASM 模式下替代 Thread 的异步任务
+            // Async task replacing Thread in WASM mode
             private Task? _updateTask;
             private Task? _fixedUpdateTask;
 
-            // 按通道独立覆盖 UseAsyncLoop，为 null 时回退到 MonoBehaviourManager.UseAsyncLoop
+            // Per-channel override of UseAsyncLoop; falls back to MonoBehaviourManager.UseAsyncLoop when null
             private bool? _useAsyncLoopOverride;
 
             private readonly ObjectPool<FrameEventArgs> _frameEventArgsPool = new(DEFAULT_OBJECT_POOL_SIZE);
@@ -158,7 +158,7 @@ namespace VeloxDev.TimeLine
             public event EventHandler? Resumed;
             public event EventHandler? Stopped;
 
-            #region 公共属性
+            #region Public properties
 
             public bool IsRunning => _isRunning;
             public bool IsPaused => _isPaused;
@@ -179,7 +179,7 @@ namespace VeloxDev.TimeLine
 
             #endregion
 
-            #region 配置
+            #region Configuration
 
             public void SetTargetFPS(int fps)
             {
@@ -212,10 +212,10 @@ namespace VeloxDev.TimeLine
             public void ExecuteOnMainThread(Action action) => _mainThreadQueue.Enqueue(action);
 
             /// <summary>
-            /// 设置当前通道是否使用 async/await 替代原生 Thread 驱动帧循环。
-            /// 为 null 时回退到全局 <see cref="MonoBehaviourManager.UseAsyncLoop"/>。
+            /// Sets whether the current channel uses async/await instead of native Threads to drive the frame loop.
+            /// When null, falls back to the global <see cref="MonoBehaviourManager.UseAsyncLoop"/>.
             /// </summary>
-            /// <exception cref="InvalidOperationException">通道已启动时调用会抛出异常。</exception>
+            /// <exception cref="InvalidOperationException">Thrown when the channel is already running.</exception>
             public void SetUseAsyncLoop(bool useAsyncLoop)
             {
                 if (_isRunning)
@@ -225,9 +225,10 @@ namespace VeloxDev.TimeLine
             }
 
             /// <summary>
-            /// 清除当前通道的独立覆盖配置，回退到全局 <see cref="MonoBehaviourManager.UseAsyncLoop"/>。
+            /// Clears the current channel's independent override, falling back to the global
+            /// <see cref="MonoBehaviourManager.UseAsyncLoop"/>.
             /// </summary>
-            /// <exception cref="InvalidOperationException">通道已启动时调用会抛出异常。</exception>
+            /// <exception cref="InvalidOperationException">Thrown when the channel is already running.</exception>
             public void ClearUseAsyncLoopOverride()
             {
                 if (_isRunning)
@@ -240,7 +241,7 @@ namespace VeloxDev.TimeLine
 
             #endregion
 
-            #region 生命周期
+            #region Lifecycle
 
             public void Start()
             {
@@ -389,7 +390,7 @@ namespace VeloxDev.TimeLine
 
             #endregion
 
-            #region 主循环
+            #region Main loop
 
             private void FixedUpdateLoop(CancellationToken token)
             {
@@ -487,7 +488,7 @@ namespace VeloxDev.TimeLine
                 }
             }
 
-            // WASM 兼容路径：以 async/await + Task.Delay 替代 Thread + Thread.Sleep
+            // WASM-compatible path: replaces Thread + Thread.Sleep with async/await + Task.Delay
             private async Task FixedUpdateLoopAsync(CancellationToken token)
             {
                 _isFixedUpdateThreadActive = true;
@@ -605,7 +606,7 @@ namespace VeloxDev.TimeLine
 
             #endregion
 
-            #region 行为执行
+            #region Behavior execution
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private void ExecuteBehaviorsUpdateSync(FrameEventArgs frameArgs, CancellationToken token)
@@ -657,7 +658,7 @@ namespace VeloxDev.TimeLine
 
             #endregion
 
-            #region 辅助方法
+            #region Helper methods
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private BehaviorWrapper[] GetCachedWrappers()
@@ -673,7 +674,7 @@ namespace VeloxDev.TimeLine
 
             private void ProcessMainThreadOperations()
             {
-                // 限制每帧处理数量，防止卡顿
+                // Limit the number processed per frame to prevent stutter
                 int processed = 0;
                 while (processed < 64 && _mainThreadQueue.TryDequeue(out var action))
                 {
@@ -772,7 +773,7 @@ namespace VeloxDev.TimeLine
             }
 
             /// <summary>
-            /// 高精度睡眠：长等待用 Thread.Sleep(1) 节省 CPU，尾部自旋保精度
+            /// High-precision sleep: uses Thread.Sleep(1) for long waits to save CPU, with a tail spin for precision.
             /// </summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private void PrecisionSleep(TimeSpan duration, CancellationToken token)
@@ -781,7 +782,7 @@ namespace VeloxDev.TimeLine
 
                 var targetTicks = _frameTimer.ElapsedTicks + ConvertTimeSpanToStopwatchTicks(duration);
 
-                // 长等待阶段：Thread.Sleep(1) 实际精度约 1-2ms，节约 CPU
+                // Long-wait phase: Thread.Sleep(1) has about 1-2ms real precision, saving CPU
                 if (duration > TimeSpan.FromMilliseconds(SPIN_ONLY_THRESHOLD_MS))
                 {
                     var sleepUntilTicks = targetTicks - MillisecondsToStopwatchTicks(SPIN_ONLY_THRESHOLD_MS);
@@ -792,7 +793,7 @@ namespace VeloxDev.TimeLine
                     }
                 }
 
-                // 尾部自旋：高精度等待最后 ~2ms
+                // Tail spin: high-precision wait for the last ~2ms
                 var sw = new SpinWait();
                 while (_frameTimer.ElapsedTicks < targetTicks)
                 {
@@ -812,7 +813,7 @@ namespace VeloxDev.TimeLine
                         arr[idx++] = v;
                 }
 
-                // 插入排序 — 行为数量通常很少，避免 LINQ 分配
+                // Insertion sort — behavior counts are usually small, avoiding LINQ allocations
                 for (int i = 1; i < idx; i++)
                 {
                     var key = arr[i];
@@ -960,11 +961,11 @@ namespace VeloxDev.TimeLine
 
         #endregion
 
-        #region 配置
+        #region Configuration
 
         /// <summary>
-        /// 使用 async/await + Task.Delay 替代原生 Thread 驱动帧循环。
-        /// 在不支持 Thread 的平台（WASM、iOS NativeAOT 等）下会自动启用。
+        /// Uses async/await + Task.Delay instead of native Threads to drive the frame loop.
+        /// Automatically enabled on platforms that do not support Thread (WASM, iOS NativeAOT, etc.).
         /// </summary>
         public static bool UseAsyncLoop { get; set; } =
 #if NET5_0_OR_GREATER
@@ -975,7 +976,7 @@ namespace VeloxDev.TimeLine
 
         #endregion
 
-        #region 通道管理
+        #region Channel management
 
         private static readonly ConcurrentDictionary<string, LoopChannel> _channels = new();
 
@@ -992,12 +993,12 @@ namespace VeloxDev.TimeLine
             });
         }
 
-        /// <summary>获取所有已创建的通道名称</summary>
+        /// <summary>Gets the names of all created channels.</summary>
         public static IEnumerable<string> ChannelNames => _channels.Keys;
 
         #endregion
 
-        #region 全局事件
+        #region Global events
 
         public static event EventHandler<MonoBehaviourChannelEventArgs>? OnChannelStarted;
         public static event EventHandler<MonoBehaviourChannelEventArgs>? OnChannelPaused;
@@ -1006,7 +1007,7 @@ namespace VeloxDev.TimeLine
 
         #endregion
 
-        #region 生命周期管理
+        #region Lifecycle management
 
         public static void Start(string channel = DEFAULT_CHANNEL)
             => GetOrCreateChannel(channel).Start();
@@ -1034,7 +1035,7 @@ namespace VeloxDev.TimeLine
 
         #endregion
 
-        #region 配置API
+        #region Configuration API
 
         public static void SetTargetFPS(int fps, string channel = DEFAULT_CHANNEL)
             => GetOrCreateChannel(channel).SetTargetFPS(fps);
@@ -1049,23 +1050,23 @@ namespace VeloxDev.TimeLine
             => GetOrCreateChannel(channel).ExecuteOnMainThread(action);
 
         /// <summary>
-        /// 设置指定通道是否使用 async/await 替代原生 Thread 驱动帧循环。
-        /// 覆盖全局 <see cref="UseAsyncLoop"/> 设置。
+        /// Sets whether the specified channel uses async/await instead of native Threads to drive the frame loop.
+        /// Overrides the global <see cref="UseAsyncLoop"/> setting.
         /// </summary>
-        /// <exception cref="InvalidOperationException">通道已启动时调用会抛出异常。</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the channel is already running.</exception>
         public static void SetUseAsyncLoop(bool useAsyncLoop, string channel = DEFAULT_CHANNEL)
             => GetOrCreateChannel(channel).SetUseAsyncLoop(useAsyncLoop);
 
         /// <summary>
-        /// 清除指定通道的独立覆盖配置，回退到全局 <see cref="UseAsyncLoop"/>。
+        /// Clears the specified channel's independent override, falling back to the global <see cref="UseAsyncLoop"/>.
         /// </summary>
-        /// <exception cref="InvalidOperationException">通道已启动时调用会抛出异常。</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the channel is already running.</exception>
         public static void ClearUseAsyncLoopOverride(string channel = DEFAULT_CHANNEL)
             => GetOrCreateChannel(channel).ClearUseAsyncLoopOverride();
 
         #endregion
 
-        #region 状态查询
+        #region Status queries
 
         public static bool IsRunning(string channel = DEFAULT_CHANNEL)
             => _channels.TryGetValue(channel, out var c) && c.IsRunning;

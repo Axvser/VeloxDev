@@ -9,10 +9,10 @@ namespace Demo.WinUI
         {
             this.InitializeComponent();
 
-            // MAUI/WinUI 的 UnhandledException 事件频繁因以下已知原因触发：
-            //   • IDispatcherTimer.Tick 回调中未捕获的异常 (dotnet/maui #12245)
-            //   • XAML 绑定链路异常（类型转换失败，非致命）
-            //   • ScrollToAsync 布局过渡期异常
+            // The MAUI/WinUI UnhandledException event fires frequently for these known reasons:
+            //   • Uncaught exceptions in IDispatcherTimer.Tick callbacks (dotnet/maui #12245)
+            //   • XAML binding-chain exceptions (type-conversion failures, non-fatal)
+            //   • Exceptions during ScrollToAsync layout transitions
             this.UnhandledException += (sender, e) =>
             {
                 System.Diagnostics.Debug.WriteLine(

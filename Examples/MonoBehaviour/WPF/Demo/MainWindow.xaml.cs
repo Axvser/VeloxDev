@@ -185,7 +185,7 @@ namespace Demo
                 if (txtThreadStatus != null)
                     txtThreadStatus.Text = $"Update Thread: {(MonoBehaviourManager.IsUpdateThreadAlive() ? "Running" : "Stopped")} | Physics Thread: {(MonoBehaviourManager.IsFixedUpdateThreadAlive() ? "Running" : "Stopped")}";
                 if (txtSystemStatus != null)
-                    txtSystemStatus.Text = MonoBehaviourManager.IsRunning() ? (MonoBehaviourManager.IsPaused() ? "🟡 System Paused" : "🟢 System Running") : "🔴 System Stopped";
+                    txtSystemStatus.Text = MonoBehaviourManager.IsRunning() ? (MonoBehaviourManager.IsPaused() ? "System Paused" : "System Running") : "System Stopped";
             });
         }
 

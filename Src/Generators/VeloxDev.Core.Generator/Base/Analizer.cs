@@ -92,10 +92,10 @@ namespace VeloxDev.Generators.Base
                 FieldName = GetFieldNameFromPropertyName(propertySymbol.Name);
                 IsNullable = IsNullableType(propertySymbol.Type);
 
-                // 获取属性本身的访问修饰符
+                // Get the property's own access modifier
                 PropertyAccessModifier = GetPropertyAccessModifier(propertySymbol);
 
-                // 获取访问器的访问修饰符（相对于属性级别的）
+                // Get the accessor's access modifier (relative to the property level)
                 GetterAccessModifier = GetAccessorAccessModifier(propertySymbol, isGetter: true);
                 SetterAccessModifier = GetAccessorAccessModifier(propertySymbol, isGetter: false);
 
@@ -139,7 +139,7 @@ namespace VeloxDev.Generators.Base
                 var accessorMethod = isGetter ? propertySymbol.GetMethod : propertySymbol.SetMethod;
                 if (accessorMethod == null) return string.Empty;
 
-                // 只有当访问器的可访问性与属性不同时才需要指定修饰符
+                // Only specify a modifier when the accessor's accessibility differs from the property's
                 var propertyAccessibility = propertySymbol.DeclaredAccessibility;
                 var accessorAccessibility = accessorMethod.DeclaredAccessibility;
 
@@ -209,7 +209,7 @@ namespace VeloxDev.Generators.Base
         {
             const string RETRACT = "   ";
 
-            // 从字段构造
+            // Construct from a field
             public MVVMPropertyFactory(MVVMFieldAnalizer fieldAnalizer, string modifies, bool isView)
             {
                 Modifies = modifies;
@@ -229,7 +229,7 @@ namespace VeloxDev.Generators.Base
                 SetterAccessModifier = string.Empty;
             }
 
-            // 从属性构造
+            // Construct from a property
             public MVVMPropertyFactory(MVVMPropertyAnalizer propertyAnalizer, string modifies, bool isView)
             {
                 Modifies = modifies;
@@ -396,7 +396,7 @@ namespace VeloxDev.Generators.Base
 
             public string GenerateViewModel()
             {
-                // 生成属性访问器，完全保留用户写的修饰符
+                // Generate the property accessors, fully preserving the modifiers the user wrote
                 var getter = HasGetter ? GenerateGetter() : string.Empty;
 
                 string setter;
@@ -423,7 +423,7 @@ namespace VeloxDev.Generators.Base
                 var changedMethod = HasSetter ?
                     $"{RETRACT}partial void On{PropertyName}Changed({FullTypeName} oldValue, {FullTypeName} newValue);" : string.Empty;
 
-                // 如果是部分属性，添加partial修饰符
+                // If it's a partial property, add the partial modifier
                 var partialModifier = IsPartial ? "partial " : string.Empty;
                 var collectionMembers = GenerateCollectionMembers();
                 var workflowSlotMembers = GenerateWorkflowSlotMembers();
@@ -450,9 +450,9 @@ namespace VeloxDev.Generators.Base
                     return $"{RETRACT}    {getterAccessModifier}get => {SourceName};";
                 }
 
-                // ObservableCollection: 在 getter 中惰性订阅 CollectionChanged。
-                // 字段初始化器 = [] 直接赋值字段不走 setter，此处的 tracker 调用
-                // 确保订阅始终激活（仅首次真正订阅，后续 O(1) 空操作）。
+                // ObservableCollection: lazily subscribe to CollectionChanged in the getter.
+                // A field initializer ([] = ...) assigns the field directly without going through the setter,
+                // so this tracker call keeps the subscription active (only the first call truly subscribes; later calls are O(1) no-ops).
                 var handlerName = $"On{PropertyName}CollectionChanged";
                 return $$"""
                     {{RETRACT}}    {{getterAccessModifier}}get
@@ -706,7 +706,7 @@ namespace VeloxDev.Generators.Base
 
             public string GenerateProxy()
             {
-                // 生成属性访问器，完全保留用户写的修饰符
+                // Generate the property accessors, fully preserving the modifiers the user wrote
                 var getter = HasGetter ?
                     $"{RETRACT}    {(!string.IsNullOrEmpty(GetterAccessModifier) ? GetterAccessModifier + " " : "")}get => {SourceName};" :
                     string.Empty;
@@ -715,7 +715,7 @@ namespace VeloxDev.Generators.Base
                     $"{RETRACT}    {(!string.IsNullOrEmpty(SetterAccessModifier) ? SetterAccessModifier + " " : "")}set => {SourceName} = value;" :
                     string.Empty;
 
-                // 如果是部分属性，添加partial修饰符
+                // If it's a partial property, add the partial modifier
                 var partialModifier = IsPartial ? "partial " : string.Empty;
 
                 return $$"""

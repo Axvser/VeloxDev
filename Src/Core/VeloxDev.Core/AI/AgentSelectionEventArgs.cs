@@ -29,7 +29,7 @@ public sealed class AgentSelectionEventArgs(string prompt, string[] options) : E
     /// Label shown above the free-text input field. Provided by the Agent in the
     /// appropriate output language (configured via <c>WithOutputLanguage</c>).
     /// </summary>
-    public string FreeTextPrompt { get; set; } = "自定义输入（可选）";
+    public string FreeTextPrompt { get; set; } = "Custom input (optional)";
 
     /// <summary>
     /// For single-select mode (<see cref="AllowMultiSelect"/> is <c>false</c>):

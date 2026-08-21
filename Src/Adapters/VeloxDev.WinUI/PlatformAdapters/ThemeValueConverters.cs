@@ -151,7 +151,7 @@ namespace VeloxDev.DynamicTheme
             {
                 if (parameters[0] is string str)
                 {
-                    // 支持 #AARRGGBB 或 #RRGGBB
+                    // Supports #AARRGGBB or #RRGGBB
                     str = str.Trim();
                     if (str.StartsWith('#'))
                     {
@@ -205,14 +205,14 @@ namespace VeloxDev.DynamicTheme
 
                 if (parameters[0] is string str)
                 {
-                    // 先尝试资源查找
+                    // First try resource lookup.
                     if (ThemeResourceLookup.TryFindResource(str, out var resource))
                     {
                         if (resource is Brush b)
                             return b;
                     }
 
-                    // 再尝试颜色解析
+                    // Then try color parsing.
                     var colorConv = new ColorConverter();
                     if (colorConv.Convert(typeof(Color), propertyName, [str]) is Color c)
                         return new SolidColorBrush(c);
@@ -237,21 +237,21 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 尝试资源查找
+                // Try resource lookup.
                 if (ThemeResourceLookup.TryFindResource(str, out var resource) &&
                     targetType.IsInstanceOfType(resource))
                 {
                     return resource;
                 }
 
-                // 尝试Brush
+                // Try Brush.
                 if (typeof(Brush).IsAssignableFrom(targetType))
                 {
                     var brushConverter = new BrushConverter();
                     return brushConverter.Convert(targetType, propertyName, parameters);
                 }
 
-                // 通用转换器
+                // Generic converter.
                 var converter = TypeDescriptor.GetConverter(targetType);
                 if (converter.CanConvertFrom(typeof(string)))
                     return converter.ConvertFromString(null, CultureInfo.InvariantCulture, str);

@@ -23,19 +23,19 @@ namespace VeloxDev.Generators.Writers
 
             foreach (var methodSymbol in symbol.GetMembers().OfType<IMethodSymbol>())
             {
-                // 仅检查是否标记了 VeloxCommandAttribute
+                // Only check whether VeloxCommandAttribute is applied
                 var attribute = methodSymbol.GetAttributes()
                     .FirstOrDefault(attr =>
                         attr.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == attributeFullName);
 
                 if (attribute == null) continue;
 
-                // 解析配置：先位置参数，后命名参数覆盖
+                // Parse the configuration: positional arguments first, then named-argument overrides
                 string commandName = "Auto";
                 bool canValidate = false;
                 int semaphore = 1;
 
-                // 位置参数（按顺序）
+                // Positional arguments (in order)
                 if (attribute.ConstructorArguments.Length >= 1 && attribute.ConstructorArguments[0].Value is string nameArg)
                     commandName = nameArg;
                 if (attribute.ConstructorArguments.Length >= 2 && attribute.ConstructorArguments[1].Value is bool canValArg)
@@ -43,7 +43,7 @@ namespace VeloxDev.Generators.Writers
                 if (attribute.ConstructorArguments.Length >= 3 && attribute.ConstructorArguments[2].Value is int semaArg)
                     semaphore = semaArg;
 
-                // 命名参数（覆盖位置参数）
+                // Named arguments (override positional arguments)
                 foreach (var namedArg in attribute.NamedArguments)
                 {
                     switch (namedArg.Key)
@@ -60,16 +60,16 @@ namespace VeloxDev.Generators.Writers
                     }
                 }
 
-                // Auto 命名规则
+                // Auto naming rule
                 if (commandName == "Auto")
                 {
                     commandName = methodSymbol.Name.Replace("Async", "");
                 }
 
-                // 构造方式分析
+                // Analyze the construction mode
                 int constructorType = ParseConstructorType(methodSymbol);
 
-                // 记录上下文
+                // Record the context
                 list.Add(Tuple.Create(commandName, canValidate, Math.Max(1, semaphore), methodSymbol.Name, constructorType));
             }
 
@@ -83,7 +83,7 @@ namespace VeloxDev.Generators.Writers
             var returnType = methodSymbol.ReturnType;
             string returnTypeName = returnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-            // 检查是否返回 Task
+            // Check whether it returns Task
             bool isTask = returnTypeName == "global::System.Threading.Tasks.Task" ||
                          returnTypeName.StartsWith("global::System.Threading.Tasks.Task<");
 
@@ -92,8 +92,8 @@ namespace VeloxDev.Generators.Writers
             var paramType = parameters[0].Type;
             string paramTypeName = paramType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-            // 精确检查 object? 类型
-            // 方法1：检查可空对象类型
+            // Check the object? type precisely
+            // Method 1: check the nullable object type
             bool isObjectOrNullableObject =
                 paramType.SpecialType == SpecialType.System_Object ||
                 (paramType.NullableAnnotation == NullableAnnotation.Annotated &&
@@ -106,7 +106,7 @@ namespace VeloxDev.Generators.Writers
                 return 1;  // CreateTaskOnlyWithParameter
             }
 
-            // 检查 CancellationToken
+            // Check for CancellationToken
             if (paramTypeName == "global::System.Threading.CancellationToken")
             {
                 return 2;  // CreateTaskOnlyWithCancellationToken

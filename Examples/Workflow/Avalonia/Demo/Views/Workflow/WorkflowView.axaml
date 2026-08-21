@@ -17,9 +17,9 @@
 			 behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
 			 behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
 
-	<!-- 模板 -->
+	<!-- Templates -->
 	<UserControl.DataTemplates>
-		<!-- 节点模板 -->
+		<!-- Node template -->
 		<DataTemplate DataType="vm:NodeViewModel">
 			<local:NodeView Width="{Binding Size.Width}"
 							Height="{Binding Size.Height}"
@@ -52,7 +52,7 @@
 										ZIndex="{Binding Anchor.Layer}"
 										RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 		</DataTemplate>
-		<!-- 连接线模板 -->
+		<!-- Link template -->
 		<DataTemplate DataType="vm:LinkViewModel">
 			<Panel ZIndex="-1">
 				<local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
@@ -89,7 +89,7 @@
 	</UserControl.DataTemplates>
 
 	<Grid ColumnDefinitions="2*,auto,8*">
-		<!-- 渲染节点编辑器 ( 虚拟化支持 + Minimap 缩略图 ) -->
+		<!-- Node editor rendering (virtualization support + minimap thumbnail) -->
 		<Grid Grid.Column="2" x:Name="WorkflowContainer">
 			<Border x:Name="PART_SurfaceBorder" BorderBrush="White" BorderThickness="1" CornerRadius="3">
 			   <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
@@ -103,7 +103,7 @@
 								VerticalAlignment="Top"
 							 behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}">
 							<Canvas.DataTemplates>
-								<!-- 依照优先级寻找数据模板 >> Self > Parent > App -->
+								<!-- Resolve the data template by priority: Self > Parent > App -->
 							</Canvas.DataTemplates>
 						</Canvas>
 					</ScrollViewer>
@@ -125,7 +125,7 @@
 											  ViewportHeight="{Binding Bounds.Height, ElementName=WorkflowContainer}"/>
 		</Grid>
 
-		<!-- 功能按键 ( 测试用 ) -->
+		<!-- Action buttons (for testing) -->
 		<Grid Grid.Column="0">
 			<ScrollViewer>
 				<StackPanel Orientation="Vertical">
@@ -144,7 +144,7 @@
 							<ToggleSwitch Grid.Column="1"
 										  IsChecked="{Binding IsMinimapVisible, ElementName=PART_MinimapOverlay}"/>
 						</Grid>
-						<!-- Agent 对话 -->
+						<!-- Agent chat -->
 						<Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
 							<StackPanel Spacing="6">
 								<Grid ColumnDefinitions="*,Auto">
@@ -156,7 +156,7 @@
 												  FontSize="11"
 												  Margin="0,-6,0,-6"/>
 								</Grid>
-								<!-- MarkdownView 自带内部滚动，直接放入面板，不要套在 ScrollViewer 里 -->
+								<!-- MarkdownView has its own internal scrolling; put it directly in the panel, not inside a ScrollViewer -->
 								<md:MarkdownView Text="{Binding ConversationMarkdown}"
 												 Height="360"
 												 HorizontalAlignment="Stretch"
@@ -176,7 +176,7 @@
 								</Grid>
 							</StackPanel>
 						</Border>
-						<!-- MCP 服务器 -->
+						<!-- MCP servers -->
 						<Border x:Name="McpStatusPanel" x:DataType="mcp:McpStatusViewModel" Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
 							<StackPanel Spacing="6">
 								<Grid ColumnDefinitions="*,Auto">
@@ -204,7 +204,7 @@
 								</ItemsControl>
 							</StackPanel>
 						</Border>
-						<!-- 执行记录 -->
+						<!-- Execution log -->
 						<Border Margin="0,12,0,0" Padding="10" Background="#202020" BorderBrush="#4c4c4c" BorderThickness="1" CornerRadius="4">
 							<ScrollViewer MaxHeight="250" VerticalScrollBarVisibility="Auto" x:Name="ExecutionLogScroller">
 								<StackPanel Spacing="6">

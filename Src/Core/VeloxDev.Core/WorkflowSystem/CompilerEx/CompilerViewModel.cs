@@ -6,14 +6,20 @@ using VeloxDev.WorkflowSystem.StandardEx;
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// 编译入口：把一个起点（Controller）可达的子图分解成若干编译图（多图语义）。
-/// v1 分解算法（直接裁剪，无环路）：
-///  - 线性段（单入单出）→ ExecuteEntry；
-///  - 实现 <see cref="ICompileTimeRouter"/> 的节点 → BranchEntry（静态分支按当前 key 剪枝，动态分支全保留）；
-///  - 路由 key 指向多个下游 → ParallelEntry（扇出/汇聚）；无下游 → IsTerminal 终端分支；
-///  - 分支后所有出口共同指向的节点 → 汇合点，作为父图下一段链的起点（序号带偏移，不归零）；
-///  - 编译完给每个实现 <see cref="ICompileTimeAware"/> 的节点注入 <see cref="CompileContext"/>。
-/// 运行期回退由节点实现 <see cref="IRedirectable"/>（链内回退）承担，编译图本身是无环的。
+/// The compile entry point: decomposes the sub-graph reachable from one start node (Controller) into several
+/// compiled graphs (multi-graph semantics).
+/// v1 decomposition algorithm (direct pruning, no cycles):
+///  - linear segment (single input / single output) → ExecuteEntry;
+///  - node implementing <see cref="ICompileTimeRouter"/> → BranchEntry (static branches are pruned by the current
+///    key, dynamic branches are all kept);
+///  - route key pointing to multiple downstream nodes → ParallelEntry (fan-out/join); no downstream → IsTerminal
+///    terminal branch;
+///  - the node all branch exits jointly point to → join point, used as the start of the next chain segment in the
+///    parent graph (order carries an offset, not reset to zero);
+///  - after compiling, every node implementing <see cref="ICompileTimeAware"/> is injected with a
+///    <see cref="CompileContext"/>.
+/// Runtime redirect is handled by nodes implementing <see cref="IRedirectable"/> (in-chain redirect); the compiled
+/// graph itself is acyclic.
 /// </summary>
 public sealed partial class CompilerViewModel
 {
@@ -24,7 +30,7 @@ public sealed partial class CompilerViewModel
     {
         if (component is not IWorkflowNodeViewModel start)
             throw new ArgumentException(
-                $"CompileAsync 需要 IWorkflowNodeViewModel 作为起点，收到 {component?.GetType().Name}。");
+                $"CompileAsync requires an IWorkflowNodeViewModel as the start node; received {component?.GetType().Name}.");
 
         var state = new CompileState();
         var graphs = new List<CompiledGraph> { await CompileGraphAsync(start, state, ct) };
@@ -41,16 +47,17 @@ public sealed partial class CompilerViewModel
         var chain = new List<IWorkflowNodeViewModel>();
         var offset = state.Counter;
         var node = start;
-        var resumedAfterBranch = false;   // 当前 node 是否刚由分支汇合点续上（应作为新链起点处理）
+        var resumedAfterBranch = false;   // Whether the current node was just resumed from a branch join point (should be treated as a new chain start)
 
         while (node != null)
         {
-            // 汇合边界：线性走到一个多输入节点（非本图起点、非分支续接点）→ 停止，
-            // 交回父图从它继续。边界节点不标记 visited（它尚未被编译，属于父图）。
+            // Join boundary: walking linearly into a multi-input node (not the graph start, not a branch-resume
+            // point) → stop and hand back to the parent graph to continue from it. The boundary node is not marked
+            // visited (it is not yet compiled; it belongs to the parent graph).
             if (!ReferenceEquals(node, start) && !resumedAfterBranch && HasMultipleInputs(node))
                 break;
 
-            // 已编译节点不再处理（无环图，避免重复编译）。
+            // Nodes already compiled are not processed again (acyclic graph, avoids duplicate compilation).
             if (!state.Visited.Add(node))
                 break;
             resumedAfterBranch = false;
@@ -62,13 +69,14 @@ public sealed partial class CompilerViewModel
                 state.Counter++;
 
                 var routeTable = await router.GetRouteTable();
-                var currentKey = await router.ResolveRouteKey(null);   // 编译期 payload = null
+                var currentKey = await router.ResolveRouteKey(null);   // compile-time payload = null
                 var isDynamic = currentKey is null;
                 var options = new ObservableCollection<BranchOption>();
                 var exits = new List<IWorkflowNodeViewModel?>();
 
-                // 通用路由编译：每个 key 的子图可能是 单一路径 / 扇出(ParallelEntry)。
-                // 无下游 → 终端分支；单目标 → 普通子图；多目标 → 扇出(并行组，汇聚点=CommonNext)。
+                // Generic route compilation: each key's sub-graph may be a single path or a fan-out (ParallelEntry).
+                // No downstream → terminal branch; single target → normal sub-graph; multiple targets → fan-out
+                // (parallel group, join point = CommonNext).
                 foreach (var kv in routeTable)
                 {
                     var label = kv.Key?.ToString() ?? "?";
@@ -86,7 +94,7 @@ public sealed partial class CompilerViewModel
                         exits.Add(LastNode(sub));
                         continue;
                     }
-                    // 多目标 → 扇出：每路子图编译进 ParallelEntry。
+                    // Multiple targets → fan-out: compile each sub-graph into a ParallelEntry.
                     var branches = new List<CompiledGraph>();
                     var subExits = new List<IWorkflowNodeViewModel?>();
                     foreach (var t in kv.Value)
@@ -108,12 +116,13 @@ public sealed partial class CompilerViewModel
                             }
                         },
                     });
-                    // 扇出各路的末尾节点加入出口；最终 CommonNext 会算出它们的公共下游（汇聚点）。
+                    // Add the last node of each fan-out branch to the exits; CommonNext will compute their common downstream (join point).
                     exits.AddRange(subExits);
                 }
 
-                // 静态模式（编译期已知 key）：全拓扑里不在活跃分支的下游节点，走一遍并发「重置信号」
-                // （CompileContext.Order = -1，绝对停止）——两种模式下每个节点都会被编译器走到。
+                // Static mode (key known at compile-time): downstream nodes in the full topology not on an active
+                // branch get a "reset signal" (CompileContext.Order = -1, absolute stop) — every node is reached
+                // by the compiler in both modes.
                 if (!isDynamic)
                 {
                     var liveTargets = new HashSet<IWorkflowNodeViewModel>(
@@ -131,17 +140,18 @@ public sealed partial class CompilerViewModel
                     Router = node,
                     Options = options,
                     IsDynamic = isDynamic,
-                    // 编译期锁定的路由 key：Static 下运行期以此为准（编译瞬间的选中值）；
-                    // Dynamic 下为 null，运行期重新解析。
+                    // Route key locked at compile-time: in Static mode runtime relies on it (the value selected at
+                    // compile time); in Dynamic mode it is null and re-resolved at runtime.
                     CompileKey = currentKey,
                 });
 
-                // 分支后的汇合点：所有活跃分支出口共同指向的下一个节点。
+                // The join point after a branch: the next node all active branch exits jointly point to.
                 node = CommonNext(exits);
                 if (node is not null)
                 {
-                    // 汇合登记：把各分支出口（输入源）写入 JoinInputs，供该节点编译身份回填 InputNodes，
-                    // 运行期按此聚合成 GroupData 注入 Data。单输入汇合保持裸 Data 链式语义。
+                    // Join registration: write each branch exit (input source) into JoinInputs so the node's
+                    // compile identity can backfill InputNodes, and the runtime aggregates them into a GroupData
+                    // injected as Data. Single-input joins keep bare Data chaining semantics.
                     var distinctExits = exits.Where(e => e is not null)
                         .Cast<IWorkflowNodeViewModel>()
                         .Distinct(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance)
@@ -153,7 +163,7 @@ public sealed partial class CompilerViewModel
                 continue;
             }
 
-            // 线性节点
+            // Linear node
             chain.Add(node);
             var next = await SingleTargetValidAsync(node, state, ct);
             if (next is null || ReferenceEquals(next, node))
@@ -168,7 +178,7 @@ public sealed partial class CompilerViewModel
         return new CompiledGraph { Entries = new ObservableCollection<ActionEntry>(entries) };
     }
 
-    /// <summary>把当前线性链 flush 成 ExecuteEntry，并给链内每个节点分配编译身份。</summary>
+    /// <summary>Flushes the current linear chain into an ExecuteEntry and assigns each node in the chain a compile identity.</summary>
     private static void FlushChain(List<ActionEntry> entries, List<IWorkflowNodeViewModel> chain,
         CompileState state, int offset)
     {
@@ -194,8 +204,9 @@ public sealed partial class CompilerViewModel
     }
 
     /// <summary>
-    /// 静态分支下，从被略过目标出发，沿全拓扑走一遍，给每个节点发送「重置信号」（Order = -1）。
-    /// 到汇合点（多输入、属主线）或已活跃节点处停止；节点加入 visited，避免主线再处理。
+    /// In static mode, starting from a skipped target, walks the full topology and sends each node a "reset signal"
+    /// (Order = -1). Stops at a join point (multi-input, part of the main line) or an already active node; nodes are
+    /// added to visited so the main line does not process them again.
     /// </summary>
     private static void MarkStoppedBranch(IWorkflowNodeViewModel start, CompileState state)
     {
@@ -213,7 +224,7 @@ public sealed partial class CompilerViewModel
         }
     }
 
-    /// <summary>节点的全部下游目标（输出 slot 的 Targets，去重）。</summary>
+    /// <summary>All of the node's downstream targets (the Targets of its output slots, deduplicated).</summary>
     private static IEnumerable<IWorkflowNodeViewModel> AllTargets(IWorkflowNodeViewModel node)
         => node.Slots.Where(s => s is not null)
             .SelectMany(s => s!.Targets ?? [])
@@ -240,7 +251,7 @@ public sealed partial class CompilerViewModel
         _ => null,
     };
 
-    /// <summary>所有分支出口的共同下游（汇合点）；无共同下游返回 null（分支各自结束）。</summary>
+    /// <summary>The common downstream (join point) of all branch exits; returns null when there is no common downstream (each branch ends on its own).</summary>
     private static IWorkflowNodeViewModel? CommonNext(List<IWorkflowNodeViewModel?> exits)
     {
         IWorkflowNodeViewModel? common = null;
@@ -275,10 +286,11 @@ public sealed partial class CompilerViewModel
     }
 
     /// <summary>
-    /// 链续接的「合法性」版 <see cref="SingleTarget"/>：返回经由合法输出边唯一可达的下游节点
-    /// （去重后恰一个）；否则 null。每条输出边在编译期都以 <see cref="ICompileContext"/> 走一遍
-    /// <see cref="IWorkflowNodeViewModelHelper.AccessAsync"/> 静态检测——非法边按运行期
-    /// 广播语义跳过（视为未连接），不进入编译图。
+    /// The "validity-aware" variant of <see cref="SingleTarget"/> for chain continuation: returns the downstream
+    /// node uniquely reachable through valid output edges (exactly one after deduplication); otherwise null. Every
+    /// output edge runs <see cref="IWorkflowNodeViewModelHelper.AccessAsync"/> static validation at compile-time
+    /// with an <see cref="ICompileContext"/> — invalid edges are skipped per the runtime broadcast semantics
+    /// (treated as unconnected) and do not enter the compiled graph.
     /// </summary>
     private async Task<IWorkflowNodeViewModel?> SingleTargetValidAsync(
         IWorkflowNodeViewModel node, CompileState state, CancellationToken ct)
@@ -295,7 +307,7 @@ public sealed partial class CompilerViewModel
                 var helper = node.GetHelper();
                 if (helper is null) continue;
 
-                // 编译期占位身份：Order 取当前游标（发送节点尚未编号），Sender/Receiver 填待校验的边。
+                // Compile-time placeholder identity: Order uses the current cursor (the sender node is not yet numbered); Sender/Receiver hold the edge to validate.
                 var compileCtx = new CompileContext
                 {
                     Order = state.Counter,
@@ -313,13 +325,13 @@ public sealed partial class CompilerViewModel
         return distinct.Count == 1 ? distinct[0] : null;
     }
 
-    /// <summary>编译游标：全局序号计数器 + 已访问集合（避免 ref 参数，供异步递归共享）。</summary>
+    /// <summary>Compile cursor: a global order counter plus a visited set (avoids ref parameters so it can be shared across async recursion).</summary>
     private sealed class CompileState
     {
         public int Counter;
         public readonly HashSet<IWorkflowNodeViewModel> Visited = [];
 
-        /// <summary>汇合点 → 输入源节点列表（编译期从各分支出口登记，供汇合点编译身份回填 InputNodes）。</summary>
+        /// <summary>Join point → input source node list (registered from each branch exit at compile-time, so the join point's compile identity can backfill InputNodes).</summary>
         public readonly Dictionary<IWorkflowNodeViewModel, IReadOnlyList<IWorkflowNodeViewModel>> JoinInputs =
             new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
     }

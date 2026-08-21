@@ -30,7 +30,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 逗号分隔的字符串 "x,y"
+                // Format 1: comma-separated string "x,y"
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -40,7 +40,7 @@ namespace VeloxDev.DynamicTheme
                         return new Point(x, y);
                 }
 
-                // 格式2: 两个独立参数 [x, y]
+                // Format 2: two separate parameters [x, y]
                 if (parameters.Length >= 2)
                 {
                     double x = System.Convert.ToDouble(parameters[0]);
@@ -62,7 +62,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 逗号分隔的字符串
+                // Format 1: comma-separated string
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -81,7 +81,7 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // 格式2: 数值参数集合
+                // Format 2: numeric parameter list
                 return parameters.Length switch
                 {
                     1 => new Thickness(System.Convert.ToDouble(parameters[0])),
@@ -110,7 +110,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 逗号分隔的字符串
+                // Format 1: comma-separated string
                 if (parameters[0] is string strValue)
                 {
                     var parts = strValue.Split(',');
@@ -126,7 +126,7 @@ namespace VeloxDev.DynamicTheme
                     }
                 }
 
-                // 格式2: 数值参数集合
+                // Format 2: numeric parameter list
                 return parameters.Length switch
                 {
                     1 => new CornerRadius(System.Convert.ToDouble(parameters[0])),
@@ -150,7 +150,7 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 颜色名称或HEX字符串
+                // Format 1: color name or HEX string
                 if (parameters[0] is string colorString)
                 {
                     var converter = new System.Windows.Media.BrushConverter();
@@ -158,7 +158,7 @@ namespace VeloxDev.DynamicTheme
                     return brush?.Color;
                 }
 
-                // 格式2: 整数值 (ARGB)
+                // Format 2: integer value (ARGB)
                 if (parameters[0] is int argb)
                 {
                     return Color.FromArgb(
@@ -168,7 +168,7 @@ namespace VeloxDev.DynamicTheme
                         (byte)(argb & 0xFF));
                 }
 
-                // 格式3: 单独分量
+                // Format 3: individual components
                 if (parameters.Length >= 3)
                 {
                     byte a = parameters.Length >= 4 ? System.Convert.ToByte(parameters[0]) : (byte)255;
@@ -192,11 +192,11 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                // 格式1: 直接传递笔刷
+                // Format 1: pass a brush directly
                 if (parameters[0] is Brush brush)
                     return brush;
 
-                // 格式2: 资源键查找
+                // Format 2: resource-key lookup
                 if (parameters[0] is string resourceKey)
                 {
                     if (ThemeResourceLookup.TryFindResource(resourceKey, out var resource)
@@ -204,14 +204,14 @@ namespace VeloxDev.DynamicTheme
                         return resourceBrush;
                 }
 
-                // 格式3: 颜色字符串（使用WPF的BrushConverter）
+                // Format 3: color string (uses WPF's BrushConverter)
                 if (parameters[0] is string colorString)
                 {
                     var converter = new System.Windows.Media.BrushConverter();
                     return converter.ConvertFromString(colorString) as Brush;
                 }
 
-                // 格式4: 颜色值（委托给颜色转换器）
+                // Format 4: color value (delegated to the color converter)
                 var colorConverter = new ColorConverter();
                 if (colorConverter.Convert(typeof(Color), propertyName, parameters) is Color color)
                 {
@@ -228,7 +228,7 @@ namespace VeloxDev.DynamicTheme
     {
         public object? Convert(Type targetType, string propertyName, object?[] parameters)
         {
-            // 参数验证
+            // Parameter validation
             if (parameters == null || parameters.Length != 1 || parameters[0] is not string strValue)
                 return null;
 
@@ -240,28 +240,28 @@ namespace VeloxDev.DynamicTheme
                     return resourceValue;
                 }
 
-                // 特殊处理Brush类型（WPF的BrushConverter需要单独处理）
+                // Special-case the Brush type (WPF's BrushConverter must be handled separately).
                 if (typeof(Brush).IsAssignableFrom(targetType))
                 {
                     var brushConverter = new System.Windows.Media.BrushConverter();
                     return brushConverter.ConvertFromString(strValue);
                 }
 
-                // 获取目标类型的TypeConverter
+                // Get the target type's TypeConverter.
                 TypeConverter converter = TypeDescriptor.GetConverter(targetType);
 
-                // 支持文化不敏感的转换（如数字、日期等）
+                // Support culture-insensitive conversion (numbers, dates, etc.).
                 if (converter.CanConvertFrom(typeof(string)))
                 {
                     return converter.ConvertFromString(null, CultureInfo.InvariantCulture, strValue);
                 }
 
-                // 回退到默认转换（适用于大多数WPF内置类型）
+                // Fall back to default conversion (works for most WPF built-in types).
                 return converter.ConvertFrom(strValue);
             }
             catch (NotSupportedException)
             {
-                // 类型不支持转换时尝试资源查找
+                // When conversion is unsupported, try resource lookup.
                 if (Application.Current.TryFindResource(strValue) is object resourceValue &&
                     targetType.IsInstanceOfType(resourceValue))
                 {

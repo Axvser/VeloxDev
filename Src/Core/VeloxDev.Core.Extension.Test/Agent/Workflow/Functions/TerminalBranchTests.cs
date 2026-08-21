@@ -6,8 +6,9 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// 验证「终端分支」语义：路由表登记了某分支但该分支无下游节点（如 Method Router 的 Patch），
-/// 运行时选中该分支应**直接结束**运行，而不是透传到汇合点（Finalize）继续执行。
+/// Verifies the "terminal branch" semantics: when the route table registers a branch that has no
+/// downstream nodes (e.g. the Method Router's Patch), selecting that branch at runtime should
+/// **end** the run directly instead of passing through to the join point (Finalize).
 /// </summary>
 [TestClass]
 public class TerminalBranchTests
@@ -23,7 +24,7 @@ public class TerminalBranchTests
         var router = session.Tree.Nodes.OfType<EnumSelectorNodeViewModel>()
             .Single(n => n.Title == "Method Router");
 
-        // 让运行期路由选到 Patch——该分支没有连接任何下游节点。
+        // Make the runtime route select Patch — that branch has no downstream nodes connected.
         router.SelectedValue = NetworkRequestMethod.Patch;
 
         var context = new RuntimeContext();
@@ -40,12 +41,12 @@ public class TerminalBranchTests
         var session = WorkflowDemoSession.Create();
         var boolSelector = session.Tree.Nodes.OfType<BoolSelectorNodeViewModel>().Single();
         boolSelector.CompileMode = RouterCompileMode.Static;
-        boolSelector.Condition = true;   // 编译瞬间：True → Hot 分支
+        boolSelector.Condition = true;   // at compile time: True → Hot branch
 
         var compiler = new CompilerViewModel();
         await compiler.CompileAsync(session.Controller);
 
-        // 编译后再改选中值：运行期仍应走编译期锁定的 Hot（true），而不是新值 false。
+        // Change the selection after compile: at runtime it must still follow the compile-time-locked Hot (true), not the new value false.
         boolSelector.Condition = false;
 
         var context = new RuntimeContext();

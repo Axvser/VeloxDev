@@ -25,13 +25,13 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     public AgentSession? Session;
 
     /// <summary>
-    /// 全局 MCP 服务器加载器与状态（Agent 与 UI 共享）：WorkflowView 绑定其 Status 展示面板，
-    /// Agent 经 McpAgentToolkit（ListMcpServers / LoadMcpServers）管理。
+    /// Global MCP server loader and status (shared by the Agent and the UI): WorkflowView binds its Status panel,
+    /// and the Agent manages servers through McpAgentToolkit (ListMcpServers / LoadMcpServers).
     /// </summary>
     public McpScope Mcp { get; } = new();
 
-    /// <summary>宿主预注册的 MCP 服务器配置（Agent 只能加载这些，不能任意构造）。
-    /// 安全模型：配置在加载时确定一次，之后不可变更——Agent 只能加载/卸载/查看，不能中途改配置。</summary>
+    /// <summary>MCP server configurations pre-registered by the host (the Agent may only load these, never construct arbitrary ones).
+    /// Security model: configuration is fixed once at load time and cannot change afterwards — the Agent can only load/unload/inspect, never reconfigure mid-session.</summary>
     public IReadOnlyList<McpServerConfiguration> McpServers { get; set; } = DemoMcpServers;
 
     private static readonly McpServerConfiguration[] DemoMcpServers =
@@ -42,7 +42,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             Description = "微软官方文档检索（远程 Streamable HTTP）",
             RunMode = McpServerRunMode.Http,
             Endpoint = "https://learn.microsoft.com/api/mcp",
-            Options = new { connectionTimeout = 30 },   // 秒
+            Options = new { connectionTimeout = 30 },   // seconds
         },
         new()
         {
@@ -67,15 +67,15 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         },
     ];
 
-    /// <summary>加载全部预注册的 MCP 服务器（状态经 <see cref="Mcp"/> 实时驱动）。</summary>
+    /// <summary>Loads all pre-registered MCP servers (status is driven live through <see cref="Mcp"/>).</summary>
     public async Task LoadMcpServersAsync() => await Mcp.LoadAsync(McpServers);
 
-    // ── 动态工具集（Agent 会话中途加/移除 MCP 工具）────────────────────────
+    // ── Dynamic tool set (add/remove MCP tools mid-session) ──────────────────────
 
     private readonly List<AITool> _baseTools = [];
 
     /// <summary>
-    /// 固定工具集（工作流工具 + MCP 管理工具），在 <see cref="ProvideAgent"/> 时创建一次。
+    /// Fixed tool set (workflow tools + MCP management tools), created once in <see cref="ProvideAgent"/>.
     /// </summary>
     internal void SetBaseTools(IEnumerable<AITool> tools)
     {
@@ -84,8 +84,8 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     }
 
     /// <summary>
-    /// 组装本次对话的运行选项：基础工具 + 当前已连接的 MCP 服务器工具。
-    /// 每次对话调用都重新组装——服务器中途加载/卸载后，下一次对话即生效（无需重建 Agent）。
+    /// Assembles the run options for this conversation: base tools + tools of the currently connected MCP servers.
+    /// Re-assembled on every conversation call — servers loaded/unloaded mid-session take effect on the next conversation (no Agent rebuild needed).
     /// </summary>
     public ChatClientAgentRunOptions BuildRunOptions()
         => new() { ChatOptions = new ChatOptions { Tools = [.. _baseTools, .. Mcp.LoadedTools] } };
@@ -94,7 +94,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     {
         base.Install(tree);
 
-        // 初始化Agent
+        // Initialize the agent
         Agent = await ProvideAgent(tree, this);
         Session = await Agent.CreateSessionAsync();
     }
@@ -112,7 +112,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// </summary>
     public event Action? ToolCalled;
 
-    #pragma warning disable CS0067 // 外部订阅者使用
+    #pragma warning disable CS0067 // used by external subscribers
     /// <summary>
     /// Raised when the Agent calls the <c>RefreshVisualSlotAnchors</c> tool.
     /// Subscribe from the View layer to force all visible node views to re-sync slot anchor positions.
@@ -151,56 +151,58 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
 
     public static async Task<ChatClientAgent> ProvideAgent(IWorkflowTreeViewModel tree, AgentHelper helper)
     {
-        // 创建独立的工作空间
+        // Create an isolated workspace
         var scope = tree.AsAgentScope()
-            .WithPromptLanguage(AgentLanguages.English)   // 默认提示词语言
-            .WithOutputLanguage(AgentLanguages.Chinese)   // 默认输出语言
-            // 从程序集自动发现组件
+            .WithPromptLanguage(AgentLanguages.English)   // default prompt language
+            .WithOutputLanguage(AgentLanguages.Chinese)   // default output language
+            // Auto-discover components from assemblies
             .WithAutoDiscovery(assemblyName: "VeloxDev.Core")
             .WithAutoDiscovery(assemblyName: "Lib") 
-            .WithAutoMarkDirty(false)               // 视图是否自动标记为脏
-            .WithMaxToolCalls(200)                  // 最大工具调用数
-            .WithAllowNodeExecution(true)           // 显式允许 Agent 执行节点业务代码（安全默认关闭，演示需要）
-            .WithSynchronizationContext(SynchronizationContext.Current) // 工具调用 marshal 到 UI 线程（组件是 UI 绑定）
-            .WithToolCallCallback(args =>           // 工具调用回调
+            .WithAutoMarkDirty(false)               // whether the view auto-marks itself dirty
+            .WithMaxToolCalls(200)                  // maximum tool call count
+            .WithAllowNodeExecution(true)           // explicitly allow the Agent to run node business code (safely off by default; the demo needs it)
+            .WithSynchronizationContext(SynchronizationContext.Current) // marshal tool calls to the UI thread (components are UI-bound)
+            .WithToolCallCallback(args =>           // tool-call callback
             {
                 helper.ToolCalled?.Invoke();
                 return Task.CompletedTask;
             })
-            .WithSelectionHandler(async args => // Agent询问用户执行哪一项操作
+            .WithSelectionHandler(async args => // the Agent asks the user which action to perform
             {
                 if (helper.SelectionHandler is not null)
                     await helper.SelectionHandler(args);
             })
-            .WithConfirmationHandler(async args => // Agent向用户确认操作权限
+            .WithConfirmationHandler(async args => // the Agent asks the user to confirm operation permissions
             {
                 if (helper.ConfirmationHandler is not null)
                     await helper.ConfirmationHandler(args);
             });
 
-        // 交互工具激进程度 0~3
+        // Interaction-tool aggressiveness 0~3
         scope.WithInteractionSafety(helper.InteractionSafety);
-        // 注册自定义安全等级提示词覆盖（仅对 1~3 档生效）
+        // Register custom safety-level prompt overrides (applies to levels 1~3 only)
         foreach (var kvp in helper.InteractionSafetyPrompts)
             scope.WithInteractionSafetyPrompt(kvp.Key, kvp.Value);
 
-        // 注册 MCP 服务器管理工具：Agent 可列出状态、加载（需要时安装并连接）、卸载、描述能力。
-        // 安全模型：服务器配置在加载时确定一次、之后不可变更；Agent 只能加载/卸载/查看，不能中途改配置。
-        // 工具集在每次对话时按当前加载状态动态组装。
+        // Register MCP server management tools: the Agent can list status, load (install and connect if needed),
+        // unload, and describe capabilities.
+        // Security model: server configuration is fixed once at load time and cannot change afterwards;
+        // the Agent can only load/unload/inspect, never reconfigure mid-session.
+        // The tool set is assembled per conversation from the current load state.
         scope.WithTools(
-            "MCP 服务器管理工具：ListMcpServers 查看各 MCP 服务器的存活/安装中/连接中/错误状态与工具数；" +
-            "DescribeMcpServer 导出某台已连接服务器的工具能力提示词（不激活工具），用于向用户说明它能做什么；" +
-            "LoadMcpServers 加载（需要时安装并连接）宿主预注册的服务器；" +
-            "UnloadMcpServer 中途移除某台服务器（其工具从下一次对话的工具集消失，可再加载）。" +
-            "服务器配置由宿主在加载时确定一次、之后不可变更——不要尝试修改或重新配置服务器（目录集等）。" +
-            "加载本地服务器会安装 npm/pip 运行时，可能耗时——先向用户确认再调用。",
+            "MCP server management tools: ListMcpServers shows each MCP server's alive/installing/connecting/error state and tool count; " +
+            "DescribeMcpServer exports a connected server's tool-capability prompt (without activating the tools) so you can tell the user what it can do; " +
+            "LoadMcpServers loads host pre-registered servers (installing and connecting when needed); " +
+            "UnloadMcpServer removes a server mid-session (its tools disappear from the next conversation's tool set; it can be loaded again). " +
+            "Server configuration is fixed once by the host at load time and cannot change afterwards — do not attempt to modify or reconfigure servers (directory sets, etc.). " +
+            "Loading a local server installs npm/pip runtimes and may take time — confirm with the user before calling.",
             [.. new McpAgentToolkit(helper.Mcp, helper.McpServers).CreateTools()]);
 
-        // 渐进式上下文
+        // Progressive context
         var contextPrompt = scope.ProvideProgressiveContextPrompt();
 
-        // 创建MAF工具集（固定部分），并保存为“基础工具”；MCP 服务器工具在每次对话时
-        // 经 BuildChatOptions 动态并入，因此服务器中途加载/卸载无需重建 Agent。
+        // Create the MAF tool set (fixed part) and save it as the "base tools"; MCP server tools are merged in
+        // dynamically per conversation via BuildChatOptions, so servers loaded/unloaded mid-session need no Agent rebuild.
         helper.SetBaseTools(scope.ProvideTools());
 
         var apiKey = Environment.GetEnvironmentVariable(EnvironmentVariableName);

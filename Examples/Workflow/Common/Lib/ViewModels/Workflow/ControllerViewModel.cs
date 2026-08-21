@@ -12,16 +12,16 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
 {
     public ControllerViewModel() => InitializeWorkflow();
 
-    // ── 编译 / 运行 ────────────────────────────────────────────────────────────
-    /// <summary>编译结果（以自身为起点的编译图）。</summary>
+    // ── Compile / Run ──────────────────────────────────────────────────────────
+    /// <summary>Compilation result (the compiled graphs rooted at this controller).</summary>
     public CompilerViewModel Compiler { get; } = new();
 
-    /// <summary>当前运行期的执行会话（Run 时创建，UI 可绑定进度）。</summary>
+    /// <summary>Current runtime execution session (created on Run; the UI can bind to its progress).</summary>
     public IRuntimeContext? RuntimeContext { get; private set; }
 
     private CancellationTokenSource? _runCts;
 
-    /// <summary>是否已编译出至少一张图（Run 按钮可用）。</summary>
+    /// <summary>Whether at least one graph has been compiled (enables the Run button).</summary>
     public bool HasCompiledGraphs => Compiler.Graphs.Count > 0;
 
     [AgentContext(AgentLanguages.Chinese, "编译：以自身为起点，把可达子图分解成编译图，并给各节点注入编译身份")]
@@ -79,8 +79,8 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         }
     }
 
-    // ── 注入接口 ───────────────────────────────────────────────────────────────
-    /// <summary>编译期注入的编译身份（控制器是起点，Order 通常为 0）。</summary>
+    // ── Injected Interfaces ────────────────────────────────────────────────────
+    /// <summary>Compile-time identity injected by the compiler (the controller is the origin; Order is usually 0).</summary>
     public ICompileContext? CompileContext { get; private set; }
 
     public void AttachCompileTimeContext(ICompileContext context)
@@ -90,10 +90,10 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         OnPropertyChanged(nameof(IsCompileStopped));
     }
 
-    /// <summary>编译期是否处于绝对停止状态。</summary>
+    /// <summary>Whether the node is in the compile-time absolute stop state.</summary>
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
-    /// <summary>运行期注入：引擎驱动本节点前，把当前执行会话交给它。</summary>
+    /// <summary>Runtime injection: hands the current execution session to this node before the engine drives it.</summary>
     public void AttachRuntimeContext(IRuntimeContext context)
     {
         RuntimeContext = context;

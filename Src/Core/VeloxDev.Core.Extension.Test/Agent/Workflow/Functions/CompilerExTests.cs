@@ -5,9 +5,10 @@ using VeloxDev.Core.WorkflowSystem.CompilerEx;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// 验证新 CompilerEx 分解算法：线性段 → ExecuteEntry，选择器 → BranchEntry（嵌套子图），
-/// 分支下游序号带偏移（不归零）；两种模式下所有节点都被编译器走到——Static 下被略过的分支节点
-/// 收到重置信号（Order = -1，绝对停止），Dynamic 下全部分支分配 live orders。
+/// Verifies the new CompilerEx decomposition algorithm: linear segments → ExecuteEntry, selectors →
+/// BranchEntry (nested sub-graphs), branch downstream orders carry an offset (not reset to zero); in
+/// both modes every node is visited by the compiler — under Static, skipped branch nodes receive a
+/// reset signal (Order = -1, absolute stop), under Dynamic all branches get live orders.
 /// </summary>
 [TestClass]
 public class CompilerExTests
@@ -22,20 +23,20 @@ public class CompilerExTests
         Assert.AreEqual(1, graphs.Count, "single start node → single compiled graph");
         var graph = graphs[0];
 
-        // ── 结构：线性段 → Bool 分支 → 汇合线性段 → Enum 分支 → 尾段 ──
+        // ── Structure: linear segment → Bool branch → join linear segment → Enum branch → tail ──
         Assert.IsInstanceOfType<ExecuteEntry>(graph.Entries[0], "first entry is a linear chain");
         Assert.IsInstanceOfType<BranchEntry>(graph.Entries[1], "second entry is a branch (bool selector)");
         Assert.IsInstanceOfType<ExecuteEntry>(graph.Entries[2], "third entry is the post-branch join chain");
         Assert.IsInstanceOfType<BranchEntry>(graph.Entries[3], "fourth entry is a branch (enum selector)");
         Assert.IsInstanceOfType<ExecuteEntry>(graph.Entries[4], "fifth entry is the tail chain");
 
-        // Demo 默认 Dynamic：两分支都分配 live orders（不剪枝）。
+        // Demo defaults to Dynamic: both branches get live orders (no pruning).
         var boolBranch = (BranchEntry)graph.Entries[1];
         Assert.AreEqual(2, boolBranch.Options.Count, "bool selector has True/False options");
         Assert.IsTrue(boolBranch.IsDynamic, "demo default dynamic → both branches alive");
         Assert.IsNotNull(boolBranch.Router, "branch carries its router node");
 
-        // ── 编译身份：序号带偏移连续分配 ──
+        // ── Compile identity: orders assigned contiguously with an offset ──
         Assert.AreEqual(0, ControllerOf(session).CompileContext?.Order, "controller is order 0");
         Assert.AreEqual(1, LoadSeedOf(session).CompileContext?.Order, "load seed is order 1");
         Assert.AreEqual(2, BoolSelectorOf(session).CompileContext?.Order, "bool selector is order 2");
@@ -43,7 +44,7 @@ public class CompilerExTests
         var trueOpt = boolBranch.Options.First(o => Equals(o.Key, true));
         var falseOpt = boolBranch.Options.First(o => Equals(o.Key, false));
 
-        // True 分支下游从 offset 继续（不归零）：Hot Path 是第 3 个，Cold Path 第 4 个（都活）。
+        // True-branch downstream continues from the offset (not reset): Hot Path is 3rd, Cold Path 4th (both alive).
         var hot = session.Tree.Nodes.OfType<NodeViewModel>().First(n => n.Title == "Hot Path");
         var cold = session.Tree.Nodes.OfType<NodeViewModel>().First(n => n.Title == "Cold Path");
         Assert.AreEqual(3, hot.CompileContext?.Order, "Hot Path continues numbering from the offset (not 0)");
@@ -51,11 +52,11 @@ public class CompilerExTests
         Assert.IsFalse(cold.IsCompileStopped, "dynamic Cold Path is not stopped");
         Assert.IsFalse(hot.IsCompileStopped, "chosen branch node is not stopped");
 
-        // 汇合点 Aggregate 的序号在分支之后继续（offset 已越过两个分支的槽位）
+        // The join point Aggregate's order continues after the branches (the offset has passed both branches' slots)
         var aggregate = session.Tree.Nodes.OfType<NodeViewModel>().First(n => n.Title == "Aggregate");
         Assert.AreEqual(5, aggregate.CompileContext?.Order, "join node continues after branch slots");
 
-        // ── 分支子图嵌套：True → [Hot Path]，False → [Cold Path] ──
+        // ── Branch sub-graph nesting: True → [Hot Path], False → [Cold Path] ──
         var trueSub = trueOpt.Graph!;
         Assert.IsInstanceOfType<ExecuteEntry>(trueSub.Entries[0]);
         var hotNode = (NodeViewModel)((ExecuteEntry)trueSub.Entries[0]).Nodes[0];
@@ -68,7 +69,7 @@ public class CompilerExTests
     {
         var session = WorkflowDemoSession.Create();
         var boolSelector = session.Tree.Nodes.OfType<BoolSelectorNodeViewModel>().Single();
-        boolSelector.CompileMode = RouterCompileMode.Static;   // Condition=true → False 被略过
+        boolSelector.CompileMode = RouterCompileMode.Static;   // Condition=true → False is skipped
 
         var compiler = new CompilerViewModel();
         await compiler.CompileAsync(session.Controller);
@@ -98,13 +99,13 @@ public class CompilerExTests
         Assert.AreEqual("Completed", context.Status, "engine completes the run");
         Assert.IsTrue(context.Sequence > 0, "nodes were driven and got sequence numbers");
         Assert.IsTrue(context.Logs.Count > 0, "engine captured an execution log per driven node");
-        // 选择的分支（True → Hot Path）被执行；被剪枝的 False 分支不执行。
+        // The selected branch (True → Hot Path) is executed; the pruned False branch is not.
         Assert.IsTrue(context.Logs.Any(l => l.Contains("NodeViewModel")), "worker nodes were driven");
 
-        // 编号编译期固定：运行后徽标仍保持编译顺序（Hot = #4），不会被运行时重写成 #1。
+        // Numbers are compile-time fixed: after the run the badge keeps the compile order (Hot = #4), not rewritten to #1 at runtime.
         var hot2 = session.Tree.Nodes.OfType<NodeViewModel>().First(n => n.Title == "Hot Path");
         Assert.AreEqual(4, hot2.LastExecutionOrder, "badge stays at the compile-fixed number after run");
-        // 执行状态码跳到编译期固定编号：运行结束停在尾节点（Finalize）的编号上。
+        // The execution state code jumps to the compile-time fixed number: the run ends on the tail node (Finalize)'s number.
         var finalize = session.Tree.Nodes.OfType<NodeViewModel>().First(n => n.Title == "Finalize");
         Assert.AreEqual(finalize.CompileContext?.Order, context.CurrentOrder,
             "execution state code ends on the last node's compile-fixed order");
@@ -116,12 +117,12 @@ public class CompilerExTests
         var session = WorkflowDemoSession.Create();
         var selector = session.Tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
 
-        // Dynamic：路由表包含全部分支
+        // Dynamic: the route table contains all branches
         selector.CompileMode = RouterCompileMode.Dynamic;
         var dynTable = await selector.GetRouteTable();
         Assert.IsTrue(dynTable.Count > 1, "dynamic mode returns all branches");
 
-        // Static：只包含当前选中分支
+        // Static: only the currently selected branch
         selector.CompileMode = RouterCompileMode.Static;
         var staticTable = await selector.GetRouteTable();
         Assert.AreEqual(1, staticTable.Count, "static mode returns only the selected branch");

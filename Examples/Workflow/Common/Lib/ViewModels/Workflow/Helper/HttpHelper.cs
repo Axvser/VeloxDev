@@ -9,10 +9,10 @@ namespace Demo.ViewModels.Workflow.Helper
     public partial class HttpHelper<T> : NodeHelper<T>
         where T : NodeViewModel
     {
-        // 数据流访问上下文（IAccessContext）在两阶段复用：
-        //   context.IsCompilePhase == true  → 编译期静态检测，context.Data 为 null；
-        //   context.IsCompilePhase == false → 运行期实时检测，context.Data 为本次广播负载。
-        //   context.Sender / context.Receiver 携带这条边的两端槽。
+        // The data-flow access context (IAccessContext) is reused across two phases:
+        //   context.IsCompilePhase == true  → compile-time static check, context.Data is null;
+        //   context.IsCompilePhase == false → runtime real-time check, context.Data is this broadcast's payload.
+        //   context.Sender / context.Receiver carry the two slots of this edge.
         public override Task<bool> AccessAsync(IAccessContext context, CancellationToken ct)
         {
             return base.AccessAsync(context, ct);
@@ -126,8 +126,8 @@ namespace Demo.ViewModels.Workflow.Helper
         }
 
         /// <summary>
-        /// 统一数据流入口：编译器按序驱动（IRuntimeContext）、广播投递（RECV）、
-        /// 手动 Run / AI 唤起（EXEC）都经 <see cref="ReceiveAsync"/> 消费。
+        /// Unified data-flow entry point: the compiler drives in order (IRuntimeContext), broadcast delivery (RECV),
+        /// and manual Run / AI invocation (EXEC) all flow through <see cref="ReceiveAsync"/>.
         /// </summary>
         public override async Task<object?> ReceiveAsync(ITaskContext context, CancellationToken ct)
         {
@@ -136,9 +136,9 @@ namespace Demo.ViewModels.Workflow.Helper
                 return null;
             }
 
-            // 编译执行：引擎把 RuntimeContext（IRuntimeContext + ITaskContext）直接传入。
-            // 节点的编号在编译期已固定（CompileContext.Order），运行期只推进状态，不重写徽标编号。
-            // 引擎绕过 ReceiveCommand，命令生命周期事件不会触发 —— 此处自补偿计数器/运行指示器。
+            // Compiled execution: the engine passes RuntimeContext (IRuntimeContext + ITaskContext) directly.
+            // The node's number is fixed at compile time (CompileContext.Order); runtime only advances state, never rewrites the badge.
+            // The engine bypasses ReceiveCommand, so command lifecycle events do not fire — self-compensate counters/running state here.
             if (context is IRuntimeContext)
             {
                 Interlocked.Increment(ref _activeRuns);
@@ -166,20 +166,20 @@ namespace Demo.ViewModels.Workflow.Helper
                 return null;
             }
 
-            // 无状态模式：广播（RECV，携带 sender/receiver）与手动 Run / AI（EXEC）共用
-            // NetworkFlowContext 记录，仅以模式标记区分执行路径。
+            // Stateless mode: broadcast (RECV, carrying sender/receiver) and manual Run / AI (EXEC) share the
+            // NetworkFlowContext recording, distinguished only by the mode marker.
             var flow = NetworkFlowContext.From(context.Data);
             await ExecuteStepAsync(flow, context.Sender is not null ? "RECV" : "EXEC", ct);
 
-            // 自动向下游传递：把处理结果沿输出槽广播到下游节点的 ReceiveCommand。
-            // 默认 true（AutoBroadcast 旗标）；取消勾选则退回手动 Forward 逐步推进。
+            // Auto-forward downstream: broadcast the result along the output slot to downstream nodes' ReceiveCommand.
+            // Default true (AutoBroadcast flag); unchecking falls back to manual Forward step-by-step.
             if (_viewModel.AutoBroadcast)
                 await BroadcastAsync(flow, ct);
 
             return flow;
         }
 
-        /// <summary>编译执行下的节点步骤：只更新运行状态/耗时，不触碰编译期固定的编号徽标。</summary>
+        /// <summary>Node step under compiled execution: only updates running state/elapsed time, never touches the compile-time-fixed number badge.</summary>
         private async Task ExecuteCompiledStepAsync(CancellationToken ct)
         {
             if (_viewModel is null) return;
@@ -214,8 +214,8 @@ namespace Demo.ViewModels.Workflow.Helper
         }
 
         /// <summary>
-        /// 模拟一段工作负载：记录执行轨迹、更新节点 UI 状态、按 DelayMilliseconds 延迟。
-        /// 编译器模式与无状态模式共用，避免两套几乎相同的状态推进逻辑。
+        /// Simulates a workload: records the execution trace, updates the node UI state, and delays by DelayMilliseconds.
+        /// Shared by compiler mode and stateless mode to avoid two nearly identical state-advance logic paths.
         /// </summary>
         private async Task ExecuteStepAsync(NetworkFlowContext context, string mode, CancellationToken ct)
         {
@@ -224,9 +224,9 @@ namespace Demo.ViewModels.Workflow.Helper
                 return;
             }
 
-            // 非编译器路径的全局单调序号，只用于执行日志的轨迹文本。节点的编号徽标
-            // （LastExecutionOrder / LastExecutionTrace）是编译机器的专属顺序（CompileContext.Order），
-            // 独立启动（EXEC/RECV）只记录活动日志，绝不扰动编译编号。
+            // Non-compiler paths use a global monotonic sequence number, only for the trace text in the execution log.
+            // The node's number badge (LastExecutionOrder / LastExecutionTrace) is the compiled run's own order
+            // (CompileContext.Order); standalone starts (EXEC/RECV) only record activity logs and never disturb it.
             var executionOrder = (_viewModel.Parent as TreeViewModel)?.NextExecutionSequence()
                 ?? context.NextOrder();
             var executionTrace = context.RecordExecution($"{mode} {_viewModel.Title}", out _, executionOrder);
@@ -246,7 +246,7 @@ namespace Demo.ViewModels.Workflow.Helper
                 context.Set("last.node", _viewModel.Title);
                 context.Set("last.duration", stopwatch.ElapsedMilliseconds.ToString());
 
-                // 编译执行模式下，Compiler 负责链式传递，此处原地修改参数对象
+                // Under compiled execution, the Compiler handles chained delivery; here the parameter object is mutated in place
 
                 await UpdateViewModelStateAsync(
                     status: "Completed",

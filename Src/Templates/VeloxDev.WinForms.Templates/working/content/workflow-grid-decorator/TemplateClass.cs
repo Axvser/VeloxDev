@@ -16,7 +16,7 @@ namespace TemplateNamespace;
 public sealed class TemplateClass : Panel, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
-    // 其余方案模板代码同为 28px，但用户反馈 WinForms 视觉上偏小，故默认放大到 36px。
+    // Other template code uses 28px, but WinForms reads visually smaller, so the default is enlarged to 36px.
     private const double DefaultRulerThickness = 36;
 
     private readonly Color _background = ParseColor("TemplateGridBackground");

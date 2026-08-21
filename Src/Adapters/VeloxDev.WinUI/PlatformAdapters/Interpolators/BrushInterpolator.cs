@@ -16,8 +16,8 @@ namespace VeloxDev.Adapters.NativeInterpolators
             var s = Normalize(start);
             var e = Normalize(end);
 
-            // 单帧（重置等）返回原始目标值：end 为 null 时就写 null，而不是透明画刷。
-            // 否则 OpacityMask 会被设成透明画刷，导致整个元素不可见。
+            // Single-frame (reset, etc.) returns the raw target value: write null when end is null rather than a transparent brush.
+            // Otherwise OpacityMask would be set to a transparent brush, making the whole element invisible.
             if (steps <= 1) return [end];
 
             (var alignedS, var alignedE) = AlignBrushTypes(s, e);
@@ -44,7 +44,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
         };
 
         /// <summary>
-        /// ���Խ����� Brush ����Ϊ��ͬ���ͣ������Ͳ�ͬ����ת��Ϊ�߼��ȼ���̬��
+        /// Tries to align the two brushes to the same type; when the types differ, converts them to logically equivalent forms.
         /// </summary>
         private static (Brush, Brush) AlignBrushTypes(Brush s, Brush e)
         {
@@ -63,11 +63,11 @@ namespace VeloxDev.Adapters.NativeInterpolators
             if (e is SolidColorBrush eb2 && s is RadialGradientBrush rs)
                 return (s, ToRadialEquivalent(eb2, rs));
 
-            // ���Ͳ��ɶ��� �� ����ԭ��
+            // Types cannot be aligned → keep as-is.
             return (s, e);
         }
 
-        //----------- ���Խ���ת�� -----------
+        //----------- Linear gradient conversion -----------
 
         private static LinearGradientBrush ToLinearEquivalent(SolidColorBrush solid, LinearGradientBrush template)
         {
@@ -85,7 +85,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return brush;
         }
 
-        //----------- ���򽥱�ת�� -----------
+        //----------- Radial gradient conversion -----------
 
         private static RadialGradientBrush ToRadialEquivalent(SolidColorBrush solid, RadialGradientBrush template)
         {
@@ -105,7 +105,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return brush;
         }
 
-        //----------- ʵ�ʲ�ֵ�߼� -----------
+        //----------- Actual interpolation logic -----------
 
         private static Brush InterpolateAligned(Brush s, Brush e, double t)
         {
@@ -126,7 +126,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
                         return InterpolateRadial(sr, er, t);
 
                     default:
-                        // ���Ϊ��ɫ�˻�
+                        // Degenerate to solid-color blending.
                         var c1 = ExtractRepresentativeColor(s);
                         var c2 = ExtractRepresentativeColor(e);
                         var mixed = LerpColorPremultiplied(c1, c2, t);
@@ -138,12 +138,12 @@ namespace VeloxDev.Adapters.NativeInterpolators
             }
             catch
             {
-                // �����򷵻�ĩ֡
+                // On error, return the last frame.
                 return e;
             }
         }
 
-        //----------- ���Խ����ֵ -----------
+        //----------- Linear gradient interpolation -----------
 
         private static LinearGradientBrush InterpolateLinear(LinearGradientBrush s, LinearGradientBrush e, double t)
         {
@@ -168,7 +168,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return result;
         }
 
-        //----------- ���򽥱��ֵ -----------
+        //----------- Radial gradient interpolation -----------
 
         private static RadialGradientBrush InterpolateRadial(RadialGradientBrush s, RadialGradientBrush e, double t)
         {
@@ -195,7 +195,7 @@ namespace VeloxDev.Adapters.NativeInterpolators
             return result;
         }
 
-        //----------- �������� -----------
+        //----------- Math helpers -----------
 
         private static Point LerpPoint(Point a, Point b, double t)
             => new(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t));

@@ -2,7 +2,7 @@ using VeloxDev.MVVM;
 
 namespace Demo.ViewModels;
 
-/// <summary>角色：用来决定聊天记录里一条消息的展示方式（纯文本还是 Markdown）。</summary>
+/// <summary>Role: decides how a message is displayed in the chat transcript (plain text vs. Markdown).</summary>
 public enum AgentMessageRole
 {
     User,
@@ -12,9 +12,10 @@ public enum AgentMessageRole
 }
 
 /// <summary>
-/// 结构化 Agent 聊天消息。与 <see cref="TreeViewModel.AgentLog"/>（纯文本行）并存：
-/// <see cref="AgentLog"/> 供各平台 Demo 兼容使用，<see cref="TreeViewModel.AgentMessages"/>
-/// 供 Avalonia Full Demo 以 AvalonMarkdown 渲染助手回复中的 Markdown 内容。
+/// Structured agent chat message. It coexists with <see cref="TreeViewModel.AgentLog"/> (plain-text lines):
+/// <see cref="AgentLog"/> is used across platform demos for compatibility, while
+/// <see cref="TreeViewModel.AgentMessages"/> lets the Avalonia Full Demo render Markdown content in the
+/// assistant's replies with AvalonMarkdown.
 /// </summary>
 public partial class AgentMessageViewModel
 {
@@ -28,17 +29,17 @@ public partial class AgentMessageViewModel
         Text = text;
     }
 
-    /// <summary>从兼容的纯文本日志行（带 emoji 前缀）还原为结构化消息。</summary>
+    /// <summary>Restores a structured message from a compatible plain-text log line (with a role-marker prefix).</summary>
     public static AgentMessageViewModel FromLogLine(string line)
     {
         var trimmed = line?.TrimStart() ?? string.Empty;
 
-        if (trimmed.StartsWith("🧑", StringComparison.Ordinal))
-            return new AgentMessageViewModel(AgentMessageRole.User, trimmed.Substring("🧑".Length).TrimStart());
-        if (trimmed.StartsWith("🤖", StringComparison.Ordinal))
-            return new AgentMessageViewModel(AgentMessageRole.Assistant, trimmed.Substring("🤖".Length).TrimStart());
-        if (trimmed.StartsWith("❌", StringComparison.Ordinal))
-            return new AgentMessageViewModel(AgentMessageRole.Error, trimmed.Substring("❌".Length).TrimStart());
+        if (trimmed.StartsWith("[User]", StringComparison.Ordinal))
+            return new AgentMessageViewModel(AgentMessageRole.User, trimmed.Substring("[User]".Length).TrimStart());
+        if (trimmed.StartsWith("[Agent]", StringComparison.Ordinal))
+            return new AgentMessageViewModel(AgentMessageRole.Assistant, trimmed.Substring("[Agent]".Length).TrimStart());
+        if (trimmed.StartsWith("[Error]", StringComparison.Ordinal))
+            return new AgentMessageViewModel(AgentMessageRole.Error, trimmed.Substring("[Error]".Length).TrimStart());
 
         return new AgentMessageViewModel(AgentMessageRole.Plain, trimmed);
     }

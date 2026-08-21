@@ -17,14 +17,14 @@
 			 behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
 	
 	<UserControl.DataTemplates>
-		<!-- 节点模板 -->
+		<!-- Node template -->
 		<DataTemplate DataType="vm:NodeViewModel">
 			<local:NodeView Width="{Binding Size.Width}" Height="{Binding Size.Height}"
 							Canvas.Left="{Binding Anchor.Horizontal}" Canvas.Top="{Binding Anchor.Vertical}" ZIndex="{Binding Anchor.Layer}"
 							RenderTransform="{Binding $parent[local:TreeView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 		</DataTemplate>
 
-		<!-- 连线模板 -->
+		<!-- Link template -->
 		<DataTemplate DataType="framework:IWorkflowLinkViewModel">
 			<local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}"
 							EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}"
@@ -35,7 +35,7 @@
 		</DataTemplate>
 	</UserControl.DataTemplates>
 
-	<!-- 渲染节点编辑器 ( 支持虚拟化 ) -->
+	<!-- Node editor rendering (with virtualization) -->
 	<Grid Grid.Column="2">
 		<Border x:Name="PART_SurfaceBorder" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="3" Background="#1E1E1E">
 			<local:WorkflowGridDecorator x:Name="PART_GridDecorator">
@@ -44,13 +44,13 @@
 							x:DataType="vm:TreeViewModel" Width="{Binding Layout.ActualSize.Width}" Height="{Binding Layout.ActualSize.Height}" HorizontalAlignment="Left" VerticalAlignment="Top"
 							behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}">
 						<Canvas.DataTemplates>
-							<!-- 依照优先级寻找数据模板： Self > Parent > App -->
+							<!-- Resolve the data template by priority: Self > Parent > App -->
 						</Canvas.DataTemplates>
 					</Canvas>
 				</ScrollViewer>
 			</local:WorkflowGridDecorator>
 		</Border>
-		<!-- 小地图 -->
+		<!-- Minimap -->
 		<local:MinimapOverlay x:Name="PART_MinimapOverlay"
 							  HorizontalAlignment="Right"
 							  VerticalAlignment="Top"

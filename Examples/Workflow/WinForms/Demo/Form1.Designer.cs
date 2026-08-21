@@ -342,8 +342,9 @@
             //
             // minimapOverlay
             //
-            // 小地图宿主在非滚动区（splitContainer.Panel2），画布平移/滚动时固定右上角。
-            // Location 由 MinimapOverlay.PositionAtTopRight 按父容器尺寸计算，这里不设。
+            // The minimap is hosted in the non-scrolling area (splitContainer.Panel2) and stays
+            // fixed at the top-right while the canvas pans/scrolls. Its Location is computed by
+            // MinimapOverlay.PositionAtTopRight from the parent size, so it is not set here.
             minimapOverlay.Name = "minimapOverlay";
             minimapOverlay.TabIndex = 1;
             minimapOverlay.BringToFront();

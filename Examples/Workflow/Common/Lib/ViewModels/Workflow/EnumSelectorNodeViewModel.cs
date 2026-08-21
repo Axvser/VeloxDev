@@ -41,17 +41,17 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
 
     private void OnOutputSlotsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // SelectorTypeName 在 SelectorType 之后触发（SlotEnumerator 先设置类型），
-        // 因此触发时 EnumValues 读到的已是新的选择器类型。
+        // SelectorTypeName fires after SelectorType (SlotEnumerator sets the type first),
+        // so by the time this fires, EnumValues already reads the new selector type.
         if (e.PropertyName == nameof(SlotEnumerator<>.SelectorTypeName))
         {
             OnPropertyChanged(nameof(EnumType));
             OnPropertyChanged(nameof(EnumValues));
         }
-        // CurrentValue 现由枚举器持有，这里同步到节点的 SelectedValue 绑定。
-        // UI 框架（WPF/Avalonia）的 ComboBox 在 ItemsSource 换新数组的同一帧内会丢弃
-        // 已重绑的选中项：条目容器尚未按新源生成，字符串匹配失败 → 显示为空。
-        // 延迟一帧，让 ItemsSource 先落地并生成条目，再重绑选中项。
+        // CurrentValue is now owned by the enumerator; sync it here to the node's SelectedValue binding.
+        // UI frameworks (WPF/Avalonia) drop a re-bound selection in the same frame the ItemsSource swaps arrays:
+        // item containers are not yet generated for the new source, the string match fails → it shows as empty.
+        // Defer one frame so ItemsSource lands and generates items first, then re-bind the selected value.
         if (e.PropertyName == nameof(SlotEnumerator<>.CurrentValue))
         {
             var sc = SynchronizationContext.Current;
@@ -79,7 +79,7 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
 
     [VeloxProperty] private string lastRouted = "-";
 
-    // 执行序列号（手动实现，生成器暂未覆盖）
+    // Execution sequence number (hand-written; the generator does not cover this yet)
     private int lastExecutionOrder;
     public int LastExecutionOrder
     {
@@ -124,10 +124,10 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
         return items[index].Slot?.ToString() ?? "?";
     }
 
-    /// <summary>编译期注入的编译身份（Order = -1 表示绝对停止）。</summary>
+    /// <summary>Compile-time identity injected by the compiler (Order = -1 means absolute stop).</summary>
     public ICompileContext? CompileContext { get; private set; }
 
-    /// <summary>编译期是否处于绝对停止状态（未选中静态分支 / 终止）。</summary>
+    /// <summary>Whether the node is in the compile-time absolute stop state (unselected static branch / terminated).</summary>
     public bool IsCompileStopped => CompileContext is { Order: -1 };
 
     public void AttachCompileTimeContext(ICompileContext context)
@@ -141,20 +141,20 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     }
 
     /// <summary>
-    /// 编译模式：Static 编译期只返回当前选中分支；Dynamic 返回全部分支（运行期定 key）。
-    /// 不同的模式下 <see cref="GetRouteTable"/> 返回的字典不同。
+    /// Compile mode: Static returns only the currently selected branch at compile time; Dynamic returns all branches (key decided at runtime).
+    /// The dictionary returned by <see cref="GetRouteTable"/> differs by mode.
     /// </summary>
     [AgentContext(AgentLanguages.Chinese, "编译模式：Static 编译期锁定当前选中分支（未选中分支被剪除，其下游节点 Order = -1 绝对停止）；Dynamic 运行期按数据负载重新选分支（全部分支存活，编译期 payload 为 null 时 ResolveRouteKey 返回 null）。通过 PatchNodeProperties 设置，如 {\"CompileMode\":\"Static\"}。")]
     [AgentContext(AgentLanguages.English, "Compile mode: Static locks the currently selected branch at compile time (unselected branches are pruned; their downstream nodes get Order = -1 / absolute stop); Dynamic re-selects the branch at runtime from the data payload (all branches stay alive; ResolveRouteKey returns null for a null compile-time payload). Set via PatchNodeProperties, e.g. {\"CompileMode\":\"Static\"}.")]
     [VeloxProperty] private RouterCompileMode _compileMode = RouterCompileMode.Dynamic;
 
-    /// <summary>编译模式下拉数据源。</summary>
+    /// <summary>Options for the compile-mode dropdown.</summary>
     public RouterCompileMode[] CompileModeOptions => [RouterCompileMode.Static, RouterCompileMode.Dynamic];
 
     /// <summary>
-    /// 统一路由入口：
-    /// - Static：key 由当前选中的枚举值决定（编译期可定）；
-    /// - Dynamic：编译期(null payload)返回 null → IsDynamic；运行期读共享字段 selector.value，否则回退当前选中值。
+    /// Unified route-key entry point:
+    /// - Static: the key is decided by the currently selected enum value (decidable at compile time);
+    /// - Dynamic: a null compile-time payload returns null → IsDynamic; at runtime reads the shared "selector.value" field, else falls back to the currently selected value.
     /// </summary>
     public Task<object?> ResolveRouteKey(object? payload)
     {
@@ -169,7 +169,7 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
             : null);
     }
 
-    /// <summary>编译时路由表（随编译模式变化）：Static 只含当前选中分支；Dynamic 含全部分支（保留 1:N 扇出）。</summary>
+    /// <summary>Compile-time route table (changes with mode): Static contains only the currently selected branch; Dynamic contains all branches (preserving 1:N fan-out).</summary>
     public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
     {
         var dict = new Dictionary<object, List<IWorkflowNodeViewModel>>();
@@ -178,7 +178,7 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
 
         if (CompileMode == RouterCompileMode.Static)
         {
-            // 静态：只返回当前选中分支（无下游则登记为终端分支）
+            // Static: return only the currently selected branch (register as terminal branch if it has no downstream)
             var key = OutputSlots.NormalizeSelectorValue(OutputSlots.CurrentValue);
             var slot = key is not null && OutputSlots.TrySelect(key, out var s) ? s : null;
             if (slot is not null)
@@ -197,7 +197,7 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
         }
         else
         {
-            // 动态：全部分支（含无下游的终端分支，登记为空列表）
+            // Dynamic: all branches (terminal branches without downstream are registered as empty lists)
             foreach (var item in OutputSlots.Items)
             {
                 var slot = item.Slot;

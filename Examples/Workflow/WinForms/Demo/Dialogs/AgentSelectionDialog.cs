@@ -7,8 +7,8 @@ using System.Windows.Forms;
 namespace Demo;
 
 /// <summary>
-/// 供 AgentHelper.SelectionHandler 使用的深色风格选择对话框。
-/// 支持单选框、多选框以及自由文本输入。
+/// Dark-styled selection dialog used by AgentHelper.SelectionHandler.
+/// Supports single-select, multi-select, and free-text input.
 /// </summary>
 internal sealed class AgentSelectionDialog : Form
 {
@@ -64,7 +64,7 @@ internal sealed class AgentSelectionDialog : Form
 
         var titleLabel = new Label
         {
-            Text = allowMultiSelect ? "☑️  Agent · 请多选" : "🤖  Agent · 请选择",
+            Text = allowMultiSelect ? "Agent · 请多选" : "Agent · 请选择",
             ForeColor = AccentBlue,
             Font = new Font("Segoe UI", 11f, FontStyle.Bold, GraphicsUnit.Point),
             AutoSize = true,
@@ -180,7 +180,7 @@ internal sealed class AgentSelectionDialog : Form
 
             var confirmBtn = new Button
             {
-                Text = "✓  确认选择",
+                Text = "确认选择",
                 FlatStyle = FlatStyle.Flat,
                 BackColor = BtnBg,
                 ForeColor = AccentBlue,

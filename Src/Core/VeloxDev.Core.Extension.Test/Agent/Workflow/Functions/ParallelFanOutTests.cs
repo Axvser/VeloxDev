@@ -5,8 +5,8 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// 验证扇出（ParallelEntry）+ 汇聚等待：一个路由 key 指向多个下游，各路都执行，
-/// 汇聚点在所有分支之后执行。
+/// Verifies fan-out (ParallelEntry) + join wait: one route key points to multiple downstreams, all
+/// paths execute, and the join point runs after all branches.
 /// </summary>
 [TestClass]
 public class ParallelFanOutTests
@@ -20,7 +20,7 @@ public class ParallelFanOutTests
         compiler.CompileAsync(controller).GetAwaiter().GetResult();
         var graph = compiler.Graphs[0];
 
-        // 编译结构：True 分支 → ParallelEntry（两路扇出）。
+        // Compiled structure: True branch → ParallelEntry (two-way fan-out).
         var branch = graph.Entries.OfType<BranchEntry>().Single();
         var trueOpt = branch.Options.First(o => Equals(o.Key, true));
         var parallel = Assert.IsInstanceOfType<ParallelEntry>(trueOpt.Graph!.Entries[0]);
@@ -59,7 +59,7 @@ public class ParallelFanOutTests
         join.InputSlot.SetChannelCommand.Execute(SlotChannel.MultipleSources);
 
         Connect(tree, controller.OutputSlot!, sel.InputSlot!);
-        Connect(tree, sel.TrueSlot!, t1.InputSlot!);   // 扇出：True → [T1, T2]
+        Connect(tree, sel.TrueSlot!, t1.InputSlot!);   // fan-out: True → [T1, T2]
         Connect(tree, sel.TrueSlot!, t2.InputSlot!);
         Connect(tree, t1.OutputSlot!, join.InputSlot!);
         Connect(tree, t2.OutputSlot!, join.InputSlot!);

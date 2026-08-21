@@ -51,9 +51,9 @@ public sealed class WorkflowSurfaceBehavior
 
         if (value)
         {
-            // 宿主画布启用时自动编排 Win32 窗口样式，消除自绘画布与子窗口（节点
-            // 卡片）重绘分离导致的闪烁/残影：画布窗口加 WS_CLIPCHILDREN，所在顶级
-            // 窗体加 WS_EX_COMPOSITED（DWM 统一合成整个窗体树）。宿主无需任何改动。
+            // When the host canvas is enabled, automatically orchestrate Win32 window styles to eliminate flicker/ghosting
+            // from the repaint separation between the self-drawn canvas and child windows (node cards): the canvas window
+            // gets WS_CLIPCHILDREN and its top-level form gets WS_EX_COMPOSITED (DWM composites the whole form tree). Host needs no changes.
             NativeWindowStyleHelper.EnsureClipChildren(element);
             NativeWindowStyleHelper.EnsureComposited(element);
         }
@@ -286,12 +286,12 @@ public sealed class WorkflowSurfaceBehavior
 
         host.PerformLayout();
 
-        // 异步失效重绘：WM_PAINT 由消息循环合并处理。Refresh 会被运行状态刷新/滚动/
-        // 集合变更等非交互场景高频调用，一律同步重绘会让自绘画布每帧立即重画造成卡顿，
-        // 因此默认保持异步。
-        // 例外：宿主正在捕获鼠标（画布平移/拖动手势进行中）时同步重绘——否则高频
-        // 鼠标消息把 WM_PAINT 不断延后，节点旧位置与旧连线来不及擦除形成残影。
-        // 拖动节点的同步重绘由 WorkflowNodeDragBehavior 单独触发，此路径无需重复。
+        // Asynchronous invalidation: WM_PAINT is coalesced by the message loop. Refresh is called frequently by non-interactive
+        // scenarios (runtime status refresh, scrolling, collection changes); always repainting synchronously would make the
+        // self-drawn canvas redraw every frame and stutter, so the default stays asynchronous.
+        // Exception: repaint synchronously while the host captures the mouse (canvas pan/drag in progress) — otherwise high-
+        // frequency mouse messages keep deferring WM_PAINT and the node's old position and old links are not erased in time,
+        // leaving ghosts. Node-drag synchronous repaint is triggered separately by WorkflowNodeDragBehavior, so not repeated here.
         host.Invalidate();
         if (host.Capture)
         {
@@ -345,9 +345,9 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        // 按名称解析对应控件（如 PART_ScrollViewer / PART_Canvas / PART_GridDecorator），
-        // 自动为其窗口加 WS_CLIPCHILDREN：这些层叠容器重绘时裁剪子控件区域，避免
-        // 覆盖节点视图/连线导致层间闪烁。控件在句柄创建前即可通过控件树解析。
+        // Resolve the named control (e.g. PART_ScrollViewer / PART_Canvas / PART_GridDecorator) and automatically add
+        // WS_CLIPCHILDREN to its window: these layered containers clip child regions while repainting, avoiding layer
+        // flicker from covering node views/links. The control can be resolved through the control tree before its handle exists.
         if (FindControlByName(root, name!) is Control control)
         {
             NativeWindowStyleHelper.EnsureClipChildren(control);

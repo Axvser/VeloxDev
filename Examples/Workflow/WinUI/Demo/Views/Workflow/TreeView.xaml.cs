@@ -72,7 +72,7 @@ namespace Demo.Views
 
             string filePath = Path.Combine(folder.Path, "Workflow.json");
             tree.SaveCommand.Execute(filePath);
-            await ShowMessageAsync("保存成功", $"工作流已保存到：{filePath}");
+            await ShowMessageAsync("Save Succeeded", $"Workflow saved to: {filePath}");
         }
 
         private async void SelectWorkflow(object sender, RoutedEventArgs e)
@@ -103,7 +103,7 @@ namespace Demo.Views
 
                 if (!success || result is null)
                 {
-                    await ShowMessageAsync("加载失败", "文件格式不正确或解析失败。", "确定");
+                    await ShowMessageAsync("Load Failed", "The file format is invalid or the parse failed.", "OK");
                     return;
                 }
 
@@ -140,11 +140,11 @@ namespace Demo.Views
                         sv.ScrollToVerticalOffset(Math.Max(0, centerY - vpH / 2.0));
                     }
                 }
-                await ShowMessageAsync("加载成功", $"工作流已从 {file.Name} 加载成功。", "确定");
+                await ShowMessageAsync("Load Succeeded", $"Workflow loaded from {file.Name}.", "OK");
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("错误", $"加载文件失败：{ex.Message}", "确定");
+                await ShowMessageAsync("Error", $"Failed to load file: {ex.Message}", "OK");
             }
         }
 
@@ -352,8 +352,8 @@ namespace Demo.Views
                     // Multi-select mode: ContentDialog with confirm/cancel
                     var dialog = new ContentDialog
                     {
-                        Title = "☑️  Agent · 请多选",
-                        PrimaryButtonText = "✓  确认选择",
+                        Title = "Agent · 请多选",
+                        PrimaryButtonText = "确认选择",
                         CloseButtonText = "取消",
                         DefaultButton = ContentDialogButton.Primary,
                         Content = scroller,
@@ -381,7 +381,7 @@ namespace Demo.Views
                     // Single-select mode: inline buttons call dialog.Hide()
                     ContentDialog dialog = new()
                     {
-                        Title = "🤖  Agent · 请选择",
+                        Title = "Agent · 请选择",
                         PrimaryButtonText = "取消",
                         XamlRoot = this.XamlRoot,
                         DefaultButton = ContentDialogButton.None,
@@ -465,11 +465,11 @@ namespace Demo.Views
 
                 var dialog = new ContentDialog
                 {
-                    Title = "⚠️  Agent · 操作确认",
+                    Title = "Agent · 操作确认",
                     Content = bodyPanel,
-                    PrimaryButtonText = "✓  仅同意一次",
-                    SecondaryButtonText = "✓✓  本次会话始终同意",
-                    CloseButtonText = "✕  拒绝",
+                    PrimaryButtonText = "仅同意一次",
+                    SecondaryButtonText = "本次会话始终同意",
+                    CloseButtonText = "拒绝",
                     DefaultButton = ContentDialogButton.Close,
                     XamlRoot = this.XamlRoot,
                 };

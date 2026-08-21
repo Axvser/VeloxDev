@@ -6,23 +6,24 @@ using VeloxDev.WorkflowSystem.StandardEx;
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// 一次运行期的执行会话（也是那个公有携带 UID 的 VM）：
-/// 上下文共享（UID / 顺序 / 日志 / 共享变量）+ 执行位置/决策状态（引擎维护、UI 绑定进度）。
-/// 节点实现 <see cref="IRuntimeAware"/>，由引擎在驱动前注入本对象。
-/// 继承 <see cref="ITaskContext"/>：编译器把本会话对象直接传入
-/// <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/>，并逐节点写 <see cref="Data"/>。
+/// One runtime execution session (also the public VM carrying the UID):
+/// shared context (UID / sequence / logs / shared variables) plus execution position and decision
+/// state (maintained by the engine, bound to UI progress).
+/// Nodes implement <see cref="IRuntimeAware"/> and the engine injects this object before driving.
+/// Inherits <see cref="ITaskContext"/>: the compiler passes this session object directly into
+/// <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/> and writes <see cref="Data"/> per node.
 /// </summary>
 public sealed partial class RuntimeContext : IRuntimeContext
 {
-    /// <summary>运行期执行会话，恒为 false（编译期才有 true）。</summary>
+    /// <summary>Runtime execution session — always false (only the compile phase is true).</summary>
     public bool IsCompilePhase => false;
 
-    // ── 上下文共享 ──
+    // ── Shared context ──
     [VeloxProperty] private Guid _uid = Guid.NewGuid();
     [VeloxProperty] private int _sequence = 0;
     [VeloxProperty] private ObservableCollection<string> _logs = [];
 
-    // ── 执行位置 / 决策状态（引擎维护）──
+    // ── Execution position / decision state (maintained by the engine) ──
     [VeloxProperty] private ActionEntry? _currentEntry;
     [VeloxProperty] private int _nodeIndex = -1;
     [VeloxProperty] private object? _branchKey;
@@ -31,86 +32,91 @@ public sealed partial class RuntimeContext : IRuntimeContext
     [VeloxProperty] private string _status = "Idle";
 
     /// <summary>
-    /// 当前执行状态码 = 正在执行节点的**编译期固定编号**（CompileContext.Order）。
-    /// 运行期只在这些固定编号之间跳跃，不重排编号。
+    /// Current execution status code = the **compile-time fixed number** (CompileContext.Order) of the
+    /// node currently executing. At runtime it only jumps between these fixed numbers, never renumbers.
     /// </summary>
     [VeloxProperty] private int _currentOrder = -1;
 
-    // ── 数据流载荷（编译器驱动时逐节点注入；作为 ITaskContext 提供）──
+    // ── Data-flow payload (injected per node by the compiler while driving; exposed as ITaskContext) ──
     [VeloxProperty] private object? _data;
     [VeloxProperty] private IWorkflowSlotViewModel? _sender;
     [VeloxProperty] private IWorkflowSlotViewModel? _receiver;
 
-    // 共享变量（黑板）：节点/引擎/UI 都可读写，非直接 UI 绑定，走方法访问
+    // Shared variables (blackboard): readable/writable by nodes, the engine, and the UI; not directly
+    // UI-bound, accessed through methods
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
 
-    // 产物登记表（Key = 来源 Node 引用身份，Value = 该 pass 登记的产物 + pass 戳）：
-    // 引擎逐节点驱动后登记，汇合点按输入组聚合；pass 戳用于区分「本 pass 真跑过」与「重跑被跳过的旧产物」。
+    // Output registry (Key = source Node reference identity, Value = the output registered this pass + pass stamp):
+    // the engine registers after driving each node, and join points aggregate per input group; the pass stamp
+    // distinguishes "actually ran this pass" from "old outputs skipped on a re-run".
     private readonly Dictionary<IWorkflowNodeViewModel, (int Attempt, object? Value)> _outputs =
         new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
 
     /// <summary>
-    /// 节点是否在本次驱动中调用了 <see cref="Error"/> 或 <see cref="Warn"/>（请求重定向）。
-    /// 由引擎在每次驱动节点前清除、驱动后检查。经 <see cref="IRuntimeContext"/> 读写。
+    /// Whether the node called <see cref="Error"/> or <see cref="Warn"/> during this drive (a redirect request).
+    /// The engine clears it before each drive and checks it after. Read/written via <see cref="IRuntimeContext"/>.
     /// </summary>
     public bool RedirectRequested { get; set; }
 
-    /// <summary>流程是否因「节点报错但未实现 <see cref="IRedirectable"/>」而提前结束（状态置为 -1）。</summary>
+    /// <summary>Whether the flow ended early because "the node errored but does not implement <see cref="IRedirectable"/>" (status set to -1).</summary>
     public bool EndedWithError { get; set; }
 
-    /// <summary>引擎请求的回退目标 Order（可为跨链）。RunAsync 读取后带该目标重跑整张图。</summary>
+    /// <summary>The engine-requested redirect target Order (may be cross-chain). RunAsync re-runs the whole graph with it.</summary>
     public int? PendingRedirectTarget { get; set; }
 
     /// <summary>
-    /// 引擎每 pass 开头写入的「当前重跑目标 Order」（首 pass 为 null）。
-    /// 供产物收集区分两类被跳过的节点：目标之前的是契约保留 prefix（Order &lt; 该值），目标之后未重驱动的是陈旧分支。
+    /// The "current re-run target Order" the engine writes at the start of each pass (null on the first pass).
+    /// The output collector uses it to tell the two kinds of skipped nodes apart: nodes before the target are the
+    /// contract-preserved prefix (Order &lt; that value); nodes after the target not re-driven are stale branches.
     /// </summary>
     public int? ActiveRedirectTarget { get; set; }
 
-    /// <summary>取下一个执行顺序号（自增）。</summary>
+    /// <summary>Gets the next execution sequence number (auto-incremented).</summary>
     public int Next() => Interlocked.Increment(ref _sequence);
 
-    /// <summary>节点/引擎推送一条普通日志（带顺序前缀）。</summary>
+    /// <summary>Nodes/the engine push a plain log line (with a sequence prefix).</summary>
     public void Log(string entry) => _logs.Add($"{Next():00}. {entry}");
 
-    /// <summary>节点/引擎推送一条异常/错误消息（带顺序前缀与 ✗ 标记）。同时请求重定向。</summary>
+    /// <summary>Nodes/the engine push an exception/error message (sequence prefix with a ✗ marker). Also requests a redirect.</summary>
     public void Error(string message)
     {
         _logs.Add($"{Next():00}. ✗ {message}");
         RedirectRequested = true;
     }
 
-    /// <summary>节点/引擎推送一条警告消息（带顺序前缀与 ⚠ 标记）。同时请求重定向。</summary>
+    /// <summary>Nodes/the engine push a warning message (sequence prefix with a ⚠ marker). Also requests a redirect.</summary>
     public void Warn(string message)
     {
         _logs.Add($"{Next():00}. ⚠ {message}");
         RedirectRequested = true;
     }
 
-    /// <summary>写入一个共享变量（key 为空则忽略）。</summary>
+    /// <summary>Writes a shared variable (ignored when the key is empty).</summary>
     public void Set(string key, object? value)
     {
         if (string.IsNullOrWhiteSpace(key)) return;
         _variables[key] = value;
     }
 
-    /// <summary>读取一个共享变量。</summary>
+    /// <summary>Reads a shared variable.</summary>
     public bool TryGet(string key, out object? value) => _variables.TryGetValue(key, out value);
 
-    /// <summary>登记节点本次运行的产物（引擎在 DriveAsync 驱动后写入），带当前 pass 戳。</summary>
+    /// <summary>Registers the node's output for this run (written by the engine after DriveAsync drives it), stamped with the current pass.</summary>
     public void RegisterOutput(IWorkflowNodeViewModel node, object? value)
     {
         if (node is null) return;
         _outputs[node] = (Attempt, value);
     }
 
-    /// <summary>清空产物登记表（每次 RunAsync 开始调用一次；重定向重跑不清空 → 由 pass 戳过滤陈旧产物）。</summary>
+    /// <summary>Clears the output registry (once at the start of each RunAsync; redirect re-runs do not clear it → stale outputs are filtered by pass stamp).</summary>
     public void ResetOutputs() => _outputs.Clear();
 
     /// <summary>
-    /// 收集一组输入节点的产物为只读字典；未登记的节点不包含（TryGetValue 返回 false）。
-    /// 过滤规则：仅保留「本 pass 真跑过」的产物（pass 戳 == 当前 Attempt）或「重定向目标之前的契约保留 prefix」
-    /// （来源 Order &lt; ActiveRedirectTarget，resume 契约假设其结果未变）。按输入源数量预置容量，零扩容。
+    /// Collects the outputs of a group of input nodes into a read-only dictionary; unregistered nodes are absent
+    /// (TryGetValue returns false).
+    /// Filter rule: only keep outputs "actually run this pass" (pass stamp == current Attempt) or the contract-preserved
+    /// prefix before the redirect target (source Order &lt; ActiveRedirectTarget; the resume contract assumes its result
+    /// did not change). Capacity is pre-sized by the input-source count, zero reallocations.
     /// </summary>
     public IReadOnlyDictionary<IWorkflowNodeViewModel, object?> CollectGroupedInputs(
         IEnumerable<IWorkflowNodeViewModel> inputNodes)
@@ -128,8 +134,9 @@ public sealed partial class RuntimeContext : IRuntimeContext
     }
 
     /// <summary>
-    /// 该来源的产物是否仍视为有效：本 pass 刚登记（pass 戳 == Attempt），
-    /// 或来源在重定向目标之前、属于契约保留的 prefix（跳过未重驱动但其结果未变）。
+    /// Whether a source's output is still considered valid: it was just registered this pass (pass stamp == Attempt),
+    /// or the source is before the redirect target and belongs to the contract-preserved prefix (skipped without
+    /// re-driving, but its result did not change).
     /// </summary>
     private bool IsCurrentPassOrPreserved(IWorkflowNodeViewModel source, (int Attempt, object? Value) entry)
         => entry.Attempt == Attempt

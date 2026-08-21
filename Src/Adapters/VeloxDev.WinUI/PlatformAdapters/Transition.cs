@@ -75,9 +75,9 @@ namespace VeloxDev.TransitionSystem
             }
             public StateSnapshot Property(Expression<Func<T, Transform?>> propertyLambda, ICollection<Transform> newValue, object? interpolationOptions = null)
             {
-                // 单个变换直接赋值，保持运行时类型——否则包成 TransformGroup 会改变运行时类型，
-                // 破坏嵌套属性路径（例如 ((TranslateTransform)x.RenderTransform).X 依赖中间是 TranslateTransform）。
-                // 多个变换才包成 TransformGroup。
+                // A single transform is assigned directly to preserve its runtime type — wrapping it in a TransformGroup would change the runtime type,
+                // breaking nested property paths (e.g. ((TranslateTransform)x.RenderTransform).X depends on the intermediate being a TranslateTransform).
+                // Only multiple transforms are wrapped in a TransformGroup.
                 if (newValue is { Count: 1 })
                 {
                     Transform? single = null;

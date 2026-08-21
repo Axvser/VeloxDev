@@ -6,7 +6,7 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
 /// Verifies the SlotEnumerator-based EnumSelector's per-credential selection memory and its
-/// undo/redo behavior on the demo's bootstrap undo stack (逐条引导步骤). These tests only touch
+/// undo/redo behavior on the demo's bootstrap undo stack (one step at a time). These tests only touch
 /// the selector + undo stack — the Compiler mechanism was removed for a from-scratch rewrite, so
 /// routing/compile-time behavior is no longer exercised here.
 /// </summary>
@@ -20,8 +20,8 @@ public class DemoEnumSelectorSwitchRepro
         var node = session.Tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
         var vr = typeof(NetworkRequestMethod).Assembly.GetType("Demo.ViewModels.VoltageRange");
 
-        // Demo 现在默认在 NetworkRequestMethod（Get）。先切到 VoltageRange 记录 High，
-        // 再验证 A/B 两个凭据各自独立记忆选中值。
+        // The demo now defaults to NetworkRequestMethod (Get). First switch to VoltageRange to record High,
+        // then verify that credentials A/B each remember their selected value independently.
         node.OutputSlots.SetSelector(vr!);
         node.SelectedValue = "High";
         node.OutputSlots.SetSelector(typeof(NetworkRequestMethod));
@@ -40,7 +40,7 @@ public class DemoEnumSelectorSwitchRepro
         var node = session.Tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
         var vr = typeof(NetworkRequestMethod).Assembly.GetType("Demo.ViewModels.VoltageRange");
 
-        // Demo 现在默认在 NetworkRequestMethod；先切到 VoltageRange 记录 High，再验证各凭据的 dict 恢复。
+        // The demo now defaults to NetworkRequestMethod; first switch to VoltageRange to record High, then verify each credential's dict restore.
         node.OutputSlots.SetSelector(vr!);
         node.SelectedValue = "High";
         node.OutputSlots.SetSelector(typeof(NetworkRequestMethod));
@@ -71,11 +71,11 @@ public class DemoEnumSelectorSwitchRepro
         var vr = typeof(NetworkRequestMethod).Assembly.GetType("Demo.ViewModels.VoltageRange");
         Assert.IsNotNull(vr, "VoltageRange should exist in Lib");
 
-        // The demo keeps its bootstrap on the undo stack (逐条引导步骤), but the interactive
+        // The demo keeps its bootstrap on the undo stack (one step at a time), but the interactive
         // switches we perform below land on top of it — so a single Undo pops exactly our own
         // switch, deterministically. To exercise the undo path, perform switches of our own, then
         // undo one.
-        // Demo 现在默认在 NetworkRequestMethod；先切到 VoltageRange 记录 High，再切回 HTTP 验证 GET。
+        // The demo now defaults to NetworkRequestMethod; first switch to VoltageRange to record High, then switch back to HTTP to verify GET.
         node.OutputSlots.SetSelector(vr!);
         node.SelectedValue = "High";
         node.OutputSlots.SetSelector(typeof(NetworkRequestMethod));

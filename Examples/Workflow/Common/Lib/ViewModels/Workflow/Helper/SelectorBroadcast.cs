@@ -3,14 +3,15 @@ using VeloxDev.WorkflowSystem;
 namespace Demo.ViewModels.Workflow.Helper;
 
 /// <summary>
-/// 选择器的无状态广播工具：只向**指定槽**（当前选中值对应的分支）的下游广播，
-/// 而不是沿全部输出槽扇出。供 Bool/Enum 选择器在无状态（非编译广播）模式下按选中值走单分支。
+/// Stateless broadcast helper for selectors: broadcasts only to the downstream of the **specified slot**
+/// (the branch matching the currently selected value), rather than fanning out across all output slots.
+/// Bool/Enum selectors use it to follow a single branch in stateless (non-compiled-broadcast) mode.
 /// </summary>
 internal static class SelectorBroadcast
 {
     /// <summary>
-    /// 只把数据投递到 <paramref name="slot"/> 的下游目标（逐条过 owner 的 AccessAsync 门禁，
-    /// 与 <c>StandardBroadcastAsync</c> 一致）。槽为空则无事发生。
+    /// Delivers the data only to <paramref name="slot"/>'s downstream targets (each passes the owner's AccessAsync
+    /// gate, consistent with <c>StandardBroadcastAsync</c>). A null slot does nothing.
     /// </summary>
     public static async Task ToSlotAsync(IWorkflowNodeViewModel owner, IWorkflowSlotViewModel? slot, object? data, CancellationToken ct)
     {

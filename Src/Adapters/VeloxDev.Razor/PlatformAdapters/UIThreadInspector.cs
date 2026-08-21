@@ -7,9 +7,9 @@ namespace VeloxDev.TransitionSystem
         private static volatile bool _isAppRunning = true;
 
         /// <summary>
-        /// 显式在 Blazor circuit 线程上捕获（可选）。不调用时也会在首次 UI 线程访问时自动捕获
-        /// （见 <see cref="EnsureCaptured"/>）；仅当动画从后台线程首次启动时才需要，
-        /// 例如经 <c>Task.Run</c> 在非 UI 线程调用 <c>Execute</c>。
+        /// Optionally capture on the Blazor circuit thread. If not called, capture also happens automatically on first UI-thread access
+        /// (see <see cref="EnsureCaptured"/>); it is only needed when an animation starts from a background thread for the first time,
+        /// e.g. calling <c>Execute</c> from a non-UI thread via <c>Task.Run</c>.
         /// </summary>
         public static void CaptureUIThread()
         {
@@ -20,8 +20,8 @@ namespace VeloxDev.TransitionSystem
         public static void NotifyShutdown() => _isAppRunning = false;
 
         /// <summary>
-        /// 惰性捕获：首次在带 SynchronizationContext 的线程（如 circuit 线程）触碰本类时
-        /// 自动记录上下文与线程 id。后台线程（无 SynchronizationContext）调用时无副作用。
+        /// Lazy capture: records the context and thread id the first time this class is touched on a thread with a SynchronizationContext
+        /// (such as the circuit thread). Calling from a background thread (no SynchronizationContext) has no side effects.
         /// </summary>
         private static void EnsureCaptured()
         {
