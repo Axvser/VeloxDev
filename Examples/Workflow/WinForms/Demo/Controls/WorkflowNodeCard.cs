@@ -54,6 +54,13 @@ internal sealed class WorkflowNodeCard : UserControl
     private ComboBox? _routerModeCombo;
     private TableLayoutPanel? _outputSlotsLayout;
     private readonly List<(Label label, Views.SlotView slot)> _dynamicSlotRows = [];
+    private TableLayoutPanel? _inputSlotsLayout;
+    private TextBox? _scriptBox;
+    private Label? _descriptionLabel;
+    private Label? _pythonStatusLabel;
+    private readonly List<Views.SlotView> _pythonSlotRows = [];
+    private TextBox? _intervalBox;
+    private Label? _tickLabel;
 
     // ── Main slot buttons (edge-anchored slot views; screen position computed by WorkflowCanvas) ────
     internal Views.SlotView? InputSlotButton { get; private set; }
@@ -155,6 +162,8 @@ internal sealed class WorkflowNodeCard : UserControl
                 case ControllerViewModel c: ApplyController(c); break;
                 case BoolSelectorNodeViewModel b: ApplyBoolSelector(b); break;
                 case EnumSelectorNodeViewModel e: ApplyEnumSelector(e); break;
+                case PythonScriptNodeViewModel p: ApplyPython(p); break;
+                case TimerNodeViewModel t: ApplyTimer(t); break;
             }
         }
         finally
@@ -195,6 +204,13 @@ internal sealed class WorkflowNodeCard : UserControl
                 border = Color.FromArgb(214, 160, 255);
                 header = Color.FromArgb(58, 37, 80);
                 body = Color.FromArgb(42, 30, 53);
+                footer = body;
+                break;
+            case PythonScriptNodeViewModel:
+            case TimerNodeViewModel:
+                border = Color.FromArgb(110, 198, 255);
+                header = Color.FromArgb(37, 53, 69);
+                body = Color.FromArgb(30, 42, 53);
                 footer = body;
                 break;
             default:
@@ -287,6 +303,12 @@ internal sealed class WorkflowNodeCard : UserControl
         {
             slot.Dispose();
         }
+
+        foreach (var slot in _pythonSlotRows)
+        {
+            slot.Dispose();
+        }
+        _pythonSlotRows.Clear();
     }
 
     // ── Layout building ──────────────────────────────────────────────────────────────
@@ -306,6 +328,8 @@ internal sealed class WorkflowNodeCard : UserControl
             case ControllerViewModel: BuildController(); break;
             case BoolSelectorNodeViewModel: BuildBoolSelector(); break;
             case EnumSelectorNodeViewModel: BuildEnumSelector(); break;
+            case PythonScriptNodeViewModel: BuildPython(); break;
+            case TimerNodeViewModel: BuildTimer(); break;
         }
     }
 
@@ -618,6 +642,138 @@ internal sealed class WorkflowNodeCard : UserControl
         InputSlotButton = AddSlotButton(null);
     }
 
+    // ── Layout: Python node ───────────────────────────────────────────────────────
+    private void BuildPython()
+    {
+        SetRows(48F, 0F, false);
+
+        var flow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Margin = Padding.Empty,
+            Padding = new Padding(12, 14, 12, 10), BackColor = Color.FromArgb(37, 53, 69),
+        };
+        _titleLabel = MakeLabel(Color.White, 10.5F, FontStyle.Bold, autoSize: true);
+        _pythonStatusLabel = MakeBadge(Color.FromArgb(228, 216, 255), Color.FromArgb(43, 36, 64));
+        flow.Controls.Add(_titleLabel);
+        flow.Controls.Add(_pythonStatusLabel);
+        _headerPanel.Controls.Add(flow);
+
+        // Ports live in fixed left/right strips, isolated from the middle editor (description + script).
+        var bodyHost = new Panel
+        {
+            Dock = DockStyle.Fill, AutoScroll = true,
+            BackColor = Color.FromArgb(30, 42, 53), Padding = Padding.Empty,
+        };
+        var bodyGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1,
+            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
+        };
+        bodyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64F));   // input ports (left)
+        bodyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));   // middle: description + script
+        bodyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64F));   // output ports (right)
+
+        _inputSlotsLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty,
+            Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
+        };
+        _inputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
+        _inputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        bodyGrid.Controls.Add(_inputSlotsLayout, 0, 0);
+
+        var middle = new Panel
+        {
+            Dock = DockStyle.Fill, Margin = Padding.Empty,
+            Padding = new Padding(4, 6, 4, 6), BackColor = Color.FromArgb(30, 42, 53),
+        };
+        var middleTlp = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
+        };
+        middleTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        middleTlp.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // description
+        middleTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));  // script editor
+
+        _descriptionLabel = MakeLabel(Color.FromArgb(139, 148, 158), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.TopLeft);
+        _descriptionLabel.Dock = DockStyle.Fill;
+        _descriptionLabel.MaximumSize = new System.Drawing.Size(0, 36);
+        middleTlp.Controls.Add(_descriptionLabel, 0, 0);
+
+        _scriptBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            AcceptsReturn = true,
+            WordWrap = false,
+            ScrollBars = ScrollBars.Both,
+            Font = new Font("Consolas", 10F),
+            BackColor = Color.FromArgb(13, 17, 23),
+            ForeColor = Color.FromArgb(230, 237, 243),
+            BorderStyle = BorderStyle.FixedSingle,
+            Margin = new Padding(0, 2, 0, 0),
+        };
+        _scriptBox.TextChanged += OnScriptTextChanged;
+        middleTlp.Controls.Add(_scriptBox, 0, 1);
+        middle.Controls.Add(middleTlp);
+        bodyGrid.Controls.Add(middle, 1, 0);
+
+        _outputSlotsLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty,
+            Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
+        };
+        _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
+        bodyGrid.Controls.Add(_outputSlotsLayout, 2, 0);
+
+        bodyHost.Controls.Add(bodyGrid);
+        _bodyPanel.Controls.Add(bodyHost);
+    }
+
+    // ── Layout: Timer node ─────────────────────────────────────────────────────────
+    private void BuildTimer()
+    {
+        SetRows(48F, 0F, false);
+
+        var flow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Margin = Padding.Empty,
+            Padding = new Padding(12, 14, 12, 10), BackColor = Color.FromArgb(37, 53, 69),
+        };
+        _titleLabel = MakeLabel(Color.White, 10.5F, FontStyle.Bold, autoSize: true);
+        _orderBadge = MakeBadge(Color.FromArgb(200, 255, 200), Color.FromArgb(31, 61, 31));
+        flow.Controls.Add(_titleLabel);
+        flow.Controls.Add(_orderBadge);
+        _headerPanel.Controls.Add(flow);
+
+        var bodyTlp = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
+            Margin = Padding.Empty, Padding = new Padding(14), BackColor = Color.FromArgb(30, 42, 53),
+        };
+        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
+        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
+        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+
+        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Interval (ms)"), 0, 0);
+        _intervalBox = MakeTextBox();
+        _intervalBox.TextChanged += OnIntervalTextChanged;
+        bodyTlp.Controls.Add(_intervalBox, 0, 1);
+        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Last Tick"), 0, 2);
+        _tickLabel = MakeLabel(Color.FromArgb(110, 198, 255), 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.TopLeft);
+        bodyTlp.Controls.Add(_tickLabel, 0, 3);
+        _bodyPanel.Controls.Add(bodyTlp);
+
+        InputSlotButton = AddSlotButton(null);
+        OutputSlotButton = AddSlotButton(null);
+    }
+
     // ── Data application ──────────────────────────────────────────────────────────────
     private void ApplyWorker(NodeViewModel n)
     {
@@ -693,6 +849,91 @@ internal sealed class WorkflowNodeCard : UserControl
         InputSlotButton!.ViewModel = e.InputSlot;
         UpdateEnumCombo(e);
         RebuildEnumSlots(e);
+    }
+
+    private void ApplyPython(PythonScriptNodeViewModel p)
+    {
+        SetText(_titleLabel, p.Title);
+        SetText(_pythonStatusLabel, p.LastStatus);
+        SetVisible(_pythonStatusLabel, !string.IsNullOrEmpty(p.LastStatus) && p.LastStatus != "Idle");
+        SetText(_descriptionLabel, p.Description);
+        SetText(_scriptBox, p.Script);
+        RebuildPythonSlots(p);
+    }
+
+    private void ApplyTimer(TimerNodeViewModel t)
+    {
+        SetText(_titleLabel, t.Title);
+        SetText(_orderBadge, t.ExecutionOrderText);
+        SetVisible(_orderBadge, t.HasExecutionOrder);
+        SetText(_intervalBox, t.IntervalMilliseconds.ToString(CultureInfo.InvariantCulture));
+        SetText(_tickLabel, t.LastTick);
+        InputSlotButton!.ViewModel = t.InputSlot;
+        OutputSlotButton!.ViewModel = t.OutputSlot;
+    }
+
+    /// <summary>Rebuilds the Python node's dynamic input/output slot rows (reuses existing SlotViews when the count matches).</summary>
+    private void RebuildPythonSlots(PythonScriptNodeViewModel p)
+    {
+        if (_inputSlotsLayout is null || _outputSlotsLayout is null) return;
+
+        var inputs = p.InputSlots?.Items
+            .Select((item, i) => (Name: string.IsNullOrWhiteSpace(item.Name) ? $"In {i + 1}" : item.Name, Slot: (IWorkflowSlotViewModel?)item.Slot))
+            .ToArray() ?? [];
+        var outputs = p.OutputSlots?.Items
+            .Select((item, i) => (Name: string.IsNullOrWhiteSpace(item.Name) ? $"Out {i + 1}" : item.Name, Slot: (IWorkflowSlotViewModel?)item.Slot))
+            .ToArray() ?? [];
+
+        if (_pythonSlotRows.Count == inputs.Length + outputs.Length)
+        {
+            for (var i = 0; i < inputs.Length; i++) _pythonSlotRows[i].ViewModel = inputs[i].Slot;
+            for (var i = 0; i < outputs.Length; i++) _pythonSlotRows[inputs.Length + i].ViewModel = outputs[i].Slot;
+            return;
+        }
+
+        foreach (var s in _pythonSlotRows)
+        {
+            _inputSlotsLayout.Controls.Remove(s);
+            _outputSlotsLayout.Controls.Remove(s);
+            s.Dispose();
+        }
+        _pythonSlotRows.Clear();
+        _inputSlotsLayout.SuspendLayout();
+        _inputSlotsLayout.Controls.Clear();
+        _inputSlotsLayout.RowStyles.Clear();
+        _inputSlotsLayout.RowCount = Math.Max(1, inputs.Length);
+        _outputSlotsLayout.SuspendLayout();
+        _outputSlotsLayout.Controls.Clear();
+        _outputSlotsLayout.RowStyles.Clear();
+        _outputSlotsLayout.RowCount = Math.Max(1, outputs.Length);
+
+        for (var i = 0; i < inputs.Length; i++)
+        {
+            _inputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+            var btn = new Views.SlotView { Margin = new Padding(2, 4, 2, 4) };
+            btn.ViewModel = inputs[i].Slot;
+            _inputSlotsLayout.Controls.Add(btn, 0, i);
+            var lbl = MakeLabel(Color.FromArgb(110, 198, 255), 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleLeft);
+            lbl.Dock = DockStyle.Fill;
+            lbl.Text = inputs[i].Name;
+            _inputSlotsLayout.Controls.Add(lbl, 1, i);
+            _pythonSlotRows.Add(btn);
+        }
+        for (var i = 0; i < outputs.Length; i++)
+        {
+            _outputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+            var lbl = MakeLabel(Color.FromArgb(110, 198, 255), 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleRight);
+            lbl.Dock = DockStyle.Fill;
+            lbl.Text = outputs[i].Name;
+            _outputSlotsLayout.Controls.Add(lbl, 0, i);
+            var btn = new Views.SlotView { Margin = new Padding(2, 4, 2, 4) };
+            btn.ViewModel = outputs[i].Slot;
+            _outputSlotsLayout.Controls.Add(btn, 1, i);
+            _pythonSlotRows.Add(btn);
+        }
+
+        _inputSlotsLayout.ResumeLayout();
+        _outputSlotsLayout.ResumeLayout();
     }
 
     // ── Dynamic slot rows (BoolSelector) ──────────────────────────────────────────
@@ -831,6 +1072,20 @@ internal sealed class WorkflowNodeCard : UserControl
             node.Condition = _conditionCheck.Checked;
     }
 
+    private void OnScriptTextChanged(object? sender, EventArgs e)
+    {
+        if (_updatingFromVm || _node is not PythonScriptNodeViewModel p || _scriptBox is null) return;
+        if (!string.Equals(p.Script, _scriptBox.Text, StringComparison.Ordinal))
+            p.Script = _scriptBox.Text;
+    }
+
+    private void OnIntervalTextChanged(object? sender, EventArgs e)
+    {
+        if (_updatingFromVm || _node is not TimerNodeViewModel t || _intervalBox is null) return;
+        if (int.TryParse(_intervalBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) && t.IntervalMilliseconds != v)
+            t.IntervalMilliseconds = v;
+    }
+
     private void OnEnumValueChanged(object? sender, EventArgs e)
     {
         if (_updatingFromVm || _node is not EnumSelectorNodeViewModel node || _enumCombo is null) return;
@@ -898,6 +1153,12 @@ internal sealed class WorkflowNodeCard : UserControl
         _runCountLabel = _waitCountLabel = _traceLabel = _statusLabel = _bodyDuration = null;
         _errorLabel = _responseLabel = _controllerDesc = null;
         _outputSlotsLayout = null;
+        _inputSlotsLayout = null;
+        _scriptBox = null;
+        _descriptionLabel = null;
+        _pythonStatusLabel = null;
+        _intervalBox = null;
+        _tickLabel = null;
         InputSlotButton = OutputSlotButton = null;
     }
 

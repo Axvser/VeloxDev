@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 mc:Ignorable="d" d:DesignWidth="200" d:DesignHeight="140"
+			 x:Class="Demo.TimerNodeView"
+			 xmlns:local="using:Demo"
+			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+			 xmlns:vm="using:Demo.ViewModels"
+			 ClipToBounds="False"
+			 behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
+			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
+			 x:DataType="vm:TimerNodeViewModel">
+	<Grid RowDefinitions="40,*" ClipToBounds="False">
+		<Grid.Styles>
+			<Style Selector="local|SlotView">
+				<Setter Property="Foreground" Value="White"/>
+			</Style>
+			<Style Selector="local|SlotView[SlotState=8]">
+				<Setter Property="Foreground" Value="Tomato"/>
+			</Style>
+			<Style Selector="local|SlotView[SlotState=16]">
+				<Setter Property="Foreground" Value="Lime"/>
+			</Style>
+			<Style Selector="local|SlotView[SlotState=24]">
+				<Setter Property="Foreground" Value="Violet"/>
+			</Style>
+		</Grid.Styles>
+
+		<Border Grid.RowSpan="2"
+				CornerRadius="6"
+				BorderThickness="1.5"
+				BorderBrush="#6ec6ff"
+				Background="#1e2a35"/>
+
+		<Grid Grid.RowSpan="2" ZIndex="6" ClipToBounds="False">
+			<local:SlotView x:Name="PART_InputSlot"
+							Width="20" Height="20"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Center"
+							Margin="-10,0,0,0"
+							DataContext="{Binding InputSlot}"
+							IsVisible="{Binding $parent[local:TimerNodeView].DataContext.HasInputSlot}"
+							SlotState="{Binding State}"/>
+			<local:SlotView x:Name="PART_OutputSlot"
+							Width="20" Height="20"
+							HorizontalAlignment="Right"
+							VerticalAlignment="Center"
+							Margin="0,0,-10,0"
+							DataContext="{Binding OutputSlot}"
+							IsVisible="{Binding $parent[local:TimerNodeView].DataContext.HasOutputSlot}"
+							SlotState="{Binding State}"/>
+		</Grid>
+
+		<Border Grid.Row="0"
+				Background="#253545"
+				CornerRadius="4,4,0,0"
+				BorderThickness="0,0,0,0.5"
+				BorderBrush="#6ec6ff"
+				behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+				<TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
+				<TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold" VerticalAlignment="Center"
+						   IsVisible="{Binding HasExecutionOrder}"/>
+			</StackPanel>
+		</Border>
+
+		<Border Grid.Row="1" Background="#1e2a35" CornerRadius="0,0,4,4">
+			<StackPanel Margin="14" Spacing="6">
+				<TextBlock Text="Interval (ms)" Foreground="#bfbfbf" FontSize="11"/>
+				<TextBox Text="{Binding IntervalMilliseconds, UpdateSourceTrigger=PropertyChanged}" FontSize="11"/>
+				<TextBlock Text="Last Tick" Foreground="#bfbfbf" FontSize="11"/>
+				<TextBlock Text="{Binding LastTick}" Foreground="#6ec6ff" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap"/>
+			</StackPanel>
+		</Border>
+	</Grid>
+</UserControl>

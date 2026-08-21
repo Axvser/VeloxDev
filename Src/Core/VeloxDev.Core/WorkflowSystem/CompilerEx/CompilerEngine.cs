@@ -197,12 +197,16 @@ public sealed class CompilerEngine
     /// <summary>
     /// Fan-out group: executes all branch subgraphs in order — the order carries the "wait for all
     /// upstreams to arrive" merge semantics (the shared IRuntimeContext blackboard is not thread-safe,
-    /// so there is no true parallelism). A terminal branch hit inside any branch ends the whole run.
+    /// so there is no true parallelism). Every branch is a downstream of the SAME fan-out source, so the
+    /// source payload is restored before each branch — otherwise the previous branch's output would leak
+    /// into the next branch as its input. A terminal branch hit inside any branch ends the whole run.
     /// </summary>
     private async Task<bool> RunParallelAsync(ParallelEntry parallel, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
+        var sourceData = context.Data;   // the fan-out source's output, broadcast to every branch
         foreach (var branch in parallel.Branches)
         {
+            context.Data = sourceData;   // each branch reads the same source payload, not the previous branch's output
             if (await RunGraphAsync(branch, context, ct, redirectTarget)) return true;
         }
         return false;

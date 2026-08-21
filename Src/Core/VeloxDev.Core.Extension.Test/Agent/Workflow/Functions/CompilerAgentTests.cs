@@ -67,7 +67,7 @@ public class CompilerAgentTests
     [TestMethod]
     public void CompileWorkflow_ReturnsPlanAndOrders()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(session.Tree));
         int controllerIdx = session.Tree.Nodes.IndexOf(session.Controller);
 
@@ -97,7 +97,7 @@ public class CompilerAgentTests
     [TestMethod]
     public void GetCompileStatus_ReturnsIdentityWithoutRecompiling()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(session.Tree));
         int controllerIdx = session.Tree.Nodes.IndexOf(session.Controller);
 
@@ -116,7 +116,7 @@ public class CompilerAgentTests
     [TestMethod]
     public void StaticCompile_PrunesUnselectedBranches()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var tree = session.Tree;
         var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree));
         var enumSelector = tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
@@ -175,7 +175,7 @@ public class CompilerAgentTests
     [TestMethod]
     public void RunCompiledWorkflow_DrivesTheChain()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         // Zero the simulated delays so the whole chain completes fast in the test.
         foreach (var n in session.Nodes)
             n.DelayMilliseconds = 0;
@@ -204,7 +204,7 @@ public class CompilerAgentTests
     [TestMethod]
     public async Task NonCompilerStart_DoesNotClobberCompileBadge()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         foreach (var n in session.Nodes) n.DelayMilliseconds = 0;
         var tree = session.Tree;
         var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree).WithAllowNodeExecution(true));
@@ -228,7 +228,7 @@ public class CompilerAgentTests
     [TestMethod]
     public async Task GetExecutionLog_ReturnsTreeLog()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var tree = session.Tree;
         var loadSeed = tree.Nodes.OfType<NodeViewModel>().First(n => n.Title == "Load Seed");
         loadSeed.DelayMilliseconds = 0;

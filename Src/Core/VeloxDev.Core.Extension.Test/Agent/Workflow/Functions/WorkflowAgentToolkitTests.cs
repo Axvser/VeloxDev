@@ -87,7 +87,7 @@ public class WorkflowAgentToolkitTests
     [TestMethod]
     public void SetEnumSlotCollection_DoesNotAddPhantomUndoEntries()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var tree = session.Tree;
         var node = tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
         int idx = tree.Nodes.IndexOf(node);
@@ -119,7 +119,7 @@ public class WorkflowAgentToolkitTests
     [TestMethod]
     public void ClearHistory_DropsUndoRedoStack_WithoutTouchingCanvas()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var tree = session.Tree;
         var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree));
 
@@ -368,7 +368,7 @@ public class WorkflowAgentToolkitTests
     [TestMethod]
     public void GetFullTopology_IncludesLinkIds()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(session.Tree));
 
         var method = typeof(WorkflowAgentToolkit)

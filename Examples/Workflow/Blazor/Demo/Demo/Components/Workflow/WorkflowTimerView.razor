@@ -1,0 +1,12 @@
+@using Demo.ViewModels
+@using System.ComponentModel
+@implements IDisposable
+
+@* Body-only content rendered inside the generated TemplateNodeView (BodyContent). *@
+<div style="padding:12px;display:flex;flex-direction:column;gap:6px;">
+    <label style="color:#bfbfbf;font-size:11px;">Interval (ms)</label>
+    <input class="timer-interval" type="number" value="@_interval" @onchange="OnIntervalChanged"
+           style="background:#373737;color:#fff;border:1px solid #555;border-radius:3px;padding:4px;font-size:11px;" />
+    <label style="color:#bfbfbf;font-size:11px;">Last Tick</label>
+    <span style="color:#6ec6ff;font-weight:600;font-size:11px;word-break:break-all;">@(Selector?.LastTick)</span>
+</div>

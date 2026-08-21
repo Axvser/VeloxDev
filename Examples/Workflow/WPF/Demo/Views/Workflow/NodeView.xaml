@@ -16,9 +16,9 @@
     </UserControl.Resources>
     <Grid ClipToBounds="False">
         <Grid.RowDefinitions>
-            <RowDefinition Height="52" />
+            <RowDefinition Height="40" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="54" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Border Grid.RowSpan="3"
@@ -46,6 +46,7 @@
                             Margin="0,0,-10,0"
                             DataContext="{Binding OutputSlot}"
                             Visibility="{Binding HasOutputSlot, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            PinDirection="Out"
                             SlotState="{Binding State}" />
         </Grid>
 
@@ -136,7 +137,8 @@
         <Border Grid.Row="2"
                 Padding="1"
                 Background="#2D2D2D"
-                CornerRadius="0,0,4,4">
+                CornerRadius="0,0,4,4"
+                Visibility="{Binding ShowActionButtons, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

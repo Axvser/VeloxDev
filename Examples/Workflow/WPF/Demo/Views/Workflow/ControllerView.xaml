@@ -90,6 +90,7 @@
                         Margin="0,0,-10,0"
                         DataContext="{Binding OutputSlot}"
                         Visibility="{Binding HasOutputSlot, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        PinDirection="Out"
                         SlotState="{Binding State}" />
     </Grid>
 </UserControl>

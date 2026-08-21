@@ -12,6 +12,8 @@ public partial class CustomTemplateSelector : DataTemplateSelector
     public DataTemplate? ControllerTemplate { get; set; }
     public DataTemplate? BoolSelectorTemplate { get; set; }
     public DataTemplate? EnumSelectorTemplate { get; set; }
+    public DataTemplate? PythonTemplate { get; set; }
+    public DataTemplate? TimerTemplate { get; set; }
     public DataTemplate? LinkTemplate { get; set; }
 
     protected override DataTemplate SelectTemplateCore(object item)
@@ -24,6 +26,13 @@ public partial class CustomTemplateSelector : DataTemplateSelector
                 throw new InvalidOperationException("BoolSelectorTemplate is not set"),
             EnumSelectorNodeViewModel => EnumSelectorTemplate ??
                 throw new InvalidOperationException("EnumSelectorTemplate is not set"),
+            // New FULL-demo nodes without a dedicated view here → fall back to the generic node card.
+            TimerNodeViewModel => TimerTemplate ??
+                throw new InvalidOperationException("TimerTemplate is not set"),
+            LogicGateNodeViewModel => NodeTemplate ??
+                throw new InvalidOperationException("NodeTemplate is not set"),
+            PythonScriptNodeViewModel => PythonTemplate ??
+                throw new InvalidOperationException("PythonTemplate is not set"),
             NodeViewModel => NodeTemplate ??
                 throw new InvalidOperationException("NodeTemplate is not set"),
             IWorkflowLinkViewModel => LinkTemplate ??

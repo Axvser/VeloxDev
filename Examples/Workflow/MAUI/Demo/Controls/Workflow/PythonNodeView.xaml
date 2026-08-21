@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Demo.Controls"
+             xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
+             x:Class="Demo.Controls.PythonNodeView"
+             behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+             behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_InputSlotsList,PART_OutputSlotsList"
+             behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
+    <Grid RowDefinitions="40,Auto,*">
+        <Border Grid.RowSpan="3"
+                Stroke="#6EC6FF"
+                StrokeThickness="1.5"
+                StrokeShape="RoundRectangle 6"
+                BackgroundColor="#1E2A35" />
+
+        <Border Grid.Row="0"
+                BackgroundColor="#253545"
+                Stroke="#6EC6FF"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 4,4,0,0"
+                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+            <HorizontalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="8">
+                <Label Text="{Binding Title}" TextColor="White" FontAttributes="Bold" />
+                <Border BackgroundColor="#2B2440" Stroke="#B799FF" StrokeThickness="1" StrokeShape="RoundRectangle 10" Padding="6,1">
+                    <Label Text="{Binding LastStatus}" TextColor="#E4D8FF" FontAttributes="Bold" />
+                </Border>
+            </HorizontalStackLayout>
+        </Border>
+
+        <Border Grid.Row="1" Padding="12,3" Stroke="#30363D" StrokeThickness="0" StrokeShape="RoundRectangle 0">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="0" />
+            </Border.StrokeShape>
+            <Label Text="{Binding Description}" TextColor="#8B949E" FontSize="10" LineBreakMode="WordWrap" MaxLines="2" />
+        </Border>
+
+        <Border Grid.Row="2" BackgroundColor="#1E2A35" StrokeShape="RoundRectangle 0,0,4,4">
+            <Grid ColumnDefinitions="64,*,64">
+                <!-- Input port strip (fixed, left) -->
+                <VerticalStackLayout x:Name="PART_InputSlotsList"
+                                     Grid.Column="0"
+                                     BindableLayout.ItemsSource="{Binding InputSlots.Items}"
+                                     Spacing="2">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="Auto,*" Margin="0,4">
+                                <controls:SlotView Grid.Column="0"
+                                                   WidthRequest="16"
+                                                   HeightRequest="16"
+                                                   HorizontalOptions="Start"
+                                                   VerticalOptions="Center"
+                                                   Margin="-8,0,0,0"
+                                                   BindingContext="{Binding Slot}"
+                                                   SlotState="{Binding Slot.State}" />
+                                <Label Grid.Column="1"
+                                       Text="{Binding Name}"
+                                       TextColor="#6EC6FF"
+                                       FontAttributes="Bold"
+                                       FontSize="11"
+                                       VerticalTextAlignment="Center"
+                                       HorizontalTextAlignment="Start"
+                                       Margin="4,0,0,0"
+                                       LineBreakMode="TailTruncation" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+                <!-- Script editor -->
+                <Border Grid.Column="1" Margin="4,6" Stroke="#30363D" StrokeThickness="1" StrokeShape="RoundRectangle 4" BackgroundColor="#0D1117">
+                    <Grid RowDefinitions="Auto,*">
+                        <Border Grid.Row="0" BackgroundColor="#161B22" Stroke="#30363D" StrokeThickness="0" Padding="8,4">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Grid.Column="0" Text="script.py" TextColor="#7EE787" FontFamily="monospace" FontSize="11" FontAttributes="Bold" />
+                                <Label Grid.Column="1" Text="Python 3" TextColor="#6E7681" FontSize="10" />
+                            </Grid>
+                        </Border>
+                        <Editor Grid.Row="1"
+                                Text="{Binding Script}"
+                                BackgroundColor="#0D1117"
+                                TextColor="#E6EDF3"
+                                FontFamily="monospace"
+                                FontSize="12"
+                                AutoSize="TextChanges" />
+                    </Grid>
+                </Border>
+
+                <!-- Output port strip (fixed, right) -->
+                <VerticalStackLayout x:Name="PART_OutputSlotsList"
+                                     Grid.Column="2"
+                                     BindableLayout.ItemsSource="{Binding OutputSlots.Items}"
+                                     Spacing="2"
+                                     HorizontalOptions="End">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+                                <Label Grid.Column="0"
+                                       Text="{Binding Name}"
+                                       TextColor="#6EC6FF"
+                                       FontAttributes="Bold"
+                                       FontSize="11"
+                                       VerticalTextAlignment="Center"
+                                       HorizontalTextAlignment="End"
+                                       Margin="0,0,4,0"
+                                       LineBreakMode="TailTruncation" />
+                                <controls:SlotView Grid.Column="1"
+                                                   WidthRequest="16"
+                                                   HeightRequest="16"
+                                                   HorizontalOptions="End"
+                                                   VerticalOptions="Center"
+                                                   Margin="0,0,-8,0"
+                                                   BindingContext="{Binding Slot}"
+                                                   SlotState="{Binding Slot.State}" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+            </Grid>
+        </Border>
+    </Grid>
+</ContentView>

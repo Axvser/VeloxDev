@@ -10,11 +10,12 @@ public class EnumSelectorHelper : NodeHelper<EnumSelectorNodeViewModel>
         if (Component is null) return null;
 
         // Compiled execution: the engine passes RuntimeContext (IRuntimeContext + ITaskContext); the sequence number is fixed at compile time.
-        // Only record the routing direction; do not rewrite the badge.
+        // Only record the routing direction; do not rewrite the badge. The router is routing-only: it must pass
+        // the incoming payload through (return ctx.Data), otherwise the selected branch would see null Data.
         if (ctx is IRuntimeContext)
         {
             Component.LastRouted = Component.SelectedValue is { } sv ? $"→ {sv}" : "→ ?";
-            return null;
+            return ctx.Data;
         }
 
         var context = NetworkFlowContext.From(ctx.Data);

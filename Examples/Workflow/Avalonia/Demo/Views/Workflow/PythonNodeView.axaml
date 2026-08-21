@@ -1,0 +1,144 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="260"
+			 x:Class="Demo.PythonNodeView"
+			 xmlns:local="using:Demo"
+			 xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+			 xmlns:vm="using:Demo.ViewModels"
+			 ClipToBounds="False"
+			 behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
+			 behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_InputSlotsList,PART_OutputSlotsList"
+			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
+			 x:DataType="vm:PythonScriptNodeViewModel">
+	<Grid RowDefinitions="40,Auto,*" ClipToBounds="False">
+		<Border Grid.RowSpan="3"
+				CornerRadius="6"
+				BorderThickness="1.5"
+				BorderBrush="#6ec6ff"
+				Background="#1e2a35"/>
+
+		<Border Grid.Row="0"
+				Background="#253545"
+				CornerRadius="4,4,0,0"
+				BorderThickness="0,0,0,0.5"
+				BorderBrush="#6ec6ff"
+				behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+				behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+				<TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
+				<TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold" VerticalAlignment="Center"
+						   IsVisible="{Binding HasExecutionOrder}"/>
+				<Border Background="#2b2440" BorderBrush="#b799ff" BorderThickness="1" CornerRadius="10" Padding="6,1">
+					<TextBlock Text="{Binding LastStatus}" Foreground="#e4d8ff" FontWeight="SemiBold"/>
+				</Border>
+			</StackPanel>
+		</Border>
+
+		<Border Grid.Row="1" Padding="12,3" BorderBrush="#30363d" BorderThickness="0,0,0,1">
+			<TextBlock Text="{Binding Description}" Foreground="#8b949e" FontSize="10" TextWrapping="Wrap" MaxHeight="26"/>
+		</Border>
+
+		<Border Grid.Row="2" Background="#1e2a35" CornerRadius="0,0,4,4">
+			<Grid ColumnDefinitions="64,*,64" ClipToBounds="False">
+				<Grid.Styles>
+					<Style Selector="local|SlotView">
+						<Setter Property="Foreground" Value="White"/>
+					</Style>
+					<Style Selector="local|SlotView[SlotState=8]">
+						<Setter Property="Foreground" Value="Tomato"/>
+					</Style>
+					<Style Selector="local|SlotView[SlotState=16]">
+						<Setter Property="Foreground" Value="Lime"/>
+					</Style>
+					<Style Selector="local|SlotView[SlotState=24]">
+						<Setter Property="Foreground" Value="Violet"/>
+					</Style>
+				</Grid.Styles>
+
+				<!-- Input port strip (fixed, left) -->
+				<ItemsControl Grid.Column="0"
+							  ItemsSource="{Binding InputSlots.Items}"
+							  x:Name="PART_InputSlotsList"
+							  ClipToBounds="False">
+					<ItemsControl.ItemTemplate>
+						<DataTemplate>
+							<Grid ColumnDefinitions="Auto,*" Margin="0,4" ClipToBounds="False">
+								<local:SlotView Grid.Column="0"
+												Width="16" Height="16"
+												HorizontalAlignment="Left"
+												VerticalAlignment="Center"
+												Margin="-8,0,0,0"
+												DataContext="{Binding Slot}"
+												SlotState="{Binding State}"/>
+								<TextBlock Grid.Column="1"
+										   Text="{Binding Name}"
+										   Foreground="#6ec6ff"
+										   FontWeight="SemiBold"
+										   FontSize="11"
+										   VerticalAlignment="Center"
+										   HorizontalAlignment="Left"
+										   Margin="4,0,0,0"
+										   TextTrimming="CharacterEllipsis"/>
+							</Grid>
+						</DataTemplate>
+					</ItemsControl.ItemTemplate>
+				</ItemsControl>
+
+				<!-- Script editor -->
+				<Border Grid.Column="1" Margin="4,6" BorderBrush="#30363d" BorderThickness="1" CornerRadius="4" Background="#0d1117">
+					<DockPanel>
+						<Border DockPanel.Dock="Top" Background="#161b22" BorderBrush="#30363d" BorderThickness="0,0,0,1" Padding="8,4">
+							<Grid ColumnDefinitions="*,Auto">
+								<TextBlock Grid.Column="0" Text="script.py" Foreground="#7ee787" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold"/>
+								<TextBlock Grid.Column="1" Text="Python 3" Foreground="#6e7681" FontSize="10"/>
+							</Grid>
+						</Border>
+						<TextBox Text="{Binding Script, UpdateSourceTrigger=PropertyChanged}"
+								 AcceptsReturn="True"
+								 TextWrapping="NoWrap"
+								 FontFamily="Consolas"
+								 FontSize="12"
+								 Foreground="#e6edf3"
+								 Background="#0d1117"
+								 CaretBrush="#6ec6ff"
+								 BorderThickness="0"
+								 Padding="6,4"
+								 ToolTip.Tip="{Binding LastOutput}"/>
+					</DockPanel>
+				</Border>
+
+				<!-- Output port strip (fixed, right) -->
+				<ItemsControl Grid.Column="2"
+							  ItemsSource="{Binding OutputSlots.Items}"
+							  x:Name="PART_OutputSlotsList"
+							  ClipToBounds="False"
+							  HorizontalAlignment="Right">
+					<ItemsControl.ItemTemplate>
+						<DataTemplate>
+							<Grid ColumnDefinitions="*,Auto" Margin="0,4" ClipToBounds="False">
+								<TextBlock Grid.Column="0"
+										   Text="{Binding Name}"
+										   Foreground="#6ec6ff"
+										   FontWeight="SemiBold"
+										   FontSize="11"
+										   VerticalAlignment="Center"
+										   HorizontalAlignment="Right"
+										   Margin="0,0,4,0"
+										   TextTrimming="CharacterEllipsis"/>
+								<local:SlotView Grid.Column="1"
+												Width="16" Height="16"
+												HorizontalAlignment="Right"
+												VerticalAlignment="Center"
+												Margin="0,0,-8,0"
+												DataContext="{Binding Slot}"
+												SlotState="{Binding State}"/>
+							</Grid>
+						</DataTemplate>
+					</ItemsControl.ItemTemplate>
+				</ItemsControl>
+			</Grid>
+		</Border>
+	</Grid>
+</UserControl>

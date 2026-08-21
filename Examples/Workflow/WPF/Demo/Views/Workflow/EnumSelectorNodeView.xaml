@@ -81,6 +81,7 @@
                                                 VerticalAlignment="Center"
                                                 Margin="0,0,-8,0"
                                                 DataContext="{Binding Slot}"
+                                                PinDirection="Out"
                                                 SlotState="{Binding Slot.State}"/>
                             </Grid>
                         </DataTemplate>

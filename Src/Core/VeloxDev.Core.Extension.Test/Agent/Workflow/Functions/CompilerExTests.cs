@@ -16,7 +16,7 @@ public class CompilerExTests
     [TestMethod]
     public async Task CompileBaseGraph_ProducesBranchTree_WithOffsetOrders()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var compiler = new CompilerViewModel();
 
         var graphs = await compiler.CompileAsync(session.Controller);
@@ -67,7 +67,7 @@ public class CompilerExTests
     [TestMethod]
     public async Task StaticMode_SendsResetSignalToSkippedBranch()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var boolSelector = session.Tree.Nodes.OfType<BoolSelectorNodeViewModel>().Single();
         boolSelector.CompileMode = RouterCompileMode.Static;   // Condition=true → False is skipped
 
@@ -87,7 +87,7 @@ public class CompilerExTests
     [TestMethod]
     public async Task CompileThenRun_EngineDrivesGraph_WithRuntimeContext()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var compiler = new CompilerViewModel();
         await compiler.CompileAsync(session.Controller);
 
@@ -114,7 +114,7 @@ public class CompilerExTests
     [TestMethod]
     public async Task MethodRouter_CompileMode_ChangesRouteTable()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var selector = session.Tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
 
         // Dynamic: the route table contains all branches

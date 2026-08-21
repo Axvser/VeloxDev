@@ -238,6 +238,36 @@
                                             </InputSlots>
                                         </TemplateNodeView>
                                         break;
+                                    case PythonScriptNodeViewModel p:
+                                        <TemplateNodeView Node="p"
+                                                          AllowOverflow="true"
+                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
+                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
+                                            <BodyContent>
+                                                <WorkflowPythonNodeView Selector="p" Tree="tree" />
+                                            </BodyContent>
+                                        </TemplateNodeView>
+                                        break;
+                                    case TimerNodeViewModel t:
+                                        <TemplateNodeView Node="t"
+                                                          AllowOverflow="true"
+                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
+                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
+                                            <BodyContent>
+                                                <WorkflowTimerView Selector="t" />
+                                            </BodyContent>
+                                            <InputSlots>
+                                                <WorkflowSlotConnectionBehavior Slot="t.InputSlot" Tree="tree">
+                                                    <TemplateSlotView Slot="t.InputSlot" Tree="tree" SlotSize="20" />
+                                                </WorkflowSlotConnectionBehavior>
+                                            </InputSlots>
+                                            <OutputSlots>
+                                                <WorkflowSlotConnectionBehavior Slot="t.OutputSlot" Tree="tree">
+                                                    <TemplateSlotView Slot="t.OutputSlot" Tree="tree" SlotSize="20" />
+                                                </WorkflowSlotConnectionBehavior>
+                                            </OutputSlots>
+                                        </TemplateNodeView>
+                                        break;
                                 }
                             </ItemTemplate>
                         </ViewPool>

@@ -60,6 +60,10 @@ public partial class NodeViewModel : ICompileTimeAware, IRuntimeAware
     [AgentContext(AgentLanguages.English, "When true, the node automatically forwards the result to all connected downstream nodes after execution.")]
     [VeloxProperty] private bool autoBroadcast = true;
 
+    [AgentContext(AgentLanguages.Chinese, "无状态模式下是否显示 Run/Forward 按钮（编译链只有启动节点持有按钮）")]
+    [AgentContext(AgentLanguages.English, "Whether to show the Run/Forward buttons in stateless mode (in a compiled chain only the start node holds buttons).")]
+    [VeloxProperty] private bool showActionButtons = false;
+
     [VeloxProperty] private bool isRunning = false;
     [VeloxProperty] private string lastStatus = "Idle";
     [VeloxProperty] private string lastDuration = "-";

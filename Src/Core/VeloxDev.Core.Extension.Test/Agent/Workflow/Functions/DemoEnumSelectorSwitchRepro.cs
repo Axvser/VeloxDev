@@ -16,7 +16,7 @@ public class DemoEnumSelectorSwitchRepro
     [TestMethod]
     public void Repro_DemoCredentialValuesPreserved()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var node = session.Tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
         var vr = typeof(NetworkRequestMethod).Assembly.GetType("Demo.ViewModels.VoltageRange");
 
@@ -36,7 +36,7 @@ public class DemoEnumSelectorSwitchRepro
     [TestMethod]
     public void Repro_UndoRedo_DictRestoration()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var node = session.Tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
         var vr = typeof(NetworkRequestMethod).Assembly.GetType("Demo.ViewModels.VoltageRange");
 
@@ -66,7 +66,7 @@ public class DemoEnumSelectorSwitchRepro
     [TestMethod]
     public void Repro_MethodRouter_UndoSelectSwitch()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var node = session.Tree.Nodes.OfType<EnumSelectorNodeViewModel>().Single();
         var vr = typeof(NetworkRequestMethod).Assembly.GetType("Demo.ViewModels.VoltageRange");
         Assert.IsNotNull(vr, "VoltageRange should exist in Lib");

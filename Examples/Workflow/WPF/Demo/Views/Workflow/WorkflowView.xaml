@@ -52,6 +52,33 @@
                                         IsEnabled="{Binding IsEnabled}"
                                         RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
         </DataTemplate>
+        <DataTemplate x:Key="TimerTemplate" DataType="{x:Type vm:TimerNodeViewModel}">
+            <local:TimerNodeView Width="{Binding Size.Width}"
+                                 Height="{Binding Size.Height}"
+                                 Canvas.Left="{Binding Anchor.Horizontal}"
+                                 Canvas.Top="{Binding Anchor.Vertical}"
+                                 Panel.ZIndex="{Binding Anchor.Layer}"
+                                 IsEnabled="{Binding IsEnabled}"
+                                 RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
+        </DataTemplate>
+        <DataTemplate x:Key="LogicGateTemplate" DataType="{x:Type vm:LogicGateNodeViewModel}">
+            <local:LogicGateNodeView Width="{Binding Size.Width}"
+                                     Height="{Binding Size.Height}"
+                                     Canvas.Left="{Binding Anchor.Horizontal}"
+                                     Canvas.Top="{Binding Anchor.Vertical}"
+                                     Panel.ZIndex="{Binding Anchor.Layer}"
+                                     IsEnabled="{Binding IsEnabled}"
+                                     RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
+        </DataTemplate>
+        <DataTemplate x:Key="PythonTemplate" DataType="{x:Type vm:PythonScriptNodeViewModel}">
+            <local:PythonNodeView Width="{Binding Size.Width}"
+                                  Height="{Binding Size.Height}"
+                                  Canvas.Left="{Binding Anchor.Horizontal}"
+                                  Canvas.Top="{Binding Anchor.Vertical}"
+                                  Panel.ZIndex="{Binding Anchor.Layer}"
+                                  IsEnabled="{Binding IsEnabled}"
+                                  RenderTransform="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:WorkflowView}}, Path=(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
+        </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
             <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
                                      StartTop="{Binding Sender.Anchor.Vertical}"
@@ -81,6 +108,9 @@
                                       Simulator="{StaticResource NodeTemplate}"
                                       BoolSelector="{StaticResource BoolSelectorTemplate}"
                                       EnumSelector="{StaticResource EnumSelectorTemplate}"
+                                      Timer="{StaticResource TimerTemplate}"
+                                      LogicGate="{StaticResource LogicGateTemplate}"
+                                      Python="{StaticResource PythonTemplate}"
                                       Link="{StaticResource LinkTemplate}"/>
     </UserControl.Resources>
 

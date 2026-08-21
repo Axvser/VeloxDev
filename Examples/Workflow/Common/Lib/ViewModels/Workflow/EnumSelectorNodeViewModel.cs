@@ -161,13 +161,39 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
         if (CompileMode == RouterCompileMode.Dynamic && payload is null)
             return Task.FromResult<object?>(null);
 
-        if (payload is IRuntimeContext ctx && ctx.TryGet("selector.value", out var v) && v is string s)
-            return Task.FromResult(OutputSlots is not null ? OutputSlots.NormalizeSelectorValue(s) : s);
+        if (payload is IRuntimeContext ctx)
+        {
+            // Explicit shared variable wins (legacy stateless broadcast).
+            if (ctx.TryGet("selector.value", out var v) && v is string s)
+                return Task.FromResult(OutputSlots is not null ? OutputSlots.NormalizeSelectorValue(s) : s);
+
+            // Otherwise, when the payload carries per-member 0/1 flags (e.g. a python node emitting High/Low/Zero),
+            // route by whichever flag is set — lets the voltage demo's computed grade drive the branch.
+            if (OutputSlots is not null && ctx.Data is IDictionary<string, object?> data)
+            {
+                foreach (var item in OutputSlots.Items)
+                {
+                    var key = item.Value?.ToString();
+                    if (key is not null && data.TryGetValue(key, out var flag) && IsTruthyFlag(flag))
+                        return Task.FromResult(OutputSlots.NormalizeSelectorValue(item.Value!));
+                }
+            }
+        }
 
         return Task.FromResult(OutputSlots is not null
             ? OutputSlots.NormalizeSelectorValue(OutputSlots.CurrentValue)
             : null);
     }
+
+    /// <summary>Whether a payload field is a nonzero 0/1 style flag (long/int/bool/numeric string).</summary>
+    private static bool IsTruthyFlag(object? flag) => flag switch
+    {
+        long l => l != 0,
+        int i => i != 0,
+        bool b => b,
+        string s => long.TryParse(s, out var n) && n != 0,
+        _ => false,
+    };
 
     /// <summary>Compile-time route table (changes with mode): Static contains only the currently selected branch; Dynamic contains all branches (preserving 1:N fan-out).</summary>
     public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()

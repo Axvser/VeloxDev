@@ -50,6 +50,22 @@
                                         Canvas.ZIndex="{Binding Anchor.Layer}"
                                         IsEnabled="{Binding IsEnabled}"/>
         </DataTemplate>
+        <DataTemplate x:Key="PythonTemplate">
+            <local:PythonNodeView Width="{Binding Size.Width}"
+                                  Height="{Binding Size.Height}"
+                                  Canvas.Left="{Binding Anchor.Horizontal}"
+                                  Canvas.Top="{Binding Anchor.Vertical}"
+                                  Canvas.ZIndex="{Binding Anchor.Layer}"
+                                  IsEnabled="{Binding IsEnabled}"/>
+        </DataTemplate>
+        <DataTemplate x:Key="TimerTemplate">
+            <local:TimerNodeView Width="{Binding Size.Width}"
+                                 Height="{Binding Size.Height}"
+                                 Canvas.Left="{Binding Anchor.Horizontal}"
+                                 Canvas.Top="{Binding Anchor.Vertical}"
+                                 Canvas.ZIndex="{Binding Anchor.Layer}"
+                                 IsEnabled="{Binding IsEnabled}"/>
+        </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
             <local:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
                                      StartTop="{Binding Sender.Anchor.Vertical}"
@@ -66,6 +82,8 @@
                                       NodeTemplate="{StaticResource NodeTemplate}"
                                       BoolSelectorTemplate="{StaticResource BoolSelectorTemplate}"
                                       EnumSelectorTemplate="{StaticResource EnumSelectorTemplate}"
+                                      PythonTemplate="{StaticResource PythonTemplate}"
+                                      TimerTemplate="{StaticResource TimerTemplate}"
                                       LinkTemplate="{StaticResource LinkTemplate}"/>
     </UserControl.Resources>
 

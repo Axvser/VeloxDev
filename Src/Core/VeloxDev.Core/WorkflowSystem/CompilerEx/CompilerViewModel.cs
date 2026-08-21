@@ -165,10 +165,40 @@ public sealed partial class CompilerViewModel
 
             // Linear node
             chain.Add(node);
-            var next = await SingleTargetValidAsync(node, state, ct);
+            var validTargets = await GetValidTargetsAsync(node, state, ct);
+            var next = validTargets.Count == 1 ? validTargets[0] : null;
             if (next is null || ReferenceEquals(next, node))
             {
                 FlushChain(entries, chain, state, offset);
+
+                // Plain-node fan-out: a non-router node with several valid downstream targets broadcasts its
+                // result to all of them as a ParallelEntry, then continues from their common join point
+                // (same semantics as a router's single-key fan-out).
+                if (validTargets.Count > 1)
+                {
+                    var branches = new List<CompiledGraph>();
+                    var exits = new List<IWorkflowNodeViewModel?>();
+                    foreach (var t in validTargets)
+                    {
+                        var sub = await CompileGraphAsync(t, state, ct);
+                        branches.Add(sub);
+                        exits.Add(LastNode(sub));
+                    }
+                    entries.Add(new ParallelEntry { Branches = new ObservableCollection<CompiledGraph>(branches) });
+
+                    node = CommonNext(exits);
+                    if (node is not null)
+                    {
+                        var distinctExits = exits.Where(e => e is not null)
+                            .Cast<IWorkflowNodeViewModel>()
+                            .Distinct(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance)
+                            .ToList();
+                        if (distinctExits.Count > 1)
+                            state.JoinInputs[node] = distinctExits;
+                    }
+                    resumedAfterBranch = node is not null;
+                    continue;
+                }
                 break;
             }
             node = next;
@@ -295,6 +325,18 @@ public sealed partial class CompilerViewModel
     private async Task<IWorkflowNodeViewModel?> SingleTargetValidAsync(
         IWorkflowNodeViewModel node, CompileState state, CancellationToken ct)
     {
+        var distinct = await GetValidTargetsAsync(node, state, ct);
+        return distinct.Count == 1 ? distinct[0] : null;
+    }
+
+    /// <summary>
+    /// All distinct downstream nodes reachable through valid output edges (each edge runs AccessAsync with an
+    /// <see cref="ICompileContext"/>; invalid edges are skipped per the runtime broadcast semantics).
+    /// Returns 0 for a leaf node, 1 for a linear chain, &gt;1 for a plain-node fan-out.
+    /// </summary>
+    private async Task<List<IWorkflowNodeViewModel>> GetValidTargetsAsync(
+        IWorkflowNodeViewModel node, CompileState state, CancellationToken ct)
+    {
         var validTargets = new List<IWorkflowNodeViewModel>();
         foreach (var sender in node.Slots.Where(s => s is not null))
         {
@@ -321,8 +363,7 @@ public sealed partial class CompilerViewModel
                 validTargets.Add(target);
             }
         }
-        var distinct = validTargets.Distinct().ToList();
-        return distinct.Count == 1 ? distinct[0] : null;
+        return validTargets.Distinct().ToList();
     }
 
     /// <summary>Compile cursor: a global order counter plus a visited set (avoids ref parameters so it can be shared across async recursion).</summary>

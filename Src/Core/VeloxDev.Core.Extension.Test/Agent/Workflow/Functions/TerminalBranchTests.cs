@@ -16,7 +16,7 @@ public class TerminalBranchTests
     [TestMethod]
     public async Task TerminalBranch_PatchNoTarget_StopsRunInsteadOfPassingThrough()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var compiler = new CompilerViewModel();
         await compiler.CompileAsync(session.Controller);
 
@@ -38,7 +38,7 @@ public class TerminalBranchTests
     [TestMethod]
     public async Task StaticCompile_LocksRouteKey_IgnoresPostCompileChange()
     {
-        var session = WorkflowDemoSession.Create();
+        var session = WorkflowDemoSession.CreateLegacy();
         var boolSelector = session.Tree.Nodes.OfType<BoolSelectorNodeViewModel>().Single();
         boolSelector.CompileMode = RouterCompileMode.Static;
         boolSelector.Condition = true;   // at compile time: True → Hot branch
