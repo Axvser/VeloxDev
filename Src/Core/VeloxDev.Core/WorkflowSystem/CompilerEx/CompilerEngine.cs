@@ -23,7 +23,8 @@ public sealed class CompilerEngine
         const int MaxRedirects = 50;
         context.IsRunning = true;
         context.Status = "Running";
-        // 每次 RunAsync 一次性清空产物登记表（重定向重跑不清空 → 被跳过节点保留旧产物，已知限制）。
+        // 每次 RunAsync 一次性清空产物登记表；重定向重跑不清空，由 pass 戳过滤陈旧产物
+        // （CollectGroupedInputs = 本 pass 产物 ∪ 重定向目标之前的契约保留 prefix）。
         context.ResetOutputs();
         int? redirectTarget = null;
         var redirects = 0;
@@ -34,6 +35,7 @@ public sealed class CompilerEngine
             {
                 context.Attempt = redirects + 1;   // 图重跑计数（每次回退 +1）
                 context.PendingRedirectTarget = null;
+                context.ActiveRedirectTarget = redirectTarget;   // 首 pass 为 null；产物收集据此区分契约保留 prefix 与陈旧分支
                 var terminated = await RunGraphAsync(graph, context, ct, redirectTarget);
                 if (!terminated && context.PendingRedirectTarget is { } next)
                 {

@@ -59,6 +59,14 @@ public interface IRuntimeContext : ITaskContext
     /// <summary>引擎请求的回退目标 Order（可为跨链）。<see cref="CompilerEngine.RunAsync"/> 读取后带该目标重跑整张图。</summary>
     int? PendingRedirectTarget { get; set; }
 
+    /// <summary>
+    /// 引擎每 pass 开头写入的「当前重跑目标 Order」（首 pass 为 null）。
+    /// 供产物收集区分两类被跳过的节点：目标之前的是契约保留 prefix（Order &lt; 该值），目标之后未重驱动的是陈旧分支。
+    /// </summary>
+    [AgentContext(AgentLanguages.Chinese, "当前重定向目标 Order：引擎每 pass 开头写入（首 pass 为 null），产物收集用它区分契约保留 prefix 与陈旧分支")]
+    [AgentContext(AgentLanguages.English, "Active redirect target Order set by the engine at the start of each pass (null on the first pass); the output collector uses it to distinguish contract-preserved prefix from stale branches")]
+    int? ActiveRedirectTarget { get; set; }
+
     /// <summary>推送一条普通日志（带顺序前缀）。</summary>
     void Log(string entry);
 
@@ -74,21 +82,23 @@ public interface IRuntimeContext : ITaskContext
     /// <summary>读取一个共享变量。</summary>
     bool TryGet(string key, out object? value);
 
-    /// <summary>登记节点本次运行的产物（引擎在 DriveAsync 驱动后写入），供下游汇合点聚合。</summary>
-    [AgentContext(AgentLanguages.Chinese, "登记节点本次运行的产物：引擎逐节点驱动后写入，多输入汇合点按输入组聚合")]
-    [AgentContext(AgentLanguages.English, "Register a node's output for this run: the engine writes it after driving each node, and multi-input joins aggregate per input group")]
+    /// <summary>登记节点本次运行的产物（引擎在 DriveAsync 驱动后写入），带当前 pass 戳，供下游汇合点聚合。</summary>
+    [AgentContext(AgentLanguages.Chinese, "登记节点本次运行的产物：引擎逐节点驱动后写入，带当前 pass 戳；多输入汇合点按输入组聚合")]
+    [AgentContext(AgentLanguages.English, "Register a node's output for this run stamped with the current attempt: the engine writes it after driving each node, and multi-input joins aggregate per input group")]
     void RegisterOutput(IWorkflowNodeViewModel node, object? value);
 
     /// <summary>清空产物登记表（每次 <see cref="CompilerEngine.RunAsync"/> 开始调用一次）。</summary>
-    [AgentContext(AgentLanguages.Chinese, "清空产物登记表：每次 RunAsync 开始清空一次，重定向重跑不清空")]
-    [AgentContext(AgentLanguages.English, "Clear the product registry once at the start of each RunAsync (not cleared on redirect re-runs)")]
+    [AgentContext(AgentLanguages.Chinese, "清空产物登记表：每次 RunAsync 开始清空一次，重定向重跑不清空（由 pass 戳过滤陈旧产物）")]
+    [AgentContext(AgentLanguages.English, "Clear the product registry once at the start of each RunAsync (not cleared on redirect re-runs; stale outputs are filtered by pass stamp)")]
     void ResetOutputs();
 
     /// <summary>
     /// 收集一组输入节点的产物为只读字典（Key=来源 Node 引用身份，Value=该节点产物）。
-    /// 未登记的节点不包含——<see cref="IReadOnlyDictionary{TKey,TValue}.TryGetValue"/> 返回 false。
+    /// 过滤规则：仅保留「本 pass 真跑过」的产物（pass 戳 == 当前 Attempt）或「重定向目标之前的契约保留 prefix」
+    /// （来源 Order &lt; ActiveRedirectTarget，resume 契约假设其结果未变）；未登记节点不包含——
+    /// <see cref="IReadOnlyDictionary{TKey,TValue}.TryGetValue"/> 返回 false。按输入源数量预置容量。
     /// </summary>
-    [AgentContext(AgentLanguages.Chinese, "按输入组收集产物为只读字典：未登记的来源不包含（TryGetValue 返回 false）")]
-    [AgentContext(AgentLanguages.English, "Collect outputs for a group of input nodes as a read-only dictionary; unregistered sources are absent (TryGetValue returns false)")]
+    [AgentContext(AgentLanguages.Chinese, "按输入组收集产物为只读字典：仅本 pass 产物 + 目标前契约保留 prefix；未登记的来源不包含（TryGetValue 返回 false）")]
+    [AgentContext(AgentLanguages.English, "Collect outputs for a group of input nodes as a read-only dictionary: only this pass's outputs plus the contract-preserved prefix before the redirect target; unregistered sources are absent (TryGetValue returns false)")]
     IReadOnlyDictionary<IWorkflowNodeViewModel, object?> CollectGroupedInputs(IEnumerable<IWorkflowNodeViewModel> inputNodes);
 }

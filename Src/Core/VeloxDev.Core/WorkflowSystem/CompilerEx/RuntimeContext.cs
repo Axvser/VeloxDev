@@ -44,8 +44,9 @@ public sealed partial class RuntimeContext : IRuntimeContext
     // 共享变量（黑板）：节点/引擎/UI 都可读写，非直接 UI 绑定，走方法访问
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
 
-    // 产物登记表（Key = 来源 Node 引用身份）：引擎逐节点驱动后登记，汇合点按输入组聚合
-    private readonly Dictionary<IWorkflowNodeViewModel, object?> _outputs =
+    // 产物登记表（Key = 来源 Node 引用身份，Value = 该 pass 登记的产物 + pass 戳）：
+    // 引擎逐节点驱动后登记，汇合点按输入组聚合；pass 戳用于区分「本 pass 真跑过」与「重跑被跳过的旧产物」。
+    private readonly Dictionary<IWorkflowNodeViewModel, (int Attempt, object? Value)> _outputs =
         new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
 
     /// <summary>
@@ -59,6 +60,12 @@ public sealed partial class RuntimeContext : IRuntimeContext
 
     /// <summary>引擎请求的回退目标 Order（可为跨链）。RunAsync 读取后带该目标重跑整张图。</summary>
     public int? PendingRedirectTarget { get; set; }
+
+    /// <summary>
+    /// 引擎每 pass 开头写入的「当前重跑目标 Order」（首 pass 为 null）。
+    /// 供产物收集区分两类被跳过的节点：目标之前的是契约保留 prefix（Order &lt; 该值），目标之后未重驱动的是陈旧分支。
+    /// </summary>
+    public int? ActiveRedirectTarget { get; set; }
 
     /// <summary>取下一个执行顺序号（自增）。</summary>
     public int Next() => Interlocked.Increment(ref _sequence);
@@ -90,28 +97,42 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// <summary>读取一个共享变量。</summary>
     public bool TryGet(string key, out object? value) => _variables.TryGetValue(key, out value);
 
-    /// <summary>登记节点本次运行的产物（引擎在 DriveAsync 驱动后写入）。</summary>
+    /// <summary>登记节点本次运行的产物（引擎在 DriveAsync 驱动后写入），带当前 pass 戳。</summary>
     public void RegisterOutput(IWorkflowNodeViewModel node, object? value)
     {
         if (node is null) return;
-        _outputs[node] = value;
+        _outputs[node] = (Attempt, value);
     }
 
-    /// <summary>清空产物登记表（每次 RunAsync 开始调用一次；重定向重跑不清空 → 被跳过节点保留旧产物，已知限制）。</summary>
+    /// <summary>清空产物登记表（每次 RunAsync 开始调用一次；重定向重跑不清空 → 由 pass 戳过滤陈旧产物）。</summary>
     public void ResetOutputs() => _outputs.Clear();
 
-    /// <summary>收集一组输入节点的产物为只读字典；未登记的节点不包含（TryGetValue 返回 false）。</summary>
+    /// <summary>
+    /// 收集一组输入节点的产物为只读字典；未登记的节点不包含（TryGetValue 返回 false）。
+    /// 过滤规则：仅保留「本 pass 真跑过」的产物（pass 戳 == 当前 Attempt）或「重定向目标之前的契约保留 prefix」
+    /// （来源 Order &lt; ActiveRedirectTarget，resume 契约假设其结果未变）。按输入源数量预置容量，零扩容。
+    /// </summary>
     public IReadOnlyDictionary<IWorkflowNodeViewModel, object?> CollectGroupedInputs(
         IEnumerable<IWorkflowNodeViewModel> inputNodes)
     {
-        var result = new Dictionary<IWorkflowNodeViewModel, object?>(
+        var capacity = inputNodes is IReadOnlyCollection<IWorkflowNodeViewModel> rc ? rc.Count : 0;
+        var result = new Dictionary<IWorkflowNodeViewModel, object?>(capacity,
             WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
         if (inputNodes is not null)
         {
             foreach (var n in inputNodes)
-                if (n is not null && _outputs.TryGetValue(n, out var v))
-                    result[n] = v;
+                if (n is not null && _outputs.TryGetValue(n, out var entry) && IsCurrentPassOrPreserved(n, entry))
+                    result[n] = entry.Value;
         }
         return new ReadOnlyDictionary<IWorkflowNodeViewModel, object?>(result);
     }
+
+    /// <summary>
+    /// 该来源的产物是否仍视为有效：本 pass 刚登记（pass 戳 == Attempt），
+    /// 或来源在重定向目标之前、属于契约保留的 prefix（跳过未重驱动但其结果未变）。
+    /// </summary>
+    private bool IsCurrentPassOrPreserved(IWorkflowNodeViewModel source, (int Attempt, object? Value) entry)
+        => entry.Attempt == Attempt
+           || (ActiveRedirectTarget is int t
+               && (source as ICompileTimeAware)?.CompileContext?.Order is int o && o < t);
 }
