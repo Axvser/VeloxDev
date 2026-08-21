@@ -19,4 +19,13 @@ public interface ICompileContext : IAccessContext
 
     /// <summary>子图入口偏移。</summary>
     int Offset { get; set; }
+
+    /// <summary>
+    /// 汇合点输入源节点列表（编译期从各分支出口登记）。Count &gt; 1 时运行期把各上游产物聚合成
+    /// <see cref="GroupData"/> 注入 <see cref="IRuntimeContext.Data"/>；链式/单输入节点为 null，
+    /// 保持裸 Data 链式语义。
+    /// </summary>
+    [AgentContext(AgentLanguages.Chinese, "汇合点输入源节点列表：Count 大于 1 时运行期把各上游产物聚合为只读字典 GroupData 注入 Data；链式/单输入节点为 null")]
+    [AgentContext(AgentLanguages.English, "Join-point input source nodes: when Count > 1 the runtime aggregates each upstream output into a read-only GroupData dictionary injected as Data; null on chained/single-input nodes")]
+    IReadOnlyList<IWorkflowNodeViewModel>? InputNodes { get; set; }
 }

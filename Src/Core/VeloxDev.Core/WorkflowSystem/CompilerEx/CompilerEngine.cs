@@ -23,6 +23,8 @@ public sealed class CompilerEngine
         const int MaxRedirects = 50;
         context.IsRunning = true;
         context.Status = "Running";
+        // 每次 RunAsync 一次性清空产物登记表（重定向重跑不清空 → 被跳过节点保留旧产物，已知限制）。
+        context.ResetOutputs();
         int? redirectTarget = null;
         var redirects = 0;
         try
@@ -176,7 +178,7 @@ public sealed class CompilerEngine
                 context.Log($"→ 分支 '{key}' 无下游节点，运行结束。");
                 return true;
             }
-            if (!chosen.IsSkipped && chosen.Graph is not null)
+            if (chosen.Graph is not null)
                 return await RunGraphAsync(chosen.Graph, context, ct, redirectTarget);
         }
         return false;
@@ -211,13 +213,20 @@ public sealed class CompilerEngine
         if (node is IRuntimeAware aware)
             aware.AttachRuntimeContext(context);
         // 执行状态码 = 编译期固定编号（Order = -1 的停止节点不驱动，但保持状态码）。
-        if (node is ICompileTimeAware compileAware && compileAware.CompileContext is { } cc)
+        var cc = (node as ICompileTimeAware)?.CompileContext;
+        if (cc is not null)
             context.CurrentOrder = cc.Order;
         context.Log($"→ {node.GetType().Name}");
 
         try
         {
+            // 汇合注入：编译期登记了多路输入（Count > 1）→ 以「来源 Node → 产物」只读字典覆盖裸 Data，
+            // 节点在 ReceiveAsync 中用 context.Data is IGroupData 读取各上游结果。
+            if (cc?.InputNodes is { Count: > 1 } inputs)
+                context.Data = new GroupData(context.CollectGroupedInputs(inputs));
+
             var result = await node.GetHelper().ReceiveAsync(context, ct);
+            context.RegisterOutput(node, result);   // 驱动后登记产物，供下游汇合点聚合
             context.Data = result;
         }
         catch (OperationCanceledException)

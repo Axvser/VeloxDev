@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
@@ -43,6 +44,10 @@ public sealed partial class RuntimeContext : IRuntimeContext
     // 共享变量（黑板）：节点/引擎/UI 都可读写，非直接 UI 绑定，走方法访问
     private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
 
+    // 产物登记表（Key = 来源 Node 引用身份）：引擎逐节点驱动后登记，汇合点按输入组聚合
+    private readonly Dictionary<IWorkflowNodeViewModel, object?> _outputs =
+        new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+
     /// <summary>
     /// 节点是否在本次驱动中调用了 <see cref="Error"/> 或 <see cref="Warn"/>（请求重定向）。
     /// 由引擎在每次驱动节点前清除、驱动后检查。经 <see cref="IRuntimeContext"/> 读写。
@@ -84,4 +89,29 @@ public sealed partial class RuntimeContext : IRuntimeContext
 
     /// <summary>读取一个共享变量。</summary>
     public bool TryGet(string key, out object? value) => _variables.TryGetValue(key, out value);
+
+    /// <summary>登记节点本次运行的产物（引擎在 DriveAsync 驱动后写入）。</summary>
+    public void RegisterOutput(IWorkflowNodeViewModel node, object? value)
+    {
+        if (node is null) return;
+        _outputs[node] = value;
+    }
+
+    /// <summary>清空产物登记表（每次 RunAsync 开始调用一次；重定向重跑不清空 → 被跳过节点保留旧产物，已知限制）。</summary>
+    public void ResetOutputs() => _outputs.Clear();
+
+    /// <summary>收集一组输入节点的产物为只读字典；未登记的节点不包含（TryGetValue 返回 false）。</summary>
+    public IReadOnlyDictionary<IWorkflowNodeViewModel, object?> CollectGroupedInputs(
+        IEnumerable<IWorkflowNodeViewModel> inputNodes)
+    {
+        var result = new Dictionary<IWorkflowNodeViewModel, object?>(
+            WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        if (inputNodes is not null)
+        {
+            foreach (var n in inputNodes)
+                if (n is not null && _outputs.TryGetValue(n, out var v))
+                    result[n] = v;
+        }
+        return new ReadOnlyDictionary<IWorkflowNodeViewModel, object?>(result);
+    }
 }

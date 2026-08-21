@@ -40,7 +40,7 @@ WorkflowSystem 内置编译器：把控制器可达的子图分解为编译计�
 
 ### 操作方式
 
-1. **先编译** —— 从控制器/入口节点调用 `CompileWorkflow(startNodeIndex)`。读取返回的 `entries`（Execute/Branch/Parallel，含 options、`isSkipped`、`isTerminal`）与 `nodeOrders` 以理解计划。
+1. **先编译** —— 从控制器/入口节点调用 `CompileWorkflow(startNodeIndex)`。读取返回的 `entries`（Execute/Branch/Parallel，含 options、`isTerminal`）与 `nodeOrders` 以理解计划。
 2. **切换路由模式** —— 用 `PatchNodeProperties` 设置路由节点的 `CompileMode`（如 `{"CompileMode":"Static"}`），再重新 `CompileWorkflow`。Static 模式下应看到被剪除的分支（`Order = -1`）。
 3. **尊重停止节点** —— `Order = -1` 的节点已被编译出活跃路径，不要把它当作活跃链来驱动。
 4. **运行整条链** —— 调用 `RunCompiledWorkflow(startNodeIndex)` 端到端执行编译链（即 Demo Run 按钮的路径）。读取返回的 `runStatus`（`Completed`/`Stopped`）、`logs`（执行轨迹）、`data`（最终载荷）与 `endedWithError`。

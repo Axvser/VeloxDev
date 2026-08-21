@@ -40,7 +40,7 @@ Query it with `GetCompileStatus` (returns `{i, id, t, order, chainIndex, offset,
 
 ### How to operate
 
-1. **Compile first** — call `CompileWorkflow(startNodeIndex)` from the controller/entry node. Read the returned `entries` (Execute/Branch/Parallel with options, `isSkipped`, `isTerminal`) and `nodeOrders` to understand the plan.
+1. **Compile first** — call `CompileWorkflow(startNodeIndex)` from the controller/entry node. Read the returned `entries` (Execute/Branch/Parallel with options, `isTerminal`) and `nodeOrders` to understand the plan.
 2. **Switch routing mode** — set `CompileMode` on a router node via `PatchNodeProperties` (e.g. `{"CompileMode":"Static"}`), then re-run `CompileWorkflow`. In Static mode expect pruned branches (`Order = -1`).
 3. **Respect stopped nodes** — a node with `Order = -1` is compiled out of the active path. Do NOT drive it as part of the live chain.
 4. **Run the chain** — call `RunCompiledWorkflow(startNodeIndex)` to execute the compiled chain end-to-end (the demo's Run path). Read the returned `runStatus` (`Completed` / `Stopped`), `logs` (the execution trail), `data` (final payload) and `endedWithError`.

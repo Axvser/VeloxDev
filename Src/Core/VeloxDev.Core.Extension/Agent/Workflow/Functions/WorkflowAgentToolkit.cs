@@ -2080,7 +2080,6 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                     {
                         ["key"] = o.Key?.ToString(),
                         ["label"] = o.Label,
-                        ["isSkipped"] = o.IsSkipped,
                         ["isTerminal"] = o.IsTerminal,
                     });
                     if (o.Graph is not null)

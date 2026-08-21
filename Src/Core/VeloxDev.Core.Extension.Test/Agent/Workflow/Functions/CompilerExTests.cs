@@ -42,8 +42,6 @@ public class CompilerExTests
 
         var trueOpt = boolBranch.Options.First(o => Equals(o.Key, true));
         var falseOpt = boolBranch.Options.First(o => Equals(o.Key, false));
-        Assert.IsFalse(trueOpt.IsSkipped, "chosen True branch is not skipped");
-        Assert.IsFalse(falseOpt.IsSkipped, "dynamic mode keeps the False branch alive too");
 
         // True 分支下游从 offset 继续（不归零）：Hot Path 是第 3 个，Cold Path 第 4 个（都活）。
         var hot = session.Tree.Nodes.OfType<NodeViewModel>().First(n => n.Title == "Hot Path");

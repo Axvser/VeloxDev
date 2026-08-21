@@ -10,5 +10,4 @@ public abstract partial class ActionEntry
 {
     [VeloxProperty] private Guid _id = Guid.NewGuid();   // 条目 UID（UI 树节点标识）
     [VeloxProperty] private int _depth = 0;              // 嵌套层级（UI 缩进）
-    [VeloxProperty] private bool _isSkipped = false;     // 编译期剪除（未选中静态分支）
 }

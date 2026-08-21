@@ -73,4 +73,22 @@ public interface IRuntimeContext : ITaskContext
 
     /// <summary>读取一个共享变量。</summary>
     bool TryGet(string key, out object? value);
+
+    /// <summary>登记节点本次运行的产物（引擎在 DriveAsync 驱动后写入），供下游汇合点聚合。</summary>
+    [AgentContext(AgentLanguages.Chinese, "登记节点本次运行的产物：引擎逐节点驱动后写入，多输入汇合点按输入组聚合")]
+    [AgentContext(AgentLanguages.English, "Register a node's output for this run: the engine writes it after driving each node, and multi-input joins aggregate per input group")]
+    void RegisterOutput(IWorkflowNodeViewModel node, object? value);
+
+    /// <summary>清空产物登记表（每次 <see cref="CompilerEngine.RunAsync"/> 开始调用一次）。</summary>
+    [AgentContext(AgentLanguages.Chinese, "清空产物登记表：每次 RunAsync 开始清空一次，重定向重跑不清空")]
+    [AgentContext(AgentLanguages.English, "Clear the product registry once at the start of each RunAsync (not cleared on redirect re-runs)")]
+    void ResetOutputs();
+
+    /// <summary>
+    /// 收集一组输入节点的产物为只读字典（Key=来源 Node 引用身份，Value=该节点产物）。
+    /// 未登记的节点不包含——<see cref="IReadOnlyDictionary{TKey,TValue}.TryGetValue"/> 返回 false。
+    /// </summary>
+    [AgentContext(AgentLanguages.Chinese, "按输入组收集产物为只读字典：未登记的来源不包含（TryGetValue 返回 false）")]
+    [AgentContext(AgentLanguages.English, "Collect outputs for a group of input nodes as a read-only dictionary; unregistered sources are absent (TryGetValue returns false)")]
+    IReadOnlyDictionary<IWorkflowNodeViewModel, object?> CollectGroupedInputs(IEnumerable<IWorkflowNodeViewModel> inputNodes);
 }

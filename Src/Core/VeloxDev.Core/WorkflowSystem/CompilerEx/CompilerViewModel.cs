@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
@@ -57,7 +58,7 @@ public sealed partial class CompilerViewModel
             if (node is ICompileTimeRouter router)
             {
                 FlushChain(entries, chain, state, offset);
-                AttachCompileContext(node, state.Counter, 0, offset);
+                AttachCompileContext(node, state.Counter, 0, offset, state);
                 state.Counter++;
 
                 var routeTable = await router.GetRouteTable();
@@ -137,6 +138,17 @@ public sealed partial class CompilerViewModel
 
                 // 分支后的汇合点：所有活跃分支出口共同指向的下一个节点。
                 node = CommonNext(exits);
+                if (node is not null)
+                {
+                    // 汇合登记：把各分支出口（输入源）写入 JoinInputs，供该节点编译身份回填 InputNodes，
+                    // 运行期按此聚合成 GroupData 注入 Data。单输入汇合保持裸 Data 链式语义。
+                    var distinctExits = exits.Where(e => e is not null)
+                        .Cast<IWorkflowNodeViewModel>()
+                        .Distinct(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance)
+                        .ToList();
+                    if (distinctExits.Count > 1)
+                        state.JoinInputs[node] = distinctExits;
+                }
                 resumedAfterBranch = node is not null;
                 continue;
             }
@@ -162,13 +174,14 @@ public sealed partial class CompilerViewModel
     {
         if (chain.Count == 0) return;
         for (int i = 0; i < chain.Count; i++)
-            AttachCompileContext(chain[i], state.Counter + i, i, offset);
+            AttachCompileContext(chain[i], state.Counter + i, i, offset, state);
         state.Counter += chain.Count;
         entries.Add(new ExecuteEntry { Nodes = new ObservableCollection<IWorkflowNodeViewModel>(chain) });
         chain.Clear();
     }
 
-    private static void AttachCompileContext(IWorkflowNodeViewModel node, int order, int chainIndex, int offset)
+    private static void AttachCompileContext(IWorkflowNodeViewModel node, int order, int chainIndex, int offset,
+        CompileState state)
     {
         if (node is ICompileTimeAware aware)
             aware.AttachCompileTimeContext(new CompileContext
@@ -176,6 +189,7 @@ public sealed partial class CompilerViewModel
                 Order = order,
                 ChainIndex = chainIndex,
                 Offset = offset,
+                InputNodes = state.JoinInputs.TryGetValue(node, out var inputs) ? inputs : null,
             });
     }
 
@@ -193,7 +207,7 @@ public sealed partial class CompilerViewModel
             if (state.Visited.Contains(n)) continue;
             if (!ReferenceEquals(n, start) && HasMultipleInputs(n)) continue;
             state.Visited.Add(n);
-            AttachCompileContext(n, -1, -1, 0);
+            AttachCompileContext(n, -1, -1, 0, state);
             foreach (var t in AllTargets(n))
                 if (t is not null) queue.Enqueue(t);
         }
@@ -304,5 +318,9 @@ public sealed partial class CompilerViewModel
     {
         public int Counter;
         public readonly HashSet<IWorkflowNodeViewModel> Visited = [];
+
+        /// <summary>汇合点 → 输入源节点列表（编译期从各分支出口登记，供汇合点编译身份回填 InputNodes）。</summary>
+        public readonly Dictionary<IWorkflowNodeViewModel, IReadOnlyList<IWorkflowNodeViewModel>> JoinInputs =
+            new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
     }
 }

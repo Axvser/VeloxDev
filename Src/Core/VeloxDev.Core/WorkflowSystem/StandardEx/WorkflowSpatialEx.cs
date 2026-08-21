@@ -259,14 +259,15 @@ public static class WorkflowSpatialEx
             observable.Remove(item);
         }
     }
+}
 
-    private sealed class WorkflowReferenceEqualityComparer<T> : IEqualityComparer<T>
-        where T : class
-    {
-        public static readonly WorkflowReferenceEqualityComparer<T> Instance = new();
+/// <summary>引用身份相等的比较器（node VM 不重写 Equals；汇合登记表 / 产物表按引用身份聚键）。</summary>
+internal sealed class WorkflowReferenceEqualityComparer<T> : IEqualityComparer<T>
+    where T : class
+{
+    public static readonly WorkflowReferenceEqualityComparer<T> Instance = new();
 
-        public bool Equals(T? x, T? y) => ReferenceEquals(x, y);
+    public bool Equals(T? x, T? y) => ReferenceEquals(x, y);
 
-        public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
-    }
+    public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
 }
