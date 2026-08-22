@@ -7,7 +7,7 @@
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.Avalonia</Title>
-		<Version>7.0.142</Version>
+		<Version>7.0.214</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + Avalonia</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -27,7 +27,7 @@
 		<PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
 		<PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
 		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.Core" Version="7.0.142" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="7.0.214" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 </Project>

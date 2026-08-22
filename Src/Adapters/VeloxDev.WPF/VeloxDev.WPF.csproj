@@ -11,7 +11,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WPF</Title>
-		<Version>7.0.142</Version>
+		<Version>7.0.214</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WPF</Description>
 	 <PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -24,7 +24,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.Core" Version="7.0.142" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="7.0.214" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 </Project>

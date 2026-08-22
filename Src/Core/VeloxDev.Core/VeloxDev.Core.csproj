@@ -11,7 +11,7 @@
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<IsTrimmable>false</IsTrimmable>
 		<Title>VeloxDev.Core</Title>
-		<Version>7.0.142</Version>
+		<Version>7.0.214</Version>
 		<Authors>Axvser</Authors>
 		<Description>Build modern, AI-controllable workflow editors on any .NET GUI — WPF, Avalonia, WinUI, MAUI ...</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>

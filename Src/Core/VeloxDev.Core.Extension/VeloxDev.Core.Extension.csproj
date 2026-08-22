@@ -7,7 +7,7 @@
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<IsTrimmable>false</IsTrimmable>
 		<Title>VeloxDev.Core.Extension</Title>
-		<Version>7.0.142</Version>
+		<Version>7.0.214</Version>
 		<Authors>Axvser</Authors>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<Description>Optional companion to the dependency-free VeloxDev.Core. Adds MAF-based Workflow Agent tools (60+ function-calling tools, MCP support) and runtime extensions for building AI-controllable workflow editors on WPF, Avalonia, WinUI, MAUI, WinForms, and Blazor/Razor.</Description>
@@ -18,13 +18,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="CliWrap" Version="3.10.2" />
+		<PackageReference Include="CliWrap" Version="3.10.5" />
 		<PackageReference Include="Microsoft.Agents.AI" Version="1.13.0" />
 		<PackageReference Include="Microsoft.Extensions.AI" Version="10.8.0" />
 		<PackageReference Include="ModelContextProtocol" Version="2.2.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<ProjectReference Include="../VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.Core" Version="7.0.142" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="7.0.214" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 	<ItemGroup>
