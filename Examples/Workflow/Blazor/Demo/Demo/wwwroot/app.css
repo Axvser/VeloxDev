@@ -508,3 +508,102 @@ html, body {
     top: 50%;
     transform: translateY(-50%);
 }
+
+/* ── Agent interaction modals (RequestSelection / RequestConfirmation) ── */
+.wf-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.wf-modal {
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 10px;
+    width: min(460px, calc(100vw - 48px));
+    max-height: 82vh;
+    overflow: auto;
+    color: #e0e0e0;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.wf-modal-header {
+    background: #16213e;
+    padding: 14px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #7ec8ff;
+    border-bottom: 1px solid #232b45;
+}
+.wf-modal-body { padding: 14px 18px 18px; }
+.wf-modal-prompt {
+    margin: 0 0 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #e0e0e0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.wf-modal-key {
+    display: inline-block;
+    margin: 0 0 10px;
+    padding: 6px 10px;
+    background: #2a1f00;
+    border: 1px solid #ffd166;
+    border-radius: 5px;
+    font-family: Consolas, Menlo, monospace;
+    font-size: 11px;
+    color: #ffd166;
+}
+.wf-modal-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.wf-opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #0f3460;
+    border: 1px solid #7ec8ff;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+}
+.wf-opt input[type="checkbox"] { accent-color: #7ec8ff; }
+.wf-opt-btn {
+    text-align: left;
+    padding: 10px 14px;
+    background: #0f3460;
+    border: 1px solid #7ec8ff;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 13px;
+    cursor: pointer;
+}
+.wf-opt-btn:hover { background: #12406e; }
+.wf-modal-freetext-label { margin: 10px 0 4px; font-size: 11px; color: #b0b0b0; }
+.wf-modal-freetext {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    background: #2d2d2d;
+    border: 1px solid #555;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+.wf-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.wf-btn-cancel, .wf-btn-confirm, .wf-btn-deny, .wf-btn-once, .wf-btn-always {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid;
+    font-size: 12px;
+    cursor: pointer;
+}
+.wf-btn-cancel { background: #2a2a3e; border-color: #444; color: #888; }
+.wf-btn-confirm { background: #0f3460; border-color: #7ec8ff; color: #7ec8ff; }
+.wf-btn-deny   { background: #3b0000; border-color: #ff6b6b; color: #ff6b6b; }
+.wf-btn-once   { background: #0f3460; border-color: #7ec8ff; color: #7ec8ff; }
+.wf-btn-always { background: #0d3b1a; border-color: #6bffb8; color: #6bffb8; }

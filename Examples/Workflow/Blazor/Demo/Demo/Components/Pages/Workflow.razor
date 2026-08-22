@@ -3,6 +3,7 @@
 @rendermode RenderMode.InteractiveServer
 @using System.Collections.Specialized
 @using System.ComponentModel
+@using VeloxDev.AI
 @implements IDisposable
 
 <PageTitle>VeloxDev Workflow — Blazor Demo</PageTitle>
@@ -276,4 +277,67 @@
             </div>
         }
     </main>
+
+    <!-- Agent interaction modals (RequestSelection / RequestConfirmation) -->
+    @if (_selection is { } sel)
+    {
+        <div class="wf-modal-overlay">
+            <div class="wf-modal">
+                <div class="wf-modal-header">@(sel.AllowMultiSelect ? "Agent · 请多选" : "Agent · 请选择")</div>
+                <div class="wf-modal-body">
+                    <p class="wf-modal-prompt">@sel.Prompt</p>
+                    <div class="wf-modal-options">
+                        @if (sel.AllowMultiSelect)
+                        {
+                            @foreach (var idx in System.Linq.Enumerable.Range(0, sel.Options.Length))
+                            {
+                                <label class="wf-opt">
+                                    <input type="checkbox" checked="@sel.Checked[idx]" @onchange="e => OnCheckChanged(sel, idx, (bool)(e.Value ?? false))" />
+                                    <span>@sel.Options[idx]</span>
+                                </label>
+                            }
+                        }
+                        else
+                        {
+                            @foreach (var opt in sel.Options)
+                            {
+                                <button class="wf-opt-btn" @onclick="() => PickOption(opt)">@opt</button>
+                            }
+                        }
+                    </div>
+                    <div class="wf-modal-freetext-label">@sel.FreeTextPrompt</div>
+                    <input class="wf-modal-freetext" type="text" @bind="sel.FreeText" @bind:event="oninput" placeholder="@sel.FreeTextPrompt" />
+                    <div class="wf-modal-actions">
+                        @if (sel.AllowMultiSelect)
+                        {
+                            <button class="wf-btn-cancel" @onclick="CancelSelection">取消</button>
+                            <button class="wf-btn-confirm" @onclick="ConfirmMultiSelection">确认选择</button>
+                        }
+                        else
+                        {
+                            <button class="wf-btn-cancel" @onclick="CancelSelection">取消（不选择）</button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_confirmation is { } conf)
+    {
+        <div class="wf-modal-overlay">
+            <div class="wf-modal">
+                <div class="wf-modal-header" style="color:#ffd166;">Agent · 操作确认</div>
+                <div class="wf-modal-body">
+                    <div class="wf-modal-key">@conf.OperationKey</div>
+                    <p class="wf-modal-prompt">@conf.Description</p>
+                    <div class="wf-modal-actions">
+                        <button class="wf-btn-deny" @onclick="() => CompleteConfirmation(AgentConfirmationResult.Deny)">拒绝</button>
+                        <button class="wf-btn-once" @onclick="() => CompleteConfirmation(AgentConfirmationResult.AllowOnce)">仅同意一次</button>
+                        <button class="wf-btn-always" @onclick="() => CompleteConfirmation(AgentConfirmationResult.AllowAlways)">本次会话始终同意</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 </div>

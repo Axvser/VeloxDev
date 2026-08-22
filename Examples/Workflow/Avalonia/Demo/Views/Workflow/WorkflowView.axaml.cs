@@ -336,7 +336,13 @@ public partial class WorkflowView : UserControl
                     BorderBrush = new SolidColorBrush(Color.Parse("#444444")),
                     CornerRadius = new CornerRadius(6),
                 };
-                cancelBtn.Click += (_, _) => dialog.Close();
+                cancelBtn.Click += (_, _) =>
+                {
+                    // A typed custom response is still a valid answer even when the user cancels.
+                    args.FreeTextResponse = freeTextBox.Text?.Trim();
+                    args.FreeTextResponse = string.IsNullOrWhiteSpace(args.FreeTextResponse) ? null : args.FreeTextResponse;
+                    dialog.Close();
+                };
                 optionsPanel.Children.Add(cancelBtn);
             }
             else
@@ -355,7 +361,13 @@ public partial class WorkflowView : UserControl
                     BorderBrush = new SolidColorBrush(Color.Parse("#444444")),
                     CornerRadius = new CornerRadius(6),
                 };
-                cancelBtn.Click += (_, _) => dialog.Close();
+                cancelBtn.Click += (_, _) =>
+                {
+                    // A typed custom response is still a valid answer even when the user cancels.
+                    args.FreeTextResponse = freeTextBox.Text?.Trim();
+                    args.FreeTextResponse = string.IsNullOrWhiteSpace(args.FreeTextResponse) ? null : args.FreeTextResponse;
+                    dialog.Close();
+                };
                 optionsPanel.Children.Add(cancelBtn);
             }
 

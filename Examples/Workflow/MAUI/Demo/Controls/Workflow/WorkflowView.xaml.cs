@@ -252,7 +252,7 @@ public partial class WorkflowView : ContentView
             {
                 BackgroundColor = Color.FromArgb("#2d2d2d"),
                 TextColor = Colors.White,
-                Placeholder = args.FreeTextPrompt,
+                Placeholder = "（可选）",
                 PlaceholderColor = Color.FromArgb("#666666"),
             };
 

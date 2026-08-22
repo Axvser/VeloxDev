@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using VeloxDev.AI;
 using VeloxDev.MVVM.Serialization;
 using VeloxDev.WorkflowSystem;
 
@@ -24,6 +25,33 @@ public partial class Workflow : ComponentBase, IDisposable
         => (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;
     private string _canvasLayoutSize = "";
     private INotifyPropertyChanged? _subscribedVirtualLink;
+
+    // ── Agent interaction modals (RequestSelection / RequestConfirmation) ──
+    private SelectionRequest? _selection;
+    private ConfirmationRequest? _confirmation;
+
+    /// <summary>Active <c>RequestSelection</c> dialog state; rendered by Workflow.razor and
+    /// completed by the user's buttons. <see cref="Completion"/> unblocks the Agent tool call.</summary>
+    private sealed class SelectionRequest
+    {
+        public string Prompt = "";
+        public string[] Options = [];
+        public bool AllowMultiSelect;
+        public string FreeTextPrompt = "";
+        public string FreeText { get; set; } = "";
+        public string? SelectedOption;
+        public bool[] Checked = [];
+        public TaskCompletionSource<bool> Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    /// <summary>Active <c>RequestConfirmation</c> dialog state.</summary>
+    private sealed class ConfirmationRequest
+    {
+        public string OperationKey = "";
+        public string Description = "";
+        public AgentConfirmationResult Result;
+        public TaskCompletionSource<bool> Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
 
     protected override void OnInitialized()
     {
@@ -52,6 +80,11 @@ public partial class Workflow : ComponentBase, IDisposable
         if (_session.Tree.GetHelper() is AgentHelper helper)
         {
             helper.Mcp.Status.PropertyChanged += OnMcpStatusChanged;
+            // Wire the Agent's interaction tools to the page's modal UI. The tool call is
+            // marshalled onto the renderer's SynchronizationContext, so these handlers can touch
+            // component state directly; the modal blocks the tool until the user answers.
+            helper.SelectionHandler = ShowSelectionAsync;
+            helper.ConfirmationHandler = ShowConfirmationAsync;
             _ = helper.LoadMcpServersAsync();
         }
     }
@@ -84,7 +117,11 @@ public partial class Workflow : ComponentBase, IDisposable
             _subscribedVirtualLink = null;
         }
         if (_session.Tree.GetHelper() is AgentHelper helper)
+        {
+            helper.SelectionHandler = null;
+            helper.ConfirmationHandler = null;
             helper.Mcp.Status.PropertyChanged -= OnMcpStatusChanged;
+        }
     }
 
     private void UpdateCanvasSize()
@@ -210,6 +247,90 @@ public partial class Workflow : ComponentBase, IDisposable
         _useStreaming = e.Value?.ToString() == "true";
         if (_session?.Tree is not null)
             _session.Tree.UseStreamingAgentResponse = _useStreaming;
+    }
+
+    // ── Agent interaction handlers ─────────────────────────────────────────
+
+    private async Task ShowSelectionAsync(AgentSelectionEventArgs args)
+    {
+        var req = new SelectionRequest
+        {
+            Prompt = args.Prompt,
+            Options = args.Options.ToArray(),
+            AllowMultiSelect = args.AllowMultiSelect,
+            FreeTextPrompt = args.FreeTextPrompt,
+            Checked = new bool[args.Options.Count],
+        };
+        _selection = req;
+        await InvokeAsync(StateHasChanged);
+
+        // Block until the user answers. The TCS is completed by the modal's buttons below.
+        await req.Completion.Task;
+
+        if (req.AllowMultiSelect)
+        {
+            var selected = new List<string>();
+            for (int i = 0; i < req.Options.Length; i++)
+                if (req.Checked[i]) selected.Add(req.Options[i]);
+            args.SelectedOptions = selected;
+        }
+        else
+        {
+            args.SelectedOption = req.SelectedOption;
+        }
+        args.FreeTextResponse = string.IsNullOrWhiteSpace(req.FreeText) ? null : req.FreeText.Trim();
+
+        _selection = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ShowConfirmationAsync(AgentConfirmationEventArgs args)
+    {
+        var req = new ConfirmationRequest
+        {
+            OperationKey = args.OperationKey,
+            Description = args.Description,
+        };
+        _confirmation = req;
+        await InvokeAsync(StateHasChanged);
+
+        await req.Completion.Task;
+
+        args.Result = req.Result;
+
+        _confirmation = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnCheckChanged(SelectionRequest sel, int idx, bool value)
+        => sel.Checked[idx] = value;
+
+    private void PickOption(string? option)
+    {
+        if (_selection is not { } sel || sel.AllowMultiSelect) return;
+        sel.SelectedOption = option;
+        sel.Completion.TrySetResult(true);
+    }
+
+    private void ConfirmMultiSelection()
+    {
+        if (_selection is not { } sel || !sel.AllowMultiSelect) return;
+        sel.Completion.TrySetResult(true);
+    }
+
+    private void CancelSelection()
+    {
+        if (_selection is not { } sel) return;
+        if (sel.AllowMultiSelect)
+            Array.Fill(sel.Checked, false);
+        sel.Completion.TrySetResult(true);
+    }
+
+    private void CompleteConfirmation(AgentConfirmationResult result)
+    {
+        if (_confirmation is not { } conf) return;
+        conf.Result = result;
+        conf.Completion.TrySetResult(true);
     }
 
     public void Dispose()

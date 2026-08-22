@@ -217,7 +217,7 @@ internal sealed class AgentSelectionDialog : Form
             };
             cancelBtnMulti.FlatAppearance.BorderColor = CancelBorder;
             cancelBtnMulti.FlatAppearance.BorderSize = 1;
-            cancelBtnMulti.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
+            cancelBtnMulti.Click += (_, _) => { ReadFreeText(freeTextBox); DialogResult = DialogResult.Cancel; Close(); };
             btnRow.Controls.Add(cancelBtnMulti);
 
             optionsFlow.Controls.Add(btnRow);
@@ -225,7 +225,7 @@ internal sealed class AgentSelectionDialog : Form
         else
         {
             var cancelBtn = MakeOptionButton("取消（不选择）", CancelBg, TextDim, CancelBorder);
-            cancelBtn.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
+            cancelBtn.Click += (_, _) => { ReadFreeText(freeTextBox); DialogResult = DialogResult.Cancel; Close(); };
             optionsFlow.Controls.Add(cancelBtn);
         }
 

@@ -287,12 +287,14 @@ namespace Demo.Views
 
                 // Track controls
                 List<CheckBox>? checkBoxes = isMulti ? [] : null;
-                string? singleChoice = null;
                 var freeTextBox = new TextBox
                 {
                     PlaceholderText = args.FreeTextPrompt,
                     Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 8),
                 };
+
+                // The single-select dialog is referenced by the option buttons so a pick can dismiss it.
+                ContentDialog? dialog = null;
 
                 foreach (var opt in options)
                 {
@@ -318,12 +320,12 @@ namespace Demo.Views
                         };
                         btn.Click += (_, _) =>
                         {
-                            singleChoice = captured;
                             tcs.TrySetResult(new SelectionDialogResult
                             {
-                                SelectedOption = singleChoice,
+                                SelectedOption = captured,
                                 FreeTextResponse = freeTextBox.Text?.Trim(),
                             });
+                            dialog?.Hide();
                         };
                         optionStack.Children.Add(btn);
                     }
@@ -350,7 +352,7 @@ namespace Demo.Views
                 if (isMulti)
                 {
                     // Multi-select mode: ContentDialog with confirm/cancel
-                    var dialog = new ContentDialog
+                    dialog = new ContentDialog
                     {
                         Title = "Agent · 请多选",
                         PrimaryButtonText = "确认选择",
@@ -373,46 +375,27 @@ namespace Demo.Views
                     }
                     else
                     {
-                        tcs.TrySetResult(new SelectionDialogResult());
+                        // Cancelled: no box was selected, but a typed custom response still counts.
+                        tcs.TrySetResult(new SelectionDialogResult
+                        {
+                            FreeTextResponse = freeTextBox?.Text?.Trim(),
+                        });
                     }
                 }
                 else
                 {
-                    // Single-select mode: inline buttons call dialog.Hide()
-                    ContentDialog dialog = new()
+                    // Single-select mode: option buttons (built above) set the result and dismiss
+                    // the dialog. If it is dismissed via ESC/backdrop/close (Primary = "取消"),
+                    // only the free-text response survives.
+                    dialog = new ContentDialog
                     {
                         Title = "Agent · 请选择",
                         PrimaryButtonText = "取消",
                         XamlRoot = this.XamlRoot,
                         DefaultButton = ContentDialogButton.None,
+                        Content = scroller,
                     };
 
-                    string? chosen = null;
-
-                    foreach (var opt in options)
-                    {
-                        var captured = opt;
-                        var btn = new Button
-                        {
-                            Content = opt,
-                            HorizontalAlignment = HorizontalAlignment.Stretch,
-                            HorizontalContentAlignment = HorizontalAlignment.Left,
-                            Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 4),
-                        };
-                        btn.Click += (_, _) =>
-                        {
-                            chosen = captured;
-                            tcs.TrySetResult(new SelectionDialogResult
-                            {
-                                SelectedOption = chosen,
-                                FreeTextResponse = freeTextBox?.Text?.Trim(),
-                            });
-                            dialog.Hide();
-                        };
-                        optionStack.Children.Add(btn);
-                    }
-
-                    dialog.Content = scroller;
                     await dialog.ShowAsync();
 
                     // If not set yet (dismissed via ESC/backdrop/close btn)
