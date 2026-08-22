@@ -18,7 +18,7 @@
 		<PackageReference Include="Avalonia.Desktop" Version="12.0.1" />
 		<PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.1" />
 		<PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.1" />
-		<PackageReference Include="AvalonMarkdown" Version="5.0.0" />
+		<PackageReference Include="AvalonMarkdown" Version="8.0.0" />
 		<!--Condition below is needed to remove the diagnostics bridge from build output in Release configuration.-->
 		<PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.1">
 			<IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>

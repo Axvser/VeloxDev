@@ -38,12 +38,12 @@
 								 RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 		</DataTemplate>
 		<DataTemplate DataType="vm:LogicGateNodeViewModel">
-			<local:NodeView Width="{Binding Size.Width}"
-							Height="{Binding Size.Height}"
-							Canvas.Left="{Binding Anchor.Horizontal}"
-							Canvas.Top="{Binding Anchor.Vertical}"
-							ZIndex="{Binding Anchor.Layer}"
-							RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
+			<local:LogicGateNodeView Width="{Binding Size.Width}"
+									 Height="{Binding Size.Height}"
+									 Canvas.Left="{Binding Anchor.Horizontal}"
+									 Canvas.Top="{Binding Anchor.Vertical}"
+									 ZIndex="{Binding Anchor.Layer}"
+									 RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 		</DataTemplate>
 		<DataTemplate DataType="vm:PythonScriptNodeViewModel">
 			<local:PythonNodeView Width="{Binding Size.Width}"
