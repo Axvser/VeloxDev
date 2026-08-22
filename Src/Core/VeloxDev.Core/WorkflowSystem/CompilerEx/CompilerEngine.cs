@@ -48,7 +48,7 @@ public sealed class CompilerEngine
                         context.Error($"Redirected more than {MaxRedirects} times. Aborting.");
                         throw new InvalidOperationException($"Redirected more than {MaxRedirects} times. Aborting.");
                     }
-                    context.Log($"→ Redirecting to compile state #{next} (skipping prior nodes, re-executing).");
+                    context.Log($"Redirecting to compile state #{next} (skipping prior nodes, re-executing).");
                     redirectTarget = next;
                     continue;
                 }
@@ -152,7 +152,7 @@ public sealed class CompilerEngine
             }
             else
             {
-                context.Log($"→ Redirect target #{target} is not a predecessor or is invalid; ignored.");
+                context.Log($"Redirect target #{target} is not a predecessor or is invalid; ignored.");
             }
         }
         return false;
@@ -185,7 +185,7 @@ public sealed class CompilerEngine
             var chosen = branch.Options.FirstOrDefault(o => o is not null && Equals(o.Key, key));
             if (chosen is null || chosen.IsTerminal)
             {
-                context.Log($"→ Branch '{key}' has no downstream node; the run ends.");
+                context.Log($"Branch '{key}' has no downstream node; the run ends.");
                 return true;
             }
             if (chosen.Graph is not null)
@@ -232,7 +232,7 @@ public sealed class CompilerEngine
         var cc = (node as ICompileTimeAware)?.CompileContext;
         if (cc is not null)
             context.CurrentOrder = cc.Order;
-        context.Log($"→ {node.GetType().Name}");
+        context.Log(node.GetType().Name);
 
         try
         {

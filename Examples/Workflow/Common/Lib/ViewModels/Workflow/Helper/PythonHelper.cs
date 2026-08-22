@@ -38,7 +38,7 @@ public class PythonHelper : NodeHelper<PythonScriptNodeViewModel>
             Component.LastRun = DateTime.Now.ToString("HH:mm:ss");
             Component.LastOutput = Truncate(raw);
             if (ctx is IRuntimeContext rc)
-                rc.Log($"→ Python finished in {Component.LastRun}: {Truncate(raw, 200)}");
+                rc.Log($"Python finished in {Component.LastRun}: {Truncate(raw, 200)}");
             return parsed;
         }
         catch (OperationCanceledException)

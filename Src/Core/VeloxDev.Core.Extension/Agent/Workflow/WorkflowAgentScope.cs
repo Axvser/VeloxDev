@@ -938,7 +938,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine();
 
         // ── Global Behavioral Constraints ──
-        result.AppendLine("## ⚠ Critical Behavioral Constraints");
+        result.AppendLine("## Critical Behavioral Constraints");
         result.AppendLine();
         result.AppendLine("These constraints apply to ALL operations.");
         result.AppendLine();

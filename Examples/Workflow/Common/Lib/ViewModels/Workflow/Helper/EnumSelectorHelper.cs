@@ -14,7 +14,7 @@ public class EnumSelectorHelper : NodeHelper<EnumSelectorNodeViewModel>
         // the incoming payload through (return ctx.Data), otherwise the selected branch would see null Data.
         if (ctx is IRuntimeContext)
         {
-            Component.LastRouted = Component.SelectedValue is { } sv ? $"→ {sv}" : "→ ?";
+            Component.LastRouted = Component.SelectedValue is { } sv ? $"[{sv}]" : "[?]";
             return ctx.Data;
         }
 
@@ -28,7 +28,7 @@ public class EnumSelectorHelper : NodeHelper<EnumSelectorNodeViewModel>
         }
         routeValue ??= Component.SelectedValue;
 
-        Component.LastRouted = routeValue is not null ? $"→ {routeValue}" : "→ ?";
+        Component.LastRouted = routeValue is not null ? $"[{routeValue}]" : "[?]";
         // Record the routing trace only; do not write LastExecutionOrder — the number badge belongs to the compiled run, and non-compiler starts must not disturb it.
         context.RecordExecution(Component.LastRouted, out _);
 

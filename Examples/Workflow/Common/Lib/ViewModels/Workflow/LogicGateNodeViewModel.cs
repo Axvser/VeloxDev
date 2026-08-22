@@ -100,7 +100,7 @@ public partial class LogicGateNodeViewModel : ICompileTimeRouter, ICompileTimeAw
             return Task.FromResult<object?>(null);
 
         var result = LogicGateHelper.Evaluate(ctx.Data, GateOp);
-        LastRouted = result ? "→ True" : "→ False";
+        LastRouted = result ? "[True]" : "[False]";
         return Task.FromResult<object?>(result);
     }
 

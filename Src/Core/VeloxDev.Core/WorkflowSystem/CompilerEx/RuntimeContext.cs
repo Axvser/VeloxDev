@@ -77,17 +77,17 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// <summary>Nodes/the engine push a plain log line (with a sequence prefix).</summary>
     public void Log(string entry) => _logs.Add($"{Next():00}. {entry}");
 
-    /// <summary>Nodes/the engine push an exception/error message (sequence prefix with a ✗ marker). Also requests a redirect.</summary>
+    /// <summary>Nodes/the engine push an exception/error message (sequence prefix with an [Error] marker). Also requests a redirect.</summary>
     public void Error(string message)
     {
-        _logs.Add($"{Next():00}. ✗ {message}");
+        _logs.Add($"{Next():00}. [Error] {message}");
         RedirectRequested = true;
     }
 
-    /// <summary>Nodes/the engine push a warning message (sequence prefix with a ⚠ marker). Also requests a redirect.</summary>
+    /// <summary>Nodes/the engine push a warning message (sequence prefix with a [Warning] marker). Also requests a redirect.</summary>
     public void Warn(string message)
     {
-        _logs.Add($"{Next():00}. ⚠ {message}");
+        _logs.Add($"{Next():00}. [Warning] {message}");
         RedirectRequested = true;
     }
 

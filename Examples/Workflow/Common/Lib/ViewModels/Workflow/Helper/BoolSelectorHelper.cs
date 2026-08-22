@@ -14,7 +14,7 @@ public class BoolSelectorHelper : NodeHelper<BoolSelectorNodeViewModel>
         // the incoming payload through (return ctx.Data), otherwise the selected branch would see null Data.
         if (ctx is IRuntimeContext)
         {
-            Component.LastRouted = Component.Condition ? "→ True" : "→ False";
+            Component.LastRouted = Component.Condition ? "[True]" : "[False]";
             return ctx.Data;
         }
 
@@ -24,7 +24,7 @@ public class BoolSelectorHelper : NodeHelper<BoolSelectorNodeViewModel>
             ? bool.TryParse(conditionKey, out var parsed) && parsed
             : Component.Condition;
 
-        Component.LastRouted = condition ? "→ True" : "→ False";
+        Component.LastRouted = condition ? "[True]" : "[False]";
         // Record the routing trace only; do not write LastExecutionOrder — the number badge belongs to the compiled run, and non-compiler starts must not disturb it.
         context.RecordExecution(Component.LastRouted, out _);
 

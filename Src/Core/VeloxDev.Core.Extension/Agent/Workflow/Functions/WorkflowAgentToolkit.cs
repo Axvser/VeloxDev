@@ -483,7 +483,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return Ok($"Slot [{nodeIndex}][{slotIndex}] deleted.");
     }
 
-    [Description("⚠ Prefer ConnectByProperty — slot indices shift on SlotEnumerator nodes. Use only after ListSlotProperties confirms a stable index. Returns the slot→property map so you can switch to property routing.")]
+    [Description("Prefer ConnectByProperty — slot indices shift on SlotEnumerator nodes. Use only after ListSlotProperties confirms a stable index. Returns the slot→property map so you can switch to property routing.")]
     private async Task<string> ConnectSlots(
         [Description("Sender node index.")] int senderNodeIndex,
         [Description("Sender slot index.")] int senderSlotIndex,
@@ -2010,7 +2010,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         return new JObject { ["status"] = "ok", ["compiledNodes"] = orders.Count, ["nodes"] = orders }.ToString(Formatting.None);
     }
 
-    [Description("Returns the tree's aggregate execution log — the chronological record of direct (non-compiler) executions appended by nodes (e.g. '01. EXEC Load Seed'). For the compiler run-session log (with sequence numbers and WARN ⚠ / ERROR ✗ markers), use RunCompiledWorkflow's 'logs' field instead. Pure query.")]
+    [Description("Returns the tree's aggregate execution log — the chronological record of direct (non-compiler) executions appended by nodes (e.g. '01. EXEC Load Seed'). For the compiler run-session log (with sequence numbers and [Warning] / [Error] markers), use RunCompiledWorkflow's 'logs' field instead. Pure query.")]
     private string GetExecutionLog()
     {
         var logs = new JArray();

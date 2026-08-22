@@ -20,7 +20,7 @@ public class TimerHelper : NodeHelper<TimerNodeViewModel>
         };
         Component.LastTick = tick["time"]?.ToString() ?? "-";
         if (ctx is IRuntimeContext rc)
-            rc.Log($"→ Timer tick at {tick["time"]}");
+            rc.Log($"Timer tick at {tick["time"]}");
 
         return Task.FromResult<object?>(tick);
     }

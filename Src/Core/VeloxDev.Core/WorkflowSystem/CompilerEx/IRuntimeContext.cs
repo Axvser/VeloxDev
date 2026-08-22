@@ -73,10 +73,10 @@ public interface IRuntimeContext : ITaskContext
     /// <summary>Pushes a plain log line (with a sequence prefix).</summary>
     void Log(string entry);
 
-    /// <summary>Pushes an exception/error log line (sequence prefix with a ✗ marker). Also marks "redirect requested" — the engine decides, based on whether the node implements IRedirectable, to redirect or end.</summary>
+    /// <summary>Pushes an exception/error log line (sequence prefix with an [Error] marker). Also marks "redirect requested" — the engine decides, based on whether the node implements IRedirectable, to redirect or end.</summary>
     void Error(string message);
 
-    /// <summary>Pushes a warning log line (sequence prefix with a ⚠ marker). Also marks "redirect requested" — the engine decides, based on whether the node implements IRedirectable, to redirect or end.</summary>
+    /// <summary>Pushes a warning log line (sequence prefix with a [Warning] marker). Also marks "redirect requested" — the engine decides, based on whether the node implements IRedirectable, to redirect or end.</summary>
     void Warn(string message);
 
     /// <summary>Writes a shared variable (ignored when the key is empty).</summary>
