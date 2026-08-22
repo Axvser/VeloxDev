@@ -145,31 +145,42 @@ The agent can then create nodes, wire slots, change routing credentials, and pat
 ### Connect MCP servers for external tooling
 
 ```csharp
-// Load external tools via Model Context Protocol (stdio transport).
-// Supports Node (npm install + node), Npx (npx -y), and Uvx (uvx) modes.
-var mcpTools = await new McpScope()
+// Load external tools via Model Context Protocol:
+//   stdio — local processes (Npm / Npx / Uvx / Pip / Dotnet / Exe)
+//   Http  — remote servers over Streamable HTTP (SSE fallback for legacy servers)
+var mcp = new McpScope()
     .WithMcpRoot(".evn/mcp")
-    .LoadAsync(new[]
+    .WithSynchronizationContext(SynchronizationContext.Current);
+
+var configs = new[]
+{
+    // 1) Local stdio server (npx)
+    new McpServerConfiguration
     {
-        new McpServerConfiguration
-        {
-            Name = "Filesystem",
-            RunMode = McpServerRunMode.Npx,
-            NpmPackage = "@modelcontextprotocol/server-filesystem",
-        },
-        new McpServerConfiguration
-        {
-            Name = "Git",
-            RunMode = McpServerRunMode.Npx,
-            NpmPackage = "@modelcontextprotocol/server-git",
-        },
-    });
+        Name = "Filesystem",
+        RunMode = McpServerRunMode.Npx,
+        Package = "@modelcontextprotocol/server-filesystem",
+        Arguments = ["C:/data"],                               // allowed directories
+    },
+    // 2) Remote HTTP server
+    new McpServerConfiguration
+    {
+        Name = "Microsoft Learn",
+        RunMode = McpServerRunMode.Http,
+        Endpoint = "https://learn.microsoft.com/api/mcp",
+        Options = new { connectionTimeout = 30 },              // seconds
+        // Header auth:  Options = new { headers = new { Authorization = "Bearer <token>" } }
+        // OAuth 2.0:    Options = new { oauth = new { clientId = "...", redirectUri = "...", scopes = new[] { "read" } } }
+    },
+};
+
+var mcpTools = await mcp.LoadAsync(configs);
 
 // Merge MCP tools into your workflow agent
 var allTools = scope.ProvideTools().Concat(mcpTools).ToArray();
 ```
 
-The `McpScope` handles npm package installation (idempotent, thread-safe) and stdio transport management automatically. Failed servers are reported via the `ServerError` event without blocking remaining servers.
+The `McpScope` handles npm package installation (idempotent, thread-safe) and stdio transport management automatically; remote servers connect over Streamable HTTP. Failed servers are reported via the `ServerError` event without blocking remaining servers. For OAuth-secured servers, register the authorization redirect with `WithOAuthAuthorizationRedirect(...)`.
 
 ---
 

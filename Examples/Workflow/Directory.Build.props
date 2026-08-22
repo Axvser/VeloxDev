@@ -1,0 +1,13 @@
+<Project>
+	<ItemGroup>
+		<!--
+			The Trimmed demos reference VeloxDev.Core by ProjectReference, so the
+			NuGet package's buildTransitive props (TrimmerRootAssembly) never load
+			for them: a project reference does not import the package's props.
+			Root the assembly here (the app-side equivalent of the package hint),
+			so its reflection metadata survives TrimMode=full when these demos are
+			published trimmed. Inert when trimming is disabled.
+		-->
+		<TrimmerRootAssembly Include="VeloxDev.Core" />
+	</ItemGroup>
+</Project>
