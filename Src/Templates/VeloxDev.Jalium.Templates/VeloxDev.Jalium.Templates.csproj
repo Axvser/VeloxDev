@@ -8,6 +8,7 @@
     <Authors>Axvser</Authors>
     <Description>dotnet new item templates for VeloxDev workflow views on Jalium.UI.</Description>
     <PackageType>Template</PackageType>
+	<PackageIcon>veloxdev-logo.png</PackageIcon>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <IncludeContentInPack>true</IncludeContentInPack>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
