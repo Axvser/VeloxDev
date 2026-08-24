@@ -2,7 +2,16 @@
 
 # ⚡ VeloxDev
 
-**Build modern, AI-controllable workflow editors on any .NET GUI — WPF, Avalonia, WinUI, MAUI, WinForms, or Blazor.**
+**Build modern, AI-controllable workflow editors on any .NET GUI — WPF, Avalonia, WinUI, MAUI, WinForms, Blazor, or Jalium.**
+
+<!-- Supported GUI frameworks -->
+[![WPF](https://img.shields.io/badge/-WPF-512BD4?style=flat-square&logo=dotnet&logoColor=white)](https://learn.microsoft.com/dotnet/desktop/wpf/)
+[![Avalonia](https://img.shields.io/badge/-Avalonia-8B5CF6?style=flat-square)](https://avaloniaui.net/)
+[![WinUI](https://img.shields.io/badge/-WinUI-0C54A2?style=flat-square&logo=windows&logoColor=white)](https://learn.microsoft.com/windows/apps/winui/)
+[![MAUI](https://img.shields.io/badge/-MAUI-512BD4?style=flat-square&logo=dotnet&logoColor=white)](https://learn.microsoft.com/dotnet/maui/)
+[![WinForms](https://img.shields.io/badge/-WinForms-512BD4?style=flat-square&logo=dotnet&logoColor=white)](https://learn.microsoft.com/dotnet/desktop/winforms/)
+[![Blazor](https://img.shields.io/badge/-Blazor-512BD4?style=flat-square&logo=dotnet&logoColor=white)](https://learn.microsoft.com/aspnet/core/blazor/)
+![Jalium](https://img.shields.io/badge/-Jalium-6C5CE7?style=flat-square)
 
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=4caf50&logo=nuget&label=VeloxDev.Core)](https://www.nuget.org/packages/VeloxDev.Core/)
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Extension?color=4caf50&logo=nuget&label=VeloxDev.Core.Extension)](https://www.nuget.org/packages/VeloxDev.Core.Extension/)
@@ -11,8 +20,7 @@
 
 ---
 
-### 🌐 [Online Wiki](https://axvser.github.io/VeloxDev.Docs/)
-### 📁 [Local Wiki](https://github.com/Axvser/VeloxDev.Docs/)
+**📖 Wiki** — [Online (WASM)](https://axvser.github.io/VeloxDev.Docs/) · [Local](https://github.com/Axvser/VeloxDev.Docs/) — the online Wiki is a Blazor WebAssembly app, so its load speed depends on your network.
 
 ---
 
@@ -50,6 +58,7 @@ Pick the adapter for your GUI framework and you get everything — workflow, age
 | MAUI | `VeloxDev.MAUI` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.MAUI?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.MAUI/) |
 | WinForms | `VeloxDev.WinForms` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.WinForms?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.WinForms/) |
 | Blazor / Razor | `VeloxDev.Razor` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Razor?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Razor/) |
+| Jalium | `VeloxDev.Jalium` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Jalium?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Jalium/) |
 
 Adapter API docs:
 [WinForms](Src/Adapters/VeloxDev.WinForms/README.md) ·
@@ -79,8 +88,11 @@ The template package contains the Node, Slot, Link, Tree, template selector,
 grid decorator, and minimap overlay views. Each view template generates its
 files with the required VeloxDev workflow behaviors already connected.
 
-The Avalonia, WPF, WinUI, and MAUI template suites expose the same style
-options. Common short aliases include:
+The Avalonia, WPF, WinUI, MAUI, WinForms, and Jalium template suites expose
+the same style options. The Jalium suite uses `jalium-v-*` short names
+(`jalium-v-tree`, `jalium-v-node`, `jalium-v-slot`, `jalium-v-link`,
+`jalium-v-grid`, `jalium-v-minimap`, `jalium-v-selector`). Common short
+aliases include:
 
 | Template | Style aliases |
 |----------|---------------|
@@ -92,6 +104,31 @@ options. Common short aliases include:
 | Minimap overlay | `-bg` background, `-bdr` border, `-nf` node fill, `-vs` viewport stroke |
 
 All templates use `-ns` for the generated namespace.
+
+### Build a Jalium workflow view suite with the CLI
+
+Jalium is a code-first Windows UI framework (no XAML). The same seven-view
+suite is generated from the Jalium template pack:
+
+```powershell
+dotnet new install VeloxDev.Jalium.Templates
+dotnet add package VeloxDev.Jalium
+
+dotnet new jalium-v-slot -n SlotView -ns MyApp.Views -o Views
+dotnet new jalium-v-node -n NodeView -ns MyApp.Views -o Views
+dotnet new jalium-v-link -n LinkView -ns MyApp.Views -o Views
+dotnet new jalium-v-selector -n TemplateSelector -ns MyApp.Views -o Views
+dotnet new jalium-v-grid -n GridDecorator -ns MyApp.Views -o Views
+dotnet new jalium-v-minimap -n MinimapOverlay -ns MyApp.Views -o Views
+dotnet new jalium-v-tree -n TreeView -ns MyApp.Views -o Views
+
+dotnet build
+```
+
+The generated Jalium views are self-contained code-first components — the
+TreeView draws the grid + absolute-floating ruler bands itself, the minimap
+subclasses the adapter's base overlay, and node/link views are pooled through
+the adapter's `ViewManager` over the tree's `VisibleItems`.
 
 ### Core-only packages *(bring your own adapter)*
 
@@ -200,14 +237,15 @@ VeloxDev/
 │   │   ├── VeloxDev.WinUI                  # WinUI 3 platform adapter
 │   │   ├── VeloxDev.MAUI                   # .NET MAUI platform adapter
 │   │   ├── VeloxDev.WinForms               # WinForms platform adapter
-│   │   └── VeloxDev.Razor                  # Blazor / Razor platform adapter
+│   │   ├── VeloxDev.Razor                  # Blazor / Razor platform adapter
+│   │   └── VeloxDev.Jalium                 # Jalium platform adapter
 │   ├── Generators/
 │   │   └── VeloxDev.Core.Generator         # Roslyn Source Generators (netstandard2.0)
 │   └── Templates/                          # dotnet new item templates for GUI adapters
 ├── Examples/
-│   ├── Workflow/      WPF · Avalonia · WinUI · WinForms · MAUI · Blazor · Common(Lib)
+│   ├── Workflow/      WPF · Avalonia · WinUI · WinForms · MAUI · Blazor · Jalium · Common(Lib)
 │   ├── MVVM/          WPF · Avalonia
-│   ├── Transition/    WPF · Avalonia · WinUI · WinForms · MAUI
+│   ├── Transition/    WPF · Avalonia · WinUI · WinForms · MAUI · Blazor · Jalium
 │   ├── Theme/         WPF · Avalonia
 │   ├── AOP/           WPF · Avalonia
 │   ├── AOTReflection/
