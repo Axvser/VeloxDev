@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>VeloxDev.Jalium.Templates</PackageId>
+    <Title>VeloxDev.Jalium.Templates</Title>
+    <Version>7.0.0</Version>
+    <Authors>Axvser</Authors>
+    <Description>dotnet new item templates for VeloxDev workflow views on Jalium.UI.</Description>
+    <PackageType>Template</PackageType>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <IncludeSymbols>false</IncludeSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="working\content\**\*" Pack="true" PackagePath="content" />
+    <None Include="..\..\..\Assets\veloxdev-logo.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

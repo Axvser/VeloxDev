@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "Jalium"
+  ],
+  "identity": "VeloxDev.Jalium.WorkflowGridDecorator",
+  "name": "VeloxDev Jalium Workflow Grid Decorator",
+  "description": "A styled grid decorator for a Jalium.UI workflow surface.",
+  "shortName": "jalium-v-grid",
+  "sourceName": "TemplateClass",
+  "defaultName": "GridDecorator",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated view.",
+      "defaultValue": "VeloxDevWorkflowDemo",
+      "replaces": "TemplateNamespace"
+    },
+    "gridBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface background.",
+      "defaultValue": "#1E1E1E",
+      "replaces": "TemplateGridBackground"
+    },
+    "minorGridColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minor grid line color.",
+      "defaultValue": "#2A2D2E",
+      "replaces": "TemplateMinorGridColor"
+    },
+    "majorGridColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Major grid line color.",
+      "defaultValue": "#4D4D4D",
+      "replaces": "TemplateMajorGridColor"
+    },
+    "axisColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Axis line color.",
+      "defaultValue": "#4D4D4D",
+      "replaces": "TemplateAxisColor"
+    },
+    "gridSpacing": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Grid spacing in world units.",
+      "defaultValue": "40",
+      "replaces": "TemplateGridSpacing"
+    },
+    "majorLineEvery": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Major line every N minor lines.",
+      "defaultValue": "5",
+      "replaces": "TemplateMajorLineEvery"
+    },
+    "rulerBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Ruler band background.",
+      "defaultValue": "#C82D2D30",
+      "replaces": "TemplateRulerBackground"
+    },
+    "rulerTickColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Ruler tick color.",
+      "defaultValue": "#6E6E6E",
+      "replaces": "TemplateRulerTickColor"
+    },
+    "rulerLabelColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Ruler label color.",
+      "defaultValue": "#C8C8C8",
+      "replaces": "TemplateRulerLabelColor"
+    },
+    "rulerDividerColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Ruler divider line color.",
+      "defaultValue": "#4D4D4D",
+      "replaces": "TemplateRulerDividerColor"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.cs"
+    }
+  ]
+}

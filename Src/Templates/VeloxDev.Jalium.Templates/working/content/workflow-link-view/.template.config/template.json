@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "Jalium"
+  ],
+  "identity": "VeloxDev.Jalium.WorkflowLinkView",
+  "name": "VeloxDev Jalium Workflow Link View",
+  "description": "An orthogonal link view for a Jalium.UI workflow surface.",
+  "shortName": "jalium-v-link",
+  "sourceName": "TemplateClass",
+  "defaultName": "LinkView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated view.",
+      "defaultValue": "VeloxDevWorkflowDemo",
+      "replaces": "TemplateNamespace"
+    },
+    "linkColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Link line color.",
+      "defaultValue": "#DDFFFFFF",
+      "replaces": "TemplateLinkColor"
+    },
+    "linkThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Link line thickness.",
+      "defaultValue": "2",
+      "replaces": "TemplateLinkThickness"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.cs"
+    }
+  ]
+}

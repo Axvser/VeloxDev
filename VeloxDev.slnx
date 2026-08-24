@@ -91,6 +91,9 @@
   <Folder Name="/Examples/Workflow/Avalonia/">
     <Project Path="Examples/Workflow/Avalonia/Demo/Demo.csproj" />
   </Folder>
+  <Folder Name="/Examples/Workflow/Jalium/">
+    <Project Path="Examples/Workflow/Jalium/Demo/Demo.csproj" />
+  </Folder>
   <Folder Name="/Examples/Workflow/MAUI/">
     <Project Path="Examples/Workflow/MAUI/Demo/Demo.csproj">
       <Deploy Solution="*|Any CPU" />

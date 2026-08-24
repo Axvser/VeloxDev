@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    VeloxDev Workflow - Jalium (full)
+
+    The complete workflow demo on the Jalium.UI GUI framework: the voltage-analysis chain
+    (Controller, Timer, Generate Dataset fan-out, 3 analyzers, join Merge Report, Enum Selector
+    by grade, 3 report nodes) with per-node-type views, a controller panel (Compile / Run / Stop /
+    Close), Agent chat + MCP status, and an execution log. Debug builds consume the local adapter
+    (which ProjectReferences VeloxDev.Core) and the shared Common/Lib view-models; Release builds
+    consume the NuGet packages. Requires API_KEY_DEEPSEEK (the Agent stack, like the WPF/Avalonia
+    full demos, throws at tree construction without it).
+
+    Run: dotnet run -p "Examples\Workflow\Jalium\Demo"
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>Demo</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Consume Jalium's prebuilt native shared libraries (Debug-only on this machine);
+         never rebuild the native projects from source. -->
+    <BuildJaliumNativeProjects>false</BuildJaliumNativeProjects>
+    <BuildJaliumNativeStaticProjects>false</BuildJaliumNativeStaticProjects>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Shared full view-models + graph builder (voltage-analysis chain). -->
+    <ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
+    <!-- The Jalium adapter (Debug consumes VeloxDev.Core by project ref). -->
+    <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.Jalium\VeloxDev.Jalium.csproj" />
+    <!-- The Windows desktop entry package (net10.0-windows) — the app host and windowing. -->
+    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.8" />
+  </ItemGroup>
+
+</Project>

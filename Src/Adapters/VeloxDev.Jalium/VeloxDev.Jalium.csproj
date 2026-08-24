@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Platform-neutral: the adapter uses only the cross-platform core (Controls/Media/
+         Interop/Core), not the net10.0-windows Jalium.UI.Desktop entry package. So it can
+         serve Windows, Linux and Android consumers alike. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>1573;1591;8605;8604</NoWarn>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageId>VeloxDev.Jalium</PackageId>
+    <Title>VeloxDev.Jalium</Title>
+    <Version>7.0.214</Version>
+    <Authors>Axvser</Authors>
+    <Description>VeloxDev.Core + Jalium.UI</Description>
+    <PackageIcon>veloxdev-logo.png</PackageIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\Assets\veloxdev-logo.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="VeloxDev.Core" Version="7.0.214" Condition="'$(Configuration)' != 'Debug'" />
+    <!-- Jalium.UI.Controls is the lowest platform-neutral package that carries the
+         Canvas/ScrollViewer/Border/Control + DrawingContext/Geometry/FormattedText +
+         TextMeasurement surface the workflow adapter renders with. -->
+    <PackageReference Include="Jalium.UI.Controls" Version="26.10.8" />
+  </ItemGroup>
+
+</Project>

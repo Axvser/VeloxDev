@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    VeloxDev Workflow - Jalium Trimmed
+
+    A node-editor demo on the Jalium.UI GUI framework using the VeloxDev.Jalium
+    adapter, published with IL trimming. Debug builds consume the local adapter
+    (which ProjectReferences VeloxDev.Core); Release builds consume the NuGet
+    packages. VeloxDev.Core's buildTransitive props root it for trimming; the
+    Examples/Workflow/Directory.Build.props TrimmerRootAssembly is the in-repo
+    fallback.
+
+    Publish (native Jalium shared DLLs are Debug-only on this machine):
+        dotnet publish "Examples\Workflow\Jalium Trimmed\Demo" -c Release -r win-x64 -p:JaliumNativeConfiguration=Debug
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>Demo</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <StackTraceSupport>false</StackTraceSupport>
+    <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
+
+    <SuppressTrimAnalysisWarnings>false</SuppressTrimAnalysisWarnings>
+    <NoWarn>$(NoWarn);IL2026;IL2050;IL2059;IL2067;IL2068;IL2070;IL2072;IL2073;IL2075;IL2087;IL2104;IL3000;IL3050</NoWarn>
+
+    <BuildJaliumNativeProjects>false</BuildJaliumNativeProjects>
+    <BuildJaliumNativeStaticProjects>false</BuildJaliumNativeStaticProjects>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Jalium.UI.Markup.RazorScripting"
+                                    Value="false"
+                                    Trim="true" />
+  </ItemGroup>
+
+  <!-- In-repo demos reference the adapter by project (consistent with the other
+       Workflow demos). The adapter itself consumes VeloxDev.Core + Jalium.UI.Desktop
+       from NuGet in Release; once VeloxDev.Jalium is published, switch this to a
+       PackageReference (and the package's buildTransitive props will root Core). -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.Jalium\VeloxDev.Jalium.csproj" />
+    <!-- The Windows desktop entry package (net10.0-windows) — the app host, windowing and
+         Jalium.UI.Build trim props come from here, not from the platform-neutral adapter. -->
+    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.8" />
+  </ItemGroup>
+
+</Project>

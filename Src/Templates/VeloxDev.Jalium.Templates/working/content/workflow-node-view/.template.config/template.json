@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "Jalium"
+  ],
+  "identity": "VeloxDev.Jalium.WorkflowNodeView",
+  "name": "VeloxDev Jalium Workflow Node View",
+  "description": "A code-first node card for a Jalium.UI workflow surface.",
+  "shortName": "jalium-v-node",
+  "sourceName": "TemplateClass",
+  "defaultName": "NodeView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated view.",
+      "defaultValue": "VeloxDevWorkflowDemo",
+      "replaces": "TemplateNamespace"
+    },
+    "nodeBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node card background.",
+      "defaultValue": "#DDFFFFFF",
+      "replaces": "TemplateNodeBackground"
+    },
+    "nodeForeground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node card foreground (title/labels).",
+      "defaultValue": "#DD1E1E1E",
+      "replaces": "TemplateNodeForeground"
+    },
+    "nodeBorderBrush": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node card border color.",
+      "defaultValue": "#331E1E1E",
+      "replaces": "TemplateNodeBorderBrush"
+    },
+    "nodeBorderThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node card border thickness.",
+      "defaultValue": "1",
+      "replaces": "TemplateNodeBorderThickness"
+    },
+    "nodeCornerRadius": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node card corner radius.",
+      "defaultValue": "6",
+      "replaces": "TemplateNodeCornerRadius"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.cs"
+    }
+  ]
+}

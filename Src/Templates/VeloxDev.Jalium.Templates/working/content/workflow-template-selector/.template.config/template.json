@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": ["VeloxDev", "Workflow", "Jalium"],
+  "identity": "VeloxDev.Jalium.WorkflowTemplateSelector",
+  "name": "VeloxDev Jalium Workflow Template Selector",
+  "description": "Routes workflow node/link items to their views for a Jalium.UI surface.",
+  "shortName": "jalium-v-selector",
+  "sourceName": "TemplateClass",
+  "defaultName": "TemplateSelector",
+  "preferNameDirectory": false,
+  "tags": { "language": "C#", "type": "item" },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated view.",
+      "defaultValue": "VeloxDevWorkflowDemo",
+      "replaces": "TemplateNamespace"
+    }
+  },
+  "primaryOutputs": [ { "path": "TemplateClass.cs" } ]
+}

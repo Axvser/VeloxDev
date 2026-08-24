@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Axvser",
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "Jalium"
+  ],
+  "identity": "VeloxDev.Jalium.WorkflowTreeView",
+  "name": "VeloxDev Jalium Workflow Tree View",
+  "description": "A workflow surface control on Jalium.UI composing the WorkflowTreeView adapter control.",
+  "shortName": "jalium-v-tree",
+  "sourceName": "TemplateClass",
+  "defaultName": "TreeView",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  },
+  "symbols": {
+    "namespace": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Namespace for the generated view.",
+      "defaultValue": "VeloxDevWorkflowDemo",
+      "replaces": "TemplateNamespace"
+    },
+    "surfaceBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface background.",
+      "defaultValue": "#1E1E1E",
+      "replaces": "TemplateSurfaceBackground"
+    },
+    "surfaceBorderBrush": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface border color.",
+      "defaultValue": "#33FFFFFF",
+      "replaces": "TemplateSurfaceBorderBrush"
+    },
+    "surfaceBorderThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface border thickness.",
+      "defaultValue": "1",
+      "replaces": "TemplateSurfaceBorderThickness"
+    },
+    "surfaceCornerRadius": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface corner radius.",
+      "defaultValue": "3",
+      "replaces": "TemplateSurfaceCornerRadius"
+    }
+  },
+  "primaryOutputs": [
+    {
+      "path": "TemplateClass.cs"
+    }
+  ]
+}
