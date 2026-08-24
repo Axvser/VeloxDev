@@ -11,7 +11,7 @@
 [![MAUI](https://img.shields.io/badge/-MAUI-512BD4?style=flat-square&logo=dotnet&logoColor=white)](https://learn.microsoft.com/dotnet/maui/)
 [![WinForms](https://img.shields.io/badge/-WinForms-512BD4?style=flat-square&logo=dotnet&logoColor=white)](https://learn.microsoft.com/dotnet/desktop/winforms/)
 [![Blazor](https://img.shields.io/badge/-Blazor-512BD4?style=flat-square&logo=dotnet&logoColor=white)](https://learn.microsoft.com/aspnet/core/blazor/)
-![Jalium](https://img.shields.io/badge/-Jalium-6C5CE7?style=flat-square)
+[![Jalium](https://img.shields.io/badge/-Jalium-6C5CE7?style=flat-square)](https://github.com/VeryJokerJal/Jalium.UI)
 
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=4caf50&logo=nuget&label=VeloxDev.Core)](https://www.nuget.org/packages/VeloxDev.Core/)
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Extension?color=4caf50&logo=nuget&label=VeloxDev.Core.Extension)](https://www.nuget.org/packages/VeloxDev.Core.Extension/)
