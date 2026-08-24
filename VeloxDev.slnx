@@ -7,6 +7,7 @@
   </Configurations>
   <Folder Name="/Adapters/">
     <Project Path="Src/Adapters/VeloxDev.Avalonia/VeloxDev.Avalonia.csproj" />
+    <Project Path="Src/Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj" />
     <Project Path="Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj" />
     <Project Path="Src/Adapters/VeloxDev.Razor/VeloxDev.Razor.csproj" Id="7fd995c3-8c46-486c-b8b2-e2bcac557da7" />
     <Project Path="Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj" />
@@ -91,6 +92,9 @@
   <Folder Name="/Examples/Workflow/Avalonia/">
     <Project Path="Examples/Workflow/Avalonia/Demo/Demo.csproj" />
   </Folder>
+  <Folder Name="/Examples/Workflow/Jalium Trimmed/">
+    <Project Path="Examples/Workflow/Jalium Trimmed/Demo/Demo.csproj" />
+  </Folder>
   <Folder Name="/Examples/Workflow/Jalium/">
     <Project Path="Examples/Workflow/Jalium/Demo/Demo.csproj" />
   </Folder>
@@ -152,6 +156,7 @@
   </Folder>
   <Folder Name="/Templates/">
     <Project Path="Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj" />
+    <Project Path="Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj" />
