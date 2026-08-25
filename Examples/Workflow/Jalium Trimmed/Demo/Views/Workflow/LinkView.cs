@@ -38,17 +38,6 @@ public class LinkView : FrameworkElement
 
     private void SizeToParent()
     {
-        // World size: the LinkView is a child of the scale-only canvas, so it is scaled with it and
-        // must span the UNSCALED world canvas (Layout.ActualSize) — the scaled parent bounds would
-        // overshoot at zoom > 1 and clip the polyline at zoom < 1.
-        var (w, h) = WorldSize();
-        if (w > 0 && h > 0)
-        {
-            Width = w;
-            Height = h;
-            return;
-        }
-
         if (VisualTreeHelper.GetParent(this) is FrameworkElement parent && parent.ActualWidth > 0 && parent.ActualHeight > 0)
         {
             Width = parent.ActualWidth;
@@ -62,17 +51,6 @@ public class LinkView : FrameworkElement
             Width = Math.Max(Width, 2000);
             Height = Math.Max(Height, 2000);
         }
-    }
-
-    private (double W, double H) WorldSize()
-    {
-        var layout = _link?.Sender.Parent?.Parent?.Layout;
-        if (layout is not null && layout.ActualSize.Width > 0)
-        {
-            return (layout.ActualSize.Width, layout.ActualSize.Height);
-        }
-
-        return (0, 0);
     }
 
     private void OnParentSizeChanged(object? sender, SizeChangedEventArgs e)
@@ -107,11 +85,7 @@ public class LinkView : FrameworkElement
         if (_link?.Sender.Parent?.Parent?.Layout is INotifyPropertyChanged layout)
         {
             _layoutNotify = layout;
-            _layoutHandler = (_, _) =>
-            {
-                SizeToParent();
-                InvalidateVisual();
-            };
+            _layoutHandler = (_, _) => InvalidateVisual();
             layout.PropertyChanged += _layoutHandler;
         }
 
@@ -178,14 +152,10 @@ public class LinkView : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
-        if (RenderSize.Width <= 0 || RenderSize.Height <= 0)
+        if ((RenderSize.Width <= 0 || RenderSize.Height <= 0) && VisualTreeHelper.GetParent(this) is FrameworkElement p)
         {
-            var (w, h) = WorldSize();
-            if (w > 0)
-            {
-                Width = w;
-                Height = h;
-            }
+            Width = p.ActualWidth;
+            Height = p.ActualHeight;
         }
 
         if (_link is null || !_link.IsVisible || IsVirtual(_link))

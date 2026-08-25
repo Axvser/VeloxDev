@@ -58,54 +58,47 @@ public static class GridDecorator
     /// scroll offset (= the viewport's top-left in canvas coordinates); ticks are drawn at the world
     /// grid lines that cross the viewport. Call in the surface's OnPostRender so the bands sit on
     /// top of the node/link views.</summary>
-    public static void DrawRulers(DrawingContext dc, double originX, double originY, double scale, double scrollX, double scrollY, double viewportWidth, double viewportHeight)
+    public static void DrawRulers(DrawingContext dc, double originX, double originY, double scrollX, double scrollY, double viewportWidth, double viewportHeight)
     {
-        // Under the scale-only canvas transform the bands are drawn in canvas-local units
-        // (scroll/scale position, thickness/scale, font/scale) so they appear as a fixed-size
-        // viewport overlay while the ticks stay aligned with the scaled grid.
         const double ruler = RulerThickness;
-        double rs = ruler / scale;
-        double vx = scrollX / scale, vy = scrollY / scale;
-        double vw = viewportWidth / scale, vh = viewportHeight / scale;
-
-        dc.DrawRectangle(s_rulerBg, null, new Rect(vx, vy, vw, rs));
-        dc.DrawRectangle(s_rulerBg, null, new Rect(vx, vy, rs, vh));
-        dc.DrawLine(s_dividerPen, new Point(vx + rs, vy), new Point(vx + rs, vy + vh));
-        dc.DrawLine(s_dividerPen, new Point(vx, vy + rs), new Point(vx + vw, vy + rs));
+        dc.DrawRectangle(s_rulerBg, null, new Rect(scrollX, scrollY, viewportWidth, ruler));
+        dc.DrawRectangle(s_rulerBg, null, new Rect(scrollX, scrollY, ruler, viewportHeight));
+        dc.DrawLine(s_dividerPen, new Point(scrollX + ruler, scrollY), new Point(scrollX + ruler, scrollY + viewportHeight));
+        dc.DrawLine(s_dividerPen, new Point(scrollX, scrollY + ruler), new Point(scrollX + viewportWidth, scrollY + ruler));
 
         // Top ruler: ticks at world grid x crossing the viewport, canvas x = world + originX.
-        double worldLeft = vx - originX;
-        for (double g = Math.Floor(worldLeft / GridStep) * GridStep; g + originX <= vx + vw; g += GridStep)
+        double worldLeft = scrollX - originX;
+        for (double g = Math.Floor(worldLeft / GridStep) * GridStep; g + originX <= scrollX + viewportWidth; g += GridStep)
         {
             double x = g + originX;
-            if (x < vx + rs) continue;
+            if (x < scrollX + ruler) continue;
             bool major = IsMajor(g);
-            double tick = (major ? ruler - 6 : Math.Max(6, ruler * 0.35)) / scale;
+            double tick = major ? ruler - 6 : Math.Max(6, ruler * 0.35);
             Pen pen = IsNearZero(g) ? s_axisPen : s_tickPen;
-            dc.DrawLine(pen, new Point(x, vy + rs), new Point(x, vy + rs - tick));
+            dc.DrawLine(pen, new Point(x, scrollY + ruler), new Point(x, scrollY + ruler - tick));
             if (major)
             {
-                var label = new FormattedText(Format(g), "Segoe UI", 13 / scale) { Foreground = s_rulerLabel };
+                var label = new FormattedText(Format(g), "Segoe UI", 13) { Foreground = s_rulerLabel };
                 TextMeasurement.MeasureText(label);
-                dc.DrawText(label, new Point(x + 3 / scale, vy + 2 / scale));
+                dc.DrawText(label, new Point(x + 3, scrollY + 2));
             }
         }
 
         // Left ruler: ticks at world grid y crossing the viewport, canvas y = world + originY.
-        double worldTop = vy - originY;
-        for (double g = Math.Floor(worldTop / GridStep) * GridStep; g + originY <= vy + vh; g += GridStep)
+        double worldTop = scrollY - originY;
+        for (double g = Math.Floor(worldTop / GridStep) * GridStep; g + originY <= scrollY + viewportHeight; g += GridStep)
         {
             double y = g + originY;
-            if (y < vy + rs) continue;
+            if (y < scrollY + ruler) continue;
             bool major = IsMajor(g);
-            double tick = (major ? ruler - 6 : Math.Max(6, ruler * 0.35)) / scale;
+            double tick = major ? ruler - 6 : Math.Max(6, ruler * 0.35);
             Pen pen = IsNearZero(g) ? s_axisPen : s_tickPen;
-            dc.DrawLine(pen, new Point(vx + rs, y), new Point(vx + rs - tick, y));
+            dc.DrawLine(pen, new Point(scrollX + ruler, y), new Point(scrollX + ruler - tick, y));
             if (major)
             {
-                var label = new FormattedText(Format(g), "Segoe UI", 13 / scale) { Foreground = s_rulerLabel };
+                var label = new FormattedText(Format(g), "Segoe UI", 13) { Foreground = s_rulerLabel };
                 TextMeasurement.MeasureText(label);
-                dc.DrawText(label, new Point(vx + 3 / scale, y + 2 / scale));
+                dc.DrawText(label, new Point(scrollX + 3, y + 2));
             }
         }
     }
