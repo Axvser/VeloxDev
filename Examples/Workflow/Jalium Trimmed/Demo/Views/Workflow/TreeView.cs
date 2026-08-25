@@ -34,6 +34,13 @@ public class TreeView : Canvas
     public double OriginX => _tree?.Layout.ActualOffset.Horizontal ?? 0;
     public double OriginY => _tree?.Layout.ActualOffset.Vertical ?? 0;
 
+    /// <summary>Uniform zoom factor (scale-only canvas transform): nodes/links keep their per-element
+    /// translate (world + origin), only the canvas is scaled, so GetPosition returns world+origin and
+    /// all coordinate code stays valid. Mouse wheel zooms around the cursor.</summary>
+    public double Scale => _scale;
+
+    private double _scale = 1.0;
+
     /// <summary>Raised after any model change so overlays (rulers, minimap) can redraw.</summary>
     public Action? Changed;
 
@@ -59,6 +66,7 @@ public class TreeView : Canvas
         AddHandler(MouseMoveEvent, new MouseEventHandler(OnMouseMove));
         AddHandler(MouseUpEvent, new MouseButtonEventHandler(OnMouseUp));
         AddHandler(LostMouseCaptureEvent, new MouseEventHandler(OnLostMouseCapture));
+        AddHandler(MouseWheelEvent, new MouseWheelEventHandler(OnMouseWheel));
     }
 
     public void AttachScrollViewer(ScrollViewer viewer)
@@ -114,8 +122,14 @@ public class TreeView : Canvas
     private void UpdateCanvasSize()
     {
         if (_tree is null) return;
-        Width = Math.Max(CanvasWidth, _tree.Layout.ActualSize.Width);
-        Height = Math.Max(CanvasHeight, _tree.Layout.ActualSize.Height);
+        double baseW = Math.Max(CanvasWidth, _tree.Layout.ActualSize.Width);
+        double baseH = Math.Max(CanvasHeight, _tree.Layout.ActualSize.Height);
+        // Scale-only canvas: the ScrollViewer extent tracks zoom; Min tracks it too (Width is a max).
+        Width = baseW * _scale;
+        Height = baseH * _scale;
+        MinWidth = Width;
+        MinHeight = Height;
+        RenderTransform = new ScaleTransform(_scale, _scale);
         InvalidateMeasure();
     }
 
@@ -124,13 +138,22 @@ public class TreeView : Canvas
         if (_tree is null || _scrollViewer is null) return;
         var layout = _tree.Layout;
         _tree.GetHelper().Viewport = new Viewport(
-            _scrollViewer.HorizontalOffset - layout.ActualOffset.Horizontal,
-            _scrollViewer.VerticalOffset - layout.ActualOffset.Vertical,
-            _scrollViewer.ViewportWidth,
-            _scrollViewer.ViewportHeight);
+            _scrollViewer.HorizontalOffset / _scale - layout.ActualOffset.Horizontal,
+            _scrollViewer.VerticalOffset / _scale - layout.ActualOffset.Vertical,
+            _scrollViewer.ViewportWidth / _scale,
+            _scrollViewer.ViewportHeight / _scale);
     }
 
     private Point ToCanvas(double wx, double wy) => new(wx + OriginX, wy + OriginY);
+
+    /// <summary>The world canvas extent (unscaled). The canvas layout grows to <c>world * Scale</c> so
+    /// the ScrollViewer extent tracks zoom, but the grid must be drawn for the FULL world extent —
+    /// a scaled-down canvas would otherwise leave the right/bottom grid un-drawn.</summary>
+    private (double W, double H) WorldSize()
+    {
+        if (_tree is null) return (CanvasWidth, CanvasHeight);
+        return (Math.Max(CanvasWidth, _tree.Layout.ActualSize.Width), Math.Max(CanvasHeight, _tree.Layout.ActualSize.Height));
+    }
 
     // ── Port geometry (authoritative model: node.Anchor + fixed offsets) ──
 
@@ -180,14 +203,57 @@ public class TreeView : Canvas
     public void NavigateToWorld(double wx, double wy)
     {
         if (_scrollViewer == null) return;
-        double targetH = wx - _scrollViewer.ViewportWidth / 2 + OriginX;
-        double targetV = wy - _scrollViewer.ViewportHeight / 2 + OriginY;
-        if (targetH < 0) { GrowLeft(-targetH); targetH = 0; }
-        else if (targetH > _scrollViewer.ScrollableWidth) { GrowRight(targetH - _scrollViewer.ScrollableWidth); }
-        if (targetV < 0) { GrowTop(-targetV); targetV = 0; }
-        else if (targetV > _scrollViewer.ScrollableHeight) { GrowBottom(targetV - _scrollViewer.ScrollableHeight); }
+        double targetH = (wx + OriginX) * _scale - _scrollViewer.ViewportWidth / 2;
+        double targetV = (wy + OriginY) * _scale - _scrollViewer.ViewportHeight / 2;
+        ClampScrollAndGrow(ref targetH, ref targetV);
         _scrollViewer.ScrollToHorizontalOffset(targetH);
         _scrollViewer.ScrollToVerticalOffset(targetV);
+    }
+
+    // ── Zoom (scale-only canvas, wheel around the cursor) ──────────────────
+
+    private void OnMouseWheel(object? sender, MouseWheelEventArgs e)
+    {
+        if (_tree is null || _scrollViewer is null) return;
+
+        // Jalium's wheel Delta is inverted vs WPF (wheel-up/forward is negative), so a negative
+        // delta zooms IN.
+        double z = e.Delta < 0 ? 1.1 : 1 / 1.1;
+        double newScale = Math.Clamp(_scale * z, 0.1, 4.0);
+        if (Math.Abs(newScale - _scale) < 1e-9) return;
+
+        // GetPosition(canvas) returns world + origin (scale-only transform inverts the scale), so
+        // the cursor's canvas-local point is the stable anchor: keep it at the same viewport spot.
+        var pos = e.GetPosition(this);
+        double anchorX = pos.X * _scale - _scrollViewer.HorizontalOffset;
+        double anchorY = pos.Y * _scale - _scrollViewer.VerticalOffset;
+
+        _scale = newScale;
+        ApplyScale();
+
+        double targetH = pos.X * _scale - anchorX;
+        double targetV = pos.Y * _scale - anchorY;
+        ClampScrollAndGrow(ref targetH, ref targetV);
+
+        _scrollViewer.ScrollToHorizontalOffset(targetH);
+        _scrollViewer.ScrollToVerticalOffset(targetV);
+        UpdateViewport();
+        InvalidateVisual();
+        Changed?.Invoke();
+        e.Handled = true;
+    }
+
+    private void ApplyScale() => UpdateCanvasSize();
+
+    /// <summary>Clamps a target scroll into the scrollable extent, growing the canvas (by ÷scale, back
+    /// to world units) when it runs past an edge. Shared by zoom-at-cursor, pan and NavigateToWorld.</summary>
+    private void ClampScrollAndGrow(ref double targetH, ref double targetV)
+    {
+        if (_scrollViewer is null) return;
+        if (targetH < 0) { GrowLeft(-targetH / _scale); targetH = 0; }
+        else if (targetH > _scrollViewer.ScrollableWidth) { GrowRight((targetH - _scrollViewer.ScrollableWidth) / _scale); }
+        if (targetV < 0) { GrowTop(-targetV / _scale); targetV = 0; }
+        else if (targetV > _scrollViewer.ScrollableHeight) { GrowBottom((targetV - _scrollViewer.ScrollableHeight) / _scale); }
     }
 
     // ── Rendering ──────────────────────────────────────────────────────────
@@ -195,7 +261,10 @@ public class TreeView : Canvas
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
-        GridDecorator.DrawGrid(dc, OriginX, OriginY, Width, Height);
+        // Draw the grid for the WORLD extent (not the scaled Width/Height), so it stays fully drawn
+        // at any zoom — the scale-only transform shrinks it to fill the canvas.
+        var (ww, wh) = WorldSize();
+        GridDecorator.DrawGrid(dc, OriginX, OriginY, ww, wh);
         // Node/link views are pooled ViewManager children over VisibleItems.
     }
 
@@ -204,9 +273,11 @@ public class TreeView : Canvas
         base.OnPostRender(dc);
         // The ruler bands are viewport-fixed (absolute floating): drawn after the child views so they
         // sit on top, positioned at the scroll offset so they never leave the viewport while panning.
+        // Under zoom the band lives in canvas-local units (scroll/S, thickness/S) so it stays a fixed
+        // on-screen size while its ticks stay aligned with the scaled grid.
         if (_scrollViewer is { } viewer)
         {
-            GridDecorator.DrawRulers(dc, OriginX, OriginY,
+            GridDecorator.DrawRulers(dc, OriginX, OriginY, _scale,
                 viewer.HorizontalOffset, viewer.VerticalOffset,
                 viewer.ViewportWidth, viewer.ViewportHeight);
         }

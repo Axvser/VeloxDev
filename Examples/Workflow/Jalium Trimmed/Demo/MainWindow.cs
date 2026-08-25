@@ -52,16 +52,17 @@ internal sealed class MainWindow : Window
         };
 
         // Feed the minimap's offsets/viewport on every scroll or model change (the base's
-        // WorkflowMinimapOverlay repaints and drag-pans from these values). The grid + ruler band
-        // are drawn by the TreeView's own OnRender (GridDecorator), like the other GUI adapters.
+        // WorkflowMinimapOverlay repaints and drag-pans from these values). Under zoom the minimap's
+        // ScrollOffset/Viewport are in WORLD units (scroll ÷ scale), so the viewport rect tracks zoom.
+        // The grid + ruler band are drawn by the TreeView's own OnRender (GridDecorator).
         void RefreshOverlays()
         {
             minimap.ContentOffsetX = surface.OriginX;
             minimap.ContentOffsetY = surface.OriginY;
-            minimap.ScrollOffsetX = viewer.HorizontalOffset;
-            minimap.ScrollOffsetY = viewer.VerticalOffset;
-            minimap.ViewportWidth = viewer.ViewportWidth;
-            minimap.ViewportHeight = viewer.ViewportHeight;
+            minimap.ScrollOffsetX = viewer.HorizontalOffset / surface.Scale;
+            minimap.ScrollOffsetY = viewer.VerticalOffset / surface.Scale;
+            minimap.ViewportWidth = viewer.ViewportWidth / surface.Scale;
+            minimap.ViewportHeight = viewer.ViewportHeight / surface.Scale;
         }
 
         viewer.ScrollChanged += (_, _) => RefreshOverlays();
