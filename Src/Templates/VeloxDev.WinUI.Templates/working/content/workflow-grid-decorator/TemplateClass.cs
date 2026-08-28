@@ -13,6 +13,14 @@ using Windows.Foundation;
 
 namespace TemplateNamespace;
 
+/// <summary>
+/// A workflow surface decorator that draws the world grid and floating translucent rulers.
+/// Content (the scroll viewer + canvas) fills the whole viewport; the world canvas is
+/// translated by <see cref="RulerThickness"/> so the world origin stays at the ruler-band
+/// edge while content can still scroll under the translucent bands (the Jalium floating
+/// ruler model). The decorator layers, bottom to top: surface + grid, the content child,
+/// and the ruler overlay (topmost, hit-test transparent).
+/// </summary>
 public sealed class TemplateClass : Grid, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
@@ -130,6 +138,13 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         Children.Add(_topRulerLayer);
         Children.Add(_leftRulerLayer);
 
+        // Ruler overlays render above the content child (scroll viewer), so content
+        // scrolling under the translucent bands stays visibly dimmed.
+        Canvas.SetZIndex(_topRulerBackground, 100);
+        Canvas.SetZIndex(_leftRulerBackground, 100);
+        Canvas.SetZIndex(_topRulerLayer, 100);
+        Canvas.SetZIndex(_leftRulerLayer, 100);
+
         Loaded += (_, _) => RefreshVisuals();
         SizeChanged += (_, _) => RefreshVisuals();
         LayoutUpdated += (_, _) => ApplyChildLayout();
@@ -185,42 +200,35 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
     private void ApplyChildLayout()
     {
         var ruler = Math.Max(0, RulerThickness);
-        var contentWidth = Math.Max(0, ActualWidth - ruler);
-        var contentHeight = Math.Max(0, ActualHeight - ruler);
-        var contentMargin = new Thickness(ruler, ruler, 0, 0);
+        var width = Math.Max(0, ActualWidth);
+        var height = Math.Max(0, ActualHeight);
 
-        _contentBackground.Margin = contentMargin;
-        _contentBackground.Width = contentWidth;
-        _contentBackground.Height = contentHeight;
+        // Grid and surface span the full viewport so the grid extends under the ruler bands.
+        _contentBackground.Width = width;
+        _contentBackground.Height = height;
+        _contentBackground.Margin = new Thickness(0);
 
-        _contentLayer.Margin = contentMargin;
-        _contentLayer.Width = contentWidth;
-        _contentLayer.Height = contentHeight;
-        _contentLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, contentWidth, contentHeight) };
+        _contentLayer.Width = width;
+        _contentLayer.Height = height;
+        _contentLayer.Margin = new Thickness(0);
+        _contentLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, width, height) };
 
         _topRulerBackground.Height = ruler;
-        _topRulerBackground.Width = ActualWidth;
+        _topRulerBackground.Width = width;
         _leftRulerBackground.Width = ruler;
-        _leftRulerBackground.Height = ActualHeight;
+        _leftRulerBackground.Height = height;
 
-        _topRulerLayer.Margin = new Thickness(ruler, 0, 0, 0);
-        _topRulerLayer.Width = contentWidth;
+        _topRulerLayer.Margin = new Thickness(0);
+        _topRulerLayer.Width = width;
         _topRulerLayer.Height = ruler;
-        _topRulerLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, contentWidth, ruler) };
+        _topRulerLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, width, ruler) };
 
-        _leftRulerLayer.Margin = new Thickness(0, ruler, 0, 0);
+        _leftRulerLayer.Margin = new Thickness(0);
         _leftRulerLayer.Width = ruler;
-        _leftRulerLayer.Height = contentHeight;
-        _leftRulerLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, ruler, contentHeight) };
-        Clip = new RectangleGeometry { Rect = new Rect(0, 0, ActualWidth, ActualHeight) };
+        _leftRulerLayer.Height = height;
+        _leftRulerLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, ruler, height) };
 
-        foreach (var child in Children)
-        {
-            if (!_internalElements.Contains(child) && child is FrameworkElement element)
-            {
-                element.Margin = contentMargin;
-            }
-        }
+        Clip = new RectangleGeometry { Rect = new Rect(0, 0, width, height) };
     }
 
     private void RefreshVisuals()
@@ -237,59 +245,65 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         _leftRulerLayer.Children.Clear();
 
         var ruler = Math.Max(0, RulerThickness);
-        var contentWidth = Math.Max(0, ActualWidth - ruler);
-        var contentHeight = Math.Max(0, ActualHeight - ruler);
-        if (contentWidth <= 0 || contentHeight <= 0)
+        var width = Math.Max(0, ActualWidth);
+        var height = Math.Max(0, ActualHeight);
+        if (width <= 0 || height <= 0)
         {
             return;
         }
 
-        DrawGrid(contentWidth, contentHeight);
-        DrawRulers(contentWidth, contentHeight, ruler);
+        DrawGrid(width, height, ruler);
+        DrawRulers(width, height, ruler);
     }
 
-    private void DrawGrid(double contentWidth, double contentHeight)
+    private void DrawGrid(double width, double height, double ruler)
     {
         var spacing = Math.Max(8, GridSpacing);
         var majorStep = spacing * Math.Max(1, MajorLineEvery);
         var worldLeft = ScrollOffsetX - ContentOffsetX;
         var worldTop = ScrollOffsetY - ContentOffsetY;
-        var worldRight = worldLeft + contentWidth;
-        var worldBottom = worldTop + contentHeight;
+        var worldRight = worldLeft + width;
+        var worldBottom = worldTop + height;
 
         var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
-            var x = value - worldLeft;
+            var x = ruler + (value - worldLeft);
             var brush = IsNearZero(value) ? AxisBrush : IsMajorLine(value, majorStep) ? MajorGridBrush : MinorGridBrush;
-            AddLine(_contentLayer, x, 0, x, contentHeight, brush, IsNearZero(value) ? 1.2 : 1);
+            AddLine(_contentLayer, x, 0, x, height, brush, IsNearZero(value) ? 1.2 : 1);
         }
 
         var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
-            var y = value - worldTop;
+            var y = ruler + (value - worldTop);
             var brush = IsNearZero(value) ? AxisBrush : IsMajorLine(value, majorStep) ? MajorGridBrush : MinorGridBrush;
-            AddLine(_contentLayer, 0, y, contentWidth, y, brush, IsNearZero(value) ? 1.2 : 1);
+            AddLine(_contentLayer, 0, y, width, y, brush, IsNearZero(value) ? 1.2 : 1);
         }
     }
 
-    private void DrawRulers(double contentWidth, double contentHeight, double ruler)
+    private void DrawRulers(double width, double height, double ruler)
     {
         var spacing = Math.Max(8, GridSpacing);
         var majorStep = spacing * Math.Max(1, MajorLineEvery);
         var worldLeft = ScrollOffsetX - ContentOffsetX;
         var worldTop = ScrollOffsetY - ContentOffsetY;
-        var worldRight = worldLeft + contentWidth;
-        var worldBottom = worldTop + contentHeight;
+        var worldRight = worldLeft + width;
+        var worldBottom = worldTop + height;
 
-        AddLine(_topRulerLayer, 0, ruler - 1, contentWidth, ruler - 1, DividerBrush, 1);
-        AddLine(_leftRulerLayer, ruler - 1, 0, ruler - 1, contentHeight, DividerBrush, 1);
+        // Dividers stop at the perpendicular band (they never cross the corner junction).
+        AddLine(_topRulerLayer, ruler, ruler - 1, width, ruler - 1, DividerBrush, 1);
+        AddLine(_leftRulerLayer, ruler - 1, ruler, ruler - 1, height, DividerBrush, 1);
 
         var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
-            var x = value - worldLeft;
+            var x = ruler + (value - worldLeft);
+            if (x < ruler)
+            {
+                continue;
+            }
+
             var isMajor = IsMajorLine(value, majorStep);
             var tickLength = isMajor ? ruler - 6 : Math.Max(6, ruler * 0.35);
             var brush = IsNearZero(value) ? AxisBrush : TickBrush;
@@ -304,7 +318,12 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
-            var y = value - worldTop;
+            var y = ruler + (value - worldTop);
+            if (y < ruler)
+            {
+                continue;
+            }
+
             var isMajor = IsMajorLine(value, majorStep);
             var tickLength = isMajor ? ruler - 6 : Math.Max(6, ruler * 0.35);
             var brush = IsNearZero(value) ? AxisBrush : TickBrush;

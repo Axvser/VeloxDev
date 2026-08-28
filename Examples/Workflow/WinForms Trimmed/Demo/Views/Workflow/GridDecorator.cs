@@ -22,7 +22,9 @@ public sealed class GridDecorator : Panel, IWorkflowGridDecorator
     private const double DefaultRulerThickness = 36;
 
     private readonly Color _background = ParseColor("#1E1E1E");
-    private readonly Color _rulerBackground = ParseColor("#C8252526");
+    // WinForms-specific alpha (mirror of TreeView.SurfaceCanvas): node cards paint opaque
+    // over the band, so lower opacity lets the grid read through it as the translucency.
+    private readonly Color _rulerBackground = ParseColor("#70252526");
     private readonly Color _labelColor = ParseColor("#888888");
     private readonly Color _minorGridColor = ParseColor("#2A2D2E");
     private readonly Color _majorGridColor = ParseColor("#3A3D40");
@@ -86,67 +88,65 @@ public sealed class GridDecorator : Panel, IWorkflowGridDecorator
 
         var bounds = new RectangleF(0, 0, Width, Height);
         var ruler = Math.Max(0, RulerThickness);
-        var contentRect = new RectangleF(
-            (float)ruler, (float)ruler,
-            Math.Max(0, bounds.Width - (float)ruler),
-            Math.Max(0, bounds.Height - (float)ruler));
 
         using var bgBrush = new SolidBrush(_background);
         using var rulerBrush = new SolidBrush(_rulerBackground);
         g.FillRectangle(bgBrush, bounds);
+
+        // Full-area grid (no contentRect clip) so lines extend under the translucent
+        // bands; the bands are filled after, dimming whatever scrolls beneath them (the
+        // Jalium floating-ruler model). The grid keeps the +ruler offset because a
+        // standalone decorator sits below a content viewport that is translated by
+        // RulerThickness, keeping the world origin at the band edge.
+        DrawGrid(g, bounds, ruler);
+
         g.FillRectangle(rulerBrush, 0, 0, bounds.Width, (float)ruler);
         g.FillRectangle(rulerBrush, 0, 0, (float)ruler, bounds.Height);
 
-        if (contentRect.Width > 0 && contentRect.Height > 0)
-        {
-            var saved = g.Save();
-            g.SetClip(contentRect);
-            DrawGrid(g, contentRect);
-            g.Restore(saved);
-        }
-
-        DrawRulers(g, bounds, contentRect);
+        DrawRulers(g, bounds, ruler);
     }
 
-    private void DrawGrid(Graphics g, RectangleF contentRect)
+    private void DrawGrid(Graphics g, RectangleF bounds, double ruler)
     {
         var spacing = Math.Max(8, _gridSpacing);
         var majorStep = spacing * Math.Max(1, _majorLineEvery);
         var worldLeft = ScrollOffsetX - ContentOffsetX;
         var worldTop = ScrollOffsetY - ContentOffsetY;
-        var worldRight = worldLeft + contentRect.Width;
-        var worldBottom = worldTop + contentRect.Height;
+        var worldRight = worldLeft + bounds.Width;
+        var worldBottom = worldTop + bounds.Height;
 
         using var minorPen = new Pen(_minorGridColor, 1f);
         using var majorPen = new Pen(_majorGridColor, 1f);
         using var axisPen = new Pen(_axisColor, 1.2f);
 
+        // Grid x = ruler + (value - worldLeft): the standalone decorator draws the world
+        // grid beneath a content viewport translated by RulerThickness, so the origin stays
+        // at the band edge. Lines span the full viewport so they extend under the bands.
         var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
-            var x = (float)(contentRect.X + (value - worldLeft));
+            var x = (float)(ruler + (value - worldLeft));
             var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
-            g.DrawLine(pen, x, contentRect.Y, x, contentRect.Bottom);
+            g.DrawLine(pen, x, 0, x, bounds.Height);
         }
 
         var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
-            var y = (float)(contentRect.Y + (value - worldTop));
+            var y = (float)(ruler + (value - worldTop));
             var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
-            g.DrawLine(pen, contentRect.X, y, contentRect.Right, y);
+            g.DrawLine(pen, 0, y, bounds.Width, y);
         }
     }
 
-    private void DrawRulers(Graphics g, RectangleF bounds, RectangleF contentRect)
+    private void DrawRulers(Graphics g, RectangleF bounds, double ruler)
     {
-        var ruler = Math.Max(0, RulerThickness);
         var spacing = Math.Max(8, _gridSpacing);
         var majorStep = spacing * Math.Max(1, _majorLineEvery);
         var worldLeft = ScrollOffsetX - ContentOffsetX;
         var worldTop = ScrollOffsetY - ContentOffsetY;
-        var worldRight = worldLeft + contentRect.Width;
-        var worldBottom = worldTop + contentRect.Height;
+        var worldRight = worldLeft + bounds.Width;
+        var worldBottom = worldTop + bounds.Height;
 
         using var dividerPen = new Pen(_dividerColor, 1f);
         using var tickPen = new Pen(_tickColor, 1f);
@@ -157,13 +157,19 @@ public sealed class GridDecorator : Panel, IWorkflowGridDecorator
         g.DrawLine(dividerPen, (float)ruler, 0, (float)ruler, bounds.Height);
         g.DrawLine(dividerPen, 0, (float)ruler, bounds.Width, (float)ruler);
 
-        // Top ruler.
+        // Top ruler. Ticks share the grid's x = ruler + (value - worldLeft). Skip
+        // x < ruler so the corner junction and left band stay clean (no ticks/labels).
         var saved = g.Save();
-        g.SetClip(new RectangleF((float)ruler, 0, contentRect.Width, (float)ruler));
+        g.SetClip(new RectangleF((float)ruler, 0, Math.Max(0, bounds.Width - (float)ruler), (float)ruler));
         var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
-            var x = (float)(contentRect.X + (value - worldLeft));
+            var x = (float)(ruler + (value - worldLeft));
+            if (x < ruler)
+            {
+                continue;
+            }
+
             var isMajor = IsMajorLine(value, majorStep);
             var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
             var pen = IsNearZero(value) ? axisPen : tickPen;
@@ -180,11 +186,16 @@ public sealed class GridDecorator : Panel, IWorkflowGridDecorator
 
         // Left ruler.
         saved = g.Save();
-        g.SetClip(new RectangleF(0, (float)ruler, (float)ruler, contentRect.Height));
+        g.SetClip(new RectangleF(0, (float)ruler, (float)ruler, Math.Max(0, bounds.Height - (float)ruler)));
         var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
-            var y = (float)(contentRect.Y + (value - worldTop));
+            var y = (float)(ruler + (value - worldTop));
+            if (y < ruler)
+            {
+                continue;
+            }
+
             var isMajor = IsMajorLine(value, majorStep);
             var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
             var pen = IsNearZero(value) ? axisPen : tickPen;

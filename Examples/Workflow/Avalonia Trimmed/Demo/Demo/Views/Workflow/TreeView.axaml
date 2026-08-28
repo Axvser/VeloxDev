@@ -43,6 +43,10 @@
 					<Canvas x:Name="PART_Canvas"
 							x:DataType="vm:TreeViewModel" Width="{Binding Layout.ActualSize.Width}" Height="{Binding Layout.ActualSize.Height}" HorizontalAlignment="Left" VerticalAlignment="Top"
 							behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}">
+						<Canvas.RenderTransform>
+							<TranslateTransform X="{Binding RulerThickness, ElementName=PART_GridDecorator}"
+												Y="{Binding RulerThickness, ElementName=PART_GridDecorator}" />
+						</Canvas.RenderTransform>
 						<Canvas.DataTemplates>
 							<!-- Resolve the data template by priority: Self > Parent > App -->
 						</Canvas.DataTemplates>

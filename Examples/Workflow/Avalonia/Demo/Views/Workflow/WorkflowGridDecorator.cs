@@ -10,7 +10,15 @@ using Size = Avalonia.Size;
 
 namespace Demo;
 
-public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
+/// <summary>
+/// A workflow surface decorator that draws the world grid and floating translucent rulers.
+/// Content (the scroll viewer + canvas) fills the whole viewport; the world canvas is
+/// translated by <see cref="RulerThickness"/> so the world origin stays at the ruler-band
+/// edge while content can still scroll under the translucent bands (the Jalium floating
+/// ruler model). The decorator layers, bottom to top: surface + grid, the content child,
+/// and the ruler overlay (topmost, hit-test transparent).
+/// </summary>
+public sealed class WorkflowGridDecorator : Panel, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 
@@ -22,6 +30,9 @@ public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
     private static readonly Pen AxisPen = new(new ImmutableSolidColorBrush(Color.Parse("#38BDF8")), 1.2);
     private static readonly Pen TickPen = new(new ImmutableSolidColorBrush(Color.Parse("#64748B")), 1);
     private static readonly Pen DividerPen = new(new ImmutableSolidColorBrush(Color.Parse("#475569")), 1);
+
+    private readonly GridLayer _gridLayer;
+    private readonly RulerLayer _rulerLayer;
 
     public static readonly StyledProperty<double> RulerThicknessProperty =
         AvaloniaProperty.Register<WorkflowGridDecorator, double>(nameof(RulerThickness), 28d);
@@ -46,21 +57,24 @@ public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
 
     static WorkflowGridDecorator()
     {
-        AffectsMeasure<WorkflowGridDecorator>(RulerThicknessProperty);
-        AffectsArrange<WorkflowGridDecorator>(RulerThicknessProperty);
-        AffectsRender<WorkflowGridDecorator>(
-            RulerThicknessProperty,
-            GridSpacingProperty,
-            MajorLineEveryProperty,
-            ScrollOffsetXProperty,
-            ScrollOffsetYProperty,
-            ContentOffsetXProperty,
-            ContentOffsetYProperty);
+        RulerThicknessProperty.Changed.AddClassHandler<WorkflowGridDecorator>(OnVisualPropertyChanged);
+        GridSpacingProperty.Changed.AddClassHandler<WorkflowGridDecorator>(OnVisualPropertyChanged);
+        MajorLineEveryProperty.Changed.AddClassHandler<WorkflowGridDecorator>(OnVisualPropertyChanged);
+        ScrollOffsetXProperty.Changed.AddClassHandler<WorkflowGridDecorator>(OnVisualPropertyChanged);
+        ScrollOffsetYProperty.Changed.AddClassHandler<WorkflowGridDecorator>(OnVisualPropertyChanged);
+        ContentOffsetXProperty.Changed.AddClassHandler<WorkflowGridDecorator>(OnVisualPropertyChanged);
+        ContentOffsetYProperty.Changed.AddClassHandler<WorkflowGridDecorator>(OnVisualPropertyChanged);
     }
 
     public WorkflowGridDecorator()
     {
         ClipToBounds = true;
+
+        _gridLayer = new GridLayer(this) { IsHitTestVisible = false };
+        _rulerLayer = new RulerLayer(this) { IsHitTestVisible = false, ZIndex = 100 };
+
+        Children.Add(_gridLayer);
+        Children.Add(_rulerLayer);
     }
 
     public double RulerThickness
@@ -105,114 +119,90 @@ public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
         set => SetValue(ContentOffsetYProperty, value);
     }
 
-    protected override Size MeasureOverride(Size availableSize)
+    private static void OnVisualPropertyChanged(WorkflowGridDecorator decorator, AvaloniaPropertyChangedEventArgs e)
     {
-        var ruler = Math.Max(0, RulerThickness);
-        var childAvailable = new Size(
-            Math.Max(0, availableSize.Width - ruler),
-            Math.Max(0, availableSize.Height - ruler));
-
-        Child?.Measure(childAvailable);
-
-        if (Child is null)
-        {
-            return new Size(ruler, ruler);
-        }
-
-        return new Size(
-            Child.DesiredSize.Width + ruler,
-            Child.DesiredSize.Height + ruler);
+        decorator._gridLayer.InvalidateVisual();
+        decorator._rulerLayer.InvalidateVisual();
     }
 
-    protected override Size ArrangeOverride(Size finalSize)
+    /// <summary>Bottom layer: surface fill + the full-viewport world grid (extends under the ruler bands).</summary>
+    private sealed class GridLayer(WorkflowGridDecorator owner) : Control
     {
-        var ruler = Math.Max(0, RulerThickness);
-        var childBounds = new Rect(
-            ruler,
-            ruler,
-            Math.Max(0, finalSize.Width - ruler),
-            Math.Max(0, finalSize.Height - ruler));
-
-        Child?.Arrange(childBounds);
-        return finalSize;
-    }
-
-    public override void Render(DrawingContext context)
-    {
-        var bounds = Bounds;
-        if (bounds.Width <= 0 || bounds.Height <= 0)
+        public override void Render(DrawingContext context)
         {
-            return;
-        }
-
-        var ruler = Math.Max(0, RulerThickness);
-        var contentRect = new Rect(
-            ruler,
-            ruler,
-            Math.Max(0, bounds.Width - ruler),
-            Math.Max(0, bounds.Height - ruler));
-
-        context.DrawRectangle(SurfaceBackgroundBrush, null, bounds);
-        context.DrawRectangle(RulerBackgroundBrush, null, new Rect(0, 0, bounds.Width, ruler));
-        context.DrawRectangle(RulerBackgroundBrush, null, new Rect(0, 0, ruler, bounds.Height));
-
-        if (contentRect.Width > 0 && contentRect.Height > 0)
-        {
-            using (context.PushClip(contentRect))
+            var bounds = Bounds;
+            if (bounds.Width <= 0 || bounds.Height <= 0)
             {
-                context.DrawRectangle(SurfaceBackgroundBrush, null, contentRect);
-                DrawGrid(context, contentRect);
+                return;
             }
+
+            context.DrawRectangle(SurfaceBackgroundBrush, null, bounds);
+            DrawGrid(context, bounds);
         }
 
-        DrawRulers(context, bounds, contentRect);
-    }
-
-    private void DrawGrid(DrawingContext context, Rect contentRect)
-    {
-        var spacing = Math.Max(8, GridSpacing);
-        var majorStep = spacing * Math.Max(1, MajorLineEvery);
-        var worldLeft = ScrollOffsetX - ContentOffsetX;
-        var worldTop = ScrollOffsetY - ContentOffsetY;
-        var worldRight = worldLeft + contentRect.Width;
-        var worldBottom = worldTop + contentRect.Height;
-
-        var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
-        for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
+        private void DrawGrid(DrawingContext context, Rect bounds)
         {
-            var x = contentRect.X + (value - worldLeft);
-            var pen = IsNearZero(value) ? AxisPen : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
-            context.DrawLine(pen, new Point(x, contentRect.Y), new Point(x, contentRect.Bottom));
-        }
+            var ruler = Math.Max(0, owner.RulerThickness);
+            var spacing = Math.Max(8, owner.GridSpacing);
+            var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
+            var worldLeft = owner.ScrollOffsetX - owner.ContentOffsetX;
+            var worldTop = owner.ScrollOffsetY - owner.ContentOffsetY;
+            var worldRight = worldLeft + bounds.Width;
+            var worldBottom = worldTop + bounds.Height;
 
-        var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
-        for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
-        {
-            var y = contentRect.Y + (value - worldTop);
-            var pen = IsNearZero(value) ? AxisPen : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
-            context.DrawLine(pen, new Point(contentRect.X, y), new Point(contentRect.Right, y));
-        }
-    }
-
-    private void DrawRulers(DrawingContext context, Rect bounds, Rect contentRect)
-    {
-        var ruler = Math.Max(0, RulerThickness);
-        var spacing = Math.Max(8, GridSpacing);
-        var majorStep = spacing * Math.Max(1, MajorLineEvery);
-        var worldLeft = ScrollOffsetX - ContentOffsetX;
-        var worldTop = ScrollOffsetY - ContentOffsetY;
-        var worldRight = worldLeft + contentRect.Width;
-        var worldBottom = worldTop + contentRect.Height;
-
-        context.DrawLine(DividerPen, new Point(ruler, 0), new Point(ruler, bounds.Height));
-        context.DrawLine(DividerPen, new Point(0, ruler), new Point(bounds.Width, ruler));
-
-        using (context.PushClip(new Rect(ruler, 0, contentRect.Width, ruler)))
-        {
             var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = contentRect.X + (value - worldLeft);
+                var x = ruler + (value - worldLeft);
+                var pen = IsNearZero(value) ? AxisPen : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
+                context.DrawLine(pen, new Point(x, 0), new Point(x, bounds.Height));
+            }
+
+            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
+            {
+                var y = ruler + (value - worldTop);
+                var pen = IsNearZero(value) ? AxisPen : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
+                context.DrawLine(pen, new Point(0, y), new Point(bounds.Width, y));
+            }
+        }
+    }
+
+    /// <summary>Topmost layer: the translucent ruler bands, dividers, ticks and labels (hit-test transparent).</summary>
+    private sealed class RulerLayer(WorkflowGridDecorator owner) : Control
+    {
+        public override void Render(DrawingContext context)
+        {
+            var bounds = Bounds;
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                return;
+            }
+
+            var ruler = Math.Max(0, owner.RulerThickness);
+            context.DrawRectangle(RulerBackgroundBrush, null, new Rect(0, 0, bounds.Width, ruler));
+            context.DrawRectangle(RulerBackgroundBrush, null, new Rect(0, 0, ruler, bounds.Height));
+
+            context.DrawLine(DividerPen, new Point(ruler, 0), new Point(ruler, bounds.Height));
+            context.DrawLine(DividerPen, new Point(0, ruler), new Point(bounds.Width, ruler));
+
+            var spacing = Math.Max(8, owner.GridSpacing);
+            var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
+            var worldLeft = owner.ScrollOffsetX - owner.ContentOffsetX;
+            var worldTop = owner.ScrollOffsetY - owner.ContentOffsetY;
+            var worldRight = worldLeft + bounds.Width;
+            var worldBottom = worldTop + bounds.Height;
+
+            // Top ruler: ticks at world grid x crossing the viewport; skip the left band region.
+            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
+            {
+                var x = ruler + (value - worldLeft);
+                if (x < ruler)
+                {
+                    continue;
+                }
+
                 var isMajor = IsMajorLine(value, majorStep);
                 var tickLength = isMajor ? ruler - 6 : Math.Max(6, ruler * 0.35);
                 var pen = IsNearZero(value) ? AxisPen : TickPen;
@@ -223,14 +213,17 @@ public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
                     DrawLabel(context, value, new Point(x + 3, (ruler - 10) / 2));
                 }
             }
-        }
 
-        using (context.PushClip(new Rect(0, ruler, ruler, contentRect.Height)))
-        {
+            // Left ruler: ticks at world grid y crossing the viewport; skip the top band region.
             var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = contentRect.Y + (value - worldTop);
+                var y = ruler + (value - worldTop);
+                if (y < ruler)
+                {
+                    continue;
+                }
+
                 var isMajor = IsMajorLine(value, majorStep);
                 var tickLength = isMajor ? ruler - 6 : Math.Max(6, ruler * 0.35);
                 var pen = IsNearZero(value) ? AxisPen : TickPen;

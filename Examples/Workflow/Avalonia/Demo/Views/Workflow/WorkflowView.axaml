@@ -127,6 +127,10 @@
 								HorizontalAlignment="Left"
 								VerticalAlignment="Top"
 							 behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}">
+							<Canvas.RenderTransform>
+								<TranslateTransform X="{Binding RulerThickness, ElementName=PART_GridDecorator}"
+													Y="{Binding RulerThickness, ElementName=PART_GridDecorator}" />
+							</Canvas.RenderTransform>
 							<Canvas.DataTemplates>
 								<!-- Resolve the data template by priority: Self > Parent > App -->
 							</Canvas.DataTemplates>
