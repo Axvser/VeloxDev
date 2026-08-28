@@ -1,13 +1,13 @@
-using System;
-
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
 /// Broadcasts the current <see cref="SurfaceViewport"/> snapshot to viewport-driven overlays
 /// (grid decorator, minimap) without forcing the whole surface to re-render. Pushed through a
-/// <c>CascadingValue</c> by <see cref="WorkflowSurfaceBehavior"/>; consumers subscribe to
-/// <see cref="Changed"/> and re-render themselves. Mirrors the XAML adapters, where the scroll
-/// viewer updates overlay transforms directly while the node/link content stays untouched.
+/// cascading value by the surface behavior; consumers subscribe to <see cref="Changed"/> and re-render
+/// themselves. Mirrors the XAML adapters, where the scroll viewer updates overlay transforms directly
+/// while the node/link content stays untouched.
+///
+/// Promoted to Core from the Razor adapter so the push channel is a standard data-exchange primitive.
 /// </summary>
 public sealed class SurfaceViewportFeed
 {

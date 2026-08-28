@@ -162,7 +162,7 @@ public partial class TreeView : ComponentBase, IDisposable
 
     private string Background { get; } = ToCss("#1E1E1E");
     private string MinorGridColor { get; } = ToCss("#2A2D2E");
-    private string RulerBackground { get; } = ToCss("#252526");
+    private string RulerBackground { get; } = ToCss("#C8252526");
     private string RulerTickColor { get; } = ToCss("#555555");
     private string RulerDividerColor { get; } = ToCss("#3A3D40");
     private string NodeForegroundCss { get; } = ToCss("#DD1E1E1E");

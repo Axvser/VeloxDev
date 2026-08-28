@@ -236,10 +236,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
 
         var point = e.GetPosition(state.Canvas);
-        viewModel.SetPointerCommand.Execute(new Anchor(
-            point.X - viewModel.Layout.ActualOffset.Horizontal,
-            point.Y - viewModel.Layout.ActualOffset.Vertical,
-            0));
+        viewModel.SetPointerCommand.Execute(
+            WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout));
     }
 
     private static void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -318,37 +316,14 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         }
 
         var current = e.GetPosition(host);
-        var newOffsetX = state.PanStartOffset.X + (state.PanStart.X - current.X);
-        var newOffsetY = state.PanStartOffset.Y + (state.PanStart.Y - current.Y);
+        var desiredX = state.PanStartOffset.X + (state.PanStart.X - current.X);
+        var desiredY = state.PanStartOffset.Y + (state.PanStart.Y - current.Y);
         var maxH = GetHorizontalScrollMaximum(state.ScrollViewer);
         var maxV = GetVerticalScrollMaximum(state.ScrollViewer);
-        bool layoutChanged = false;
 
-        if (newOffsetX < 0)
-        {
-            viewModel.Layout.NegativeOffset += new Offset(-newOffsetX, 0);
-            newOffsetX = 0;
-            layoutChanged = true;
-        }
-        else if (newOffsetX > maxH)
-        {
-            viewModel.Layout.PositiveOffset += new Offset(newOffsetX - maxH, 0);
-            newOffsetX = maxH;
-            layoutChanged = true;
-        }
-
-        if (newOffsetY < 0)
-        {
-            viewModel.Layout.NegativeOffset += new Offset(0, -newOffsetY);
-            newOffsetY = 0;
-            layoutChanged = true;
-        }
-        else if (newOffsetY > maxV)
-        {
-            viewModel.Layout.PositiveOffset += new Offset(0, newOffsetY - maxV);
-            newOffsetY = maxV;
-            layoutChanged = true;
-        }
+        var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, viewModel.Layout, horizontal: true);
+        var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, viewModel.Layout, horizontal: false);
+        var layoutChanged = newOffsetX != desiredX || newOffsetY != desiredY;
 
         if (layoutChanged)
         {
@@ -399,8 +374,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
-        var viewportX = state.ScrollViewer.Offset.X - viewModel.Layout.ActualOffset.Horizontal;
-        var viewportY = state.ScrollViewer.Offset.Y - viewModel.Layout.ActualOffset.Vertical;
+        var viewportX = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.Offset.X, viewModel.Layout.ActualOffset.Horizontal);
+        var viewportY = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.Offset.Y, viewModel.Layout.ActualOffset.Vertical);
         viewModel.GetHelper().Viewport = new Viewport(
             viewportX, viewportY,
             state.ScrollViewer.Viewport.Width,

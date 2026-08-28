@@ -87,7 +87,7 @@ public class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
 
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E)), null, content);
 
-        var worldLeft = ScrollOffsetX - ContentOffsetX;
+        var worldLeft = WorkflowSurfaceMath.GridWorldLeft(ScrollOffsetX, ContentOffsetX);
         var worldTop = ScrollOffsetY - ContentOffsetY;
         var worldRight = worldLeft + content.Width;
         var worldBottom = worldTop + content.Height;
@@ -99,7 +99,7 @@ public class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
         var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
-            var x = content.X + (value - worldLeft);
+            var x = WorkflowSurfaceMath.GridX(value, worldLeft, content.X);
             var pen = Math.Abs(value) < 0.001 ? axisPen : (Math.Abs(value % majorStep) < 0.001 ? majorPen : minorPen);
             dc.DrawLine(pen, new Point(x, content.Top), new Point(x, content.Bottom));
         }

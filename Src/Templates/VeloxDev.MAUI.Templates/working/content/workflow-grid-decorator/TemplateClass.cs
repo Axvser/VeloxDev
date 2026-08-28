@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace TemplateNamespace;

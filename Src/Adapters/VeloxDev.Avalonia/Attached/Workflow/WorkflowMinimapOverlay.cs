@@ -442,7 +442,10 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         // Viewport in world coordinates — use bindable ViewportWidth/Height
         var vw = Math.Max(1, ViewportWidth);
         var vh = Math.Max(1, ViewportHeight);
-        _lastViewport = BoundsRect.FromNode(ScrollOffsetX - ContentOffsetX, ScrollOffsetY - ContentOffsetY, vw, vh);
+        _lastViewport = BoundsRect.FromNode(
+            WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX),
+            WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY),
+            vw, vh);
     }
 
     private void ClearCache()
@@ -463,16 +466,9 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         var (ox, oy, mmW, mmH, sc) = ComputeTransform(gb);
         if (sc <= 0) return null;
 
-        var left = ox + (vp.Left - gb.Left) * sc;
-        var top = oy + (vp.Top - gb.Top) * sc;
-        var w = Math.Max(2.0, vp.Width * sc);
-        var h = Math.Max(2.0, vp.Height * sc);
-
-        // Clamp inside minimap content area (0,0..mmW,mmH)
-        left = Math.Max(0, Math.Min(mmW - w, left));
-        top = Math.Max(0, Math.Min(mmH - h, top));
-
-        return new Rect(left, top, w, h);
+        var (l, t, w, h) = WorkflowSurfaceMath.MinimapViewportRect(
+            ox, oy, sc, vp.Left, vp.Top, vp.Width, vp.Height, gb.Left, gb.Top, mmW, mmH, minRectSize: 2.0);
+        return new Rect(l, t, w, h);
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -549,10 +545,9 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         var pad = Math.Max(0, ContentPadding);
         var drawW = mmW - pad * 2;
         var drawH = mmH - pad * 2;
-        var sc = Math.Min(drawW / Math.Max(1, globalBounds.Width), drawH / Math.Max(1, globalBounds.Height));
-        var sw = globalBounds.Width * sc;
-        var sh = globalBounds.Height * sc;
-        return (pad + (drawW - sw) / 2, pad + (drawH - sh) / 2, mmW, mmH, sc);
+        var (ox, oy, sc) = WorkflowSurfaceMath.MinimapFit(
+            globalBounds.Width, globalBounds.Height, drawW, drawH, pad);
+        return (ox, oy, mmW, mmH, sc);
     }
 
     private void NavigateToWorld(double adjX, double adjY)
@@ -562,38 +557,17 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         var (ox, oy, _, _, sc) = ComputeTransform(gb);
         if (sc <= 0) return;
 
-        var wcx = (adjX - ox) / sc + gb.Left;
-        var wcy = (adjY - oy) / sc + gb.Top;
-
-        var scrollX = (wcx - ViewportWidth / 2) + ContentOffsetX;
-        var scrollY = (wcy - ViewportHeight / 2) + ContentOffsetY;
+        var (wcx, wcy) = WorkflowSurfaceMath.MinimapToWorld(adjX, adjY, ox, oy, sc, gb.Left, gb.Top);
+        var (scrollX, scrollY) = WorkflowSurfaceMath.MinimapToScroll(
+            wcx, wcy, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);
 
         if (_scrollViewer is not null && WorkflowTree?.Layout is { } layout)
         {
             var maxH = Math.Max(0, _scrollViewer.Extent.Width - _scrollViewer.Viewport.Width);
             var maxV = Math.Max(0, _scrollViewer.Extent.Height - _scrollViewer.Viewport.Height);
 
-            if (scrollX < 0)
-            {
-                layout.NegativeOffset = new Offset(layout.NegativeOffset.Horizontal + (-scrollX), layout.NegativeOffset.Vertical);
-                scrollX = 0;
-            }
-            else if (scrollX > maxH)
-            {
-                layout.PositiveOffset = new Offset(layout.PositiveOffset.Horizontal + (scrollX - maxH), layout.PositiveOffset.Vertical);
-                scrollX = maxH;
-            }
-
-            if (scrollY < 0)
-            {
-                layout.NegativeOffset = new Offset(layout.NegativeOffset.Horizontal, layout.NegativeOffset.Vertical + (-scrollY));
-                scrollY = 0;
-            }
-            else if (scrollY > maxV)
-            {
-                layout.PositiveOffset = new Offset(layout.PositiveOffset.Horizontal, layout.PositiveOffset.Vertical + (scrollY - maxV));
-                scrollY = maxV;
-            }
+            scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true);
+            scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false);
 
             _scrollViewer.Offset = new Vector(
                 Math.Max(0, Math.Min(scrollX, maxH)),
@@ -647,23 +621,19 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
             {
                 var ncr = (float)Math.Max(0, NodeCornerRadius);
                 foreach (var (nx, ny, nw, nh) in _lastNodeRects)
+                {
+                    var (l, t) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, ox, oy, sc);
                     context.FillRectangle(NodeBrush,
-                        new Rect(ox + (nx - gb.Left) * sc, oy + (ny - gb.Top) * sc,
-                                 Math.Max(2.0, nw * sc), Math.Max(2.0, nh * sc)), ncr);
+                        new Rect(l, t, Math.Max(2.0, nw * sc), Math.Max(2.0, nh * sc)), ncr);
+                }
             }
 
             // Viewport indicator
             var vp = _lastViewport;
             if (!vp.IsEmpty)
             {
-                var vpx = ox + (vp.Left - gb.Left) * sc;
-                var vpy = oy + (vp.Top - gb.Top) * sc;
-                var vpw = Math.Max(2.0, vp.Width * sc);
-                var vph = Math.Max(2.0, vp.Height * sc);
-
-                vpx = Math.Max(mmRect.X, Math.Min(mmRect.Right - vpw, vpx));
-                vpy = Math.Max(mmRect.Y, Math.Min(mmRect.Bottom - vph, vpy));
-
+                var (vpx, vpy, vpw, vph) = WorkflowSurfaceMath.MinimapViewportRect(
+                    ox, oy, sc, vp.Left, vp.Top, vp.Width, vp.Height, gb.Left, gb.Top, mmW, mmH, minRectSize: 2.0);
                 var vr = new Rect(vpx, vpy, vpw, vph);
                 var ncr = (float)Math.Max(0, NodeCornerRadius);
                 if (ViewportFill is not null)

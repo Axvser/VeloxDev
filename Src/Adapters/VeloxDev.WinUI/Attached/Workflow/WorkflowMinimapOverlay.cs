@@ -363,7 +363,10 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
         var vw = Math.Max(1, ViewportWidth);
         var vh = Math.Max(1, ViewportHeight);
-        _lastViewport = BoundsRect.FromNode(ScrollOffsetX - ContentOffsetX, ScrollOffsetY - ContentOffsetY, vw, vh);
+        _lastViewport = BoundsRect.FromNode(
+            WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX),
+            WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY),
+            vw, vh);
     }
 
     private void ClearCache()
@@ -382,12 +385,8 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         var mmW = Math.Max(minSz, Math.Min(MinimapWidth, ActualWidth - margin * 2));
         var mmH = Math.Max(minSz, Math.Min(MinimapHeight, ActualHeight - margin * 2));
         var pad = Math.Max(0, ContentPadding);
-        var drawW = mmW - pad * 2;
-        var drawH = mmH - pad * 2;
-        var sc = Math.Min(drawW / Math.Max(1, gb.Width), drawH / Math.Max(1, gb.Height));
-        var sw = gb.Width * sc;
-        var sh = gb.Height * sc;
-        return (pad + (drawW - sw) / 2, pad + (drawH - sh) / 2, mmW, mmH, sc);
+        var (ox, oy, sc) = WorkflowSurfaceMath.MinimapFit(gb.Width, gb.Height, mmW - pad * 2, mmH - pad * 2, pad);
+        return (ox, oy, mmW, mmH, sc);
     }
 
     // ── Pointer ──────────────────────────────────────────────────────────────
@@ -476,36 +475,16 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         var (ox, oy, _, _, sc) = ComputeTransform(gb);
         if (sc <= 0) return;
 
-        var wcx = (adjX - ox) / sc + gb.Left;
-        var wcy = (adjY - oy) / sc + gb.Top;
-        var scrollX = (wcx - ViewportWidth / 2) + ContentOffsetX;
-        var scrollY = (wcy - ViewportHeight / 2) + ContentOffsetY;
+        var (wcx, wcy) = WorkflowSurfaceMath.MinimapToWorld(adjX, adjY, ox, oy, sc, gb.Left, gb.Top);
+        var (scrollX, scrollY) = WorkflowSurfaceMath.MinimapToScroll(
+            wcx, wcy, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);
         if (_scrollViewer is not null && WorkflowTree?.Layout is { } layout)
         {
             var maxH = Math.Max(0, _scrollViewer.ScrollableWidth);
             var maxV = Math.Max(0, _scrollViewer.ScrollableHeight);
 
-            if (scrollX < 0)
-            {
-                layout.NegativeOffset = new Offset(layout.NegativeOffset.Horizontal + (-scrollX), layout.NegativeOffset.Vertical);
-                scrollX = 0;
-            }
-            else if (scrollX > maxH)
-            {
-                layout.PositiveOffset = new Offset(layout.PositiveOffset.Horizontal + (scrollX - maxH), layout.PositiveOffset.Vertical);
-                scrollX = maxH;
-            }
-
-            if (scrollY < 0)
-            {
-                layout.NegativeOffset = new Offset(layout.NegativeOffset.Horizontal, layout.NegativeOffset.Vertical + (-scrollY));
-                scrollY = 0;
-            }
-            else if (scrollY > maxV)
-            {
-                layout.PositiveOffset = new Offset(layout.PositiveOffset.Horizontal, layout.PositiveOffset.Vertical + (scrollY - maxV));
-                scrollY = maxV;
-            }
+            scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true);
+            scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false);
 
             _scrollViewer.ChangeView(
                 Math.Max(0, Math.Min(scrollX, maxH)),
@@ -584,8 +563,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
             if (i < _lastNodeRects.Count)
             {
                 var (nx, ny, nw, nh) = _lastNodeRects[i];
-                var rx = ox + (nx - gb.Left) * sc;
-                var ry = oy + (ny - gb.Top) * sc;
+                var (rx, ry) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, ox, oy, sc);
                 var rw = Math.Max(2.0, nw * sc);
                 var rh = Math.Max(2.0, nh * sc);
                 SetLeft(rect, rx);

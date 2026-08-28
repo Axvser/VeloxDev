@@ -20,7 +20,7 @@ namespace Demo.Controls;
 ///   - Slot anchors: computed directly from control screen coordinates before each layout/draw, no separate Behavior needed
 ///   - Canvas size: computed dynamically from node coordinates; scrollbars appear when content exceeds the window area
 /// </summary>
-public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecorator
+public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 {
     // ── Grid parameters ─────────────────────────────────────────────────────────
     private const int GridSpacing = 40;
@@ -111,7 +111,7 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
                     oldSrc.ViewportScrollRequested -= OnMinimapScrollRequested;
                 }
 
-                if (_minimap is WorkflowBehaviors.IWorkflowMinimapOverlay oldMm)
+                if (_minimap is IWorkflowMinimapOverlay oldMm)
                 {
                     oldMm.WorkflowTree = null;
                 }
@@ -125,7 +125,7 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
                     src.ViewportScrollRequested += OnMinimapScrollRequested;
                 }
 
-                if (value is WorkflowBehaviors.IWorkflowMinimapOverlay mm)
+                if (value is IWorkflowMinimapOverlay mm)
                 {
                     mm.WorkflowTree = _session?.Tree;
                 }
@@ -233,7 +233,7 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
     /// </summary>
     private void SyncMinimap()
     {
-        if (_minimap is not WorkflowBehaviors.IWorkflowMinimapOverlay m) return;
+        if (_minimap is not IWorkflowMinimapOverlay m) return;
 
         var scroll = AutoScrollPosition;
         m.ScrollOffsetX = -(_panOffset.X + scroll.X);
@@ -269,7 +269,7 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
 
         // RelayoutAllCards → SyncMinimap can still read the stale AutoScrollPosition, so force the
         // minimap to the requested scroll now for immediate feedback; it converges on the pan.
-        if (_minimap is WorkflowBehaviors.IWorkflowMinimapOverlay m)
+        if (_minimap is IWorkflowMinimapOverlay m)
         {
             m.ScrollOffsetX = sx;
             m.ScrollOffsetY = sy;
@@ -703,8 +703,8 @@ public sealed class WorkflowCanvas : Panel, WorkflowBehaviors.IWorkflowGridDecor
         //   - 36px ruler band, world origin defaults to the content boundary, tick "0" at the content junction
         //   - Top/left ticks clipped to their own band; the top-left corner junction renders no ticks or numbers
         //   - Top label vertically centered at (ruler-13)/2, left label at y+2; font size 13px
-        // Colors keep the template defaults: ruler background #252526 / tick #555555 / text #888888 / divider #3A3D40 / axis #4D4D4D.
-        using var rulerBrush = new SolidBrush(Color.FromArgb(37, 37, 38));
+        // Colors keep the template defaults: ruler background #C8252526 (semi-transparent) / tick #555555 / text #888888 / divider #3A3D40 / axis #4D4D4D.
+        using var rulerBrush = new SolidBrush(Color.FromArgb(200, 37, 37, 38));
         using var dividerPen = new Pen(Color.FromArgb(58, 61, 64), 1f);
         using var tickPen = new Pen(Color.FromArgb(85, 85, 85), 1f);
         using var axisPen = new Pen(Color.FromArgb(77, 77, 77), 1f);

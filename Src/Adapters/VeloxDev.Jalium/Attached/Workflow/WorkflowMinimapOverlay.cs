@@ -197,10 +197,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     {
         double drawW = Math.Max(1, Width - ContentPad * 2);
         double drawH = Math.Max(1, Height - ContentPad * 2);
-        double scale = Math.Min(drawW / Math.Max(1, bounds.Width), drawH / Math.Max(1, bounds.Height));
-        double ox = ContentPad + (drawW - bounds.Width * scale) / 2.0;
-        double oy = ContentPad + (drawH - bounds.Height * scale) / 2.0;
-        return (ox, oy, scale);
+        return WorkflowSurfaceMath.MinimapFit(bounds.Width, bounds.Height, drawW, drawH, ContentPad);
     }
 
     private void PanToMini(Point mini)
@@ -217,8 +214,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             return;
         }
 
-        double wx = (mini.X - ox) / scale + bounds.X;
-        double wy = (mini.Y - oy) / scale + bounds.Y;
+        var (wx, wy) = WorkflowSurfaceMath.MinimapToWorld(mini.X, mini.Y, ox, oy, scale, bounds.X, bounds.Y);
         NavigateToWorld(wx, wy);
     }
 
@@ -230,32 +226,15 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             return;
         }
 
-        double targetH = wx - ScrollViewer.ViewportWidth / 2 + ContentOffsetX;
-        double targetV = wy - ScrollViewer.ViewportHeight / 2 + ContentOffsetY;
         var layout = _tree.Layout;
-
-        if (targetH < 0)
-        {
-            layout.NegativeOffset += new Offset(-targetH, 0);
-            targetH = 0;
-        }
-        else if (targetH > ScrollViewer.ScrollableWidth)
-        {
-            layout.PositiveOffset += new Offset(targetH - ScrollViewer.ScrollableWidth, 0);
-        }
-
-        if (targetV < 0)
-        {
-            layout.NegativeOffset += new Offset(0, -targetV);
-            targetV = 0;
-        }
-        else if (targetV > ScrollViewer.ScrollableHeight)
-        {
-            layout.PositiveOffset += new Offset(0, targetV - ScrollViewer.ScrollableHeight);
-        }
-
-        ScrollViewer.ScrollToHorizontalOffset(Math.Max(0, targetH));
-        ScrollViewer.ScrollToVerticalOffset(Math.Max(0, targetV));
+        var maxH = Math.Max(0, ScrollViewer.ScrollableWidth);
+        var maxV = Math.Max(0, ScrollViewer.ScrollableHeight);
+        var (scrollX, scrollY) = WorkflowSurfaceMath.MinimapToScroll(
+            wx, wy, ScrollViewer.ViewportWidth, ScrollViewer.ViewportHeight, ContentOffsetX, ContentOffsetY);
+        scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true);
+        scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false);
+        ScrollViewer.ScrollToHorizontalOffset(Math.Max(0, Math.Min(scrollX, maxH)));
+        ScrollViewer.ScrollToVerticalOffset(Math.Max(0, Math.Min(scrollY, maxV)));
     }
 
     // ── Mouse ──────────────────────────────────────────────────────────────
@@ -306,14 +285,14 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         {
             foreach (var node in _tree.Nodes)
             {
-                var p = new Point(ox + (node.Anchor.Horizontal - bounds.X) * scale, oy + (node.Anchor.Vertical - bounds.Y) * scale);
+                var (lx, ly) = WorkflowSurfaceMath.MinimapLocal(node.Anchor.Horizontal, node.Anchor.Vertical, bounds.X, bounds.Y, ox, oy, scale);
                 dc.DrawRoundedRectangle(s_node, null,
-                    new Rect(p.X, p.Y, Math.Max(1, node.Size.Width * scale), Math.Max(1, node.Size.Height * scale)), 2, 2);
+                    new Rect(lx, ly, Math.Max(1, node.Size.Width * scale), Math.Max(1, node.Size.Height * scale)), 2, 2);
             }
         }
 
-        double worldLeft = ScrollOffsetX - ContentOffsetX;
-        double worldTop = ScrollOffsetY - ContentOffsetY;
+        double worldLeft = WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX);
+        double worldTop = WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY);
         var v = new Point(ox + (worldLeft - bounds.X) * scale, oy + (worldTop - bounds.Y) * scale);
         double vw = Math.Max(2, ViewportWidth * scale);
         double vh = Math.Max(2, ViewportHeight * scale);

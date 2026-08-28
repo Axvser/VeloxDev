@@ -338,10 +338,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
 
         var center = control.TransformToVisual(host).TransformPoint(new Windows.Foundation.Point(control.ActualWidth / 2, control.ActualHeight / 2));
-        slot.Anchor = new Anchor(
-            node.Anchor.Horizontal + center.X,
-            node.Anchor.Vertical + center.Y,
-            slot.Anchor.Layer);
+        slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromNode(
+            node.Anchor.Horizontal, node.Anchor.Vertical, center.X, center.Y, slot.Anchor.Layer);
     }
 
     private static FrameworkElement? ResolveCoordinateHost(UserControl control, UserControl parentHost)

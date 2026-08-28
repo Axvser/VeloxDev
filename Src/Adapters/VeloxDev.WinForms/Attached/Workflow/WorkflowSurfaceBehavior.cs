@@ -249,8 +249,8 @@ public sealed class WorkflowSurfaceBehavior
             try
             {
                 tree.GetHelper().Viewport = new Viewport(
-                    scrollOffset.Horizontal - contentOffset.Horizontal,
-                    scrollOffset.Vertical - contentOffset.Vertical,
+                    WorkflowSurfaceMath.ToWorld(scrollOffset.Horizontal, contentOffset.Horizontal),
+                    WorkflowSurfaceMath.ToWorld(scrollOffset.Vertical, contentOffset.Vertical),
                     clientSize.Width,
                     clientSize.Height);
             }

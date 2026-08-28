@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Windows.Forms;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
@@ -21,7 +22,7 @@ public sealed class GridDecorator : Panel, IWorkflowGridDecorator
     private const double DefaultRulerThickness = 36;
 
     private readonly Color _background = ParseColor("#1E1E1E");
-    private readonly Color _rulerBackground = ParseColor("#252526");
+    private readonly Color _rulerBackground = ParseColor("#C8252526");
     private readonly Color _labelColor = ParseColor("#888888");
     private readonly Color _minorGridColor = ParseColor("#2A2D2E");
     private readonly Color _majorGridColor = ParseColor("#3A3D40");

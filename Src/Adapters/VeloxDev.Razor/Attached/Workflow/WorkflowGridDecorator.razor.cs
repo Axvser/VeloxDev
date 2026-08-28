@@ -37,7 +37,7 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
 
     /// <summary>Gets or sets the ruler background color.</summary>
     [Parameter]
-    public string RulerBackground { get; set; } = "#252526";
+    public string RulerBackground { get; set; } = "rgba(37,37,38,0.78)";
 
     /// <summary>Gets or sets the tick color.</summary>
     [Parameter]

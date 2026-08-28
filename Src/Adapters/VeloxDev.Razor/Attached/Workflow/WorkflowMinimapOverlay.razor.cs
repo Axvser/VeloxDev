@@ -361,9 +361,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         var drawH = Math.Max(1, Height - pad * 2);
         var bw = Math.Max(1, maxX - minX);
         var bh = Math.Max(1, maxY - minY);
-        var scale = Math.Min(drawW / bw, drawH / bh);
-        var ox = pad + (drawW - bw * scale) / 2;
-        var oy = pad + (drawH - bh * scale) / 2;
+        var (ox, oy, scale) = WorkflowSurfaceMath.MinimapFit(bw, bh, drawW, drawH, pad);
 
         _scale = scale;
         _mapOx = ox;
@@ -376,8 +374,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
 
         MappedNodes = nodes.Select(n =>
         {
-            var x = ox + (n.Anchor.Horizontal - minX) * scale;
-            var y = oy + (n.Anchor.Vertical - minY) * scale;
+            var (x, y) = WorkflowSurfaceMath.MinimapLocal(n.Anchor.Horizontal, n.Anchor.Vertical, minX, minY, ox, oy, scale);
             return new Mapped(x, y, Math.Max(1, n.Size.Width * scale), Math.Max(1, n.Size.Height * scale));
         }).ToArray();
 

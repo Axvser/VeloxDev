@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace TemplateNamespace;

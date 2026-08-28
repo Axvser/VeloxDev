@@ -313,10 +313,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var point = e.GetPosition(state.Canvas);
-        viewModel.SetPointerCommand.Execute(new Anchor(
-            point.X - viewModel.Layout.ActualOffset.Horizontal,
-            point.Y - viewModel.Layout.ActualOffset.Vertical,
-            0));
+        viewModel.SetPointerCommand.Execute(
+            WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout));
     }
 
     private static void OnMouseUp(object? sender, MouseButtonEventArgs e)
@@ -363,37 +361,16 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var current = e.GetPosition(host);
-        var newOffsetX = state.PanStartOffset.X + (state.PanStart.X - current.X);
-        var newOffsetY = state.PanStartOffset.Y + (state.PanStart.Y - current.Y);
+        var desiredX = state.PanStartOffset.X + (state.PanStart.X - current.X);
+        var desiredY = state.PanStartOffset.Y + (state.PanStart.Y - current.Y);
         var maxH = state.ScrollViewer.ScrollableWidth;
         var maxV = state.ScrollViewer.ScrollableHeight;
-        var layoutChanged = false;
 
-        if (newOffsetX < 0)
-        {
-            viewModel.Layout.NegativeOffset += new Offset(-newOffsetX, 0);
-            newOffsetX = 0;
-            layoutChanged = true;
-        }
-        else if (newOffsetX > maxH)
-        {
-            viewModel.Layout.PositiveOffset += new Offset(newOffsetX - maxH, 0);
-            newOffsetX = maxH;
-            layoutChanged = true;
-        }
-
-        if (newOffsetY < 0)
-        {
-            viewModel.Layout.NegativeOffset += new Offset(0, -newOffsetY);
-            newOffsetY = 0;
-            layoutChanged = true;
-        }
-        else if (newOffsetY > maxV)
-        {
-            viewModel.Layout.PositiveOffset += new Offset(0, newOffsetY - maxV);
-            newOffsetY = maxV;
-            layoutChanged = true;
-        }
+        // Canonical overscroll clamp: expands the canvas via Negative/PositiveOffset when panning past
+        // the content edge, then returns the clamped scroll offset (WorkflowSurfaceMath.ClampScrollOffset).
+        var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, viewModel.Layout, horizontal: true);
+        var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, viewModel.Layout, horizontal: false);
+        var layoutChanged = newOffsetX != desiredX || newOffsetY != desiredY;
 
         if (layoutChanged)
         {
@@ -443,8 +420,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
-        var viewportX = state.ScrollViewer.HorizontalOffset - viewModel.Layout.ActualOffset.Horizontal;
-        var viewportY = state.ScrollViewer.VerticalOffset - viewModel.Layout.ActualOffset.Vertical;
+        var viewportX = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.HorizontalOffset, viewModel.Layout.ActualOffset.Horizontal);
+        var viewportY = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.VerticalOffset, viewModel.Layout.ActualOffset.Vertical);
         viewModel.GetHelper().Viewport = new Viewport(
             viewportX, viewportY,
             state.ScrollViewer.ViewportWidth,

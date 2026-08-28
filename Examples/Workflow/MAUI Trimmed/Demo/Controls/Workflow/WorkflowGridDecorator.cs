@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
@@ -100,7 +101,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             canvas.FillRectangle(dirtyRect);
 
             var ruler = Math.Max(0, owner.RulerThickness);
-            canvas.FillColor = Color.FromArgb("#252526");
+            canvas.FillColor = Color.FromArgb("#C8252526");
             canvas.FillRectangle(0, 0, dirtyRect.Width, (float)ruler);
             canvas.FillRectangle(0, 0, (float)ruler, dirtyRect.Height);
 

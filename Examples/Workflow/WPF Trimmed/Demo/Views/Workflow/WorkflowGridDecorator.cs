@@ -3,7 +3,9 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using Size = System.Windows.Size;
 
 namespace Demo.Views.Workflow;
 
@@ -12,7 +14,7 @@ public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
     private const double MajorLineEpsilon = 0.001;
 
     private static readonly Brush SurfaceBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E1E1E"));
-    private static readonly Brush RulerBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252526"));
+    private static readonly Brush RulerBackgroundBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#C8252526"));
     private static readonly Brush LabelBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888"));
     private static readonly Pen MinorGridPen = CreateFrozenPen("#2A2D2E", 1);
     private static readonly Pen MajorGridPen = CreateFrozenPen("#3A3D40", 1);

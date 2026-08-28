@@ -149,7 +149,7 @@ the control lives in the demos).
 |-----------|---------|
 | `Viewport` (`SurfaceViewport`) | — |
 | `RulerThickness` / `Spacing` | `28` / `40` |
-| `RulerBackground` / `TickColor` / `LabelColor` / `DividerColor` | `#252526` / `#555555` / `#888888` / `#3A3D40` |
+| `RulerBackground` / `TickColor` / `LabelColor` / `DividerColor` | `rgba(37,37,38,0.78)` / `#555555` / `#888888` / `#3A3D40` |
 
 ---
 

@@ -168,7 +168,7 @@ public sealed class TreeView : UserControl
         private const double Eps = 0.001;
 
         private readonly Color _gridBackground = ParseColor("#1E1E1E");
-        private readonly Color _rulerBackground = ParseColor("#252526");
+        private readonly Color _rulerBackground = ParseColor("#C8252526");
         private readonly Color _labelColor = ParseColor("#888888");
         private readonly Color _minorGridColor = ParseColor("#2A2D2E");
         private readonly Color _majorGridColor = ParseColor("#3A3D40");
