@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 using Windows.Foundation;
 
@@ -17,7 +18,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
     private const double MajorLineEpsilon = 0.001;
 
     private static readonly SolidColorBrush SurfaceBackgroundBrush = CreateBrush("#141922");
-    private static readonly SolidColorBrush RulerBackgroundBrush = CreateBrush("#1C2330");
+    private static readonly SolidColorBrush RulerBackgroundBrush = CreateBrush("#C81C2330");
     private static readonly SolidColorBrush LabelBrush = CreateBrush("#94A3B8");
     private static readonly SolidColorBrush MinorGridBrush = CreateBrush("#223043");
     private static readonly SolidColorBrush MajorGridBrush = CreateBrush("#31445C");

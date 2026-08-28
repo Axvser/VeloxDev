@@ -316,7 +316,7 @@ public sealed class WorkflowSlotLayoutBehavior
             return;
         }
 
-        double newX, newY;
+        Anchor newAnchor;
         if (coordinateHost is not null)
         {
             var centerOnCanvas = GetCenterRelativeTo(control, coordinateHost);
@@ -325,8 +325,11 @@ public sealed class WorkflowSlotLayoutBehavior
                 return;
             }
 
-            newX = centerOnCanvas.Value.X;
-            newY = centerOnCanvas.Value.Y;
+            // MAUI measures the center relative to the canvas (coordinate host) by summing
+            // layout positions, which excludes the canvas TranslationX render transform — so
+            // the result is already canvas/world space and needs no ActualOffset subtraction.
+            // (Core's SlotAnchorFromVisualCenter is for adapters that measure in screen space.)
+            newAnchor = new Anchor(centerOnCanvas.Value.X, centerOnCanvas.Value.Y, slot.Anchor.Layer);
         }
         else
         {
@@ -336,18 +339,20 @@ public sealed class WorkflowSlotLayoutBehavior
                 return;
             }
 
-            newX = node.Anchor.Horizontal + center.Value.X;
-            newY = node.Anchor.Vertical + center.Value.Y;
+            // SlotAnchorFromNode: anchor = nodeAnchor + local offset (no coordinate host).
+            newAnchor = WorkflowSurfaceMath.SlotAnchorFromNode(
+                node.Anchor.Horizontal, node.Anchor.Vertical,
+                center.Value.X, center.Value.Y, slot.Anchor.Layer);
         }
 
         // Dirty check: skip if the anchor value hasn't changed.
         // This prevents the infinite cycle:
         //   SyncSlot → slot.Anchor setter → PropertyChanged → ApplyLayout
         //   → MAUI layout → SizeChanged/X/Y → ScheduleSync → SyncSlot ...
-        if (slot.Anchor.Horizontal == newX && slot.Anchor.Vertical == newY)
+        if (slot.Anchor.Horizontal == newAnchor.Horizontal && slot.Anchor.Vertical == newAnchor.Vertical)
             return;
 
-        slot.Anchor = new Anchor(newX, newY, slot.Anchor.Layer);
+        slot.Anchor = newAnchor;
     }
 
     private static VisualElement? ResolveCoordinateHost(ContentView control, ContentView parentHost)

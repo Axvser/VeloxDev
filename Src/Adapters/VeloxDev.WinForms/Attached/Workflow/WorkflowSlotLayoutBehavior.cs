@@ -559,10 +559,8 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         var localPoint = host.PointToClient(screenPoint);
-        slot.Anchor = new Anchor(
-            node.Anchor.Horizontal + localPoint.X,
-            node.Anchor.Vertical + localPoint.Y,
-            slot.Anchor.Layer);
+        slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromNode(
+            node.Anchor.Horizontal, node.Anchor.Vertical, localPoint.X, localPoint.Y, slot.Anchor.Layer);
     }
 
     private static Control? ResolveCoordinateHost(Control control, Control parentHost)

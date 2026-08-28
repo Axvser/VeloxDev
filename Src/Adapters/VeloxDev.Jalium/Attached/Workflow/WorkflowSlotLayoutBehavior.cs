@@ -354,10 +354,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         var top = Canvas.GetTop(control);
         double localX = (double.IsNaN(left) ? 0 : left) + control.ActualWidth / 2;
         double localY = (double.IsNaN(top) ? 0 : top) + control.ActualHeight / 2;
-        slot.Anchor = new Anchor(
-            node.Anchor.Horizontal + localX,
-            node.Anchor.Vertical + localY,
-            slot.Anchor.Layer);
+        slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromNode(
+            node.Anchor.Horizontal, node.Anchor.Vertical, localX, localY, slot.Anchor.Layer);
     }
 
     private static FrameworkElement? ResolveCoordinateHost(FrameworkElement control, FrameworkElement parentHost)

@@ -4,7 +4,9 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
 using System.Globalization;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using Size = Avalonia.Size;
 
 namespace TemplateNamespace;
 

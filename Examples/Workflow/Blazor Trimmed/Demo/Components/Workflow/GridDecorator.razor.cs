@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Components.Workflow;
@@ -47,7 +48,7 @@ public partial class GridDecorator : ComponentBase
     [Parameter]
     public string? AxisColor { get; set; }
 
-    private string RulerBackgroundCss => RulerBackground ?? ToCss("#252526");
+    private string RulerBackgroundCss => RulerBackground ?? ToCss("#C8252526");
     private string RulerTickColorCss => RulerTickColor ?? ToCss("#555555");
     private string RulerLabelColorCss => RulerLabelColor ?? ToCss("#888888");
     private string RulerDividerColorCss => RulerDividerColor ?? ToCss("#3A3D40");

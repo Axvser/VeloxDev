@@ -167,8 +167,8 @@ public sealed class WorkflowSurfaceBehavior
             return false;
         }
 
-        viewportX = state.ScrollViewer.ScrollX - viewModel.Layout.ActualOffset.Horizontal;
-        viewportY = state.ScrollViewer.ScrollY - viewModel.Layout.ActualOffset.Vertical;
+        viewportX = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.ScrollX, viewModel.Layout.ActualOffset.Horizontal);
+        viewportY = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.ScrollY, viewModel.Layout.ActualOffset.Vertical);
         return true;
     }
 
@@ -598,38 +598,21 @@ public sealed class WorkflowSurfaceBehavior
         var newOffsetY = state.PanAccumulatedY - deltaY;
         var maxH = GetHorizontalScrollMaximum(state);
         var maxV = GetVerticalScrollMaximum(state);
-        var layoutChanged = false;
+        // layoutChanged = the desired offset overshoots [0, max] on either axis, which is
+        // exactly when ClampScrollOffset (below) expands the canvas.  Kept adapter-specific
+        // so the max-recompute flow below stays unchanged.
+        var layoutChanged = newOffsetX < 0 || newOffsetX > maxH || newOffsetY < 0 || newOffsetY > maxV;
 
         // ©¤©¤ Expand canvas when pan reaches edge ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
         // Expansion IS the correct behavior (matching WPF).  The original crash
         // was caused by a cascade: expansion ¡ú Refresh ¡ú more expansion.
         // The IsRefreshing guard in Refresh() breaks this cycle.
 
-        if (newOffsetX < 0)
-        {
-            viewModel.Layout.NegativeOffset += new Offset(-newOffsetX, 0);
-            newOffsetX = 0;
-            layoutChanged = true;
-        }
-        else if (newOffsetX > maxH)
-        {
-            viewModel.Layout.PositiveOffset += new Offset(newOffsetX - maxH, 0);
-            newOffsetX = maxH;
-            layoutChanged = true;
-        }
-
-        if (newOffsetY < 0)
-        {
-            viewModel.Layout.NegativeOffset += new Offset(0, -newOffsetY);
-            newOffsetY = 0;
-            layoutChanged = true;
-        }
-        else if (newOffsetY > maxV)
-        {
-            viewModel.Layout.PositiveOffset += new Offset(0, newOffsetY - maxV);
-            newOffsetY = maxV;
-            layoutChanged = true;
-        }
+        // ClampScrollOffset writes the overshoot into NegativeOffset (before origin) or
+        // PositiveOffset (past the content edge) and returns the clamped offset to apply.
+        // threshold 0 = always expand, matching the previous inline branches.
+        newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(newOffsetX, maxH, viewModel.Layout, horizontal: true, threshold: 0);
+        newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(newOffsetY, maxV, viewModel.Layout, horizontal: false, threshold: 0);
 
         if (layoutChanged)
         {
@@ -747,8 +730,8 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        var viewportX = scrollX - viewModel.Layout.ActualOffset.Horizontal;
-        var viewportY = scrollY - viewModel.Layout.ActualOffset.Vertical;
+        var viewportX = WorkflowSurfaceMath.ToWorld(scrollX, viewModel.Layout.ActualOffset.Horizontal);
+        var viewportY = WorkflowSurfaceMath.ToWorld(scrollY, viewModel.Layout.ActualOffset.Vertical);
         viewModel.GetHelper().Viewport = new Viewport(
             double.IsNaN(viewportX) ? 0 : viewportX,
             double.IsNaN(viewportY) ? 0 : viewportY,
@@ -822,10 +805,10 @@ public sealed class WorkflowSurfaceBehavior
                 return;
             }
 
-            var targetX = state.PendingViewportX + viewModel.Layout.ActualOffset.Horizontal;
-            var targetY = state.PendingViewportY + viewModel.Layout.ActualOffset.Vertical;
-            targetX = Math.Max(0, Math.Min(targetX, GetHorizontalScrollMaximum(state)));
-            targetY = Math.Max(0, Math.Min(targetY, GetVerticalScrollMaximum(state)));
+            // ToScreen: screen = world + ActualOffset (the pending viewport is in world space).
+            var target = WorkflowSurfaceMath.ToScreen(state.PendingViewportX, state.PendingViewportY, viewModel.Layout);
+            var targetX = Math.Max(0, Math.Min(target.Horizontal, GetHorizontalScrollMaximum(state)));
+            var targetY = Math.Max(0, Math.Min(target.Vertical, GetVerticalScrollMaximum(state)));
 
             if (Math.Abs(state.ScrollViewer.ScrollX - targetX) > 0.5
                 || Math.Abs(state.ScrollViewer.ScrollY - targetY) > 0.5)

@@ -265,11 +265,8 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             var centerOnCanvas = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), coordinateHost);
             if (centerOnCanvas is not null)
             {
-                var actualOffset = GetActualOffset(node.Parent);
-                slot.Anchor = new Anchor(
-                    centerOnCanvas.Value.X - actualOffset.Horizontal,
-                    centerOnCanvas.Value.Y - actualOffset.Vertical,
-                    slot.Anchor.Layer);
+                slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(
+                    centerOnCanvas.Value.X, centerOnCanvas.Value.Y, slot.Anchor.Layer, node.Parent?.Layout ?? new CanvasLayout());
                 return;
             }
         }
@@ -278,9 +275,9 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         if (center is null)
             return;
 
-        slot.Anchor = new Anchor(
-            node.Anchor.Horizontal + center.Value.X,
-            node.Anchor.Vertical + center.Value.Y,
+        slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromNode(
+            node.Anchor.Horizontal, node.Anchor.Vertical,
+            center.Value.X, center.Value.Y,
             slot.Anchor.Layer);
     }
 
@@ -330,12 +327,4 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
                 .Select(static x => x.Trim())
                 .Where(static x => x.Length > 0)
                 .ToArray();
-
-    private static Offset GetActualOffset(IWorkflowTreeViewModel? tree)
-    {
-        if (tree is null)
-            return new Offset();
-
-        return tree.Layout.ActualOffset;
-    }
 }

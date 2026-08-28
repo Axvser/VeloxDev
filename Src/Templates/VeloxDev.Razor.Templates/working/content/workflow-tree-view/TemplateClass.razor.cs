@@ -163,7 +163,7 @@ public partial class TemplateClass : ComponentBase, IDisposable
 
     private string Background { get; } = ToCss("TemplateSurfaceBackground");
     private string MinorGridColor { get; } = ToCss("#2A2D2E");
-    private string RulerBackground { get; } = ToCss("#252526");
+    private string RulerBackground { get; } = ToCss("#C8252526");
     private string RulerTickColor { get; } = ToCss("#555555");
     private string RulerDividerColor { get; } = ToCss("#3A3D40");
     private string NodeForegroundCss { get; } = ToCss("TemplateNodeForeground");

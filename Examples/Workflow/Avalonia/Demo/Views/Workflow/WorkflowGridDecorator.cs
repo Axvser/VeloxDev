@@ -4,7 +4,9 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
 using System.Globalization;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using Size = Avalonia.Size;
 
 namespace Demo;
 
@@ -13,7 +15,7 @@ public sealed class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
     private const double MajorLineEpsilon = 0.001;
 
     private static readonly IBrush SurfaceBackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("#141922"));
-    private static readonly IBrush RulerBackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("#1C2330"));
+    private static readonly IBrush RulerBackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("#C81C2330"));
     private static readonly IBrush LabelBrush = new ImmutableSolidColorBrush(Color.Parse("#94A3B8"));
     private static readonly Pen MinorGridPen = new(new ImmutableSolidColorBrush(Color.Parse("#223043")), 1);
     private static readonly Pen MajorGridPen = new(new ImmutableSolidColorBrush(Color.Parse("#31445C")), 1);

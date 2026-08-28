@@ -284,10 +284,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var point = e.GetCurrentPoint(state.ScrollViewer).Position;
-        viewModel.SetPointerCommand.Execute(new Anchor(
-            state.ScrollViewer.HorizontalOffset + point.X - viewModel.Layout.ActualOffset.Horizontal,
-            state.ScrollViewer.VerticalOffset + point.Y - viewModel.Layout.ActualOffset.Vertical,
-            0));
+        viewModel.SetPointerCommand.Execute(WorkflowSurfaceMath.ToWorldAnchor(
+            state.ScrollViewer.HorizontalOffset + point.X,
+            state.ScrollViewer.VerticalOffset + point.Y,
+            0,
+            viewModel.Layout));
     }
 
     private static void OnPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -342,37 +343,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var current = e.GetCurrentPoint(host).Position;
-        var newOffsetX = state.PanStartOffset.X + (state.PanStart.X - current.X);
-        var newOffsetY = state.PanStartOffset.Y + (state.PanStart.Y - current.Y);
+        var desiredX = state.PanStartOffset.X + (state.PanStart.X - current.X);
+        var desiredY = state.PanStartOffset.Y + (state.PanStart.Y - current.Y);
         var maxH = GetHorizontalScrollMaximum(state.ScrollViewer);
         var maxV = GetVerticalScrollMaximum(state.ScrollViewer);
-        var layoutChanged = false;
 
-        if (newOffsetX < 0)
-        {
-            viewModel.Layout.NegativeOffset += new Offset(-newOffsetX, 0);
-            newOffsetX = 0;
-            layoutChanged = true;
-        }
-        else if (newOffsetX > maxH)
-        {
-            viewModel.Layout.PositiveOffset += new Offset(newOffsetX - maxH, 0);
-            newOffsetX = maxH;
-            layoutChanged = true;
-        }
-
-        if (newOffsetY < 0)
-        {
-            viewModel.Layout.NegativeOffset += new Offset(0, -newOffsetY);
-            newOffsetY = 0;
-            layoutChanged = true;
-        }
-        else if (newOffsetY > maxV)
-        {
-            viewModel.Layout.PositiveOffset += new Offset(0, newOffsetY - maxV);
-            newOffsetY = maxV;
-            layoutChanged = true;
-        }
+        var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, viewModel.Layout, horizontal: true);
+        var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, viewModel.Layout, horizontal: false);
+        var layoutChanged = newOffsetX != desiredX || newOffsetY != desiredY;
 
         if (layoutChanged)
         {
@@ -456,8 +434,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
-        var viewportX = state.ScrollViewer.HorizontalOffset - viewModel.Layout.ActualOffset.Horizontal;
-        var viewportY = state.ScrollViewer.VerticalOffset - viewModel.Layout.ActualOffset.Vertical;
+        var viewportX = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.HorizontalOffset, viewModel.Layout.ActualOffset.Horizontal);
+        var viewportY = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.VerticalOffset, viewModel.Layout.ActualOffset.Vertical);
         viewModel.GetHelper().Viewport = new Viewport(
             viewportX, viewportY,
             state.ScrollViewer.ViewportWidth,

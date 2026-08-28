@@ -67,7 +67,7 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Ruler area background color.",
-      "defaultValue": "#252526",
+      "defaultValue": "#C8252526",
       "replaces": "TemplateRulerBackground"
     },
     "rulerTickColor": {

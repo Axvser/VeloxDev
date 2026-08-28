@@ -272,8 +272,10 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             }
         _lastGlobalBounds = gb;
 
-        var vpX = double.IsNaN(ScrollOffsetX - ContentOffsetX) ? 0 : ScrollOffsetX - ContentOffsetX;
-        var vpY = double.IsNaN(ScrollOffsetY - ContentOffsetY) ? 0 : ScrollOffsetY - ContentOffsetY;
+        var rawVpX = WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX);
+        var rawVpY = WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY);
+        var vpX = double.IsNaN(rawVpX) ? 0 : rawVpX;
+        var vpY = double.IsNaN(rawVpY) ? 0 : rawVpY;
         var vpW = double.IsNaN(ViewportWidth) ? 1 : Math.Max(1, ViewportWidth);
         var vpH = double.IsNaN(ViewportHeight) ? 1 : Math.Max(1, ViewportHeight);
         _lastViewport = BoundsRect.FromNode(vpX, vpY, vpW, vpH);
@@ -311,16 +313,14 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         var drawW = _mmW - pad * 2;
         var drawH = _mmH - pad * 2;
 
-        // Guard against NaN from BoundsRect values that may not be initialized.
-        var scW = drawW / Math.Max(1f, (float)gb.Width);
-        var scH = drawH / Math.Max(1f, (float)gb.Height);
-        _sc = float.IsNaN(scW) || float.IsNaN(scH) || float.IsInfinity(scW) || float.IsInfinity(scH)
-            ? 1f : Math.Min(scW, scH);
-
-        var sw = (float)gb.Width * _sc;
-        var sh = (float)gb.Height * _sc;
-        _ox = pad + (drawW - sw) / 2;
-        _oy = pad + (drawH - sh) / 2;
+        // MinimapFit: scale = min(drawW/max(1,cw), drawH/max(1,ch)),
+        // origin = pad + (draw − content·scale)/2.  Preserve MAUI's NaN/Infinity guard
+        // on the fit scale (gb bounds can be NaN from a node with a NaN Size).
+        var (fitOx, fitOy, fitSc) = WorkflowSurfaceMath.MinimapFit(
+            (float)gb.Width, (float)gb.Height, drawW, drawH, pad);
+        _sc = float.IsNaN((float)fitSc) || float.IsInfinity((float)fitSc) ? 1f : (float)fitSc;
+        _ox = (float)fitOx;
+        _oy = (float)fitOy;
 
         // Final NaN guard for _ox/_oy — if they're NaN all hit-testing breaks.
         if (float.IsNaN(_ox)) _ox = 0f;
@@ -347,14 +347,20 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         if (float.IsNaN(w) || float.IsNaN(h))
             return (0, 0, 0, 0);
 
-        var rawX = _ox + (float)((vp.Left - gb.Left) * _sc);
-        var rawY = _oy + (float)((vp.Top - gb.Top) * _sc);
-        if (float.IsNaN(rawX) || float.IsNaN(rawY))
-            return (0, 0, 0, 0);
+        // MinimapViewportRect maps the world viewport onto the minimap via the same fit
+        // transform the content uses and clamps the indicator inside the minimap bounds
+        // (min indicator size 2px, matching the old inline math).
+        var (x, y, rw, rh) = WorkflowSurfaceMath.MinimapViewportRect(
+            _ox, _oy, _sc,
+            vp.Left, vp.Top, vp.Width, vp.Height,
+            gb.Left, gb.Top,
+            _mmW, _mmH, minRectSize: 2.0);
 
-        var x = Math.Max(0f, Math.Min(_mmW - w, rawX));
-        var y = Math.Max(0f, Math.Min(_mmH - h, rawY));
-        return (float.IsNaN(x) ? 0f : x, float.IsNaN(y) ? 0f : y, w, h);
+        // Preserve MAUI's final NaN guards on the helper's raw output.
+        return (float.IsNaN((float)x) ? 0f : (float)x,
+                float.IsNaN((float)y) ? 0f : (float)y,
+                float.IsNaN((float)rw) ? 0f : (float)rw,
+                float.IsNaN((float)rh) ? 0f : (float)rh);
     }
 
     /// <summary>Safe float multiplication guarding against NaN.</summary>
@@ -576,10 +582,13 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private void NavigateToWorld(float adjX, float adjY)
     {
         if (_drawGb.IsEmpty || _sc <= 0) return;
-        var wcx = (adjX - _ox) / _sc + _drawGb.Left;
-        var wcy = (adjY - _oy) / _sc + _drawGb.Top;
-        var scrollX = (wcx - (float)ViewportWidth / 2) + (float)ContentOffsetX;
-        var scrollY = (wcy - (float)ViewportHeight / 2) + (float)ContentOffsetY;
+
+        // MinimapToWorld: world = (mm − origin)/scale + contentLeft; MinimapToScroll then
+        // converts the world target to the scroll offset that centers it on the viewport.
+        var (wcx, wcy) = WorkflowSurfaceMath.MinimapToWorld(
+            adjX, adjY, _ox, _oy, _sc, _drawGb.Left, _drawGb.Top);
+        var (scrollX, scrollY) = WorkflowSurfaceMath.MinimapToScroll(
+            wcx, wcy, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);
         if (_scrollView is null || WorkflowTree?.Layout is not { } layout) return;
 
         var contentW = _scrollView.ContentSize.Width;
@@ -587,63 +596,21 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         var svW = _scrollView.Width;
         var svH = _scrollView.Height;
 
-        // Expand canvas model when drag reaches edge.  The binding
-        // {Binding Layout.ActualSize.Width} picks up the change and
-        // triggers a MAUI layout pass — one per expansion is acceptable.
-        bool layoutChanged = false;
-
         var maxH = ComputeMaxScroll(contentW, svW);
         var maxV = ComputeMaxScroll(contentH, svH);
 
-        if (scrollX < 0)
-        {
-            var addX = -scrollX;
-            if (addX > 0.5f)
-            {
-                layout.NegativeOffset = new Offset(
-                    layout.NegativeOffset.Horizontal + addX,
-                    layout.NegativeOffset.Vertical);
-                scrollX = 0;
-                layoutChanged = true;
-            }
-        }
-        else if (scrollX > maxH)
-        {
-            var addX = scrollX - maxH;
-            if (addX > 0.5f)
-            {
-                layout.PositiveOffset = new Offset(
-                    layout.PositiveOffset.Horizontal + addX,
-                    layout.PositiveOffset.Vertical);
-                scrollX = maxH;
-                layoutChanged = true;
-            }
-        }
+        // Expand canvas model when drag reaches edge.  ClampScrollOffset writes the
+        // overshoot into NegativeOffset (before origin) or PositiveOffset (past the edge)
+        // only when it exceeds the 0.5f dead-band (sub-pixel jitter), returning the clamped
+        // scroll offset.  The binding {Binding Layout.ActualSize.Width} picks up the change
+        // and triggers a MAUI layout pass — one per expansion is acceptable.
+        bool layoutChanged = (scrollX < 0 && -scrollX > 0.5f)
+            || (scrollX > maxH && scrollX - maxH > 0.5f)
+            || (scrollY < 0 && -scrollY > 0.5f)
+            || (scrollY > maxV && scrollY - maxV > 0.5f);
 
-        if (scrollY < 0)
-        {
-            var addY = -scrollY;
-            if (addY > 0.5f)
-            {
-                layout.NegativeOffset = new Offset(
-                    layout.NegativeOffset.Horizontal,
-                    layout.NegativeOffset.Vertical + addY);
-                scrollY = 0;
-                layoutChanged = true;
-            }
-        }
-        else if (scrollY > maxV)
-        {
-            var addY = scrollY - maxV;
-            if (addY > 0.5f)
-            {
-                layout.PositiveOffset = new Offset(
-                    layout.PositiveOffset.Horizontal,
-                    layout.PositiveOffset.Vertical + addY);
-                scrollY = maxV;
-                layoutChanged = true;
-            }
-        }
+        scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true, threshold: 0.5f);
+        scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false, threshold: 0.5f);
 
         // Recompute max after expansion (model just grew).
         if (layoutChanged)
@@ -762,11 +729,14 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
                     canvas.FillColor = NodeFillColor;
                     var ncr = Math.Max(0, (float)NodeCornerRadius);
                     foreach (var (nx, ny, nw, nh) in _lastNodeRects)
+                    {
+                        // MinimapLocal: local = origin + (world − contentOrigin)·scale.
+                        var (lx, ly) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, _ox, _oy, _sc);
                         canvas.FillRoundedRectangle(
-                            _ox + (float)((nx - gb.Left) * _sc),
-                            _oy + (float)((ny - gb.Top) * _sc),
+                            (float)lx, (float)ly,
                             Math.Max(2f, (float)(nw * _sc)),
                             Math.Max(2f, (float)(nh * _sc)), ncr);
+                    }
                 }
 
                 var (vpx, vpy, vpw, vph) = GetClampedViewportRect();

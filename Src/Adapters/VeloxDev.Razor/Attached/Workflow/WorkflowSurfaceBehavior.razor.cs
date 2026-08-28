@@ -202,8 +202,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             var layout = Tree.Layout;
             var contentX = layout?.ActualOffset.Horizontal ?? 0;
             var contentY = layout?.ActualOffset.Vertical ?? 0;
-            var viewportX = scrollLeft - _offsetX - contentX;
-            var viewportY = scrollTop - _offsetY - contentY;
+            var viewportX = WorkflowSurfaceMath.ToWorld(scrollLeft, _offsetX + contentX);
+            var viewportY = WorkflowSurfaceMath.ToWorld(scrollTop, _offsetY + contentY);
             try
             {
                 Tree.GetHelper().Viewport = new Viewport(viewportX, viewportY, _viewportW, _viewportH);
