@@ -5,10 +5,20 @@ using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
 
+/// <summary>
+/// A workflow surface decorator that draws the world grid and floating translucent rulers.
+/// Content (the scroll viewer + canvas) fills the whole viewport; the world canvas is
+/// translated by <see cref="RulerThickness"/> so the world origin stays at the ruler-band
+/// edge while content can still scroll under the translucent bands (the Jalium floating
+/// ruler model). The decorator layers, bottom to top: surface + grid (<see cref="_gridGraphicsView"/>),
+/// the content child, and the ruler overlay (<see cref="_rulerGraphicsView"/>, topmost,
+/// input-transparent).
+/// </summary>
 public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
-    private readonly GraphicsView _graphicsView;
+    private readonly GraphicsView _gridGraphicsView;
+    private readonly GraphicsView _rulerGraphicsView;
 
     public static readonly BindableProperty RulerThicknessProperty = BindableProperty.Create(
         nameof(RulerThickness), typeof(double), typeof(WorkflowGridDecorator), 28d, propertyChanged: OnVisualPropertyChanged);
@@ -33,12 +43,21 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
     public WorkflowGridDecorator()
     {
-        _graphicsView = new GraphicsView
+        _gridGraphicsView = new GraphicsView
         {
             Drawable = new GridDrawable(this),
             InputTransparent = true
         };
-        Children.Add(_graphicsView);
+        _rulerGraphicsView = new GraphicsView
+        {
+            Drawable = new RulerDrawable(this),
+            InputTransparent = true,
+            // Above the content child (scroll viewer), so content scrolling under the
+            // translucent bands stays visibly dimmed.
+            ZIndex = 10
+        };
+        Children.Add(_gridGraphicsView);
+        Children.Add(_rulerGraphicsView);
     }
 
     public double RulerThickness
@@ -87,10 +106,12 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
     {
         if (bindable is WorkflowGridDecorator decorator)
         {
-            decorator._graphicsView.Invalidate();
+            decorator._gridGraphicsView.Invalidate();
+            decorator._rulerGraphicsView.Invalidate();
         }
     }
 
+    /// <summary>Bottom layer: surface background + the world grid over the full viewport (extends under the ruler bands).</summary>
     private sealed class GridDrawable(WorkflowGridDecorator owner) : IDrawable
     {
         public void Draw(ICanvas canvas, RectF dirtyRect)
@@ -100,75 +121,93 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             canvas.FillColor = Color.FromArgb("#1E1E1E");
             canvas.FillRectangle(dirtyRect);
 
-            var ruler = Math.Max(0, owner.RulerThickness);
-            canvas.FillColor = Color.FromArgb("#C8252526");
-            canvas.FillRectangle(0, 0, dirtyRect.Width, (float)ruler);
-            canvas.FillRectangle(0, 0, (float)ruler, dirtyRect.Height);
-
-            var contentRect = new RectF(
-                (float)ruler, (float)ruler,
-                Math.Max(0, dirtyRect.Width - (float)ruler),
-                Math.Max(0, dirtyRect.Height - (float)ruler));
-
-            if (contentRect.Width > 0 && contentRect.Height > 0)
-            {
-                canvas.SaveState();
-                canvas.ClipRectangle(contentRect);
-                DrawGrid(canvas, contentRect);
-                canvas.RestoreState();
-            }
-
-            DrawRulers(canvas, dirtyRect, contentRect, ruler);
+            DrawGrid(canvas, dirtyRect, Math.Max(0, owner.RulerThickness));
 
             canvas.RestoreState();
         }
 
-        private void DrawGrid(ICanvas canvas, RectF contentRect)
+        private void DrawGrid(ICanvas canvas, RectF bounds, double ruler)
         {
             var spacing = Math.Max(8, owner.GridSpacing);
             var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
             var worldLeft = owner.ScrollOffsetX - owner.ContentOffsetX;
             var worldTop = owner.ScrollOffsetY - owner.ContentOffsetY;
-            var worldRight = worldLeft + contentRect.Width;
-            var worldBottom = worldTop + contentRect.Height;
+            var worldRight = worldLeft + bounds.Width;
+            var worldBottom = worldTop + bounds.Height;
 
             var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = contentRect.X + (float)(value - worldLeft);
+                var x = (float)ruler + (float)(value - worldLeft);
                 SetGridStroke(canvas, value, majorStep);
-                canvas.DrawLine(x, contentRect.Y, x, contentRect.Bottom);
+                canvas.DrawLine(x, 0, x, bounds.Height);
             }
 
             var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = contentRect.Y + (float)(value - worldTop);
+                var y = (float)ruler + (float)(value - worldTop);
                 SetGridStroke(canvas, value, majorStep);
-                canvas.DrawLine(contentRect.X, y, contentRect.Right, y);
+                canvas.DrawLine(0, y, bounds.Width, y);
             }
         }
 
-        private void DrawRulers(ICanvas canvas, RectF bounds, RectF contentRect, double ruler)
+        private void SetGridStroke(ICanvas canvas, double value, double majorStep)
+        {
+            if (IsNearZero(value))
+            {
+                canvas.StrokeColor = Color.FromArgb("#4D4D4D");
+                canvas.StrokeSize = 1.2f;
+                return;
+            }
+
+            canvas.StrokeColor = IsMajorLine(value, majorStep)
+                ? Color.FromArgb("#3A3D40")
+                : Color.FromArgb("#2A2D2E");
+            canvas.StrokeSize = 1;
+        }
+    }
+
+    /// <summary>Top layer: translucent ruler bands, dividers, ticks and labels (hit-test transparent).</summary>
+    private sealed class RulerDrawable(WorkflowGridDecorator owner) : IDrawable
+    {
+        public void Draw(ICanvas canvas, RectF dirtyRect)
+        {
+            canvas.SaveState();
+
+            var ruler = Math.Max(0, owner.RulerThickness);
+            canvas.FillColor = Color.FromArgb("#C8252526");
+            canvas.FillRectangle(0, 0, dirtyRect.Width, (float)ruler);
+            canvas.FillRectangle(0, 0, (float)ruler, dirtyRect.Height);
+
+            DrawRulers(canvas, dirtyRect, ruler);
+
+            canvas.RestoreState();
+        }
+
+        private void DrawRulers(ICanvas canvas, RectF bounds, double ruler)
         {
             var spacing = Math.Max(8, owner.GridSpacing);
             var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
             var worldLeft = owner.ScrollOffsetX - owner.ContentOffsetX;
             var worldTop = owner.ScrollOffsetY - owner.ContentOffsetY;
-            var worldRight = worldLeft + contentRect.Width;
-            var worldBottom = worldTop + contentRect.Height;
+            var worldRight = worldLeft + bounds.Width;
+            var worldBottom = worldTop + bounds.Height;
 
             canvas.StrokeColor = Color.FromArgb("#3A3D40");
             canvas.StrokeSize = 1f;
             canvas.DrawLine((float)ruler, 0, (float)ruler, bounds.Height);
             canvas.DrawLine(0, (float)ruler, bounds.Width, (float)ruler);
 
-            canvas.SaveState();
-            canvas.ClipRectangle(new RectF((float)ruler, 0, contentRect.Width, (float)ruler));
             var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = contentRect.X + (float)(value - worldLeft);
+                var x = (float)ruler + (float)(value - worldLeft);
+                if (x < ruler)
+                {
+                    continue;
+                }
+
                 var isMajor = IsMajorLine(value, majorStep);
                 var tickLength = isMajor ? ruler - 6 : Math.Max(6, ruler * 0.35);
                 canvas.StrokeColor = IsNearZero(value)
@@ -182,14 +221,16 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
                     DrawLabel(canvas, value, x + 3, 10f);
                 }
             }
-            canvas.RestoreState();
 
-            canvas.SaveState();
-            canvas.ClipRectangle(new RectF(0, (float)ruler, (float)ruler, contentRect.Height));
             var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = contentRect.Y + (float)(value - worldTop);
+                var y = (float)ruler + (float)(value - worldTop);
+                if (y < ruler)
+                {
+                    continue;
+                }
+
                 var isMajor = IsMajorLine(value, majorStep);
                 var tickLength = isMajor ? ruler - 6 : Math.Max(6, ruler * 0.35);
                 canvas.StrokeColor = IsNearZero(value)
@@ -204,7 +245,6 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
                     DrawLabel(canvas, value, 3, y + 10);
                 }
             }
-            canvas.RestoreState();
         }
 
         private static void DrawLabel(ICanvas canvas, double value, float x, float y)
@@ -229,28 +269,13 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
             return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
         }
-
-        private static void SetGridStroke(ICanvas canvas, double value, double majorStep)
-        {
-            if (IsNearZero(value))
-            {
-                canvas.StrokeColor = Color.FromArgb("#4D4D4D");
-                canvas.StrokeSize = 1.2f;
-                return;
-            }
-
-            canvas.StrokeColor = IsMajorLine(value, majorStep)
-                ? Color.FromArgb("#3A3D40")
-                : Color.FromArgb("#2A2D2E");
-            canvas.StrokeSize = 1;
-        }
-
-        private static bool IsMajorLine(double value, double majorStep)
-            => majorStep > 0 && (Math.Abs(value % majorStep) < MajorLineEpsilon
-                || Math.Abs(value % majorStep - majorStep) < MajorLineEpsilon
-                || Math.Abs(value % majorStep + majorStep) < MajorLineEpsilon);
-
-        private static bool IsNearZero(double value)
-            => Math.Abs(value) < MajorLineEpsilon;
     }
+
+    private static bool IsMajorLine(double value, double majorStep)
+        => majorStep > 0 && (Math.Abs(value % majorStep) < MajorLineEpsilon
+            || Math.Abs(value % majorStep - majorStep) < MajorLineEpsilon
+            || Math.Abs(value % majorStep + majorStep) < MajorLineEpsilon);
+
+    private static bool IsNearZero(double value)
+        => Math.Abs(value) < MajorLineEpsilon;
 }

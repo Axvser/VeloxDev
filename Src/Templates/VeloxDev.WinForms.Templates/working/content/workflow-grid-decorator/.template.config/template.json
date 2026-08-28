@@ -66,8 +66,8 @@
     "rulerBackground": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Ruler area background color.",
-      "defaultValue": "#C8252526",
+      "description": "Ruler area background color. WinForms default uses alpha 0x70 (vs the other frameworks' 0xC8): WinForms cannot dim the opaque node-card children over the band, so lower opacity makes the grid pass visibly under the translucent band.",
+      "defaultValue": "#70252526",
       "replaces": "TemplateRulerBackground"
     },
     "rulerTickColor": {

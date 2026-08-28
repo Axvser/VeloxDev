@@ -211,28 +211,18 @@
                     StrokeShape="RoundRectangle 3"
                     BackgroundColor="#0B1120">
                 <controls:WorkflowGridDecorator x:Name="PART_GridDecorator">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="{Binding Source={x:Reference PART_GridDecorator}, Path=RulerThickness}" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <ScrollView x:Name="PART_ScrollViewer"
-                                    Grid.Row="1"
-                                    Grid.Column="1"
-                                    Orientation="Both"
-                                    BackgroundColor="Transparent">
+                    <ScrollView x:Name="PART_ScrollViewer"
+                                Orientation="Both"
+                                BackgroundColor="Transparent">
+                        <AbsoluteLayout x:Name="PART_RulerOffsetHost"
+                                        TranslationX="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
+                                        TranslationY="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}">
                             <AbsoluteLayout x:Name="PART_Canvas"
                                             BackgroundColor="Transparent"
                                             behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
-                                            behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}">
-                            </AbsoluteLayout>
-                        </ScrollView>
-                    </Grid>
+                                            behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}" />
+                        </AbsoluteLayout>
+                    </ScrollView>
                 </controls:WorkflowGridDecorator>
             </Border>
             <!-- Minimap overlay -->

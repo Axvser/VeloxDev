@@ -9,8 +9,10 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -49,6 +51,9 @@ public sealed class TemplateClass : UserControl
     /// <summary>Optional minimap overlay that implements <see cref="IWorkflowMinimapOverlay"/>.</summary>
     public Control? PART_MinimapOverlay { get; private set; }
 
+    /// <summary>Floating translucent ruler overlay (owned popup), created once the surface is parented.</summary>
+    private RulerOverlayForm? _rulerOverlay;
+
     private readonly Color _surfaceBackground = ParseColor("TemplateSurfaceBackground");
     private readonly Color _surfaceBorderBrush = ParseColor("TemplateSurfaceBorderBrush");
     private readonly int _surfaceBorderThickness = int.Parse("TemplateSurfaceBorderThickness", CultureInfo.InvariantCulture);
@@ -68,7 +73,13 @@ public sealed class TemplateClass : UserControl
     private bool _isPanning;
     private Point _panPressScreen;
     private Point _panOffsetAtPress;
-    private Point _panOffset;
+
+    // World-origin translation. Initialized to (RulerThickness, RulerThickness) = (36,36)
+    // so tick "0" and the axis grid line land at the ruler-band edge (matching the full
+    // demo's _panOffset); the grid draws at value - worldLeft and nodes at anchor + panOffset,
+    // so the two stay aligned as you pan. ApplyPan pushes this into the canvas + grid + minimap
+    // on every layout (see ScheduleLayout), so the initial offset takes effect without a drag.
+    private Point _panOffset = new((int)SurfaceCanvas.DefaultRulerThickness, (int)SurfaceCanvas.DefaultRulerThickness);
 
     // Link renderers (VirtualLink + all real links) painted by the canvas OnPaint.
     // They are deliberately NOT child controls — mirroring the full demo, which draws
@@ -139,9 +150,8 @@ public sealed class TemplateClass : UserControl
         WorkflowSurfaceBehavior.SetGridDecoratorName(this, "PART_Canvas");
         WorkflowSurfaceBehavior.SetPointerPressSourceName(this, "PART_Canvas");
 
-        // Pan: dragging the empty canvas moves the canvas by a signed offset,
-        // then pushes the new world origin into the grid
-        // decorator + minimap so they track.
+        // Pan: dragging the empty canvas moves the canvas by a signed offset, then
+        // pushes the new world origin into the grid decorator + minimap so they track.
         PART_Canvas.MouseDown += OnCanvasMouseDown;
         PART_Canvas.MouseMove += OnCanvasMouseMove;
         PART_Canvas.MouseUp += OnCanvasMouseUp;
@@ -162,21 +172,17 @@ public sealed class TemplateClass : UserControl
     /// </summary>
     private sealed class SurfaceCanvas : Panel, IWorkflowGridDecorator
     {
-        // Grid/ruler metrics, shared with the full demo's self-drawn canvas.
-        private const double DefaultRulerThickness = 36;
+        // Grid/ruler metrics, shared with the full demo's self-drawn canvas. internal so
+        // the enclosing TemplateClass can seed its initial pan offset from it.
+        internal const double DefaultRulerThickness = 36;
         private const double GridSpacing = 40;
         private const int MajorFreq = 5;
         private const double Eps = 0.001;
 
         private readonly Color _gridBackground = ParseColor("TemplateSurfaceBackground");
-        private readonly Color _rulerBackground = ParseColor("#C8252526");
-        private readonly Color _labelColor = ParseColor("#888888");
         private readonly Color _minorGridColor = ParseColor("#2A2D2E");
         private readonly Color _majorGridColor = ParseColor("#3A3D40");
         private readonly Color _axisColor = ParseColor("#4D4D4D");
-        private readonly Color _tickColor = ParseColor("#555555");
-        private readonly Color _dividerColor = ParseColor("#3A3D40");
-        private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
 
         public SurfaceCanvas()
         {
@@ -225,33 +231,23 @@ public sealed class TemplateClass : UserControl
 
         protected override void OnPaintBackground(PaintEventArgs e)
         {
-            // The grid and rulers render in the background pass so they sit under
-            // the node cards (child windows) exactly like the old grid decorator
-            // layer, but in the same opaque surface as the links.
+            // The grid renders in the background pass so it sits under the node cards
+            // (child windows) exactly like the old grid decorator layer, but in the
+            // same opaque surface as the links. The floating translucent ruler bands,
+            // ticks, and labels are drawn by the RulerOverlayForm — a WS_EX_LAYERED
+            // owned popup that composites ABOVE the node cards at per-pixel alpha, the
+            // one WinForms mechanism that can genuinely dim cards scrolling under the
+            // band (cards dimmed, matching WPF/Avalonia/WinUI/MAUI/Razor). The grid is
+            // drawn full-area (no contentRect clip) so grid lines scroll under the
+            // translucent band and stay visibly dimmed.
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var bounds = new RectangleF(0, 0, Width, Height);
-            var ruler = (float)DefaultRulerThickness;
-            var contentRect = new RectangleF(
-                ruler, ruler,
-                Math.Max(0, bounds.Width - ruler),
-                Math.Max(0, bounds.Height - ruler));
 
             using var bgBrush = new SolidBrush(_gridBackground);
-            using var rulerBrush = new SolidBrush(_rulerBackground);
             g.FillRectangle(bgBrush, bounds);
-            g.FillRectangle(rulerBrush, 0, 0, bounds.Width, ruler);
-            g.FillRectangle(rulerBrush, 0, 0, ruler, bounds.Height);
 
-            if (contentRect.Width > 0 && contentRect.Height > 0)
-            {
-                var saved = g.Save();
-                g.SetClip(contentRect);
-                DrawGrid(g, contentRect);
-                g.Restore(saved);
-            }
-
-            DrawRulers(g, bounds, contentRect);
+            DrawGrid(g, bounds);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -268,94 +264,39 @@ public sealed class TemplateClass : UserControl
             }
         }
 
-        private void DrawGrid(Graphics g, RectangleF contentRect)
+        private void DrawGrid(Graphics g, RectangleF bounds)
         {
             var spacing = Math.Max(8, GridSpacing);
             var majorStep = spacing * Math.Max(1, MajorFreq);
             var worldLeft = ScrollOffsetX - ContentOffsetX;
             var worldTop = ScrollOffsetY - ContentOffsetY;
-            var worldRight = worldLeft + contentRect.Width;
-            var worldBottom = worldTop + contentRect.Height;
+            var worldRight = worldLeft + bounds.Width;
+            var worldBottom = worldTop + bounds.Height;
 
             using var minorPen = new Pen(_minorGridColor, 1f);
             using var majorPen = new Pen(_majorGridColor, 1f);
             using var axisPen = new Pen(_axisColor, 1.2f);
 
+            // Grid x = value - worldLeft. The pan offset starts at the ruler-band edge
+            // (36,36), so world origin "0" lands at x=36 and grid lines align with nodes
+            // at anchor + panOffset. No +ruler term — that was the inset-model offset that
+            // desynced the grid from the nodes. Lines span the full viewport so they extend
+            // under the translucent bands.
             var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = (float)(contentRect.X + (value - worldLeft));
+                var x = (float)(value - worldLeft);
                 var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
-                g.DrawLine(pen, x, contentRect.Y, x, contentRect.Bottom);
+                g.DrawLine(pen, x, 0, x, bounds.Height);
             }
 
             var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = (float)(contentRect.Y + (value - worldTop));
+                var y = (float)(value - worldTop);
                 var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
-                g.DrawLine(pen, contentRect.X, y, contentRect.Right, y);
+                g.DrawLine(pen, 0, y, bounds.Width, y);
             }
-        }
-
-        private void DrawRulers(Graphics g, RectangleF bounds, RectangleF contentRect)
-        {
-            var ruler = (float)DefaultRulerThickness;
-            var spacing = Math.Max(8, GridSpacing);
-            var majorStep = spacing * Math.Max(1, MajorFreq);
-            var worldLeft = ScrollOffsetX - ContentOffsetX;
-            var worldTop = ScrollOffsetY - ContentOffsetY;
-            var worldRight = worldLeft + contentRect.Width;
-            var worldBottom = worldTop + contentRect.Height;
-
-            using var dividerPen = new Pen(_dividerColor, 1f);
-            using var tickPen = new Pen(_tickColor, 1f);
-            using var axisPen = new Pen(_axisColor, 1f);
-            using var labelBrush = new SolidBrush(_labelColor);
-            using var format = new StringFormat(StringFormat.GenericTypographic);
-
-            g.DrawLine(dividerPen, ruler, 0, ruler, bounds.Height);
-            g.DrawLine(dividerPen, 0, ruler, bounds.Width, ruler);
-
-            // Top ruler.
-            var saved = g.Save();
-            g.SetClip(new RectangleF(ruler, 0, contentRect.Width, ruler));
-            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
-            for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
-            {
-                var x = (float)(contentRect.X + (value - worldLeft));
-                var isMajor = IsMajorLine(value, majorStep);
-                var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
-                var pen = IsNearZero(value) ? axisPen : tickPen;
-                g.DrawLine(pen, x, ruler, x, (float)(ruler - tickLength));
-
-                if (isMajor)
-                {
-                    var text = FormatGridValue(value);
-                    g.DrawString(text, _labelFont, labelBrush, x + 3, 2, format);
-                }
-            }
-            g.Restore(saved);
-
-            // Left ruler.
-            saved = g.Save();
-            g.SetClip(new RectangleF(0, ruler, ruler, contentRect.Height));
-            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
-            for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
-            {
-                var y = (float)(contentRect.Y + (value - worldTop));
-                var isMajor = IsMajorLine(value, majorStep);
-                var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
-                var pen = IsNearZero(value) ? axisPen : tickPen;
-                g.DrawLine(pen, ruler, y, (float)(ruler - tickLength), y);
-
-                if (isMajor)
-                {
-                    var text = FormatGridValue(value);
-                    g.DrawString(text, _labelFont, labelBrush, 3, y + 2, format);
-                }
-            }
-            g.Restore(saved);
         }
 
         private Pen SelectPen(double value, double majorStep, Pen minorPen, Pen majorPen, Pen axisPen)
@@ -385,6 +326,299 @@ public sealed class TemplateClass : UserControl
 
             return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
         }
+    }
+
+    /// <summary>
+    /// Per-pixel alpha ruler-band overlay. WinForms children always paint above the
+    /// parent's OnPaintBackground, so a translucent band drawn there can never dim the
+    /// opaque node cards scrolling under it — cards cover the band. The one mechanism
+    /// that CAN is a WS_EX_LAYERED window composited over the viewport: this is an
+    /// owned, top-level, hit-transparent popup whose surface is rendered via
+    /// UpdateLayeredWindow at per-pixel alpha, so the band genuinely composites ABOVE
+    /// the node cards (cards are dimmed under the band, matching WPF/Avalonia/WinUI/
+    /// MAUI/Razor). Creating a layered CHILD window fails with ERROR_NOT_SUPPORTED on
+    /// some systems, hence the owned popup; owned popups also follow the form when it
+    /// moves and stay above it for free. WS_EX_TOOLWINDOW keeps it out of the taskbar
+    /// and alt-tab; WM_NCHITTEST → HTTRANSPARENT keeps panning and node drags working
+    /// under the band.
+    /// </summary>
+    private sealed class RulerOverlayForm : Form
+    {
+        private const int WsExLayered = 0x00080000;
+        private const int WsExNoActivate = 0x08000000;
+        private const int WsExToolWindow = 0x00000080;
+        private const int WsExTransparent = 0x00000020;
+        private const int HtTransparent = -1;
+        private const int WmNcHitTest = 0x0084;
+        private const uint UlwAlpha = 2;
+
+        private const double GridSpacing = 40;
+        private const int MajorFreq = 5;
+        private const double Eps = 0.001;
+
+        // Same palette as the surface. Alpha 0x70 (WinForms deviation): the band
+        // composites over cards AND grid, so at the other frameworks' 0xC8 the grid
+        // under the band would read only ~3.5 lum deep (imperceptible); 0x70 keeps the
+        // tint but lets the grid pass visibly under the band.
+        private readonly Color _rulerBackground = ParseColor("#70252526");
+        private readonly Color _labelColor = ParseColor("#888888");
+        private readonly Color _tickColor = ParseColor("#555555");
+        private readonly Color _axisColor = ParseColor("#4D4D4D");
+        private readonly Color _dividerColor = ParseColor("#3A3D40");
+        private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
+
+        private Bitmap? _surface;
+
+        public RulerOverlayForm()
+        {
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.Manual;
+            ControlBox = false;
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                cp.ExStyle |= WsExLayered | WsExNoActivate | WsExToolWindow | WsExTransparent;
+                return cp;
+            }
+        }
+
+        protected override bool ShowWithoutActivation => true;
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WmNcHitTest)
+            {
+                m.Result = (IntPtr)HtTransparent;
+                return;
+            }
+
+            base.WndProc(ref m);
+        }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double RulerThickness { get; set; } = 36;
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ScrollOffsetX { get; set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ScrollOffsetY { get; set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ContentOffsetX { get; set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ContentOffsetY { get; set; }
+
+        /// <summary>
+        /// Repaints the layered surface. The window's own screen rect is the physical
+        /// bitmap size; ticks/labels are drawn in logical (viewport client) space and
+        /// scaled to fill, so a system-DPI-aware host (1:1 here) and a virtualized one
+        /// both stay aligned with the grid drawn by the canvas.
+        /// </summary>
+        public void RefreshSurface()
+        {
+            if (IsDisposed || !IsHandleCreated || Width < 1 || Height < 1) return;
+
+            GetWindowRect(Handle, out var rect);
+            var pw = Math.Max(1, rect.Right - rect.Left);
+            var ph = Math.Max(1, rect.Bottom - rect.Top);
+
+            if (_surface is null || _surface.Width != pw || _surface.Height != ph)
+            {
+                _surface?.Dispose();
+                _surface = new Bitmap(pw, ph, PixelFormat.Format32bppPArgb);
+            }
+
+            using (var g = Graphics.FromImage(_surface))
+            {
+                g.Clear(Color.Transparent);
+                g.ScaleTransform(
+                    pw / (float)Math.Max(1, Width),
+                    ph / (float)Math.Max(1, Height));
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                DrawBands(g, Width, Height);
+            }
+
+            UpdateLayeredSurface(rect, pw, ph);
+        }
+
+        private void DrawBands(Graphics g, int cw, int ch)
+        {
+            var ruler = (float)RulerThickness;
+            using var rulerBrush = new SolidBrush(_rulerBackground);
+            using var dividerPen = new Pen(_dividerColor, 1f);
+            using var tickPen = new Pen(_tickColor, 1f);
+            using var axisPen = new Pen(_axisColor, 1f);
+            using var labelBrush = new SolidBrush(_labelColor);
+            using var format = new StringFormat(StringFormat.GenericTypographic);
+
+            // Translucent bands — one bitmap, per-pixel alpha over everything beneath
+            // (the canvas grid AND the opaque node cards).
+            g.FillRectangle(rulerBrush, 0, 0, cw, ruler);
+            g.FillRectangle(rulerBrush, 0, 0, ruler, ch);
+
+            // Dividers at full opacity.
+            g.DrawLine(dividerPen, ruler, 0, ruler, ch);
+            g.DrawLine(dividerPen, 0, ruler, cw, ruler);
+
+            var spacing = Math.Max(8, GridSpacing);
+            var majorStep = spacing * Math.Max(1, MajorFreq);
+            var worldLeft = ScrollOffsetX - ContentOffsetX;
+            var worldTop = ScrollOffsetY - ContentOffsetY;
+            var worldRight = worldLeft + cw;
+            var worldBottom = worldTop + ch;
+
+            // Top ruler. Ticks share the grid's x = value - worldLeft (the canvas draws
+            // the grid at the same x), so ticks stay aligned with grid lines while the
+            // content scrolls under the viewport-fixed band. Skip x < ruler so the corner
+            // junction and left band stay clean (no ticks or labels there).
+            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
+            {
+                var x = (float)(value - worldLeft);
+                if (x < ruler)
+                {
+                    continue;
+                }
+
+                var isMajor = IsMajorLine(value, majorStep);
+                var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
+                var pen = IsNearZero(value) ? axisPen : tickPen;
+                g.DrawLine(pen, x, ruler, x, (float)(ruler - tickLength));
+
+                if (isMajor)
+                {
+                    g.DrawString(FormatGridValue(value), _labelFont, labelBrush, x + 3, 2, format);
+                }
+            }
+
+            // Left ruler.
+            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
+            {
+                var y = (float)(value - worldTop);
+                if (y < ruler)
+                {
+                    continue;
+                }
+
+                var isMajor = IsMajorLine(value, majorStep);
+                var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
+                var pen = IsNearZero(value) ? axisPen : tickPen;
+                g.DrawLine(pen, ruler, y, (float)(ruler - tickLength), y);
+
+                if (isMajor)
+                {
+                    g.DrawString(FormatGridValue(value), _labelFont, labelBrush, 3, y + 2, format);
+                }
+            }
+        }
+
+        private void UpdateLayeredSurface(RECT rect, int pw, int ph)
+        {
+            var screenDc = GetDC(IntPtr.Zero);
+            var memDc = CreateCompatibleDC(screenDc);
+            var hbitmap = _surface!.GetHbitmap(Color.FromArgb(0));
+            var old = SelectObject(memDc, hbitmap);
+            try
+            {
+                var ptDst = new POINT { X = rect.Left, Y = rect.Top };
+                var size = new SIZE { cx = pw, cy = ph };
+                var ptSrc = new POINT();
+                var blend = new BLENDFUNCTION
+                {
+                    BlendOp = 0,               // AC_SRC_OVER
+                    SourceConstantAlpha = 255,
+                    AlphaFormat = 1,           // AC_SRC_ALPHA — bitmap must be premultiplied
+                };
+                UpdateLayeredWindow(Handle, screenDc, ref ptDst, ref size, memDc, ref ptSrc, 0, ref blend, UlwAlpha);
+            }
+            finally
+            {
+                SelectObject(memDc, old);
+                DeleteObject(hbitmap);
+                DeleteDC(memDc);
+                ReleaseDC(IntPtr.Zero, screenDc);
+            }
+        }
+
+        private static bool IsMajorLine(double value, double majorStep)
+            => majorStep > 0
+                && (Math.Abs(value % majorStep) < Eps
+                    || Math.Abs(value % majorStep - majorStep) < Eps
+                    || Math.Abs(value % majorStep + majorStep) < Eps);
+
+        private static bool IsNearZero(double value)
+            => Math.Abs(value) < Eps;
+
+        private static string FormatGridValue(double value)
+        {
+            var abs = Math.Abs(value);
+            if (abs < 10000)
+            {
+                return Math.Round(value).ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (abs < 1000000)
+            {
+                return Math.Round(value / 1000d, 1).ToString(CultureInfo.InvariantCulture) + "K";
+            }
+
+            return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT { public int X; public int Y; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SIZE { public int cx; public int cy; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BLENDFUNCTION
+        {
+            public byte BlendOp;
+            public byte BlendFlags;
+            public byte SourceConstantAlpha;
+            public byte AlphaFormat;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst, ref POINT pptDst, ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc, int crKey, ref BLENDFUNCTION pblend, uint dwFlags);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetDC(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+        [DllImport("gdi32.dll")]
+        private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteDC(IntPtr hdc);
+
+        [DllImport("gdi32.dll")]
+        private static extern IntPtr SelectObject(IntPtr hdc, IntPtr h);
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteObject(IntPtr ho);
     }
 
     /// <summary>Gets or sets the workflow tree bound to this surface.</summary>
@@ -535,7 +769,10 @@ public sealed class TemplateClass : UserControl
     {
         var view = new LinkView
         {
-            ExternalInvalidate = () => { if (!IsDisposed) PART_Canvas.Invalidate(); },
+            ExternalInvalidate = () =>
+            {
+                if (!IsDisposed) PART_Canvas.Invalidate();
+            },
         };
         view.Bind(link);
         return view;
@@ -559,8 +796,44 @@ public sealed class TemplateClass : UserControl
             ViewModel = tagged;
         }
 
+        EnsureRulerOverlay();
         ScheduleLayout();
     }
+
+    /// <summary>
+    /// Creates the floating ruler overlay once the surface is parented (FindForm needs
+    /// the top-level window). Called from OnHandleCreated and lazily from ApplyPan, so
+    /// a tree bound before the control is added to a form still gets the overlay.
+    /// </summary>
+    private void EnsureRulerOverlay()
+    {
+        if (_rulerOverlay is not null || IsDisposed || !IsHandleCreated) return;
+        var owner = FindForm();
+        if (owner is null || owner.IsDisposed) return;
+
+        _rulerOverlay = new RulerOverlayForm { RulerThickness = SurfaceCanvas.DefaultRulerThickness };
+        _rulerOverlay.Show(owner);                     // owned popup: above owner, follows moves
+        SyncRulerOverlay();
+
+        PART_ScrollViewer.Resize += OnRulerOverlayHostChanged;
+        PART_ScrollViewer.LocationChanged += OnRulerOverlayHostChanged;
+        owner.Move += OnRulerOverlayOwnerMoved;        // owned window auto-moves; re-ULW at the new rect
+        owner.Resize += OnRulerOverlayHostChanged;     // docked viewport resizes with the window
+    }
+
+    /// <summary>Keeps the overlay sized/positioned over the viewport and repaints it.</summary>
+    private void SyncRulerOverlay()
+    {
+        if (_rulerOverlay is null || _rulerOverlay.IsDisposed) return;
+        if (PART_ScrollViewer.Width < 1 || PART_ScrollViewer.Height < 1) return;
+
+        _rulerOverlay.Location = PART_ScrollViewer.PointToScreen(Point.Empty);
+        _rulerOverlay.Size = PART_ScrollViewer.ClientSize;
+        _rulerOverlay.RefreshSurface();
+    }
+
+    private void OnRulerOverlayHostChanged(object? sender, EventArgs e) => SyncRulerOverlay();
+    private void OnRulerOverlayOwnerMoved(object? sender, EventArgs e) => SyncRulerOverlay();
 
     private void OnSurfaceResize(object? sender, EventArgs e) => ScheduleLayout();
 
@@ -616,6 +889,10 @@ public sealed class TemplateClass : UserControl
     {
         if (IsDisposed) return;
 
+        // The overlay needs the surface parented (FindForm); create it lazily here too
+        // so panning before OnHandleCreated still works.
+        EnsureRulerOverlay();
+
         // The canvas stays fixed over the viewport; the pan is a world-origin
         // translation applied to every node view. Publish it for node views added
         // later, reposition existing ones, then re-measure slot anchors so links
@@ -646,6 +923,17 @@ public sealed class TemplateClass : UserControl
             PART_GridDecorator.Invalidate();
         }
 
+        // The floating ruler overlay reads the same world origin, so its ticks stay
+        // aligned with the grid while the content scrolls under the viewport-fixed band.
+        if (_rulerOverlay is not null)
+        {
+            _rulerOverlay.ScrollOffsetX = -_panOffset.X;
+            _rulerOverlay.ScrollOffsetY = -_panOffset.Y;
+            _rulerOverlay.ContentOffsetX = content.Horizontal;
+            _rulerOverlay.ContentOffsetY = content.Vertical;
+            SyncRulerOverlay();
+        }
+
         if (PART_MinimapOverlay is IWorkflowMinimapOverlay minimap)
         {
             minimap.ScrollOffsetX = -_panOffset.X;
@@ -659,9 +947,9 @@ public sealed class TemplateClass : UserControl
 
         PART_Canvas.Invalidate();
 
-        // Invalidate only queues; during high-frequency panning WM_PAINT is deferred, so stale
-        // node positions and links are not erased in time and leave ghosting. Repaint the canvas
-        // (links) and the grid decorator synchronously to keep every frame clean.
+        // Invalidate only queues; during high-frequency panning WM_PAINT is deferred, so old
+        // node positions and old links are not erased in time and leave ghost trails. Sync-redraw
+        // the canvas (links) and grid decorator to keep every frame clean.
         PART_Canvas.Update();
         PART_GridDecorator.Update();
 
@@ -690,6 +978,11 @@ public sealed class TemplateClass : UserControl
             if (IsDisposed) return;
             ApplyCanvasSize();
             WorkflowSurfaceBehavior.Refresh(this);
+            // Push the current pan offset (the initial world-origin translation at the
+            // ruler-band edge) into the canvas, grid, and minimap once the surface is laid
+            // out; ApplyPan is otherwise only called from user panning. Runs on every
+            // layout, so resize keeps the floating rulers tracking too.
+            ApplyPan();
         };
 
         if (IsHandleCreated)
@@ -801,13 +1094,23 @@ public sealed class TemplateClass : UserControl
                 _linksSubscribedTree = null;
             }
 
-            foreach (var lv in _linkRenderers) lv.Dispose();
+            foreach (var lv in _linkRenderers)
+            {
+                lv.Dispose();
+            }
+
             _linkRenderers.Clear();
 
             if (_notifier is not null)
             {
                 _notifier.PropertyChanged -= OnTreeChanged;
                 _notifier = null;
+            }
+
+            if (_rulerOverlay is not null)
+            {
+                _rulerOverlay.Dispose();
+                _rulerOverlay = null;
             }
         }
 

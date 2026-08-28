@@ -3,7 +3,9 @@ using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -54,6 +56,12 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // SetMinimapOverlayName is not used — Refresh's ResolveScrollOffset only returns
     // -AutoScrollPosition and does not include _panOffset; manual sync is deterministic.
     private Control? _minimap;
+
+    // Floating translucent ruler overlay (owned popup), created once the canvas is parented.
+    // The ruler bands/ticks/labels moved out of OnPaintBackground into this WS_EX_LAYERED
+    // window so they composite ABOVE the opaque node-card children (cards dimmed under the
+    // band, matching the other frameworks). See EnsureRulerOverlay / SyncRulerOverlay.
+    private RulerOverlayForm? _rulerOverlay;
 
     // ── IWorkflowGridDecorator ──────────────────────────────────────────────
     // WorkflowSurfaceBehavior.Refresh pushes scroll/content offsets here on every refresh cycle
@@ -286,6 +294,58 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         Update();
     }
 
+    // ── Floating ruler overlay ───────────────────────────────────────────────────
+    /// <summary>
+    /// Creates the floating ruler overlay once the canvas is parented (FindForm needs the
+    /// top-level window). Called from OnHandleCreated and lazily from SyncRulerOverlay callers,
+    /// so it appears even if a tree is attached before the control is added to a form.
+    /// </summary>
+    private void EnsureRulerOverlay()
+    {
+        if (_rulerOverlay is not null || IsDisposed || !IsHandleCreated) return;
+        var owner = FindForm();
+        if (owner is null || owner.IsDisposed) return;
+
+        _rulerOverlay = new RulerOverlayForm { RulerThickness = RulerThickness };
+        _rulerOverlay.Show(owner);                   // owned popup: above owner, follows moves
+        SyncRulerOverlay();
+
+        Resize += OnRulerOverlayHostChanged;
+        LocationChanged += OnRulerOverlayHostChanged;
+        owner.Move += OnRulerOverlayOwnerMoved;      // owned window auto-moves; re-ULW at the new rect
+        owner.Resize += OnRulerOverlayHostChanged;   // docked canvas resizes with the window
+    }
+
+    /// <summary>
+    /// Keeps the overlay sized/positioned over this canvas's client area and repaints it with the
+    /// current world origin. The overlay reads the same origin as the grid
+    /// (<c>ScrollOffset = -(panOffset + scroll)</c>, content offset 0 — matching DrawGrid), so its
+    /// ticks stay aligned with the grid lines while content scrolls under the viewport-fixed band.
+    /// </summary>
+    private void SyncRulerOverlay()
+    {
+        if (_rulerOverlay is null || _rulerOverlay.IsDisposed) return;
+        if (Width < 1 || Height < 1) return;
+
+        var scroll = AutoScrollPosition;
+        _rulerOverlay.Location = PointToScreen(Point.Empty);
+        _rulerOverlay.Size = ClientSize;
+        _rulerOverlay.ScrollOffsetX = -(_panOffset.X + scroll.X);
+        _rulerOverlay.ScrollOffsetY = -(_panOffset.Y + scroll.Y);
+        _rulerOverlay.ContentOffsetX = 0;
+        _rulerOverlay.ContentOffsetY = 0;
+        _rulerOverlay.RefreshSurface();
+    }
+
+    private void OnRulerOverlayHostChanged(object? sender, EventArgs e) => SyncRulerOverlay();
+    private void OnRulerOverlayOwnerMoved(object? sender, EventArgs e) => SyncRulerOverlay();
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        EnsureRulerOverlay();
+    }
+
     private void DetachSession(WorkflowDemoSession? s)
     {
         if (s is null) return;
@@ -432,6 +492,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         UpdateCanvasMinSize();
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
         SyncMinimap();
+        SyncRulerOverlay();
     }
 
     // ── Slot anchor sync ────────────────────────────────────────────────────────
@@ -582,6 +643,10 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     // ── Drawing ──────────────────────────────────────────────────────────────────
     // The grid and rulers are drawn in OnPaintBackground (not OnPaint) as the bottom layer; cards
     // are child controls drawn on top, and links are drawn on top via the template LinkView geometry in OnPaint.
+    // The floating translucent ruler bands, ticks, and labels are NOT drawn here anymore: they live in
+    // the RulerOverlayForm (a WS_EX_LAYERED owned popup composited above the canvas at per-pixel alpha),
+    // so cards scrolling under the band are genuinely dimmed instead of covering it — the one WinForms
+    // mechanism that can match the other frameworks' floating translucent rulers.
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         base.OnPaintBackground(e);
@@ -592,7 +657,6 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         var origin = new PointF(_panOffset.X + scroll.X, _panOffset.Y + scroll.Y);
 
         DrawGrid(g, origin);
-        DrawFloatingRulers(g, origin);
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -649,9 +713,11 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
     // ── Grid drawing ──────────────────────────────────────────────────────────────
     /// <summary>
-    /// Draws the content-area grid (starting at (RulerThickness, RulerThickness), panning with the content).
-    /// Consistent with the other solutions (WPF/Avalonia/MAUI/WinUI templates, Blazor): the grid belongs
-    /// to the content and the rulers float.
+    /// Draws the full-area grid (extending under the ruler bands), panning with the content.
+    /// Consistent with the other solutions (WPF/Avalonia/MAUI/WinUI templates, Blazor): the grid
+    /// belongs to the content and the rulers float. The floating translucent ruler bands live in
+    /// the <see cref="RulerOverlayForm"/> (a WS_EX_LAYERED owned popup composited above the canvas),
+    /// so grid lines and node cards scroll under the band and stay visibly dimmed.
     /// </summary>
     private void DrawGrid(Graphics g, PointF origin)
     {
@@ -660,109 +726,26 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         using var major = new Pen(Color.FromArgb(58, 61, 64), 1f);
         using var axis = new Pen(Color.FromArgb(77, 77, 77), 1.2f);
 
-        var contentLeft = RulerThickness;
-        var contentTop = RulerThickness;
-        var contentRight = ClientSize.Width;
-        var contentBottom = ClientSize.Height;
-
-        // Draw the grid only in the content area (outside the ruler band), matching the other solutions' PushClip(contentRect).
-        var gridState = g.Save();
-        g.SetClip(new RectangleF(contentLeft, contentTop, contentRight - contentLeft, contentBottom - contentTop));
-
-        // Convert world coordinates to client: only draw x values inside the content area (>= RulerThickness).
-        var startX = Math.Floor((-origin.X) / GridSpacing) * GridSpacing;
-        for (var x = startX; x <= -origin.X + contentRight + GridSpacing; x += GridSpacing)
-        {
-            var sx = (float)(x + origin.X);
-            if (sx < contentLeft - GridSpacing) continue;
-            var pen = NearZero(x) ? axis : IsMajor(x) ? major : minor;
-            g.DrawLine(pen, sx, contentTop, sx, contentBottom);
-        }
-
-        var startY = Math.Floor((-origin.Y) / GridSpacing) * GridSpacing;
-        for (var y = startY; y <= -origin.Y + contentBottom + GridSpacing; y += GridSpacing)
-        {
-            var sy = (float)(y + origin.Y);
-            if (sy < contentTop - GridSpacing) continue;
-            var pen = NearZero(y) ? axis : IsMajor(y) ? major : minor;
-            g.DrawLine(pen, contentLeft, sy, contentRight, sy);
-        }
-
-        g.Restore(gridState);
-    }
-
-    /// <summary>
-    /// Draws floating rulers: a 36px tick band fixed at the client's top-left corner, ticks aligned
-    /// to the grid spacing and panning with the scroll (translateX/Y = -origin), matching the floating
-    /// ruler behavior of the other solutions. No longer scrolls with the content (unlike the old
-    /// DrawAxisScale drawn at the world origin).
-    /// </summary>
-    private void DrawFloatingRulers(Graphics g, PointF origin)
-    {
-        // Fully consistent with the floating rulers of the other solutions (WPF/Avalonia/MAUI/WinUI Demo):
-        //   - 36px ruler band, world origin defaults to the content boundary, tick "0" at the content junction
-        //   - Top/left ticks clipped to their own band; the top-left corner junction renders no ticks or numbers
-        //   - Top label vertically centered at (ruler-13)/2, left label at y+2; font size 13px
-        // Colors keep the template defaults: ruler background #C8252526 (semi-transparent) / tick #555555 / text #888888 / divider #3A3D40 / axis #4D4D4D.
-        using var rulerBrush = new SolidBrush(Color.FromArgb(200, 37, 37, 38));
-        using var dividerPen = new Pen(Color.FromArgb(58, 61, 64), 1f);
-        using var tickPen = new Pen(Color.FromArgb(85, 85, 85), 1f);
-        using var axisPen = new Pen(Color.FromArgb(77, 77, 77), 1f);
-        using var textBrush = new SolidBrush(Color.FromArgb(136, 136, 136));
-        using var font = new Font("Segoe UI", 13f, GraphicsUnit.Pixel);
-        using var fmt = new StringFormat(StringFormat.GenericTypographic);
-
-        var ruler = RulerThickness;
         var cw = ClientSize.Width;
         var ch = ClientSize.Height;
 
-        // Ruler band background.
-        g.FillRectangle(rulerBrush, 0, 0, cw, ruler);
-        g.FillRectangle(rulerBrush, 0, 0, ruler, ch);
-        // Divider line (separates the ruler from the content area).
-        g.DrawLine(dividerPen, ruler, 0, ruler, ch);
-        g.DrawLine(dividerPen, 0, ruler, cw, ruler);
-
-        // Top ruler: world x-axis. Tick x = value + origin.X; drawn only above the content area (x >= ruler);
-        // the top-left corner junction renders no ticks/numbers.
-        var worldLeft = -origin.X;
-        var worldRight = worldLeft + cw;
-        var startX = Math.Floor(worldLeft / GridSpacing) * GridSpacing;
-        var topState = g.Save();
-        g.SetClip(new RectangleF(ruler, 0, cw - ruler, ruler));
-        for (var x = startX; x <= worldRight + GridSpacing; x += GridSpacing)
+        // Convert world coordinates to client and draw the grid full-area (no clip, no
+        // content-area guard) so grid lines extend under the translucent ruler bands.
+        var startX = Math.Floor((-origin.X) / GridSpacing) * GridSpacing;
+        for (var x = startX; x <= -origin.X + cw + GridSpacing; x += GridSpacing)
         {
             var sx = (float)(x + origin.X);
-            var isMajor = IsMajor(x);
-            var tl = isMajor ? ruler - 6f : Math.Max(6f, (float)(ruler * 0.35));
-            g.DrawLine(NearZero(x) ? axisPen : tickPen, sx, ruler, sx, ruler - tl);
-            if (isMajor)
-            {
-                g.DrawString(FormatGridValue(x), font, textBrush, sx + 3, (ruler - 13) / 2, fmt);
-            }
+            var pen = NearZero(x) ? axis : IsMajor(x) ? major : minor;
+            g.DrawLine(pen, sx, 0, sx, ch);
         }
 
-        g.Restore(topState);
-
-        // Left ruler: world y-axis. Drawn only to the left of the content area (y >= ruler); the top-left corner junction renders no ticks/numbers.
-        var worldTop = -origin.Y;
-        var worldBottom = worldTop + ch;
-        var startY = Math.Floor(worldTop / GridSpacing) * GridSpacing;
-        var leftState = g.Save();
-        g.SetClip(new RectangleF(0, ruler, ruler, ch - ruler));
-        for (var y = startY; y <= worldBottom + GridSpacing; y += GridSpacing)
+        var startY = Math.Floor((-origin.Y) / GridSpacing) * GridSpacing;
+        for (var y = startY; y <= -origin.Y + ch + GridSpacing; y += GridSpacing)
         {
             var sy = (float)(y + origin.Y);
-            var isMajor = IsMajor(y);
-            var tl = isMajor ? ruler - 6f : Math.Max(6f, (float)(ruler * 0.35));
-            g.DrawLine(NearZero(y) ? axisPen : tickPen, ruler, sy, ruler - tl, sy);
-            if (isMajor)
-            {
-                g.DrawString(FormatGridValue(y), font, textBrush, 3, sy + 2, fmt);
-            }
+            var pen = NearZero(y) ? axis : IsMajor(y) ? major : minor;
+            g.DrawLine(pen, 0, sy, cw, sy);
         }
-
-        g.Restore(leftState);
     }
 
     // ── Hit testing ──────────────────────────────────────────────────────────────
@@ -852,6 +835,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         // by the canvas OnPaint origin transform.
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
         SyncMinimap();
+        SyncRulerOverlay();
     }
 
     protected override void Dispose(bool disposing)
@@ -864,6 +848,12 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             }
 
             DetachSession(_session);
+
+            if (_rulerOverlay is not null)
+            {
+                _rulerOverlay.Dispose();
+                _rulerOverlay = null;
+            }
         }
 
         base.Dispose(disposing);
@@ -906,5 +896,270 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
         path.CloseFigure();
         return path;
+    }
+
+    /// <summary>
+    /// Per-pixel alpha ruler-band overlay. WinForms children always paint above the parent's
+    /// OnPaintBackground, so a translucent band drawn there can never dim the opaque node cards
+    /// scrolling under it — cards cover the band. The one mechanism that CAN is a WS_EX_LAYERED
+    /// window composited over the viewport: this is an owned, top-level, hit-transparent popup whose
+    /// surface is rendered via UpdateLayeredWindow at per-pixel alpha, so the band genuinely
+    /// composites ABOVE the node cards (cards are dimmed under the band, matching WPF/Avalonia/
+    /// WinUI/MAUI/Razor). Creating a layered CHILD window fails with ERROR_NOT_SUPPORTED on some
+    /// systems, hence the owned popup; owned popups also follow the form when it moves and stay above
+    /// it for free. WS_EX_TOOLWINDOW keeps it out of the taskbar and alt-tab; WM_NCHITTEST →
+    /// HTTRANSPARENT keeps panning and node drags working under the band.
+    /// </summary>
+    private sealed class RulerOverlayForm : Form
+    {
+        private const int WsExLayered = 0x00080000;
+        private const int WsExNoActivate = 0x08000000;
+        private const int WsExToolWindow = 0x00000080;
+        private const int WsExTransparent = 0x00000020;
+        private const int HtTransparent = -1;
+        private const int WmNcHitTest = 0x0084;
+        private const uint UlwAlpha = 2;
+
+        private const int GridSpacing = 40;
+        private const int MajorFreq = 5;
+        private const double Eps = 0.001;
+
+        // Same palette as the surface/grid. Alpha 0x70 (WinForms deviation): the band composites
+        // over cards AND grid, so at the other frameworks' 0xC8 the grid under the band would read
+        // only ~3.5 lum deep (imperceptible); 0x70 keeps the tint but lets the grid pass visibly
+        // under the band.
+        private readonly Color _rulerBackground = Color.FromArgb(112, 37, 37, 38);
+        private readonly Color _labelColor = Color.FromArgb(136, 136, 136);
+        private readonly Color _tickColor = Color.FromArgb(85, 85, 85);
+        private readonly Color _axisColor = Color.FromArgb(77, 77, 77);
+        private readonly Color _dividerColor = Color.FromArgb(58, 61, 64);
+        private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
+
+        private Bitmap? _surface;
+
+        public RulerOverlayForm()
+        {
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.Manual;
+            ControlBox = false;
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                cp.ExStyle |= WsExLayered | WsExNoActivate | WsExToolWindow | WsExTransparent;
+                return cp;
+            }
+        }
+
+        protected override bool ShowWithoutActivation => true;
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WmNcHitTest)
+            {
+                m.Result = (IntPtr)HtTransparent;
+                return;
+            }
+
+            base.WndProc(ref m);
+        }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double RulerThickness { get; set; } = 36;
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ScrollOffsetX { get; set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ScrollOffsetY { get; set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ContentOffsetX { get; set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double ContentOffsetY { get; set; }
+
+        /// <summary>
+        /// Repaints the layered surface. The window's own screen rect is the physical bitmap size;
+        /// ticks/labels are drawn in logical (viewport client) space and scaled to fill, so a
+        /// system-DPI-aware host (1:1 here) and a virtualized one both stay aligned with the grid
+        /// drawn by the canvas.
+        /// </summary>
+        public void RefreshSurface()
+        {
+            if (IsDisposed || !IsHandleCreated || Width < 1 || Height < 1) return;
+
+            GetWindowRect(Handle, out var rect);
+            var pw = Math.Max(1, rect.Right - rect.Left);
+            var ph = Math.Max(1, rect.Bottom - rect.Top);
+
+            if (_surface is null || _surface.Width != pw || _surface.Height != ph)
+            {
+                _surface?.Dispose();
+                _surface = new Bitmap(pw, ph, PixelFormat.Format32bppPArgb);
+            }
+
+            using (var g = Graphics.FromImage(_surface))
+            {
+                g.Clear(Color.Transparent);
+                g.ScaleTransform(
+                    pw / (float)Math.Max(1, Width),
+                    ph / (float)Math.Max(1, Height));
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                DrawBands(g, Width, Height);
+            }
+
+            UpdateLayeredSurface(rect, pw, ph);
+        }
+
+        private void DrawBands(Graphics g, int cw, int ch)
+        {
+            var ruler = (float)RulerThickness;
+            using var rulerBrush = new SolidBrush(_rulerBackground);
+            using var dividerPen = new Pen(_dividerColor, 1f);
+            using var tickPen = new Pen(_tickColor, 1f);
+            using var axisPen = new Pen(_axisColor, 1f);
+            using var labelBrush = new SolidBrush(_labelColor);
+            using var format = new StringFormat(StringFormat.GenericTypographic);
+
+            // Translucent bands — one bitmap, per-pixel alpha over everything beneath
+            // (the canvas grid AND the opaque node cards).
+            g.FillRectangle(rulerBrush, 0, 0, cw, ruler);
+            g.FillRectangle(rulerBrush, 0, 0, ruler, ch);
+
+            // Dividers at full opacity.
+            g.DrawLine(dividerPen, ruler, 0, ruler, ch);
+            g.DrawLine(dividerPen, 0, ruler, cw, ruler);
+
+            var spacing = Math.Max(8, GridSpacing);
+            var majorStep = spacing * Math.Max(1, MajorFreq);
+            var worldLeft = ScrollOffsetX - ContentOffsetX;
+            var worldTop = ScrollOffsetY - ContentOffsetY;
+            var worldRight = worldLeft + cw;
+            var worldBottom = worldTop + ch;
+
+            // Top ruler. Ticks share the grid's x = value - worldLeft (the canvas draws the grid at
+            // the same x), so ticks stay aligned with grid lines while the content scrolls under the
+            // viewport-fixed band. Skip x < ruler so the corner junction and left band stay clean.
+            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
+            {
+                var x = (float)(value - worldLeft);
+                if (x < ruler)
+                {
+                    continue;
+                }
+
+                var isMajor = IsMajor(value);
+                var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
+                var pen = NearZero(value) ? axisPen : tickPen;
+                g.DrawLine(pen, x, ruler, x, (float)(ruler - tickLength));
+
+                if (isMajor)
+                {
+                    g.DrawString(FormatGridValue(value), _labelFont, labelBrush, x + 3, 2, format);
+                }
+            }
+
+            // Left ruler.
+            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
+            {
+                var y = (float)(value - worldTop);
+                if (y < ruler)
+                {
+                    continue;
+                }
+
+                var isMajor = IsMajor(value);
+                var tickLength = isMajor ? (float)(ruler - 6) : Math.Max(6f, (float)(ruler * 0.35));
+                var pen = NearZero(value) ? axisPen : tickPen;
+                g.DrawLine(pen, ruler, y, (float)(ruler - tickLength), y);
+
+                if (isMajor)
+                {
+                    g.DrawString(FormatGridValue(value), _labelFont, labelBrush, 3, y + 2, format);
+                }
+            }
+        }
+
+        private void UpdateLayeredSurface(RECT rect, int pw, int ph)
+        {
+            var screenDc = GetDC(IntPtr.Zero);
+            var memDc = CreateCompatibleDC(screenDc);
+            var hbitmap = _surface!.GetHbitmap(Color.FromArgb(0));
+            var old = SelectObject(memDc, hbitmap);
+            try
+            {
+                var ptDst = new POINT { X = rect.Left, Y = rect.Top };
+                var size = new SIZE { cx = pw, cy = ph };
+                var ptSrc = new POINT();
+                var blend = new BLENDFUNCTION
+                {
+                    BlendOp = 0,               // AC_SRC_OVER
+                    SourceConstantAlpha = 255,
+                    AlphaFormat = 1,           // AC_SRC_ALPHA — bitmap must be premultiplied
+                };
+                UpdateLayeredWindow(Handle, screenDc, ref ptDst, ref size, memDc, ref ptSrc, 0, ref blend, UlwAlpha);
+            }
+            finally
+            {
+                SelectObject(memDc, old);
+                DeleteObject(hbitmap);
+                DeleteDC(memDc);
+                ReleaseDC(IntPtr.Zero, screenDc);
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT { public int X; public int Y; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SIZE { public int cx; public int cy; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BLENDFUNCTION
+        {
+            public byte BlendOp;
+            public byte BlendFlags;
+            public byte SourceConstantAlpha;
+            public byte AlphaFormat;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst, ref POINT pptDst, ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc, int crKey, ref BLENDFUNCTION pblend, uint dwFlags);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetDC(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+        [DllImport("gdi32.dll")]
+        private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteDC(IntPtr hdc);
+
+        [DllImport("gdi32.dll")]
+        private static extern IntPtr SelectObject(IntPtr hdc, IntPtr h);
+
+        [DllImport("gdi32.dll")]
+        private static extern bool DeleteObject(IntPtr ho);
     }
 }
