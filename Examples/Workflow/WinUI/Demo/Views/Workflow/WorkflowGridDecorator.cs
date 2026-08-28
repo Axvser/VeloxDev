@@ -20,6 +20,10 @@ namespace Demo.Views;
 /// edge while content can still scroll under the translucent bands (the Jalium floating
 /// ruler model). The decorator layers, bottom to top: surface + grid, the content child,
 /// and the ruler overlay (topmost, hit-test transparent).
+///
+/// Grid/ruler elements are POOLED and updated in place on scroll rather than rebuilt:
+/// a drag frame only rewrites coordinates on existing elements instead of re-creating
+/// ~100 XAML Line/TextBlock objects each frame (the pre-pooling cause of drag jank).
 /// </summary>
 public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 {
@@ -40,7 +44,25 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
     private readonly Border _contentBackground;
     private readonly Border _topRulerBackground;
     private readonly Border _leftRulerBackground;
-    private readonly HashSet<UIElement> _internalElements;
+
+    // Pooled visuals: created once, coordinates rewritten in place during pan.
+    private readonly List<Line> _gridVertical = [];
+    private readonly List<Line> _gridHorizontal = [];
+    private readonly List<Line> _topTicks = [];
+    private readonly List<Line> _leftTicks = [];
+    private readonly List<TextBlock> _topLabels = [];
+    private readonly List<TextBlock> _leftLabels = [];
+    private readonly List<string> _topLabelText = [];
+    private readonly List<string> _leftLabelText = [];
+
+    // Static band dividers (structural only, positioned in ApplyChildLayout).
+    private readonly Line _topDivider = new() { Stroke = DividerBrush, StrokeThickness = 1 };
+    private readonly Line _leftDivider = new() { Stroke = DividerBrush, StrokeThickness = 1 };
+
+    // Last applied structural values so ApplyChildLayout is a no-op between changes.
+    private double _lastWidth = -1;
+    private double _lastHeight = -1;
+    private double _lastRuler = -1;
 
     public static readonly DependencyProperty RulerThicknessProperty = DependencyProperty.Register(
         nameof(RulerThickness),
@@ -121,16 +143,6 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             HorizontalAlignment = HorizontalAlignment.Left
         };
 
-        _internalElements =
-        [
-            _contentBackground,
-            _contentLayer,
-            _topRulerBackground,
-            _leftRulerBackground,
-            _topRulerLayer,
-            _leftRulerLayer
-        ];
-
         Children.Add(_contentBackground);
         Children.Add(_contentLayer);
         Children.Add(_topRulerBackground);
@@ -145,8 +157,12 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         Canvas.SetZIndex(_topRulerLayer, 100);
         Canvas.SetZIndex(_leftRulerLayer, 100);
 
-        Loaded += (_, _) => RefreshVisuals();
-        SizeChanged += (_, _) => RefreshVisuals();
+        // Static dividers sit under the pooled ticks/labels (same add-order as before).
+        _topRulerLayer.Children.Add(_topDivider);
+        _leftRulerLayer.Children.Add(_leftDivider);
+
+        Loaded += (_, _) => RebuildSurface();
+        SizeChanged += (_, _) => RebuildSurface();
         LayoutUpdated += (_, _) => ApplyChildLayout();
     }
 
@@ -194,7 +210,16 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
     private static void OnLayoutPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        ((WorkflowGridDecorator)d).RefreshVisuals();
+        var decorator = (WorkflowGridDecorator)d;
+        if (e.Property == ScrollOffsetXProperty || e.Property == ScrollOffsetYProperty
+            || e.Property == ContentOffsetXProperty || e.Property == ContentOffsetYProperty)
+        {
+            decorator.UpdateGridAndRulers();
+        }
+        else
+        {
+            decorator.RebuildSurface();
+        }
     }
 
     private void ApplyChildLayout()
@@ -202,6 +227,23 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         var ruler = Math.Max(0, RulerThickness);
         var width = Math.Max(0, ActualWidth);
         var height = Math.Max(0, ActualHeight);
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        // Guard: only re-apply when a structural value actually changed, so the
+        // per-layout geometry churn (and the LayoutUpdated feedback loop) is gone.
+        if (Math.Abs(width - _lastWidth) < 0.5
+            && Math.Abs(height - _lastHeight) < 0.5
+            && Math.Abs(ruler - _lastRuler) < 0.5)
+        {
+            return;
+        }
+
+        _lastWidth = width;
+        _lastHeight = height;
+        _lastRuler = ruler;
 
         // Grid and surface span the full viewport so the grid extends under the ruler bands.
         _contentBackground.Width = width;
@@ -228,10 +270,16 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         _leftRulerLayer.Height = height;
         _leftRulerLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, ruler, height) };
 
+        // Static band dividers.
+        _topDivider.X1 = ruler; _topDivider.Y1 = ruler - 1;
+        _topDivider.X2 = width; _topDivider.Y2 = ruler - 1;
+        _leftDivider.X1 = ruler - 1; _leftDivider.Y1 = ruler;
+        _leftDivider.X2 = ruler - 1; _leftDivider.Y2 = height;
+
         Clip = new RectangleGeometry { Rect = new Rect(0, 0, width, height) };
     }
 
-    private void RefreshVisuals()
+    private void RebuildSurface()
     {
         if (!IsLoaded)
         {
@@ -240,9 +288,34 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
         ApplyChildLayout();
 
-        _contentLayer.Children.Clear();
-        _topRulerLayer.Children.Clear();
-        _leftRulerLayer.Children.Clear();
+        var width = Math.Max(0, ActualWidth);
+        var height = Math.Max(0, ActualHeight);
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        var spacing = Math.Max(8, GridSpacing);
+        var major = Math.Max(1, MajorLineEvery);
+
+        // Reserve enough pooled elements for the current viewport + headroom.
+        const int margin = 8;
+        EnsurePool(_gridVertical, _contentLayer, (int)Math.Ceiling(width / spacing) + margin);
+        EnsurePool(_gridHorizontal, _contentLayer, (int)Math.Ceiling(height / spacing) + margin);
+        EnsurePool(_topTicks, _topRulerLayer, (int)Math.Ceiling(width / spacing) + margin);
+        EnsurePool(_leftTicks, _leftRulerLayer, (int)Math.Ceiling(height / spacing) + margin);
+        EnsureLabelPool(_topLabels, _topLabelText, _topRulerLayer, (int)Math.Ceiling(width / spacing) / major + margin);
+        EnsureLabelPool(_leftLabels, _leftLabelText, _leftRulerLayer, (int)Math.Ceiling(height / spacing) / major + margin);
+
+        UpdateGridAndRulers();
+    }
+
+    private void UpdateGridAndRulers()
+    {
+        if (!IsLoaded || _gridVertical.Count == 0)
+        {
+            return;
+        }
 
         var ruler = Math.Max(0, RulerThickness);
         var width = Math.Max(0, ActualWidth);
@@ -252,12 +325,6 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             return;
         }
 
-        DrawGrid(width, height, ruler);
-        DrawRulers(width, height, ruler);
-    }
-
-    private void DrawGrid(double width, double height, double ruler)
-    {
         var spacing = Math.Max(8, GridSpacing);
         var majorStep = spacing * Math.Max(1, MajorLineEvery);
         var worldLeft = ScrollOffsetX - ContentOffsetX;
@@ -265,37 +332,41 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         var worldRight = worldLeft + width;
         var worldBottom = worldTop + height;
 
+        // Vertical grid lines.
         var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+        var vIndex = 0;
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
             var x = ruler + (value - worldLeft);
-            var brush = IsNearZero(value) ? AxisBrush : IsMajorLine(value, majorStep) ? MajorGridBrush : MinorGridBrush;
-            AddLine(_contentLayer, x, 0, x, height, brush, IsNearZero(value) ? 1.2 : 1);
+            var line = _gridVertical[vIndex];
+            line.X1 = x; line.Y1 = 0; line.X2 = x; line.Y2 = height;
+            var nearZero = IsNearZero(value);
+            line.Stroke = nearZero ? AxisBrush : IsMajorLine(value, majorStep) ? MajorGridBrush : MinorGridBrush;
+            line.StrokeThickness = nearZero ? 1.2 : 1;
+            line.Visibility = Visibility.Visible;
+            vIndex++;
         }
+        HideExcess(_gridVertical, vIndex);
 
+        // Horizontal grid lines.
         var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+        var hIndex = 0;
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
             var y = ruler + (value - worldTop);
-            var brush = IsNearZero(value) ? AxisBrush : IsMajorLine(value, majorStep) ? MajorGridBrush : MinorGridBrush;
-            AddLine(_contentLayer, 0, y, width, y, brush, IsNearZero(value) ? 1.2 : 1);
+            var line = _gridHorizontal[hIndex];
+            line.X1 = 0; line.Y1 = y; line.X2 = width; line.Y2 = y;
+            var nearZero = IsNearZero(value);
+            line.Stroke = nearZero ? AxisBrush : IsMajorLine(value, majorStep) ? MajorGridBrush : MinorGridBrush;
+            line.StrokeThickness = nearZero ? 1.2 : 1;
+            line.Visibility = Visibility.Visible;
+            hIndex++;
         }
-    }
+        HideExcess(_gridHorizontal, hIndex);
 
-    private void DrawRulers(double width, double height, double ruler)
-    {
-        var spacing = Math.Max(8, GridSpacing);
-        var majorStep = spacing * Math.Max(1, MajorLineEvery);
-        var worldLeft = ScrollOffsetX - ContentOffsetX;
-        var worldTop = ScrollOffsetY - ContentOffsetY;
-        var worldRight = worldLeft + width;
-        var worldBottom = worldTop + height;
-
-        // Dividers stop at the perpendicular band (they never cross the corner junction).
-        AddLine(_topRulerLayer, ruler, ruler - 1, width, ruler - 1, DividerBrush, 1);
-        AddLine(_leftRulerLayer, ruler - 1, ruler, ruler - 1, height, DividerBrush, 1);
-
-        var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+        // Top ruler ticks + labels.
+        var tIndex = 0;
+        var lIndex = 0;
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
             var x = ruler + (value - worldLeft);
@@ -305,17 +376,35 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             }
 
             var isMajor = IsMajorLine(value, majorStep);
+            var nearZero = IsNearZero(value);
             var tickLength = isMajor ? ruler - 6 : Math.Max(6, ruler * 0.35);
-            var brush = IsNearZero(value) ? AxisBrush : TickBrush;
-            AddLine(_topRulerLayer, x, ruler, x, ruler - tickLength, brush, IsNearZero(value) ? 1.2 : 1);
+            var tick = _topTicks[tIndex];
+            tick.X1 = x; tick.Y1 = ruler; tick.X2 = x; tick.Y2 = ruler - tickLength;
+            tick.Stroke = nearZero ? AxisBrush : TickBrush;
+            tick.StrokeThickness = nearZero ? 1.2 : 1;
+            tick.Visibility = Visibility.Visible;
+            tIndex++;
 
             if (isMajor)
             {
-                AddLabel(_topRulerLayer, Math.Round(value).ToString(CultureInfo.InvariantCulture), x + 3, (ruler - 10) / 2);
+                var text = Math.Round(value).ToString(CultureInfo.InvariantCulture);
+                if (_topLabelText[lIndex] != text)
+                {
+                    _topLabelText[lIndex] = text;
+                    _topLabels[lIndex].Text = text;
+                }
+                Canvas.SetLeft(_topLabels[lIndex], x + 3);
+                Canvas.SetTop(_topLabels[lIndex], (ruler - 10) / 2);
+                _topLabels[lIndex].Visibility = Visibility.Visible;
+                lIndex++;
             }
         }
+        HideExcess(_topTicks, tIndex);
+        HideExcess(_topLabels, lIndex);
 
-        var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+        // Left ruler ticks + labels.
+        tIndex = 0;
+        lIndex = 0;
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
             var y = ruler + (value - worldTop);
@@ -325,42 +414,67 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             }
 
             var isMajor = IsMajorLine(value, majorStep);
+            var nearZero = IsNearZero(value);
             var tickLength = isMajor ? ruler - 6 : Math.Max(6, ruler * 0.35);
-            var brush = IsNearZero(value) ? AxisBrush : TickBrush;
-            AddLine(_leftRulerLayer, ruler, y, ruler - tickLength, y, brush, IsNearZero(value) ? 1.2 : 1);
+            var tick = _leftTicks[tIndex];
+            tick.X1 = ruler; tick.Y1 = y; tick.X2 = ruler - tickLength; tick.Y2 = y;
+            tick.Stroke = nearZero ? AxisBrush : TickBrush;
+            tick.StrokeThickness = nearZero ? 1.2 : 1;
+            tick.Visibility = Visibility.Visible;
+            tIndex++;
 
             if (isMajor)
             {
-                AddLabel(_leftRulerLayer, Math.Round(value).ToString(CultureInfo.InvariantCulture), 3, y + 2);
+                var text = Math.Round(value).ToString(CultureInfo.InvariantCulture);
+                if (_leftLabelText[lIndex] != text)
+                {
+                    _leftLabelText[lIndex] = text;
+                    _leftLabels[lIndex].Text = text;
+                }
+                Canvas.SetLeft(_leftLabels[lIndex], 3);
+                Canvas.SetTop(_leftLabels[lIndex], y + 2);
+                _leftLabels[lIndex].Visibility = Visibility.Visible;
+                lIndex++;
             }
+        }
+        HideExcess(_leftTicks, tIndex);
+        HideExcess(_leftLabels, lIndex);
+    }
+
+    private static void EnsurePool(List<Line> pool, Canvas host, int count)
+    {
+        while (pool.Count < count)
+        {
+            var line = new Line { Visibility = Visibility.Collapsed };
+            pool.Add(line);
+            host.Children.Add(line);
         }
     }
 
-    private static void AddLine(Canvas canvas, double x1, double y1, double x2, double y2, Brush stroke, double thickness)
+    private static void EnsureLabelPool(List<TextBlock> pool, List<string> cache, Canvas host, int count)
     {
-        canvas.Children.Add(new Line
+        while (pool.Count < count)
         {
-            X1 = x1,
-            Y1 = y1,
-            X2 = x2,
-            Y2 = y2,
-            Stroke = stroke,
-            StrokeThickness = thickness
-        });
+            var label = new TextBlock
+            {
+                Text = string.Empty,
+                Foreground = LabelBrush,
+                FontSize = 10,
+                FontWeight = FontWeights.Normal,
+                Visibility = Visibility.Collapsed
+            };
+            pool.Add(label);
+            cache.Add(string.Empty);
+            host.Children.Add(label);
+        }
     }
 
-    private static void AddLabel(Canvas canvas, string text, double left, double top)
+    private static void HideExcess<T>(List<T> pool, int activeCount) where T : UIElement
     {
-        var label = new TextBlock
+        for (var i = activeCount; i < pool.Count; i++)
         {
-            Text = text,
-            Foreground = LabelBrush,
-            FontSize = 10,
-            FontWeight = FontWeights.Normal
-        };
-        Canvas.SetLeft(label, left);
-        Canvas.SetTop(label, top);
-        canvas.Children.Add(label);
+            pool[i].Visibility = Visibility.Collapsed;
+        }
     }
 
     private static SolidColorBrush CreateBrush(string hex)
