@@ -40,6 +40,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
     private readonly GraphicsView _gridGraphicsView;
     private readonly GraphicsView _rulerGraphicsView;
+    private bool _invalidatePending;
 
     public WorkflowGridDecorator()
     {
@@ -68,13 +69,36 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
     public double ContentOffsetX { get => (double)GetValue(ContentOffsetXProperty); set => SetValue(ContentOffsetXProperty, value); }
     public double ContentOffsetY { get => (double)GetValue(ContentOffsetYProperty); set => SetValue(ContentOffsetYProperty, value); }
 
+    /// <summary>
+    /// A single pan frame can write several decorator DPs back-to-back (ApplyVisibleRegion
+    /// sets ScrollOffsetX/Y + ContentOffsetX/Y together). Each is a full-canvas Win2D
+    /// Invalidate on the grid and the ruler surfaces — coalesce them into ONE redraw per
+    /// frame by flushing at the next main-thread dispatch instead of invalidating inline.
+    /// </summary>
     private static void OnVisualPropertyChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
         if (bindable is WorkflowGridDecorator decorator)
         {
-            decorator._gridGraphicsView.Invalidate();
-            decorator._rulerGraphicsView.Invalidate();
+            decorator.ScheduleInvalidate();
         }
+    }
+
+    private void ScheduleInvalidate()
+    {
+        if (_invalidatePending)
+        {
+            return;
+        }
+
+        _invalidatePending = true;
+        MainThread.BeginInvokeOnMainThread(FlushInvalidate);
+    }
+
+    private void FlushInvalidate()
+    {
+        _invalidatePending = false;
+        _gridGraphicsView.Invalidate();
+        _rulerGraphicsView.Invalidate();
     }
 
     /// <summary>Bottom layer: surface background + the world grid over the full viewport (extends under the ruler bands).</summary>

@@ -1,6 +1,7 @@
 using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
 using Demo.Workflow;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
 using System.Windows.Input;
@@ -102,6 +103,35 @@ public partial class WorkflowView : ContentView
         set => SetValue(SessionProperty, value);
     }
 
+    /// <summary>
+    /// View-model collection fed to the canvas <see cref="ViewPool"/>. Mirrors
+    /// <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/> but drops link view
+    /// models — links are rendered by the single <see cref="LinkLayerView"/>, so the
+    /// pool must not materialize one GraphicsView per link.
+    /// </summary>
+    public static readonly BindableProperty NodeItemsSourceProperty = BindableProperty.Create(
+        nameof(NodeItemsSource),
+        typeof(INotifyCollectionChanged),
+        typeof(WorkflowView),
+        null);
+
+    public INotifyCollectionChanged? NodeItemsSource
+    {
+        get => (INotifyCollectionChanged?)GetValue(NodeItemsSourceProperty);
+        set => SetValue(NodeItemsSourceProperty, value);
+    }
+
+    private void UpdateNodeItemsSource(TreeViewModel? tree)
+    {
+        if (NodeItemsSource is NodeOnlyVisibleItems wrapper)
+        {
+            wrapper.Detach();
+        }
+
+        var visible = tree?.GetHelper()?.VisibleItems;
+        NodeItemsSource = visible is null ? null : new NodeOnlyVisibleItems(visible);
+    }
+
     private static void OnSessionChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
         var view = (WorkflowView)bindable;
@@ -131,6 +161,7 @@ public partial class WorkflowView : ContentView
         // BindingContext on individual child elements — that breaks the natural
         // inheritance chain and can cause missed binding updates.
         BindingContext = _workflowViewModel;
+        UpdateNodeItemsSource(newSession?.Tree);
 
         if (newSession is not null)
         {
@@ -402,5 +433,67 @@ public partial class WorkflowView : ContentView
     private void OnAgentInputCompleted(object? sender, EventArgs e)
     {
         OnSendToAgent(sender, e);
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/> but drops link
+    /// view models, so the node ViewPool only ever materializes node views. Links are
+    /// rendered by the single <see cref="LinkLayerView"/> instead of one GraphicsView
+    /// per link.
+    /// </summary>
+    private sealed class NodeOnlyVisibleItems : ObservableCollection<IWorkflowViewModel>
+    {
+        private readonly ObservableCollection<IWorkflowViewModel> _source;
+
+        public NodeOnlyVisibleItems(ObservableCollection<IWorkflowViewModel> source)
+        {
+            _source = source;
+            _source.CollectionChanged += OnSourceChanged;
+            foreach (var item in source)
+            {
+                if (item is not IWorkflowLinkViewModel)
+                {
+                    Add(item);
+                }
+            }
+        }
+
+        /// <summary>Unsubscribes from the source so this wrapper can be garbage-collected on session change.</summary>
+        public void Detach() => _source.CollectionChanged -= OnSourceChanged;
+
+        private void OnSourceChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            switch (e.Action)
+            {
+                case NotifyCollectionChangedAction.Add:
+                    foreach (var item in e.NewItems ?? Array.Empty<object>())
+                    {
+                        if (item is not IWorkflowLinkViewModel)
+                        {
+                            Add((IWorkflowViewModel)item);
+                        }
+                    }
+                    break;
+                case NotifyCollectionChangedAction.Remove:
+                    foreach (var item in e.OldItems ?? Array.Empty<object>())
+                    {
+                        if (item is not IWorkflowLinkViewModel)
+                        {
+                            Remove((IWorkflowViewModel)item);
+                        }
+                    }
+                    break;
+                case NotifyCollectionChangedAction.Reset:
+                    Clear();
+                    foreach (var item in _source)
+                    {
+                        if (item is not IWorkflowLinkViewModel)
+                        {
+                            Add(item);
+                        }
+                    }
+                    break;
+            }
+        }
     }
 }
