@@ -81,33 +81,11 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     // ── Internal types ───────────────────────────────────────────────────────
 
-    private struct BoundsRect
-    {
-        public double Left, Top, Width, Height;
-        public readonly double Right => Left + Width;
-        public readonly double Bottom => Top + Height;
-        public readonly bool IsEmpty => Width <= 0 || Height <= 0;
-
-        public static BoundsRect Union(BoundsRect a, BoundsRect b)
-        {
-            if (a.IsEmpty) return b;
-            if (b.IsEmpty) return a;
-            var l = Math.Min(a.Left, b.Left);
-            var t = Math.Min(a.Top, b.Top);
-            var r = Math.Max(a.Right, b.Right);
-            var btm = Math.Max(a.Bottom, b.Bottom);
-            return new BoundsRect { Left = l, Top = t, Width = r - l, Height = btm - t };
-        }
-
-        public static BoundsRect FromNode(double x, double y, double w, double h)
-            => new() { Left = x, Top = y, Width = w, Height = h };
-    }
-
     // ── State ────────────────────────────────────────────────────────────────
 
-    private BoundsRect _lastGlobalBounds;
+    private WorkflowBounds _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
-    private BoundsRect _lastViewport;
+    private WorkflowBounds _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
     private ContentView? _parentView;
@@ -135,7 +113,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     // Drawing intermediates (float for MAUI ICanvas)
     private float _mmW, _mmH, _ox, _oy, _sc;
-    private BoundsRect _drawGb;
+    private WorkflowBounds _drawGb;
 
     public WorkflowMinimapOverlay()
     {
@@ -426,9 +404,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         var tree = WorkflowTree;
         if (tree is null) { ClearCache(); return; }
 
-        var gb = default(BoundsRect);
         _lastNodeRects.Clear();
-        bool first = true;
 
         if (tree.Nodes is not null)
             foreach (var node in tree.Nodes)
@@ -439,10 +415,8 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
                     Math.Max(1, node.Size.Width),
                     Math.Max(1, node.Size.Height));
                 _lastNodeRects.Add((nx, ny, nw, nh));
-                var nr = BoundsRect.FromNode(nx, ny, nw, nh);
-                if (first) { gb = nr; first = false; } else gb = BoundsRect.Union(gb, nr);
             }
-        _lastGlobalBounds = gb;
+        _lastGlobalBounds = WorkflowBounds.FromNodes(_lastNodeRects);
 
         var rawVpX = WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX);
         var rawVpY = WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY);
@@ -450,7 +424,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         var vpY = double.IsNaN(rawVpY) ? 0 : rawVpY;
         var vpW = double.IsNaN(ViewportWidth) ? 1 : Math.Max(1, ViewportWidth);
         var vpH = double.IsNaN(ViewportHeight) ? 1 : Math.Max(1, ViewportHeight);
-        _lastViewport = BoundsRect.FromNode(vpX, vpY, vpW, vpH);
+        _lastViewport = WorkflowBounds.FromNode(vpX, vpY, vpW, vpH);
     }
 
     private void ClearCache()

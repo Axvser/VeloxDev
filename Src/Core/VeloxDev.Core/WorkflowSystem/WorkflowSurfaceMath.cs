@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using VeloxDev.AI;
 
 namespace VeloxDev.WorkflowSystem;
@@ -79,6 +80,22 @@ public static class WorkflowSurfaceMath
         return desired;
     }
 
+    /// <summary>
+    /// Maximum scroll offset for a ScrollViewer: <c>max = max(0, extent − viewport)</c>.
+    /// Every adapter inlined this (WPF/WinUI/Avalonia <c>Extent − Viewport</c>, MAUI with NaN
+    /// guards, WinForms via AutoScrollPosition, Jalium via ScrollableWidth) with subtle
+    /// platform differences — the caller still resolves its native extent/viewport.
+    /// </summary>
+    public static double ScrollMax(double extent, double viewport)
+        => Math.Max(0, extent - viewport);
+
+    /// <summary>
+    /// Clamps a value to <c>[min, max]</c>. Replaces the repeated <c>Math.Max(min, Math.Min(v, max))</c>
+    /// written by hand in every surface behavior and minimap after overscroll clamping.
+    /// </summary>
+    public static double ClampValue(double value, double min, double max)
+        => Math.Max(min, Math.Min(value, max));
+
     // ── ③ Grid offset math ───────────────────────────────────────────────────
 
     /// <summary>
@@ -94,6 +111,28 @@ public static class WorkflowSurfaceMath
     /// </summary>
     public static double GridX(double worldValue, double worldLeft, double contentRectX)
         => contentRectX + (worldValue - worldLeft);
+
+    /// <summary>
+    /// Top edge of the visible world region in scroll space: <c>worldTop = ScrollOffsetY − ContentOffsetY</c>.
+    /// Y-axis mirror of <see cref="GridWorldLeft"/> (previously every grid decorator inlined this).
+    /// </summary>
+    public static double GridWorldTop(double scrollOffset, double contentOffset)
+        => scrollOffset - contentOffset;
+
+    /// <summary>
+    /// Converts a world y-coordinate to a screen y-coordinate inside the content area:
+    /// <c>y = contentRect.Y + (worldValue − worldTop)</c>. Y-axis mirror of <see cref="GridX"/>.
+    /// </summary>
+    public static double GridY(double worldValue, double worldTop, double contentRectY)
+        => contentRectY + (worldValue - worldTop);
+
+    /// <summary>
+    /// Grid-line snapping: the first world value aligned to the spacing grid at or below
+    /// <paramref name="worldLeft"/>: <c>first = ⌊worldLeft / spacing⌋ · spacing</c>. Every grid
+    /// decorator previously inlined this loop-start computation.
+    /// </summary>
+    public static double GridFirstLine(double worldLeft, double spacing)
+        => Math.Floor(worldLeft / spacing) * spacing;
 
     // ── ④ Slot anchor conversion ─────────────────────────────────────────────
 
@@ -111,6 +150,17 @@ public static class WorkflowSurfaceMath
     /// </summary>
     public static Anchor SlotAnchorFromNode(double nodeX, double nodeY, double localX, double localY, int layer)
         => new(nodeX + localX, nodeY + localY, layer);
+
+    /// <summary>
+    /// Computes the slot anchor from a measured visual center that is already in canvas-local
+    /// (world) space: <c>anchor = center</c>. Adapters whose canvas-level translation (WPF's
+    /// per-node offset / WinUI &amp; MAUI's canvas <c>Translation</c>) is already inverted by the
+    /// coordinate-host transform land here; <see cref="SlotAnchorFromVisualCenter"/> is the
+    /// screen-space variant that still subtracts <c>ActualOffset</c>. Choosing the wrong one is
+    /// a silent offset bug, so the two contracts are named explicitly.
+    /// </summary>
+    public static Anchor SlotAnchorFromCanvasLocal(double centerX, double centerY, int layer)
+        => new(centerX, centerY, layer);
 
     // ── ⑤ Minimap mapping ────────────────────────────────────────────────────
 
@@ -144,8 +194,10 @@ public static class WorkflowSurfaceMath
     /// Maps the world-space viewport rectangle onto the minimap draw area through the same fit transform
     /// the content uses (<paramref name="originX"/>/<paramref name="originY"/>/<paramref name="scale"/> —
     /// pass the values from <see cref="MinimapFit"/>), with the indicator size floored to
-    /// <paramref name="minRectSize"/> pixels and the rectangle clamped to stay inside the minimap bounds
-    /// (<c>mmWidth × mmHeight</c>). WPF/MAUI/Avalonia/WinUI use a minimum of 2, the WinForms demo 4.
+    /// <paramref name="minRectSize"/> pixels, capped to the minimap bounds, and the position clamped to
+    /// stay inside the minimap (<c>mmWidth × mmHeight</c>). The size cap keeps the block from overflowing
+    /// when the viewport is larger than the fitted content (small workflows). WPF/MAUI/Avalonia/WinUI use
+    /// a minimum of 2, the WinForms demo 4.
     /// </summary>
     public static (double X, double Y, double Width, double Height) MinimapViewportRect(
         double originX, double originY, double scale,
@@ -154,8 +206,8 @@ public static class WorkflowSurfaceMath
         double mmWidth, double mmHeight, double minRectSize)
     {
         var (x, y) = MinimapLocal(vpLeft, vpTop, contentLeft, contentTop, originX, originY, scale);
-        var w = Math.Max(minRectSize, vpWidth * scale);
-        var h = Math.Max(minRectSize, vpHeight * scale);
+        var w = Math.Min(mmWidth, Math.Max(minRectSize, vpWidth * scale));
+        var h = Math.Min(mmHeight, Math.Max(minRectSize, vpHeight * scale));
         x = Math.Max(0, Math.Min(mmWidth - w, x));
         y = Math.Max(0, Math.Min(mmHeight - h, y));
         return (x, y, w, h);
@@ -178,4 +230,56 @@ public static class WorkflowSurfaceMath
         double worldX, double worldY, double viewportWidth, double viewportHeight,
         double contentOffsetX, double contentOffsetY)
         => (worldX - viewportWidth / 2 + contentOffsetX, worldY - viewportHeight / 2 + contentOffsetY);
+
+    /// <summary>
+    /// Floors a minimap thumbnail size to a minimum pixel count: <c>max(min, size · scale)</c>.
+    /// Every minimap inlined this to keep tiny nodes visible (WinForms/MAUI/Avalonia/WPF/WinUI
+    /// used 2, Jalium/Razor used 1).
+    /// </summary>
+    public static double MinThumbSize(double size, double scale, double min)
+        => Math.Max(min, size * scale);
+}
+
+/// <summary>
+/// Axis-aligned bounds over workflow content in world space — the union/empty semantics every
+/// minimap previously carried as its own private <c>BoundsRect</c> struct (WPF/WinUI/Avalonia/MAUI).
+/// Coordinates live in world space (node anchors + sizes); the minimap fits these into its draw area.
+/// </summary>
+public readonly struct WorkflowBounds
+{
+    public double Left { get; init; }
+    public double Top { get; init; }
+    public double Width { get; init; }
+    public double Height { get; init; }
+
+    public readonly double Right => Left + Width;
+    public readonly double Bottom => Top + Height;
+    public readonly bool IsEmpty => Width <= 0 || Height <= 0;
+
+    public static WorkflowBounds FromNode(double x, double y, double w, double h)
+        => new() { Left = x, Top = y, Width = w, Height = h };
+
+    public static WorkflowBounds FromNodes(IEnumerable<(double X, double Y, double W, double H)> rects)
+    {
+        var bounds = default(WorkflowBounds);
+        var first = true;
+        foreach (var (x, y, w, h) in rects)
+        {
+            var nr = FromNode(x, y, w, h);
+            bounds = first ? nr : Union(bounds, nr);
+            first = false;
+        }
+        return bounds;
+    }
+
+    public static WorkflowBounds Union(WorkflowBounds a, WorkflowBounds b)
+    {
+        if (a.IsEmpty) return b;
+        if (b.IsEmpty) return a;
+        var l = Math.Min(a.Left, b.Left);
+        var t = Math.Min(a.Top, b.Top);
+        var r = Math.Max(a.Right, b.Right);
+        var btm = Math.Max(a.Bottom, b.Bottom);
+        return new WorkflowBounds { Left = l, Top = t, Width = r - l, Height = btm - t };
+    }
 }

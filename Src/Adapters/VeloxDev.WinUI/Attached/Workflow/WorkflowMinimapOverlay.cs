@@ -148,35 +148,11 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     public double MinimapMinSize { get => (double)GetValue(MinimapMinSizeProperty); set => SetValue(MinimapMinSizeProperty, value); }
     public string? ScrollViewerName { get => (string?)GetValue(ScrollViewerNameProperty); set => SetValue(ScrollViewerNameProperty, value); }
 
-    // ── Internal types ───────────────────────────────────────────────────────
-
-    private struct BoundsRect
-    {
-        public double Left, Top, Width, Height;
-        public readonly double Right => Left + Width;
-        public readonly double Bottom => Top + Height;
-        public readonly bool IsEmpty => Width <= 0 || Height <= 0;
-
-        public static BoundsRect Union(BoundsRect a, BoundsRect b)
-        {
-            if (a.IsEmpty) return b;
-            if (b.IsEmpty) return a;
-            var l = Math.Min(a.Left, b.Left);
-            var t = Math.Min(a.Top, b.Top);
-            var r = Math.Max(a.Right, b.Right);
-            var btm = Math.Max(a.Bottom, b.Bottom);
-            return new BoundsRect { Left = l, Top = t, Width = r - l, Height = btm - t };
-        }
-
-        public static BoundsRect FromNode(double x, double y, double w, double h)
-            => new() { Left = x, Top = y, Width = w, Height = h };
-    }
-
     // ── State ────────────────────────────────────────────────────────────────
 
-    private BoundsRect _lastGlobalBounds;
+    private WorkflowBounds _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
-    private BoundsRect _lastViewport;
+    private WorkflowBounds _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
     private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
@@ -351,7 +327,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         var tree = WorkflowTree;
         if (tree is null) { ClearCache(); return; }
 
-        var globalBounds = default(BoundsRect);
+        var globalBounds = default(WorkflowBounds);
         _lastNodeRects.Clear();
         bool first = true;
 
@@ -360,16 +336,16 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
             {
                 var (nx, ny, nw, nh) = (node.Anchor.Horizontal, node.Anchor.Vertical, node.Size.Width, node.Size.Height);
                 _lastNodeRects.Add((nx, ny, nw, nh));
-                var nr = BoundsRect.FromNode(nx, ny, nw, nh);
+                var nr = WorkflowBounds.FromNode(nx, ny, nw, nh);
                 if (first) { globalBounds = nr; first = false; }
-                else globalBounds = BoundsRect.Union(globalBounds, nr);
+                else globalBounds = WorkflowBounds.Union(globalBounds, nr);
             }
 
         _lastGlobalBounds = globalBounds;
 
         var vw = Math.Max(1, ViewportWidth);
         var vh = Math.Max(1, ViewportHeight);
-        _lastViewport = BoundsRect.FromNode(
+        _lastViewport = WorkflowBounds.FromNode(
             WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX),
             WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY),
             vw, vh);
@@ -384,7 +360,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
     // ── Transform ─────────────────────────────────────────────────────────────
 
-    private (double Ox, double Oy, double MmW, double MmH, double Sc) ComputeTransform(BoundsRect gb)
+    private (double Ox, double Oy, double MmW, double MmH, double Sc) ComputeTransform(WorkflowBounds gb)
     {
         var margin = 0.0;
         var minSz = Math.Max(1, MinimapMinSize);
@@ -406,15 +382,11 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         var (ox, oy, mmW, mmH, sc) = ComputeTransform(gb);
         if (sc <= 0) return null;
 
-        var l = ox + (vp.Left - gb.Left) * sc;
-        var t = oy + (vp.Top - gb.Top) * sc;
-        // Clamp the block to the minimap so it never overflows when the viewport
-        // is larger than the fitted content (small workflows). Position clamping
-        // below then stays meaningful and the block keeps tracking the scroll.
-        var w = Math.Min(mmW, Math.Max(2.0, vp.Width * sc));
-        var h = Math.Min(mmH, Math.Max(2.0, vp.Height * sc));
-        l = Math.Max(0, Math.Min(mmW - w, l));
-        t = Math.Max(0, Math.Min(mmH - h, t));
+        // Shared fit + clamp: maps the world-space viewport through the minimap fit and
+        // keeps the block inside the minimap even when the viewport exceeds the content.
+        var (l, t, w, h) = WorkflowSurfaceMath.MinimapViewportRect(
+            ox, oy, sc, vp.Left, vp.Top, vp.Width, vp.Height,
+            gb.Left, gb.Top, mmW, mmH, minRectSize: 2.0);
         return new Rect(l, t, w, h);
     }
 
@@ -547,8 +519,8 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
             {
                 var (nx, ny, nw, nh) = _lastNodeRects[i];
                 var (rx, ry) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, ox, oy, sc);
-                var rw = Math.Max(2.0, nw * sc);
-                var rh = Math.Max(2.0, nh * sc);
+                var rw = WorkflowSurfaceMath.MinThumbSize(nw, sc, 2.0);
+                var rh = WorkflowSurfaceMath.MinThumbSize(nh, sc, 2.0);
                 SetLeft(rect, rx);
                 SetTop(rect, ry);
                 rect.Width = rw;
@@ -572,14 +544,10 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
                 _viewportRect = new Rectangle();
                 Children.Add(_viewportRect);
             }
-            var vpx = ox + (vp.Left - gb.Left) * sc;
-            var vpy = oy + (vp.Top - gb.Top) * sc;
-            // Same clamp as GetViewportRectInMinimap: keep the block inside the
-            // minimap when the viewport exceeds the fitted content.
-            var vpw = Math.Min(mmW, Math.Max(2.0, vp.Width * sc));
-            var vph = Math.Min(mmH, Math.Max(2.0, vp.Height * sc));
-            vpx = Math.Max(0, Math.Min(mmW - vpw, vpx));
-            vpy = Math.Max(0, Math.Min(mmH - vph, vpy));
+            // Same shared fit + clamp as GetViewportRectInMinimap.
+            var (vpx, vpy, vpw, vph) = WorkflowSurfaceMath.MinimapViewportRect(
+                ox, oy, sc, vp.Left, vp.Top, vp.Width, vp.Height,
+                gb.Left, gb.Top, mmW, mmH, minRectSize: 2.0);
             SetLeft(_viewportRect, vpx);
             SetTop(_viewportRect, vpy);
             _viewportRect.Width = vpw;

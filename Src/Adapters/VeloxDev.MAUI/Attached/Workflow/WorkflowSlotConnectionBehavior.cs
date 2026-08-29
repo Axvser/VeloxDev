@@ -421,14 +421,15 @@ public sealed class WorkflowSlotConnectionBehavior
         IsDraggingConnection = false;
     }
 
-    private static bool SynchronizeSlotAnchor(View view, VisualElement coordinateHost, IWorkflowSlotViewModel slot)
+    private static bool SynchronizeSlotAnchor(View view, VisualElement? coordinateHost, IWorkflowSlotViewModel slot)
     {
-        if (view.Width <= 0 || view.Height <= 0 || !TryGetCenterRelativeTo(view, coordinateHost, out var center))
+        if (coordinateHost is null || view.Width <= 0 || view.Height <= 0 || !TryGetCenterRelativeTo(view, coordinateHost, out var center))
         {
             return false;
         }
 
-        slot.Anchor = new Anchor(center.X, center.Y, slot.Anchor.Layer);
+        // coordinateHost is the canvas; the measured center is already world/canvas-local.
+        slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(center.X, center.Y, slot.Anchor.Layer);
         return true;
     }
 

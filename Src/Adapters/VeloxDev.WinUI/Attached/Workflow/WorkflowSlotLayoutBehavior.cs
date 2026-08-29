@@ -330,10 +330,10 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         if (coordinateHost is not null)
         {
             var centerOnCanvas = control.TransformToVisual(coordinateHost).TransformPoint(new Windows.Foundation.Point(control.ActualWidth / 2, control.ActualHeight / 2));
-            slot.Anchor = new Anchor(
-                centerOnCanvas.X,
-                centerOnCanvas.Y,
-                slot.Anchor.Layer);
+            // coordinateHost is the canvas, so the transform already inverts the canvas
+            // Translation — the center is world/canvas-local and must NOT subtract ActualOffset.
+            slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(
+                centerOnCanvas.X, centerOnCanvas.Y, slot.Anchor.Layer);
             return;
         }
 

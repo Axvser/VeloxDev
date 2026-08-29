@@ -399,12 +399,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             newOffsetY = Math.Min(newOffsetY, maxV);
             state.PanStart = current;
             state.PanStartOffset = new Vector(
-                Math.Max(0, Math.Min(newOffsetX, maxH)),
-                Math.Max(0, Math.Min(newOffsetY, maxV)));
+                WorkflowSurfaceMath.ClampValue(newOffsetX, 0, maxH),
+                WorkflowSurfaceMath.ClampValue(newOffsetY, 0, maxV));
         }
 
-        var appliedOffsetX = Math.Max(0, Math.Min(newOffsetX, maxH));
-        var appliedOffsetY = Math.Max(0, Math.Min(newOffsetY, maxV));
+        var appliedOffsetX = WorkflowSurfaceMath.ClampValue(newOffsetX, 0, maxH);
+        var appliedOffsetY = WorkflowSurfaceMath.ClampValue(newOffsetY, 0, maxV);
 
         state.ScrollViewer.ScrollToHorizontalOffset(appliedOffsetX);
         state.ScrollViewer.ScrollToVerticalOffset(appliedOffsetY);
@@ -484,10 +484,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     }
 
     private static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)
-        => Math.Max(0, scrollViewer.ExtentWidth - scrollViewer.ViewportWidth);
+        => WorkflowSurfaceMath.ScrollMax(scrollViewer.ExtentWidth, scrollViewer.ViewportWidth);
 
     private static double GetVerticalScrollMaximum(ScrollViewer scrollViewer)
-        => Math.Max(0, scrollViewer.ExtentHeight - scrollViewer.ViewportHeight);
+        => WorkflowSurfaceMath.ScrollMax(scrollViewer.ExtentHeight, scrollViewer.ViewportHeight);
 
     private static bool IsSurfaceBlankInteraction(DependencyObject source, SurfaceState state)
     {

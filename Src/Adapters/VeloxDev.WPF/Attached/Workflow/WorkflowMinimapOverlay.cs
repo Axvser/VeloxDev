@@ -150,35 +150,11 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     public double MinimapMinSize { get => (double)GetValue(MinimapMinSizeProperty); set => SetValue(MinimapMinSizeProperty, value); }
     public string? ScrollViewerName { get => (string?)GetValue(ScrollViewerNameProperty); set => SetValue(ScrollViewerNameProperty, value); }
 
-    // ── Internal types ───────────────────────────────────────────────────────
-
-    private struct BoundsRect
-    {
-        public double Left, Top, Width, Height;
-        public readonly double Right => Left + Width;
-        public readonly double Bottom => Top + Height;
-        public readonly bool IsEmpty => Width <= 0 || Height <= 0;
-
-        public static BoundsRect Union(BoundsRect a, BoundsRect b)
-        {
-            if (a.IsEmpty) return b;
-            if (b.IsEmpty) return a;
-            var l = Math.Min(a.Left, b.Left);
-            var t = Math.Min(a.Top, b.Top);
-            var r = Math.Max(a.Right, b.Right);
-            var btm = Math.Max(a.Bottom, b.Bottom);
-            return new BoundsRect { Left = l, Top = t, Width = r - l, Height = btm - t };
-        }
-
-        public static BoundsRect FromNode(double x, double y, double w, double h)
-            => new() { Left = x, Top = y, Width = w, Height = h };
-    }
-
     // ── State ────────────────────────────────────────────────────────────────
 
-    private BoundsRect _lastGlobalBounds;
+    private WorkflowBounds _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
-    private BoundsRect _lastViewport;
+    private WorkflowBounds _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
     private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
@@ -345,25 +321,20 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         var tree = WorkflowTree;
         if (tree is null) { ClearCache(); return; }
 
-        var globalBounds = default(BoundsRect);
         _lastNodeRects.Clear();
-        bool first = true;
 
         if (tree.Nodes is not null)
             foreach (var node in tree.Nodes)
             {
                 var (nx, ny, nw, nh) = (node.Anchor.Horizontal, node.Anchor.Vertical, node.Size.Width, node.Size.Height);
                 _lastNodeRects.Add((nx, ny, nw, nh));
-                var nr = BoundsRect.FromNode(nx, ny, nw, nh);
-                if (first) { globalBounds = nr; first = false; }
-                else globalBounds = BoundsRect.Union(globalBounds, nr);
             }
 
-        _lastGlobalBounds = globalBounds;
+        _lastGlobalBounds = WorkflowBounds.FromNodes(_lastNodeRects);
 
         var vw = Math.Max(1, ViewportWidth);
         var vh = Math.Max(1, ViewportHeight);
-        _lastViewport = BoundsRect.FromNode(
+        _lastViewport = WorkflowBounds.FromNode(
             WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX),
             WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY),
             vw, vh);
@@ -429,7 +400,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     // ── Transform ─────────────────────────────────────────────────────────────
 
-    private (double Ox, double Oy, double MmW, double MmH, double Sc) ComputeTransform(BoundsRect gb)
+    private (double Ox, double Oy, double MmW, double MmH, double Sc) ComputeTransform(WorkflowBounds gb)
     {
         var margin = 0.0; // WPF margin is handled by Grid alignment
         var minSz = Math.Max(1, MinimapMinSize);
@@ -506,7 +477,9 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
                 foreach (var (nx, ny, nw, nh) in _lastNodeRects)
                 {
                     var (l, t) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, ox, oy, sc);
-                    var r = new Rect(l, t, Math.Max(2.0, nw * sc), Math.Max(2.0, nh * sc));
+                    var r = new Rect(l, t,
+                        WorkflowSurfaceMath.MinThumbSize(nw, sc, 2.0),
+                        WorkflowSurfaceMath.MinThumbSize(nh, sc, 2.0));
                     dc.DrawRoundedRectangle(NodeBrush, null, r, ncr, ncr);
                 }
             }

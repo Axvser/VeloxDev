@@ -334,13 +334,13 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             newOffsetY = Math.Min(newOffsetY, maxV);
             state.PanStart = current;
             state.PanStartOffset = new Vector(
-                Math.Max(0, Math.Min(newOffsetX, maxH)),
-                Math.Max(0, Math.Min(newOffsetY, maxV)));
+                WorkflowSurfaceMath.ClampValue(newOffsetX, 0, maxH),
+                WorkflowSurfaceMath.ClampValue(newOffsetY, 0, maxV));
         }
 
         state.ScrollViewer.Offset = new Vector(
-            Math.Max(0, Math.Min(newOffsetX, maxH)),
-            Math.Max(0, Math.Min(newOffsetY, maxV)));
+            WorkflowSurfaceMath.ClampValue(newOffsetX, 0, maxH),
+            WorkflowSurfaceMath.ClampValue(newOffsetY, 0, maxV));
 
         UpdateVisibleRegion(host, state);
         e.Handled = true;
@@ -411,10 +411,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     }
 
     private static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)
-        => Math.Max(0, scrollViewer.Extent.Width - scrollViewer.Viewport.Width);
+        => WorkflowSurfaceMath.ScrollMax(scrollViewer.Extent.Width, scrollViewer.Viewport.Width);
 
     private static double GetVerticalScrollMaximum(ScrollViewer scrollViewer)
-        => Math.Max(0, scrollViewer.Extent.Height - scrollViewer.Viewport.Height);
+        => WorkflowSurfaceMath.ScrollMax(scrollViewer.Extent.Height, scrollViewer.Viewport.Height);
 
     private static bool ShouldStartPan(PointerPressedEventArgs e, SurfaceState state)
     {

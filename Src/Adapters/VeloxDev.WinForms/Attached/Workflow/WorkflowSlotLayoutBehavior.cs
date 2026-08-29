@@ -549,13 +549,16 @@ public sealed class WorkflowSlotLayoutBehavior
 
         if (coordinateHost is not null)
         {
+            // PointToClient yields the center in the coordinate host's client space
+            // (world + ActualOffset); subtract via the shared screen-space helper.
             var coordinatePoint = coordinateHost.PointToClient(screenPoint);
-            var actualOffset = GetActualOffset(host, node.Parent);
-            slot.Anchor = new Anchor(
-                coordinatePoint.X - actualOffset.Horizontal,
-                coordinatePoint.Y - actualOffset.Vertical,
-                slot.Anchor.Layer);
-            return;
+            var layout = node.Parent?.Layout;
+            if (layout is not null)
+            {
+                slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(
+                    coordinatePoint.X, coordinatePoint.Y, slot.Anchor.Layer, layout);
+                return;
+            }
         }
 
         var localPoint = host.PointToClient(screenPoint);

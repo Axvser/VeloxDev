@@ -329,7 +329,8 @@ public sealed class WorkflowSlotLayoutBehavior
             // layout positions, which excludes the canvas TranslationX render transform — so
             // the result is already canvas/world space and needs no ActualOffset subtraction.
             // (Core's SlotAnchorFromVisualCenter is for adapters that measure in screen space.)
-            newAnchor = new Anchor(centerOnCanvas.Value.X, centerOnCanvas.Value.Y, slot.Anchor.Layer);
+            newAnchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(
+                centerOnCanvas.Value.X, centerOnCanvas.Value.Y, slot.Anchor.Layer);
         }
         else
         {

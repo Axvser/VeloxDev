@@ -233,8 +233,8 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             wx, wy, ScrollViewer.ViewportWidth, ScrollViewer.ViewportHeight, ContentOffsetX, ContentOffsetY);
         scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true);
         scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false);
-        ScrollViewer.ScrollToHorizontalOffset(Math.Max(0, Math.Min(scrollX, maxH)));
-        ScrollViewer.ScrollToVerticalOffset(Math.Max(0, Math.Min(scrollY, maxV)));
+        ScrollViewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(scrollX, 0, maxH));
+        ScrollViewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(scrollY, 0, maxV));
     }
 
     // ── Mouse ──────────────────────────────────────────────────────────────
@@ -287,19 +287,17 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             {
                 var (lx, ly) = WorkflowSurfaceMath.MinimapLocal(node.Anchor.Horizontal, node.Anchor.Vertical, bounds.X, bounds.Y, ox, oy, scale);
                 dc.DrawRoundedRectangle(s_node, null,
-                    new Rect(lx, ly, Math.Max(1, node.Size.Width * scale), Math.Max(1, node.Size.Height * scale)), 2, 2);
+                    new Rect(lx, ly,
+                        WorkflowSurfaceMath.MinThumbSize(node.Size.Width, scale, 1),
+                        WorkflowSurfaceMath.MinThumbSize(node.Size.Height, scale, 1)), 2, 2);
             }
         }
 
-        double worldLeft = WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX);
-        double worldTop = WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY);
-        var v = new Point(ox + (worldLeft - bounds.X) * scale, oy + (worldTop - bounds.Y) * scale);
-        double vw = Math.Max(2, ViewportWidth * scale);
-        double vh = Math.Max(2, ViewportHeight * scale);
-        vw = Math.Min(vw, Width);
-        vh = Math.Min(vh, Height);
-        v.X = Math.Max(0, Math.Min(Width - vw, v.X));
-        v.Y = Math.Max(0, Math.Min(Height - vh, v.Y));
-        dc.DrawRectangle(s_viewportFill, s_viewportPen, new Rect(v.X, v.Y, vw, vh));
+        var worldLeft = WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX);
+        var worldTop = WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY);
+        var (vx, vy, vw, vh) = WorkflowSurfaceMath.MinimapViewportRect(
+            ox, oy, scale, worldLeft, worldTop, ViewportWidth, ViewportHeight,
+            bounds.X, bounds.Y, Width, Height, minRectSize: 2);
+        dc.DrawRectangle(s_viewportFill, s_viewportPen, new Rect(vx, vy, vw, vh));
     }
 }

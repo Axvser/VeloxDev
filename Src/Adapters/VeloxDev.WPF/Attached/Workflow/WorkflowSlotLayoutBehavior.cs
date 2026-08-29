@@ -313,20 +313,21 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
         if (coordinateHost is not null)
         {
+            // TranslatePoint relative to the canvas yields canvas-local (world + ActualOffset)
+            // because the ActualOffset is a per-node render transform; subtract to get world.
             var centerOnCanvas = control.TranslatePoint(new Point(control.ActualWidth / 2, control.ActualHeight / 2), coordinateHost);
-            var actualOffset = GetActualOffset(node.Parent);
-            slot.Anchor = new Anchor(
-                centerOnCanvas.X - actualOffset.Horizontal,
-                centerOnCanvas.Y - actualOffset.Vertical,
-                slot.Anchor.Layer);
-            return;
+            var layout = node.Parent?.Layout;
+            if (layout is not null)
+            {
+                slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(
+                    centerOnCanvas.X, centerOnCanvas.Y, slot.Anchor.Layer, layout);
+                return;
+            }
         }
 
         var center = control.TranslatePoint(new Point(control.ActualWidth / 2, control.ActualHeight / 2), host);
-        slot.Anchor = new Anchor(
-            node.Anchor.Horizontal + center.X,
-            node.Anchor.Vertical + center.Y,
-            slot.Anchor.Layer);
+        slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromNode(
+            node.Anchor.Horizontal, node.Anchor.Vertical, center.X, center.Y, slot.Anchor.Layer);
     }
 
     private static FrameworkElement? ResolveCoordinateHost(UserControl control, UserControl parentHost)
@@ -374,16 +375,6 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         => string.IsNullOrWhiteSpace(names)
             ? Enumerable.Empty<string>()
             : names!.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0);
-
-    private static Offset GetActualOffset(IWorkflowTreeViewModel? tree)
-    {
-        if (tree is null)
-        {
-            return new Offset();
-        }
-
-        return tree.Layout.ActualOffset;
-    }
 
     private static FrameworkElement? FindDescendantWithSlotDataContext(DependencyObject parent)
     {
