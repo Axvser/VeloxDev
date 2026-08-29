@@ -757,10 +757,27 @@ window.veloxdevWorkflow = (() => {
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
 
+        // Window resize changes the visible-area size without a scroll; re-push the viewport block
+        // with the new scroller client size so the minimap reflects the current editor state without
+        // requiring a click (the world top-left is unchanged — only the visible size shrinks).
+        const scrollerEl = document.getElementById(scrollerId);
+        let resizeObserver = null;
+        if (scrollerEl && typeof ResizeObserver !== 'undefined') {
+            const onResize = function () {
+                const last = minimapLastWorld[scrollerId];
+                if (last) {
+                    setMinimapViewport(scrollerId, last.x, last.y, scrollerEl.clientWidth, scrollerEl.clientHeight);
+                }
+            };
+            resizeObserver = new ResizeObserver(onResize);
+            resizeObserver.observe(scrollerEl);
+        }
+
         return {
             dispose: function () {
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
+                if (resizeObserver) resizeObserver.disconnect();
                 if (minimapRects[scrollerId]) delete minimapRects[scrollerId];
             }
         };

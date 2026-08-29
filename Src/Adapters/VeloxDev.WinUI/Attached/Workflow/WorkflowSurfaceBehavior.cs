@@ -217,6 +217,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ViewChanged += OnViewChanged;
+            // ViewChanged does not fire when only the window resizes (the viewport size changes
+            // without a scroll operation), so hook SizeChanged to refresh the minimap's viewport
+            // indicator on window shrink — matching WPF's ScrollChanged behavior.
+            state.ScrollViewer.SizeChanged += OnScrollViewerSizeChanged;
         }
     }
 
@@ -230,6 +234,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ViewChanged -= OnViewChanged;
+            state.ScrollViewer.SizeChanged -= OnScrollViewerSizeChanged;
         }
 
         state.PointerPressSource = null;
@@ -334,6 +339,22 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
+        var host = EnumerateVisualAncestors(viewer).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+        if (host is not null)
+        {
+            Refresh(host);
+        }
+    }
+
+    private static void OnScrollViewerSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (sender is not ScrollViewer viewer)
+        {
+            return;
+        }
+
+        // Window resize changes the visible-area size without firing ViewChanged; refresh so the
+        // minimap viewport indicator reflects the new visible region (nodes scrolled out of view).
         var host = EnumerateVisualAncestors(viewer).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
         if (host is not null)
         {
