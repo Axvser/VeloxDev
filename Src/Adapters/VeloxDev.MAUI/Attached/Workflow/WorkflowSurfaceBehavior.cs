@@ -16,14 +16,19 @@ public sealed class WorkflowSurfaceBehavior
         public PanGestureRecognizer? PanGesture { get; set; }
         public INotifyPropertyChanged? LayoutNotifier { get; set; }
         public PropertyChangedEventHandler? LayoutChangedHandler { get; set; }
-        public double LastPanTotalX { get; set; }
-        public double LastPanTotalY { get; set; }
-        /// <summary>Tracked expected scroll position during a pan gesture.
-        /// Never read from ScrollViewer.ScrollX during running to avoid
-        /// stale intermediate positions from async ScrollToAsync.</summary>
+        /// <summary>Anchor scroll offset of the current pan gesture â€” the scroll position the
+        /// gesture began at (or the last edge/node-drag re-anchor). Each Running computes the
+        /// target ABSOLUTELY as anchor âˆ’ (Total âˆ’ anchorTotal), the same math WPF and the minimap
+        /// use. No per-delta accumulation: a clamped/rounded ScrollToAsync can't accumulate
+        /// bookkeeping drift, which is what jittered during drag and jumped at release.</summary>
         public double PanAccumulatedX { get; set; }
-        /// <summary>Tracked expected scroll position during a pan gesture.</summary>
+        /// <summary>Anchor scroll offset of the current pan gesture (vertical).</summary>
         public double PanAccumulatedY { get; set; }
+        /// <summary>Gesture TotalX at the pan anchor. The pointer's current distance from the
+        /// anchor is (TotalX âˆ’ PanAnchorTotalX); the scroll target is anchor âˆ’ that distance.</summary>
+        public double PanAnchorTotalX { get; set; }
+        /// <summary>Gesture TotalY at the pan anchor (vertical).</summary>
+        public double PanAnchorTotalY { get; set; }
         public bool HasPendingScrollRestore { get; set; }
         public bool IsRefreshing { get; set; }
         public bool IsVisibleRegionUpdateQueued { get; set; }
@@ -35,8 +40,8 @@ public sealed class WorkflowSurfaceBehavior
         public CancellationTokenSource? PanCts { get; set; }
 
         /// <summary>True while a pan gesture is active (Started through Completed/Canceled).
-        /// Used by OnScrolled to suppress redundant Refresh during pan gestures, since
-        /// ApplyPanAsync already calls UpdateVisibleRegion after each ScrollToAsync.</summary>
+        /// No longer gates OnScrolled or the decorator writers â€” those are always active now so
+        /// grid + content track the native offset together. Kept for the diagnostic trace.</summary>
         public bool PanGestureActive { get; set; }
     }
 
@@ -310,6 +315,10 @@ public sealed class WorkflowSurfaceBehavior
         {
             state.ScrollViewer.Scrolled += OnScrolled;
             state.ScrollViewer.SizeChanged += OnScrollViewerSizeChanged;
+            // Configure the native ScrollViewer once its platform view exists (the handler can
+            // be created after this attachment runs). Re-runs if the handler is re-created.
+            state.ScrollViewer.HandlerChanged += OnScrollViewerHandlerChanged;
+            OnScrollViewerHandlerChanged(state.ScrollViewer, EventArgs.Empty);
         }
     }
 
@@ -319,6 +328,7 @@ public sealed class WorkflowSurfaceBehavior
         {
             state.ScrollViewer.Scrolled -= OnScrolled;
             state.ScrollViewer.SizeChanged -= OnScrollViewerSizeChanged;
+            state.ScrollViewer.HandlerChanged -= OnScrollViewerHandlerChanged;
         }
 
         if (state.Canvas is not null)
@@ -447,20 +457,15 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        // During an active pan gesture, ApplyPanAsync already calls
-        // UpdateVisibleRegion after each ScrollToAsync completes.
-        // The OnScrolled that fires from the same ScrollToAsync would
-        // redundantly call Refresh ¡ú ApplyLayout ¡ú UpdateVisibleRegion,
-        // re-reading viewport values while MAUI layout may still be
-        // transitional. This causes a visual flashback/jump on mouse
-        // release (the "Completed" case) because the stale scroll
-        // position writes ViewportOffset/Viewport after the gesture
-        // has logically ended.
-        if (state.PanGestureActive)
-        {
-            return;
-        }
-
+        // CRITICAL: do NOT suppress Scrolled during a pan. MAUI fires this on every native
+        // ViewChanged (intermediate + final), and ScrollX/ScrollY are the native offsets at
+        // that instant â€” the ONLY trustworthy position. ScrollToAsync is a fire-and-forget
+        // ChangeView that can land short of the request (it never guarantees the target is hit),
+        // and on Windows the native ScrollViewer's manipulation can move the content on its
+        // own. Suppressing Scrolled froze the decorators at the requested target during the
+        // drag, so when the native settled elsewhere after release the decorators snapped â€”
+        // the release jump. Letting every scroll through (the minimap's path) keeps grid +
+        // content glued at all times.
         Refresh(host);
     }
 
@@ -474,6 +479,44 @@ public sealed class WorkflowSurfaceBehavior
                 Refresh(host);
             }
         }
+    }
+
+    /// <summary>
+    /// On Windows the native ScrollViewer must be a PASSIVE receiver of ChangeView only. MAUI's
+    /// pan recognizer drives the surface through native manipulation events (ManipulationMode 35
+    /// on the pointer-press source), and the nested ScrollViewer â€” a manipulation-capable control
+    /// with the default <c>ManipulationMode.System</c> â€” would otherwise claim the manipulation
+    /// as its container and scroll the content itself, with inertia. It then fights our
+    /// programmatic ChangeView calls, and on pointer release its manipulation completes and
+    /// applies its OWN accumulated offset â€” the post-release content jump we chased during
+    /// the release-pan investigation.
+    ///
+    /// We demote it to a passive MANUAL container instead: <c>ManipulationMode</c> to the same
+    /// TranslateX|TranslateY|Scale value MAUI uses on gesture containers. A non-<c>System</c>
+    /// mode stops the ScrollViewer from claiming the gesture for its own scrolling, so ChangeView
+    /// is the sole scroll driver (the same model the WinUI adapter uses). The manipulation still
+    /// initiates on this control (it is the nearest non-<c>None</c> ancestor of the canvas) and
+    /// bubbles to the parent's handlers, which is how the pan keeps working.
+    ///
+    /// IMPORTANT: do NOT use <c>ManipulationModes.None</c> here. None disables manipulation for
+    /// the element AND its entire subtree, so no manipulation ever initiates inside the canvas â€”
+    /// the pan stops working entirely (observed regression).
+    /// </summary>
+    private static void OnScrollViewerHandlerChanged(object? sender, EventArgs e)
+    {
+        if (sender is not ScrollView viewer)
+        {
+            return;
+        }
+#if WINDOWS
+        if (viewer.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ScrollViewer sv)
+        {
+            sv.IsScrollInertiaEnabled = false;
+            sv.ManipulationMode = Microsoft.UI.Xaml.Input.ManipulationModes.TranslateX
+                | Microsoft.UI.Xaml.Input.ManipulationModes.TranslateY
+                | Microsoft.UI.Xaml.Input.ManipulationModes.Scale;
+        }
+#endif
     }
 
     private static void ApplyLayout(ContentView host, SurfaceState state)
@@ -505,8 +548,15 @@ public sealed class WorkflowSurfaceBehavior
             double.IsNaN(state.Canvas.HeightRequest))
             state.Canvas.HeightRequest = Math.Max(1, actualSize.Height);
 
-        UpdateGridDecorator(viewModel, state);
-        UpdateMinimapOverlay(viewModel, state);
+        // Decorator/minimap offsets are viewport data. Written from ScrollX (the native offset
+        // as of the last ViewChanged) on EVERY Refresh â€” including during a pan â€” so grid +
+        // content never diverge. The decorators coalesce their redraws (ScheduleInvalidate),
+        // so the second write from ApplyVisibleRegion later in this Refresh is free.
+        if (state.ScrollViewer is not null)
+        {
+            UpdateGridDecorator(viewModel, state, state.ScrollViewer.ScrollX, state.ScrollViewer.ScrollY);
+            UpdateMinimapOverlay(viewModel, state, state.ScrollViewer.ScrollX, state.ScrollViewer.ScrollY);
+        }
     }
 
     private static async void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
@@ -527,23 +577,27 @@ public sealed class WorkflowSurfaceBehavior
             switch (e.StatusType)
             {
                 case GestureStatus.Started:
-                    state.LastPanTotalX = 0;
-                    state.LastPanTotalY = 0;
+                    // Anchor the pan at the current scroll + pointer position. Each Running
+                    // computes the target absolutely from this anchor (WPF/minimap style)
+                    // instead of accumulating per-delta differences, which drift whenever a
+                    // clamped ScrollToAsync lands off the requested offset.
                     state.PanAccumulatedX = state.ScrollViewer.ScrollX;
                     state.PanAccumulatedY = state.ScrollViewer.ScrollY;
+                    state.PanAnchorTotalX = e.TotalX;
+                    state.PanAnchorTotalY = e.TotalY;
                     state.PanGestureActive = true;
                     break;
                 case GestureStatus.Running:
                     if (WorkflowNodeDragBehavior.IsDraggingNode || WorkflowSlotConnectionBehavior.IsDraggingConnection)
                     {
-                        state.LastPanTotalX = e.TotalX;
-                        state.LastPanTotalY = e.TotalY;
-                        // Don't overwrite PanAccumulatedX/Y during node/connection drag.
-                        // When drag ends mid-pan gesture, the next Running enters ApplyPanAsync
-                        // using delta = TotalX - LastPanTotalX applied against the pre-drag
-                        // PanAccumulated snapshot. If PanAccumulated were overwritten with
-                        // ScrollX here (which hasn't changed), delta would be near zero,
-                        // suppressing the intended scroll and causing a viewport jump.
+                        // Keep the anchor glued to the current scroll + pointer while a
+                        // node/connection drag suppresses canvas panning, so that when the
+                        // drag ends mid-gesture the resumed pan continues from the current
+                        // position instead of jumping by the node-drag pointer distance.
+                        state.PanAccumulatedX = state.ScrollViewer.ScrollX;
+                        state.PanAccumulatedY = state.ScrollViewer.ScrollY;
+                        state.PanAnchorTotalX = e.TotalX;
+                        state.PanAnchorTotalY = e.TotalY;
                         break;
                     }
 
@@ -551,18 +605,17 @@ public sealed class WorkflowSurfaceBehavior
                     break;
                 case GestureStatus.Canceled:
                 case GestureStatus.Completed:
-                    state.LastPanTotalX = 0;
-                    state.LastPanTotalY = 0;
-                    // Preserve actual scroll position instead of resetting to 0.
-                    // Between Completed and the next Started, a stale OnScrolled
-                    // may fire (from an in-flight ScrollToAsync), calling Refresh
-                    // which writes ViewportOffset. Having a coherent PanAccumulated
-                    // prevents state corruption across gesture boundaries.
-                    state.PanAccumulatedX = state.ScrollViewer.ScrollX;
-                    state.PanAccumulatedY = state.ScrollViewer.ScrollY;
-                    state.PanCts?.Cancel();
-                    state.PanCts = null;
-                    state.PanGestureActive = false;
+                    {
+                        state.PanCts?.Cancel();
+                        state.PanCts = null;
+                        state.PanGestureActive = false;
+                        state.PanAccumulatedX = state.ScrollViewer.ScrollX;
+                        state.PanAccumulatedY = state.ScrollViewer.ScrollY;
+                        // No forced finalize: the last ChangeView's landing fires Scrolled ->
+                        // OnScrolled -> Refresh, which writes the decorators from the settled
+                        // native offset. Dropping the flag is safe now that OnScrolled is the
+                        // single decorator writer and reads ScrollX (native truth) directly.
+                    }
                     break;
             }
         }
@@ -585,39 +638,36 @@ public sealed class WorkflowSurfaceBehavior
         state.PanCts = new CancellationTokenSource();
         var ct = state.PanCts.Token;
 
-        var deltaX = e.TotalX - state.LastPanTotalX;
-        var deltaY = e.TotalY - state.LastPanTotalY;
-        state.LastPanTotalX = e.TotalX;
-        state.LastPanTotalY = e.TotalY;
-
-        // Use tracked accumulated position instead of reading ScrollViewer.ScrollX
-        // directly. ScrollToAsync is async and ScrollX may be at an intermediate
-        // position during the gesture, causing the next delta calculation to be
-        // based on a stale scroll position ¡ª which manifests as a visual flash-back.
-        var newOffsetX = state.PanAccumulatedX - deltaX;
-        var newOffsetY = state.PanAccumulatedY - deltaY;
+        // Absolute target from the pan anchor â€” the same math WPF uses (startOffset + pointer
+        // movement since the anchor). Reading the actual ScrollX each frame is what caused the
+        // flash-back; accumulating a per-delta offset is what jittered (a clamped ScrollToAsync
+        // lets the bookkeeping drift from the real position, so the content sticks then jumps).
+        // The anchor only moves in Started, node-drag suppression, and the edge re-anchor below,
+        // so it never accumulates error.
+        var desiredX = state.PanAccumulatedX - (e.TotalX - state.PanAnchorTotalX);
+        var desiredY = state.PanAccumulatedY - (e.TotalY - state.PanAnchorTotalY);
         var maxH = GetHorizontalScrollMaximum(state);
         var maxV = GetVerticalScrollMaximum(state);
         // layoutChanged = the desired offset overshoots [0, max] on either axis, which is
         // exactly when ClampScrollOffset (below) expands the canvas.  Kept adapter-specific
         // so the max-recompute flow below stays unchanged.
-        var layoutChanged = newOffsetX < 0 || newOffsetX > maxH || newOffsetY < 0 || newOffsetY > maxV;
+        var layoutChanged = desiredX < 0 || desiredX > maxH || desiredY < 0 || desiredY > maxV;
 
-        // ©¤©¤ Expand canvas when pan reaches edge ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-        // Expansion IS the correct behavior (matching WPF).  The original crash
-        // was caused by a cascade: expansion ¡ú Refresh ¡ú more expansion.
-        // The IsRefreshing guard in Refresh() breaks this cycle.
+        // Expand canvas when pan reaches the edge. Expansion IS the correct behavior
+        // (matching WPF). The original crash was caused by a cascade:
+        // expansion â†’ Refresh â†’ more expansion. The IsRefreshing guard in Refresh()
+        // breaks this cycle.
 
         // ClampScrollOffset writes the overshoot into NegativeOffset (before origin) or
         // PositiveOffset (past the content edge) and returns the clamped offset to apply.
         // threshold 0 = always expand, matching the previous inline branches.
-        newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(newOffsetX, maxH, viewModel.Layout, horizontal: true, threshold: 0);
-        newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(newOffsetY, maxV, viewModel.Layout, horizontal: false, threshold: 0);
+        var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, viewModel.Layout, horizontal: true, threshold: 0);
+        var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, viewModel.Layout, horizontal: false, threshold: 0);
 
         if (layoutChanged)
         {
             ApplyLayout(host, state);
-            // Recompute max from model ¡ª canvas size was just updated via ApplyLayout
+            // Recompute max from model â€” canvas size was just updated via ApplyLayout
             // but MAUI layout is async so ScrollViewer.ContentSize is stale.
             maxH = GetHorizontalScrollMaximum(state);
             maxV = GetVerticalScrollMaximum(state);
@@ -628,20 +678,41 @@ public sealed class WorkflowSurfaceBehavior
         if (!double.IsFinite(maxH)) maxH = 0;
         if (!double.IsFinite(maxV)) maxV = 0;
 
-        var appliedOffsetX = Math.Max(0, Math.Min(newOffsetX, maxH));
-        var appliedOffsetY = Math.Max(0, Math.Min(newOffsetY, maxV));
+        // Bound the applied target by the NATIVE ScrollViewer extent, not just the model.
+        // On overscroll the model's ActualSize (and canvas WidthRequest) grows
+        // SYNCHRONOUSLY, but the native content re-measures ASYNCHRONOUSLY, so during a
+        // fast drag the native extent can lag the model by thousands of pixels. ChangeView
+        // clamps to the native extent, so a model-based target lands short of the native edge.
+        // Re-anchoring at the model edge then sets the bookkeeping AHEAD of the native:
+        // the content pins at the stale native edge and, when the native finally re-measures,
+        // jumps forward in one frame to catch the anchor. Clamping the applied target to the
+        // live native extent makes every ChangeView land exactly, so the content eases with
+        // the re-measure instead of jumping (and never over-shoots on release).
+        var appliedOffsetX = Math.Max(0, Math.Min(newOffsetX, GetNativeScrollMaximum(state, horizontal: true)));
+        var appliedOffsetY = Math.Max(0, Math.Min(newOffsetY, GetNativeScrollMaximum(state, horizontal: false)));
 
-        // Update tracked position so the next delta calculation is correct.
-        state.PanAccumulatedX = appliedOffsetX;
-        state.PanAccumulatedY = appliedOffsetY;
+        if (layoutChanged)
+        {
+            // Re-anchor at the APPLIED (native-bounded) offset â€” never the model edge â€” so
+            // the bookkeeping stays exactly where the content will actually land this frame.
+            state.PanAccumulatedX = appliedOffsetX;
+            state.PanAccumulatedY = appliedOffsetY;
+            state.PanAnchorTotalX = e.TotalX;
+            state.PanAnchorTotalY = e.TotalY;
+        }
 
+        // The decorators are NOT written from the requested target: ChangeView is fire-and-forget
+        // and can land short of the request (the native manipulation fights it on Windows), so
+        // writing the requested target would desync the grid from the content. The native
+        // ViewChanged -> Scrolled -> OnScrolled -> Refresh path writes the decorators from the
+        // ACTUAL landed position on every move â€” the same single-writer path the smooth minimap uses.
         try
         {
             await state.ScrollViewer.ScrollToAsync(appliedOffsetX, appliedOffsetY, false);
         }
         catch (OperationCanceledException)
         {
-            // Previous scroll was superseded by a newer pan delta ¡ª expected.
+            // Previous scroll was superseded by a newer pan delta â€” expected.
             return;
         }
 
@@ -671,6 +742,38 @@ public sealed class WorkflowSurfaceBehavior
         if (viewModel is null || state.ScrollViewer is null) return 0;
         var h = viewModel.Layout.ActualSize.Height - state.ScrollViewer.Height;
         return double.IsNaN(h) || h < 0 ? 0 : h;
+    }
+
+    /// <summary>
+    /// The scroll extent the native ScrollViewer will actually accept RIGHT NOW:
+    /// <c>min(model extent, native Extent âˆ’ viewport)</c>. On overscroll the model's
+    /// <see cref="CanvasLayout.ActualSize"/> (and the canvas WidthRequest/HeightRequest set by
+    /// <see cref="ApplyLayout"/>) grows synchronously while the native content re-measures
+    /// asynchronously, so the native extent can lag the model by a lot during a fast drag.
+    /// ChangeView clamps to the native extent, so this is the true ceiling for any applied
+    /// target â€” a model-based ceiling lets the content pin at the stale native edge and then
+    /// jump forward when the native catches up. Falls back to the model extent on non-Windows
+    /// platforms (no ChangeView clamp desync there).
+    /// </summary>
+    private static double GetNativeScrollMaximum(SurfaceState state, bool horizontal)
+    {
+        var modelMax = horizontal ? GetHorizontalScrollMaximum(state) : GetVerticalScrollMaximum(state);
+#if WINDOWS
+        if (state.ScrollViewer?.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ScrollViewer sv)
+        {
+            var extent = horizontal ? sv.ExtentWidth : sv.ExtentHeight;
+            var viewport = horizontal ? sv.ViewportWidth : sv.ViewportHeight;
+            if (double.IsFinite(extent) && double.IsFinite(viewport) && extent > 0 && viewport > 0)
+            {
+                var nativeMax = extent - viewport;
+                if (double.IsFinite(nativeMax) && nativeMax >= 0)
+                {
+                    return Math.Min(modelMax, nativeMax);
+                }
+            }
+        }
+#endif
+        return modelMax;
     }
 
     private static IWorkflowTreeViewModel? ResolveTreeViewModel(ContentView host, SurfaceState state)
@@ -710,14 +813,15 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        UpdateGridDecorator(viewModel, state);
-        UpdateMinimapOverlay(viewModel, state);
-
         // CRITICAL: After ScrollToAsync completes, ScrollViewer dimensions and
         // scroll position can still be NaN/zero during MAUI's async layout pass.
-        // NaN propagates through Viewport ¡ú Virtualize ¡ú spatial index, causing
+        // NaN propagates through Viewport â†’ Virtualize â†’ spatial index, causing
         // all VisibleItems to be cleared (links permanently disappear).
         // NaN <= 0 returns false in C#, so Virtualize's guard does NOT catch this.
+        // CRITICAL: always write from ScrollX â€” the native offset as of the last ViewChanged,
+        // i.e. where the content ACTUALLY is. The requested target can differ from ScrollX
+        // whenever a ChangeView lands short, and writing the requested target here is exactly
+        // what made the grid snap back to the true position after release.
         var scrollX = state.ScrollViewer.ScrollX;
         var scrollY = state.ScrollViewer.ScrollY;
         var svW = state.ScrollViewer.Width;
@@ -729,6 +833,9 @@ public sealed class WorkflowSurfaceBehavior
         {
             return;
         }
+
+        UpdateGridDecorator(viewModel, state, scrollX, scrollY);
+        UpdateMinimapOverlay(viewModel, state, scrollX, scrollY);
 
         var viewportX = WorkflowSurfaceMath.ToWorld(scrollX, viewModel.Layout.ActualOffset.Horizontal);
         var viewportY = WorkflowSurfaceMath.ToWorld(scrollY, viewModel.Layout.ActualOffset.Vertical);
@@ -743,28 +850,28 @@ public sealed class WorkflowSurfaceBehavior
             double.IsNaN(scrollY) ? 0 : scrollY);
     }
 
-    private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state)
+    private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state, double scrollX, double scrollY)
     {
-        if (state.GridDecorator is not IWorkflowGridDecorator decorator || state.ScrollViewer is null)
+        if (state.GridDecorator is not IWorkflowGridDecorator decorator)
         {
             return;
         }
 
-        decorator.ScrollOffsetX = double.IsNaN(state.ScrollViewer.ScrollX) ? 0 : state.ScrollViewer.ScrollX;
-        decorator.ScrollOffsetY = double.IsNaN(state.ScrollViewer.ScrollY) ? 0 : state.ScrollViewer.ScrollY;
+        decorator.ScrollOffsetX = double.IsNaN(scrollX) ? 0 : scrollX;
+        decorator.ScrollOffsetY = double.IsNaN(scrollY) ? 0 : scrollY;
         decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
     }
 
-    private static void UpdateMinimapOverlay(IWorkflowTreeViewModel viewModel, SurfaceState state)
+    private static void UpdateMinimapOverlay(IWorkflowTreeViewModel viewModel, SurfaceState state, double scrollX, double scrollY)
     {
         if (state.MinimapOverlay is not IWorkflowMinimapOverlay minimap || state.ScrollViewer is null)
         {
             return;
         }
 
-        minimap.ScrollOffsetX = double.IsNaN(state.ScrollViewer.ScrollX) ? 0 : state.ScrollViewer.ScrollX;
-        minimap.ScrollOffsetY = double.IsNaN(state.ScrollViewer.ScrollY) ? 0 : state.ScrollViewer.ScrollY;
+        minimap.ScrollOffsetX = double.IsNaN(scrollX) ? 0 : scrollX;
+        minimap.ScrollOffsetY = double.IsNaN(scrollY) ? 0 : scrollY;
         minimap.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         minimap.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
         minimap.ViewportWidth = double.IsNaN(state.ScrollViewer.Width) ? 1 : state.ScrollViewer.Width;

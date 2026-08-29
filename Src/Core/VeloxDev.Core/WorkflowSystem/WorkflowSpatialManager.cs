@@ -16,6 +16,10 @@ public sealed class WorkflowSpatialManager : IDisposable
     // Reverse index: for each node, all NodePairBoundsProviders that have it as an endpoint.
     // Used by depth-expanded AgentBounds queries to walk the connection graph.
     private readonly Dictionary<IWorkflowNodeViewModel, List<NodePairBoundsProvider>> _nodeToPairs = [];
+    // Links whose LinkAdded fired before one of their endpoint nodes was registered. They are
+    // retried on every OnNodeAdded; without this they would be silently dropped forever and could
+    // never enter VisibleItems — "slot colored but link never visible".
+    private readonly HashSet<IWorkflowLinkViewModel> _pendingLinks = [];
     private readonly double _cellSize;
     private bool _disposed;
 
@@ -152,6 +156,8 @@ public sealed class WorkflowSpatialManager : IDisposable
             _nodeProviders.TryGetValue(nodeA, out var providerA) &&
             _nodeProviders.TryGetValue(nodeB, out var providerB))
         {
+            _pendingLinks.Remove(link);
+
             var pairProvider = new NodePairBoundsProvider(nodeA, nodeB, providerA, providerB);
             _nodePairProviders[link] = pairProvider;
             _pairToLink[pairProvider] = link;
@@ -161,11 +167,23 @@ public sealed class WorkflowSpatialManager : IDisposable
             AddToNodeIndex(nodeA, pairProvider);
             AddToNodeIndex(nodeB, pairProvider);
         }
+        else if (link.Sender?.Parent is IWorkflowNodeViewModel &&
+                 link.Receiver?.Parent is IWorkflowNodeViewModel &&
+                 link.Sender.Parent != link.Receiver.Parent)
+        {
+            // Both endpoints exist and differ, but at least one endpoint node is not registered yet
+            // (LinkAdded fired before that node was inserted, e.g. deserialized/undo orderings).
+            // Hold it for a retry on the next OnNodeAdded — otherwise it would be silently dropped
+            // and never become spatially visible, while the slot state still updates.
+            _pendingLinks.Add(link);
+        }
     }
 
     private void RemoveLink(IWorkflowLinkViewModel link)
     {
         if (link == null) return;
+
+        _pendingLinks.Remove(link);
 
         if (_nodePairProviders.TryGetValue(link, out var pairProvider))
         {
@@ -222,6 +240,22 @@ public sealed class WorkflowSpatialManager : IDisposable
     private void OnNodeAdded(object? sender, IWorkflowNodeViewModel node)
     {
         InsertNode(node);
+        // A node may have been registered after some of its links were added (LinkAdded → InsertLink
+        // parked them in _pendingLinks). Now that it's indexed, give those links another chance so
+        // they enter the spatial grid instead of staying invisible forever.
+        RetryPendingLinks();
+    }
+
+    private void RetryPendingLinks()
+    {
+        if (_pendingLinks.Count == 0) return;
+
+        foreach (var link in _pendingLinks.ToArray())
+        {
+            // InsertLink removes the link from _pendingLinks on success and re-queues it if an
+            // endpoint is still missing.
+            InsertLink(link);
+        }
     }
 
     private void OnNodeRemoved(object? sender, IWorkflowNodeViewModel node)
@@ -264,6 +298,7 @@ public sealed class WorkflowSpatialManager : IDisposable
         _nodePairProviders.Clear();
         _pairToLink.Clear();
         _nodeToPairs.Clear();
+        _pendingLinks.Clear();
         _nodePairMap.Clear();
     }
 }

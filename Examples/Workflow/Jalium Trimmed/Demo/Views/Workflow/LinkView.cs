@@ -130,15 +130,29 @@ public class LinkView : FrameworkElement
 
     private void OnLinkChanged(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();
 
-    private static bool IsVirtual(IWorkflowLinkViewModel link)
-        => link.Sender.Parent is null && link.Receiver.Parent is null;
+    /// <summary>True only for the tree's drag-preview VirtualLink: its endpoints are placeholder
+    /// <see cref="SlotDefaultViewModel"/>s, not real slots mounted to nodes. The surface draws that
+    /// preview inline in OnPostRender, so the pooled LinkView must skip it. Real links are never this
+    /// type — even one whose slots were detached keeps rendering instead of vanishing.</summary>
+    private static bool IsDragPreview(IWorkflowLinkViewModel link)
+        => link.Sender is SlotDefaultViewModel && link.Receiver is SlotDefaultViewModel;
 
     /// <summary>Authoritative model port center (node.Anchor + geometry), independent of slot.Anchor
-    /// which the safe surface does not maintain.</summary>
-    private Point PortCenter(IWorkflowSlotViewModel slot)
+    /// which the safe surface does not maintain. Returns null when the endpoint has no position yet
+    /// (slot detached with no measured anchor) so the link is skipped instead of drawing a degenerate
+    /// line from the origin.</summary>
+    private Point? PortCenter(IWorkflowSlotViewModel slot)
     {
         var node = slot.Parent;
-        if (node is null) return default;
+        if (node is null)
+        {
+            // Detached endpoint: fall back to a measured slot anchor if a GUI wrote one
+            // (WPF-style adapters maintain slot.Anchor); otherwise the endpoint has no position.
+            var anchor = slot.Anchor;
+            if (!double.IsNaN(anchor.Horizontal) && !double.IsNaN(anchor.Vertical))
+                return new Point(anchor.Horizontal, anchor.Vertical);
+            return null;
+        }
         if (SlotView.IndexOf(node, slot) is { } found)
         {
             if (found.IsInput)
@@ -146,7 +160,11 @@ public class LinkView : FrameworkElement
             return new Point(node.Anchor.Horizontal + node.Size.Width - SlotView.OutputInset,
                 node.Anchor.Vertical + SlotView.TitleBarH + SlotView.RowH * found.Index + SlotView.RowH / 2.0);
         }
-        return default;
+        // Slot is mounted to the node but not in the current port enumeration (stale instance after
+        // a selector switch): clamp to the node card so the connection stays visible and roughly
+        // positioned while the model re-establishes the slot.
+        return new Point(node.Anchor.Horizontal + node.Size.Width - SlotView.OutputInset,
+            node.Anchor.Vertical + node.Size.Height / 2.0);
     }
 
     protected override void OnRender(DrawingContext dc)
@@ -158,43 +176,40 @@ public class LinkView : FrameworkElement
             Height = p.ActualHeight;
         }
 
-        if (_link is null || !_link.IsVisible || IsVirtual(_link))
+        if (_link is null || !_link.IsVisible || IsDragPreview(_link))
         {
             return;
         }
 
         var origin = _link.Sender.Parent?.Parent?.Layout.ActualOffset ?? new Offset();
-        var from = new Point(PortCenter(_link.Sender).X + origin.Horizontal, PortCenter(_link.Sender).Y + origin.Vertical);
-        var to = new Point(PortCenter(_link.Receiver).X + origin.Horizontal, PortCenter(_link.Receiver).Y + origin.Vertical);
-        var virtualLink = IsVirtual(_link);
+        var from = PortCenter(_link.Sender);
+        var to = PortCenter(_link.Receiver);
+        if (from is null || to is null) return; // an endpoint has no position — nothing to draw
 
-        var pen = virtualLink
-            ? new Pen(s_brush, 2) { DashStyle = new DashStyle(new[] { 4.0, 2.0 }) }
-            : new Pen(s_brush, 2);
+        var fromP = new Point(from.Value.X + origin.Horizontal, from.Value.Y + origin.Vertical);
+        var toP = new Point(to.Value.X + origin.Horizontal, to.Value.Y + origin.Vertical);
+        var pen = new Pen(s_brush, 2);
 
-        double dx = Math.Abs(to.X - from.X);
+        double dx = Math.Abs(toP.X - fromP.X);
         double stub = dx / 2.0 * (1.0 - Phi);
         if (stub < 8) stub = 8;
-        double dir = to.X >= from.X ? 1 : -1;
-        var p1 = new Point(from.X + dir * stub, from.Y);
-        var p2 = new Point(p1.X, to.Y);
-        var p3 = new Point(to.X - dir * stub, to.Y);
+        double dir = toP.X >= fromP.X ? 1 : -1;
+        var p1 = new Point(fromP.X + dir * stub, fromP.Y);
+        var p2 = new Point(p1.X, toP.Y);
+        var p3 = new Point(toP.X - dir * stub, toP.Y);
 
-        var figure = new PathFigure { StartPoint = from, IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, p3, to }, true));
+        var figure = new PathFigure { StartPoint = fromP, IsClosed = false, IsFilled = false };
+        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, p3, toP }, true));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         dc.DrawGeometry(null, pen, geometry);
 
-        if (!virtualLink)
-        {
-            const double len = 12, halfW = 4;
-            var arrow = new PathFigure { StartPoint = to, IsClosed = true, IsFilled = true };
-            arrow.Segments.Add(new LineSegment(new Point(to.X - dir * len, to.Y - halfW), true));
-            arrow.Segments.Add(new LineSegment(new Point(to.X - dir * len, to.Y + halfW), true));
-            var arrowGeometry = new PathGeometry();
-            arrowGeometry.Figures.Add(arrow);
-            dc.DrawGeometry(s_brush, null, arrowGeometry);
-        }
+        const double len = 12, halfW = 4;
+        var arrow = new PathFigure { StartPoint = toP, IsClosed = true, IsFilled = true };
+        arrow.Segments.Add(new LineSegment(new Point(toP.X - dir * len, toP.Y - halfW), true));
+        arrow.Segments.Add(new LineSegment(new Point(toP.X - dir * len, toP.Y + halfW), true));
+        var arrowGeometry = new PathGeometry();
+        arrowGeometry.Figures.Add(arrow);
+        dc.DrawGeometry(s_brush, null, arrowGeometry);
     }
 }

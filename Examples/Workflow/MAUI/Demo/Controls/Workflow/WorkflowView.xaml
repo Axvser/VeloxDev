@@ -37,31 +37,13 @@
             <controls:TimerNodeView WidthRequest="{Binding Size.Width}"
                                     HeightRequest="{Binding Size.Height}" />
         </DataTemplate>
-        <DataTemplate x:Key="LinkTemplate">
-            <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                        StartTop="{Binding Sender.Anchor.Vertical}"
-                                        EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                        EndTop="{Binding Receiver.Anchor.Vertical}"
-                                        CanRender="{Binding IsVisible}" />
-        </DataTemplate>
-        <DataTemplate x:Key="VirtualLinkTemplate" x:DataType="workflow:IWorkflowLinkViewModel">
-            <controls:PolylineCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
-                                        StartTop="{Binding Sender.Anchor.Vertical}"
-                                        EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                        EndTop="{Binding Receiver.Anchor.Vertical}"
-                                        CanRender="{Binding IsVisible}"
-                                        LineColor="#E2E8F0"
-                                        IsVirtual="True" />
-        </DataTemplate>
         <controls:CustomTemplateSelector x:Key="NodeSelector"
                                          ControllerTemplate="{StaticResource ControllerTemplate}"
                                          NodeTemplate="{StaticResource NodeTemplate}"
                                          BoolSelectorTemplate="{StaticResource BoolSelectorTemplate}"
                                          EnumSelectorTemplate="{StaticResource EnumSelectorTemplate}"
                                          PythonTemplate="{StaticResource PythonTemplate}"
-                                         TimerTemplate="{StaticResource TimerTemplate}"
-                                         LinkTemplate="{StaticResource LinkTemplate}"
-                                         VirtualLinkTemplate="{StaticResource VirtualLinkTemplate}" />
+                                         TimerTemplate="{StaticResource TimerTemplate}" />
     </ContentView.Resources>
 
     <Grid ColumnDefinitions="Auto,*">
@@ -219,8 +201,15 @@
                                         TranslationY="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}">
                             <AbsoluteLayout x:Name="PART_Canvas"
                                             BackgroundColor="Transparent"
-                                            behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
-                                            behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}" />
+                                            behaviors:ViewPool.ItemsSource="{Binding NodeItemsSource, Source={x:Reference Root}}"
+                                            behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}">
+                                <!-- Single link layer: renders every connection in one GraphicsView
+                                     (world-anchored, fills the canvas, translates with it). The node
+                                     ViewPool must therefore only materialize node views — WorkflowView
+                                     filters links out of NodeItemsSource. -->
+                                <controls:LinkLayerView AbsoluteLayout.LayoutFlags="All"
+                                                        AbsoluteLayout.LayoutBounds="0,0,1,1" />
+                            </AbsoluteLayout>
                         </AbsoluteLayout>
                     </ScrollView>
                 </controls:WorkflowGridDecorator>

@@ -1,7 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-        <TargetFrameworks>net10.0;</TargetFrameworks>
+        <!-- The Windows TFM must be >= 10.0.19041.0: MAUI 10.0.x ships Windows assets only
+             for net10.0-windows10.0.19041 (and 20348), so a lower TFM silently falls back to
+             the platform-neutral net10.0 assembly, losing the Windows-only types that the
+             #if WINDOWS code needs. Matches the demos' net10.0-windows10.0.19041.0. -->
+        <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
 		<!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
 		<!-- <TargetFrameworks>$(TargetFrameworks);net8.0-tizen</TargetFrameworks> -->
 		<UseMaui>true</UseMaui>
@@ -23,6 +27,9 @@
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + MAUI</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
+		<!-- Align with the installed MAUI workload (the demos use $(MauiVersion)); the 10.0.0
+		     pin has no Windows TFM assets, so #if WINDOWS code never compiled into the lib. -->
+		<MauiVersion>10.0.20</MauiVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -30,9 +37,16 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.0" />
+		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
 		<PackageReference Include="VeloxDev.Core" Version="7.0.214" Condition="'$(Configuration)' != 'Debug'" />
+	</ItemGroup>
+
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+		<!-- WinUI 3 (Microsoft.UI.Xaml) for the Windows TFM. Apps get WindowsAppSDK via the
+		     MAUI SDK; class libraries must reference it explicitly. Version matches what the
+		     workload's Microsoft.Maui.Controls resolves in the consuming app. -->
+		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250909003" />
 	</ItemGroup>
 
 </Project>

@@ -11,8 +11,6 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
     public DataTemplate? EnumSelectorTemplate { get; set; }
     public DataTemplate? PythonTemplate { get; set; }
     public DataTemplate? TimerTemplate { get; set; }
-    public DataTemplate? LinkTemplate { get; set; }
-    public DataTemplate? VirtualLinkTemplate { get; set; }
 
     protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
         => item switch
@@ -25,10 +23,10 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
             LogicGateNodeViewModel => NodeTemplate ?? throw new InvalidOperationException("NodeTemplate is not set."),
             PythonScriptNodeViewModel => PythonTemplate ?? throw new InvalidOperationException("PythonTemplate is not set."),
             NodeViewModel => NodeTemplate ?? throw new InvalidOperationException("NodeTemplate is not set."),
-            // VirtualLink's slots have no parent node — use that to distinguish from regular links
-            IWorkflowLinkViewModel link when link.Sender.Parent is null || link.Receiver.Parent is null
-                => VirtualLinkTemplate ?? throw new InvalidOperationException("VirtualLinkTemplate is not set."),
-            IWorkflowLinkViewModel => LinkTemplate ?? throw new InvalidOperationException("LinkTemplate is not set."),
+            // Links are NOT pooled anymore — the single LinkLayerView renders them.
+            // WorkflowView.NodeItemsSource filters them out, so a link reaching this
+            // selector means the pool was fed an unfiltered collection.
+            IWorkflowLinkViewModel => throw new InvalidOperationException("LinkViewModels must not be pooled; the LinkLayerView renders links."),
             _ => throw new InvalidOperationException($"Unknown data type: {item?.GetType().Name}")
         };
 }
