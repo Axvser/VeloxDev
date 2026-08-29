@@ -24,14 +24,6 @@ public sealed class WorkflowSurfaceBehavior
         public double PanAccumulatedX { get; set; }
         /// <summary>Anchor scroll offset of the current pan gesture (vertical).</summary>
         public double PanAccumulatedY { get; set; }
-        /// <summary>Last scroll offset this pan REQUESTED (the clamped target passed to
-        /// ScrollToAsync). MAUI's ScrollX updates from the native ViewChanged one frame AFTER the
-        /// ChangeView lands, so during a pan the grid/minimap are written from this requested
-        /// target instead — where the content actually is — keeping the decorators from trailing
-        /// a frame behind the content (the gap that snapped shut on release).</summary>
-        public double LastPanTargetX { get; set; }
-        /// <summary>Last requested vertical scroll offset of the active pan gesture.</summary>
-        public double LastPanTargetY { get; set; }
         /// <summary>Gesture TotalX at the pan anchor. The pointer's current distance from the
         /// anchor is (TotalX − PanAnchorTotalX); the scroll target is anchor − that distance.</summary>
         public double PanAnchorTotalX { get; set; }
@@ -468,13 +460,12 @@ public sealed class WorkflowSurfaceBehavior
         // CRITICAL: do NOT suppress Scrolled during a pan. MAUI fires this on every native
         // ViewChanged (intermediate + final), and ScrollX/ScrollY are the native offsets at
         // that instant — the ONLY trustworthy position. ScrollToAsync is a fire-and-forget
-        // ChangeView that can land short of the request (the pan diagnostic's LANDING_LAG),
+        // ChangeView that can land short of the request (it never guarantees the target is hit),
         // and on Windows the native ScrollViewer's manipulation can move the content on its
         // own. Suppressing Scrolled froze the decorators at the requested target during the
         // drag, so when the native settled elsewhere after release the decorators snapped —
         // the release jump. Letting every scroll through (the minimap's path) keeps grid +
         // content glued at all times.
-        PanTraceState(state, "SCROLLED");
         Refresh(host);
     }
 
@@ -497,8 +488,8 @@ public sealed class WorkflowSurfaceBehavior
     /// with the default <c>ManipulationMode.System</c> — would otherwise claim the manipulation
     /// as its container and scroll the content itself, with inertia. It then fights our
     /// programmatic ChangeView calls, and on pointer release its manipulation completes and
-    /// applies its OWN accumulated offset — the post-release content jump the pan diagnostic
-    /// captured (e.g. FINALIZE 787 → SCROLLED 169).
+    /// applies its OWN accumulated offset — the post-release content jump we chased during
+    /// the release-pan investigation.
     ///
     /// We demote it to a passive MANUAL container instead: <c>ManipulationMode</c> to the same
     /// TranslateX|TranslateY|Scale value MAUI uses on gesture containers. A non-<c>System</c>
@@ -592,8 +583,6 @@ public sealed class WorkflowSurfaceBehavior
                     // clamped ScrollToAsync lands off the requested offset.
                     state.PanAccumulatedX = state.ScrollViewer.ScrollX;
                     state.PanAccumulatedY = state.ScrollViewer.ScrollY;
-                    state.LastPanTargetX = state.PanAccumulatedX;
-                    state.LastPanTargetY = state.PanAccumulatedY;
                     state.PanAnchorTotalX = e.TotalX;
                     state.PanAnchorTotalY = e.TotalY;
                     state.PanGestureActive = true;
@@ -622,7 +611,6 @@ public sealed class WorkflowSurfaceBehavior
                         state.PanGestureActive = false;
                         state.PanAccumulatedX = state.ScrollViewer.ScrollX;
                         state.PanAccumulatedY = state.ScrollViewer.ScrollY;
-                        PanTraceState(state, "COMPLETED");
                         // No forced finalize: the last ChangeView's landing fires Scrolled ->
                         // OnScrolled -> Refresh, which writes the decorators from the settled
                         // native offset. Dropping the flag is safe now that OnScrolled is the
@@ -635,64 +623,6 @@ public sealed class WorkflowSurfaceBehavior
         {
             System.Diagnostics.Debug.WriteLine($"[WorkflowSurfaceBehavior] Pan error: {ex.Message}");
         }
-    }
-
-    // ── TEMP diagnostic: release-time pan tracing (only fires at/after Completed) ──
-    private static readonly object PanTraceLock = new();
-    private static void PanTrace(string line)
-    {
-        try
-        {
-            lock (PanTraceLock)
-            {
-                System.IO.File.AppendAllText(
-                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "panrelease.log"),
-                    $"{DateTime.Now:HH:mm:ss.fff} {line}\r\n");
-            }
-        }
-        catch { }
-    }
-    private static void PanTraceState(SurfaceState state, string tag)
-    {
-        var vm = ResolveTreeViewModel(state.Host!, state);
-        var nativeOff = ReadNativeOffsets(state);
-        var extent = ReadNativeExtent(state);
-        PanTrace($"{tag}: demo={state.Host?.GetType().Name} " +
-                 $"lastTarget={state.LastPanTargetX:F2},{state.LastPanTargetY:F2} " +
-                 $"scrollX={state.ScrollViewer?.ScrollX:F2} scrollY={state.ScrollViewer?.ScrollY:F2} " +
-                 $"nativeX={nativeOff.X:F2} nativeY={nativeOff.Y:F2} " +
-                 $"extentW={extent.Width:F1} extentH={extent.Height:F1} " +
-                 $"transX={state.Canvas?.TranslationX:F2} transY={state.Canvas?.TranslationY:F2} " +
-                 $"actualOff={vm?.Layout.ActualOffset.Horizontal:F2},{vm?.Layout.ActualOffset.Vertical:F2} " +
-                 $"canvasW={state.Canvas?.WidthRequest:F1} actualW={vm?.Layout.ActualSize.Width:F1} " +
-                 $"svW={state.ScrollViewer?.Width:F1} svH={state.ScrollViewer?.Height:F1} " +
-                 $"maxX={GetHorizontalScrollMaximum(state):F1} active={state.PanGestureActive}");
-    }
-
-    /// <summary>TEMP diagnostic: native scroll offsets on Windows — the ground truth of where the
-    /// content actually is (ScrollX mirrors it only after a ViewChanged has been processed).</summary>
-    private static (double X, double Y) ReadNativeOffsets(SurfaceState state)
-    {
-#if WINDOWS
-        if (state.ScrollViewer?.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ScrollViewer sv)
-        {
-            return (sv.HorizontalOffset, sv.VerticalOffset);
-        }
-#endif
-        return (double.NaN, double.NaN);
-    }
-
-    /// <summary>TEMP diagnostic: native content extent on Windows — what ChangeView actually clamps
-    /// against (model ActualSize is the async-ahead ceiling; Extent is the native truth).</summary>
-    private static (double Width, double Height) ReadNativeExtent(SurfaceState state)
-    {
-#if WINDOWS
-        if (state.ScrollViewer?.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ScrollViewer sv)
-        {
-            return (sv.ExtentWidth, sv.ExtentHeight);
-        }
-#endif
-        return (double.NaN, double.NaN);
     }
 
     private static async Task ApplyPanAsync(ContentView host, SurfaceState state, PanUpdatedEventArgs e)
@@ -752,7 +682,7 @@ public sealed class WorkflowSurfaceBehavior
         // On overscroll the model's ActualSize (and canvas WidthRequest) grows
         // SYNCHRONOUSLY, but the native content re-measures ASYNCHRONOUSLY, so during a
         // fast drag the native extent can lag the model by thousands of pixels. ChangeView
-        // clamps to the native extent, so a model-based target lands short (LANDING_LAG).
+        // clamps to the native extent, so a model-based target lands short of the native edge.
         // Re-anchoring at the model edge then sets the bookkeeping AHEAD of the native:
         // the content pins at the stale native edge and, when the native finally re-measures,
         // jumps forward in one frame to catch the anchor. Clamping the applied target to the
@@ -771,15 +701,11 @@ public sealed class WorkflowSurfaceBehavior
             state.PanAnchorTotalY = e.TotalY;
         }
 
-        // Record the requested target for diagnostics only. The decorators are NOT written
-        // from it: ChangeView is fire-and-forget and can land short of the request (the native
-        // manipulation fights it on Windows), so writing the requested target would desync the
-        // grid from the content. The native ViewChanged -> Scrolled -> OnScrolled -> Refresh
-        // path writes the decorators from the ACTUAL landed position on every move — the same
-        // single-writer path the smooth minimap uses.
-        state.LastPanTargetX = appliedOffsetX;
-        state.LastPanTargetY = appliedOffsetY;
-
+        // The decorators are NOT written from the requested target: ChangeView is fire-and-forget
+        // and can land short of the request (the native manipulation fights it on Windows), so
+        // writing the requested target would desync the grid from the content. The native
+        // ViewChanged -> Scrolled -> OnScrolled -> Refresh path writes the decorators from the
+        // ACTUAL landed position on every move — the same single-writer path the smooth minimap uses.
         try
         {
             await state.ScrollViewer.ScrollToAsync(appliedOffsetX, appliedOffsetY, false);
@@ -792,12 +718,6 @@ public sealed class WorkflowSurfaceBehavior
 
         if (!ct.IsCancellationRequested)
         {
-            // TEMP diagnostic: only logs when ScrollX missed the requested target (rare).
-            if (Math.Abs(state.ScrollViewer.ScrollX - appliedOffsetX) > 0.5
-                || Math.Abs(state.ScrollViewer.ScrollY - appliedOffsetY) > 0.5)
-            {
-                PanTraceState(state, $"LANDING_LAG (applied={appliedOffsetX:F2},{appliedOffsetY:F2})");
-            }
             UpdateVisibleRegion(host, state);
         }
     }
@@ -895,13 +815,13 @@ public sealed class WorkflowSurfaceBehavior
 
         // CRITICAL: After ScrollToAsync completes, ScrollViewer dimensions and
         // scroll position can still be NaN/zero during MAUI's async layout pass.
-        // NaN propagates through Viewport �� Virtualize �� spatial index, causing
+        // NaN propagates through Viewport → Virtualize → spatial index, causing
         // all VisibleItems to be cleared (links permanently disappear).
         // NaN <= 0 returns false in C#, so Virtualize's guard does NOT catch this.
         // CRITICAL: always write from ScrollX — the native offset as of the last ViewChanged,
-        // i.e. where the content ACTUALLY is. The requested target (LastPanTarget) can differ
-        // whenever a ChangeView lands short, and writing it here is exactly what made the grid
-        // snap back to the true position after release.
+        // i.e. where the content ACTUALLY is. The requested target can differ from ScrollX
+        // whenever a ChangeView lands short, and writing the requested target here is exactly
+        // what made the grid snap back to the true position after release.
         var scrollX = state.ScrollViewer.ScrollX;
         var scrollY = state.ScrollViewer.ScrollY;
         var svW = state.ScrollViewer.Width;
