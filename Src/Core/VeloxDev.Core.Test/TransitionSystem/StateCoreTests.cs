@@ -1,5 +1,5 @@
 using VeloxDev.TransitionSystem.Abstractions;
-using VeloxDev.TransitionSystem.NativeInterpolators;
+using VeloxDev.TransitionSystem.NativeSamplers;
 
 namespace VeloxDev.Core.Test.TransitionSystem;
 
@@ -44,7 +44,7 @@ public class StateCoreTests
     public void SetInterpolator_Expression_CanRetrieve()
     {
         var state = new StateCore();
-        var interp = new DoubleInterpolator();
+        var interp = new DoubleSampler();
         state.SetInterpolator<Target, double>(t => t.Value, interp);
 
         Assert.IsTrue(state.TryGetInterpolator<Target, double>(t => t.Value, out var result));

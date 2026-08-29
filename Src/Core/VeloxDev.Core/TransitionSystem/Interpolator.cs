@@ -1,179 +1,94 @@
 using System.Collections.Concurrent;
 using System.Drawing;
 using System.Numerics;
-using VeloxDev.TransitionSystem.NativeInterpolators;
+using VeloxDev.TransitionSystem.NativeSamplers;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
-public abstract class InterpolatorCore<
-    TOutputCore,
-    TPriorityCore> : InterpolatorCore, IFrameInterpolator<TPriorityCore>
-    where TOutputCore : IFrameSequence<TPriorityCore>, new()
-{
-    public override IFrameSequenceCore Interpolate(
-        object target,
-        IFrameState state,
-        ITransitionEffectCore effect,
-        IUIThreadInspectorCore inspector)
-    {
-        if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to ITransitionEffect<TPriorityCore> !");
-        if (inspector is not IUIThreadInspector<TPriorityCore> cvt_inspector) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to IUIThreadInspector<TPriorityCore> !");
-
-        return Interpolate(target, state, cvt_effect, cvt_inspector);
-    }
-
-    public virtual IFrameSequence<TPriorityCore> Interpolate(
-        object target,
-        IFrameState state,
-        ITransitionEffect<TPriorityCore> effect,
-        IUIThreadInspector<TPriorityCore> inspector)
-    {
-        var output = new TOutputCore();
-        var count = (int)(effect.Duration.TotalMilliseconds / (1000.0 / effect.FPS));
-        count = count > 0 ? count : 1;
-        output.SetCount(count);
-        foreach (var kvp in state.Values)
-        {
-            var currentValue = inspector.ProtectedGetValue(target, kvp.Key);
-            // The path is invalid for the current target (intermediate type mismatch) → skip this property to avoid distorting interpolation by treating it as a null value.
-            if (ReferenceEquals(currentValue, TransitionProperty.UnreadablePath)) continue;
-            var newValue = kvp.Value;
-            state.TryGetOptions(kvp.Key, out var options);
-            if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
-            {
-                var frames = inspector.ProtectedInterpolate(target, () => customInterpolator.Interpolate(currentValue, newValue, count, options));
-                output.AddPropertyInterpolations(kvp.Key, frames);
-            }
-            else if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator) && interpolator != null)
-            {
-                var frames = inspector.ProtectedInterpolate(target, () => interpolator.Interpolate(currentValue, newValue, count, options));
-                output.AddPropertyInterpolations(kvp.Key, frames);
-            }
-            else
-            {
-                if (currentValue is IInterpolable v1)
-                {
-                    var frames = inspector.ProtectedInterpolate(target, () => v1.Interpolate(currentValue, newValue, count, options));
-                    output.AddPropertyInterpolations(kvp.Key, frames);
-                }
-                else if (newValue is IInterpolable v2)
-                {
-                    var frames = inspector.ProtectedInterpolate(target, () => v2.Interpolate(currentValue, newValue, count, options));
-                    output.AddPropertyInterpolations(kvp.Key, frames);
-                }
-            }
-        }
-        return output;
-    }
-}
-
-public abstract class InterpolatorCore<TOutputCore> : InterpolatorCore, IFrameInterpolator
-    where TOutputCore : IFrameSequence, new()
-{
-    public override IFrameSequenceCore Interpolate(
-        object target,
-        IFrameState state,
-        ITransitionEffectCore effect,
-        IUIThreadInspectorCore inspector)
-    {
-        if (inspector is not IUIThreadInspector cvt_inspector) throw new InvalidOperationException("Failed to Convert from IUIThreadInspectorCore to IUIThreadInspector !");
-
-        return Interpolate(target, state, effect, cvt_inspector);
-    }
-
-    public virtual IFrameSequence Interpolate(
-        object target,
-        IFrameState state,
-        ITransitionEffectCore effect,
-        IUIThreadInspector inspector)
-    {
-        var output = new TOutputCore();
-        var count = (int)(effect.Duration.TotalMilliseconds / (1000.0 / effect.FPS));
-        count = count > 0 ? count : 1;
-        output.SetCount(count);
-        foreach (var kvp in state.Values)
-        {
-            var currentValue = inspector.ProtectedGetValue(target, kvp.Key);
-            // The path is invalid for the current target (intermediate type mismatch) → skip this property to avoid distorting interpolation by treating it as a null value.
-            if (ReferenceEquals(currentValue, TransitionProperty.UnreadablePath)) continue;
-            var newValue = kvp.Value;
-            state.TryGetOptions(kvp.Key, out var options);
-            if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
-            {
-                var frames = inspector.ProtectedInterpolate(target, () => customInterpolator.Interpolate(currentValue, newValue, count, options));
-                output.AddPropertyInterpolations(kvp.Key, frames);
-            }
-            else if (TryGetInterpolator(kvp.Key.PropertyType, out var interpolator) && interpolator != null)
-            {
-                var frames = inspector.ProtectedInterpolate(target, () => interpolator.Interpolate(currentValue, newValue, count, options));
-                output.AddPropertyInterpolations(kvp.Key, frames);
-            }
-            else
-            {
-                if (currentValue is IInterpolable v1)
-                {
-                    var frames = inspector.ProtectedInterpolate(target, () => v1.Interpolate(currentValue, newValue, count, options));
-                    output.AddPropertyInterpolations(kvp.Key, frames);
-                }
-                else if (newValue is IInterpolable v2)
-                {
-                    var frames = inspector.ProtectedInterpolate(target, () => v2.Interpolate(currentValue, newValue, count, options));
-                    output.AddPropertyInterpolations(kvp.Key, frames);
-                }
-            }
-        }
-        return output;
-    }
-}
-
-public abstract class InterpolatorCore : IFrameInterpolatorCore
+public abstract class InterpolatorCore
 {
     static InterpolatorCore()
     {
-        RegisterInterpolator(typeof(double), new DoubleInterpolator());
-        RegisterInterpolator(typeof(float), new FloatInterpolator());
-        RegisterInterpolator(typeof(int), new IntInterpolator());
-        RegisterInterpolator(typeof(long), new LongInterpolator());
-        RegisterInterpolator(typeof(Point), new PointInterpolator());
-        RegisterInterpolator(typeof(PointF), new PointFInterpolator());
-        RegisterInterpolator(typeof(Size), new SizeInterpolator());
-        RegisterInterpolator(typeof(SizeF), new SizeFInterpolator());
-        RegisterInterpolator(typeof(Color), new ColorInterpolator());
-        RegisterInterpolator(typeof(Rectangle), new RectangleInterpolator());
-        RegisterInterpolator(typeof(RectangleF), new RectangleFInterpolator());
+        RegisterInterpolator(typeof(double), new DoubleSampler());
+        RegisterInterpolator(typeof(float), new FloatSampler());
+        RegisterInterpolator(typeof(int), new IntSampler());
+        RegisterInterpolator(typeof(long), new LongSampler());
+        RegisterInterpolator(typeof(Point), new PointSampler());
+        RegisterInterpolator(typeof(PointF), new PointFSampler());
+        RegisterInterpolator(typeof(Size), new SizeSampler());
+        RegisterInterpolator(typeof(SizeF), new SizeFSampler());
+        RegisterInterpolator(typeof(Color), new ColorSampler());
+        RegisterInterpolator(typeof(Rectangle), new RectangleSampler());
+        RegisterInterpolator(typeof(RectangleF), new RectangleFSampler());
 #if !NETSTANDARD2_0
-        RegisterInterpolator(typeof(Vector2), new Vector2Interpolator());
-        RegisterInterpolator(typeof(Vector3), new Vector3Interpolator());
-        RegisterInterpolator(typeof(Vector4), new Vector4Interpolator());
-        RegisterInterpolator(typeof(Quaternion), new QuaternionInterpolator());
+        RegisterInterpolator(typeof(Vector2), new Vector2Sampler());
+        RegisterInterpolator(typeof(Vector3), new Vector3Sampler());
+        RegisterInterpolator(typeof(Vector4), new Vector4Sampler());
+        RegisterInterpolator(typeof(Quaternion), new QuaternionSampler());
 #endif
     }
 
-    public static ConcurrentDictionary<Type, IValueInterpolator> NativeInterpolators { get; protected set; } = [];
+    public static ConcurrentDictionary<Type, ISampleable> NativeInterpolators { get; protected set; } = [];
 
-    public static bool TryGetInterpolator(Type type, out IValueInterpolator? interpolator)
+    public static bool TryGetInterpolator(Type type, out ISampleable? sampleable)
     {
-        if (NativeInterpolators.TryGetValue(type, out interpolator))
+        if (NativeInterpolators.TryGetValue(type, out sampleable))
         {
             return true;
         }
-        interpolator = null;
+        sampleable = null;
         return false;
     }
-    public static bool RegisterInterpolator(Type type, IValueInterpolator interpolator)
+    public static bool RegisterInterpolator(Type type, ISampleable sampleable)
     {
-        // Atomic last-writer-wins install. The previous read-modify-write
-        // (TryGetValue + TryUpdate) raced: a concurrent registration of the same type
-        // between the two calls made TryUpdate fail and this registration was silently
-        // dropped. AddOrUpdate makes the update unconditional and atomic, so the
+        // Atomic last-writer-wins install. AddOrUpdate makes the update unconditional and atomic, so the
         // registration is guaranteed to land.
-        NativeInterpolators.AddOrUpdate(type, interpolator, (_, _) => interpolator);
+        NativeInterpolators.AddOrUpdate(type, sampleable, (_, _) => sampleable);
         return true;
     }
-    public static bool UnregisterInterpolator(Type type, out IValueInterpolator? interpolator)
+    public static bool UnregisterInterpolator(Type type, out ISampleable? sampleable)
     {
-        return NativeInterpolators.TryRemove(type, out interpolator);
+        return NativeInterpolators.TryRemove(type, out sampleable);
     }
 
-    public abstract IFrameSequenceCore Interpolate(object target, IFrameState state, ITransitionEffectCore effect, IUIThreadInspectorCore inspector);
+    /// <summary>
+    /// 归一化：读每个属性的当前值（start）与目标值（end），解析 <see cref="ISampleable"/>（自定义 → 注册表 → 值本身
+    /// 是 ISampleable），调用 <c>Normalize(start, end, options)</c> 得到无状态采样处理器并存入 <see cref="SamplerSet"/>。
+    /// </summary>
+    public virtual SamplerSet Prepare(object target, IFrameState state, ITransitionEffectCore effect, IUIThreadInspectorCore inspector)
+    {
+        var set = new SamplerSet(inspector);
+        foreach (var kvp in state.Values)
+        {
+            var currentValue = inspector.ProtectedGetValue(target, kvp.Key);
+            // The path is invalid for the current target (intermediate type mismatch) → skip this property to avoid distorting interpolation by treating it as a null value.
+            if (ReferenceEquals(currentValue, TransitionProperty.UnreadablePath)) continue;
+            var newValue = kvp.Value;
+            state.TryGetOptions(kvp.Key, out var options);
+
+            ISampleable? sampleable = null;
+            if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
+            {
+                sampleable = customInterpolator;
+            }
+            else if (TryGetInterpolator(kvp.Key.PropertyType, out var registered) && registered != null)
+            {
+                sampleable = registered;
+            }
+            else if (currentValue is ISampleable s1)
+            {
+                sampleable = s1;
+            }
+            else if (newValue is ISampleable s2)
+            {
+                sampleable = s2;
+            }
+
+            if (sampleable == null) continue;
+
+            var sampler = sampleable.Normalize(currentValue, newValue, options);
+            set.Add(kvp.Key, sampler, currentValue, newValue, options);
+        }
+        return set;
+    }
 }

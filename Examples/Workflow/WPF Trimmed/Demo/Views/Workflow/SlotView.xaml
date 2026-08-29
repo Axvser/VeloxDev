@@ -7,7 +7,6 @@
              mc:Ignorable="d"
              d:DesignHeight="20" d:DesignWidth="20"
              Background="Transparent"
-             behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"
              MouseLeftButtonUp="OnPointerReleased"
              MouseLeftButtonDown="OnPointerPressed">
     <Viewbox>

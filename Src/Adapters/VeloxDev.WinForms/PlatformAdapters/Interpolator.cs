@@ -1,12 +1,12 @@
-﻿using VeloxDev.Adapters.NativeInterpolators;
+﻿using VeloxDev.Adapters.NativeSamplers;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class Interpolator : InterpolatorCore<InterpolatorOutput>
+    public class Interpolator : InterpolatorCore
     {
         static Interpolator()
         {
-            RegisterInterpolator(typeof(Padding), new PaddingInterpolator());
+            RegisterInterpolator(typeof(Padding), new PaddingSampler());
         }
     }
 }

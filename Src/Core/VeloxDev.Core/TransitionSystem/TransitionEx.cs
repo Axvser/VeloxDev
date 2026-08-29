@@ -26,7 +26,7 @@ public static class TransitionCoreEx
     public static TSnapshot Interpolator<TSnapshot, TTarget, TValue>(
         this TSnapshot snapshot,
         Expression<Func<TTarget, TValue>> propertyLambda,
-        IValueInterpolator interpolator)
+        ISampleable interpolator)
         where TSnapshot : StateSnapshotCore, new()
     {
         return snapshot.CoreInterpolator<TSnapshot, TTarget, TValue>(propertyLambda, interpolator);

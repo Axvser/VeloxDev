@@ -524,9 +524,12 @@ public sealed class WorkflowNodeDragBehavior
         root.Invalidate();
         root.Update();
 
-        foreach (Control child in root.Controls)
+        foreach (Control? child in root.Controls)
         {
-            RedrawTree(child);
+            if (child is not null)
+            {
+                RedrawTree(child);
+            }
         }
     }
 

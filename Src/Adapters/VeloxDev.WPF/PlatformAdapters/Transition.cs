@@ -58,7 +58,7 @@ namespace VeloxDev.TransitionSystem
             {
                 return CoreEffect<StateSnapshot, TransitionEffect>(effect);
             }
-            public StateSnapshot Property(Expression<Func<T, IInterpolable?>> propertyLambda, IInterpolable? newValue, object? interpolationOptions = null)
+            public StateSnapshot Property<TValue>(Expression<Func<T, TValue>> propertyLambda, TValue newValue, object? interpolationOptions = null)
             {
                 state.SetValue(propertyLambda, newValue);
                 if (interpolationOptions != null) state.SetOptions(propertyLambda, interpolationOptions);

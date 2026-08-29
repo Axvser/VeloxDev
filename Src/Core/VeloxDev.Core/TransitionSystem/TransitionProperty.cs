@@ -69,7 +69,7 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
 
     /// <summary>
     /// Compiles the "per-segment reflective GetValue + type/null checks" into a single delegate, eliminating
-    /// per-frame per-property reflection overhead (the hot path of <c>InterpolatorOutputBase.SetValues</c> /
+    /// per-frame per-property reflection overhead (the hot path of <c>SamplerSet</c> /
     /// <c>ProtectedGetValue</c>).
     ///
     /// The semantics distinguish two kinds of "cannot read":

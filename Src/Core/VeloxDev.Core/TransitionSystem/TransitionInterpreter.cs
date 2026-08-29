@@ -4,198 +4,51 @@ using VeloxDev.TimeLine;
 namespace VeloxDev.TransitionSystem.Abstractions;
 
 public abstract class TransitionInterpreterCore<
-    TOutputCore,
     TTransitionEffectCore,
     TPriorityCore> : TransitionInterpreterCore, ITransitionInterpreter<TPriorityCore>
     where TTransitionEffectCore : ITransitionEffect<TPriorityCore>
-    where TOutputCore : IFrameSequence<TPriorityCore>
 {
-    public override async Task Execute(
+    public override Task Execute(
         object target,
-        IFrameSequenceCore frameSequence,
+        SamplerSet frameSet,
         ITransitionEffectCore effect,
         CancellationTokenSource cts)
     {
-        if (frameSequence is not IFrameSequence<TPriorityCore> cvt_frameSequence) return;
-        if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) return;
-        await Execute(
-            target,
-            cvt_frameSequence,
-            cvt_effect,
-            cts);
+        if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) return Task.CompletedTask;
+        return Execute(target, frameSet, cvt_effect, cts);
     }
 
-    public virtual async Task Execute(
+    public virtual Task Execute(
         object target,
-        IFrameSequence<TPriorityCore> frameSequence,
+        SamplerSet frameSet,
         ITransitionEffect<TPriorityCore> effect,
         CancellationTokenSource cts)
     {
-        this.cts = cts;
-        if (frameSequence is ICancellableFrameSequence cancellable)
-            cancellable.SetCancellation(cts);
-        var indexs = GetEaseIndex(effect, frameSequence.Count);
-        var frameMs = effect.Duration.TotalMilliseconds / frameSequence.Count;
-        var foreverloop = effect.LoopTime == int.MaxValue;
-        try
-        {
-            effect.InvokeStart(target, Args);
-            var stopwatch = Stopwatch.StartNew();
-            double frameCounter = 0;
-            for (int loop = 0;
-                loop <= effect.LoopTime || foreverloop;
-                loop += foreverloop ? 0 : 1)
-            {
-                for (int index = 0; index < frameSequence.Count; index++)
-                {
-                    if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
-                    effect.InvokeUpdate(target, Args);
-                    frameSequence.Update(
-                        target,
-                        indexs[index],
-                        effect.Priority);
-                    effect.InvokeLateUpdate(target, Args);
-                    await WaitForFrameAsync(stopwatch, frameCounter++, frameMs, cts);
-                }
-
-                if (effect.IsAutoReverse)
-                {
-                    for (int index = frameSequence.Count - 1; index >= 0; index--)
-                    {
-                        if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
-                        effect.InvokeUpdate(target, Args);
-                        frameSequence.Update(
-                            target,
-                            indexs[index],
-                            effect.Priority);
-                        effect.InvokeLateUpdate(target, Args);
-                        await WaitForFrameAsync(stopwatch, frameCounter++, frameMs, cts);
-                    }
-                }
-            }
-            effect.InvokeCompleted(target, Args);
-        }
-        catch
-        {
-            effect.InvokeCancled(target, Args);
-        }
-        finally
-        {
-            effect.InvokeFinally(target, Args);
-        }
-    }
-
-    private static List<int> GetEaseIndex(
-        ITransitionEffect<TPriorityCore> effect,
-        int steps)
-    {
-        List<int> result = [];
-        var endIndex = steps - 1d;
-        for (int i = 0; i < steps; i++)
-        {
-            var ease = effect.Ease.Ease(i / endIndex);
-            var index = (int)(steps * ease);
-            if (index < 0) result.Add(0);
-            else if (index >= steps) result.Add(steps - 1);
-            else result.Add(index);
-        }
-        return result;
+        return ExecuteSamplingLoopAsync(
+            target,
+            frameSet,
+            effect,
+            cts,
+            easedT => frameSet.Apply(target, easedT, effect.Priority));
     }
 }
 
 public abstract class TransitionInterpreterCore<
-    TOutputCore,
     TTransitionEffectCore> : TransitionInterpreterCore, ITransitionInterpreter
     where TTransitionEffectCore : ITransitionEffectCore
-    where TOutputCore : IFrameSequence
 {
-    public override async Task Execute(
+    public override Task Execute(
         object target,
-        IFrameSequenceCore frameSequence,
+        SamplerSet frameSet,
         ITransitionEffectCore effect,
         CancellationTokenSource cts)
     {
-        if (frameSequence is not IFrameSequence cvt_frameSequence) return;
-        await Execute(
+        return ExecuteSamplingLoopAsync(
             target,
-            cvt_frameSequence,
+            frameSet,
             effect,
-            cts);
-    }
-
-    public virtual async Task Execute(
-        object target,
-        IFrameSequence frameSequence,
-        ITransitionEffectCore effect,
-        CancellationTokenSource cts)
-    {
-        this.cts = cts;
-        if (frameSequence is ICancellableFrameSequence cancellable)
-            cancellable.SetCancellation(cts);
-        var indexs = GetEaseIndex(effect, frameSequence.Count);
-        var frameMs = effect.Duration.TotalMilliseconds / frameSequence.Count;
-        var foreverloop = effect.LoopTime == int.MaxValue;
-        try
-        {
-            effect.InvokeStart(target, Args);
-            var stopwatch = Stopwatch.StartNew();
-            double frameCounter = 0;
-            for (int loop = 0;
-                loop <= effect.LoopTime || foreverloop;
-                loop += foreverloop ? 0 : 1)
-            {
-                for (int index = 0; index < frameSequence.Count; index++)
-                {
-                    if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
-                    effect.InvokeUpdate(target, Args);
-                    frameSequence.Update(
-                        target,
-                        indexs[index]);
-                    effect.InvokeLateUpdate(target, Args);
-                    await WaitForFrameAsync(stopwatch, frameCounter++, frameMs, cts);
-                }
-
-                if (effect.IsAutoReverse)
-                {
-                    for (int index = frameSequence.Count - 1; index >= 0; index--)
-                    {
-                        if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
-                        effect.InvokeUpdate(target, Args);
-                        frameSequence.Update(
-                            target,
-                            indexs[index]);
-                        effect.InvokeLateUpdate(target, Args);
-                        await WaitForFrameAsync(stopwatch, frameCounter++, frameMs, cts);
-                    }
-                }
-            }
-            effect.InvokeCompleted(target, Args);
-        }
-        catch
-        {
-            effect.InvokeCancled(target, Args);
-        }
-        finally
-        {
-            effect.InvokeFinally(target, Args);
-        }
-    }
-
-    private static List<int> GetEaseIndex(
-        ITransitionEffectCore effect,
-        int steps)
-    {
-        List<int> result = [];
-        var endIndex = steps - 1d;
-        for (int i = 0; i < steps; i++)
-        {
-            var ease = effect.Ease.Ease(i / endIndex);
-            var index = (int)(steps * ease);
-            if (index < 0) result.Add(0);
-            else if (index >= steps) result.Add(steps - 1);
-            else result.Add(index);
-        }
-        return result;
+            cts,
+            easedT => frameSet.Apply(target, easedT));
     }
 }
 
@@ -204,28 +57,101 @@ public abstract class TransitionInterpreterCore : ITransitionInterpreterCore, ID
     protected CancellationTokenSource? cts = null;
     public virtual TransitionEventArgs Args { get; set; } = new();
 
-    public abstract Task Execute(object target, IFrameSequenceCore frameSequence, ITransitionEffectCore effect, CancellationTokenSource cts);
+    public abstract Task Execute(object target, SamplerSet frameSet, ITransitionEffectCore effect, CancellationTokenSource cts);
+
+    /// <summary>
+    /// Stopwatch-driven continuous sampling loop: the normalized time is derived from elapsed wall-clock time each
+    /// iteration, so <see cref="Task.Delay(TimeSpan)"/> is never a timing source — its imprecision does not affect
+    /// correctness. The yield interval is capped at <c>1000 / FPS</c> ms (<c>FPS</c> is a maximum sample rate, not a
+    /// frame grid): this bounds the allocation rate and prevents the loop from flooding the UI render thread when the
+    /// system timer resolution is fine (e.g. <c>timeBeginPeriod(1)</c> would otherwise push <c>Task.Delay(1)</c> to
+    /// ~1000Hz). Each pass samples eased time in [0,1] and applies via the frame set (which marshals the writes to
+    /// the UI thread). The final frame of each pass is the exact endpoint.
+    /// </summary>
+    protected async Task ExecuteSamplingLoopAsync(
+        object target,
+        SamplerSet frameSet,
+        ITransitionEffectCore effect,
+        CancellationTokenSource cts,
+        Action<double> apply)
+    {
+        this.cts = cts;
+        frameSet.SetCancellation(cts);
+        var durationMs = effect.Duration.TotalMilliseconds;
+        var foreverloop = effect.LoopTime == int.MaxValue;
+        var sampleIntervalMs = 1000.0 / Math.Max(1, effect.FPS); // FPS = maximum sample rate cap
+        try
+        {
+            effect.InvokeStart(target, Args);
+            var stopwatch = Stopwatch.StartNew();
+            var cycle = 0;
+            while (foreverloop || cycle <= effect.LoopTime)
+            {
+                if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
+                await RunPassAsync(target, effect, stopwatch, durationMs, sampleIntervalMs, cts, apply, forward: true);
+                if (effect.IsAutoReverse)
+                {
+                    if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
+                    await RunPassAsync(target, effect, stopwatch, durationMs, sampleIntervalMs, cts, apply, forward: false);
+                }
+                cycle++;
+            }
+            effect.InvokeCompleted(target, Args);
+        }
+        catch
+        {
+            effect.InvokeCancled(target, Args);
+        }
+        finally
+        {
+            effect.InvokeFinally(target, Args);
+        }
+    }
+
+    private async Task RunPassAsync(
+        object target,
+        ITransitionEffectCore effect,
+        Stopwatch stopwatch,
+        double durationMs,
+        double sampleIntervalMs,
+        CancellationTokenSource cts,
+        Action<double> apply,
+        bool forward)
+    {
+        var passStartMs = stopwatch.Elapsed.TotalMilliseconds;
+        while (true)
+        {
+            if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
+
+            var rawT = durationMs <= 0 ? 1 : (stopwatch.Elapsed.TotalMilliseconds - passStartMs) / durationMs;
+            if (rawT < 0) rawT = 0;
+
+            double easedT;
+            if (rawT >= 1)
+            {
+                // 每程末帧精确 = end（正向）/ start（反向）—— 不依赖 Ease(1) 是否精确为 1
+                easedT = forward ? 1 : 0;
+            }
+            else
+            {
+                var easeIn = forward ? rawT : 1 - rawT;
+                easedT = effect.Ease.Ease(easeIn);
+                if (easedT < 0) easedT = 0;
+                else if (easedT > 1) easedT = 1; // 保留 GetEaseIndex 的 Back/Elastic 越界钳制
+            }
+
+            effect.InvokeUpdate(target, Args);
+            apply(easedT);
+            effect.InvokeLateUpdate(target, Args);
+
+            if (rawT >= 1) return;
+            await Task.Delay(TimeSpan.FromMilliseconds(sampleIntervalMs), cts.Token); // yield; Stopwatch is the timing authority
+        }
+    }
 
     public virtual void Exit()
     {
         Dispose();
-    }
-
-    /// <summary>
-    /// Stopwatch-calibrated frame-interval wait: compensates for <see cref="Task.Delay(TimeSpan)"/> timer jitter and
-    /// drift, avoiding animation lag that accumulates over time and stutter from uneven frame intervals.
-    /// Returns immediately when behind the target schedule so the animation catches up to the planned duration.
-    /// The animation ends precisely on time.
-    /// </summary>
-    protected static async Task WaitForFrameAsync(Stopwatch stopwatch, double frameIndex, double frameMs, CancellationTokenSource cts)
-    {
-        if (frameMs <= 0) return;
-
-        var targetMs = (frameIndex + 1) * frameMs;
-        var remainingMs = targetMs - stopwatch.Elapsed.TotalMilliseconds;
-        if (remainingMs <= 0) return;
-
-        await Task.Delay(TimeSpan.FromMilliseconds(remainingMs), cts.Token);
     }
 
     public virtual void Dispose()

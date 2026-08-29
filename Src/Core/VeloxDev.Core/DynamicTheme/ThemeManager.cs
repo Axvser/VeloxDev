@@ -91,14 +91,11 @@ namespace VeloxDev.DynamicTheme
             CancleTransition();
             activeThemes.RemoveAll(x => !x.TryGetTarget(out _));
             var actives = activeThemes.Select(x => x.TryGetTarget(out var obj) ? obj : null).Where(x => x != null).ToArray();
-            int steps = (int)(effect.Duration.TotalMilliseconds / (1000.0 / effect.FPS));
-            if (steps <= 0) steps = 1;
-            int deltaTime = (int)(effect.Duration.TotalMilliseconds / steps);
             foreach (var themeObject in actives)
             {
                 themeObject?.ExecuteThemeChanging(current, themeType);
             }
-            await ExecuteTransition(CalculateFrames(actives, steps, effect.Ease, themeType), deltaTime, themeType);
+            await ExecuteTransition(PrepareSamplers(actives, themeType), effect.Ease, effect.Duration.TotalMilliseconds, themeType);
             foreach (var themeObject in actives)
             {
                 themeObject?.ExecuteThemeChanged(current, themeType);
@@ -129,13 +126,11 @@ namespace VeloxDev.DynamicTheme
             CancleTransition();
             activeThemes.RemoveAll(x => !x.TryGetTarget(out _));
             var actives = activeThemes.Select(x => x.TryGetTarget(out var obj) ? obj : null).Where(x => x != null).ToArray();
-            int steps = 1;
-            int deltaTime = 0;
             foreach (var themeObject in actives)
             {
                 themeObject?.ExecuteThemeChanging(current, themeType);
             }
-            await ExecuteTransition(CalculateFrames(actives, steps, Eases.Default, themeType), deltaTime, themeType);
+            await ExecuteTransition(PrepareSamplers(actives, themeType), Eases.Default, 0d, themeType);
             foreach (var themeObject in actives)
             {
                 themeObject?.ExecuteThemeChanged(current, themeType);
@@ -150,30 +145,9 @@ namespace VeloxDev.DynamicTheme
             Jump(typeof(T));
         }
 
-        private static Queue<Action> CalculateFrames(IThemeObject?[] targets, int steps, IEaseCalculator ease, Type targetThemeType)
+        private static List<TransitionEntry> PrepareSamplers(IThemeObject?[] targets, Type targetThemeType)
         {
-            var updates = new Queue<Action>(steps);
-            if (steps <= 0) return updates;
-
-            // Pre-compute the frame indices mapped by the easing curve
-            var easedFrameIndices = new int[steps];
-            for (int i = 0; i < steps; i++)
-            {
-                try
-                {
-                    double t = (double)i / (steps - 1);
-                    double easedT = ease.Ease(t);
-                    easedFrameIndices[i] = (int)Math.Round(easedT * (steps - 1));
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[CalculateFrames] Error calculating eased frame index: {ex.Message}");
-                    easedFrameIndices[i] = i; // fall back to linear index
-                }
-            }
-
-            // Pre-compute all frame values for each target object and property
-            var allFrames = new Dictionary<IThemeObject, Dictionary<PropertyInfo, object?[]>>();
+            var entries = new List<TransitionEntry>();
 
             foreach (var target in targets)
             {
@@ -181,7 +155,7 @@ namespace VeloxDev.DynamicTheme
                 {
                     if (target == null)
                     {
-                        Debug.WriteLine("[CalculateFrames] Encountered null target, skipping");
+                        Debug.WriteLine("[ThemeManager] Encountered null target, skipping");
                         continue;
                     }
 
@@ -195,13 +169,10 @@ namespace VeloxDev.DynamicTheme
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"[CalculateFrames] Error getting cache for target: {ex.Message}");
+                        Debug.WriteLine($"[ThemeManager] Error getting cache for target: {ex.Message}");
                         continue;
                     }
 
-                    var propertyFrames = new Dictionary<PropertyInfo, object?[]>();
-
-                    // Process each property
                     foreach (var propEntry in staticCache)
                     {
                         PropertyInfo? propertyInfo = null;
@@ -214,7 +185,7 @@ namespace VeloxDev.DynamicTheme
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[CalculateFrames] Error getting property info: {ex.Message}");
+                            Debug.WriteLine($"[ThemeManager] Error getting property info: {ex.Message}");
                             continue;
                         }
 
@@ -258,12 +229,12 @@ namespace VeloxDev.DynamicTheme
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[CalculateFrames] Error getting current value for {propEntry.Key}: {ex.Message}");
+                            Debug.WriteLine($"[ThemeManager] Error getting current value for {propEntry.Key}: {ex.Message}");
                         }
 
                         if (!hasCurrentValue)
                         {
-                            Debug.WriteLine($"[CalculateFrames] No current value found for {propEntry.Key}, skipping");
+                            Debug.WriteLine($"[ThemeManager] No current value found for {propEntry.Key}, skipping");
                             continue;
                         }
 
@@ -286,132 +257,77 @@ namespace VeloxDev.DynamicTheme
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[CalculateFrames] Error getting target value for {propEntry.Key}: {ex.Message}");
+                            Debug.WriteLine($"[ThemeManager] Error getting target value for {propEntry.Key}: {ex.Message}");
                         }
 
                         if (!hasTargetValue)
                         {
-                            Debug.WriteLine($"[CalculateFrames] No target value found for {propEntry.Key}, skipping");
+                            Debug.WriteLine($"[ThemeManager] No target value found for {propEntry.Key}, skipping");
                             continue;
                         }
 
-                        // Compute the transition frames
-                        var frames = new object?[steps];
-                        bool framesCalculated = false;
-
+                        // Resolve a sampleable: registered native -> self-ISampleable -> simple transition (hold, jump at end)
+                        ISampleable? sampleable = null;
                         try
                         {
-                            if (InterpolatorCore.TryGetInterpolator(propertyInfo.PropertyType, out var interpolator))
+                            if (InterpolatorCore.TryGetInterpolator(propertyInfo.PropertyType, out var registered))
                             {
-                                var interpolated = interpolator!.Interpolate(currentValue, targetValue, steps);
-                                for (int i = 0; i < steps && i < interpolated.Count; i++)
-                                {
-                                    frames[i] = interpolated[i];
-                                }
-                                framesCalculated = true;
+                                sampleable = registered;
                             }
-                            else if (currentValue is IInterpolable interpolable)
+                            else if (currentValue is ISampleable s1)
                             {
-                                var interpolated = interpolable.Interpolate(currentValue, targetValue, steps);
-                                for (int i = 0; i < steps && i < interpolated.Count; i++)
-                                {
-                                    frames[i] = interpolated[i];
-                                }
-                                framesCalculated = true;
+                                sampleable = s1;
+                            }
+                            else if (targetValue is ISampleable s2)
+                            {
+                                sampleable = s2;
                             }
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[CalculateFrames] Error interpolating values for {propEntry.Key}: {ex.Message}");
+                            Debug.WriteLine($"[ThemeManager] Error resolving sampleable for {propEntry.Key}: {ex.Message}");
                         }
 
-                        if (!framesCalculated)
-                        {
-                            Debug.WriteLine($"[CalculateFrames] No interpolator found for {propEntry.Key}, using simple transition");
-                            try
-                            {
-                                for (int i = 0; i < steps; i++)
-                                {
-                                    frames[i] = i == steps - 1 ? targetValue : currentValue;
-                                }
-                                framesCalculated = true;
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.WriteLine($"[CalculateFrames] Error creating simple transition for {propEntry.Key}: {ex.Message}");
-                            }
-                        }
-
-                        if (framesCalculated)
-                        {
-                            propertyFrames[propertyInfo] = frames;
-                        }
-                    }
-
-                    if (propertyFrames.Count > 0)
-                    {
-                        allFrames[target] = propertyFrames;
+                        // Normalize: bind the sampler to this animation (writes go through the compiled property path)
+                        var transitionProperty = TransitionProperty.FromProperty(propertyInfo);
+                        var sampler = sampleable?.Normalize(currentValue, targetValue, null);
+                        entries.Add(new TransitionEntry(target, transitionProperty, sampler, currentValue, targetValue));
                     }
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[CalculateFrames] Unexpected error processing target: {ex.Message}");
+                    Debug.WriteLine($"[ThemeManager] Unexpected error processing target: {ex.Message}");
                 }
             }
 
-            // Build the update action for each frame
-            for (int frameIndex = 0; frameIndex < steps; frameIndex++)
-            {
-                try
-                {
-                    int easedIndex = easedFrameIndices[frameIndex];
-                    int actualFrameIndex = easedIndex < 0 ? 0 : (easedIndex >= steps ? steps - 1 : easedIndex);
-
-                    updates.Enqueue(() =>
-                    {
-                        foreach (var targetEntry in allFrames)
-                        {
-                            try
-                            {
-                                var target = targetEntry.Key;
-                                foreach (var propEntry in targetEntry.Value)
-                                {
-                                    try
-                                    {
-                                        var value = propEntry.Value[actualFrameIndex];
-                                        if (value != null)
-                                        {
-                                            propEntry.Key.SetValue(target, value);
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Debug.WriteLine($"[CalculateFrames] Error setting property value: {ex.Message}");
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.WriteLine($"[CalculateFrames] Error processing target in frame {frameIndex}: {ex.Message}");
-                            }
-                        }
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[CalculateFrames] Error creating update action for frame {frameIndex}: {ex.Message}");
-                }
-            }
-
-            return updates;
+            return entries;
         }
+
+        private sealed class TransitionEntry
+        {
+            public TransitionEntry(object target, ITransitionProperty transitionProperty, ISampler? sampler, object? current, object? targetValue)
+            {
+                Target = target;
+                TransitionProperty = transitionProperty;
+                Sampler = sampler;
+                Current = current;
+                TargetValue = targetValue;
+            }
+
+            public object Target { get; }
+            public ITransitionProperty TransitionProperty { get; }
+            public ISampler? Sampler { get; }
+            public object? Current { get; }
+            public object? TargetValue { get; }
+        }
+
         private static CancellationTokenSource? _cts_transition = null;
         private static readonly SemaphoreSlim _asyncLock_transition = new(1, 1);
         private static void CancleTransition()
         {
             Interlocked.Exchange(ref _cts_transition, null)?.Cancel();
         }
-        private static async Task ExecuteTransition(Queue<Action> updates, int deltaTime, Type themeType)
+        private static async Task ExecuteTransition(List<TransitionEntry> entries, IEaseCalculator ease, double durationMs, Type themeType)
         {
             await _asyncLock_transition.WaitAsync();
 
@@ -420,15 +336,45 @@ namespace VeloxDev.DynamicTheme
 
             try
             {
-                while (updates.Count > 0)
+                var stopwatch = Stopwatch.StartNew();
+                while (true)
                 {
                     if (cts.IsCancellationRequested)
                     {
                         break;
                     }
-                    var action = updates.Dequeue();
-                    action.Invoke();
-                    await Task.Delay(deltaTime, cts.Token);
+                    var rawT = durationMs <= 0 ? 1 : stopwatch.Elapsed.TotalMilliseconds / durationMs;
+                    if (rawT > 1) rawT = 1;
+                    var easedT = ease.Ease(rawT);
+                    if (easedT < 0) easedT = 0;
+                    else if (easedT > 1) easedT = 1;
+
+                    var isEnd = rawT >= 1;
+                    var applyT = isEnd ? 1.0 : easedT;
+                    foreach (var entry in entries)
+                    {
+                        try
+                        {
+                            if (entry.Sampler == null)
+                            {
+                                // simple transition: hold the current value until the end
+                                if (isEnd && entry.TargetValue != null)
+                                    entry.TransitionProperty.SetValue(entry.Target, entry.TargetValue);
+                                continue;
+                            }
+                            entry.Sampler.Update(entry.Target, entry.TransitionProperty, entry.Current, entry.TargetValue, null, applyT);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[ThemeManager] Error setting property value: {ex.Message}");
+                        }
+                    }
+
+                    if (rawT >= 1)
+                    {
+                        break;
+                    }
+                    await Task.Delay(1, cts.Token);
                 }
                 if (!cts.IsCancellationRequested)
                 {

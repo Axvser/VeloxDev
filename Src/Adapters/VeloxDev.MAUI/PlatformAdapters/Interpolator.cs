@@ -1,24 +1,24 @@
 ﻿using Microsoft.Maui.Controls.Shapes;
-using VeloxDev.Adapters.NativeInterpolators;
+using VeloxDev.Adapters.NativeSamplers;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class Interpolator : InterpolatorCore<InterpolatorOutput>
+    public class Interpolator : InterpolatorCore
     {
         static Interpolator()
         {
-            RegisterInterpolator(typeof(Brush), new BrushInterpolator());
-            RegisterInterpolator(typeof(Thickness), new ThicknessInterpolator());
-            RegisterInterpolator(typeof(Point), new PointInterpolator());
-            RegisterInterpolator(typeof(PointF), new PointFInterpolator());
-            RegisterInterpolator(typeof(CornerRadius), new CornerRadiusInterpolator());
-            RegisterInterpolator(typeof(Transform), new TransformInterpolator());
-            RegisterInterpolator(typeof(Color), new ColorInterpolator());
-            RegisterInterpolator(typeof(Size), new SizeInterpolator());
-            RegisterInterpolator(typeof(SizeF), new SizeFInterpolator());
-            RegisterInterpolator(typeof(Rect), new RectInterpolator());
-            RegisterInterpolator(typeof(RectF), new RectFInterpolator());
-            RegisterInterpolator(typeof(Shadow), new ShadowInterpolator());
+            RegisterInterpolator(typeof(Brush), new BrushSampler());
+            RegisterInterpolator(typeof(Thickness), new ThicknessSampler());
+            RegisterInterpolator(typeof(Point), new PointSampler());
+            RegisterInterpolator(typeof(PointF), new PointFSampler());
+            RegisterInterpolator(typeof(CornerRadius), new CornerRadiusSampler());
+            RegisterInterpolator(typeof(Transform), new TransformSampler());
+            RegisterInterpolator(typeof(Color), new ColorSampler());
+            RegisterInterpolator(typeof(Size), new SizeSampler());
+            RegisterInterpolator(typeof(SizeF), new SizeFSampler());
+            RegisterInterpolator(typeof(Rect), new RectSampler());
+            RegisterInterpolator(typeof(RectF), new RectFSampler());
+            RegisterInterpolator(typeof(Shadow), new ShadowSampler());
         }
     }
 }

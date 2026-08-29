@@ -11,7 +11,7 @@ public class StateSnapshotCore<
     TTransitionInterpreterCore> : StateSnapshotCore<T>
     where TStateCore : IFrameState, new()
     where TEffectCore : ITransitionEffectCore, new()
-    where TInterpolatorCore : IFrameInterpolator, new()
+    where TInterpolatorCore : InterpolatorCore, new()
     where TUIThreadInspectorCore : IUIThreadInspector, new()
     where TTransitionInterpreterCore : class, ITransitionInterpreter, new()
 {
@@ -47,7 +47,7 @@ public class StateSnapshotCore<
 
         if (scheduler is TransitionSchedulerCore coreScheduler) coreScheduler.cts = cts;
 
-        Queue<IFrameInterpolatorCore> interpolators = [];
+        Queue<InterpolatorCore> interpolators = [];
         Queue<TimeSpan> spans = [];
         Queue<ITransitionEffectCore> effects = [];
         Queue<IFrameState> states = [];
@@ -109,26 +109,7 @@ public class StateSnapshotCore<
         next = converted;
         return newNode;
     }
-    internal override T1 CoreProperty<T1, TInterpolable>(Expression<Func<T1, TInterpolable>> propertyLambda, TInterpolable newValue)
-    {
-        if (this is not T1 result)
-        {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
-        }
-        state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
-        return result;
-    }
-    internal override T1 CoreProperty<T1, TInterpolable>(Expression<Func<T1, TInterpolable>> propertyLambda, TInterpolable newValue, object? interpolationOptions)
-    {
-        if (this is not T1 result)
-        {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
-        }
-        state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
-        state.SetOptions(propertyLambda, interpolationOptions);
-        return result;
-    }
-    internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, IValueInterpolator interpolator)
+    internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, ISampleable interpolator)
     {
         if (this is not T1 result)
         {
@@ -177,7 +158,7 @@ public class StateSnapshotCore<
     TPriorityCore> : StateSnapshotCore<T>
     where TStateCore : IFrameState, new()
     where TEffectCore : ITransitionEffect<TPriorityCore>, new()
-    where TInterpolatorCore : IFrameInterpolator<TPriorityCore>, new()
+    where TInterpolatorCore : InterpolatorCore, new()
     where TUIThreadInspectorCore : IUIThreadInspector<TPriorityCore>, new()
     where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
 {
@@ -213,7 +194,7 @@ public class StateSnapshotCore<
 
         if (scheduler is TransitionSchedulerCore coreScheduler) coreScheduler.cts = cts;
 
-        Queue<IFrameInterpolatorCore> interpolators = [];
+        Queue<InterpolatorCore> interpolators = [];
         Queue<TimeSpan> spans = [];
         Queue<ITransitionEffectCore> effects = [];
         Queue<IFrameState> states = [];
@@ -275,26 +256,7 @@ public class StateSnapshotCore<
         next = converted;
         return newNode;
     }
-    internal override T1 CoreProperty<T1, TInterpolable>(Expression<Func<T1, TInterpolable>> propertyLambda, TInterpolable newValue)
-    {
-        if (this is not T1 result)
-        {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
-        }
-        state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
-        return result;
-    }
-    internal override T1 CoreProperty<T1, TInterpolable>(Expression<Func<T1, TInterpolable>> propertyLambda, TInterpolable newValue, object? interpolationOptions)
-    {
-        if (this is not T1 result)
-        {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
-        }
-        state.SetValue<T1, TInterpolable>(propertyLambda, newValue);
-        state.SetOptions(propertyLambda, interpolationOptions);
-        return result;
-    }
-    internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, IValueInterpolator interpolator)
+    internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, ISampleable interpolator)
     {
         if (this is not T1 result)
         {
@@ -351,13 +313,7 @@ public abstract class StateSnapshotCore<T> : StateSnapshotCore
 public abstract class StateSnapshotCore
 {
     internal abstract void AsRoot();
-    internal abstract T CoreProperty<T, TInterpolable>(Expression<Func<T, TInterpolable>> propertyLambda, TInterpolable newValue)
-        where T : class
-        where TInterpolable : IInterpolable;
-    internal abstract T CoreProperty<T, TInterpolable>(Expression<Func<T, TInterpolable>> propertyLambda, TInterpolable newValue, object? interpolationOptions)
-        where T : class
-        where TInterpolable : IInterpolable;
-    internal abstract T1 CoreInterpolator<T1, TTarget, TValue>(Expression<Func<TTarget, TValue>> propertyLambda, IValueInterpolator interpolator)
+    internal abstract T1 CoreInterpolator<T1, TTarget, TValue>(Expression<Func<TTarget, TValue>> propertyLambda, ISampleable interpolator)
         where T1 : StateSnapshotCore;
     protected abstract T1 CoreEffect<T1, T2>(T2 effect) where T2 : ITransitionEffectCore;
     protected abstract T1 CoreEffect<T1, T2>(Action<T2> effectSetter) where T2 : ITransitionEffectCore, new();

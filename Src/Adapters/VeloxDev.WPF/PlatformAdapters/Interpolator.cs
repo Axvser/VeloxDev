@@ -1,28 +1,27 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Media3D;
-using System.Windows.Threading;
-using VeloxDev.Adapters.NativeInterpolators;
+using VeloxDev.Adapters.NativeSamplers;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class Interpolator : InterpolatorCore<InterpolatorOutput, DispatcherPriority>
+    public class Interpolator : InterpolatorCore
     {
         static Interpolator()
         {
-            RegisterInterpolator(typeof(Brush), new BrushInterpolator());
-            RegisterInterpolator(typeof(Thickness), new ThicknessInterpolator());
-            RegisterInterpolator(typeof(Point), new PointInterpolator());
-            RegisterInterpolator(typeof(CornerRadius), new CornerRadiusInterpolator());
-            RegisterInterpolator(typeof(Transform), new TransformInterpolator());
-            RegisterInterpolator(typeof(Size), new SizeInterpolator());
-            RegisterInterpolator(typeof(Rect), new RectInterpolator());
-            RegisterInterpolator(typeof(Vector), new VectorInterpolator());
-            RegisterInterpolator(typeof(Color), new ColorInterpolator());
-            RegisterInterpolator(typeof(DropShadowEffect), new DropShadowEffectInterpolator());
-            RegisterInterpolator(typeof(Point3D), new Point3DInterpolator());
-            RegisterInterpolator(typeof(Vector3D), new Vector3DInterpolator());
+            RegisterInterpolator(typeof(Brush), new BrushSampler());
+            RegisterInterpolator(typeof(Thickness), new ThicknessSampler());
+            RegisterInterpolator(typeof(Point), new PointSampler());
+            RegisterInterpolator(typeof(CornerRadius), new CornerRadiusSampler());
+            RegisterInterpolator(typeof(Transform), new TransformSampler());
+            RegisterInterpolator(typeof(Size), new SizeSampler());
+            RegisterInterpolator(typeof(Rect), new RectSampler());
+            RegisterInterpolator(typeof(Vector), new VectorSampler());
+            RegisterInterpolator(typeof(Color), new ColorSampler());
+            RegisterInterpolator(typeof(DropShadowEffect), new DropShadowEffectSampler());
+            RegisterInterpolator(typeof(Point3D), new Point3DSampler());
+            RegisterInterpolator(typeof(Vector3D), new Vector3DSampler());
         }
     }
 }

@@ -7,7 +7,7 @@ namespace VeloxDev.TransitionSystem.Abstractions;
 public class StateCore : IFrameState
 {
     protected ConcurrentDictionary<ITransitionProperty, object?> _values = [];
-    protected ConcurrentDictionary<ITransitionProperty, IValueInterpolator> _interpolators = [];
+    protected ConcurrentDictionary<ITransitionProperty, ISampleable> _interpolators = [];
     protected ConcurrentDictionary<ITransitionProperty, object?> _options = [];
 
     public virtual ConcurrentDictionary<ITransitionProperty, object?> Values
@@ -15,7 +15,7 @@ public class StateCore : IFrameState
         get => _values;
         protected set => _values = value;
     }
-    public virtual ConcurrentDictionary<ITransitionProperty, IValueInterpolator> Interpolators
+    public virtual ConcurrentDictionary<ITransitionProperty, ISampleable> Interpolators
     {
         get => _interpolators;
         protected set => _interpolators = value;
@@ -26,7 +26,7 @@ public class StateCore : IFrameState
         protected set => _options = value;
     }
 
-    public virtual void SetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, IValueInterpolator interpolator)
+    public virtual void SetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, ISampleable interpolator)
     {
         if (TransitionProperty.TryCreate(expression, out var property)
             && property is not null
@@ -46,7 +46,7 @@ public class StateCore : IFrameState
             SetValue(property, value);
         }
     }
-    public virtual bool TryGetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, out IValueInterpolator? interpolator)
+    public virtual bool TryGetInterpolator<TSource, TValue>(Expression<Func<TSource, TValue>> expression, out ISampleable? interpolator)
     {
         if (TransitionProperty.TryCreate(expression, out var property)
             && property is not null
@@ -81,7 +81,7 @@ public class StateCore : IFrameState
         }
     }
 
-    public virtual void SetInterpolator(ITransitionProperty propertyInfo, IValueInterpolator interpolator)
+    public virtual void SetInterpolator(ITransitionProperty propertyInfo, ISampleable interpolator)
     {
         if (_interpolators.TryGetValue(propertyInfo, out _))
         {
@@ -103,7 +103,7 @@ public class StateCore : IFrameState
             _values.TryAdd(propertyInfo, value);
         }
     }
-    public virtual bool TryGetInterpolator(ITransitionProperty propertyInfo, out IValueInterpolator? interpolator)
+    public virtual bool TryGetInterpolator(ITransitionProperty propertyInfo, out ISampleable? interpolator)
     {
         if (_interpolators.TryGetValue(propertyInfo, out var item))
         {
@@ -125,7 +125,7 @@ public class StateCore : IFrameState
         value = null;
         return false;
     }
-    public virtual void SetInterpolator(PropertyInfo propertyInfo, IValueInterpolator interpolator)
+    public virtual void SetInterpolator(PropertyInfo propertyInfo, ISampleable interpolator)
     {
         SetInterpolator(TransitionProperty.FromProperty(propertyInfo), interpolator);
     }
@@ -133,7 +133,7 @@ public class StateCore : IFrameState
     {
         SetValue(TransitionProperty.FromProperty(propertyInfo), value);
     }
-    public virtual bool TryGetInterpolator(PropertyInfo propertyInfo, out IValueInterpolator? interpolator)
+    public virtual bool TryGetInterpolator(PropertyInfo propertyInfo, out ISampleable? interpolator)
     {
         return TryGetInterpolator(TransitionProperty.FromProperty(propertyInfo), out interpolator);
     }

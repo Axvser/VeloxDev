@@ -13,18 +13,17 @@ public class TransitionSchedulerCore<
     protected static readonly TUIThreadInspectorCore uIThreadInspector = new();
 
     public override async Task Execute(
-        IFrameInterpolatorCore interpolator,
+        InterpolatorCore producer,
         IFrameState state,
         ITransitionEffectCore effect,
         CancellationTokenSource? externCts = default)
     {
-        if (interpolator is not IFrameInterpolator<TPriorityCore> cvt_interpolator) return;
         if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) return;
-        await Execute(cvt_interpolator, state, cvt_effect, externCts);
+        await Execute(producer, state, cvt_effect, externCts);
     }
 
     public virtual async Task Execute(
-        IFrameInterpolator<TPriorityCore> interpolator,
+        InterpolatorCore producer,
         IFrameState state,
         ITransitionEffect<TPriorityCore> effect,
         CancellationTokenSource? externCts = default)
@@ -45,9 +44,9 @@ public class TransitionSchedulerCore<
                 effect.InvokeAwake(target, newInterpreter.Args);
             }, effect.Priority);
 
-            var frames = interpolator.Interpolate(target, state, effect, uIThreadInspector);
+            var frameSet = producer.Prepare(target, state, effect, uIThreadInspector);
             if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
-            await newInterpreter.Execute(target, frames, effect, newCts);
+            await newInterpreter.Execute(target, frameSet, effect, newCts);
         }
         finally
         {
@@ -106,17 +105,7 @@ public class TransitionSchedulerCore<
     protected static readonly TUIThreadInspectorCore uIThreadInspector = new();
 
     public override async Task Execute(
-        IFrameInterpolatorCore interpolator,
-        IFrameState state,
-        ITransitionEffectCore effect,
-        CancellationTokenSource? externCts = default)
-    {
-        if (interpolator is not IFrameInterpolator cvt_interpolator) return;
-        await Execute(cvt_interpolator, state, effect, externCts);
-    }
-
-    public virtual async Task Execute(
-        IFrameInterpolator interpolator,
+        InterpolatorCore producer,
         IFrameState state,
         ITransitionEffectCore effect,
         CancellationTokenSource? externCts = default)
@@ -136,9 +125,9 @@ public class TransitionSchedulerCore<
             {
                 effect.InvokeAwake(target, newInterpreter.Args);
             });
-            var frames = interpolator.Interpolate(target, state, effect, uIThreadInspector);
+            var frameSet = producer.Prepare(target, state, effect, uIThreadInspector);
             if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
-            await newInterpreter.Execute(target, frames, effect, newCts);
+            await newInterpreter.Execute(target, frameSet, effect, newCts);
         }
         finally
         {
@@ -246,7 +235,7 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     }
 
     public abstract Task Execute(
-        IFrameInterpolatorCore interpolator,
+        InterpolatorCore producer,
         IFrameState state,
         ITransitionEffectCore effect,
         CancellationTokenSource? externCts = default);

@@ -26,6 +26,5 @@ public abstract class UIThreadInspectorBase : IUIThreadInspectorCore
     public abstract bool IsAppAlive();
     public abstract bool IsUIThread();
     public abstract object? ProtectedGetValue(object target, ITransitionProperty property);
-    public abstract List<object?> ProtectedInterpolate(object target, Func<List<object?>> interpolate);
     public abstract void ProtectedInvoke(object target, Action action, object? priority = default);
 }

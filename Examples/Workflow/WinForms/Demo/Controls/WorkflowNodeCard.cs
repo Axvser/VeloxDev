@@ -816,7 +816,10 @@ internal sealed class WorkflowNodeCard : UserControl
         if (combo is null) return;
         combo.Items.Clear();
         foreach (var item in items)
-            _ = combo.Items.Add(item);
+        {
+            if (item is not null)
+                _ = combo.Items.Add(item);
+        }
         combo.SelectedItem = selected;
     }
 
@@ -1021,7 +1024,11 @@ internal sealed class WorkflowNodeCard : UserControl
             !values.Cast<object>().SequenceEqual(_enumCombo.Items.Cast<object>()))
         {
             _enumCombo.Items.Clear();
-            foreach (var v in values) _enumCombo.Items.Add(v);
+            foreach (var v in values)
+            {
+                if (v is not null)
+                    _enumCombo.Items.Add(v);
+            }
         }
 
         if (!Equals(_enumCombo.SelectedItem, e.SelectedValue))

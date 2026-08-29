@@ -244,7 +244,7 @@ public static class TransitionSnapshotHelper
 
     private static bool IsAnimatable(Type propertyType, Func<Type, bool> canAnimateType)
     {
-        return canAnimateType(propertyType) || typeof(IInterpolable).IsAssignableFrom(propertyType);
+        return canAnimateType(propertyType) || typeof(ISampler).IsAssignableFrom(propertyType);
     }
 
     private static bool CanDescendInto(Type propertyType)

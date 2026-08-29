@@ -1,9 +1,11 @@
-﻿namespace VeloxDev.TransitionSystem
+using VeloxDev.TransitionSystem.Abstractions;
+
+namespace VeloxDev.TransitionSystem
 {
     public interface ITransitionScheduler<TPriorityCore> : ITransitionSchedulerCore
     {
         public Task Execute(
-            IFrameInterpolator<TPriorityCore> interpolator,
+            InterpolatorCore producer,
             IFrameState state,
             ITransitionEffect<TPriorityCore> effect,
             CancellationTokenSource? externCts = default);
@@ -11,17 +13,12 @@
 
     public interface ITransitionScheduler : ITransitionSchedulerCore
     {
-        public Task Execute(
-            IFrameInterpolator interpolator,
-            IFrameState state,
-            ITransitionEffectCore effect,
-            CancellationTokenSource? externCts = default);
     }
 
     public interface ITransitionSchedulerCore
     {
         public Task Execute(
-            IFrameInterpolatorCore interpolator,
+            InterpolatorCore producer,
             IFrameState state,
             ITransitionEffectCore effect,
             CancellationTokenSource? externCts = default);

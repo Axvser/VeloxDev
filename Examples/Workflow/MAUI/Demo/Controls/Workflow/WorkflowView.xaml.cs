@@ -55,7 +55,7 @@ public partial class WorkflowView : ContentView
 
             if (!success || tree is null)
             {
-                await MainPage.DisplayAlert("Load Failed", "The file format is invalid or could not be parsed.", "OK");
+                await MainPage.DisplayAlertAsync("Load Failed", "The file format is invalid or could not be parsed.", "OK");
                 return;
             }
 
@@ -66,7 +66,7 @@ public partial class WorkflowView : ContentView
         }
         catch (Exception ex)
         {
-            await MainPage.DisplayAlert("Error", $"Failed to load file: {ex.Message}", "OK");
+            await MainPage.DisplayAlertAsync("Error", $"Failed to load file: {ex.Message}", "OK");
         }
     }
 
@@ -77,11 +77,11 @@ public partial class WorkflowView : ContentView
             var filePath = Path.Combine(FileSystem.AppDataDirectory, "Workflow.json");
             if (_workflowViewModel.SaveCommand is ICommand cmd)
                 cmd.Execute(filePath);
-            await MainPage.DisplayAlert("Save Succeeded", $"Workflow saved to: {filePath}", "OK");
+            await MainPage.DisplayAlertAsync("Save Succeeded", $"Workflow saved to: {filePath}", "OK");
         }
         catch (Exception ex)
         {
-            await MainPage.DisplayAlert("Error", $"Failed to save file: {ex.Message}", "OK");
+            await MainPage.DisplayAlertAsync("Error", $"Failed to save file: {ex.Message}", "OK");
         }
     }
 
@@ -104,7 +104,7 @@ public partial class WorkflowView : ContentView
     }
 
     /// <summary>
-    /// View-model collection fed to the canvas <see cref="ViewPool"/>. Mirrors
+    /// View-model collection fed to the canvas <c>ViewPool</c>. Mirrors
     /// <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/> but drops link view
     /// models — links are rendered by the single <see cref="LinkLayerView"/>, so the
     /// pool must not materialize one GraphicsView per link.

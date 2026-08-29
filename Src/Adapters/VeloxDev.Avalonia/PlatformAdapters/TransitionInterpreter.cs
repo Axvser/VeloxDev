@@ -2,7 +2,7 @@
 
 namespace VeloxDev.TransitionSystem
 {
-    public class TransitionInterpreter() : TransitionInterpreterCore<InterpolatorOutput, TransitionEffect, DispatcherPriority>
+    public class TransitionInterpreter() : TransitionInterpreterCore<TransitionEffect, DispatcherPriority>
     {
 
     }

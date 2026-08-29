@@ -1,6 +1,5 @@
 using Avalonia.Threading;
 using System;
-using System.Collections.Generic;
 
 namespace VeloxDev.TransitionSystem
 {
@@ -19,18 +18,6 @@ namespace VeloxDev.TransitionSystem
             else
             {
                 return Dispatcher.UIThread?.Invoke(() => property.GetValue(target));
-            }
-        }
-
-        public override List<object?> ProtectedInterpolate(object target, Func<List<object?>> interpolate)
-        {
-            if (IsUIThread())
-            {
-                return interpolate.Invoke();
-            }
-            else
-            {
-                return Dispatcher.UIThread?.Invoke(interpolate) ?? [];
             }
         }
 

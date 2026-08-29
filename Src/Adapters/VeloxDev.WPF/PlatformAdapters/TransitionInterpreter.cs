@@ -1,8 +1,8 @@
-﻿using System.Windows.Threading;
+using System.Windows.Threading;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class TransitionInterpreter() : TransitionInterpreterCore<InterpolatorOutput, TransitionEffect, DispatcherPriority>
+    public class TransitionInterpreter() : TransitionInterpreterCore<TransitionEffect, DispatcherPriority>
     {
 
     }

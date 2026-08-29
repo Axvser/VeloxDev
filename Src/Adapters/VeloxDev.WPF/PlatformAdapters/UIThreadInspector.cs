@@ -24,14 +24,6 @@ namespace VeloxDev.TransitionSystem
             return dispatcher.Invoke(() => property.GetValue(target));
         }
 
-        public override List<object?> ProtectedInterpolate(object target, Func<List<object?>> interpolate)
-        {
-            var dispatcher = DispatcherFor(target);
-            if (dispatcher == null) return IsUIThread() ? interpolate() : [];
-            if (dispatcher.CheckAccess()) return interpolate();
-            return dispatcher.Invoke(interpolate) ?? [];
-        }
-
         public override void ProtectedInvoke(object target, Action action, DispatcherPriority priority)
         {
             var dispatcher = DispatcherFor(target);

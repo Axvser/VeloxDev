@@ -12,6 +12,9 @@
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
+    <!-- Unpackaged launch: matches Workflow/WinUI and lets VS start the demo directly (no MsixPackage profile required).
+         The default (packaged) mode requires a launchSettings.json profile with commandName 'MsixPackage'. -->
+    <WindowsPackageType>None</WindowsPackageType>
     <Nullable>enable</Nullable>
     <NoWarn>$(NoWarn);IL2104</NoWarn>
   </PropertyGroup>

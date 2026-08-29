@@ -6,7 +6,7 @@ namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "表示一个二维坐标偏移量")]
 [AgentContext(AgentLanguages.English, "Represents a two-dimensional coordinate offset")]
-public sealed partial class Offset(double left = 0d, double top = 0d) : ICloneable, IEquatable<Offset>, IInterpolable
+public sealed partial class Offset(double left = 0d, double top = 0d) : ICloneable, IEquatable<Offset>, ISampleable, ISampler
 {
     [VeloxProperty]
     [AgentContext(AgentLanguages.Chinese, "水平偏移量，像素单位")]
@@ -31,29 +31,31 @@ public sealed partial class Offset(double left = 0d, double top = 0d) : ICloneab
     public object Clone() => new Offset(Horizontal, Vertical);
     public bool Equals(Offset? other) => other is not null && Horizontal == other.Horizontal && Vertical == other.Vertical;
 
-    public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
+    public ISampler Normalize(object? start, object? end, object? options) => this;
+
+    public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
     {
-        if (steps <= 0) return [];
+        if (t <= 0) { property.SetValue(target, start); return; }
+        if (t >= 1) { property.SetValue(target, end); return; }
 
-        var s1 = start as Offset ?? new Offset();
-        var s2 = end as Offset ?? s1;
-        if (steps == 1) return [s2];
+        var s1 = start as Offset;
+        var s2 = end as Offset ?? new Offset();
+        var baseOffset = s1 ?? new Offset();
+        var deltaH = s2.Horizontal - baseOffset.Horizontal;
+        var deltaV = s2.Vertical - baseOffset.Vertical;
 
-        var deltaH = s2.Horizontal - s1.Horizontal;
-        var deltaV = s2.Vertical - s1.Vertical;
-
-        List<object?> result = new(steps);
-        for (int i = 0; i < steps; i++)
+        if (s1 is null)
         {
-            var t = (double)i / (steps - 1);
-            result.Add(new Offset(
-                s1.Horizontal + deltaH * t,
-                s1.Vertical + deltaV * t
-            ));
+            // 无现有实例可原地修改（空起点）→ 构造回退
+            property.SetValue(target, new Offset(
+                baseOffset.Horizontal + deltaH * t,
+                baseOffset.Vertical + deltaV * t));
+            return;
         }
-        result[0] = start;
-        result[steps - 1] = end;
-        return result;
+
+        // 原地修改现有实例，不 new
+        s1.Horizontal += deltaH * t;
+        s1.Vertical += deltaV * t;
     }
 
     public static bool operator ==(Offset left, Offset right) => left.Equals(right);

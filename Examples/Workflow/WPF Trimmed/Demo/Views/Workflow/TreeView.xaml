@@ -4,7 +4,6 @@
              xmlns:local="clr-namespace:Demo.Views"
              xmlns:workflowViews="clr-namespace:Demo.Views.Workflow"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
-             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
              behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
              behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"

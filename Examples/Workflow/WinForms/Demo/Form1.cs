@@ -311,7 +311,8 @@ namespace Demo
 
             foreach (var entry in _demo.Tree.ExecutionLog)
             {
-                executionLogListBox.Items.Add(entry);
+                if (entry is not null)
+                    executionLogListBox.Items.Add(entry);
             }
 
             if (executionLogListBox.Items.Count > 0)
@@ -381,7 +382,8 @@ namespace Demo
 
             foreach (var entry in _demo.Tree.AgentLog)
             {
-                agentLogListBox.Items.Add(entry);
+                if (entry is not null)
+                    agentLogListBox.Items.Add(entry);
             }
 
             if (agentLogListBox.Items.Count > 0)

@@ -1,10 +1,12 @@
+using VeloxDev.Adapters.NativeSamplers;
+
 namespace VeloxDev.TransitionSystem
 {
-    public class Interpolator : InterpolatorCore<InterpolatorOutput>
+    public class Interpolator : InterpolatorCore
     {
         static Interpolator()
         {
-            RegisterInterpolator(typeof(string), new VeloxDev.Adapters.NativeInterpolators.StringInterpolator());
+            RegisterInterpolator(typeof(string), new StringSampler());
         }
     }
 }

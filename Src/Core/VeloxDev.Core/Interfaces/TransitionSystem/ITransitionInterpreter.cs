@@ -1,4 +1,5 @@
 using VeloxDev.TimeLine;
+using VeloxDev.TransitionSystem.Abstractions;
 
 namespace VeloxDev.TransitionSystem
 {
@@ -6,18 +7,13 @@ namespace VeloxDev.TransitionSystem
     {
         public Task Execute(
             object target,
-            IFrameSequence<TPriorityCore> frameSequence,
+            SamplerSet samplerSet,
             ITransitionEffect<TPriorityCore> effect,
             CancellationTokenSource cts);
     }
 
     public interface ITransitionInterpreter : ITransitionInterpreterCore
     {
-        public Task Execute(
-            object target,
-            IFrameSequence frameSequence,
-            ITransitionEffectCore effect,
-            CancellationTokenSource cts);
     }
 
     public interface ITransitionInterpreterCore : IDisposable
@@ -25,7 +21,7 @@ namespace VeloxDev.TransitionSystem
         public TransitionEventArgs Args { get; set; }
         public Task Execute(
             object target,
-            IFrameSequenceCore frameSequence,
+            SamplerSet samplerSet,
             ITransitionEffectCore effect,
             CancellationTokenSource cts);
         public void Exit();

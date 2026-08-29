@@ -74,7 +74,7 @@ internal static class NativeWindowStyleHelper
             return;
         }
 
-        ClipChildrenTracked.Add(control, null);
+        ClipChildrenTracked.Add(control, new object());
         control.HandleCreated += OnClipChildrenHandleCreated;
         if (control.IsHandleCreated)
         {
@@ -99,7 +99,7 @@ internal static class NativeWindowStyleHelper
             return;
         }
 
-        CompositedTracked.Add(control, null);
+        CompositedTracked.Add(control, new object());
         control.HandleCreated += OnCompositedHandleCreated;
         if (control.IsHandleCreated)
         {
@@ -147,7 +147,7 @@ internal static class NativeWindowStyleHelper
             return;
         }
 
-        CompositedForms.Add(top, null);
+        CompositedForms.Add(top, new object());
         top.HandleCreated += OnTopLevelHandleCreated;
         if (top.IsHandleCreated)
         {
@@ -164,9 +164,12 @@ internal static class NativeWindowStyleHelper
         {
             var current = stack.Pop();
             count++;
-            foreach (Control child in current.Controls)
+            foreach (Control? child in current.Controls)
             {
-                stack.Push(child);
+                if (child is not null)
+                {
+                    stack.Push(child);
+                }
             }
         }
 
@@ -200,9 +203,9 @@ internal static class NativeWindowStyleHelper
 
         var current = GetLong(hwnd, index);
         var value = current.ToInt64();
-        if ((value & style) == 0)
+        if ((value & (uint)style) == 0)
         {
-            SetLong(hwnd, index, new IntPtr(value | style));
+            SetLong(hwnd, index, new IntPtr(value | (uint)style));
 
             // SWP_FRAMECHANGED: notifies the system that the window styles changed and forces a recompute/re-read of the
             // styles; otherwise styles set at runtime (especially WS_EX_COMPOSITED) may not take effect.

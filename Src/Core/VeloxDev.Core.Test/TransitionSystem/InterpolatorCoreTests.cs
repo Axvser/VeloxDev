@@ -1,5 +1,5 @@
 using VeloxDev.TransitionSystem.Abstractions;
-using VeloxDev.TransitionSystem.NativeInterpolators;
+using VeloxDev.TransitionSystem.NativeSamplers;
 
 namespace VeloxDev.Core.Test.TransitionSystem;
 
@@ -22,7 +22,7 @@ public class InterpolatorCoreTests
     [TestMethod]
     public void RegisterInterpolator_And_TryGet_Succeeds()
     {
-        var interp = new DoubleInterpolator();
+        var interp = new DoubleSampler();
         InterpolatorCore.RegisterInterpolator(typeof(RegistrationKey), interp);
         try
         {
@@ -45,7 +45,7 @@ public class InterpolatorCoreTests
     [TestMethod]
     public void UnregisterInterpolator_RemovesEntry()
     {
-        var interp = new FloatInterpolator();
+        var interp = new FloatSampler();
         InterpolatorCore.RegisterInterpolator(typeof(RemovalKey), interp);
         var removed = InterpolatorCore.UnregisterInterpolator(typeof(RemovalKey), out var old);
 
@@ -57,8 +57,8 @@ public class InterpolatorCoreTests
     [TestMethod]
     public void RegisterInterpolator_OverwritesExisting()
     {
-        var old = new DoubleInterpolator();
-        var replacement = new DoubleInterpolator();
+        var old = new DoubleSampler();
+        var replacement = new DoubleSampler();
         InterpolatorCore.RegisterInterpolator(typeof(OverwriteKey), old);
         InterpolatorCore.RegisterInterpolator(typeof(OverwriteKey), replacement);
         try
@@ -82,7 +82,7 @@ public class InterpolatorCoreTests
     [TestMethod]
     public void RegisterInterpolator_ForCustomType_Succeeds()
     {
-        var interpolator = new FloatInterpolator();
+        var interpolator = new FloatSampler();
         InterpolatorCore.RegisterInterpolator(typeof(CustomKey), interpolator);
         try
         {

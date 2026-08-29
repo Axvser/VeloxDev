@@ -1,29 +1,28 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using Avalonia.Threading;
-using VeloxDev.Adapters.NativeInterpolators;
+using VeloxDev.Adapters.NativeSamplers;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class Interpolator : InterpolatorCore<InterpolatorOutput, DispatcherPriority>
+    public class Interpolator : InterpolatorCore
     {
         static Interpolator()
         {
-            RegisterInterpolator(typeof(IBrush), new BrushInterpolator());
-            RegisterInterpolator(typeof(ITransform), new TransformInterpolator());
-            RegisterInterpolator(typeof(Thickness), new ThicknessInterpolator());
-            RegisterInterpolator(typeof(Point), new PointInterpolator());
-            RegisterInterpolator(typeof(CornerRadius), new CornerRadiusInterpolator());
-            RegisterInterpolator(typeof(Size), new SizeInterpolator());
-            RegisterInterpolator(typeof(PixelPoint), new PixelPointInterpolator());
-            RegisterInterpolator(typeof(PixelSize), new PixelSizeInterpolator());
-            RegisterInterpolator(typeof(PixelRect), new PixelRectInterpolator());
-            RegisterInterpolator(typeof(RelativePoint), new RelativePointInterpolator());
-            RegisterInterpolator(typeof(RelativeRect), new RelativeRectInterpolator());
-            RegisterInterpolator(typeof(Color), new ColorInterpolator());
-            RegisterInterpolator(typeof(BoxShadows), new BoxShadowsInterpolator());
-            RegisterInterpolator(typeof(GridLength), new GridLengthInterpolator());
+            RegisterInterpolator(typeof(IBrush), new BrushSampler());
+            RegisterInterpolator(typeof(ITransform), new TransformSampler());
+            RegisterInterpolator(typeof(Thickness), new ThicknessSampler());
+            RegisterInterpolator(typeof(Point), new PointSampler());
+            RegisterInterpolator(typeof(CornerRadius), new CornerRadiusSampler());
+            RegisterInterpolator(typeof(Size), new SizeSampler());
+            RegisterInterpolator(typeof(PixelPoint), new PixelPointSampler());
+            RegisterInterpolator(typeof(PixelSize), new PixelSizeSampler());
+            RegisterInterpolator(typeof(PixelRect), new PixelRectSampler());
+            RegisterInterpolator(typeof(RelativePoint), new RelativePointSampler());
+            RegisterInterpolator(typeof(RelativeRect), new RelativeRectSampler());
+            RegisterInterpolator(typeof(Color), new ColorSampler());
+            RegisterInterpolator(typeof(BoxShadows), new BoxShadowsSampler());
+            RegisterInterpolator(typeof(GridLength), new GridLengthSampler());
         }
     }
 }

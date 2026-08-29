@@ -76,27 +76,6 @@ namespace VeloxDev.TransitionSystem
             return tcs.Task.GetAwaiter().GetResult();
         }
 
-        public override List<object?> ProtectedInterpolate(object target, Func<List<object?>> interpolate)
-        {
-            var control = ControlDispatcher(target);
-            if (control != null)
-            {
-                if (!control.InvokeRequired) return interpolate();
-                return (List<object?>)control.Invoke(interpolate);
-            }
-
-            if (IsUIThread()) return interpolate();
-            if (_uiSyncContext == null) return [];
-
-            var tcs = new TaskCompletionSource<List<object?>>();
-            _uiSyncContext.Post(_ =>
-            {
-                try { tcs.SetResult(interpolate()); }
-                catch (Exception ex) { tcs.SetException(ex); }
-            }, null);
-            return tcs.Task.GetAwaiter().GetResult() ?? [];
-        }
-
         public override void ProtectedInvoke(object target, Action action)
         {
             var control = ControlDispatcher(target);

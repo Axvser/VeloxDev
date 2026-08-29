@@ -3,7 +3,6 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -86,27 +85,6 @@ namespace VeloxDev.TransitionSystem
                 return default;
             }
             return IsUIThread() ? property.GetValue(target) : default;
-        }
-
-        public override List<object?> ProtectedInterpolate(object target, Func<List<object?>> interpolate)
-        {
-            var queue = QueueFor(target);
-            if (queue != null)
-            {
-                if (queue.HasThreadAccess) return interpolate();
-
-                var tcs = new TaskCompletionSource<List<object?>>();
-                if (queue.TryEnqueue(() =>
-                {
-                    try { tcs.SetResult(interpolate()); }
-                    catch (Exception ex) { tcs.SetException(ex); }
-                }))
-                    return tcs.Task.GetAwaiter().GetResult() ?? [];
-
-                _isAppAlive = false;
-                return [];
-            }
-            return IsUIThread() ? interpolate() : [];
         }
 
         public override void ProtectedInvoke(object target, Action action, DispatcherQueuePriority priority)

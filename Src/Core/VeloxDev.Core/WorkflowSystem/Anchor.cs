@@ -6,7 +6,7 @@ namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "用于在工作流系统中描述组件的空间位置")]
 [AgentContext(AgentLanguages.English, "Used to describe the spatial position of components in the workflow system")]
-public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0) : ICloneable, IEquatable<Anchor>, IInterpolable
+public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0) : ICloneable, IEquatable<Anchor>, ISampleable, ISampler
 {
     [VeloxProperty]
     [AgentContext(AgentLanguages.Chinese, "水平坐标，单位为像素")]
@@ -34,31 +34,34 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
     public object Clone() => new Anchor(Horizontal, Vertical, Layer);
     public bool Equals(Anchor? other) => other is not null && Horizontal == other.Horizontal && Vertical == other.Vertical && Layer == other.Layer;
 
-    public List<object?> Interpolate(object? start, object? end, int steps, object? options = null)
+    public ISampler Normalize(object? start, object? end, object? options) => this;
+
+    public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
     {
-        if (steps <= 0) return [];
+        if (t <= 0) { property.SetValue(target, start); return; }
+        if (t >= 1) { property.SetValue(target, end); return; }
 
-        var s1 = start as Anchor ?? new Anchor();
-        var s2 = end as Anchor ?? s1;
-        if (steps == 1) return [s2];
+        var s1 = start as Anchor;
+        var s2 = end as Anchor ?? new Anchor();
+        var baseAnchor = s1 ?? new Anchor();
+        var deltaH = s2.Horizontal - baseAnchor.Horizontal;
+        var deltaV = s2.Vertical - baseAnchor.Vertical;
+        var deltaL = s2.Layer - baseAnchor.Layer;
 
-        var deltaH = s2.Horizontal - s1.Horizontal;
-        var deltaV = s2.Vertical - s1.Vertical;
-        var deltaL = s2.Layer - s1.Layer;
-
-        List<object?> result = new(steps);
-        for (int i = 0; i < steps; i++)
+        if (s1 is null)
         {
-            var t = (double)i / (steps - 1);
-            result.Add(new Anchor(
-                s1.Horizontal + deltaH * t,
-                s1.Vertical + deltaV * t,
-                s1.Layer + (int)Math.Round(deltaL * t)
-            ));
+            // 无现有实例可原地修改（空起点）→ 构造回退
+            property.SetValue(target, new Anchor(
+                baseAnchor.Horizontal + deltaH * t,
+                baseAnchor.Vertical + deltaV * t,
+                baseAnchor.Layer + (int)Math.Round(deltaL * t)));
+            return;
         }
-        result[0] = start;
-        result[steps - 1] = end;
-        return result;
+
+        // 原地修改现有实例，不 new
+        s1.Horizontal += deltaH * t;
+        s1.Vertical += deltaV * t;
+        s1.Layer += (int)Math.Round(deltaL * t);
     }
 
     public static bool operator ==(Anchor left, Anchor right) => left.Equals(right);
