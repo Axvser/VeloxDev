@@ -202,11 +202,36 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
             if (el is UserControl uc)
             {
                 var found = uc.FindName(ScrollViewerName);
-                if (found is ScrollViewer sv) { _scrollViewer = sv; }
+                if (found is ScrollViewer sv)
+                {
+                    if (_scrollViewer is not null) _scrollViewer.SizeChanged -= OnScrollViewerResized;
+                    _scrollViewer = sv;
+                    // The behavior pushes ViewportWidth on ViewChanged (scroll), but ViewChanged does
+                    // NOT fire for a viewport-SIZE change — and ScrollViewer.ViewportWidth can lag at
+                    // SizeChanged mid-layout. Read the ScrollViewer's settled viewport on ITS resize so
+                    // the draggable block follows the real visible area when the window shrinks.
+                    _scrollViewer.SizeChanged += OnScrollViewerResized;
+                }
                 return;
             }
             el = VisualTreeHelper.GetParent(el) as FrameworkElement;
         }
+    }
+
+    private void OnScrollViewerResized(object? sender, SizeChangedEventArgs e)
+    {
+        // Defer past the current layout pass so the size is settled; then push the ACTUAL visible
+        // area and re-render. ActualWidth/Height = the element's rendered size — the real visible
+        // region — whereas ScrollViewer.ViewportWidth can report the effective/larger value; the
+        // block must shrink to the actual area when the window shrinks.
+        // ScrollOffsetX/Y are unchanged by a pure resize (the block's top-left stays put).
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (_scrollViewer is null) return;
+            ViewportWidth = Math.Max(0, _scrollViewer.ActualWidth);
+            ViewportHeight = Math.Max(0, _scrollViewer.ActualHeight);
+            MarkDirty();
+        });
     }
 
     // ── Tree management ──────────────────────────────────────────────────────

@@ -129,7 +129,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.DataContextChanged += OnDataContextChanged;
-        control.SizeChanged += OnHostSizeChanged;
         control.PointerMoved += OnPointerMoved;
         control.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnPointerReleased), true);
         ResolveNamedControls(control, state);
@@ -141,7 +140,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.Loaded -= OnLoaded;
         control.Unloaded -= OnUnloaded;
         control.DataContextChanged -= OnDataContextChanged;
-        control.SizeChanged -= OnHostSizeChanged;
         control.PointerMoved -= OnPointerMoved;
         control.RemoveHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnPointerReleased));
 
@@ -219,10 +217,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ViewChanged += OnViewChanged;
-            // ViewChanged does not fire when only the window resizes (the viewport size changes
-            // without a scroll operation), so hook SizeChanged to refresh the minimap's viewport
-            // indicator on window shrink — matching WPF's ScrollChanged behavior.
-            state.ScrollViewer.SizeChanged += OnScrollViewerSizeChanged;
         }
     }
 
@@ -236,7 +230,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ViewChanged -= OnViewChanged;
-            state.ScrollViewer.SizeChanged -= OnScrollViewerSizeChanged;
         }
 
         state.PointerPressSource = null;
@@ -345,54 +338,6 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (host is not null)
         {
             Refresh(host);
-        }
-    }
-
-    private static void OnHostSizeChanged(object? sender, SizeChangedEventArgs e)
-    {
-        if (sender is not UserControl control)
-        {
-            return;
-        }
-
-        // The host UserControl resizes with the window on every resize (reliable trigger that
-        // ScrollViewer.ViewChanged misses for a viewport-SIZE change). Refresh and push the now-current
-        // ScrollViewer viewport size so the minimap's draggable block resizes immediately.
-        Refresh(control);
-        if (control.GetValue(StateProperty) is SurfaceState state
-            && state.ScrollViewer is not null
-            && state.MinimapOverlay is IWorkflowMinimapOverlay minimap)
-        {
-            minimap.ViewportWidth = Math.Max(0, state.ScrollViewer.ViewportWidth);
-            minimap.ViewportHeight = Math.Max(0, state.ScrollViewer.ViewportHeight);
-        }
-    }
-
-    private static void OnScrollViewerSizeChanged(object? sender, SizeChangedEventArgs e)
-    {
-        if (sender is not ScrollViewer viewer)
-        {
-            return;
-        }
-
-        var host = EnumerateVisualAncestors(viewer).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
-        if (host is null)
-        {
-            return;
-        }
-
-        // Window resize changes the visible-area size without firing ViewChanged; refresh so the
-        // minimap viewport indicator reflects the new visible region (nodes scrolled out of view).
-        Refresh(host);
-
-        // ScrollViewer.ViewportWidth can lag behind this SizeChanged during the layout pass, so
-        // push the new visible size directly (WinUI scrollbars overlay, so NewSize ≈ the viewport)
-        // — otherwise the minimap's draggable block keeps its old size until the next scroll.
-        if (host.GetValue(StateProperty) is SurfaceState state
-            && state.MinimapOverlay is IWorkflowMinimapOverlay minimap)
-        {
-            minimap.ViewportWidth = Math.Max(0, e.NewSize.Width);
-            minimap.ViewportHeight = Math.Max(0, e.NewSize.Height);
         }
     }
 
@@ -537,8 +482,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         minimap.ScrollOffsetY = state.ScrollViewer.VerticalOffset;
         minimap.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         minimap.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
-        minimap.ViewportWidth = state.ScrollViewer.ViewportWidth;
-        minimap.ViewportHeight = state.ScrollViewer.ViewportHeight;
+        // Push the ACTUAL visible area (the ScrollViewer's rendered size). ViewportWidth can report
+        // an effective/larger value on window shrink; the minimap's draggable block must track the
+        // real on-screen region (matches the minimap's own OnScrollViewerResized, which uses the
+        // settled ActualWidth after the layout pass).
+        minimap.ViewportWidth = Math.Max(0, state.ScrollViewer.ActualWidth);
+        minimap.ViewportHeight = Math.Max(0, state.ScrollViewer.ActualHeight);
         minimap.WorkflowTree = viewModel;
     }
 
