@@ -651,9 +651,10 @@ window.veloxdevWorkflow = (() => {
     }
 
     // ════════════════════════════════════════════════════════════
-    // MINIMAP — grab-the-block drag navigation (matching the XAML adapters).
-    // Press must land on the viewport block; .NET centers the surface viewport on the grab
-    // point, then dragging pans. The block itself is moved directly on scroll.
+    // MINIMAP — always-center navigation (matching the Jalium adapter).
+    // Every press maps the minimap point to a world target and centers the viewport on it;
+    // dragging keeps the viewport center tracking the cursor. The block itself is moved
+    // directly on scroll.
     // ════════════════════════════════════════════════════════════
     function initMinimap(minimapEl, scrollerId, dotnetRef) {
         if (!minimapEl || !scrollerId) return null;
@@ -688,30 +689,9 @@ window.veloxdevWorkflow = (() => {
             const offX = scroller.scrollLeft - last.x;
             const offY = scroller.scrollTop - last.y;
 
-            // Current block rect.
-            const bx = parseFloat(vpRect.getAttribute('x')) || 0;
-            const by = parseFloat(vpRect.getAttribute('y')) || 0;
-            const bw = parseFloat(vpRect.getAttribute('width')) || 0;
-            const bh = parseFloat(vpRect.getAttribute('height')) || 0;
-
-            // The block is the anchor; the viewport follows it. Target block CENTER:
-            //  - Pressing ON the block: the block does not move — the viewport aligns to the
-            //    visible area the block currently maps to (target = the block's current center).
-            //  - Pressing ELSEWHERE in the minimap: the block's center moves to the cursor,
-            //    retreating to just inside the minimap if that would push it over an edge.
-            let cx, cy;
-            const onBlock = mx >= bx && mx <= bx + bw && my >= by && my <= by + bh;
-            if (onBlock) {
-                cx = bx + bw / 2;
-                cy = by + bh / 2;
-            } else {
-                const reg = minimapRects[scrollerId];
-                const mmW = reg ? reg.width : 0, mmH = reg ? reg.height : 0;
-                const tlX = Math.max(0, Math.min(mmW - bw, mx - bw / 2));
-                const tlY = Math.max(0, Math.min(mmH - bh, my - bh / 2));
-                cx = tlX + bw / 2;
-                cy = tlY + bh / 2;
-            }
+            // Match the Jalium adapter: the clicked point always becomes the viewport center —
+            // no grab-anchor on the indicator block, so pressing anywhere recenters the view.
+            const cx = mx, cy = my;
 
             // Center the viewport on the block center's world point, then position the block
             // synchronously so it never lags a frame behind the scroll.

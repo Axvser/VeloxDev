@@ -181,7 +181,6 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     private BoundsRect _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
-    private double _dragOffsetX, _dragOffsetY;
     private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
     private readonly HashSet<IWorkflowLinkViewModel> _subscribedLinks = [];
     private IWorkflowTreeViewModel? _subscribedTree;
@@ -397,33 +396,10 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     {
         if (_isDragging) return;
         var pt = e.GetPosition(this);
-        var vpRect = GetViewportRectInMinimap();
-        if (vpRect is null) return;
 
-        // The block is the anchor; the viewport follows it (matches the Razor adapter):
-        //  - Pressing ON the block keeps it where it is and aligns the viewport to it.
-        //  - Pressing ELSEWHERE moves the block's center to the cursor, retreating to just
-        //    inside the minimap if that would push the block over an edge.
-        double targetCenterX, targetCenterY;
-        if (vpRect.Value.Contains(pt))
-        {
-            targetCenterX = vpRect.Value.X + vpRect.Value.Width / 2;
-            targetCenterY = vpRect.Value.Y + vpRect.Value.Height / 2;
-        }
-        else
-        {
-            var (_, _, mmW, mmH, _) = ComputeTransform(_lastGlobalBounds);
-            var bw = vpRect.Value.Width;
-            var bh = vpRect.Value.Height;
-            var tlX = Math.Max(0, Math.Min(mmW - bw, pt.X - bw / 2));
-            var tlY = Math.Max(0, Math.Min(mmH - bh, pt.Y - bh / 2));
-            targetCenterX = tlX + bw / 2;
-            targetCenterY = tlY + bh / 2;
-        }
-
-        _dragOffsetX = pt.X - targetCenterX;
-        _dragOffsetY = pt.Y - targetCenterY;
-        NavigateToWorld(targetCenterX, targetCenterY);
+        // Match the Jalium adapter: the clicked point always becomes the viewport center —
+        // no grab-anchor on the indicator block, so pressing anywhere recenters the view.
+        NavigateToWorld(pt.X, pt.Y);
         _isDragging = true;
         CaptureMouse();
         e.Handled = true;
@@ -433,7 +409,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     {
         if (!_isDragging) return;
         var pt = e.GetPosition(this);
-        NavigateToWorld(pt.X - _dragOffsetX, pt.Y - _dragOffsetY);
+        NavigateToWorld(pt.X, pt.Y);
         e.Handled = true;
     }
 

@@ -110,14 +110,23 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private BoundsRect _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
-    private float _dragOffsetX, _dragOffsetY;
     private ContentView? _parentView;
 #if WINDOWS
+    // Native pan gesture: it rides the GraphicsView's captured manipulation pipeline
+    // (ManipulationMode=All), so deltas keep arriving while the pointer is outside the
+    // minimap — unlike routed PointerMoved listeners, which stop at the bounds because
+    // only the capture owner receives pointer events once a manipulation begins.
+    private PanGestureRecognizer? _panGesture;
+    private float _dragStartX;
+    private float _dragStartY;
+    private PointerEventHandler? _nativePressedHandler;
     private PointerEventHandler? _nativeMovedHandler;
     private PointerEventHandler? _nativeReleasedHandler;
-    private bool _nativeDragSubscribed;
-    private bool _nativePointerCaptured;
+    // One deferred retry per handler epoch: HandlerChanged fires before the platform
+    // view exists, so the first attach attempt is allowed to retry on the UI thread.
+    private bool _platformAttachPending;
 #endif
+
     private PointerGestureRecognizer? _parentPointerRecognizer;
     private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
     private readonly HashSet<IWorkflowLinkViewModel> _subscribedLinks = [];
@@ -138,6 +147,15 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         DragInteraction += OnDragInteraction;
         EndInteraction += OnEndInteraction;
         Loaded += OnLoaded;
+
+#if WINDOWS
+        // Attached statically (not lazily on drag start) so a press is always captured
+        // even if the gesture suppresses MAUI's own touch interaction on the GraphicsView.
+        // The drag end is owned by this gesture's Completed/Canceled.
+        _panGesture = new PanGestureRecognizer();
+        _panGesture.PanUpdated += OnPanUpdated;
+        GestureRecognizers.Add(_panGesture);
+#endif
     }
 
     private void OnLoaded(object? s, EventArgs e)
@@ -156,7 +174,144 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             }
             el = el.Parent;
         }
+
+#if WINDOWS
+        // The element is in the live tree now, so the platform view exists — attach the
+        // native pointer handlers here (OnHandlerChanged runs before the view is created).
+        AttachPlatformPressedHandler();
+#endif
     }
+
+    protected override void OnHandlerChanged()
+    {
+        base.OnHandlerChanged();
+#if WINDOWS
+        // New handler epoch: allow a fresh deferred retry if the platform view is not
+        // created yet at this point.
+        _platformAttachPending = false;
+        AttachPlatformPressedHandler();
+#endif
+    }
+
+    protected override void OnHandlerChanging(HandlerChangingEventArgs args)
+    {
+        base.OnHandlerChanging(args);
+#if WINDOWS
+        // Detach from the outgoing platform view so the handlers don't leak across
+        // handler recreations (e.g. page navigation).
+        if (args.OldHandler?.PlatformView is UIElement oldEl)
+        {
+            if (_nativePressedHandler is not null)
+            {
+                oldEl.RemoveHandler(UIElement.PointerPressedEvent, _nativePressedHandler);
+                _nativePressedHandler = null;
+            }
+            if (_nativeMovedHandler is not null)
+            {
+                oldEl.RemoveHandler(UIElement.PointerMovedEvent, _nativeMovedHandler);
+                _nativeMovedHandler = null;
+            }
+            if (_nativeReleasedHandler is not null)
+            {
+                oldEl.RemoveHandler(UIElement.PointerReleasedEvent, _nativeReleasedHandler);
+                oldEl.RemoveHandler(UIElement.PointerCanceledEvent, _nativeReleasedHandler);
+                oldEl.RemoveHandler(UIElement.PointerCaptureLostEvent, _nativeReleasedHandler);
+                _nativeReleasedHandler = null;
+            }
+        }
+#endif
+    }
+
+#if WINDOWS
+    /// <summary>
+    /// Hooks the minimap's own platform element. The press always originates there, so
+    /// these handlers fire even when the pan gesture claims the manipulation and
+    /// suppresses MAUI's touch interaction (StartInteraction). With the GraphicsView's
+    /// manipulation holding pointer capture, PointerMoved on this same element keeps
+    /// arriving outside the bounds — a second, independent out-of-bounds input path on
+    /// top of the pan gesture's manipulation deltas.
+    /// </summary>
+    private void AttachPlatformPressedHandler()
+    {
+        if (_nativePressedHandler is not null) return;
+        if (this.Handler?.PlatformView is not UIElement mmEl)
+        {
+            // HandlerChanged is raised before MAUI creates the platform view (that happens
+            // inside the handler's Setup). Defer one tick — the native element exists by the
+            // time the UI thread processes it. Bounded by _platformAttachPending, so a view
+            // that never materializes cannot spin.
+            if (_platformAttachPending) return;
+            _platformAttachPending = true;
+            Dispatcher.Dispatch(() => AttachPlatformPressedHandler());
+            return;
+        }
+        _nativePressedHandler = (s, e) =>
+        {
+            if (this.Handler?.PlatformView is not UIElement mm) return;
+            var pt = e.GetCurrentPoint(mm).Position;
+            _dragStartX = (float)pt.X;
+            _dragStartY = (float)pt.Y;
+            // Best-effort explicit capture: while captured, ONLY this element fires
+            // pointer events, so PointerMoved below keeps flowing outside the bounds
+            // until release. (Can only be taken during PointerPressed.)
+            mm.CapturePointer(e.Pointer);
+            // MAUI raises StartInteraction from its class handler before this instance
+            // handler, so _isDragging is already true when the interaction ran; the probe
+            // then only records the start. When the gesture suppresses the interaction,
+            // the probe stands in for the full press handling.
+            if (_isDragging) return;
+            if (_pendingRefresh) RefreshMinimapData();
+            var aw = (float)SafeDim(WidthRequest, 1);
+            var ah = (float)SafeDim(HeightRequest, 1);
+            ComputeDrawing(aw, ah);
+            NavigateToWorld(_dragStartX, _dragStartY);
+            _isDragging = true;
+        };
+        _nativeMovedHandler = (s, e) =>
+        {
+            if (!_isDragging) return;
+            if (this.Handler?.PlatformView is not UIElement mm) return;
+            var pt = e.GetCurrentPoint(mm).Position;
+            NavigateToWorld((float)pt.X, (float)pt.Y);
+        };
+        _nativeReleasedHandler = (s, e) =>
+        {
+            if (!_isDragging) return;
+            _isDragging = false;
+        };
+        mmEl.AddHandler(UIElement.PointerPressedEvent, _nativePressedHandler, true);
+        mmEl.AddHandler(UIElement.PointerMovedEvent, _nativeMovedHandler, true);
+        mmEl.AddHandler(UIElement.PointerReleasedEvent, _nativeReleasedHandler, true);
+        mmEl.AddHandler(UIElement.PointerCanceledEvent, _nativeReleasedHandler, true);
+        mmEl.AddHandler(UIElement.PointerCaptureLostEvent, _nativeReleasedHandler, true);
+    }
+
+    /// <summary>
+    /// Drives the drag from native manipulation deltas. The manipulation holds pointer
+    /// capture, so Running keeps arriving after the cursor leaves the minimap and only
+    /// ends at the real release (Completed/Canceled) — matching the other frameworks.
+    /// </summary>
+    private void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
+    {
+        switch (e.StatusType)
+        {
+            case GestureStatus.Started:
+                break;
+            case GestureStatus.Running:
+                if (_isDragging)
+                {
+                    var x = _dragStartX + (float)e.TotalX;
+                    var y = _dragStartY + (float)e.TotalY;
+                    NavigateToWorld(x, y);
+                }
+                break;
+            case GestureStatus.Completed:
+            case GestureStatus.Canceled:
+                _isDragging = false;
+                break;
+        }
+    }
+#endif
 
     // ── Tree management ──────────────────────────────────────────────────────
 
@@ -235,15 +390,32 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         if (e.PropertyName is nameof(IWorkflowSlotViewModel.Anchor)) MarkDirty();
     }
 
+    private bool _invalidatePending;
+
     private void MarkDirty()
     {
         _pendingRefresh = true;
-        // Invalidate requires the main thread — dispatch if called from
-        // background (e.g. MonoBehaviourManager loop, BroadcastVisibleItemLayout).
-        if (MainThread.IsMainThread)
-            Invalidate();
-        else
-            MainThread.BeginInvokeOnMainThread(Invalidate);
+        // A single frame can write several visual DPs back-to-back (ApplyVisibleRegion
+        // sets ScrollOffsetX/Y + ContentOffsetX/Y + ViewportWidth/Height together), and a
+        // minimap drag re-writes them per scroll delta. Each DP write is a full minimap
+        // Invalidate — coalesce them into ONE redraw per frame by flushing on the next
+        // main-thread dispatch instead of invalidating inline.
+        if (_invalidatePending)
+        {
+            return;
+        }
+
+        _invalidatePending = true;
+        // Invalidate requires the main thread; BeginInvokeOnMainThread both marshals
+        // background sources and gives the coalescing window so back-to-back writes in
+        // the same frame land in one flush.
+        MainThread.BeginInvokeOnMainThread(FlushInvalidate);
+    }
+
+    private void FlushInvalidate()
+    {
+        _invalidatePending = false;
+        Invalidate();
     }
 
     // ── Data refresh ─────────────────────────────────────────────────────────
@@ -371,12 +543,6 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private static double SafeDim(double value, double fallback)
         => double.IsNaN(value) || value <= 0 ? fallback : value;
 
-    private bool GetViewportHitTest(float px, float py)
-    {
-        var (l, t, w, h) = GetClampedViewportRect();
-        return w > 0 && h > 0 && px >= l && px <= l + w && py >= t && py <= t + h;
-    }
-
     private void OnStartInteraction(object? sender, TouchEventArgs e)
     {
         try
@@ -389,30 +555,15 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
             if (e.Touches is null || e.Touches.Length == 0) return;
             var pt = e.Touches[0];
-            var (l, t, w, h) = GetClampedViewportRect();
-            if (w <= 0 || h <= 0) return;
 
-            // The block is the anchor; the viewport follows it (matches the Razor adapter):
-            //  - Pressing ON the block keeps it where it is and aligns the viewport to it.
-            //  - Pressing ELSEWHERE moves the block's center to the cursor, retreating to just
-            //    inside the minimap if that would push the block over an edge.
-            float targetCenterX, targetCenterY;
-            if (GetViewportHitTest(pt.X, pt.Y))
-            {
-                targetCenterX = l + w / 2;
-                targetCenterY = t + h / 2;
-            }
-            else
-            {
-                var tlX = Math.Max(0f, Math.Min(_mmW - w, pt.X - w / 2));
-                var tlY = Math.Max(0f, Math.Min(_mmH - h, pt.Y - h / 2));
-                targetCenterX = tlX + w / 2;
-                targetCenterY = tlY + h / 2;
-            }
-
-            _dragOffsetX = pt.X - targetCenterX;
-            _dragOffsetY = pt.Y - targetCenterY;
-            NavigateToWorld(targetCenterX, targetCenterY);
+            // Match the Jalium adapter: the clicked point always becomes the viewport
+            // center — no grab-anchor on the indicator block, so pressing anywhere
+            // recenters the view.
+#if WINDOWS
+            _dragStartX = pt.X;
+            _dragStartY = pt.Y;
+#endif
+            NavigateToWorld(pt.X, pt.Y);
             _isDragging = true;
 
             SubscribeDragCapture();
@@ -432,7 +583,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             if (!_isDragging) return;
             if (e.Touches is null || e.Touches.Length == 0) return;
             var pt = e.Touches[0];
-            NavigateToWorld(pt.X - _dragOffsetX, pt.Y - _dragOffsetY);
+            NavigateToWorld(pt.X, pt.Y);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -444,8 +595,16 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     {
         try
         {
+#if WINDOWS
+            // MAUI raises EndInteraction the instant the pointer leaves the minimap — and
+            // again on release. The native handlers (mmEl PointerReleased / pan Completed)
+            // own the drag end on Windows: they keep delivering out-of-bounds moves and
+            // end at the real release, so EndInteraction must not tear the drag down here.
+            return;
+#else
             _isDragging = false;
             UnsubscribeDragCapture();
+#endif
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -456,7 +615,9 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private void SubscribeDragCapture()
     {
 #if WINDOWS
-        SubscribeNativeDragCapture();
+        // No-op: the native pan gesture and the platform PointerPressed probe are attached
+        // statically (constructor / OnHandlerChanged), so there is nothing to subscribe
+        // lazily. The drag end is owned by the pan gesture's Completed/Canceled.
 #else
         SubscribeParentGestureCapture();
 #endif
@@ -465,74 +626,12 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private void UnsubscribeDragCapture()
     {
 #if WINDOWS
-        UnsubscribeNativeDragCapture();
+        // No-op: the static handlers stay attached for the lifetime of the view and are
+        // detached in OnHandlerChanging.
 #else
         UnsubscribeParentGestureCapture();
 #endif
     }
-
-#if WINDOWS
-    private void SubscribeNativeDragCapture()
-    {
-        if (_parentView?.Handler?.PlatformView is not FrameworkElement fe) return;
-        if (_nativeDragSubscribed) return;
-        _nativeDragSubscribed = true;
-        _nativePointerCaptured = false;
-
-        _nativeMovedHandler = (s, e) =>
-        {
-            if (!_isDragging) return;
-
-            // Capture pointer on first move so tracking continues outside bounds.
-            if (!_nativePointerCaptured)
-            {
-                fe.CapturePointer(e.Pointer);
-                _nativePointerCaptured = true;
-            }
-
-            var parentPt = e.GetCurrentPoint(fe).Position;
-
-            if (this.Handler?.PlatformView is UIElement mmElement)
-            {
-                var transform = mmElement.TransformToVisual(fe);
-                var mmOrigin = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-                var mmRelX = parentPt.X - mmOrigin.X;
-                var mmRelY = parentPt.Y - mmOrigin.Y;
-                NavigateToWorld((float)mmRelX - _dragOffsetX, (float)mmRelY - _dragOffsetY);
-            }
-        };
-
-        _nativeReleasedHandler = (s, e) =>
-        {
-            _isDragging = false;
-            UnsubscribeNativeDragCapture();
-        };
-
-        // handledEventsToo:true ensures we get pointer events even when the
-        // minimap GraphicsView (child) handles the interaction first.
-        fe.AddHandler(UIElement.PointerMovedEvent, _nativeMovedHandler, true);
-        fe.AddHandler(UIElement.PointerReleasedEvent, _nativeReleasedHandler, true);
-        fe.AddHandler(UIElement.PointerCanceledEvent, _nativeReleasedHandler, true);
-        fe.AddHandler(UIElement.PointerCaptureLostEvent, _nativeReleasedHandler, true);
-    }
-
-    private void UnsubscribeNativeDragCapture()
-    {
-        if (_parentView?.Handler?.PlatformView is not FrameworkElement fe) return;
-        _nativeDragSubscribed = false;
-        _nativePointerCaptured = false;
-
-        if (_nativeMovedHandler is not null)
-        {
-            fe.RemoveHandler(UIElement.PointerMovedEvent, _nativeMovedHandler);
-            fe.RemoveHandler(UIElement.PointerReleasedEvent, _nativeReleasedHandler);
-            fe.RemoveHandler(UIElement.PointerCanceledEvent, _nativeReleasedHandler);
-            fe.RemoveHandler(UIElement.PointerCaptureLostEvent, _nativeReleasedHandler);
-            _nativeMovedHandler = null;
-            _nativeReleasedHandler = null;
-        }
-    }
-#endif
 
     private void SubscribeParentGestureCapture()
     {
@@ -557,7 +656,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         if (!_isDragging) return;
         var pos = e.GetPosition(this);
         if (pos is null) return;
-        NavigateToWorld((float)pos.Value.X - _dragOffsetX, (float)pos.Value.Y - _dragOffsetY);
+        NavigateToWorld((float)pos.Value.X, (float)pos.Value.Y);
     }
 
     private void OnParentPointerReleased(object? sender, PointerEventArgs e)
@@ -591,19 +690,25 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             wcx, wcy, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);
         if (_scrollView is null || WorkflowTree?.Layout is not { } layout) return;
 
-        var contentW = _scrollView.ContentSize.Width;
-        var contentH = _scrollView.ContentSize.Height;
+        // Max scroll extent comes from the layout MODEL (ActualSize = OriginSize + offsets),
+        // which grows synchronously the moment ClampScrollOffset writes the overshoot below.
+        // _scrollView.ContentSize lags the async MAUI layout pass, so clamping against it
+        // pins the target at the current edge; the 2px throttle then skips the scroll and the
+        // canvas never grows — a self-locking stop at the boundary.  The canvas pan
+        // (WorkflowSurfaceBehavior) uses the model for exactly this reason.
         var svW = _scrollView.Width;
         var svH = _scrollView.Height;
 
-        var maxH = ComputeMaxScroll(contentW, svW);
-        var maxV = ComputeMaxScroll(contentH, svH);
+        var maxH = ComputeMaxScroll(layout.ActualSize.Width, svW);
+        var maxV = ComputeMaxScroll(layout.ActualSize.Height, svH);
 
         // Expand canvas model when drag reaches edge.  ClampScrollOffset writes the
         // overshoot into NegativeOffset (before origin) or PositiveOffset (past the edge)
         // only when it exceeds the 0.5f dead-band (sub-pixel jitter), returning the clamped
-        // scroll offset.  The binding {Binding Layout.ActualSize.Width} picks up the change
-        // and triggers a MAUI layout pass — one per expansion is acceptable.
+        // scroll offset.  The canvas only grows through ApplyLayout (driven by
+        // WorkflowSurfaceBehavior.Refresh), so on expansion we apply layout NOW — mirroring
+        // ApplyPanAsync — and recompute the max from the model, which already reflects the
+        // growth.
         bool layoutChanged = (scrollX < 0 && -scrollX > 0.5f)
             || (scrollX > maxH && scrollX - maxH > 0.5f)
             || (scrollY < 0 && -scrollY > 0.5f)
@@ -612,13 +717,15 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true, threshold: 0.5f);
         scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false, threshold: 0.5f);
 
-        // Recompute max after expansion (model just grew).
+        // Recompute max after expansion (model just grew synchronously).
         if (layoutChanged)
         {
-            maxH = ComputeMaxScroll(
-                _scrollView.ContentSize.Width, _scrollView.Width);
-            maxV = ComputeMaxScroll(
-                _scrollView.ContentSize.Height, _scrollView.Height);
+            if (_parentView is not null)
+            {
+                WorkflowSurfaceBehavior.Refresh(_parentView);
+            }
+            maxH = ComputeMaxScroll(layout.ActualSize.Width, _scrollView.Width);
+            maxV = ComputeMaxScroll(layout.ActualSize.Height, _scrollView.Height);
         }
 
         var clampedX = SafeClamp(scrollX, maxH);
@@ -627,7 +734,9 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         // Throttle: skip ScrollToAsync if the target hasn't changed meaningfully.
         if (Math.Abs(clampedX - _lastScrollX) < 2f &&
             Math.Abs(clampedY - _lastScrollY) < 2f)
+        {
             return;
+        }
 
         _lastScrollX = clampedX;
         _lastScrollY = clampedY;
