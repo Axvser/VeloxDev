@@ -31,7 +31,6 @@ internal sealed class MainWindow : Window
         {
             TemplateSelector = TemplateSelector.CreateSelector(),
         };
-        surface.SetTree(tree);
 
         var viewer = new ScrollViewer
         {
@@ -40,7 +39,11 @@ internal sealed class MainWindow : Window
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             PanningMode = PanningMode.None, // surface handles mouse-pan itself
         };
+        // Attach before SetTree so the surface has a scroll viewer to compute its viewport from the
+        // moment the tree is set — the first Virtualize then runs immediately (full-canvas fallback
+        // until the viewer measures) instead of waiting for a ScrollChanged that may never fire.
         surface.AttachScrollViewer(viewer);
+        surface.SetTree(tree);
 
         var minimap = new MinimapOverlay
         {
