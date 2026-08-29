@@ -172,29 +172,38 @@ public class TemplateClass : FrameworkElement
             ? new Pen(s_brush, 2) { DashStyle = new DashStyle(new[] { 4.0, 2.0 }) }
             : new Pen(s_brush, 2);
 
-        double dx = Math.Abs(to.X - from.X);
+        // Golden-ratio polyline aligned with the other GUI schemes: 4 points
+        // [from, (from.X+stub, from.Y), (to.X−stub, to.Y), to] with stub = dx/2·(1−φ).
+        double dx = to.X - from.X;
         double stub = dx / 2.0 * (1.0 - Phi);
-        if (stub < 8) stub = 8;
-        double dir = to.X >= from.X ? 1 : -1;
-        var p1 = new Point(from.X + dir * stub, from.Y);
-        var p2 = new Point(p1.X, to.Y);
-        var p3 = new Point(to.X - dir * stub, to.Y);
+        var p1 = new Point(from.X + stub, from.Y);
+        var p2 = new Point(to.X - stub, to.Y);
 
         var figure = new PathFigure { StartPoint = from, IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, p3, to }, true));
+        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, to }, true));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         dc.DrawGeometry(null, pen, geometry);
 
+        // Segment-aligned 12x8 arrowhead (matching WPF/WinUI/Avalonia/WinForms/MAUI).
         if (!virtualLink)
         {
-            const double len = 12, halfW = 4;
-            var arrow = new PathFigure { StartPoint = to, IsClosed = true, IsFilled = true };
-            arrow.Segments.Add(new LineSegment(new Point(to.X - dir * len, to.Y - halfW), true));
-            arrow.Segments.Add(new LineSegment(new Point(to.X - dir * len, to.Y + halfW), true));
-            var arrowGeometry = new PathGeometry();
-            arrowGeometry.Figures.Add(arrow);
-            dc.DrawGeometry(s_brush, null, arrowGeometry);
+            const double al = 12, aw = 8;
+            double tx = to.X - from.X, ty = to.Y - from.Y;
+            double len2 = tx * tx + ty * ty;
+            if (len2 >= 0.001)
+            {
+                double len = Math.Sqrt(len2);
+                tx /= len; ty /= len;
+                double nx = -ty, ny = tx;
+                double baseX = to.X - tx * al, baseY = to.Y - ty * al;
+                var arrow = new PathFigure { StartPoint = to, IsClosed = true, IsFilled = true };
+                arrow.Segments.Add(new LineSegment(new Point(baseX + nx * (aw / 2), baseY + ny * (aw / 2)), true));
+                arrow.Segments.Add(new LineSegment(new Point(baseX - nx * (aw / 2), baseY - ny * (aw / 2)), true));
+                var arrowGeometry = new PathGeometry();
+                arrowGeometry.Figures.Add(arrow);
+                dc.DrawGeometry(s_brush, null, arrowGeometry);
+            }
         }
     }
 }

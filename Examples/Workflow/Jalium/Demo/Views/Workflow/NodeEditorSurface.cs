@@ -413,7 +413,7 @@ internal sealed class NodeEditorSurface : Canvas
         {
             var start = ToCanvas(GetPortCenter(from.Node, from.OutputIndex).X, GetPortCenter(from.Node, from.OutputIndex).Y);
             var end = ToCanvas(_tree.VirtualLink.Receiver.Anchor.Horizontal, _tree.VirtualLink.Receiver.Anchor.Vertical);
-            DrawOrthogonalLink(dc, s_virtualPen, start, end);
+            DrawLink(dc, s_virtualPen, start, end);
         }
     }
 
@@ -513,24 +513,22 @@ internal sealed class NodeEditorSurface : Canvas
 
             var p0 = ToCanvas(GetSlotPortCenter(link.Sender).X, GetSlotPortCenter(link.Sender).Y);
             var p1 = ToCanvas(GetSlotPortCenter(link.Receiver).X, GetSlotPortCenter(link.Receiver).Y);
-            DrawOrthogonalLink(dc, s_linkPen, p0, p1);
+            DrawLink(dc, s_linkPen, p0, p1);
             DrawArrowhead(dc, s_linkBrush, p0, p1);
         }
     }
 
-    private static void DrawOrthogonalLink(DrawingContext dc, Pen pen, Point from, Point to)
+    private static void DrawLink(DrawingContext dc, Pen pen, Point from, Point to)
     {
-        double dx = Math.Abs(to.X - from.X);
+        // Golden-ratio polyline aligned with the other GUI schemes: 4 points
+        // [from, (from.X+stub, from.Y), (to.X−stub, to.Y), to] with stub = dx/2·(1−φ).
+        double dx = to.X - from.X;
         double stub = dx / 2.0 * (1.0 - Phi);
-        if (stub < 8) stub = 8;
-        double dir = to.X >= from.X ? 1 : -1;
-
-        var p1 = new Point(from.X + dir * stub, from.Y);
-        var p2 = new Point(p1.X, to.Y);
-        var p3 = new Point(to.X - dir * stub, to.Y);
+        var p1 = new Point(from.X + stub, from.Y);
+        var p2 = new Point(to.X - stub, to.Y);
 
         var figure = new PathFigure { StartPoint = from, IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, p3, to }, true));
+        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, to }, true));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         dc.DrawGeometry(null, pen, geometry);
@@ -538,12 +536,23 @@ internal sealed class NodeEditorSurface : Canvas
 
     private static void DrawArrowhead(DrawingContext dc, Brush brush, Point from, Point to)
     {
-        double dir = to.X >= from.X ? 1 : -1;
-        const double len = 12, halfW = 4; // 12x8 arrowhead
+        // Segment-aligned 12x8 arrowhead (matching WPF/WinUI/Avalonia/WinForms/MAUI).
+        const double al = 12, aw = 8;
+        double tx = to.X - from.X, ty = to.Y - from.Y;
+        double len2 = tx * tx + ty * ty;
+        if (len2 < 0.001)
+        {
+            return;
+        }
+        double len = Math.Sqrt(len2);
+        tx /= len;
+        ty /= len;
+        double nx = -ty, ny = tx;
+        double baseX = to.X - tx * al, baseY = to.Y - ty * al;
 
         var figure = new PathFigure { StartPoint = to, IsClosed = true, IsFilled = true };
-        figure.Segments.Add(new LineSegment(new Point(to.X - dir * len, to.Y - halfW), true));
-        figure.Segments.Add(new LineSegment(new Point(to.X - dir * len, to.Y + halfW), true));
+        figure.Segments.Add(new LineSegment(new Point(baseX + nx * (aw / 2), baseY + ny * (aw / 2)), true));
+        figure.Segments.Add(new LineSegment(new Point(baseX - nx * (aw / 2), baseY - ny * (aw / 2)), true));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         dc.DrawGeometry(brush, null, geometry);

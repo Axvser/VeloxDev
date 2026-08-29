@@ -190,26 +190,34 @@ public class LinkView : FrameworkElement
         var toP = new Point(to.Value.X + origin.Horizontal, to.Value.Y + origin.Vertical);
         var pen = new Pen(s_brush, 2);
 
-        double dx = Math.Abs(toP.X - fromP.X);
+        // Golden-ratio polyline aligned with the other GUI schemes (mirrors the item template).
+        double dx = toP.X - fromP.X;
         double stub = dx / 2.0 * (1.0 - Phi);
-        if (stub < 8) stub = 8;
-        double dir = toP.X >= fromP.X ? 1 : -1;
-        var p1 = new Point(fromP.X + dir * stub, fromP.Y);
-        var p2 = new Point(p1.X, toP.Y);
-        var p3 = new Point(toP.X - dir * stub, toP.Y);
+        var p1 = new Point(fromP.X + stub, fromP.Y);
+        var p2 = new Point(toP.X - stub, toP.Y);
 
         var figure = new PathFigure { StartPoint = fromP, IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, p3, toP }, true));
+        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, toP }, true));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         dc.DrawGeometry(null, pen, geometry);
 
-        const double len = 12, halfW = 4;
-        var arrow = new PathFigure { StartPoint = toP, IsClosed = true, IsFilled = true };
-        arrow.Segments.Add(new LineSegment(new Point(toP.X - dir * len, toP.Y - halfW), true));
-        arrow.Segments.Add(new LineSegment(new Point(toP.X - dir * len, toP.Y + halfW), true));
-        var arrowGeometry = new PathGeometry();
-        arrowGeometry.Figures.Add(arrow);
-        dc.DrawGeometry(s_brush, null, arrowGeometry);
+        // Segment-aligned 12x8 arrowhead (matching WPF/WinUI/Avalonia/WinForms/MAUI).
+        const double al = 12, aw = 8;
+        double tx = toP.X - fromP.X, ty = toP.Y - fromP.Y;
+        double len2 = tx * tx + ty * ty;
+        if (len2 >= 0.001)
+        {
+            double len = Math.Sqrt(len2);
+            tx /= len; ty /= len;
+            double nx = -ty, ny = tx;
+            double baseX = toP.X - tx * al, baseY = toP.Y - ty * al;
+            var arrow = new PathFigure { StartPoint = toP, IsClosed = true, IsFilled = true };
+            arrow.Segments.Add(new LineSegment(new Point(baseX + nx * (aw / 2), baseY + ny * (aw / 2)), true));
+            arrow.Segments.Add(new LineSegment(new Point(baseX - nx * (aw / 2), baseY - ny * (aw / 2)), true));
+            var arrowGeometry = new PathGeometry();
+            arrowGeometry.Figures.Add(arrow);
+            dc.DrawGeometry(s_brush, null, arrowGeometry);
+        }
     }
 }

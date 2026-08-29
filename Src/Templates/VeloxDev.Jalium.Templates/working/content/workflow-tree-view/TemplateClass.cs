@@ -214,21 +214,19 @@ public class TemplateClass : Canvas
         if (_dragKind == DragKind.Link && _dragFrom is { } from)
         {
             var start = ToCanvas(OutputCenter(from.Node, from.OutputIndex).X, OutputCenter(from.Node, from.OutputIndex).Y);
-            DrawOrthogonalLink(dc, s_virtualPen, start, ToCanvas(_virtualEnd.X, _virtualEnd.Y));
+            DrawLink(dc, s_virtualPen, start, ToCanvas(_virtualEnd.X, _virtualEnd.Y));
         }
     }
 
-    private static void DrawOrthogonalLink(DrawingContext dc, Pen pen, Point from, Point to)
+    private static void DrawLink(DrawingContext dc, Pen pen, Point from, Point to)
     {
-        double dx = Math.Abs(to.X - from.X);
+        // Golden-ratio polyline aligned with the other GUI schemes (mirrors workflow-link-view).
+        double dx = to.X - from.X;
         double stub = dx / 2.0 * (1.0 - Phi);
-        if (stub < 8) stub = 8;
-        double dir = to.X >= from.X ? 1 : -1;
-        var p1 = new Point(from.X + dir * stub, from.Y);
-        var p2 = new Point(p1.X, to.Y);
-        var p3 = new Point(to.X - dir * stub, to.Y);
+        var p1 = new Point(from.X + stub, from.Y);
+        var p2 = new Point(to.X - stub, to.Y);
         var figure = new PathFigure { StartPoint = from, IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, p3, to }, true));
+        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, to }, true));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         dc.DrawGeometry(null, pen, geometry);
