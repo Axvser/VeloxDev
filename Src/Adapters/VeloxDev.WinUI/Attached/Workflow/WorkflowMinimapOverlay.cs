@@ -190,7 +190,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     private Rectangle? _bgRect;
     private Rectangle? _borderRect;
 
-    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer? _debounceTimer;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer? _refreshTimer;
 
     public WorkflowMinimapOverlay()
     {
@@ -200,11 +200,11 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         // Only subscribe timer if we're on UI thread
         try
         {
-            _debounceTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.CreateTimer();
-            if (_debounceTimer is not null)
+            _refreshTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.CreateTimer();
+            if (_refreshTimer is not null)
             {
-                _debounceTimer.Interval = TimeSpan.FromMilliseconds(16);
-                _debounceTimer.Tick += (s, e) => RebuildShapes();
+                _refreshTimer.Interval = TimeSpan.FromMilliseconds(16);
+                _refreshTimer.Tick += (s, e) => RebuildShapes();
             }
         }
         catch { }
@@ -326,9 +326,16 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
     private void ScheduleRebuild()
     {
-        if (_debounceTimer is not null)
+        if (_refreshTimer is not null)
         {
-            _debounceTimer.Start();
+            // Throttle, not debounce: restarting a running timer on every MarkDirty
+            // means it never ticks during a continuous pan — the minimap only redraws
+            // once movement stops. Start only when idle so it ticks at the fixed 16 ms
+            // cadence while updates keep arriving.
+            if (!_refreshTimer.IsRunning)
+            {
+                _refreshTimer.Start();
+            }
         }
         else
         {
@@ -473,7 +480,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
     private void RebuildShapes()
     {
-        _debounceTimer?.Stop();
+        _refreshTimer?.Stop();
 
         if (!IsMinimapVisible)
         {

@@ -284,9 +284,22 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var point = e.GetCurrentPoint(state.ScrollViewer).Position;
+        // The canvas carries its own render translate (e.g. the ruler-band offset in the
+        // WinUI demo), so a node at canvas-local (world) coordinates renders at
+        // world + canvasTranslate + ActualOffset in scroll space. Scroll-viewer pointer
+        // coordinates are already scroll-space; compensate for the canvas translate so the
+        // virtual-link end lands exactly under the cursor. (WPF gets this for free via
+        // GetPosition(canvas) inverting the canvas transform; WinUI must compensate here.)
+        var canvasTranslateX = 0d;
+        var canvasTranslateY = 0d;
+        if (state.Canvas?.RenderTransform is TranslateTransform tt)
+        {
+            canvasTranslateX = tt.X;
+            canvasTranslateY = tt.Y;
+        }
         viewModel.SetPointerCommand.Execute(WorkflowSurfaceMath.ToWorldAnchor(
-            state.ScrollViewer.HorizontalOffset + point.X,
-            state.ScrollViewer.VerticalOffset + point.Y,
+            state.ScrollViewer.HorizontalOffset + point.X - canvasTranslateX,
+            state.ScrollViewer.VerticalOffset + point.Y - canvasTranslateY,
             0,
             viewModel.Layout));
     }
