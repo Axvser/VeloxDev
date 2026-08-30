@@ -22,6 +22,8 @@ public class TransitionSnapshotHelperTests
 
         public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
             TransitionProperty.Members<MetaType>(t => t.Width, t => t.Height);
+
+        public object? CreateFrameValue(IReadOnlyList<object?> memberValues) => null;
     }
 
     private sealed class ComplexChild

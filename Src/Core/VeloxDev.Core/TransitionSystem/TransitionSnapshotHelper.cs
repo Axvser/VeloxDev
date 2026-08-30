@@ -157,17 +157,26 @@ public static class TransitionSnapshotHelper
                     // ISampleable → declared members (one level, not recursive).
                     if (value is ISampleable meta)
                     {
-                        foreach (var member in meta.GetAnimatableMembers())
+                        if (propertyType.IsValueType)
                         {
-                            if (!member.CanRead || !member.CanWrite)
+                            // Struct: animate the whole value — member paths can't be written back through a value
+                            // type (the setter would hit a boxed copy). The assembler re-constructs it via its ctor.
+                            result.Add(transitionProperty);
+                        }
+                        else
+                        {
+                            foreach (var member in meta.GetAnimatableMembers())
                             {
-                                continue;
-                            }
+                                if (!member.CanRead || !member.CanWrite)
+                                {
+                                    continue;
+                                }
 
-                            var combined = TransitionProperty.Combine(transitionProperty, member);
-                            if (IsAnimatable(combined.PropertyType, canAnimateType))
-                            {
-                                result.Add(combined);
+                                var combined = TransitionProperty.Combine(transitionProperty, member);
+                                if (IsAnimatable(combined.PropertyType, canAnimateType))
+                                {
+                                    result.Add(combined);
+                                }
                             }
                         }
                     }

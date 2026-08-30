@@ -43,6 +43,8 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
     public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
         TransitionProperty.Members<Anchor>(a => a.Horizontal, a => a.Vertical, a => a.Layer);
 
+    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) => null;
+
     public static bool operator ==(Anchor left, Anchor right) => left.Equals(right);
     public static bool operator !=(Anchor left, Anchor right) => !left.Equals(right);
     public static Anchor operator +(Anchor left, Anchor right) => new(left.Horizontal + right.Horizontal, left.Vertical + right.Vertical, left.Layer + right.Layer);

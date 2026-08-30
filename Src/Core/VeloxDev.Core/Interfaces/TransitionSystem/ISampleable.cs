@@ -14,4 +14,12 @@ public interface ISampleable
     /// Prefer declaring them with <c>TransitionProperty.Members&lt;Foo&gt;(f =&gt; f.Bar, ...)</c>.
     /// </summary>
     IReadOnlyList<ITransitionProperty> GetAnimatableMembers();
+
+    /// <summary>
+    /// Reconstructs a value from its interpolated members, in <see cref="GetAnimatableMembers"/> order.
+    /// Structs implement this to construct through their constructor (compile-time, zero reflection), e.g.
+    /// <c>new Viewport((double)v[0], (double)v[1], (double)v[2], (double)v[3])</c>. Reference types are animated by
+    /// member decomposition and return null here (unused).
+    /// </summary>
+    object? CreateFrameValue(IReadOnlyList<object?> memberValues);
 }

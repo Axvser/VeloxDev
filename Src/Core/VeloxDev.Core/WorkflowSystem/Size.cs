@@ -40,6 +40,8 @@ public sealed partial class Size(double width = 0d, double height = 0d) : IClone
     public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
         TransitionProperty.Members<Size>(s => s.Width, s => s.Height);
 
+    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) => null;
+
     public static bool operator ==(Size a, Size b) => a.Equals(b);
     public static bool operator !=(Size a, Size b) => !a.Equals(b);
     public static Size operator +(Size a, Size b) => new(a.Width + b.Width, a.Height + b.Height);

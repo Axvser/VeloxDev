@@ -40,6 +40,8 @@ public sealed partial class Offset(double left = 0d, double top = 0d) : ICloneab
     public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
         TransitionProperty.Members<Offset>(o => o.Horizontal, o => o.Vertical);
 
+    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) => null;
+
     public static bool operator ==(Offset left, Offset right) => left.Equals(right);
     public static bool operator !=(Offset left, Offset right) => !left.Equals(right);
     public static Offset operator +(Offset left, Offset right) => new(left.Horizontal + right.Horizontal, left.Vertical + right.Vertical);

@@ -214,6 +214,24 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
     }
 
     /// <summary>
+    /// Declares a set of readable member paths from expressions (for struct <see cref="ISampleable"/> assembly).
+    /// Unlike <see cref="Members{TSource}"/> it does not require writability — a struct's members are only read and
+    /// reassembled through its constructor.
+    /// </summary>
+    public static IReadOnlyList<ITransitionProperty> ReadableMembers<TSource>(params Expression<Func<TSource, object?>>[] expressions)
+    {
+        List<ITransitionProperty> members = [];
+        foreach (var expression in expressions)
+        {
+            if (TryCreate(expression, out var property) && property is not null && property.CanRead)
+            {
+                members.Add(property);
+            }
+        }
+        return members;
+    }
+
+    /// <summary>
     /// Combines a prefix path with a suffix path: prefix = target.Foo, suffix = Foo.Bar → target.Foo.Bar.
     /// </summary>
     public static TransitionProperty Combine(ITransitionProperty prefix, ITransitionProperty suffix)
