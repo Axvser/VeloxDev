@@ -170,12 +170,6 @@ public class NodeView : Canvas
         };
         dc.DrawText(title, new Point(12, 9));
 
-        var inputs = SlotView.Inputs(_node);
-        if (inputs.Count > 0)
-        {
-            dc.DrawEllipse(SlotBrush(inputs[0].Slot.State), null, new Point(SlotView.InputPortX, DesignHeight / 2.0), 9, 9);
-        }
-
         var outputs = SlotView.Outputs(_node);
         for (int i = 0; i < outputs.Count; i++)
         {
@@ -186,10 +180,25 @@ public class NodeView : Canvas
                 TextMeasurement.MeasureText(label);
                 dc.DrawText(label, new Point(DesignWidth - 32 - label.Width, rowCenter - label.Height / 2.0));
             }
-
-            dc.DrawEllipse(SlotBrush(outputs[i].Slot.State), null, new Point(DesignWidth - SlotView.OutputInset, rowCenter), 7, 7);
         }
 
         dc.Pop();
+
+        // Ports are drawn AFTER the scale, at the collapsed local centers (matching the links and the
+        // surface hit-test), so they stay aligned with the link endpoints when the workspace zooms.
+        var inputs = SlotView.Inputs(_node);
+        if (inputs.Count > 0)
+        {
+            dc.DrawEllipse(SlotBrush(inputs[0].Slot.State), null,
+                new Point(SlotView.InputPortX, Height / 2.0), 9, 9);
+        }
+
+        var ports = SlotView.Outputs(_node);
+        for (int i = 0; i < ports.Count; i++)
+        {
+            double rowCenter = SlotView.TitleBarH + SlotView.RowH * i + SlotView.RowH / 2.0;
+            dc.DrawEllipse(SlotBrush(ports[i].Slot.State), null,
+                new Point(Width - SlotView.OutputInset, rowCenter), 7, 7);
+        }
     }
 }
