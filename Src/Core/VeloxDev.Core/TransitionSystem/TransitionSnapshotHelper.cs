@@ -6,8 +6,6 @@ namespace VeloxDev.TransitionSystem.Abstractions;
 
 public static class TransitionSnapshotHelper
 {
-    private const int DefaultMaxDepth = 4;
-
     public static void CaptureSpecific<T>(T target, IFrameState state, IEnumerable<Expression<Func<T, object?>>>? expressions)
         where T : class
     {
@@ -94,8 +92,7 @@ public static class TransitionSnapshotHelper
     /// </summary>
     public static IReadOnlyCollection<ITransitionProperty> DiscoverAnimatableProperties(
         object target,
-        Func<Type, bool> canAnimateType,
-        int maxDepth = DefaultMaxDepth)
+        Func<Type, bool> canAnimateType)
     {
         if (target is null)
         {
@@ -107,7 +104,7 @@ public static class TransitionSnapshotHelper
         }
 
         HashSet<ITransitionProperty> result = [];
-        DiscoverAnimatablePropertiesCore(target, [], result, [], canAnimateType, 0, maxDepth);
+        DiscoverAnimatablePropertiesCore(target, [], result, [], [], canAnimateType);
         return [.. result];
     }
 
@@ -116,11 +113,12 @@ public static class TransitionSnapshotHelper
         List<PropertyInfo> path,
         HashSet<ITransitionProperty> result,
         HashSet<object> ancestors,
-        Func<Type, bool> canAnimateType,
-        int depth,
-        int maxDepth)
+        HashSet<Type> ancestorTypes,
+        Func<Type, bool> canAnimateType)
     {
-        if (depth > maxDepth || !ancestors.Add(current))
+        // Object-value cycle (ancestors) + type-cycle guard (ancestorTypes): a reference back into the current path
+        // (an object re-visit, or a member whose type is already an ancestor) stops the recursion — no depth limit.
+        if (!ancestors.Add(current) || !ancestorTypes.Add(current.GetType()))
         {
             return;
         }
@@ -154,7 +152,8 @@ public static class TransitionSnapshotHelper
                         value = null;
                     }
 
-                    // ISampleable → declared members (one level, not recursive).
+                    // ISampleable → green light: expand declared members recursively all the way down (nested
+                    // ISampleable members and plain-composite sub-leaves), bounded only by the object/type guards.
                     if (value is ISampleable meta)
                     {
                         if (propertyType.IsValueType)
@@ -165,25 +164,13 @@ public static class TransitionSnapshotHelper
                         }
                         else
                         {
-                            foreach (var member in meta.GetAnimatableMembers())
-                            {
-                                if (!member.CanRead || !member.CanWrite)
-                                {
-                                    continue;
-                                }
-
-                                var combined = TransitionProperty.Combine(transitionProperty, member);
-                                if (IsAnimatable(combined.PropertyType, canAnimateType))
-                                {
-                                    result.Add(combined);
-                                }
-                            }
+                            ExpandISampleable(meta, value, transitionProperty, result, ancestors, ancestorTypes, canAnimateType);
                         }
                     }
                     // Plain composite → recurse into sub-leaves so the snapshot records them.
-                    else if (depth < maxDepth && CanDescendInto(propertyType) && value is not null)
+                    else if (CanDescendInto(propertyType) && value is not null)
                     {
-                        DiscoverAnimatablePropertiesCore(value, path, result, ancestors, canAnimateType, depth + 1, maxDepth);
+                        DiscoverAnimatablePropertiesCore(value, path, result, ancestors, ancestorTypes, canAnimateType);
                     }
                 }
 
@@ -193,6 +180,80 @@ public static class TransitionSnapshotHelper
         finally
         {
             ancestors.Remove(current);
+            ancestorTypes.Remove(current.GetType());
+        }
+    }
+
+    /// <summary>
+    /// Green-light <see cref="ISampleable"/> expansion: a declared member that is itself ISampleable expands all the
+    /// way down; a plain-composite member descends into its sub-leaves. Bounded only by the object-value cycle guard
+    /// and the ancestor-type guard (a member whose type is already on the path stops — self-referencing chains).
+    /// </summary>
+    private static void ExpandISampleable(
+        ISampleable sampleable,
+        object value,
+        TransitionProperty prefix,
+        HashSet<ITransitionProperty> result,
+        HashSet<object> ancestors,
+        HashSet<Type> ancestorTypes,
+        Func<Type, bool> canAnimateType)
+    {
+        if (!ancestors.Add(value) || !ancestorTypes.Add(value.GetType()))
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var member in sampleable.GetAnimatableMembers())
+            {
+                if (!member.CanRead || !member.CanWrite)
+                {
+                    continue;
+                }
+
+                var combined = TransitionProperty.Combine(prefix, member);
+                if (IsAnimatable(combined.PropertyType, canAnimateType))
+                {
+                    result.Add(combined); // registered / self-sampler → whole leaf
+                    continue;
+                }
+
+                object? memberValue;
+                try
+                {
+                    memberValue = member.GetValue(value);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (combined.PropertyType.IsValueType)
+                {
+                    // Struct member → animate as a whole (assembled via ISampleable.CreateFrameValue) when it is
+                    // itself ISampleable; otherwise it is not animatable.
+                    if (memberValue is ISampleable)
+                    {
+                        result.Add(combined);
+                    }
+                    continue;
+                }
+
+                if (memberValue is ISampleable nested)
+                {
+                    ExpandISampleable(nested, memberValue, combined, result, ancestors, ancestorTypes, canAnimateType);
+                }
+                else if (CanDescendInto(combined.PropertyType) && memberValue is not null)
+                {
+                    DiscoverAnimatablePropertiesCore(memberValue, [.. combined.Segments], result, ancestors, ancestorTypes, canAnimateType);
+                }
+            }
+        }
+        finally
+        {
+            ancestors.Remove(value);
+            ancestorTypes.Remove(value.GetType());
         }
     }
 
