@@ -13,7 +13,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>VeloxDev.WinUI</Title>
-		<Version>7.0.214</Version>
+		<Version>8.0.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinUI</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -25,7 +25,7 @@
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.241114003" />
 		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.Core" Version="7.0.214" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="8.0.0" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 </Project>

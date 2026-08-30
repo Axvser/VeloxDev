@@ -13,7 +13,7 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>VeloxDev.Jalium</PackageId>
     <Title>VeloxDev.Jalium</Title>
-    <Version>7.0.214</Version>
+    <Version>8.0.0</Version>
     <Authors>Axvser</Authors>
     <Description>VeloxDev.Core + Jalium.UI</Description>
     <PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -25,7 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
-    <PackageReference Include="VeloxDev.Core" Version="7.0.214" Condition="'$(Configuration)' != 'Debug'" />
+    <PackageReference Include="VeloxDev.Core" Version="8.0.0" Condition="'$(Configuration)' != 'Debug'" />
     <!-- Jalium.UI.Controls is the lowest platform-neutral package that carries the
          Canvas/ScrollViewer/Border/Control + DrawingContext/Geometry/FormattedText +
          TextMeasurement surface the workflow adapter renders with. -->
