@@ -14,6 +14,7 @@ public sealed class WorkflowSurfaceBehavior
     private sealed class SurfaceState
     {
         public bool IsEnabled { get; set; }
+        public bool ZoomEnabled { get; set; }
         public string? ScrollViewerName { get; set; }
         public string? CanvasName { get; set; }
         public string? GridDecoratorName { get; set; }
@@ -57,6 +58,60 @@ public sealed class WorkflowSurfaceBehavior
             NativeWindowStyleHelper.EnsureClipChildren(element);
             NativeWindowStyleHelper.EnsureComposited(element);
         }
+    }
+
+    /// <summary>Gets whether Ctrl + mouse-wheel zoom is enabled for the specified surface control.</summary>
+    public static bool GetZoomEnabled(Control element)
+    {
+        if (element is null)
+        {
+            throw new ArgumentNullException(nameof(element));
+        }
+
+        return GetState(element).ZoomEnabled;
+    }
+
+    /// <summary>Sets whether Ctrl + mouse-wheel zoom is enabled for the specified surface control.</summary>
+    public static void SetZoomEnabled(Control element, bool value)
+    {
+        if (element is null)
+        {
+            throw new ArgumentNullException(nameof(element));
+        }
+
+        var state = GetState(element);
+        if (state.ZoomEnabled == value)
+        {
+            return;
+        }
+
+        state.ZoomEnabled = value;
+        if (value)
+        {
+            element.MouseWheel += OnZoomMouseWheel;
+        }
+        else
+        {
+            element.MouseWheel -= OnZoomMouseWheel;
+        }
+    }
+
+    private static void OnZoomMouseWheel(object? sender, MouseEventArgs e)
+    {
+        if (sender is not Control control)
+        {
+            return;
+        }
+
+        var tree = ResolveTree(control);
+        if (tree is null || Control.ModifierKeys != Keys.Control)
+        {
+            return;
+        }
+
+        var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
+        var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
+        tree.Layout.Scale = new Scale(next, next);
     }
 
     /// <summary>

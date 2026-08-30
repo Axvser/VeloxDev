@@ -32,6 +32,15 @@ public sealed partial class Size(double width = 0d, double height = 0d) : IClone
     public object Clone() => new Size(Width, Height);
     public bool Equals(Size? other) => other is not null && Width == other.Width && Height == other.Height;
 
+    /// <summary>View value collapsed toward the world origin by <paramref name="scale"/> (identity when null/1).</summary>
+    public Size Collapse(Scale? scale)
+    {
+        if (scale is null || (scale.Horizontal == 1d && scale.Vertical == 1d)) return this;
+        var sx = scale.Horizontal == 0d ? 1d : 1d / scale.Horizontal;
+        var sy = scale.Vertical == 0d ? 1d : 1d / scale.Vertical;
+        return new Size(Width * sx, Height * sy);
+    }
+
     public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
         TransitionProperty.Members<Size>(s => s.Width, s => s.Height);
 

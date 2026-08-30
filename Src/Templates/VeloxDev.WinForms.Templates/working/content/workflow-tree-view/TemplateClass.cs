@@ -144,6 +144,7 @@ public sealed class TemplateClass : UserControl
         _selector.NodeViewFactory = CreateNodeView;
 
         WorkflowSurfaceBehavior.SetIsEnabled(this, true);
+        WorkflowSurfaceBehavior.SetZoomEnabled(this, true);
         WorkflowSurfaceBehavior.SetScrollViewerName(this, "PART_ScrollViewer");
         WorkflowSurfaceBehavior.SetCanvasName(this, "PART_Canvas");
         // The canvas renders the grid/rulers, so it is also the grid decorator.

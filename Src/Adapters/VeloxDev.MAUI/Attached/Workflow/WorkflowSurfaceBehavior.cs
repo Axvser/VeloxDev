@@ -14,6 +14,11 @@ public sealed class WorkflowSurfaceBehavior
         public View? MinimapOverlay { get; set; }
         public View? PointerPressSource { get; set; }
         public PanGestureRecognizer? PanGesture { get; set; }
+        public PinchGestureRecognizer? ZoomGesture { get; set; }
+        public double ZoomStartScale { get; set; }
+#if WINDOWS
+        public Microsoft.UI.Xaml.Input.PointerEventHandler? ZoomWheelHandler { get; set; }
+#endif
         public INotifyPropertyChanged? LayoutNotifier { get; set; }
         public PropertyChangedEventHandler? LayoutChangedHandler { get; set; }
         /// <summary>Anchor scroll offset of the current pan gesture — the scroll position the
@@ -82,6 +87,13 @@ public sealed class WorkflowSurfaceBehavior
         typeof(WorkflowSurfaceBehavior),
         null);
 
+    public static readonly BindableProperty ZoomEnabledProperty = BindableProperty.CreateAttached(
+        "ZoomEnabled",
+        typeof(bool),
+        typeof(WorkflowSurfaceBehavior),
+        false,
+        propertyChanged: OnZoomEnabledChanged);
+
     private static readonly BindableProperty StateProperty = BindableProperty.CreateAttached(
         "State",
         typeof(SurfaceState),
@@ -90,6 +102,8 @@ public sealed class WorkflowSurfaceBehavior
 
     public static bool GetIsEnabled(BindableObject element) => (bool)element.GetValue(IsEnabledProperty);
     public static void SetIsEnabled(BindableObject element, bool value) => element.SetValue(IsEnabledProperty, value);
+    public static bool GetZoomEnabled(BindableObject element) => (bool)element.GetValue(ZoomEnabledProperty);
+    public static void SetZoomEnabled(BindableObject element, bool value) => element.SetValue(ZoomEnabledProperty, value);
     public static string? GetScrollViewerName(BindableObject element) => (string?)element.GetValue(ScrollViewerNameProperty);
     public static void SetScrollViewerName(BindableObject element, string? value) => element.SetValue(ScrollViewerNameProperty, value);
     public static string? GetCanvasName(BindableObject element) => (string?)element.GetValue(CanvasNameProperty);
@@ -320,6 +334,11 @@ public sealed class WorkflowSurfaceBehavior
             state.ScrollViewer.HandlerChanged += OnScrollViewerHandlerChanged;
             OnScrollViewerHandlerChanged(state.ScrollViewer, EventArgs.Empty);
         }
+
+        if (GetZoomEnabled(control))
+        {
+            HookZoom(control, state);
+        }
     }
 
     private static void UnsubscribeResolvedControls(SurfaceState state)
@@ -343,6 +362,7 @@ public sealed class WorkflowSurfaceBehavior
             state.PointerPressSource.GestureRecognizers.Remove(state.PanGesture);
         }
 
+        UnhookZoom(state);
         state.PanCts?.Cancel();
         state.PanCts = null;
         state.ScrollViewer = null;
@@ -351,6 +371,140 @@ public sealed class WorkflowSurfaceBehavior
         state.MinimapOverlay = null;
         state.PointerPressSource = null;
         state.PanGesture = null;
+    }
+
+    private static void OnZoomEnabledChanged(BindableObject bindable, object? oldValue, object? newValue)
+    {
+        if (bindable is not ContentView control || control.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (Equals(newValue, true))
+        {
+            HookZoom(control, state);
+        }
+        else
+        {
+            UnhookZoom(state);
+        }
+    }
+
+    // MAUI is cross-platform: touch zooms via a pinch gesture (works everywhere); on Windows,
+    // Ctrl + mouse-wheel is also accepted. Both write Layout.Scale (Core collapses the nodes).
+    private static void HookZoom(ContentView control, SurfaceState state)
+    {
+        if (state.PointerPressSource is not null && state.ZoomGesture is null)
+        {
+            state.ZoomGesture = new PinchGestureRecognizer();
+            state.ZoomGesture.PinchUpdated += OnPinchUpdated;
+            state.PointerPressSource.GestureRecognizers.Add(state.ZoomGesture);
+        }
+
+#if WINDOWS
+        if (state.ZoomWheelHandler is null)
+        {
+            // Capture the MAUI host in the closure: the platform element has no DataContext, but the
+            // MAUI ContentView's BindingContext is the workflow tree.
+            var captured = control;
+            state.ZoomWheelHandler = (s, ev) => OnZoomWheelChanged(s, ev, captured);
+            if (control.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement el)
+            {
+                el.AddHandler(Microsoft.UI.Xaml.UIElement.PointerWheelChangedEvent, state.ZoomWheelHandler, true);
+            }
+            else
+            {
+                control.HandlerChanged += OnZoomHandlerChanged;
+            }
+        }
+#endif
+    }
+
+    private static void UnhookZoom(SurfaceState state)
+    {
+        if (state.PointerPressSource is not null && state.ZoomGesture is not null)
+        {
+            state.ZoomGesture.PinchUpdated -= OnPinchUpdated;
+            state.PointerPressSource.GestureRecognizers.Remove(state.ZoomGesture);
+        }
+
+        state.ZoomGesture = null;
+
+#if WINDOWS
+        if (state.Host is not null && state.ZoomWheelHandler is not null)
+        {
+            state.Host.HandlerChanged -= OnZoomHandlerChanged;
+            if (state.Host.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement el)
+            {
+                el.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerWheelChangedEvent, state.ZoomWheelHandler);
+            }
+        }
+
+        state.ZoomWheelHandler = null;
+#endif
+    }
+
+#if WINDOWS
+    private static void OnZoomHandlerChanged(object? sender, EventArgs e)
+    {
+        if (sender is not ContentView control || control.GetValue(StateProperty) is not SurfaceState state || state.ZoomWheelHandler is null)
+        {
+            return;
+        }
+
+        if (control.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement el)
+        {
+            el.AddHandler(Microsoft.UI.Xaml.UIElement.PointerWheelChangedEvent, state.ZoomWheelHandler, true);
+        }
+    }
+
+    private static void OnZoomWheelChanged(object? sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e, ContentView control)
+    {
+        if (control.GetValue(StateProperty) is not SurfaceState state
+            || control.Handler?.PlatformView is not Microsoft.UI.Xaml.UIElement source
+            || ResolveTreeViewModel(control, state) is not { } viewModel
+            || !e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control))
+        {
+            return;
+        }
+
+        var delta = e.GetCurrentPoint(source).Properties.MouseWheelDelta;
+        var factor = delta > 0 ? 1.1 : 1 / 1.1;
+        var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
+        viewModel.Layout.Scale = new Scale(next, next);
+        e.Handled = true;
+    }
+#endif
+
+    private static void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
+    {
+        if (sender is not BindableObject bindable)
+        {
+            return;
+        }
+
+        var host = FindAncestorContentView(bindable);
+        if (host is null || host.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        var tree = ResolveTreeViewModel(host, state);
+        if (tree is null)
+        {
+            return;
+        }
+
+        switch (e.Status)
+        {
+            case GestureStatus.Started:
+                state.ZoomStartScale = tree.Layout.Scale.Horizontal;
+                break;
+            case GestureStatus.Running:
+                var factor = Math.Max(0.1, Math.Min(10, state.ZoomStartScale * e.Scale));
+                tree.Layout.Scale = new Scale(factor, factor);
+                break;
+        }
     }
 
     private static void UpdateLayoutSubscription(ContentView control, SurfaceState state)

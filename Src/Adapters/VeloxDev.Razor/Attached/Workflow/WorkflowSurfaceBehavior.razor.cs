@@ -25,6 +25,10 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     [Parameter]
     public bool IsEnabled { get; set; }
 
+    /// <summary>Gets or sets whether Ctrl + mouse-wheel zoom is enabled (wired via JS).</summary>
+    [Parameter]
+    public bool ZoomEnabled { get; set; }
+
     /// <summary>Gets or sets the scroll container element id.</summary>
     [Parameter]
     public string ScrollViewerId { get; set; } = "veloxdev-wf-scroll";
@@ -83,6 +87,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private IJSObjectReference? _module;
     private DotNetObjectReference<WorkflowSurfaceBehavior>? _dotNetRef;
     private IJSObjectReference? _handle;
+    private IJSObjectReference? _wheelHandle;
 
     private double _scrollLeft;
     private double _scrollTop;
@@ -158,7 +163,26 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             var contentY = layout?.ActualOffset.Vertical ?? 0;
             _handle = await _module.InvokeAsync<IJSObjectReference>("initSurface",
                 _scroller, _canvasHost, _dotNetRef, _canvasW, _canvasH, contentX, contentY, _offsetX, _offsetY);
+
+            if (ZoomEnabled)
+            {
+                _wheelHandle = await _module.InvokeAsync<IJSObjectReference>("initWheelZoom", _scroller, _dotNetRef);
+            }
         }
+    }
+
+    /// <summary>JS wheel callback: -1 (zoom out) or +1 (zoom in).</summary>
+    [JSInvokable]
+    public void OnWheelZoom(int direction)
+    {
+        if (Tree is null)
+        {
+            return;
+        }
+
+        var factor = direction > 0 ? 1.1 : 1 / 1.1;
+        var next = Math.Max(0.1, Math.Min(10, Tree.Layout.Scale.Horizontal * factor));
+        Tree.Layout.Scale = new Scale(next, next);
     }
 
     [JSInvokable]
@@ -314,6 +338,25 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             try
             {
                 await _handle.DisposeAsync();
+            }
+            catch
+            {
+            }
+        }
+
+        if (_wheelHandle is not null)
+        {
+            try
+            {
+                await _wheelHandle.InvokeVoidAsync("dispose");
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await _wheelHandle.DisposeAsync();
             }
             catch
             {

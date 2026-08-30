@@ -73,6 +73,23 @@ internal sealed class NodeEditorSurface : Canvas
         AddHandler(MouseMoveEvent, new MouseEventHandler(OnMouseMove));
         AddHandler(MouseUpEvent, new MouseButtonEventHandler(OnMouseUp));
         AddHandler(LostMouseCaptureEvent, new MouseEventHandler(OnLostMouseCapture));
+        AddHandler(Mouse.PreviewMouseWheelEvent, new MouseWheelEventHandler(OnZoomMouseWheel));
+    }
+
+    /// <summary>Ctrl + mouse wheel zooms the workspace: each node collapses toward the world origin
+    /// by 1/scale (the Core Anchor/Size getters); the surface re-renders on Layout.Scale change.</summary>
+    private void OnZoomMouseWheel(object? sender, MouseWheelEventArgs e)
+    {
+        if (_tree is null || !e.KeyboardModifiers.HasFlag(ModifierKeys.Control))
+        {
+            return;
+        }
+
+        var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
+        var next = System.Math.Max(0.1, System.Math.Min(10, _tree.Layout.Scale.Horizontal * factor));
+        _tree.Layout.Scale = new Scale(next, next);
+        e.Handled = true;
+        System.Diagnostics.Debug.WriteLine($"[NodeEditorSurface] zoom wheel -> Scale {next}");
     }
 
     public void AttachScrollViewer(ScrollViewer viewer)
@@ -100,6 +117,7 @@ internal sealed class NodeEditorSurface : Canvas
 
         _tree.Nodes.CollectionChanged += OnNodesChanged;
         _tree.Links.CollectionChanged += OnLinksChanged;
+        SubscribeLayout();
         foreach (var node in _tree.Nodes)
         {
             AddCard(node);
@@ -111,6 +129,43 @@ internal sealed class NodeEditorSurface : Canvas
         Changed?.Invoke();
     }
 
+    private void SubscribeLayout()
+    {
+        UnsubscribeLayout();
+        if (_tree?.Layout is INotifyPropertyChanged layoutNotify)
+        {
+            layoutNotify.PropertyChanged += OnLayoutPropertyChanged;
+        }
+    }
+
+    private void UnsubscribeLayout()
+    {
+        if (_tree?.Layout is INotifyPropertyChanged layoutNotify)
+        {
+            layoutNotify.PropertyChanged -= OnLayoutPropertyChanged;
+        }
+    }
+
+    private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(CanvasLayout.Scale))
+        {
+            System.Diagnostics.Debug.WriteLine($"[NodeEditorSurface] Scale layout change -> re-position {_cards.Count} cards");
+            // The Core Anchor/Size getters collapse toward the origin by Layout.Scale; re-position and
+            // re-size every card (its model Anchor/Size read collapsed) and repaint links.
+            foreach (var (node, card) in _cards)
+            {
+                card.Width = node.Size.Width;
+                card.Height = node.Size.Height;
+                Canvas.SetLeft(card, node.Anchor.Horizontal + _tree!.Layout.ActualOffset.Horizontal);
+                Canvas.SetTop(card, node.Anchor.Vertical + _tree!.Layout.ActualOffset.Vertical);
+            }
+
+            InvalidateVisual();
+            Changed?.Invoke();
+        }
+    }
+
     private void UnsubscribeTree()
     {
         if (_tree is null)
@@ -118,6 +173,7 @@ internal sealed class NodeEditorSurface : Canvas
             return;
         }
 
+        UnsubscribeLayout();
         _tree.Nodes.CollectionChanged -= OnNodesChanged;
         _tree.Links.CollectionChanged -= OnLinksChanged;
         foreach (var node in _tree.Nodes)

@@ -61,6 +61,20 @@
       "description": "Node corner radius.",
       "defaultValue": "6",
       "replaces": "TemplateNodeCornerRadius"
+    },
+    "nodeWidth": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node design width — the Viewbox scales the card content to the node's current size, so this should match the node's Size at scale 1.",
+      "defaultValue": "260",
+      "replaces": "TemplateNodeWidth"
+    },
+    "nodeHeight": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node design height — the Viewbox scales the card content to the node's current size, so this should match the node's Size at scale 1.",
+      "defaultValue": "180",
+      "replaces": "TemplateNodeHeight"
     }
   },
   "primaryOutputs": [

@@ -287,6 +287,49 @@ internal sealed class MainWindow : Window
 
     // ── Workflow load ───────────────────────────────────────────────────────
 
+    /// <summary>Window-level preview key: fires for every key regardless of which child has focus.
+    /// Zoom the workspace with + / - ; each node collapses toward the world origin by 1/scale
+    /// (the Core Anchor/Size getters).</summary>
+    protected override bool OnPreviewWindowKeyDown(Key key, ModifierKeys modifiers, bool isRepeat)
+    {
+        // Ctrl + '+'/'-' zooms (mirrors Ctrl + wheel; plain +/- stays unhandled so it can't fire by accident).
+        if (modifiers == ModifierKeys.Control)
+        {
+            if (key == Key.Add || key == Key.OemPlus)
+            {
+                ZoomBy(1.1);
+                return true;
+            }
+
+            if (key == Key.Subtract || key == Key.OemMinus)
+            {
+                ZoomBy(1 / 1.1);
+                return true;
+            }
+        }
+
+        return base.OnPreviewWindowKeyDown(key, modifiers, isRepeat);
+    }
+
+    /// <summary>Window-level preview wheel: fires for every wheel event regardless of focus/routing.
+    /// Ctrl + wheel zooms the workspace (each node collapses toward the origin by 1/scale).</summary>
+    protected override bool OnPreviewWindowMouseWheel(int delta, Point position)
+    {
+        if (Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            ZoomBy(delta > 0 ? 1.1 : 1 / 1.1);
+            return true;
+        }
+
+        return base.OnPreviewWindowMouseWheel(delta, position);
+    }
+
+    private void ZoomBy(double factor)
+    {
+        var next = System.Math.Max(0.1, System.Math.Min(10, _tree.Layout.Scale.Horizontal * factor));
+        _tree.Layout.Scale = new Scale(next, next);
+    }
+
     private void LoadNetworkDemo()
     {
         UnsubscribeTree(_tree);

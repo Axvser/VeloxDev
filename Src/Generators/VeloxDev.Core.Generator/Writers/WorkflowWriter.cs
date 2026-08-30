@@ -773,6 +773,15 @@ namespace VeloxDev.Generators.Writers
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = {{GenerateNodeSizeInitializer(model.TargetClassSymbol)}};
                     private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> slots = [];
 
+                    // Workspace zoom: when the parent layout's Scale changes, re-raise Anchor/Size so
+                    // views re-read the collapsed values (Anchor/Size getters divide by Layout.Scale).
+                    private readonly {{NAMESPACE_VELOX_WORKFLOW}}.WorkflowNodeScaleTracker _scaleTracker = new();
+                    private void OnScaleDirty()
+                    {
+                        OnPropertyChanged(nameof(Anchor));
+                        OnPropertyChanged(nameof(Size));
+                    }
+
                     protected virtual {{TaskFullName}} Move({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
                         if (parameter is not {{NAMESPACE_VELOX_WORKFLOW}}.Offset offset) return {{TaskFullName}}.CompletedTask;
@@ -832,6 +841,7 @@ namespace VeloxDev.Generators.Writers
                            OnPropertyChanging(nameof(Parent));
                            OnParentChanging(old,value);
                            parent = value;
+                           _scaleTracker.Attach(value, OnScaleDirty);
                            OnParentChanged(old,value);
                            OnPropertyChanged(nameof(Parent));
                         }
@@ -840,7 +850,7 @@ namespace VeloxDev.Generators.Writers
                     partial void OnParentChanged({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel newValue);
                     public {{NAMESPACE_VELOX_WORKFLOW}}.Anchor Anchor
                     {
-                        get => anchor;
+                        get => anchor.Collapse(parent?.Layout?.Scale);
                         set
                         {
                            if({{ObjectFullName}}.Equals(anchor,value)) return;
@@ -856,7 +866,7 @@ namespace VeloxDev.Generators.Writers
                     partial void OnAnchorChanged({{NAMESPACE_VELOX_WORKFLOW}}.Anchor oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Anchor newValue);
                     public {{NAMESPACE_VELOX_WORKFLOW}}.Size Size
                     {
-                        get => size;
+                        get => size.Collapse(parent?.Layout?.Scale);
                         set
                         {
                            if({{ObjectFullName}}.Equals(size,value)) return;

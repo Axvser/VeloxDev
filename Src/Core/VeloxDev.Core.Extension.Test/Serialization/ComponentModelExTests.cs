@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using VeloxDev.MVVM.Serialization;
+using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Extension.Test.Serialization;
 
@@ -57,6 +58,23 @@ public class ComponentModelExTests
         var success = "not valid json {{{".TryDeserialize<TestModel>(out var restored);
         Assert.IsFalse(success);
         Assert.IsNull(restored);
+    }
+
+    [TestMethod]
+    public void CanvasLayout_Scale_RoundTrips()
+    {
+        var original = new CanvasLayout
+        {
+            Scale = new Scale(2.5, 3.5),
+            NegativeOffset = new Offset(50, 30),
+        };
+        var json = original.Serialize();
+
+        var restored = json.Deserialize<CanvasLayout>();
+        Assert.AreEqual(new Scale(2.5, 3.5), restored.Scale);
+        Assert.AreEqual(new Offset(50, 30), restored.NegativeOffset);
+        Assert.AreEqual(2.5, restored.Scale.Horizontal);
+        Assert.AreEqual(3.5, restored.Scale.Vertical);
     }
 
     [TestMethod]

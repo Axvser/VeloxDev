@@ -35,6 +35,15 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
     public object Clone() => new Anchor(Horizontal, Vertical, Layer);
     public bool Equals(Anchor? other) => other is not null && Horizontal == other.Horizontal && Vertical == other.Vertical && Layer == other.Layer;
 
+    /// <summary>View value collapsed toward the world origin by <paramref name="scale"/> (identity when null/1).</summary>
+    public Anchor Collapse(Scale? scale)
+    {
+        if (scale is null || (scale.Horizontal == 1d && scale.Vertical == 1d)) return this;
+        var sx = scale.Horizontal == 0d ? 1d : 1d / scale.Horizontal;
+        var sy = scale.Vertical == 0d ? 1d : 1d / scale.Vertical;
+        return new Anchor(Horizontal * sx, Vertical * sy, Layer);
+    }
+
     public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
         TransitionProperty.Members<Anchor>(a => a.Horizontal, a => a.Vertical, a => a.Layer);
 

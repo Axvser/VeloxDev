@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Input;
 using Avalonia.Input.GestureRecognizers;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using System;
@@ -24,6 +25,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public Control? GridDecorator { get; set; }
         public Control? PointerPressSource { get; set; }
         public Control? MinimapOverlay { get; set; }
+        public EventHandler<PointerWheelEventArgs>? ZoomHandler { get; set; }
     }
 
     public static readonly AttachedProperty<bool> IsEnabledProperty =
@@ -44,17 +46,25 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     public static readonly AttachedProperty<string?> MinimapOverlayNameProperty =
         AvaloniaProperty.RegisterAttached<WorkflowSurfaceBehavior, UserControl, string?>("MinimapOverlayName");
 
+    public static readonly AttachedProperty<bool> ZoomEnabledProperty =
+        AvaloniaProperty.RegisterAttached<WorkflowSurfaceBehavior, UserControl, bool>("ZoomEnabled");
+
     private static readonly AttachedProperty<SurfaceState?> StateProperty =
         AvaloniaProperty.RegisterAttached<WorkflowSurfaceBehavior, UserControl, SurfaceState?>("State");
 
     static WorkflowSurfaceBehavior()
     {
         IsEnabledProperty.Changed.AddClassHandler<UserControl>(OnIsEnabledChanged);
+        ZoomEnabledProperty.Changed.AddClassHandler<UserControl>(OnZoomEnabledChanged);
     }
 
     public static bool GetIsEnabled(AvaloniaObject element) => element.GetValue(IsEnabledProperty);
 
     public static void SetIsEnabled(AvaloniaObject element, bool value) => element.SetValue(IsEnabledProperty, value);
+
+    public static bool GetZoomEnabled(AvaloniaObject element) => element.GetValue(ZoomEnabledProperty);
+
+    public static void SetZoomEnabled(AvaloniaObject element, bool value) => element.SetValue(ZoomEnabledProperty, value);
 
     public static string? GetScrollViewerName(AvaloniaObject element) => element.GetValue(ScrollViewerNameProperty);
 
@@ -184,6 +194,11 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             // WorkflowSurfaceBehavior implements its own complete pan logic.
             state.ScrollViewer.LayoutUpdated += OnScrollViewerLayoutUpdated;
         }
+
+        if (GetZoomEnabled(control))
+        {
+            HookZoom(state);
+        }
     }
 
     private static void UnsubscribeResolvedControls(SurfaceState state)
@@ -197,11 +212,73 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             state.ScrollViewer.LayoutUpdated -= OnScrollViewerLayoutUpdated;
         }
 
+        UnhookZoom(state);
         state.PointerPressSource = null;
         state.ScrollViewer = null;
         state.Canvas = null;
         state.GridDecorator = null;
         state.MinimapOverlay = null;
+    }
+
+    private static void OnZoomEnabledChanged(UserControl control, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (control.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (Equals(e.NewValue, true))
+        {
+            HookZoom(state);
+        }
+        else
+        {
+            UnhookZoom(state);
+        }
+    }
+
+    // Avalonia has no PreviewMouseWheel, so the wheel is tunneled on the ScrollViewer: it fires before
+    // the control scrolls and marks the event handled, keeping plain wheel scrolling intact.
+    private static void HookZoom(SurfaceState state)
+    {
+        if (state.ScrollViewer is not null && state.ZoomHandler is null)
+        {
+            state.ZoomHandler = OnZoomPointerWheelChanged;
+            state.ScrollViewer.AddHandler(InputElement.PointerWheelChangedEvent, state.ZoomHandler, RoutingStrategies.Tunnel);
+        }
+    }
+
+    private static void UnhookZoom(SurfaceState state)
+    {
+        if (state.ScrollViewer is not null && state.ZoomHandler is not null)
+        {
+            state.ScrollViewer.RemoveHandler(InputElement.PointerWheelChangedEvent, state.ZoomHandler);
+            state.ZoomHandler = null;
+        }
+    }
+
+    private static void OnZoomPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (sender is not Control source)
+        {
+            return;
+        }
+
+        var host = source.GetVisualAncestors().OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+        if (host is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            return;
+        }
+
+        var factor = e.Delta.Y > 0 ? 1.1 : 1 / 1.1;
+        var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
+        viewModel.Layout.Scale = new Scale(next, next);
+        e.Handled = true;
     }
 
     private static void OnPointerPressed(object? sender, PointerPressedEventArgs e)

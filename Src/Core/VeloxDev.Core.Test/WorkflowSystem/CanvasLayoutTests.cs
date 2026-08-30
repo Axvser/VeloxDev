@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Test.WorkflowSystem;
@@ -165,5 +166,69 @@ public class CanvasLayoutTests
         var adapted = layout.AdaptTo(new Size(3000, 2000));
         Assert.AreEqual(100d, adapted.ViewportOffset.Horizontal);
         Assert.AreEqual(200d, adapted.ViewportOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void Scale_DefaultIsOne()
+    {
+        var layout = new CanvasLayout();
+        Assert.AreEqual(1d, layout.Scale.Horizontal);
+        Assert.AreEqual(1d, layout.Scale.Vertical);
+    }
+
+    [TestMethod]
+    public void ScaleChange_RaisesPropertyChanged_ForScale()
+    {
+        var layout = new CanvasLayout();
+        var raised = false;
+        layout.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CanvasLayout.Scale)) raised = true;
+        };
+        layout.Scale = new Scale(2, 2);
+        Assert.IsTrue(raised, "the Scale PropertyChanged is the view-dirty signal the scale attached property binds to");
+    }
+
+    [TestMethod]
+    public void ScaleChange_DoesNotAffectActualSizeOrOffset()
+    {
+        var layout = new CanvasLayout();
+        layout.NegativeOffset = new Offset(50, 30);
+        var widthBefore = layout.ActualSize.Width;
+        var heightBefore = layout.ActualSize.Height;
+        layout.Scale = new Scale(2, 2);
+        Assert.AreEqual(widthBefore, layout.ActualSize.Width);
+        Assert.AreEqual(heightBefore, layout.ActualSize.Height);
+        Assert.AreEqual(50d, layout.ActualOffset.Horizontal);
+        Assert.AreEqual(30d, layout.ActualOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void Equals_DifferentScale_ReturnsFalse()
+    {
+        var a = new CanvasLayout();
+        var b = new CanvasLayout { Scale = new Scale(2, 2) };
+        Assert.IsFalse(a.Equals(b));
+    }
+
+    [TestMethod]
+    public void Clone_PreservesScale()
+    {
+        var layout = new CanvasLayout { Scale = new Scale(1.5, 2.5) };
+        var clone = (CanvasLayout)layout.Clone();
+        Assert.AreEqual(new Scale(1.5, 2.5), clone.Scale);
+
+        clone.Scale = new Scale(3, 3);
+        Assert.AreEqual(1.5, layout.Scale.Horizontal);
+        Assert.AreEqual(2.5, layout.Scale.Vertical);
+    }
+
+    [TestMethod]
+    public void AdaptTo_PreservesScale()
+    {
+        var layout = new CanvasLayout { Scale = new Scale(2, 2) };
+        var adapted = layout.AdaptTo(new Size(3000, 2000));
+        Assert.AreEqual(2d, adapted.Scale.Horizontal);
+        Assert.AreEqual(2d, adapted.Scale.Vertical);
     }
 }

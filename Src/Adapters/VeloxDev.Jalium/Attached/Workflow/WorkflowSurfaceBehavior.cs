@@ -23,6 +23,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public FrameworkElement? GridDecorator { get; set; }
         public FrameworkElement? MinimapOverlay { get; set; }
         public FrameworkElement? PointerPressSource { get; set; }
+        public FrameworkElement? ZoomHooked { get; set; }
+        public MouseWheelEventHandler? ZoomWheelHandler { get; set; }
     }
 
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
@@ -61,6 +63,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         typeof(WorkflowSurfaceBehavior),
         new PropertyMetadata(null));
 
+    public static readonly DependencyProperty ZoomEnabledProperty = DependencyProperty.RegisterAttached(
+        "ZoomEnabled",
+        typeof(bool),
+        typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(false, OnZoomEnabledChanged));
+
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
         "State",
         typeof(SurfaceState),
@@ -84,6 +92,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     public static string? GetMinimapOverlayName(DependencyObject element) => (string?)element.GetValue(MinimapOverlayNameProperty);
     public static void SetMinimapOverlayName(DependencyObject element, string? value) => element.SetValue(MinimapOverlayNameProperty, value);
+
+    public static bool GetZoomEnabled(DependencyObject element) => (bool)element.GetValue(ZoomEnabledProperty);
+    public static void SetZoomEnabled(DependencyObject element, bool value) => element.SetValue(ZoomEnabledProperty, value);
 
     /// <summary>Re-resolves named parts and pushes offsets/viewport. Call after wiring a tree.</summary>
     public static void Refresh(FrameworkElement host)
@@ -215,6 +226,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         {
             state.ScrollViewer.ScrollChanged += OnScrollChanged;
         }
+
+        if (GetZoomEnabled(control))
+        {
+            HookZoom(control);
+        }
     }
 
     private static void UnsubscribeResolvedControls(SurfaceState state)
@@ -230,11 +246,83 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             state.ScrollViewer.ScrollChanged -= OnScrollChanged;
         }
 
+        UnhookZoom(state);
+
         state.PointerPressSource = null;
         state.ScrollViewer = null;
         state.Canvas = null;
         state.GridDecorator = null;
         state.MinimapOverlay = null;
+    }
+
+    private static void OnZoomEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not FrameworkElement control)
+        {
+            return;
+        }
+
+        if (Equals(e.NewValue, true))
+        {
+            HookZoom(control);
+        }
+        else
+        {
+            if (control.GetValue(StateProperty) is SurfaceState state)
+            {
+                UnhookZoom(state);
+            }
+        }
+    }
+
+    private static void HookZoom(FrameworkElement control)
+    {
+        if (control.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (state.ZoomHooked is null)
+        {
+            state.ZoomHooked = control;
+            state.ZoomWheelHandler = new MouseWheelEventHandler(OnZoomMouseWheel);
+            control.AddHandler(Mouse.PreviewMouseWheelEvent, state.ZoomWheelHandler);
+        }
+    }
+
+    private static void UnhookZoom(SurfaceState state)
+    {
+        if (state.ZoomHooked is not null && state.ZoomWheelHandler is not null)
+        {
+            state.ZoomHooked.RemoveHandler(Mouse.PreviewMouseWheelEvent, state.ZoomWheelHandler);
+            state.ZoomHooked = null;
+            state.ZoomWheelHandler = null;
+        }
+    }
+
+    private static void OnZoomMouseWheel(object? sender, MouseWheelEventArgs e)
+    {
+        if (sender is not FrameworkElement source)
+        {
+            return;
+        }
+
+        var host = EnumerateVisualAncestors(source).OfType<FrameworkElement>().FirstOrDefault(GetIsEnabled);
+        if (host is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        if (!e.KeyboardModifiers.HasFlag(ModifierKeys.Control))
+        {
+            return;
+        }
+
+        var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
+        var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
+        viewModel.Layout.Scale = new Scale(next, next);
+        e.Handled = true;
+        System.Diagnostics.Debug.WriteLine($"[WorkflowSurfaceBehavior] zoom wheel -> Scale {next}");
     }
 
     private static void OnPointerPressed(object? sender, MouseButtonEventArgs e)

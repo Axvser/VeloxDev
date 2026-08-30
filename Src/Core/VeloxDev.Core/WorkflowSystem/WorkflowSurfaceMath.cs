@@ -238,6 +238,35 @@ public static class WorkflowSurfaceMath
     /// </summary>
     public static double MinThumbSize(double size, double scale, double min)
         => Math.Max(min, size * scale);
+
+    // ── ⑥ Scale (collapse toward the world origin) ──────────────────────────
+
+    /// <summary>
+    /// Per-node scale factor used to collapse the node toward the world origin <c>(0,0)</c>: a node whose
+    /// anchor is <c>(ax, ay)</c> sees the origin at local <c>(-ax, -ay)</c>, so the whole node (position and
+    /// content) is scaled about that point by <c>1/scale</c>. The larger the workspace zoom, the tighter the
+    /// graph clusters around the origin — the node's model <see cref="Anchor"/> and <see cref="Size"/> stay
+    /// unchanged, the canvas stays the same size, and only the render transform moves.
+    /// </summary>
+    public static (double ScaleX, double ScaleY, double CenterX, double CenterY) ScaleCollapse(
+        double anchorX, double anchorY, double scaleX, double scaleY)
+        => (SafeInverse(scaleX), SafeInverse(scaleY), -anchorX, -anchorY);
+
+    /// <summary>
+    /// World-space bounds a node occupies after collapsing toward the origin:
+    /// <c>(anchorX/scaleX, anchorY/scaleY, width/scaleX, height/scaleY)</c>. Mirrors the per-node
+    /// <see cref="ScaleCollapse"/> render transform so minimaps (and any world-space overlay) can draw the
+    /// collapsed thumbnails without touching the model.
+    /// </summary>
+    public static (double Left, double Top, double Width, double Height) ScaleVisualBounds(
+        double anchorX, double anchorY, double width, double height, double scaleX, double scaleY)
+    {
+        var invX = SafeInverse(scaleX);
+        var invY = SafeInverse(scaleY);
+        return (anchorX * invX, anchorY * invY, width * invX, height * invY);
+    }
+
+    private static double SafeInverse(double value) => value == 0 ? 1 : 1 / value;
 }
 
 /// <summary>

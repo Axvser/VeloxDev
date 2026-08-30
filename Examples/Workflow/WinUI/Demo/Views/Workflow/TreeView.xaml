@@ -9,7 +9,7 @@
     xmlns:vm="using:Demo.ViewModels"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+    behaviors:WorkflowSurfaceBehavior.IsEnabled="True" behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
     behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
     behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
     behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"

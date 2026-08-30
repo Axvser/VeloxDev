@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using VeloxDev.WorkflowSystem;
+using Windows.System;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -22,6 +23,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public FrameworkElement? GridDecorator { get; set; }
         public FrameworkElement? MinimapOverlay { get; set; }
         public FrameworkElement? PointerPressSource { get; set; }
+        public PointerEventHandler? ZoomHandler { get; set; }
     }
 
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
@@ -60,6 +62,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         typeof(WorkflowSurfaceBehavior),
         new PropertyMetadata(null));
 
+    public static readonly DependencyProperty ZoomEnabledProperty = DependencyProperty.RegisterAttached(
+        "ZoomEnabled",
+        typeof(bool),
+        typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(false, OnZoomEnabledChanged));
+
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
         "State",
         typeof(SurfaceState),
@@ -69,6 +77,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     public static bool GetIsEnabled(DependencyObject element) => (bool)element.GetValue(IsEnabledProperty);
 
     public static void SetIsEnabled(DependencyObject element, bool value) => element.SetValue(IsEnabledProperty, value);
+
+    public static bool GetZoomEnabled(DependencyObject element) => (bool)element.GetValue(ZoomEnabledProperty);
+
+    public static void SetZoomEnabled(DependencyObject element, bool value) => element.SetValue(ZoomEnabledProperty, value);
 
     public static string? GetScrollViewerName(DependencyObject element) => element.GetValue(ScrollViewerNameProperty) as string;
 
@@ -218,6 +230,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         {
             state.ScrollViewer.ViewChanged += OnViewChanged;
         }
+
+        if (GetZoomEnabled(control))
+        {
+            HookZoom(state);
+        }
     }
 
     private static void UnsubscribeResolvedControls(SurfaceState state)
@@ -232,11 +249,76 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             state.ScrollViewer.ViewChanged -= OnViewChanged;
         }
 
+        UnhookZoom(state);
         state.PointerPressSource = null;
         state.ScrollViewer = null;
         state.Canvas = null;
         state.GridDecorator = null;
         state.MinimapOverlay = null;
+    }
+
+    private static void OnZoomEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not UserControl control || control.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (Equals(e.NewValue, true))
+        {
+            HookZoom(state);
+        }
+        else
+        {
+            UnhookZoom(state);
+        }
+    }
+
+    // WinUI has no PreviewMouseWheel, so the wheel is handled on the SCROLLVIEWER (always in the bubble
+    // path over its whole content). Hooked with handledEventsToo:true so it still fires when a node
+    // handled the wheel first. A Ctrl+wheel notch may also scroll a hair before the handler runs — the
+    // zoom still applies everywhere (hooking the canvas instead only reached its hit-testable area).
+    private static void HookZoom(SurfaceState state)
+    {
+        if (state.ScrollViewer is not null && state.ZoomHandler is null)
+        {
+            state.ZoomHandler = new PointerEventHandler(OnZoomPointerWheelChanged);
+            state.ScrollViewer.AddHandler(UIElement.PointerWheelChangedEvent, state.ZoomHandler, true);
+        }
+    }
+
+    private static void UnhookZoom(SurfaceState state)
+    {
+        if (state.ScrollViewer is not null && state.ZoomHandler is not null)
+        {
+            state.ScrollViewer.RemoveHandler(UIElement.PointerWheelChangedEvent, state.ZoomHandler);
+            state.ZoomHandler = null;
+        }
+    }
+
+    private static void OnZoomPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not DependencyObject source)
+        {
+            return;
+        }
+
+        var host = EnumerateVisualAncestors(source).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+        if (host is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        if (!e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control))
+        {
+            return;
+        }
+
+        var delta = e.GetCurrentPoint(source as UIElement ?? host).Properties.MouseWheelDelta;
+        var factor = delta > 0 ? 1.1 : 1 / 1.1;
+        var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
+        viewModel.Layout.Scale = new Scale(next, next);
+        e.Handled = true;
     }
 
     private static void OnPointerPressed(object sender, PointerRoutedEventArgs e)

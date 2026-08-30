@@ -25,7 +25,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="7.0.0" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="8.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>

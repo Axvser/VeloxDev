@@ -109,6 +109,13 @@ public class TreeView : Canvas
             InvalidateVisual();
             Changed?.Invoke();
         }
+        else if (e.PropertyName == nameof(VeloxDev.WorkflowSystem.CanvasLayout.Scale))
+        {
+            // The Core Anchor/Size getters collapse toward the origin by Layout.Scale; re-render so the
+            // self-drawn node views (positioned at node.Anchor) reflect the collapsed coordinates.
+            InvalidateVisual();
+            Changed?.Invoke();
+        }
     }
 
     private void UpdateCanvasSize()

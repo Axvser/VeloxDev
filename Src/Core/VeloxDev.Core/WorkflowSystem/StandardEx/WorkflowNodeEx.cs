@@ -54,34 +54,55 @@ public static class WorkflowNodeEx
             }));
     }
 
+    // The Anchor/Size getters collapse toward the world origin by Layout.Scale (value / scale), so
+    // in-place mutation of the returned value would write to a discarded copy. All mutations must go
+    // through the property setters, which store the ORIGINAL world value. sx/sy here are the inverse
+    // collapse factors: collapsed = world / scale, so world = collapsed * scale.
+
+    private static (double Sx, double Sy) ViewToWorldFactors(IWorkflowNodeViewModel component)
+    {
+        var scale = component.Parent?.Layout?.Scale;
+        return (
+            scale is null || scale.Horizontal == 0 ? 1 : scale.Horizontal,
+            scale is null || scale.Vertical == 0 ? 1 : scale.Vertical);
+    }
+
     public static void StandardSetAnchor(this IWorkflowNodeViewModel component, Anchor anchor)
     {
         if (component is null) return;
-        component.Anchor.Horizontal = anchor.Horizontal;
-        component.Anchor.Vertical = anchor.Vertical;
-        component.Anchor.Layer = anchor.Layer;
+        // `anchor` is already a world coordinate (screen minus ActualOffset); store directly.
+        component.Anchor = new Anchor(anchor.Horizontal, anchor.Vertical, anchor.Layer);
         component.OnPropertyChanged(nameof(component.Anchor));
     }
 
     public static void StandardSetLayer(this IWorkflowNodeViewModel component, int layer)
     {
         if (component is null) return;
-        component.Anchor.Layer = layer;
+        // Recover the world H/V from the collapsed view anchor before changing only the layer.
+        var a = component.Anchor;
+        var (sx, sy) = ViewToWorldFactors(component);
+        component.Anchor = new Anchor(a.Horizontal * sx, a.Vertical * sy, layer);
         component.OnPropertyChanged(nameof(component.Anchor));
     }
     public static void StandardSetSize(this IWorkflowNodeViewModel component, Size size)
     {
         if (component is null) return;
-        component.Size.Width = size.Width;
-        component.Size.Height = size.Height;
+        // `size` is the logical (world) size; store directly.
+        component.Size = new Size(size.Width, size.Height);
         component.OnPropertyChanged(nameof(component.Size));
     }
 
     public static void StandardMove(this IWorkflowNodeViewModel component, Offset offset)
     {
         if (component is null) return;
-        component.Anchor.Horizontal += offset.Horizontal;
-        component.Anchor.Vertical += offset.Vertical;
+        // `offset` is a view-space (drag) delta: the collapsed anchor moves by it, then convert back
+        // to world so the node visual follows the pointer exactly (world' = (collapsed + offset) * scale).
+        var a = component.Anchor;
+        var (sx, sy) = ViewToWorldFactors(component);
+        component.Anchor = new Anchor(
+            (a.Horizontal + offset.Horizontal) * sx,
+            (a.Vertical + offset.Vertical) * sy,
+            a.Layer);
         component.OnPropertyChanged(nameof(component.Anchor));
     }
 

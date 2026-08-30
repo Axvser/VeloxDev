@@ -891,8 +891,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             // OnNodesChanged → Nodes.Add) already sees the correct bounds.  If size
             // were set afterwards the node would enter the spatial index with zero-size
             // bounds and miss the viewport check, causing it to never enter VisibleItems.
-            node.Size.Width = width;
-            node.Size.Height = height;
+            node.Size = new Size(width, height);
             Tree.CreateNodeCommand.Execute(node);
             var result = new JObject
             {

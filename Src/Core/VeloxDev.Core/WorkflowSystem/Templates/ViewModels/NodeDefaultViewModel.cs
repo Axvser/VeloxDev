@@ -26,9 +26,55 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
     public NodeDefaultViewModel() { InitializeWorkflow(); }
 
     [VeloxProperty] private IWorkflowTreeViewModel? parent = null;
-    [VeloxProperty] private Anchor anchor = new();
-    [VeloxProperty] private Size size = new();
+    private Anchor anchor = new();
+    private Size size = new();
     [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> slots = [];
+    private readonly WorkflowNodeScaleTracker _scaleTracker = new();
+
+    // Anchor/Size are hand-written (not [VeloxProperty]) so their getters can collapse toward the
+    // world origin by the layout scale. The stored fields keep the original world values.
+    public Anchor Anchor
+    {
+        get => anchor.Collapse(Parent?.Layout?.Scale);
+        set
+        {
+            if (global::System.Object.Equals(anchor, value)) return;
+            var old = anchor;
+            OnPropertyChanging(nameof(Anchor));
+            OnAnchorChanging(old, value);
+            anchor = value;
+            OnAnchorChanged(old, value);
+            OnPropertyChanged(nameof(Anchor));
+        }
+    }
+    partial void OnAnchorChanging(Anchor oldValue, Anchor newValue);
+    partial void OnAnchorChanged(Anchor oldValue, Anchor newValue);
+
+    public Size Size
+    {
+        get => size.Collapse(Parent?.Layout?.Scale);
+        set
+        {
+            if (global::System.Object.Equals(size, value)) return;
+            var old = size;
+            OnPropertyChanging(nameof(Size));
+            OnSizeChanging(old, value);
+            size = value;
+            OnSizeChanged(old, value);
+            OnPropertyChanged(nameof(Size));
+        }
+    }
+    partial void OnSizeChanging(Size oldValue, Size newValue);
+    partial void OnSizeChanged(Size oldValue, Size newValue);
+
+    partial void OnParentChanged(IWorkflowTreeViewModel? oldValue, IWorkflowTreeViewModel? newValue)
+        => _scaleTracker.Attach(newValue, OnScaleDirty);
+
+    private void OnScaleDirty()
+    {
+        OnPropertyChanged(nameof(Anchor));
+        OnPropertyChanged(nameof(Size));
+    }
 
     [VeloxCommand]
     private Task Move(object? parameter, CancellationToken ct)

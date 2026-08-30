@@ -59,6 +59,34 @@ public class TemplateClass : Canvas
         AddHandler(MouseMoveEvent, new MouseEventHandler(OnMouseMove));
         AddHandler(MouseUpEvent, new MouseButtonEventHandler(OnMouseUp));
         AddHandler(LostMouseCaptureEvent, new MouseEventHandler(OnLostMouseCapture));
+        KeyDown += OnZoomKeyDown;
+    }
+
+    private void OnZoomKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_tree is null)
+        {
+            return;
+        }
+
+        double factor;
+        if (e.Key == Key.Add || e.Key == Key.OemPlus)
+        {
+            factor = 1.1;
+        }
+        else if (e.Key == Key.Subtract || e.Key == Key.OemMinus)
+        {
+            factor = 1 / 1.1;
+        }
+        else
+        {
+            return;
+        }
+
+        // The Core Anchor/Size getters collapse the nodes toward the world origin by Layout.Scale.
+        var next = System.Math.Max(0.1, System.Math.Min(10, _tree.Layout.Scale.Horizontal * factor));
+        _tree.Layout.Scale = new Scale(next, next);
+        e.Handled = true;
     }
 
     public void AttachScrollViewer(ScrollViewer viewer)

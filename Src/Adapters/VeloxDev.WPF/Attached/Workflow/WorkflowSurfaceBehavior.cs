@@ -60,6 +60,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         typeof(WorkflowSurfaceBehavior),
         new PropertyMetadata(null));
 
+    public static readonly DependencyProperty ZoomEnabledProperty = DependencyProperty.RegisterAttached(
+        "ZoomEnabled",
+        typeof(bool),
+        typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(false, OnZoomEnabledChanged));
+
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
         "State",
         typeof(SurfaceState),
@@ -83,6 +89,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     public static string? GetMinimapOverlayName(DependencyObject element) => (string?)element.GetValue(MinimapOverlayNameProperty);
     public static void SetMinimapOverlayName(DependencyObject element, string? value) => element.SetValue(MinimapOverlayNameProperty, value);
+
+    public static bool GetZoomEnabled(DependencyObject element) => (bool)element.GetValue(ZoomEnabledProperty);
+    public static void SetZoomEnabled(DependencyObject element, bool value) => element.SetValue(ZoomEnabledProperty, value);
 
     public static void Refresh(UserControl host)
     {
@@ -213,6 +222,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         {
             state.ScrollViewer.ScrollChanged += OnScrollChanged;
         }
+
+        if (GetZoomEnabled(control))
+        {
+            HookZoom(state);
+        }
     }
 
     private static void UnsubscribeResolvedControls(SurfaceState state)
@@ -226,6 +240,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ScrollChanged -= OnScrollChanged;
+            state.ScrollViewer.PreviewMouseWheel -= OnZoomPreviewMouseWheel;
         }
 
         state.PointerPressSource = null;
@@ -233,6 +248,63 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         state.Canvas = null;
         state.GridDecorator = null;
         state.MinimapOverlay = null;
+    }
+
+    private static void OnZoomEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not UserControl control || control.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        if (Equals(e.NewValue, true))
+        {
+            HookZoom(state);
+        }
+        else
+        {
+            UnhookZoom(state);
+        }
+    }
+
+    private static void HookZoom(SurfaceState state)
+    {
+        if (state.ScrollViewer is not null)
+        {
+            state.ScrollViewer.PreviewMouseWheel += OnZoomPreviewMouseWheel;
+        }
+    }
+
+    private static void UnhookZoom(SurfaceState state)
+    {
+        if (state.ScrollViewer is not null)
+        {
+            state.ScrollViewer.PreviewMouseWheel -= OnZoomPreviewMouseWheel;
+        }
+    }
+
+    private static void OnZoomPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not DependencyObject source)
+        {
+            return;
+        }
+
+        var host = EnumerateVisualAncestors(source).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+        if (host is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        {
+            return;
+        }
+
+        if (Keyboard.Modifiers != ModifierKeys.Control)
+        {
+            return;
+        }
+
+        var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
+        var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
+        viewModel.Layout.Scale = new Scale(next, next);
+        e.Handled = true;
     }
 
     private static void OnPointerPressed(object sender, MouseButtonEventArgs e)

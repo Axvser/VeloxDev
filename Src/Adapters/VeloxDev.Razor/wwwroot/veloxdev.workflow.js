@@ -651,6 +651,27 @@ window.veloxdevWorkflow = (() => {
     }
 
     // ════════════════════════════════════════════════════════════
+    // WHEEL ZOOM — Ctrl + wheel collapses/expands nodes toward the world origin
+    // (mirrors the WPF surface Ctrl+wheel zoom). Non-passive so the browser's default
+    // scroll is suppressed while Ctrl is held; plain wheel still scrolls.
+    // ════════════════════════════════════════════════════════════
+    function initWheelZoom(scrollerEl, dotnetRef) {
+        if (!scrollerEl || !dotnetRef) return null;
+        function onWheel(e) {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            e.stopPropagation();
+            dotnetRef.invokeMethodAsync('OnWheelZoom', e.deltaY > 0 ? -1 : 1);
+        }
+        scrollerEl.addEventListener('wheel', onWheel, { passive: false });
+        return {
+            dispose: function () {
+                scrollerEl.removeEventListener('wheel', onWheel);
+            }
+        };
+    }
+
+    // ════════════════════════════════════════════════════════════
     // MINIMAP — always-center navigation (matching the Jalium adapter).
     // Every press maps the minimap point to a world target and centers the viewport on it;
     // dragging keeps the viewport center tracking the cursor. The block itself is moved
@@ -798,7 +819,8 @@ window.veloxdevWorkflow = (() => {
         initNodeDrag,
         initSlotConnection,
         initSlotLayout,
-        initMinimap
+        initMinimap,
+        initWheelZoom
     };
 })();
 
@@ -819,3 +841,4 @@ export const initNodeDrag = window.veloxdevWorkflow.initNodeDrag;
 export const initSlotConnection = window.veloxdevWorkflow.initSlotConnection;
 export const initSlotLayout = window.veloxdevWorkflow.initSlotLayout;
 export const initMinimap = window.veloxdevWorkflow.initMinimap;
+export const initWheelZoom = window.veloxdevWorkflow.initWheelZoom;

@@ -11,7 +11,7 @@
 			 xmlns:mcp="using:VeloxDev.AI.MCP"
 			 xmlns:md="clr-namespace:AvalonMarkdown.Views;assembly=AvalonMarkdown"
 			 x:DataType="vm:TreeViewModel"
-             behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+             behaviors:WorkflowSurfaceBehavior.IsEnabled="True" behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
 			 behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
 			 behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
 			 behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"

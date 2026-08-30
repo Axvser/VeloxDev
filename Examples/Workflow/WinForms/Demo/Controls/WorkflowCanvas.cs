@@ -155,6 +155,7 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetGridDecoratorName(this, nameof(WorkflowCanvas));
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(this, nameof(WorkflowCanvas));
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(this, true);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetZoomEnabled(this, true);
 
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |

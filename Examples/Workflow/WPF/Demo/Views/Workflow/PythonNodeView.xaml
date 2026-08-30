@@ -14,7 +14,9 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
-    <Grid ClipToBounds="False">
+	<!-- Viewbox: content scales to the collapsed node size; child pins to the design size (scale 1) so the factor is 1/scale. -->
+	<Viewbox Stretch="Uniform">
+    <Grid ClipToBounds="False" Width="280" Height="260">
         <Grid.RowDefinitions>
             <RowDefinition Height="40" />
             <RowDefinition Height="*" />
@@ -200,4 +202,5 @@
             </Grid>
         </Border>
     </Grid>
+	</Viewbox>
 </UserControl>

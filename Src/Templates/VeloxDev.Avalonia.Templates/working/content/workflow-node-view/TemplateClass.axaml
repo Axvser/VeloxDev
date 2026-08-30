@@ -15,7 +15,11 @@
 			 x:CompileBindings="False">
 			 <!-- Replace x:CompileBindings=False with a concrete x:DataType after defining your ViewModel. -->
 
-	<Grid RowDefinitions="36,*" ClipToBounds="False">
+	<!-- Viewbox scales the card content to the node's current size (which the Core Anchor/Size getters
+	     collapse toward the world origin), so the content scales adaptively. The child is pinned to the
+	     DESIGN size (the node's size at scale 1) so the scale factor is 1/scale. -->
+	<Viewbox Stretch="Uniform">
+	<Grid RowDefinitions="36,*" ClipToBounds="False" Width="260" Height="180">
 		<Border Grid.RowSpan="2"
 				Background="TemplateNodeBackground"
 				BorderBrush="TemplateNodeBorderBrush"
@@ -63,4 +67,5 @@
 			</ItemsControl.ItemTemplate>
 		</ItemsControl>
 	</Grid>
+	</Viewbox>
 </UserControl>
