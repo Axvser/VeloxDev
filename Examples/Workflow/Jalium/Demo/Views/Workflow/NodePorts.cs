@@ -7,8 +7,10 @@ namespace Demo.Views.Workflow;
 /// <summary>
 /// Generic port layout for the full demo's Common/Lib node view-models, matching the NodeEditorSurface's
 /// card geometry: a single input is vertically centered on the left edge; multiple inputs and all outputs
-/// are laid out as rows under the title bar. Port centers are computed straight from the node's Anchor/Size
-/// (world coordinates) exactly like the trimmed demo, so links, hit-testing and the minimap never go stale.
+/// are laid out as rows under the title bar. This class exposes DESIGN (scale-1) local centers; the surface
+/// turns them into world centers as <c>node.Anchor + designLocal·s</c> with <c>s = node.Size/DesignSize</c>
+/// (the same factor as the card's RenderTransform), so links and hit-testing land on the scaled port dots
+/// under workspace zoom.
 /// </summary>
 internal static class NodePorts
 {
@@ -52,36 +54,20 @@ internal static class NodePorts
     public static string TitleOf(IWorkflowNodeViewModel node)
         => node.GetType().GetProperty("Title")?.GetValue(node)?.ToString() ?? string.Empty;
 
-    /// <summary>World-coordinate center of the i-th input port.</summary>
-    public static Point InputCenter(IWorkflowNodeViewModel node, int i)
+    /// <summary>Input port center at the DESIGN size (used to compute the scaled world center).</summary>
+    public static Point InputCenterLocalDesign(IWorkflowNodeViewModel node, int i, double designHeight)
     {
         double y = Inputs(node).Count > 1
             ? TitleBarH + RowH * i + RowH / 2
-            : node.Size.Height / 2;
-        return new Point(node.Anchor.Horizontal + InputPortX, node.Anchor.Vertical + y);
-    }
-
-    /// <summary>World-coordinate center of the i-th output port.</summary>
-    public static Point OutputCenter(IWorkflowNodeViewModel node, int i)
-    {
-        double y = TitleBarH + RowH * i + RowH / 2;
-        return new Point(node.Anchor.Horizontal + node.Size.Width - OutputInset, node.Anchor.Vertical + y);
-    }
-
-    /// <summary>Local (card-space) center of the i-th input port.</summary>
-    public static Point InputCenterLocal(IWorkflowNodeViewModel node, int i)
-    {
-        double y = Inputs(node).Count > 1
-            ? TitleBarH + RowH * i + RowH / 2
-            : node.Size.Height / 2;
+            : designHeight / 2;
         return new Point(InputPortX, y);
     }
 
-    /// <summary>Local (card-space) center of the i-th output port.</summary>
-    public static Point OutputCenterLocal(IWorkflowNodeViewModel node, int i)
+    /// <summary>Output port center at the DESIGN size (used to compute the scaled world center).</summary>
+    public static Point OutputCenterLocalDesign(IWorkflowNodeViewModel node, int i, double designWidth)
     {
         double y = TitleBarH + RowH * i + RowH / 2;
-        return new Point(node.Size.Width - OutputInset, y);
+        return new Point(designWidth - OutputInset, y);
     }
 
     /// <summary>Finds whether a slot is an input or output of its node and its index among that list.</summary>

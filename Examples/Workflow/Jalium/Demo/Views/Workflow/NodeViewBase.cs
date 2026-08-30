@@ -10,13 +10,16 @@ namespace Demo.Views.Workflow;
 /// Base for the full-demo's per-node-type views. These are VISUAL ONLY: the NodeEditorSurface owns all
 /// interaction (drag, connect, pan) and positions each view at the node's anchor + layout offset, so a
 /// node view must NOT set its own Canvas.Left/Top and must NOT wire its own drag/connection handling.
-/// The base draws the card chrome (via <see cref="NodeChrome.Card"/>) and, in <see cref="OnPostRender"/>,
-/// the port circles at the exact <see cref="NodePorts"/> centers the surface hit-tests against.
+/// The base builds the card chrome (via <see cref="NodeChrome.Card"/>) on a design-size canvas inside a
+/// <see cref="Viewbox"/> that scales the whole card — chrome, text and the port circles drawn by
+/// <see cref="CardLayer.OnPostRender"/> — to the collapsed node box, mirroring the WPF node Viewbox.
 /// </summary>
 internal abstract class NodeViewBase : Canvas
 {
     private SlotState[] _inputStates = [];
     private SlotState[] _outputStates = [];
+    private Viewbox? _viewbox;
+    private CardLayer? _cardLayer;
 
     /// <summary>The node view-model bound to this card.</summary>
     protected IWorkflowNodeViewModel Node { get; private set; } = null!;
@@ -39,7 +42,7 @@ internal abstract class NodeViewBase : Canvas
     }
 
     /// <summary>Adds right-aligned port-name labels in the content area, one per output row, aligned
-    /// to the port circles the base draws (both use NodePorts' row pitch).</summary>
+    /// to the port circles the base draws (both use NodePorts' row pitch at the DESIGN size).</summary>
     protected void AddOutputLabels(Grid content)
     {
         var outputs = NodePorts.Outputs(Node);
@@ -72,29 +75,40 @@ internal abstract class NodeViewBase : Canvas
         content.Children.Add(grid);
     }
 
-    /// <summary>Binds the view to a node and builds its chrome + content.</summary>
-    private Viewbox? _cardViewbox;
+    /// <summary>The node's DESIGN (scale-1) size, captured at Bind. The card and ports are laid out at this
+    /// size and the whole view is scaled by the <c>Viewbox</c> = (Width/DesignWidth, Height/DesignHeight),
+    /// so the content shrinks by 1/scale when the workspace zooms — mirroring the WPF node Viewbox. The link
+    /// endpoints (and surface hit-test) are computed as node.Anchor + designLocal·s by the surface.</summary>
+    public double DesignWidth { get; private set; }
+    public double DesignHeight { get; private set; }
 
+    /// <summary>Binds the view to a node and builds its chrome + content.</summary>
     public void Bind(IWorkflowNodeViewModel node)
     {
         Node = node;
         Children.Clear();
         Width = node.Size.Width;
         Height = node.Size.Height;
+        DesignWidth = node.Size.Width;
+        DesignHeight = node.Size.Height;
         _inputStates = new SlotState[NodePorts.Inputs(node).Count];
         _outputStates = new SlotState[NodePorts.Outputs(node).Count];
 
-        // The card is laid out at the node's DESIGN size (node.Size at scale 1) inside a Viewbox that fills
-        // this view's collapsed box, so the card content scales by 1/scale when the workspace zooms —
-        // mirroring the WPF node Viewbox. The ports are drawn on this view (NOT inside the Viewbox) at the
-        // collapsed local centers, so they stay aligned with the link endpoints.
-        var card = NodeChrome.Card(node.Size.Width, node.Size.Height, Accent, NodePorts.TitleOf(node),
+        var card = NodeChrome.Card(DesignWidth, DesignHeight, Accent, NodePorts.TitleOf(node),
             InitialStatus(node), out _, out _, out var statusText, out var content);
         StatusText = statusText;
-        _cardViewbox = new Viewbox { Child = card, Stretch = Stretch.Uniform };
-        Canvas.SetLeft(_cardViewbox, 0);
-        Canvas.SetTop(_cardViewbox, 0);
-        Children.Add(_cardViewbox);
+
+        // The card is laid out at the node's DESIGN size on an inner design canvas; a Viewbox that fills
+        // the collapsed box scales the whole card (chrome, text, and the port circles drawn by
+        // CardLayer.OnPostRender) by 1/scale when the workspace zooms — mirroring the WPF node Viewbox.
+        _cardLayer = new CardLayer(this) { Width = DesignWidth, Height = DesignHeight };
+        Canvas.SetLeft(card, 0);
+        Canvas.SetTop(card, 0);
+        _cardLayer.Children.Add(card);
+        _viewbox = new Viewbox { Child = _cardLayer, Stretch = Stretch.Uniform };
+        Canvas.SetLeft(_viewbox, 0);
+        Canvas.SetTop(_viewbox, 0);
+        Children.Add(_viewbox);
 
         Build(node, content);
         if (node is INotifyPropertyChanged notify)
@@ -116,7 +130,7 @@ internal abstract class NodeViewBase : Canvas
             Array.Copy(outputs, _outputStates, outputs.Length);
         }
 
-        InvalidateVisual();
+        _cardLayer?.InvalidateVisual();
     }
 
     private void OnNodePropertyChangedHandler(object? sender, PropertyChangedEventArgs e)
@@ -127,35 +141,32 @@ internal abstract class NodeViewBase : Canvas
         }
     }
 
-    /// <summary>Resizes the card Viewbox to the current (collapsed) size so the card content scales by
-    /// 1/scale when the workspace zooms — mirroring the WPF node Viewbox. Call after the view is sized.</summary>
+    /// <summary>Scales the whole card (chrome, text, ports) to the current (collapsed) size: resize the
+    /// Viewbox so the design-size card shrinks by 1/scale when the workspace zooms — mirroring the WPF
+    /// node Viewbox. Call after the view is sized.</summary>
     public void ApplyScale()
     {
-        if (_cardViewbox is not null)
+        if (_viewbox is not null)
         {
-            _cardViewbox.Width = Width;
-            _cardViewbox.Height = Height;
+            _viewbox.Width = Width;
+            _viewbox.Height = Height;
         }
     }
 
-    /// <summary>Draws the port circles at the collapsed local centers (NodePorts), matching the link
-    /// endpoints and the surface hit-test — the ports are NOT scaled with the card Viewbox.</summary>
-    protected override void OnPostRender(DrawingContext dc)
+    /// <summary>Draws the port circles at the DESIGN-size local centers; the Viewbox scales them to the
+    /// collapsed size, matching the link endpoints (node.Anchor + designLocal·s).</summary>
+    private void DrawPorts(DrawingContext dc)
     {
-        base.OnPostRender(dc);
-
         var inputs = NodePorts.Inputs(Node);
         for (int i = 0; i < inputs.Count; i++)
         {
-            var c = NodePorts.InputCenterLocal(Node, i);
-            dc.DrawEllipse(PortBrush(_inputStates[i]), null, c, 9, 9);
+            dc.DrawEllipse(PortBrush(_inputStates[i]), null, NodePorts.InputCenterLocalDesign(Node, i, DesignHeight), 9, 9);
         }
 
         var outputs = NodePorts.Outputs(Node);
         for (int i = 0; i < outputs.Count; i++)
         {
-            var c = NodePorts.OutputCenterLocal(Node, i);
-            dc.DrawEllipse(PortBrush(_outputStates[i]), null, c, 7, 7);
+            dc.DrawEllipse(PortBrush(_outputStates[i]), null, NodePorts.OutputCenterLocalDesign(Node, i, DesignWidth), 7, 7);
         }
     }
 
@@ -167,5 +178,21 @@ internal abstract class NodeViewBase : Canvas
         if (sender) return new SolidColorBrush(Colors.Tomato);
         if (receiver) return new SolidColorBrush(Colors.Lime);
         return new SolidColorBrush(Color.FromArgb(0xDD, 0x1E, 0x1E, 0x1E));
+    }
+
+    /// <summary>The design-size canvas inside the Viewbox: holds the card border and draws the port
+    /// circles in OnPostRender (which runs after children, so ports sit on top of the chrome). Both are
+    /// scaled to the collapsed box by the Viewbox.</summary>
+    private sealed class CardLayer : Canvas
+    {
+        private readonly NodeViewBase _owner;
+
+        public CardLayer(NodeViewBase owner) => _owner = owner;
+
+        protected override void OnPostRender(DrawingContext dc)
+        {
+            base.OnPostRender(dc);
+            _owner.DrawPorts(dc);
+        }
     }
 }

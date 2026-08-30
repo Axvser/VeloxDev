@@ -137,6 +137,14 @@ public class TemplateClass : Canvas
             InvalidateVisual();
             Changed?.Invoke();
         }
+        else if (e.PropertyName == nameof(VeloxDev.WorkflowSystem.CanvasLayout.Scale))
+        {
+            // The Core Anchor/Size getters collapse toward the origin by Layout.Scale; re-render so the
+            // virtual-link preview (OutputCenter) and any surface drawing reflect the collapsed coordinates.
+            // Node views reposition themselves via the Core scale tracker re-raising Anchor/Size.
+            InvalidateVisual();
+            Changed?.Invoke();
+        }
     }
 
     private void UpdateCanvasSize()
@@ -160,14 +168,22 @@ public class TemplateClass : Canvas
 
     private Point ToCanvas(double wx, double wy) => new(wx + OriginX, wy + OriginY);
 
-    // ── Port geometry (authoritative model: node.Anchor + fixed offsets) ──
+    // ── Port geometry (authoritative model: node.Anchor + designLocal·s) ──
+    // The node view draws the card at the DESIGN size inside a Viewbox scaled to the collapsed box, so the
+    // port world center is the DESIGN local center times the collapse factor s = node.Size/DesignSize.
 
-    private Point InputCenter(IWorkflowNodeViewModel node) =>
-        new(node.Anchor.Horizontal + SlotView.InputPortX, node.Anchor.Vertical + node.Size.Height / 2.0);
+    private static Point ScaledCenter(IWorkflowNodeViewModel node, Point designLocal)
+    {
+        var sx = SlotView.DesignWidth == 0 ? 1 : node.Size.Width / SlotView.DesignWidth;
+        var sy = SlotView.DesignHeight == 0 ? 1 : node.Size.Height / SlotView.DesignHeight;
+        return new Point(node.Anchor.Horizontal + designLocal.X * sx, node.Anchor.Vertical + designLocal.Y * sy);
+    }
 
-    private Point OutputCenter(IWorkflowNodeViewModel node, int i) =>
-        new(node.Anchor.Horizontal + node.Size.Width - SlotView.OutputInset,
-            node.Anchor.Vertical + SlotView.TitleBarH + SlotView.RowH * i + SlotView.RowH / 2.0);
+    private Point InputCenter(IWorkflowNodeViewModel node)
+        => ScaledCenter(node, new Point(SlotView.InputPortX, SlotView.DesignHeight / 2.0));
+
+    private Point OutputCenter(IWorkflowNodeViewModel node, int i)
+        => ScaledCenter(node, new Point(SlotView.DesignWidth - SlotView.OutputInset, SlotView.TitleBarH + SlotView.RowH * i + SlotView.RowH / 2.0));
 
     // ── Auto-grow (VeloxDev model) ─────────────────────────────────────────
 

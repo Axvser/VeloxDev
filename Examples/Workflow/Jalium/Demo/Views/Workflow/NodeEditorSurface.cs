@@ -191,11 +191,30 @@ internal sealed class NodeEditorSurface : Canvas
 
     // ── Geometry (world coords) ─────────────────────────────────────────────
 
+    // Port world centers are the DESIGN local centers scaled by the collapse factor
+    // (node.Size/DesignSize) — matching the card RenderTransform, so links and hit-testing land
+    // exactly on the scaled port dots when the workspace zooms.
+    private Point ScaledCenter(IWorkflowNodeViewModel node, Point designLocal)
+    {
+        _cards.TryGetValue(node, out var card);
+        var sx = card is null || card.DesignWidth == 0 ? 1 : node.Size.Width / card.DesignWidth;
+        var sy = card is null || card.DesignHeight == 0 ? 1 : node.Size.Height / card.DesignHeight;
+        return new Point(node.Anchor.Horizontal + designLocal.X * sx, node.Anchor.Vertical + designLocal.Y * sy);
+    }
+
     private Point InputPortCenter(IWorkflowNodeViewModel node, int inputIndex = 0)
-        => NodePorts.InputCenter(node, inputIndex);
+    {
+        _cards.TryGetValue(node, out var card);
+        var designHeight = card?.DesignHeight ?? node.Size.Height;
+        return ScaledCenter(node, NodePorts.InputCenterLocalDesign(node, inputIndex, designHeight));
+    }
 
     private Point GetOutputPortCenter(IWorkflowNodeViewModel node, int i)
-        => NodePorts.OutputCenter(node, i);
+    {
+        _cards.TryGetValue(node, out var card);
+        var designWidth = card?.DesignWidth ?? node.Size.Width;
+        return ScaledCenter(node, NodePorts.OutputCenterLocalDesign(node, i, designWidth));
+    }
 
     private Point GetSlotPortCenter(IWorkflowSlotViewModel slot)
     {
@@ -215,8 +234,8 @@ internal sealed class NodeEditorSurface : Canvas
         return default;
     }
 
-    private static Point GetPortCenter(IWorkflowNodeViewModel node, int outputIndex)
-        => NodePorts.OutputCenter(node, outputIndex);
+    private Point GetPortCenter(IWorkflowNodeViewModel node, int outputIndex)
+        => GetOutputPortCenter(node, outputIndex);
 
     // ── Card management ─────────────────────────────────────────────────────
 
@@ -629,7 +648,7 @@ internal sealed class NodeEditorSurface : Canvas
             var outputs = NodePorts.Outputs(node);
             for (int i = 0; i < outputs.Count; i++)
             {
-                var c = NodePorts.OutputCenter(node, i);
+                var c = GetOutputPortCenter(node, i);
                 double dx = pos.X - c.X, dy = pos.Y - c.Y;
                 if (dx * dx + dy * dy <= 12 * 12)
                 {
@@ -650,7 +669,7 @@ internal sealed class NodeEditorSurface : Canvas
             var inputs = NodePorts.Inputs(node);
             for (int i = 0; i < inputs.Count; i++)
             {
-                var c = NodePorts.InputCenter(node, i);
+                var c = InputPortCenter(node, i);
                 double dx = pos.X - c.X, dy = pos.Y - c.Y;
                 if (dx * dx + dy * dy <= 14 * 14)
                 {

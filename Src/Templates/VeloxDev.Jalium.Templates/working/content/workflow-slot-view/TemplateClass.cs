@@ -14,6 +14,11 @@ public static class TemplateClass
     public const double InputPortX = 10;
     public const double OutputInset = 15;
 
+    /// <summary>Design (scale-1) card size — the node's Size at Layout.Scale 1. The card is drawn at this
+    /// size inside a Viewbox scaled to the collapsed box, so content (and ports) shrink by 1/scale.</summary>
+    public const double DesignWidth = 260;
+    public const double DesignHeight = 180;
+
     /// <summary>Input slots of a node, with their display names.</summary>
     public static IReadOnlyList<(IWorkflowSlotViewModel Slot, string Name)> Inputs(IWorkflowNodeViewModel node)
     {

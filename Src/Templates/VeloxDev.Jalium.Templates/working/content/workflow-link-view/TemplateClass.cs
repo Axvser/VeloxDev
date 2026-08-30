@@ -133,8 +133,10 @@ public class TemplateClass : FrameworkElement
     private static bool IsVirtual(IWorkflowLinkViewModel link)
         => link.Sender.Parent is null && link.Receiver.Parent is null;
 
-    /// <summary>Authoritative model port center (node.Anchor + geometry), independent of slot.Anchor
-    /// which the safe surface does not maintain.</summary>
+    /// <summary>Authoritative model port center (node.Anchor + designLocal·s), independent of slot.Anchor
+    /// which the safe surface does not maintain. The card is drawn at the DESIGN size inside a Viewbox
+    /// scaled to the collapsed box, so the port world center is the DESIGN local center times the collapse
+    /// factor s = node.Size/DesignSize.</summary>
     private Point PortCenter(IWorkflowSlotViewModel slot)
     {
         var node = slot.Parent;
@@ -142,11 +144,20 @@ public class TemplateClass : FrameworkElement
         if (SlotView.IndexOf(node, slot) is { } found)
         {
             if (found.IsInput)
-                return new Point(node.Anchor.Horizontal + SlotView.InputPortX, node.Anchor.Vertical + node.Size.Height / 2.0);
-            return new Point(node.Anchor.Horizontal + node.Size.Width - SlotView.OutputInset,
-                node.Anchor.Vertical + SlotView.TitleBarH + SlotView.RowH * found.Index + SlotView.RowH / 2.0);
+                return ScaledCenter(node, new Point(SlotView.InputPortX, SlotView.DesignHeight / 2.0));
+            return ScaledCenter(node, new Point(SlotView.DesignWidth - SlotView.OutputInset,
+                SlotView.TitleBarH + SlotView.RowH * found.Index + SlotView.RowH / 2.0));
         }
         return default;
+    }
+
+    /// <summary>Design-local center scaled by the collapse factor (node.Size/DesignSize), matching the
+    /// card's Viewbox scale and the surface's hit-testing.</summary>
+    private static Point ScaledCenter(IWorkflowNodeViewModel node, Point designLocal)
+    {
+        var sx = SlotView.DesignWidth == 0 ? 1 : node.Size.Width / SlotView.DesignWidth;
+        var sy = SlotView.DesignHeight == 0 ? 1 : node.Size.Height / SlotView.DesignHeight;
+        return new Point(node.Anchor.Horizontal + designLocal.X * sx, node.Anchor.Vertical + designLocal.Y * sy);
     }
 
     protected override void OnRender(DrawingContext dc)

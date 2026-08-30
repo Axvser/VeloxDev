@@ -137,10 +137,11 @@ public class LinkView : FrameworkElement
     private static bool IsDragPreview(IWorkflowLinkViewModel link)
         => link.Sender is SlotDefaultViewModel && link.Receiver is SlotDefaultViewModel;
 
-    /// <summary>Authoritative model port center (node.Anchor + geometry), independent of slot.Anchor
-    /// which the safe surface does not maintain. Returns null when the endpoint has no position yet
-    /// (slot detached with no measured anchor) so the link is skipped instead of drawing a degenerate
-    /// line from the origin.</summary>
+    /// <summary>Authoritative model port center (node.Anchor + designLocal·s), independent of slot.Anchor
+    /// which the safe surface does not maintain. The card is drawn at the DESIGN size inside a Viewbox
+    /// scaled to the collapsed box, so the port world center is the DESIGN local center times the collapse
+    /// factor s = node.Size/DesignSize. Returns null when the endpoint has no position yet (slot detached
+    /// with no measured anchor) so the link is skipped instead of drawing a degenerate line from the origin.</summary>
     private Point? PortCenter(IWorkflowSlotViewModel slot)
     {
         var node = slot.Parent;
@@ -156,15 +157,23 @@ public class LinkView : FrameworkElement
         if (SlotView.IndexOf(node, slot) is { } found)
         {
             if (found.IsInput)
-                return new Point(node.Anchor.Horizontal + SlotView.InputPortX, node.Anchor.Vertical + node.Size.Height / 2.0);
-            return new Point(node.Anchor.Horizontal + node.Size.Width - SlotView.OutputInset,
-                node.Anchor.Vertical + SlotView.TitleBarH + SlotView.RowH * found.Index + SlotView.RowH / 2.0);
+                return ScaledCenter(node, new Point(SlotView.InputPortX, SlotView.DesignHeight / 2.0));
+            return ScaledCenter(node, new Point(SlotView.DesignWidth - SlotView.OutputInset,
+                SlotView.TitleBarH + SlotView.RowH * found.Index + SlotView.RowH / 2.0));
         }
         // Slot is mounted to the node but not in the current port enumeration (stale instance after
         // a selector switch): clamp to the node card so the connection stays visible and roughly
         // positioned while the model re-establishes the slot.
-        return new Point(node.Anchor.Horizontal + node.Size.Width - SlotView.OutputInset,
-            node.Anchor.Vertical + node.Size.Height / 2.0);
+        return ScaledCenter(node, new Point(SlotView.DesignWidth - SlotView.OutputInset, SlotView.DesignHeight / 2.0));
+    }
+
+    /// <summary>Design-local center scaled by the collapse factor (node.Size/DesignSize), matching the
+    /// card's Viewbox scale and the surface's hit-testing.</summary>
+    private static Point ScaledCenter(IWorkflowNodeViewModel node, Point designLocal)
+    {
+        var sx = SlotView.DesignWidth == 0 ? 1 : node.Size.Width / SlotView.DesignWidth;
+        var sy = SlotView.DesignHeight == 0 ? 1 : node.Size.Height / SlotView.DesignHeight;
+        return new Point(node.Anchor.Horizontal + designLocal.X * sx, node.Anchor.Vertical + designLocal.Y * sy);
     }
 
     protected override void OnRender(DrawingContext dc)
