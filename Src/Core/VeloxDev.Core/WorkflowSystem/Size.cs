@@ -32,15 +32,11 @@ public sealed partial class Size(double width = 0d, double height = 0d) : IClone
     public object Clone() => new Size(Width, Height);
     public bool Equals(Size? other) => other is not null && Width == other.Width && Height == other.Height;
 
-    /// <summary>
-    /// Animatable member metadata (one level, not recursive): when a Size property is animated, discovery/capture
-    /// expands the members into target.Size.Width / Height paths, interpolated per member by the generic
-    /// double sampler.
-    /// </summary>
     public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
         TransitionProperty.Members<Size>(s => s.Width, s => s.Height);
 
-    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) => null;
+    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) =>
+        new Size((double?)memberValues[0] ?? 0d, (double?)memberValues[1] ?? 0d);
 
     public static bool operator ==(Size a, Size b) => a.Equals(b);
     public static bool operator !=(Size a, Size b) => !a.Equals(b);

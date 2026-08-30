@@ -35,15 +35,11 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
     public object Clone() => new Anchor(Horizontal, Vertical, Layer);
     public bool Equals(Anchor? other) => other is not null && Horizontal == other.Horizontal && Vertical == other.Vertical && Layer == other.Layer;
 
-    /// <summary>
-    /// Animatable member metadata (one level, not recursive): when an Anchor property is animated, discovery/capture
-    /// expands the members into target.Anchor.Horizontal / Vertical / Layer paths, interpolated per member by the
-    /// generic double/int samplers.
-    /// </summary>
     public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
         TransitionProperty.Members<Anchor>(a => a.Horizontal, a => a.Vertical, a => a.Layer);
 
-    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) => null;
+    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) =>
+        new Anchor((double?)memberValues[0] ?? 0d, (double?)memberValues[1] ?? 0d, (int?)memberValues[2] ?? 0);
 
     public static bool operator ==(Anchor left, Anchor right) => left.Equals(right);
     public static bool operator !=(Anchor left, Anchor right) => !left.Equals(right);

@@ -32,15 +32,11 @@ public sealed partial class Offset(double left = 0d, double top = 0d) : ICloneab
     public object Clone() => new Offset(Horizontal, Vertical);
     public bool Equals(Offset? other) => other is not null && Horizontal == other.Horizontal && Vertical == other.Vertical;
 
-    /// <summary>
-    /// Animatable member metadata (one level, not recursive): when an Offset property is animated, discovery/capture
-    /// expands the members into target.Offset.Horizontal / Vertical paths, interpolated per member by the generic
-    /// double sampler.
-    /// </summary>
     public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
         TransitionProperty.Members<Offset>(o => o.Horizontal, o => o.Vertical);
 
-    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) => null;
+    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) =>
+        new Offset((double?)memberValues[0] ?? 0d, (double?)memberValues[1] ?? 0d);
 
     public static bool operator ==(Offset left, Offset right) => left.Equals(right);
     public static bool operator !=(Offset left, Offset right) => !left.Equals(right);
