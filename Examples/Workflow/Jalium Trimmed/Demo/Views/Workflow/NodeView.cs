@@ -16,6 +16,12 @@ public class NodeView : Canvas
 {
     private const string FontFamilyName = "Segoe UI";
 
+    // Design (scale-1) card size. The card draws at this size and is scaled by (Width/DesignWidth,
+    // Height/DesignHeight) in OnRender, so the content shrinks by 1/scale when the node collapses —
+    // mirroring the WPF node Viewbox.
+    private const double DesignWidth = 260;
+    private const double DesignHeight = 180;
+
     private static readonly SolidColorBrush s_titleBrush = new(Color.FromArgb(0xDD, 0x1E, 0x1E, 0x1E));
     private static readonly SolidColorBrush s_standByBrush = new(Color.FromArgb(0xDD, 0x1E, 0x1E, 0x1E));
     private static readonly SolidColorBrush s_senderBrush = new(Color.FromRgb(0xFF, 0x63, 0x47));
@@ -150,9 +156,12 @@ public class NodeView : Canvas
     protected override void OnRender(DrawingContext dc)
     {
         if (_node is null) return;
+        // Draw at the DESIGN size, scaled to the actual (collapsed) size so the content scales by
+        // 1/scale when the workspace zooms — mirroring the WPF node Viewbox.
+        dc.PushTransform(new ScaleTransform(Width / DesignWidth, Height / DesignHeight));
         dc.DrawRoundedRectangle(new SolidColorBrush(Colors.White),
             new Pen(new SolidColorBrush(Color.FromArgb(0x33, 0x1E, 0x1E, 0x1E)), 1),
-            new Rect(0, 0, Width, Height), 6, 6);
+            new Rect(0, 0, DesignWidth, DesignHeight), 6, 6);
 
         var title = new FormattedText(SlotView.TitleOf(_node), FontFamilyName, 14)
         {
@@ -164,7 +173,7 @@ public class NodeView : Canvas
         var inputs = SlotView.Inputs(_node);
         if (inputs.Count > 0)
         {
-            dc.DrawEllipse(SlotBrush(inputs[0].Slot.State), null, new Point(SlotView.InputPortX, Height / 2.0), 9, 9);
+            dc.DrawEllipse(SlotBrush(inputs[0].Slot.State), null, new Point(SlotView.InputPortX, DesignHeight / 2.0), 9, 9);
         }
 
         var outputs = SlotView.Outputs(_node);
@@ -175,10 +184,12 @@ public class NodeView : Canvas
             {
                 var label = new FormattedText(outputs[i].Name, FontFamilyName, 12) { Foreground = s_titleBrush };
                 TextMeasurement.MeasureText(label);
-                dc.DrawText(label, new Point(Width - 32 - label.Width, rowCenter - label.Height / 2.0));
+                dc.DrawText(label, new Point(DesignWidth - 32 - label.Width, rowCenter - label.Height / 2.0));
             }
 
-            dc.DrawEllipse(SlotBrush(outputs[i].Slot.State), null, new Point(Width - SlotView.OutputInset, rowCenter), 7, 7);
+            dc.DrawEllipse(SlotBrush(outputs[i].Slot.State), null, new Point(DesignWidth - SlotView.OutputInset, rowCenter), 7, 7);
         }
+
+        dc.Pop();
     }
 }

@@ -73,12 +73,20 @@ internal abstract class NodeViewBase : Canvas
     }
 
     /// <summary>Binds the view to a node and builds its chrome + content.</summary>
+    /// <summary>The node's DESIGN (scale-1) size, captured at Bind. The card and ports are laid out at this
+    /// size and the whole view is scaled by <c>RenderTransform</c> = (Width/DesignWidth, Height/DesignHeight),
+    /// so the content shrinks by 1/scale when the workspace zooms — mirroring the WPF node Viewbox.</summary>
+    public double DesignWidth { get; private set; }
+    public double DesignHeight { get; private set; }
+
     public void Bind(IWorkflowNodeViewModel node)
     {
         Node = node;
         Children.Clear();
         Width = node.Size.Width;
         Height = node.Size.Height;
+        DesignWidth = node.Size.Width;
+        DesignHeight = node.Size.Height;
         _inputStates = new SlotState[NodePorts.Inputs(node).Count];
         _outputStates = new SlotState[NodePorts.Outputs(node).Count];
 
@@ -120,7 +128,17 @@ internal abstract class NodeViewBase : Canvas
         }
     }
 
-    /// <summary>Draws the port circles on top of the card, at the NodePorts centers the surface hit-tests.</summary>
+    /// <summary>Scales the card content to the current (collapsed) size so the content shrinks by 1/scale
+    /// when the workspace zooms — mirroring the WPF node Viewbox. Call after the view is positioned/sized.</summary>
+    public void ApplyScale()
+    {
+        RenderTransform = new ScaleTransform(
+            DesignWidth == 0 ? 1 : Width / DesignWidth,
+            DesignHeight == 0 ? 1 : Height / DesignHeight);
+    }
+
+    /// <summary>Draws the port circles on top of the card, at the DESIGN-size centers (the RenderTransform
+    /// scales them to the collapsed size), matching the world centers the surface hit-tests.</summary>
     protected override void OnPostRender(DrawingContext dc)
     {
         base.OnPostRender(dc);
@@ -128,15 +146,15 @@ internal abstract class NodeViewBase : Canvas
         var inputs = NodePorts.Inputs(Node);
         for (int i = 0; i < inputs.Count; i++)
         {
-            var c = NodePorts.InputCenterLocal(Node, i);
-            dc.DrawEllipse(PortBrush(_inputStates[i]), null, c, 9, 9);
+            double y = inputs.Count > 1 ? NodePorts.TitleBarH + NodePorts.RowH * i + NodePorts.RowH / 2.0 : DesignHeight / 2.0;
+            dc.DrawEllipse(PortBrush(_inputStates[i]), null, new Point(NodePorts.InputPortX, y), 9, 9);
         }
 
         var outputs = NodePorts.Outputs(Node);
         for (int i = 0; i < outputs.Count; i++)
         {
-            var c = NodePorts.OutputCenterLocal(Node, i);
-            dc.DrawEllipse(PortBrush(_outputStates[i]), null, c, 7, 7);
+            double y = NodePorts.TitleBarH + NodePorts.RowH * i + NodePorts.RowH / 2.0;
+            dc.DrawEllipse(PortBrush(_outputStates[i]), null, new Point(DesignWidth - NodePorts.OutputInset, y), 7, 7);
         }
     }
 

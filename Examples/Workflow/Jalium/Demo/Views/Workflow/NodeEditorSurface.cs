@@ -152,11 +152,13 @@ internal sealed class NodeEditorSurface : Canvas
         {
             System.Diagnostics.Debug.WriteLine($"[NodeEditorSurface] Scale layout change -> re-position {_cards.Count} cards");
             // The Core Anchor/Size getters collapse toward the origin by Layout.Scale; re-position and
-            // re-size every card (its model Anchor/Size read collapsed) and repaint links.
+            // re-size every card box (model Anchor/Size read collapsed) and scale the card content to it
+            // (ApplyScale = Width/DesignWidth), mirroring the WPF node Viewbox. Repaint links.
             foreach (var (node, card) in _cards)
             {
                 card.Width = node.Size.Width;
                 card.Height = node.Size.Height;
+                card.ApplyScale();
                 Canvas.SetLeft(card, node.Anchor.Horizontal + _tree!.Layout.ActualOffset.Horizontal);
                 Canvas.SetTop(card, node.Anchor.Vertical + _tree!.Layout.ActualOffset.Vertical);
             }
@@ -227,6 +229,7 @@ internal sealed class NodeEditorSurface : Canvas
 
         var card = NodeViewFactory.Create(node);
         card.Bind(node);
+        card.ApplyScale();
         _cards[node] = card;
         Children.Add(card);
         Canvas.SetLeft(card, node.Anchor.Horizontal + _tree.Layout.ActualOffset.Horizontal);
@@ -330,6 +333,7 @@ internal sealed class NodeEditorSurface : Canvas
             {
                 card.Width = node.Size.Width;
                 card.Height = node.Size.Height;
+                card.ApplyScale();
                 Canvas.SetLeft(card, node.Anchor.Horizontal + _tree.Layout.ActualOffset.Horizontal);
                 Canvas.SetTop(card, node.Anchor.Vertical + _tree.Layout.ActualOffset.Vertical);
             }
