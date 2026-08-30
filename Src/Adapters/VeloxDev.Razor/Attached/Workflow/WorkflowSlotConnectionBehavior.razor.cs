@@ -25,7 +25,7 @@ public partial class WorkflowSlotConnectionBehavior : ComponentBase, IAsyncDispo
 
     /// <summary>Gets or sets whether slot connection dragging is enabled.</summary>
     [Parameter]
-    public bool IsEnabled { get; set; } = true;
+    public bool IsEnabled { get; set; }
 
     /// <summary>Gets or sets the wrapper element style.</summary>
     [Parameter]

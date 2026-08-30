@@ -4,8 +4,8 @@
 
 @if (Node is not null)
 {
-    <WorkflowSlotLayoutBehavior Node="Node">
-        <WorkflowNodeDragBehavior Node="Node" Style="@($"width:{Node.Size.Width:F0}px;height:{Node.Size.Height:F0}px;")">
+    <WorkflowSlotLayoutBehavior Node="Node" IsEnabled="true">
+        <WorkflowNodeDragBehavior Node="Node" IsEnabled="true" Style="@($"width:{Node.Size.Width:F0}px;height:{Node.Size.Height:F0}px;")">
             <div class="veloxdev-wf-node-card"
                  style="position:relative;width:100%;height:100%;
                         background:@BackgroundCss;

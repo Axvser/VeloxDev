@@ -22,7 +22,7 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
 
     /// <summary>Gets or sets whether slot layout synchronization is enabled.</summary>
     [Parameter]
-    public bool IsEnabled { get; set; } = true;
+    public bool IsEnabled { get; set; }
 
     /// <summary>Gets or sets the coordinate host id used for world-coordinate math (reserved).</summary>
     [Parameter]

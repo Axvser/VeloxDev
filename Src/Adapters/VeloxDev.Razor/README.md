@@ -54,7 +54,7 @@ Context records: `SurfaceViewport`, `SurfaceCanvas`.
 | Parameter | Default | Notes |
 |-----------|---------|-------|
 | `Tree` | — | The `IWorkflowTreeViewModel`. |
-| `IsEnabled` | `true` | Enables pan/scroll tracking. |
+| `IsEnabled` | `false` | Enables pan/scroll tracking. Must be set to `true` explicitly (matches every other adapter). |
 | `ScrollViewerId` / `CanvasId` | `veloxdev-wf-scroll` / `veloxdev-wf-canvas` | Element ids used by the JS gesture layer. |
 | `GridDecorator` / `Minimap` | — | `RenderFragment<SurfaceViewport>` — the decorator/minimap components. |
 | `ChildContent` | — | `RenderFragment<SurfaceCanvas>` — nodes, links, slots; receives the computed canvas size. |
@@ -84,7 +84,7 @@ loading to restore a saved viewport.
 | Parameter | Default | Notes |
 |-----------|---------|-------|
 | `Node` | — | The node to position and move. |
-| `IsEnabled` | `true` | |
+| `IsEnabled` | `false` | |
 | `Style` | — | Extra styles (width/height); position/`left`/`top`/`z-index` are derived from `Node.Anchor`. |
 | `ChildContent` | — | The node content. |
 
@@ -104,7 +104,7 @@ loading to restore a saved viewport.
 |-----------|---------|-------|
 | `Slot` | — | The slot that initiates/receives connections. |
 | `Tree` | — | The owning tree (for `SetPointer`/`ResetVirtualLink`). |
-| `IsEnabled` | `true` | |
+| `IsEnabled` | `false` | |
 | `Style` / `ChildContent` | — | Wrapper styling / the slot visual. |
 
 The wrapper carries `data-veloxdev-slot-id="…"`, which is how JS resolves the drop target. On
@@ -119,7 +119,7 @@ release on another slot runs `ReceiveConnectionCommand`.
 | Parameter | Default | Notes |
 |-----------|---------|-------|
 | `Node` | — | The node whose slots are measured. |
-| `IsEnabled` | `true` | |
+| `IsEnabled` | `false` | |
 | `CoordinateHostId` | — | Reserved for coordinate-host parity with the XAML adapters. |
 | `ChildContent` | — | The node content (slots included). |
 

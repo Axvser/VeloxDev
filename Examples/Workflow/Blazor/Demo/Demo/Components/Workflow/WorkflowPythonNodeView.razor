@@ -12,7 +12,7 @@
             @foreach (var item in inputs.Items)
             {
                 <div style="display:flex;align-items:center;gap:4px;min-width:0;">
-                    <WorkflowSlotConnectionBehavior Slot="item.Slot" Tree="Tree">
+                    <WorkflowSlotConnectionBehavior Slot="item.Slot" Tree="Tree" IsEnabled="true">
                         <TemplateSlotView Slot="item.Slot" Tree="Tree" SlotSize="16" />
                     </WorkflowSlotConnectionBehavior>
                     <span style="color:#6ec6ff;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">@item.Name</span>
@@ -43,7 +43,7 @@
             {
                 <div style="display:flex;align-items:center;gap:4px;min-width:0;">
                     <span style="color:#6ec6ff;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">@item.Name</span>
-                    <WorkflowSlotConnectionBehavior Slot="item.Slot" Tree="Tree">
+                    <WorkflowSlotConnectionBehavior Slot="item.Slot" Tree="Tree" IsEnabled="true">
                         <TemplateSlotView Slot="item.Slot" Tree="Tree" SlotSize="16" />
                     </WorkflowSlotConnectionBehavior>
                 </div>

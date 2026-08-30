@@ -24,7 +24,7 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
 
     /// <summary>Gets or sets whether node dragging is enabled.</summary>
     [Parameter]
-    public bool IsEnabled { get; set; } = true;
+    public bool IsEnabled { get; set; }
 
     /// <summary>
     /// Gets or sets extra styles appended to the positioned wrapper (e.g. width/height).

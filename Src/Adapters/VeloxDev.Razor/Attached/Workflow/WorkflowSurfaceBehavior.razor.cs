@@ -23,7 +23,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
     /// <summary>Gets or sets whether the surface behaviors (pan, scroll tracking) are enabled.</summary>
     [Parameter]
-    public bool IsEnabled { get; set; } = true;
+    public bool IsEnabled { get; set; }
 
     /// <summary>Gets or sets the scroll container element id.</summary>
     [Parameter]
