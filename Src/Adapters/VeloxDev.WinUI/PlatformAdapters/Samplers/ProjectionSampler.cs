@@ -2,13 +2,14 @@ using Microsoft.UI.Xaml.Media;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
-    public class ProjectionSampler : ISampleable, ISampler
+    public class ProjectionSampler : ISampler
     {
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }
@@ -17,20 +18,24 @@ namespace VeloxDev.Adapters.NativeSamplers
             var s = Normalize(start);
             var e = Normalize(end);
 
-            property.SetValue(target, new PlaneProjection
+            // Zero per-frame allocation: reuse a scratch projection, recomputing its fields from the pristine start/end.
+            if (working is not PlaneProjection wp)
             {
-                RotationX = LerpAngle(s.RotationX, e.RotationX, t, direction, axis: 'X'),
-                RotationY = LerpAngle(s.RotationY, e.RotationY, t, direction, axis: 'Y'),
-                RotationZ = LerpAngle(s.RotationZ, e.RotationZ, t, direction, axis: 'Z'),
+                wp = new PlaneProjection();
+                working = wp;
+            }
+            wp.RotationX = LerpAngle(s.RotationX, e.RotationX, t, direction, axis: 'X');
+            wp.RotationY = LerpAngle(s.RotationY, e.RotationY, t, direction, axis: 'Y');
+            wp.RotationZ = LerpAngle(s.RotationZ, e.RotationZ, t, direction, axis: 'Z');
 
-                CenterOfRotationX = Lerp(s.CenterOfRotationX, e.CenterOfRotationX, t),
-                CenterOfRotationY = Lerp(s.CenterOfRotationY, e.CenterOfRotationY, t),
-                CenterOfRotationZ = Lerp(s.CenterOfRotationZ, e.CenterOfRotationZ, t),
+            wp.CenterOfRotationX = Lerp(s.CenterOfRotationX, e.CenterOfRotationX, t);
+            wp.CenterOfRotationY = Lerp(s.CenterOfRotationY, e.CenterOfRotationY, t);
+            wp.CenterOfRotationZ = Lerp(s.CenterOfRotationZ, e.CenterOfRotationZ, t);
 
-                GlobalOffsetX = Lerp(s.GlobalOffsetX, e.GlobalOffsetX, t),
-                GlobalOffsetY = Lerp(s.GlobalOffsetY, e.GlobalOffsetY, t),
-                GlobalOffsetZ = Lerp(s.GlobalOffsetZ, e.GlobalOffsetZ, t)
-            });
+            wp.GlobalOffsetX = Lerp(s.GlobalOffsetX, e.GlobalOffsetX, t);
+            wp.GlobalOffsetY = Lerp(s.GlobalOffsetY, e.GlobalOffsetY, t);
+            wp.GlobalOffsetZ = Lerp(s.GlobalOffsetZ, e.GlobalOffsetZ, t);
+            property.SetValue(target, wp);
         }
 
         protected virtual double LerpAngle(double start, double end, double t, RotationDirection direction, char axis)

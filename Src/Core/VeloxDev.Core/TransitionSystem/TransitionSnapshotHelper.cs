@@ -27,8 +27,7 @@ public static class TransitionSnapshotHelper
         T target,
         IFrameState state,
         Func<Type, bool> canAnimateType,
-        IEnumerable<Expression<Func<T, object?>>>? extraExpressions = null,
-        int maxDepth = DefaultMaxDepth)
+        IEnumerable<Expression<Func<T, object?>>>? extraExpressions = null)
         where T : class
     {
         if (target is null)
@@ -44,7 +43,7 @@ public static class TransitionSnapshotHelper
             throw new ArgumentNullException(nameof(canAnimateType));
         }
 
-        var properties = new HashSet<ITransitionProperty>(DiscoverAnimatableProperties(target, canAnimateType, maxDepth));
+        var properties = new HashSet<ITransitionProperty>(DiscoverAnimatableProperties(target, canAnimateType));
         foreach (var property in GetExplicitProperties(extraExpressions))
         {
             properties.Add(property);
@@ -57,8 +56,7 @@ public static class TransitionSnapshotHelper
         T target,
         IFrameState state,
         Func<Type, bool> canAnimateType,
-        IEnumerable<Expression<Func<T, object?>>>? excludedExpressions = null,
-        int maxDepth = DefaultMaxDepth)
+        IEnumerable<Expression<Func<T, object?>>>? excludedExpressions = null)
         where T : class
     {
         if (target is null)
@@ -76,7 +74,7 @@ public static class TransitionSnapshotHelper
 
         var excludedProperties = GetExplicitProperties(excludedExpressions);
         HashSet<ITransitionProperty> properties = [];
-        foreach (var property in DiscoverAnimatableProperties(target, canAnimateType, maxDepth))
+        foreach (var property in DiscoverAnimatableProperties(target, canAnimateType))
         {
             if (!IsExcluded(property, excludedProperties))
             {
@@ -87,6 +85,13 @@ public static class TransitionSnapshotHelper
         CaptureProperties(target, state, properties);
     }
 
+    /// <summary>
+    /// Discovers animatable properties for snapshot record/restore. Walks the object graph recursively
+    /// (cycle-guarded, bounded by <paramref name="maxDepth"/>) so sub-leaf values are captured:
+    /// (a) the property type matches the registry or implements <see cref="ISampler"/> → the whole path;
+    /// (b) the value implements <see cref="ISampleable"/> → its declared members (one level, not recursive);
+    /// (c) otherwise a composite (not ISampleable) → recurse into its sub-leaves.
+    /// </summary>
     public static IReadOnlyCollection<ITransitionProperty> DiscoverAnimatableProperties(
         object target,
         Func<Type, bool> canAnimateType,
@@ -104,6 +109,99 @@ public static class TransitionSnapshotHelper
         HashSet<ITransitionProperty> result = [];
         DiscoverAnimatablePropertiesCore(target, [], result, [], canAnimateType, 0, maxDepth);
         return [.. result];
+    }
+
+    private static void DiscoverAnimatablePropertiesCore(
+        object current,
+        List<PropertyInfo> path,
+        HashSet<ITransitionProperty> result,
+        HashSet<object> ancestors,
+        Func<Type, bool> canAnimateType,
+        int depth,
+        int maxDepth)
+    {
+        if (depth > maxDepth || !ancestors.Add(current))
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var property in current.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!property.CanRead || !property.CanWrite || property.GetIndexParameters().Length != 0)
+                {
+                    continue;
+                }
+
+                path.Add(property);
+                var transitionProperty = new TransitionProperty(path);
+                var propertyType = property.PropertyType;
+
+                if (IsAnimatable(propertyType, canAnimateType))
+                {
+                    result.Add(transitionProperty);
+                }
+                else
+                {
+                    object? value;
+                    try
+                    {
+                        value = property.GetValue(current);
+                    }
+                    catch
+                    {
+                        value = null;
+                    }
+
+                    // ISampleable → declared members (one level, not recursive).
+                    if (value is ISampleable meta)
+                    {
+                        foreach (var member in meta.GetAnimatableMembers())
+                        {
+                            if (!member.CanRead || !member.CanWrite)
+                            {
+                                continue;
+                            }
+
+                            var combined = TransitionProperty.Combine(transitionProperty, member);
+                            if (IsAnimatable(combined.PropertyType, canAnimateType))
+                            {
+                                result.Add(combined);
+                            }
+                        }
+                    }
+                    // Plain composite → recurse into sub-leaves so the snapshot records them.
+                    else if (depth < maxDepth && CanDescendInto(propertyType) && value is not null)
+                    {
+                        DiscoverAnimatablePropertiesCore(value, path, result, ancestors, canAnimateType, depth + 1, maxDepth);
+                    }
+                }
+
+                path.RemoveAt(path.Count - 1);
+            }
+        }
+        finally
+        {
+            ancestors.Remove(current);
+        }
+    }
+
+    private static bool CanDescendInto(Type propertyType)
+    {
+        var actualType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
+        if (actualType == typeof(string)
+            || actualType == typeof(object)
+            || actualType.IsPrimitive
+            || actualType.IsEnum
+            || actualType.IsValueType
+            || typeof(IEnumerable).IsAssignableFrom(actualType)
+            || typeof(Delegate).IsAssignableFrom(actualType))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     public static bool TryGetPropertyFromExpression<T>(Expression<Func<T, object?>> expression, out ITransitionProperty? property)
@@ -184,84 +282,9 @@ public static class TransitionSnapshotHelper
         return properties;
     }
 
-    private static void DiscoverAnimatablePropertiesCore(
-        object current,
-        List<PropertyInfo> path,
-        HashSet<ITransitionProperty> result,
-        HashSet<object> ancestors,
-        Func<Type, bool> canAnimateType,
-        int depth,
-        int maxDepth)
-    {
-        if (depth > maxDepth || !ancestors.Add(current))
-        {
-            return;
-        }
-
-        try
-        {
-            foreach (var property in current.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                if (!property.CanRead || !property.CanWrite || property.GetIndexParameters().Length != 0)
-                {
-                    continue;
-                }
-
-                path.Add(property);
-                var transitionProperty = new TransitionProperty(path);
-                var propertyType = property.PropertyType;
-
-                if (IsAnimatable(propertyType, canAnimateType))
-                {
-                    result.Add(transitionProperty);
-                }
-                else if (depth < maxDepth && CanDescendInto(propertyType))
-                {
-                    object? nextValue;
-                    try
-                    {
-                        nextValue = property.GetValue(current);
-                    }
-                    catch
-                    {
-                        nextValue = null;
-                    }
-
-                    if (nextValue is not null)
-                    {
-                        DiscoverAnimatablePropertiesCore(nextValue, path, result, ancestors, canAnimateType, depth + 1, maxDepth);
-                    }
-                }
-
-                path.RemoveAt(path.Count - 1);
-            }
-        }
-        finally
-        {
-            ancestors.Remove(current);
-        }
-    }
-
     private static bool IsAnimatable(Type propertyType, Func<Type, bool> canAnimateType)
     {
         return canAnimateType(propertyType) || typeof(ISampler).IsAssignableFrom(propertyType);
-    }
-
-    private static bool CanDescendInto(Type propertyType)
-    {
-        var actualType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
-        if (actualType == typeof(string)
-            || actualType == typeof(object)
-            || actualType.IsPrimitive
-            || actualType.IsEnum
-            || actualType.IsValueType
-            || typeof(IEnumerable).IsAssignableFrom(actualType)
-            || typeof(Delegate).IsAssignableFrom(actualType))
-        {
-            return false;
-        }
-
-        return true;
     }
 
     private static bool IsExcluded(ITransitionProperty property, HashSet<ITransitionProperty> excludedProperties)
@@ -298,14 +321,5 @@ public static class TransitionSnapshotHelper
         }
 
         return true;
-    }
-
-    private sealed class ReferenceObjectEqualityComparer : IEqualityComparer<object>
-    {
-        public static ReferenceObjectEqualityComparer Instance { get; } = new();
-
-        public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
-
-        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 }

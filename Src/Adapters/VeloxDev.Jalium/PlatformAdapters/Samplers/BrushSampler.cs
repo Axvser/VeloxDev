@@ -6,28 +6,34 @@ using Jalium.UI.Media.Imaging;
 namespace VeloxDev.Adapters.NativeSamplers
 {
     /// <summary>Aligns with the Avalonia adapter's BrushInterpolator: SolidColorBrush lerps Color AND
-    /// Opacity; non-solid or mixed brushes cross-fade by compositing the two brushes at intermediate
-    /// opacities into a RenderTargetBitmap wrapped in an ImageBrush. Middle frames mutate a live,
-    /// unfrozen SolidColorBrush in place (no per-frame allocation); anything else falls back to the
-    /// compute path.</summary>
-    public class BrushSampler : ISampleable, ISampler
+    /// Opacity; non-solid or mixed brushes cross-fade by compositing into a RenderTargetBitmap wrapped in an
+    /// ImageBrush. Middle frames always allocate a fresh brush — start/end are never mutated (shared with the
+    /// snapshot).</summary>
+    public class BrushSampler : ISampler
     {
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }
 
-            if (start is SolidColorBrush startBrush && end is SolidColorBrush endBrush && !startBrush.IsFrozen)
+            if (start is SolidColorBrush sb && end is SolidColorBrush eb)
             {
-                // 原地修改现有实例，不 new
-                startBrush.Color = InterpolateColor(startBrush.Color, endBrush.Color, t);
-                startBrush.Opacity = startBrush.Opacity + (endBrush.Opacity - startBrush.Opacity) * t;
+                // Zero per-frame allocation: reuse a scratch brush, recomputing from the pristine start/end each frame.
+                if (working is not SolidColorBrush wb)
+                {
+                    wb = new SolidColorBrush(sb.Color) { Opacity = sb.Opacity };
+                    working = wb;
+                }
+                wb.Color = InterpolateColor(sb.Color, eb.Color, t);
+                wb.Opacity = sb.Opacity + t * (eb.Opacity - sb.Opacity);
+                property.SetValue(target, wb);
                 return;
             }
 
-            // 冻结/非纯色 → 计算路径（分配）
+            // Non-solid / null → allocate a fresh brush (start/end are never mutated).
             var startBr = AdaptStartBrush(start);
             var endBr = end as Brush ?? new SolidColorBrush(Color.Transparent);
             property.SetValue(target, InterpolateBrush(startBr, endBr, t));

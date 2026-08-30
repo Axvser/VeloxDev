@@ -1,24 +1,102 @@
 namespace VeloxDev.Adapters.NativeSamplers
 {
-    public class BrushSampler : ISampleable, ISampler
+    public class BrushSampler : ISampler
     {
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }
 
-            var s = Normalize(start);
-            var e = Normalize(end);
+            // Normalize the start/end once per animation (a Color/null input must not allocate a brush per frame).
+            if (working is not NormalizedState st)
+            {
+                st = new NormalizedState { Start = Normalize(start), End = Normalize(end) };
+                working = st;
+            }
+            var s = st.Start;
+            var e = st.End;
 
-            // Align brush types.
-            (var alignedS, var alignedE) = AlignBrushTypes(s, e);
+            if (s is SolidColorBrush ss && e is SolidColorBrush se)
+            {
+                // Zero per-frame allocation: reuse a scratch brush, recomputing its color from the pristine start/end.
+                if (st.Scratch is not SolidColorBrush wb)
+                {
+                    wb = new SolidColorBrush();
+                    st.Scratch = wb;
+                }
+                wb.Color = LerpColor(ss.Color, se.Color, t);
+                property.SetValue(target, wb);
+                return;
+            }
 
-            property.SetValue(target, InterpolateAligned(alignedS, alignedE, t));
+            if (s is LinearGradientBrush sl && e is LinearGradientBrush el
+                && sl.GradientStops.Count == el.GradientStops.Count)
+            {
+                // Zero per-frame allocation: reuse a scratch linear gradient, recomputing its stops from the pristine start/end.
+                if (st.Scratch is not LinearGradientBrush wl || wl.GradientStops.Count != sl.GradientStops.Count)
+                {
+                    wl = new LinearGradientBrush { StartPoint = sl.StartPoint, EndPoint = sl.EndPoint };
+                    for (var i = 0; i < sl.GradientStops.Count; i++)
+                        wl.GradientStops.Add(new GradientStop());
+                    st.Scratch = wl;
+                }
+                wl.StartPoint = LerpPoint(sl.StartPoint, el.StartPoint, t);
+                wl.EndPoint = LerpPoint(sl.EndPoint, el.EndPoint, t);
+                for (var i = 0; i < sl.GradientStops.Count; i++)
+                {
+                    wl.GradientStops[i].Color = LerpColor(sl.GradientStops[i].Color, el.GradientStops[i].Color, t);
+                    wl.GradientStops[i].Offset = (float)Lerp(sl.GradientStops[i].Offset, el.GradientStops[i].Offset, t);
+                }
+                property.SetValue(target, wl);
+                return;
+            }
+
+            if (s is RadialGradientBrush sr && e is RadialGradientBrush er
+                && sr.GradientStops.Count == er.GradientStops.Count)
+            {
+                // Zero per-frame allocation: reuse a scratch radial gradient, recomputing its stops from the pristine start/end.
+                if (st.Scratch is not RadialGradientBrush wr || wr.GradientStops.Count != sr.GradientStops.Count)
+                {
+                    wr = new RadialGradientBrush { Center = sr.Center, Radius = sr.Radius };
+                    for (var i = 0; i < sr.GradientStops.Count; i++)
+                        wr.GradientStops.Add(new GradientStop());
+                    st.Scratch = wr;
+                }
+                wr.Center = LerpPoint(sr.Center, er.Center, t);
+                wr.Radius = (float)Lerp(sr.Radius, er.Radius, t);
+                for (var i = 0; i < sr.GradientStops.Count; i++)
+                {
+                    wr.GradientStops[i].Color = LerpColor(sr.GradientStops[i].Color, er.GradientStops[i].Color, t);
+                    wr.GradientStops[i].Offset = (float)Lerp(sr.GradientStops[i].Offset, er.GradientStops[i].Offset, t);
+                }
+                property.SetValue(target, wr);
+                return;
+            }
+
+            // Mixed types / different stop counts / other brushes → blend to a representative color in a scratch
+            // solid brush — zero per-frame framework object allocation.
+            var c1 = ExtractRepresentativeColor(s);
+            var c2 = ExtractRepresentativeColor(e);
+            if (st.Scratch is not SolidColorBrush wb2)
+            {
+                wb2 = new SolidColorBrush();
+                st.Scratch = wb2;
+            }
+            wb2.Color = LerpColor(c1, c2, t);
+            property.SetValue(target, wb2);
         }
 
-        #region Standard type alignment
+        private sealed class NormalizedState
+        {
+            public Brush Start = null!;
+            public Brush End = null!;
+            public object? Scratch;
+        }
+
+        #region Math helper methods
 
         private static Brush Normalize(object? obj)
         {
@@ -30,233 +108,6 @@ namespace VeloxDev.Adapters.NativeSamplers
 
             return new SolidColorBrush(Colors.Transparent);
         }
-
-        private static (Brush, Brush) AlignBrushTypes(Brush s, Brush e)
-        {
-            if (s.GetType() == e.GetType())
-                return (s, e);
-
-            if (s is SolidColorBrush sb && e is LinearGradientBrush le)
-                return (ToLinearEquivalent(sb, le), e);
-
-            if (e is SolidColorBrush eb && s is LinearGradientBrush ls)
-                return (s, ToLinearEquivalent(eb, ls));
-
-            if (s is SolidColorBrush sb2 && e is RadialGradientBrush re)
-                return (ToRadialEquivalent(sb2, re), e);
-
-            if (e is SolidColorBrush eb2 && s is RadialGradientBrush rs)
-                return (s, ToRadialEquivalent(eb2, rs));
-
-            return (s, e);
-        }
-
-        private static LinearGradientBrush ToLinearEquivalent(SolidColorBrush solid, LinearGradientBrush template)
-        {
-            var brush = new LinearGradientBrush
-            {
-                StartPoint = template.StartPoint,
-                EndPoint = template.EndPoint
-            };
-
-            brush.GradientStops.Add(new GradientStop { Color = solid.Color, Offset = 0f });
-            brush.GradientStops.Add(new GradientStop { Color = solid.Color, Offset = 1f });
-            return brush;
-        }
-
-        private static RadialGradientBrush ToRadialEquivalent(SolidColorBrush solid, RadialGradientBrush template)
-        {
-            var brush = new RadialGradientBrush
-            {
-                Center = template.Center,
-                Radius = template.Radius
-            };
-
-            brush.GradientStops.Add(new GradientStop { Color = solid.Color, Offset = 0f });
-            brush.GradientStops.Add(new GradientStop { Color = solid.Color, Offset = 1f });
-            return brush;
-        }
-
-        #endregion
-
-        #region Core interpolation logic
-
-        private static Brush InterpolateAligned(Brush s, Brush e, double t)
-        {
-            try
-            {
-                if (t <= 0.0) return CloneBrush(s);
-                if (t >= 1.0) return CloneBrush(e);
-
-                // Use is pattern matching instead of a switch expression.
-                if (s is SolidColorBrush startSolid && e is SolidColorBrush endSolid)
-                    return InterpolateSolidColors(startSolid, endSolid, t);
-
-                if (s is LinearGradientBrush startLinear && e is LinearGradientBrush endLinear)
-                    return InterpolateLinearGradient(startLinear, endLinear, t);
-
-                if (s is RadialGradientBrush startRadial && e is RadialGradientBrush endRadial)
-                    return InterpolateRadialGradient(startRadial, endRadial, t);
-
-                return CreateFallbackInterpolation(s, e, t);
-            }
-            catch
-            {
-                return t < 0.5 ? CloneBrush(s) : CloneBrush(e);
-            }
-        }
-
-        private static SolidColorBrush InterpolateSolidColors(SolidColorBrush start, SolidColorBrush end, double t)
-        {
-            var startColor = start.Color;
-            var endColor = end.Color;
-
-            double red = Lerp(startColor.Red, endColor.Red, t);
-            double green = Lerp(startColor.Green, endColor.Green, t);
-            double blue = Lerp(startColor.Blue, endColor.Blue, t);
-            double alpha = Lerp(startColor.Alpha, endColor.Alpha, t);
-
-            red = ClampToUnit(red);
-            green = ClampToUnit(green);
-            blue = ClampToUnit(blue);
-            alpha = ClampToUnit(alpha);
-
-            return new SolidColorBrush(Color.FromRgba(red, green, blue, alpha));
-        }
-
-        private static LinearGradientBrush InterpolateLinearGradient(LinearGradientBrush start, LinearGradientBrush end, double t)
-        {
-            var result = new LinearGradientBrush
-            {
-                StartPoint = LerpPoint(start.StartPoint, end.StartPoint, t),
-                EndPoint = LerpPoint(start.EndPoint, end.EndPoint, t)
-            };
-
-            var maxStops = Math.Max(start.GradientStops.Count, end.GradientStops.Count);
-
-            for (var i = 0; i < maxStops; i++)
-            {
-                var startStop = i < start.GradientStops.Count ? start.GradientStops[i] : null;
-                var endStop = i < end.GradientStops.Count ? end.GradientStops[i] : null;
-
-                if (startStop != null && endStop != null)
-                {
-                    var startColor = startStop.Color;
-                    var endColor = endStop.Color;
-
-                    double red = Lerp(startColor.Red, endColor.Red, t);
-                    double green = Lerp(startColor.Green, endColor.Green, t);
-                    double blue = Lerp(startColor.Blue, endColor.Blue, t);
-                    double alpha = Lerp(startColor.Alpha, endColor.Alpha, t);
-
-                    red = ClampToUnit(red);
-                    green = ClampToUnit(green);
-                    blue = ClampToUnit(blue);
-                    alpha = ClampToUnit(alpha);
-
-                    result.GradientStops.Add(new GradientStop
-                    {
-                        Color = Color.FromRgba(red, green, blue, alpha),
-                        Offset = (float)Lerp(startStop.Offset, endStop.Offset, t)
-                    });
-                }
-                else if (startStop != null)
-                {
-                    result.GradientStops.Add(new GradientStop
-                    {
-                        Color = startStop.Color,
-                        Offset = startStop.Offset
-                    });
-                }
-                else if (endStop != null)
-                {
-                    result.GradientStops.Add(new GradientStop
-                    {
-                        Color = endStop.Color,
-                        Offset = endStop.Offset
-                    });
-                }
-            }
-            return result;
-        }
-
-        private static RadialGradientBrush InterpolateRadialGradient(RadialGradientBrush start, RadialGradientBrush end, double t)
-        {
-            var result = new RadialGradientBrush
-            {
-                Center = LerpPoint(start.Center, end.Center, t),
-                Radius = (float)Lerp(start.Radius, end.Radius, t)
-            };
-
-            var maxStops = Math.Max(start.GradientStops.Count, end.GradientStops.Count);
-
-            for (var i = 0; i < maxStops; i++)
-            {
-                var startStop = i < start.GradientStops.Count ? start.GradientStops[i] : null;
-                var endStop = i < end.GradientStops.Count ? end.GradientStops[i] : null;
-
-                if (startStop != null && endStop != null)
-                {
-                    var startColor = startStop.Color;
-                    var endColor = endStop.Color;
-
-                    double red = Lerp(startColor.Red, endColor.Red, t);
-                    double green = Lerp(startColor.Green, endColor.Green, t);
-                    double blue = Lerp(startColor.Blue, endColor.Blue, t);
-                    double alpha = Lerp(startColor.Alpha, endColor.Alpha, t);
-
-                    red = ClampToUnit(red);
-                    green = ClampToUnit(green);
-                    blue = ClampToUnit(blue);
-                    alpha = ClampToUnit(alpha);
-
-                    result.GradientStops.Add(new GradientStop
-                    {
-                        Color = Color.FromRgba(red, green, blue, alpha),
-                        Offset = (float)Lerp(startStop.Offset, endStop.Offset, t)
-                    });
-                }
-                else if (startStop != null)
-                {
-                    result.GradientStops.Add(new GradientStop
-                    {
-                        Color = startStop.Color,
-                        Offset = startStop.Offset
-                    });
-                }
-                else if (endStop != null)
-                {
-                    result.GradientStops.Add(new GradientStop
-                    {
-                        Color = endStop.Color,
-                        Offset = endStop.Offset
-                    });
-                }
-            }
-            return result;
-        }
-
-        private static SolidColorBrush CreateFallbackInterpolation(Brush start, Brush end, double t)
-        {
-            var c1 = ExtractRepresentativeColor(start);
-            var c2 = ExtractRepresentativeColor(end);
-
-            double red = Lerp(c1.Red, c2.Red, t);
-            double green = Lerp(c1.Green, c2.Green, t);
-            double blue = Lerp(c1.Blue, c2.Blue, t);
-            double alpha = Lerp(c1.Alpha, c2.Alpha, t);
-
-            red = ClampToUnit(red);
-            green = ClampToUnit(green);
-            blue = ClampToUnit(blue);
-            alpha = ClampToUnit(alpha);
-
-            return new SolidColorBrush(Color.FromRgba(red, green, blue, alpha));
-        }
-
-        #endregion
-
-        #region Math helper methods
 
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
@@ -272,6 +123,15 @@ namespace VeloxDev.Adapters.NativeSamplers
             return value;
         }
 
+        private static Color LerpColor(Color start, Color end, double t)
+        {
+            double red = ClampToUnit(Lerp(start.Red, end.Red, t));
+            double green = ClampToUnit(Lerp(start.Green, end.Green, t));
+            double blue = ClampToUnit(Lerp(start.Blue, end.Blue, t));
+            double alpha = ClampToUnit(Lerp(start.Alpha, end.Alpha, t));
+            return Color.FromRgba(red, green, blue, alpha);
+        }
+
         private static Color ExtractRepresentativeColor(Brush brush)
         {
             if (brush is SolidColorBrush sb)
@@ -281,58 +141,6 @@ namespace VeloxDev.Adapters.NativeSamplers
                 return gb.GradientStops[0].Color;
 
             return Colors.Transparent;
-        }
-
-        private static Brush CloneBrush(Brush original)
-        {
-            if (original is SolidColorBrush sb)
-                return new SolidColorBrush(sb.Color);
-
-            if (original is LinearGradientBrush lb)
-                return CloneLinearGradient(lb);
-
-            if (original is RadialGradientBrush rb)
-                return CloneRadialGradient(rb);
-
-            return new SolidColorBrush(Colors.Transparent);
-        }
-
-        private static LinearGradientBrush CloneLinearGradient(LinearGradientBrush original)
-        {
-            var brush = new LinearGradientBrush
-            {
-                StartPoint = original.StartPoint,
-                EndPoint = original.EndPoint
-            };
-
-            foreach (var stop in original.GradientStops)
-            {
-                brush.GradientStops.Add(new GradientStop
-                {
-                    Color = stop.Color,
-                    Offset = stop.Offset
-                });
-            }
-            return brush;
-        }
-
-        private static RadialGradientBrush CloneRadialGradient(RadialGradientBrush original)
-        {
-            var brush = new RadialGradientBrush
-            {
-                Center = original.Center,
-                Radius = original.Radius
-            };
-
-            foreach (var stop in original.GradientStops)
-            {
-                brush.GradientStops.Add(new GradientStop
-                {
-                    Color = stop.Color,
-                    Offset = stop.Offset
-                });
-            }
-            return brush;
         }
 
         #endregion

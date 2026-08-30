@@ -7,6 +7,7 @@ namespace VeloxDev.TransitionSystem
         public string Path { get; }
         public Type PropertyType { get; }
         public PropertyInfo PropertyInfo { get; }
+        public IReadOnlyList<PropertyInfo> Segments { get; }
         public bool CanRead { get; }
         public bool CanWrite { get; }
         public object? GetValue(object target);

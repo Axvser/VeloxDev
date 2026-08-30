@@ -11,6 +11,7 @@ public class TransitionPropertyTests
         public double Value { get; set; }
         public string? Name { get; set; }
         public TestNested? Nested { get; set; }
+        public double ReadOnlyValue => Value;
     }
 
     private sealed class TestNested
@@ -240,5 +241,40 @@ public class TransitionPropertyTests
         var target = new ShapeContainer { Shape = new CircleShape { Radius = 3.5 } };
         var result = property.GetValue(target);
         Assert.AreEqual(3.5, result);
+    }
+
+    [TestMethod]
+    public void Members_ParsesExpressions_IntoProperties()
+    {
+        var members = TransitionProperty.Members<TestTarget>(t => t.Value, t => t.Name);
+
+        Assert.AreEqual(2, members.Count);
+        Assert.AreEqual("Value", members[0].Path);
+        Assert.AreEqual(typeof(double), members[0].PropertyType);
+        Assert.AreEqual("Name", members[1].Path);
+        Assert.AreEqual(typeof(string), members[1].PropertyType);
+    }
+
+    [TestMethod]
+    public void Members_FiltersNonWritable()
+    {
+        // ReadOnlyValue 只有 getter → 不可写 → 被过滤
+        var members = TransitionProperty.Members<TestTarget>(t => t.Value, t => t.ReadOnlyValue);
+
+        Assert.AreEqual(1, members.Count);
+        Assert.AreEqual("Value", members[0].Path);
+    }
+
+    [TestMethod]
+    public void Combine_ConcatenatesSegments()
+    {
+        var outer = TransitionProperty.FromProperty(typeof(TestTarget).GetProperty(nameof(TestTarget.Nested))!);
+        var inner = TransitionProperty.FromProperty(typeof(TestNested).GetProperty(nameof(TestNested.Inner))!);
+
+        var combined = TransitionProperty.Combine(outer, inner);
+
+        Assert.AreEqual("Nested.Inner", combined.Path);
+        Assert.AreEqual(2, combined.Segments.Count);
+        Assert.AreEqual(typeof(int), combined.PropertyType);
     }
 }

@@ -193,6 +193,43 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
         return new TransitionProperty([propertyInfo]);
     }
 
+    /// <summary>
+    /// Declares a set of animatable member paths from expressions (for <see cref="ISampleable.GetAnimatableMembers"/>).
+    /// Filters out members that are not readable or writable.
+    /// </summary>
+    public static IReadOnlyList<ITransitionProperty> Members<TSource>(params Expression<Func<TSource, object?>>[] expressions)
+    {
+        List<ITransitionProperty> members = [];
+        foreach (var expression in expressions)
+        {
+            if (TryCreate(expression, out var property)
+                && property is not null
+                && property.CanRead
+                && property.CanWrite)
+            {
+                members.Add(property);
+            }
+        }
+        return members;
+    }
+
+    /// <summary>
+    /// Combines a prefix path with a suffix path: prefix = target.Foo, suffix = Foo.Bar → target.Foo.Bar.
+    /// </summary>
+    public static TransitionProperty Combine(ITransitionProperty prefix, ITransitionProperty suffix)
+    {
+        if (prefix is null)
+        {
+            throw new ArgumentNullException(nameof(prefix));
+        }
+        if (suffix is null)
+        {
+            throw new ArgumentNullException(nameof(suffix));
+        }
+
+        return new TransitionProperty([.. prefix.Segments, .. suffix.Segments]);
+    }
+
     public static bool TryCreate(LambdaExpression expression, out TransitionProperty? property)
     {
         property = null;

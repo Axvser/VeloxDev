@@ -2,29 +2,76 @@ using System.Windows.Media;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
-    public class TransformSampler : ISampleable, ISampler
+    public class TransformSampler : ISampler
     {
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }
 
             var direction = options is RotationDirection d ? d : RotationDirection.Auto;
 
-            if (start is Transform startTransform && end is Transform endTransform
-                && startTransform.GetType() == endTransform.GetType()
-                && startTransform.GetType() != typeof(TransformGroup)
-                && !startTransform.IsFrozen)
+            if (start is Transform startT && end is Transform endT
+                && startT.GetType() == endT.GetType()
+                && startT.GetType() != typeof(TransformGroup))
             {
-                // 原地修改现有实例，不 new
-                MutateInPlace(startTransform, endTransform, direction, t);
+                // Zero per-frame allocation: reuse a scratch transform, recomputing from the pristine start/end each frame.
+                if (working is not Transform wt || wt.GetType() != startT.GetType())
+                {
+                    wt = CloneTransform(startT);
+                    working = wt;
+                }
+                MutateInPlace(wt, startT, endT, direction, t);
+                property.SetValue(target, wt);
                 return;
             }
 
-            // 组/类型不匹配/冻结/空 → 计算路径（保留 matrix-lerp 跨类型路径）
+            // Group / type mismatch / null → allocate a fresh transform (start/end are never mutated).
             property.SetValue(target, Compute(start, end, direction, t));
+        }
+
+        private static Transform CloneTransform(Transform source) => source switch
+        {
+            TranslateTransform t => new TranslateTransform(t.X, t.Y),
+            RotateTransform t => new RotateTransform(t.Angle, t.CenterX, t.CenterY),
+            ScaleTransform t => new ScaleTransform(t.ScaleX, t.ScaleY, t.CenterX, t.CenterY),
+            SkewTransform t => new SkewTransform(t.AngleX, t.AngleY, t.CenterX, t.CenterY),
+            MatrixTransform t => new MatrixTransform(t.Matrix),
+            _ => (Transform)source.Clone(), // rare fallback: other Freezable transform subclasses
+        };
+
+        private static void MutateInPlace(Transform working, Transform start, Transform end, RotationDirection direction, double t)
+        {
+            switch (working)
+            {
+                case TranslateTransform st when start is TranslateTransform s && end is TranslateTransform e:
+                    st.X = Lerp(s.X, e.X, t);
+                    st.Y = Lerp(s.Y, e.Y, t);
+                    break;
+                case RotateTransform st when start is RotateTransform s && end is RotateTransform e:
+                    st.Angle = LerpAngle(s.Angle, e.Angle, t, direction);
+                    st.CenterX = Lerp(s.CenterX, e.CenterX, t);
+                    st.CenterY = Lerp(s.CenterY, e.CenterY, t);
+                    break;
+                case ScaleTransform st when start is ScaleTransform s && end is ScaleTransform e:
+                    st.ScaleX = Lerp(s.ScaleX, e.ScaleX, t);
+                    st.ScaleY = Lerp(s.ScaleY, e.ScaleY, t);
+                    st.CenterX = Lerp(s.CenterX, e.CenterX, t);
+                    st.CenterY = Lerp(s.CenterY, e.CenterY, t);
+                    break;
+                case SkewTransform st when start is SkewTransform s && end is SkewTransform e:
+                    st.AngleX = Lerp(s.AngleX, e.AngleX, t);
+                    st.AngleY = Lerp(s.AngleY, e.AngleY, t);
+                    st.CenterX = Lerp(s.CenterX, e.CenterX, t);
+                    st.CenterY = Lerp(s.CenterY, e.CenterY, t);
+                    break;
+                case MatrixTransform st when start is MatrixTransform s && end is MatrixTransform e:
+                    st.Matrix = LerpMatrix(s.Matrix, e.Matrix, t);
+                    break;
+            }
         }
 
         private static Transform Compute(object? start, object? end, RotationDirection direction, double t)
@@ -35,37 +82,6 @@ namespace VeloxDev.Adapters.NativeSamplers
             var endTransforms = ParseTransforms(endTransform);
             var transformPairs = CreateTransformPairs(startTransforms, endTransforms);
             return InterpolateTransformPairs(transformPairs, t, direction);
-        }
-
-        private static void MutateInPlace(Transform working, Transform end, RotationDirection direction, double t)
-        {
-            switch (working)
-            {
-                case TranslateTransform st when end is TranslateTransform et:
-                    st.X = Lerp(st.X, et.X, t);
-                    st.Y = Lerp(st.Y, et.Y, t);
-                    break;
-                case RotateTransform st when end is RotateTransform et:
-                    st.Angle = LerpAngle(st.Angle, et.Angle, t, direction);
-                    st.CenterX = Lerp(st.CenterX, et.CenterX, t);
-                    st.CenterY = Lerp(st.CenterY, et.CenterY, t);
-                    break;
-                case ScaleTransform st when end is ScaleTransform et:
-                    st.ScaleX = Lerp(st.ScaleX, et.ScaleX, t);
-                    st.ScaleY = Lerp(st.ScaleY, et.ScaleY, t);
-                    st.CenterX = Lerp(st.CenterX, et.CenterX, t);
-                    st.CenterY = Lerp(st.CenterY, et.CenterY, t);
-                    break;
-                case SkewTransform st when end is SkewTransform et:
-                    st.AngleX = Lerp(st.AngleX, et.AngleX, t);
-                    st.AngleY = Lerp(st.AngleY, et.AngleY, t);
-                    st.CenterX = Lerp(st.CenterX, et.CenterX, t);
-                    st.CenterY = Lerp(st.CenterY, et.CenterY, t);
-                    break;
-                case MatrixTransform st when end is MatrixTransform et:
-                    st.Matrix = LerpMatrix(st.Matrix, et.Matrix, t);
-                    break;
-            }
         }
 
         private static Transform NormalizeInput(object? input)

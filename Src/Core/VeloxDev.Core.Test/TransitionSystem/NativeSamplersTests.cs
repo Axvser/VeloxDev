@@ -7,6 +7,8 @@ namespace VeloxDev.Core.Test.TransitionSystem;
 [TestClass]
 public class NativeSamplersTests
 {
+    private object? working = null;
+
     private sealed class DoubleTarget { public double Value { get; set; } }
     private static ITransitionProperty DoubleProp => TransitionProperty.FromProperty(typeof(DoubleTarget).GetProperty(nameof(DoubleTarget.Value))!);
 
@@ -21,7 +23,7 @@ public class NativeSamplersTests
     {
         var sampler = new DoubleSampler();
         var target = new DoubleTarget();
-        sampler.Update(target, DoubleProp, 0d, 10d, null, 0.5);
+        sampler.InsertFrame(target, DoubleProp, ref working, 0d, 10d, null, 0.5);
         Assert.AreEqual(5d, target.Value);
     }
 
@@ -30,9 +32,9 @@ public class NativeSamplersTests
     {
         var sampler = new DoubleSampler();
         var target = new DoubleTarget();
-        sampler.Update(target, DoubleProp, 0d, 10d, null, 0.0);
+        sampler.InsertFrame(target, DoubleProp, ref working, 0d, 10d, null, 0.0);
         Assert.AreEqual(0d, target.Value);
-        sampler.Update(target, DoubleProp, 0d, 10d, null, 1.0);
+        sampler.InsertFrame(target, DoubleProp, ref working, 0d, 10d, null, 1.0);
         Assert.AreEqual(10d, target.Value);
     }
 
@@ -41,7 +43,7 @@ public class NativeSamplersTests
     {
         var sampler = new DoubleSampler();
         var target = new DoubleTarget();
-        sampler.Update(target, DoubleProp, null, 10d, null, 0.5);
+        sampler.InsertFrame(target, DoubleProp, ref working, null, 10d, null, 0.5);
         Assert.AreEqual(5d, target.Value);
     }
 
@@ -50,9 +52,9 @@ public class NativeSamplersTests
     {
         var sampler = new DoubleSampler();
         var target = new DoubleTarget();
-        sampler.Update(target, DoubleProp, 0d, 100d, null, 0.25);
+        sampler.InsertFrame(target, DoubleProp, ref working, 0d, 100d, null, 0.25);
         Assert.AreEqual(25d, target.Value);
-        sampler.Update(target, DoubleProp, 0d, 100d, null, 0.75);
+        sampler.InsertFrame(target, DoubleProp, ref working, 0d, 100d, null, 0.75);
         Assert.AreEqual(75d, target.Value);
     }
 
@@ -61,7 +63,7 @@ public class NativeSamplersTests
     {
         var sampler = new FloatSampler();
         var target = new FloatTarget();
-        sampler.Update(target, FloatProp, 0f, 10f, null, 0.5);
+        sampler.InsertFrame(target, FloatProp, ref working, 0f, 10f, null, 0.5);
         Assert.AreEqual(5f, target.Value);
     }
 
@@ -70,7 +72,7 @@ public class NativeSamplersTests
     {
         var sampler = new LongSampler();
         var target = new LongTarget();
-        sampler.Update(target, LongProp, 0L, 100L, null, 0.5);
+        sampler.InsertFrame(target, LongProp, ref working, 0L, 100L, null, 0.5);
         Assert.AreEqual(50L, target.Value);
     }
 
@@ -79,16 +81,17 @@ public class NativeSamplersTests
     {
         var sampler = new LongSampler();
         var target = new LongTarget();
-        sampler.Update(target, LongProp, 42L, 42L, null, 0.25);
+        sampler.InsertFrame(target, LongProp, ref working, 42L, 42L, null, 0.25);
         Assert.AreEqual(42L, target.Value);
-        sampler.Update(target, LongProp, 42L, 42L, null, 0.75);
+        sampler.InsertFrame(target, LongProp, ref working, 42L, 42L, null, 0.75);
         Assert.AreEqual(42L, target.Value);
     }
 
     [TestMethod]
-    public void Normalize_ReturnsSelf_ForStatelessSampler()
+    public void NormalizeEndpoints_ReturnStartAndEnd_ForStatelessSampler()
     {
         var sampler = new DoubleSampler();
-        Assert.AreSame(sampler, sampler.Normalize(0d, 10d, null));
+        Assert.AreEqual(0d, sampler.NormalizeStart(0d, 10d, null));
+        Assert.AreEqual(10d, sampler.NormalizeEnd(0d, 10d, null));
     }
 }

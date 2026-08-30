@@ -54,6 +54,9 @@
     <Project Path="Examples/Transition/Blazor/Demo/Demo.Client/Demo.Client.csproj" Id="534345b5-cb67-4a11-9c9a-3f6536832490" />
     <Project Path="Examples/Transition/Blazor/Demo/Demo/Demo.csproj" Id="3f35e363-d582-4cdd-9d95-598bcfb50846" />
   </Folder>
+  <Folder Name="/Examples/Transition/Jalium/">
+    <Project Path="Examples/Transition/Jalium/Demo/Demo.csproj" />
+  </Folder>
   <Folder Name="/Examples/Transition/MAUI/">
     <Project Path="Examples/Transition/MAUI/Demo/Demo.csproj">
       <Deploy Solution="*|Any CPU" />

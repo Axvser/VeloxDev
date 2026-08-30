@@ -64,7 +64,9 @@ public class StateSnapshotCore<
             if (!CanMutualTask)
             {
                 TransitionCore.AddNoMutual(target, [scheduler]);
-                newEffect.Completed += (s, e) =>
+                // Finally fires on every end path (completed AND cancelled) — otherwise a cancelled animation
+                // leaves the scheduler in NoMutualSchedulers forever (leak).
+                newEffect.Finally += (s, e) =>
                 {
                     TransitionCore.RemoveNoMutual(target, [scheduler]);
                 };
@@ -109,7 +111,7 @@ public class StateSnapshotCore<
         next = converted;
         return newNode;
     }
-    internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, ISampleable interpolator)
+    internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, ISampler interpolator)
     {
         if (this is not T1 result)
         {
@@ -211,7 +213,9 @@ public class StateSnapshotCore<
             if (!CanMutualTask)
             {
                 TransitionCore.AddNoMutual(target, [scheduler]);
-                newEffect.Completed += (s, e) =>
+                // Finally fires on every end path (completed AND cancelled) — otherwise a cancelled animation
+                // leaves the scheduler in NoMutualSchedulers forever (leak).
+                newEffect.Finally += (s, e) =>
                 {
                     TransitionCore.RemoveNoMutual(target, [scheduler]);
                 };
@@ -256,7 +260,7 @@ public class StateSnapshotCore<
         next = converted;
         return newNode;
     }
-    internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, ISampleable interpolator)
+    internal override T1 CoreInterpolator<T1, TTarget1, TValue>(Expression<Func<TTarget1, TValue>> propertyLambda, ISampler interpolator)
     {
         if (this is not T1 result)
         {
@@ -313,7 +317,7 @@ public abstract class StateSnapshotCore<T> : StateSnapshotCore
 public abstract class StateSnapshotCore
 {
     internal abstract void AsRoot();
-    internal abstract T1 CoreInterpolator<T1, TTarget, TValue>(Expression<Func<TTarget, TValue>> propertyLambda, ISampleable interpolator)
+    internal abstract T1 CoreInterpolator<T1, TTarget, TValue>(Expression<Func<TTarget, TValue>> propertyLambda, ISampler interpolator)
         where T1 : StateSnapshotCore;
     protected abstract T1 CoreEffect<T1, T2>(T2 effect) where T2 : ITransitionEffectCore;
     protected abstract T1 CoreEffect<T1, T2>(Action<T2> effectSetter) where T2 : ITransitionEffectCore, new();

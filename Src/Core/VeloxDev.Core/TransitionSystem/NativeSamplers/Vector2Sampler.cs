@@ -3,11 +3,12 @@ using System.Numerics;
 namespace VeloxDev.TransitionSystem.NativeSamplers
 {
 #if !NETSTANDARD2_0
-    public class Vector2Sampler : ISampleable, ISampler
+    public class Vector2Sampler : ISampler
     {
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }

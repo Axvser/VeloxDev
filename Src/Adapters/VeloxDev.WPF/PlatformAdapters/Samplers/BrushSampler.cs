@@ -4,25 +4,33 @@ using System.Windows.Media.Imaging;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
-    public class BrushSampler : ISampleable, ISampler
+    public class BrushSampler : ISampler
     {
         private const int RenderSize = 100;
 
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }
 
-            if (start is SolidColorBrush startBrush && end is SolidColorBrush endBrush && !startBrush.IsFrozen)
+            if (start is SolidColorBrush sb && end is SolidColorBrush eb)
             {
-                // 原地修改现有实例，不 new
-                startBrush.Color = InterpolateColor(startBrush.Color, endBrush.Color, t);
+                // Zero per-frame allocation: reuse a scratch brush, recomputing from the pristine start/end each frame.
+                if (working is not SolidColorBrush wb)
+                {
+                    wb = new SolidColorBrush(sb.Color) { Opacity = sb.Opacity };
+                    working = wb;
+                }
+                wb.Color = InterpolateColor(sb.Color, eb.Color, t);
+                wb.Opacity = sb.Opacity + t * (eb.Opacity - sb.Opacity);
+                property.SetValue(target, wb);
                 return;
             }
 
-            // 冻结/非纯色 → 计算路径（分配）
+            // Non-solid / null → allocate a fresh brush (start/end are never mutated).
             Brush startBr = start as Brush ?? Brushes.Transparent;
             Brush endBr = end as Brush ?? Brushes.Transparent;
             if (startBr is SolidColorBrush sc && endBr is SolidColorBrush ec)
@@ -62,7 +70,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 drawingContext.DrawRectangle(end, null, new Rect(0, 0, RenderSize, RenderSize));
                 drawingContext.Pop();
             }
-
+             
             renderTarget.Render(drawingVisual);
 
             return new ImageBrush(renderTarget)

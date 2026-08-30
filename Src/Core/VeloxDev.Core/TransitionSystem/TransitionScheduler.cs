@@ -50,6 +50,7 @@ public class TransitionSchedulerCore<
         }
         finally
         {
+            cts = null; // release the animation's CancellationTokenSource after it ends
             _gate.Release();
         }
     }
@@ -131,6 +132,7 @@ public class TransitionSchedulerCore<
         }
         finally
         {
+            cts = null; // release the animation's CancellationTokenSource after it ends
             _gate.Release();
         }
     }

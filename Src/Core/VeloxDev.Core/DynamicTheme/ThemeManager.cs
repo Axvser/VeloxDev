@@ -266,32 +266,31 @@ namespace VeloxDev.DynamicTheme
                             continue;
                         }
 
-                        // Resolve a sampleable: registered native -> self-ISampleable -> simple transition (hold, jump at end)
-                        ISampleable? sampleable = null;
+                        // Resolve a sampler: registered native -> simple transition (hold, jump at end)
+                        ISampler? resolved = null;
                         try
                         {
                             if (InterpolatorCore.TryGetInterpolator(propertyInfo.PropertyType, out var registered))
                             {
-                                sampleable = registered;
-                            }
-                            else if (currentValue is ISampleable s1)
-                            {
-                                sampleable = s1;
-                            }
-                            else if (targetValue is ISampleable s2)
-                            {
-                                sampleable = s2;
+                                resolved = registered;
                             }
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[ThemeManager] Error resolving sampleable for {propEntry.Key}: {ex.Message}");
+                            Debug.WriteLine($"[ThemeManager] Error resolving sampler for {propEntry.Key}: {ex.Message}");
                         }
 
-                        // Normalize: bind the sampler to this animation (writes go through the compiled property path)
+                        // Normalize: produce the endpoint values and bind the sampler (writes go through the compiled property path).
+                        // When no sampler is resolved, keep the raw values for the simple hold-until-end transition.
                         var transitionProperty = TransitionProperty.FromProperty(propertyInfo);
-                        var sampler = sampleable?.Normalize(currentValue, targetValue, null);
-                        entries.Add(new TransitionEntry(target, transitionProperty, sampler, currentValue, targetValue));
+                        object? normStart = currentValue;
+                        object? normEnd = targetValue;
+                        if (resolved != null)
+                        {
+                            normStart = resolved.NormalizeStart(currentValue, targetValue, null);
+                            normEnd = resolved.NormalizeEnd(currentValue, targetValue, null);
+                        }
+                        entries.Add(new TransitionEntry(target, transitionProperty, resolved, normStart, normEnd));
                     }
                 }
                 catch (Exception ex)
@@ -319,6 +318,9 @@ namespace VeloxDev.DynamicTheme
             public ISampler? Sampler { get; }
             public object? Current { get; }
             public object? TargetValue { get; }
+
+            // Per-animation reusable scratch, lazily created by the sampler on the first middle-frame call.
+            public object? Working;
         }
 
         private static CancellationTokenSource? _cts_transition = null;
@@ -362,7 +364,7 @@ namespace VeloxDev.DynamicTheme
                                     entry.TransitionProperty.SetValue(entry.Target, entry.TargetValue);
                                 continue;
                             }
-                            entry.Sampler.Update(entry.Target, entry.TransitionProperty, entry.Current, entry.TargetValue, null, applyT);
+                            entry.Sampler.InsertFrame(entry.Target, entry.TransitionProperty, ref entry.Working, entry.Current, entry.TargetValue, null, applyT);
                         }
                         catch (Exception ex)
                         {

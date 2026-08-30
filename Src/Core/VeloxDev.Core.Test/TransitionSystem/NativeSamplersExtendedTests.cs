@@ -9,6 +9,8 @@ namespace VeloxDev.Core.Test.TransitionSystem;
 [TestClass]
 public class NativeSamplersExtendedTests
 {
+    private object? working = null;
+
     // A boxed-object property accepts any sampled value, so a single target serves every sampler below.
     private sealed class BoxTarget { public object? Value { get; set; } }
     private static ITransitionProperty Prop => TransitionProperty.FromProperty(typeof(BoxTarget).GetProperty(nameof(BoxTarget.Value))!);
@@ -22,10 +24,10 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = Color.FromArgb(255, 0, 0, 0);
         var end = Color.FromArgb(255, 255, 255, 255);
-        sampler.Update(target, Prop, start, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.5);
         // (byte) cast truncates, not rounds: 0 + 255*0.5 == 127.5 → 127
         Assert.AreEqual(Color.FromArgb(255, 127, 127, 127), target.Value);
-        sampler.Update(target, Prop, start, end, null, 1.0);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 1.0);
         Assert.AreEqual(end, target.Value);
     }
 
@@ -35,9 +37,9 @@ public class NativeSamplersExtendedTests
         var sampler = new ColorSampler();
         var target = new BoxTarget();
         var end = Color.FromArgb(255, 100, 100, 100);
-        sampler.Update(target, Prop, null, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, null, end, null, 0.5);
         Assert.AreEqual(Color.FromArgb(127, 50, 50, 50), target.Value);
-        sampler.Update(target, Prop, null, end, null, 1.0);
+        sampler.InsertFrame(target, Prop, ref working, null, end, null, 1.0);
         Assert.AreEqual(end, target.Value);
     }
 
@@ -48,7 +50,7 @@ public class NativeSamplersExtendedTests
     {
         var sampler = new TestStringSampler();
         var target = new BoxTarget();
-        sampler.Update(target, Prop, "#000000", "#ffffff", null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, "#000000", "#ffffff", null, 0.5);
         Assert.AreEqual("rgba(128, 128, 128, 1)", target.Value);
     }
 
@@ -57,9 +59,9 @@ public class NativeSamplersExtendedTests
     {
         var sampler = new TestStringSampler();
         var target = new BoxTarget();
-        sampler.Update(target, Prop, "translateX(0px)", "translateX(100px)", null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, "translateX(0px)", "translateX(100px)", null, 0.5);
         Assert.AreEqual("translateX(0px)", target.Value);
-        sampler.Update(target, Prop, "translateX(0px)", "translateX(100px)", null, 1.0);
+        sampler.InsertFrame(target, Prop, ref working, "translateX(0px)", "translateX(100px)", null, 1.0);
         Assert.AreEqual("translateX(100px)", target.Value);
     }
 
@@ -72,9 +74,9 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = new Point(0, 0);
         var end = new Point(100, 200);
-        sampler.Update(target, Prop, start, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.5);
         Assert.AreEqual(new Point(50, 100), target.Value);
-        sampler.Update(target, Prop, start, end, null, 1.0);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 1.0);
         Assert.AreEqual(end, target.Value);
     }
 
@@ -87,7 +89,7 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = new PointF(0f, 0f);
         var end = new PointF(10f, 20f);
-        sampler.Update(target, Prop, start, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.5);
         Assert.AreEqual(new PointF(5f, 10f), target.Value);
     }
 
@@ -100,7 +102,7 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = new Size(0, 0);
         var end = new Size(100, 200);
-        sampler.Update(target, Prop, start, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.5);
         Assert.AreEqual(new Size(50, 100), target.Value);
     }
 
@@ -113,7 +115,7 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = new SizeF(0f, 0f);
         var end = new SizeF(10f, 20f);
-        sampler.Update(target, Prop, start, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.5);
         Assert.AreEqual(new SizeF(5f, 10f), target.Value);
     }
 
@@ -126,7 +128,7 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = new Rectangle(0, 0, 10, 10);
         var end = new Rectangle(100, 100, 200, 200);
-        sampler.Update(target, Prop, start, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.5);
         Assert.AreEqual(new Rectangle(50, 50, 105, 105), target.Value);
     }
 
@@ -139,7 +141,7 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = new RectangleF(0f, 0f, 10f, 10f);
         var end = new RectangleF(100f, 100f, 200f, 200f);
-        sampler.Update(target, Prop, start, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.5);
         Assert.AreEqual(new RectangleF(50f, 50f, 105f, 105f), target.Value);
     }
 
@@ -152,9 +154,9 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = new Vector2(0, 0);
         var end = new Vector2(10, 20);
-        sampler.Update(target, Prop, start, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.5);
         Assert.AreEqual(new Vector2(5, 10), target.Value);
-        sampler.Update(target, Prop, null, end, null, 1.0);
+        sampler.InsertFrame(target, Prop, ref working, null, end, null, 1.0);
         Assert.AreEqual(end, target.Value);
     }
 
@@ -167,7 +169,7 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = new Vector3(0, 0, 0);
         var end = new Vector3(10, 20, 30);
-        sampler.Update(target, Prop, start, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.5);
         Assert.AreEqual(new Vector3(5, 10, 15), target.Value);
     }
 
@@ -180,7 +182,7 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = new Vector4(0, 0, 0, 0);
         var end = new Vector4(10, 20, 30, 40);
-        sampler.Update(target, Prop, start, end, null, 0.5);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.5);
         Assert.AreEqual(new Vector4(5, 10, 15, 20), target.Value);
     }
 
@@ -193,9 +195,9 @@ public class NativeSamplersExtendedTests
         var target = new BoxTarget();
         var start = Quaternion.Identity;
         var end = Quaternion.CreateFromYawPitchRoll(MathF.PI / 2, 0, 0);
-        sampler.Update(target, Prop, start, end, null, 0.0);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 0.0);
         Assert.AreEqual(start, target.Value);
-        sampler.Update(target, Prop, start, end, null, 1.0);
+        sampler.InsertFrame(target, Prop, ref working, start, end, null, 1.0);
         Assert.AreEqual(end, target.Value);
     }
 
@@ -205,7 +207,7 @@ public class NativeSamplersExtendedTests
         var sampler = new QuaternionSampler();
         var target = new BoxTarget();
         var end = Quaternion.CreateFromYawPitchRoll(1, 0, 0);
-        sampler.Update(target, Prop, null, end, null, 1.0);
+        sampler.InsertFrame(target, Prop, ref working, null, end, null, 1.0);
         Assert.AreEqual(end, target.Value);
     }
 
@@ -218,11 +220,12 @@ public class NativeSamplersExtendedTests
         Assert.AreEqual(expected.W, q.W, epsilon);
     }
 
-    private sealed class TestStringSampler : ISampleable, ISampler
+    private sealed class TestStringSampler : ISampler
     {
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }

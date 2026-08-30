@@ -2,13 +2,14 @@ using Microsoft.UI.Xaml;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
-    public class CornerRadiusSampler : ISampleable, ISampler
+    public class CornerRadiusSampler : ISampler
     {
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }

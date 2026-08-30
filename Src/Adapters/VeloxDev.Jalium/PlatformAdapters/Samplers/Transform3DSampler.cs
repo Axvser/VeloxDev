@@ -4,35 +4,43 @@ namespace VeloxDev.Adapters.NativeSamplers
 {
     /// <summary>Interpolates <see cref="Transform3D"/>: RotateTransform3D lerps the AxisAngleRotation3D
     /// angle (same axis), otherwise it falls back to Matrix3D component lerp.</summary>
-    public class Transform3DSampler : ISampleable, ISampler
+    public class Transform3DSampler : ISampler
     {
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }
 
             var startT = (Transform3D?)start;
             var endT = (Transform3D?)end;
-            property.SetValue(target, InterpolateSingle(startT, endT, t));
-        }
 
-        private static Transform3D InterpolateSingle(Transform3D? start, Transform3D? end, double t)
-        {
-            if (start is RotateTransform3D rs && end is RotateTransform3D re
+            if (startT is RotateTransform3D rs && endT is RotateTransform3D re
                 && rs.Rotation is AxisAngleRotation3D as1 && re.Rotation is AxisAngleRotation3D as2)
             {
-                return new RotateTransform3D(
-                    new AxisAngleRotation3D(as2.Axis, Lerp(as1.Angle, as2.Angle, t)),
-                    Lerp(rs.CenterX, re.CenterX, t),
-                    Lerp(rs.CenterY, re.CenterY, t),
-                    Lerp(rs.CenterZ, re.CenterZ, t));
+                // Zero per-frame allocation: reuse a scratch RotateTransform3D, recomputing its angle from the pristine start/end.
+                if (working is not RotateTransform3D wt || wt.Rotation is not AxisAngleRotation3D)
+                {
+                    wt = new RotateTransform3D(new AxisAngleRotation3D(as1.Axis, as1.Angle), rs.CenterX, rs.CenterY, rs.CenterZ);
+                    working = wt;
+                }
+                if (working is RotateTransform3D wt2 && wt2.Rotation is AxisAngleRotation3D wa)
+                {
+                    wa.Angle = Lerp(as1.Angle, as2.Angle, t);
+                    wt2.CenterX = Lerp(rs.CenterX, re.CenterX, t);
+                    wt2.CenterY = Lerp(rs.CenterY, re.CenterY, t);
+                    wt2.CenterZ = Lerp(rs.CenterZ, re.CenterZ, t);
+                    property.SetValue(target, wt2);
+                    return;
+                }
             }
 
-            var m1 = start?.Value ?? Matrix3D.Identity;
-            var m2 = end?.Value ?? Matrix3D.Identity;
-            return new MatrixTransform3D(LerpMatrix3D(m1, m2, t));
+            // Matrix fallback: allocate a fresh MatrixTransform3D (Value is read-only).
+            var m1 = startT?.Value ?? Matrix3D.Identity;
+            var m2 = endT?.Value ?? Matrix3D.Identity;
+            property.SetValue(target, new MatrixTransform3D(LerpMatrix3D(m1, m2, t)));
         }
 
         private static double Lerp(double a, double b, double t) => a + t * (b - a);

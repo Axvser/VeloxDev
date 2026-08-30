@@ -7,15 +7,18 @@ namespace VeloxDev.Adapters.NativeSamplers
     /// Samples CSS color strings for Razor/Blazor properties.
     /// Non-color strings fall back to discrete frame switching.
     /// </summary>
-    public class StringSampler : ISampleable, ISampler
+    public class StringSampler : ISampler
     {
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
         /// <summary>
         /// Computes the string value at normalized time <paramref name="t"/> in [0,1] and updates the property.
         /// Endpoint exactness is guaranteed here: t &lt;= 0 writes the precise start, t &gt;= 1 writes the precise end.
+        /// The CSS color parse is cached in <paramref name="working"/> (once per animation) so middle frames only
+        /// build the output string — no per-frame substring/Split/TryParse allocations.
         /// </summary>
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }
@@ -23,15 +26,43 @@ namespace VeloxDev.Adapters.NativeSamplers
             var startValue = start as string;
             var endValue = end as string;
 
-            if (TryResolveColorRange(startValue, endValue, out var startColor, out var endColor))
+            if (ReferenceEquals(working, DiscreteMarker))
             {
-                var progress = (float)t;
-                property.SetValue(target, ToCssColor(InterpolateColor(startColor, endColor, progress)));
+                // Discrete: hold the start value until the end (t >= 1 already returned the end value above).
+                property.SetValue(target, startValue);
                 return;
             }
 
-            // Discrete: hold the start value until the end (t >= 1 already returned the end value above).
-            property.SetValue(target, startValue);
+            if (working is not ColorRange range)
+            {
+                if (TryResolveColorRange(startValue, endValue, out var startColor, out var endColor))
+                {
+                    range = new ColorRange(startColor, endColor);
+                    working = range;
+                }
+                else
+                {
+                    working = DiscreteMarker;
+                    property.SetValue(target, startValue);
+                    return;
+                }
+            }
+
+            property.SetValue(target, ToCssColor(InterpolateColor(range.Start, range.End, (float)t)));
+        }
+
+        private static readonly object DiscreteMarker = new();
+
+        private sealed class ColorRange
+        {
+            public ColorRange(Color start, Color end)
+            {
+                Start = start;
+                End = end;
+            }
+
+            public Color Start { get; }
+            public Color End { get; }
         }
 
         private static bool TryResolveColorRange(string? start, string? end, out Color startColor, out Color endColor)
@@ -72,7 +103,10 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static string ToCssColor(Color color)
         {
-            return FormattableString.Invariant($"rgba({color.R}, {color.G}, {color.B}, {(color.A / 255d):0.###})");
+            // Writes directly into the string buffer via the interpolated string handler — one allocation per
+            // frame (the output string itself), no intermediate FormattableString.
+            return string.Create(CultureInfo.InvariantCulture,
+                $"rgba({color.R}, {color.G}, {color.B}, {(color.A / 255d):0.###})");
         }
 
         private static bool TryParseCssColor(string? value, out Color color)

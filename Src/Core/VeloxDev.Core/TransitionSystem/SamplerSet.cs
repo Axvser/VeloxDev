@@ -3,8 +3,9 @@ using System.Threading;
 namespace VeloxDev.TransitionSystem.Abstractions;
 
 /// <summary>
-/// 归一化后的逐属性采样容器：每个属性持有 (采样处理器, start, end, options)。<see cref="Apply"/> 经 UI 线程
-/// marshal 后逐个调用 <see cref="ISampler.Update"/>，动画取消时跳过（stale-frame 防护）。
+/// Per-property sampling container produced by normalization: each entry holds (sampler, start, end, options).
+/// <see cref="Apply"/> marshals to the UI thread and calls <see cref="ISampler.InsertFrame"/> per property, skipping
+/// when the animation is cancelled (stale-frame guard).
 /// </summary>
 public sealed class SamplerSet
 {
@@ -34,6 +35,9 @@ public sealed class SamplerSet
         public object? Start { get; }
         public object? End { get; }
         public object? Options { get; }
+
+        // Per-animation reusable scratch, lazily created by the sampler on the first middle-frame call.
+        public object? Working;
     }
 
     public SamplerSet(IUIThreadInspectorCore inspector)
@@ -82,7 +86,7 @@ public sealed class SamplerSet
         foreach (var entry in _entries)
         {
             if (!CanSetValue()) return;
-            entry.Sampler.Update(target, entry.Property, entry.Start, entry.End, entry.Options, t);
+            entry.Sampler.InsertFrame(target, entry.Property, ref entry.Working, entry.Start, entry.End, entry.Options, t);
         }
     }
 }

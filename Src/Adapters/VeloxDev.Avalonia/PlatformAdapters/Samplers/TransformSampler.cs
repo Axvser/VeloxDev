@@ -6,22 +6,36 @@ using System.Linq;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
-    public class TransformSampler : ISampleable, ISampler
+    public class TransformSampler : ISampler
     {
         private static readonly Transform Identity = new TransformGroup();
 
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }
 
             var direction = options is RotationDirection d ? d : RotationDirection.Auto;
-            // 1. Unified preprocessing
             var startTransform = NormalizeInput(start);
             var endTransform = NormalizeInput(end);
 
+            if (startTransform.GetType() == endTransform.GetType() && startTransform is not TransformGroup)
+            {
+                // Zero per-frame allocation: reuse a scratch transform, recomputing from the pristine start/end.
+                if (working is not Transform wt || wt.GetType() != startTransform.GetType())
+                {
+                    wt = CloneTransform(startTransform);
+                    working = wt;
+                }
+                MutateInPlace(wt, startTransform, endTransform, direction, t);
+                property.SetValue(target, wt);
+                return;
+            }
+
+            // 1. Unified preprocessing
             // 2. Parse effective transforms
             var startTransforms = ParseTransforms(startTransform);
             var endTransforms = ParseTransforms(endTransform);
@@ -31,6 +45,53 @@ namespace VeloxDev.Adapters.NativeSamplers
 
             // 4. Interpolate at time t
             property.SetValue(target, InterpolateTransformPairs(transformPairs, t, direction));
+        }
+
+        private static Transform CloneTransform(Transform source) => source switch
+        {
+            TranslateTransform t => new TranslateTransform(t.X, t.Y),
+            RotateTransform t => new RotateTransform(t.Angle, t.CenterX, t.CenterY),
+            ScaleTransform t => new ScaleTransform(t.ScaleX, t.ScaleY),
+            SkewTransform t => new SkewTransform(t.AngleX, t.AngleY),
+            Rotate3DTransform t => new Rotate3DTransform(t.AngleX, t.AngleY, t.AngleZ, t.CenterX, t.CenterY, t.CenterZ, t.Depth),
+            MatrixTransform t => new MatrixTransform(t.Matrix),
+            _ => throw new InvalidOperationException($"Unsupported transform type {source.GetType().Name}."),
+        };
+
+        private void MutateInPlace(Transform working, Transform start, Transform end, RotationDirection direction, double t)
+        {
+            switch (working)
+            {
+                case TranslateTransform st when start is TranslateTransform s && end is TranslateTransform e:
+                    st.X = Lerp(s.X, e.X, t);
+                    st.Y = Lerp(s.Y, e.Y, t);
+                    break;
+                case RotateTransform st when start is RotateTransform s && end is RotateTransform e:
+                    st.Angle = LerpAngle(s.Angle, e.Angle, t, direction);
+                    st.CenterX = Lerp(s.CenterX, e.CenterX, t);
+                    st.CenterY = Lerp(s.CenterY, e.CenterY, t);
+                    break;
+                case ScaleTransform st when start is ScaleTransform s && end is ScaleTransform e:
+                    st.ScaleX = Lerp(s.ScaleX, e.ScaleX, t);
+                    st.ScaleY = Lerp(s.ScaleY, e.ScaleY, t);
+                    break;
+                case SkewTransform st when start is SkewTransform s && end is SkewTransform e:
+                    st.AngleX = Lerp(s.AngleX, e.AngleX, t);
+                    st.AngleY = Lerp(s.AngleY, e.AngleY, t);
+                    break;
+                case Rotate3DTransform st when start is Rotate3DTransform s && end is Rotate3DTransform e:
+                    st.AngleX = LerpAngle(s.AngleX, e.AngleX, t, direction, axis: 'X');
+                    st.AngleY = LerpAngle(s.AngleY, e.AngleY, t, direction, axis: 'Y');
+                    st.AngleZ = LerpAngle(s.AngleZ, e.AngleZ, t, direction, axis: 'Z');
+                    st.CenterX = Lerp(s.CenterX, e.CenterX, t);
+                    st.CenterY = Lerp(s.CenterY, e.CenterY, t);
+                    st.CenterZ = Lerp(s.CenterZ, e.CenterZ, t);
+                    st.Depth = Lerp(s.Depth, e.Depth, t);
+                    break;
+                case MatrixTransform st when start is MatrixTransform s && end is MatrixTransform e:
+                    st.Matrix = LerpMatrix(s.Matrix, e.Matrix, t);
+                    break;
+            }
         }
 
         private static Transform NormalizeInput(object? input)

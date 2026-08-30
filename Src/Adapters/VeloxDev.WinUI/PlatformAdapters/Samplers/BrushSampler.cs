@@ -6,24 +6,108 @@ using Windows.UI;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
-    public class BrushSampler : ISampleable, ISampler
+    public class BrushSampler : ISampler
     {
         private static double Lerp(double a, double b, double t) => a + (b - a) * t;
 
-        public ISampler Normalize(object? start, object? end, object? options) => this;
+        public object? NormalizeStart(object? start, object? end, object? options) => start;
+        public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
-        public void Update(object target, ITransitionProperty property, object? start, object? end, object? options, double t)
+        public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
             if (t <= 0) { property.SetValue(target, start); return; }
             if (t >= 1) { property.SetValue(target, end); return; }
 
-            var s = Normalize(start);
-            var e = Normalize(end);
-            (var alignedS, var alignedE) = AlignBrushTypes(s, e);
-            property.SetValue(target, InterpolateAligned(alignedS, alignedE, t));
+            // Normalize the start/end once per animation (a Color/null input must not allocate a brush per frame).
+            if (working is not NormalizedState st)
+            {
+                st = new NormalizedState { Start = Normalize(start), End = Normalize(end) };
+                working = st;
+            }
+            var s = st.Start;
+            var e = st.End;
+
+            if (s is SolidColorBrush ss && e is SolidColorBrush se)
+            {
+                // Zero per-frame allocation: reuse a scratch brush, recomputing its color/opacity from the pristine start/end.
+                if (st.Scratch is not SolidColorBrush wb)
+                {
+                    wb = new SolidColorBrush();
+                    st.Scratch = wb;
+                }
+                wb.Color = LerpColorPremultiplied(ss.Color, se.Color, t);
+                wb.Opacity = Lerp(ss.Opacity, se.Opacity, t);
+                property.SetValue(target, wb);
+                return;
+            }
+
+            if (s is LinearGradientBrush sl && e is LinearGradientBrush el
+                && sl.GradientStops.Count == el.GradientStops.Count)
+            {
+                // Zero per-frame allocation: reuse a scratch linear gradient, recomputing its stops from the pristine start/end.
+                if (st.Scratch is not LinearGradientBrush wl || wl.GradientStops.Count != sl.GradientStops.Count)
+                {
+                    wl = new LinearGradientBrush { StartPoint = sl.StartPoint, EndPoint = sl.EndPoint };
+                    for (var i = 0; i < sl.GradientStops.Count; i++)
+                        wl.GradientStops.Add(new GradientStop());
+                    st.Scratch = wl;
+                }
+                wl.StartPoint = LerpPoint(sl.StartPoint, el.StartPoint, t);
+                wl.EndPoint = LerpPoint(sl.EndPoint, el.EndPoint, t);
+                for (var i = 0; i < sl.GradientStops.Count; i++)
+                {
+                    wl.GradientStops[i].Color = LerpColorPremultiplied(sl.GradientStops[i].Color, el.GradientStops[i].Color, t);
+                    wl.GradientStops[i].Offset = Lerp(sl.GradientStops[i].Offset, el.GradientStops[i].Offset, t);
+                }
+                property.SetValue(target, wl);
+                return;
+            }
+
+            if (s is RadialGradientBrush sr && e is RadialGradientBrush er
+                && sr.GradientStops.Count == er.GradientStops.Count)
+            {
+                // Zero per-frame allocation: reuse a scratch radial gradient, recomputing its stops from the pristine start/end.
+                if (st.Scratch is not RadialGradientBrush wr || wr.GradientStops.Count != sr.GradientStops.Count)
+                {
+                    wr = new RadialGradientBrush { Center = sr.Center, RadiusX = sr.RadiusX, RadiusY = sr.RadiusY };
+                    for (var i = 0; i < sr.GradientStops.Count; i++)
+                        wr.GradientStops.Add(new GradientStop());
+                    st.Scratch = wr;
+                }
+                wr.Center = LerpPoint(sr.Center, er.Center, t);
+                wr.RadiusX = Lerp(sr.RadiusX, er.RadiusX, t);
+                wr.RadiusY = Lerp(sr.RadiusY, er.RadiusY, t);
+                for (var i = 0; i < sr.GradientStops.Count; i++)
+                {
+                    wr.GradientStops[i].Color = LerpColorPremultiplied(sr.GradientStops[i].Color, er.GradientStops[i].Color, t);
+                    wr.GradientStops[i].Offset = Lerp(sr.GradientStops[i].Offset, er.GradientStops[i].Offset, t);
+                }
+                property.SetValue(target, wr);
+                return;
+            }
+
+            // Mixed types / different stop counts / other brushes → blend to a representative color in a scratch
+            // solid brush — zero per-frame WinRT object allocation.
+            var c1 = ExtractRepresentativeColor(s);
+            var c2 = ExtractRepresentativeColor(e);
+            if (st.Scratch is not SolidColorBrush wb2)
+            {
+                wb2 = new SolidColorBrush();
+                st.Scratch = wb2;
+            }
+            wb2.Color = LerpColorPremultiplied(c1, c2, t);
+            wb2.Opacity = Lerp(s.Opacity, e.Opacity, t);
+            property.SetValue(target, wb2);
         }
 
-        //----------- Normalize & Safe Align -----------
+        private sealed class NormalizedState
+        {
+            public Brush Start = null!;
+            public Brush End = null!;
+            public object? Scratch;
+        }
+
+        //----------- Normalize -----------
 
         private static Brush Normalize(object? obj) => obj switch
         {
@@ -31,158 +115,6 @@ namespace VeloxDev.Adapters.NativeSamplers
             Color c => new SolidColorBrush(c),
             _ => new SolidColorBrush(Colors.Transparent)
         };
-
-        /// <summary>
-        /// Tries to align the two brushes to the same type; when the types differ, converts them to logically equivalent forms.
-        /// </summary>
-        private static (Brush, Brush) AlignBrushTypes(Brush s, Brush e)
-        {
-            if (s.GetType() == e.GetType())
-                return (s, e);
-
-            if (s is SolidColorBrush sb && e is LinearGradientBrush le)
-                return (ToLinearEquivalent(sb, le), e);
-
-            if (e is SolidColorBrush eb && s is LinearGradientBrush ls)
-                return (s, ToLinearEquivalent(eb, ls));
-
-            if (s is SolidColorBrush sb2 && e is RadialGradientBrush re)
-                return (ToRadialEquivalent(sb2, re), e);
-
-            if (e is SolidColorBrush eb2 && s is RadialGradientBrush rs)
-                return (s, ToRadialEquivalent(eb2, rs));
-
-            // Types cannot be aligned → keep as-is.
-            return (s, e);
-        }
-
-        //----------- Linear gradient conversion -----------
-
-        private static LinearGradientBrush ToLinearEquivalent(SolidColorBrush solid, LinearGradientBrush template)
-        {
-            var brush = new LinearGradientBrush
-            {
-                StartPoint = template.StartPoint,
-                EndPoint = template.EndPoint,
-                MappingMode = template.MappingMode,
-                SpreadMethod = template.SpreadMethod,
-                Opacity = solid.Opacity
-            };
-
-            brush.GradientStops.Add(new GradientStop { Color = solid.Color, Offset = 0 });
-            brush.GradientStops.Add(new GradientStop { Color = solid.Color, Offset = 1 });
-            return brush;
-        }
-
-        //----------- Radial gradient conversion -----------
-
-        private static RadialGradientBrush ToRadialEquivalent(SolidColorBrush solid, RadialGradientBrush template)
-        {
-            var brush = new RadialGradientBrush
-            {
-                Center = template.Center,
-                GradientOrigin = template.GradientOrigin,
-                RadiusX = template.RadiusX,
-                RadiusY = template.RadiusY,
-                MappingMode = template.MappingMode,
-                SpreadMethod = template.SpreadMethod,
-                Opacity = solid.Opacity
-            };
-
-            brush.GradientStops.Add(new GradientStop { Color = solid.Color, Offset = 0 });
-            brush.GradientStops.Add(new GradientStop { Color = solid.Color, Offset = 1 });
-            return brush;
-        }
-
-        //----------- Actual interpolation logic -----------
-
-        private static Brush InterpolateAligned(Brush s, Brush e, double t)
-        {
-            try
-            {
-                switch (s)
-                {
-                    case SolidColorBrush sb when e is SolidColorBrush eb:
-                        return new SolidColorBrush(LerpColorPremultiplied(sb.Color, eb.Color, t))
-                        {
-                            Opacity = Lerp(sb.Opacity, eb.Opacity, t)
-                        };
-
-                    case LinearGradientBrush sl when e is LinearGradientBrush el:
-                        return InterpolateLinear(sl, el, t);
-
-                    case RadialGradientBrush sr when e is RadialGradientBrush er:
-                        return InterpolateRadial(sr, er, t);
-
-                    default:
-                        // Degenerate to solid-color blending.
-                        var c1 = ExtractRepresentativeColor(s);
-                        var c2 = ExtractRepresentativeColor(e);
-                        var mixed = LerpColorPremultiplied(c1, c2, t);
-                        return new SolidColorBrush(mixed)
-                        {
-                            Opacity = Lerp(s.Opacity, e.Opacity, t)
-                        };
-                }
-            }
-            catch
-            {
-                // On error, return the last frame.
-                return e;
-            }
-        }
-
-        //----------- Linear gradient interpolation -----------
-
-        private static LinearGradientBrush InterpolateLinear(LinearGradientBrush s, LinearGradientBrush e, double t)
-        {
-            var result = new LinearGradientBrush
-            {
-                StartPoint = LerpPoint(s.StartPoint, e.StartPoint, t),
-                EndPoint = LerpPoint(s.EndPoint, e.EndPoint, t),
-                MappingMode = e.MappingMode,
-                SpreadMethod = e.SpreadMethod,
-                Opacity = Lerp(s.Opacity, e.Opacity, t)
-            };
-
-            var count = Math.Min(s.GradientStops.Count, e.GradientStops.Count);
-            for (var i = 0; i < count; i++)
-            {
-                result.GradientStops.Add(new GradientStop
-                {
-                    Color = LerpColorPremultiplied(s.GradientStops[i].Color, e.GradientStops[i].Color, t),
-                    Offset = Lerp(s.GradientStops[i].Offset, e.GradientStops[i].Offset, t)
-                });
-            }
-            return result;
-        }
-
-        //----------- Radial gradient interpolation -----------
-
-        private static RadialGradientBrush InterpolateRadial(RadialGradientBrush s, RadialGradientBrush e, double t)
-        {
-            var result = new RadialGradientBrush
-            {
-                Center = LerpPoint(s.Center, e.Center, t),
-                GradientOrigin = LerpPoint(s.GradientOrigin, e.GradientOrigin, t),
-                RadiusX = Lerp(s.RadiusX, e.RadiusX, t),
-                RadiusY = Lerp(s.RadiusY, e.RadiusY, t),
-                MappingMode = e.MappingMode,
-                SpreadMethod = e.SpreadMethod,
-                Opacity = Lerp(s.Opacity, e.Opacity, t)
-            };
-
-            var count = Math.Min(s.GradientStops.Count, e.GradientStops.Count);
-            for (var i = 0; i < count; i++)
-            {
-                result.GradientStops.Add(new GradientStop
-                {
-                    Color = LerpColorPremultiplied(s.GradientStops[i].Color, e.GradientStops[i].Color, t),
-                    Offset = Lerp(s.GradientStops[i].Offset, e.GradientStops[i].Offset, t)
-                });
-            }
-            return result;
-        }
 
         //----------- Math helpers -----------
 

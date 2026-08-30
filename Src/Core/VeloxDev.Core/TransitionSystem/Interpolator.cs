@@ -28,32 +28,35 @@ public abstract class InterpolatorCore
 #endif
     }
 
-    public static ConcurrentDictionary<Type, ISampleable> NativeInterpolators { get; protected set; } = [];
+    public static ConcurrentDictionary<Type, ISampler> NativeInterpolators { get; protected set; } = [];
 
-    public static bool TryGetInterpolator(Type type, out ISampleable? sampleable)
+    public static bool TryGetInterpolator(Type type, out ISampler? sampler)
     {
-        if (NativeInterpolators.TryGetValue(type, out sampleable))
+        if (NativeInterpolators.TryGetValue(type, out sampler))
         {
             return true;
         }
-        sampleable = null;
+        sampler = null;
         return false;
     }
-    public static bool RegisterInterpolator(Type type, ISampleable sampleable)
+    public static bool RegisterInterpolator(Type type, ISampler sampler)
     {
         // Atomic last-writer-wins install. AddOrUpdate makes the update unconditional and atomic, so the
         // registration is guaranteed to land.
-        NativeInterpolators.AddOrUpdate(type, sampleable, (_, _) => sampleable);
+        NativeInterpolators.AddOrUpdate(type, sampler, (_, _) => sampler);
         return true;
     }
-    public static bool UnregisterInterpolator(Type type, out ISampleable? sampleable)
+    public static bool UnregisterInterpolator(Type type, out ISampler? sampler)
     {
-        return NativeInterpolators.TryRemove(type, out sampleable);
+        return NativeInterpolators.TryRemove(type, out sampler);
     }
 
     /// <summary>
-    /// 归一化：读每个属性的当前值（start）与目标值（end），解析 <see cref="ISampleable"/>（自定义 → 注册表 → 值本身
-    /// 是 ISampleable），调用 <c>Normalize(start, end, options)</c> 得到无状态采样处理器并存入 <see cref="SamplerSet"/>。
+    /// Normalizes each animated property: reads the current value (start) and target value (end), resolves the
+    /// <see cref="ISampler"/> (custom override → registry), calls <see cref="ISampler.NormalizeStart"/> /
+    /// <see cref="ISampler.NormalizeEnd"/> to produce the endpoint values, and stores the stateless sampler with
+    /// the normalized endpoints in the <see cref="SamplerSet"/>. ISampleable member expansion is done at capture
+    /// time, not here.
     /// </summary>
     public virtual SamplerSet Prepare(object target, IFrameState state, ITransitionEffectCore effect, IUIThreadInspectorCore inspector)
     {
@@ -66,28 +69,21 @@ public abstract class InterpolatorCore
             var newValue = kvp.Value;
             state.TryGetOptions(kvp.Key, out var options);
 
-            ISampleable? sampleable = null;
+            ISampler? sampler = null;
             if (state.TryGetInterpolator(kvp.Key, out var customInterpolator) && customInterpolator != null)
             {
-                sampleable = customInterpolator;
+                sampler = customInterpolator;
             }
             else if (TryGetInterpolator(kvp.Key.PropertyType, out var registered) && registered != null)
             {
-                sampleable = registered;
-            }
-            else if (currentValue is ISampleable s1)
-            {
-                sampleable = s1;
-            }
-            else if (newValue is ISampleable s2)
-            {
-                sampleable = s2;
+                sampler = registered;
             }
 
-            if (sampleable == null) continue;
+            if (sampler == null) continue;
 
-            var sampler = sampleable.Normalize(currentValue, newValue, options);
-            set.Add(kvp.Key, sampler, currentValue, newValue, options);
+            var normStart = sampler.NormalizeStart(currentValue, newValue, options);
+            var normEnd = sampler.NormalizeEnd(currentValue, newValue, options);
+            set.Add(kvp.Key, sampler, normStart, normEnd, options);
         }
         return set;
     }
