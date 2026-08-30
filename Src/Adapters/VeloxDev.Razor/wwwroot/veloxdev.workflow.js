@@ -79,6 +79,12 @@ window.veloxdevWorkflow = (() => {
     // the block position after a .NET re-render would otherwise overwrite it with stale data.
     const minimapLastWorld = {};
 
+    // Per-surface edge-expansion + layout-offset state, keyed by scroller id. The content wrapper
+    // (nodes/links) is positioned at edge + ActualOffset so world 0 lands at the grid/axis origin —
+    // a non-zero ActualOffset (e.g. NegativeOffset shifting the origin into view) must move the nodes
+    // too, or they collapse toward the edge instead of the world origin under workspace zoom.
+    const surfaceLayouts = {};
+
     function setMinimapMapping(scrollerId, scale, ox, oy, minX, minY, maxX, maxY) {
         minimapMappings[scrollerId] =
             (isFinite(scale) && scale > 0) ? { scale, ox, oy, minX, minY, maxX, maxY } : null;
@@ -146,13 +152,18 @@ window.veloxdevWorkflow = (() => {
     function setSurfaceLayout(scrollerId, contentX, contentY) {
         const el = document.getElementById(scrollerId);
         if (!el) return;
+        const st = surfaceLayouts[scrollerId];
+        if (!st) return;
+        // The layout offset (ActualOffset) moves the whole world — content (nodes/links), grid and
+        // axis together — so nodes keep collapsing toward the grid/origin under workspace zoom.
+        st.layoutX = contentX || 0;
+        st.layoutY = contentY || 0;
+        const gx = st.edgeX + st.layoutX;
+        const gy = st.edgeY + st.layoutY;
         const host = el.querySelector('.veloxdev-wf-canvas-host');
         if (!host) return;
         const contentEl = host.querySelector('.veloxdev-wf-canvas-content');
-        const offL = parseFloat(contentEl && contentEl.style.left) || 0;
-        const offT = parseFloat(contentEl && contentEl.style.top) || 0;
-        const gx = offL + (contentX || 0);
-        const gy = offT + (contentY || 0);
+        if (contentEl) { contentEl.style.left = gx + 'px'; contentEl.style.top = gy + 'px'; }
         const gridEl = host.querySelector('.veloxdev-wf-grid');
         if (gridEl) gridEl.style.backgroundPosition = gx + 'px ' + gy + 'px';
         const axisXEl = host.querySelector('.veloxdev-wf-axis-x');
@@ -180,12 +191,18 @@ window.veloxdevWorkflow = (() => {
 
         canvasHostEl.style.width = (initialW || 0) + 'px';
         canvasHostEl.style.height = (initialH || 0) + 'px';
-        // Reserve the ruler band: world 0 sits at the content boundary (right/below the ruler), so
-        // grid lines and ruler ticks align with node anchors. Grow-only afterward.
+        // The content wrapper sits at the ruler band (edge offset) PLUS the layout offset (ActualOffset),
+        // so world 0 aligns with the grid/axis origin (edge + ActualOffset) and nodes collapse toward it.
+        // Grow-only afterward. Register the edge/layout split so setSurfaceLayout can move the whole
+        // content + grid together when the layout offset changes.
         if (contentEl) {
-            contentEl.style.left = offsets.x + 'px';
-            contentEl.style.top = offsets.y + 'px';
+            contentEl.style.left = (offsets.x + layoutOffsets.x) + 'px';
+            contentEl.style.top = (offsets.y + layoutOffsets.y) + 'px';
         }
+        surfaceLayouts[scrollerEl.id] = {
+            edgeX: offsets.x, edgeY: offsets.y,
+            layoutX: layoutOffsets.x, layoutY: layoutOffsets.y
+        };
 
         // Aligns the grid pattern + world-0 axis with world coordinates. The grid is canvas-fixed
         // (world-fixed), so it scrolls naturally; it only re-positions when the edge offset or the
@@ -193,21 +210,25 @@ window.veloxdevWorkflow = (() => {
         function applyGridPosition() {
             const gx = offsets.x + layoutOffsets.x;
             const gy = offsets.y + layoutOffsets.y;
+            // Content (nodes/links) stays in lockstep with the grid/axis so world 0 is the shared origin.
+            if (contentEl) { contentEl.style.left = gx + 'px'; contentEl.style.top = gy + 'px'; }
             if (gridEl) gridEl.style.backgroundPosition = gx + 'px ' + gy + 'px';
             if (axisXEl) axisXEl.style.left = gx + 'px';
             if (axisYEl) axisYEl.style.top = gy + 'px';
         }
 
         function growContent(axis, amount) {
+            const st = surfaceLayouts[scrollerEl.id];
             if (axis === 'x') {
                 offsets.x += amount;
+                if (st) st.edgeX = offsets.x;
                 canvasHostEl.style.width = (canvasHostEl.offsetWidth + amount) + 'px';
-                if (contentEl) contentEl.style.left = offsets.x + 'px';
             } else {
                 offsets.y += amount;
+                if (st) st.edgeY = offsets.y;
                 canvasHostEl.style.height = (canvasHostEl.offsetHeight + amount) + 'px';
-                if (contentEl) contentEl.style.top = offsets.y + 'px';
             }
+            // applyGridPosition repositions content + grid + axis together at edge + layout offset.
             applyGridPosition();
             report();
         }
@@ -255,8 +276,11 @@ window.veloxdevWorkflow = (() => {
         // offset is grow-only afterward, so it never shrinks back when the user pans left/up.
         function ensureRulerReserve() {
             if (!contentEl) return;
-            const rx = contentEl.offsetLeft || 0;
-            const ry = contentEl.offsetTop || 0;
+            // The content now sits at edge + layout offset, so back out the layout offset to recover
+            // the ruler edge — otherwise the ActualOffset would be absorbed into the grow-only edge and
+            // double-counted on the next applyGridPosition.
+            const rx = (contentEl.offsetLeft || 0) - layoutOffsets.x;
+            const ry = (contentEl.offsetTop || 0) - layoutOffsets.y;
             if (offsets.x < rx) offsets.x = rx;
             if (offsets.y < ry) offsets.y = ry;
             applyGridPosition();
@@ -360,6 +384,7 @@ window.veloxdevWorkflow = (() => {
         return {
             dispose: function () {
                 delete surfaceRegistry[scrollerEl.id];
+                delete surfaceLayouts[scrollerEl.id];
                 scrollerEl.removeEventListener('scroll', onScroll);
                 document.removeEventListener('keydown', keydown);
                 document.removeEventListener('keyup', keyup);
@@ -628,18 +653,36 @@ window.veloxdevWorkflow = (() => {
         if (window.MutationObserver) {
             mo = new MutationObserver(function (mutations) {
                 for (const m of mutations) {
-                    if (m.type !== 'childList') continue;
-                    const hasSlotChange = [...m.addedNodes, ...m.removedNodes].some(
-                        n => n.nodeType === 1 && (n.querySelector?.('[data-veloxdev-slot-id]') || n.matches?.('[data-veloxdev-slot-id]')));
-                    if (hasSlotChange) { measure(); return; }
+                    if (m.type === 'childList') {
+                        const hasSlotChange = [...m.addedNodes, ...m.removedNodes].some(
+                            n => n.nodeType === 1 && (n.querySelector?.('[data-veloxdev-slot-id]') || n.matches?.('[data-veloxdev-slot-id]')));
+                        if (hasSlotChange) { measure(); return; }
+                    }
+                    // Node wrapper style change: the drag behavior repositions (style.left/top) and
+                    // re-sizes (width/height) the node on workspace zoom, so re-measure AFTER the DOM
+                    // actually changes. This is deterministic — the rAF-based relayout event above can
+                    // run before the repositions apply, so measure() would read stale positions and be
+                    // deduped by lastKey, leaving the slot anchors (and links) stuck on the old values.
+                    else if (m.type === 'attributes' && m.attributeName === 'style') {
+                        measure(); return;
+                    }
                 }
             });
-            mo.observe(hostEl, { childList: true, subtree: true });
+            mo.observe(hostEl, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
         }
+
+        // Re-measure when the workspace zooms (or any non-drag layout pass moves the node): the wheel
+        // zoom handler dispatches veloxdev-wf-layout-changed after Layout.Scale collapses every node
+        // toward the origin, so slot anchors (and the links drawn from them) track the collapsed nodes
+        // immediately instead of waiting for the next drag/resize. The drag events above already cover
+        // the drag path; measure() is idempotent (lastKey dedupe) so extra triggers are cheap.
+        const onRelayout = function () { measure(); };
+        document.addEventListener('veloxdev-wf-layout-changed', onRelayout);
 
         return {
             dispose: function () {
                 window.removeEventListener('resize', measure);
+                document.removeEventListener('veloxdev-wf-layout-changed', onRelayout);
                 if (ro) ro.disconnect();
                 if (mo) mo.disconnect();
                 liveMeasuring = false;
@@ -657,11 +700,18 @@ window.veloxdevWorkflow = (() => {
     // ════════════════════════════════════════════════════════════
     function initWheelZoom(scrollerEl, dotnetRef) {
         if (!scrollerEl || !dotnetRef) return null;
-        function onWheel(e) {
+        async function onWheel(e) {
             if (!e.ctrlKey) return;
             e.preventDefault();
             e.stopPropagation();
-            dotnetRef.invokeMethodAsync('OnWheelZoom', e.deltaY > 0 ? -1 : 1);
+            await dotnetRef.invokeMethodAsync('OnWheelZoom', e.deltaY > 0 ? -1 : 1);
+            // Layout.Scale change collapses every node toward the origin (Anchor/Size getters divide by
+            // scale): each node wrapper repositions via setNodePosition and re-renders its size. Wait a
+            // frame for those to apply, then re-measure so the slot anchors (and the links drawn from
+            // them) track the collapsed nodes immediately instead of on the next drag/resize.
+            requestAnimationFrame(function () {
+                document.dispatchEvent(new CustomEvent('veloxdev-wf-layout-changed'));
+            });
         }
         scrollerEl.addEventListener('wheel', onWheel, { passive: false });
         return {
