@@ -72,6 +72,23 @@ public partial class TemplateClass : ComponentBase, IDisposable
     private string BorderThicknessCss => WithCssUnits(BorderThickness ?? "TemplateNodeBorderThickness", "px");
     private string CornerRadiusCss => WithCssUnits(CornerRadius ?? "TemplateNodeCornerRadius", "px");
 
+    /// <summary>The node card's DESIGN width (its size at scale 1). The card is laid out at this
+    /// size and scaled by (collapsed width / design width) so content shrinks uniformly on zoom.</summary>
+    private const double DesignWidth = 260;
+
+    /// <summary>CSS scale factor for the design-size card = the zoom collapse factor
+    /// (collapsed width / design width). 1 at scale 1, 0.5 at scale 2.</summary>
+    private string ScaleCss
+    {
+        get
+        {
+            if (Node is null) return "1";
+            var width = Node.Size.Width;
+            if (width <= 0) return "1";
+            return (width / DesignWidth).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
     /// <summary>
     /// Appends <paramref name="suffix"/> to a CSS length placeholder unless it already carries
     /// CSS units, so XAML-style symbol values (<c>1</c>, <c>6</c>) become valid CSS lengths.

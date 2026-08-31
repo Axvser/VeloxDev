@@ -8,7 +8,9 @@
              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
              behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlots"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid RowDefinitions="36,*">
+    <!-- Elastic on zoom: the code-behind scales the header row, fonts and slot glyphs by
+         (collapsed width / 260), so content re-flows into the collapsed box and nothing clips. -->
+    <Grid x:Name="DesignGrid" RowDefinitions="36,*">
         <Border Grid.RowSpan="2"
                 Stroke="#331E1E1E"
                 StrokeThickness="1"
@@ -18,7 +20,7 @@
         <Grid behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas" behaviors:WorkflowNodeDragBehavior.IsEnabled="True"
               Grid.Row="0"
               Background="Transparent">
-            <Label Text="{Binding Name}"
+            <Label x:Name="PART_TitleLabel" Text="{Binding Name}"
                    TextColor="#DD1E1E1E"
                    FontAttributes="Bold"
                    VerticalTextAlignment="Center"

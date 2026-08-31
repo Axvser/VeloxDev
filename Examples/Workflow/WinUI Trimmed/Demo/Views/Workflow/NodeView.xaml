@@ -10,7 +10,11 @@
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
              Clip="{x:Null}"
              Foreground="#DD1E1E1E">
-    <Grid Clip="{x:Null}">
+    <!-- Viewbox scales the card content to the node's collapsed size (the Core Anchor/Size getters
+         collapse toward the world origin), so the content scales adaptively instead of clipping. The
+         child is pinned to the DESIGN size (the node's size at scale 1) so the scale factor is 1/scale. -->
+    <Viewbox Stretch="Uniform">
+    <Grid Clip="{x:Null}" Width="260" Height="180">
         <Grid.RowDefinitions>
             <RowDefinition Height="36" />
             <RowDefinition Height="*" />
@@ -65,4 +69,5 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
     </Grid>
+    </Viewbox>
 </UserControl>

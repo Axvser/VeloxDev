@@ -6,8 +6,13 @@
 {
     <WorkflowSlotLayoutBehavior Node="Node" IsEnabled="true">
         <WorkflowNodeDragBehavior Node="Node" IsEnabled="true" Style="@($"width:{Node.Size.Width:F0}px;height:{Node.Size.Height:F0}px;")">
+            @* The card is laid out at its DESIGN size (260x180) and uniformly scaled by the zoom
+               collapse factor (collapsed width / 260) via a CSS transform — matching the other
+               frameworks' Viewbox. Header text, output labels and slot glyphs shrink together, so
+               the right-side rows stay in proportion and nothing clips on zoom. *@
             <div class="veloxdev-wf-node-card"
-                 style="position:relative;width:100%;height:100%;
+                 style="position:relative;width:260px;height:180px;
+                        transform:scale(@ScaleCss);transform-origin:top left;
                         background:@BackgroundCss;
                         border:@BorderThicknessCss solid @BorderBrushCss;
                         border-radius:@CornerRadiusCss;

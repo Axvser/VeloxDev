@@ -51,6 +51,11 @@ public sealed class TemplateClass : UserControl
     // card is the only opaque thing over it).
     private readonly Color _cardBackdrop = ParseColor("#1E1E1E");
     private string _title = "";
+    // The header row (title + drag surface) — a field so zoom scaling can resize it.
+    private readonly DoubleBufferedPanel _header;
+    // Current zoom collapse factor (1/Scale). Multiplies the design-size metrics so the
+    // header/rows/slots re-flow to the collapsed box instead of clipping at low scale.
+    private double _collapse = 1d;
 
     public TemplateClass()
     {
@@ -66,20 +71,22 @@ public sealed class TemplateClass : UserControl
         // Opaque double-buffered panel: without AllPaintingInWmPaint +
         // OptimizedDoubleBuffer the header erases its background and paints the text
         // in separate passes, which flickers while the node card moves during a drag.
-        var header = new DoubleBufferedPanel
+        _header = new DoubleBufferedPanel
         {
             Dock = DockStyle.Top,
             Height = 36,
             BackColor = _opaqueBackground,
             Name = "PART_Header",
         };
-        header.Paint += (_, e) =>
+        _header.Paint += (_, e) =>
         {
             var g = e.Graphics;
             using var brush = new SolidBrush(_foreground);
-            using var font = new Font(Font.FontFamily, 10f, FontStyle.Bold);
-            var rect = new RectangleF(12, 0, Math.Max(0, header.Width - 24), header.Height);
-            using var format = new StringFormat { LineAlignment = StringAlignment.Center };
+            // Scale the title font and ellipsize so longer titles don't clip when the
+            // card collapses on zoom.
+            using var font = new Font(Font.FontFamily, Math.Max(5f, 10f * (float)_collapse), FontStyle.Bold);
+            var rect = new RectangleF(12, 0, Math.Max(0, _header.Width - 24), _header.Height);
+            using var format = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
             g.DrawString(_title, font, brush, rect, format);
         };
 
@@ -100,7 +107,7 @@ public sealed class TemplateClass : UserControl
         // rebuilt rows/labels would never erase stale pixels. An opaque background
         // erases cleanly every repaint.
         Controls.Add(PART_DynamicOutputs);
-        Controls.Add(header);
+        Controls.Add(_header);
 
         // Node drag: the whole card is the drag handle.
         WorkflowNodeDragBehavior.SetIsEnabled(this, true);
@@ -122,11 +129,35 @@ public sealed class TemplateClass : UserControl
     private sealed class DynamicOutputsPanel : Panel
     {
         private SlotView? _inputView;
+        private double _collapse = 1d;
 
         public DynamicOutputsPanel()
         {
             // Opaque background set by the card ctor (the card's opaque color);
             // no transparency anywhere.
+        }
+
+        /// <summary>Scales the row heights, slot glyphs and port by the zoom collapse
+        /// factor so they re-flow to the collapsed card, then re-lays-out.</summary>
+        public void SetCollapse(double k)
+        {
+            _collapse = k;
+            SuspendLayout();
+            foreach (Control child in Controls)
+            {
+                if (child is DynamicSlotRow row)
+                {
+                    row.ApplyScale(k);
+                }
+                else if (child is SlotView slot)
+                {
+                    var s = Math.Max(9, (int)Math.Round(18 * k));
+                    slot.Width = s;
+                    slot.Height = s;
+                }
+            }
+            ResumeLayout(true);
+            Invalidate();
         }
 
         public void SetInputView(SlotView? view)
@@ -153,7 +184,7 @@ public sealed class TemplateClass : UserControl
             if (_inputView is not null && _inputView.Visible)
             {
                 _inputView.SetBounds(
-                    4,
+                    Math.Max(2, (int)Math.Round(4 * _collapse)),
                     (Height - _inputView.Height) / 2,
                     _inputView.Width, _inputView.Height);
             }
@@ -212,6 +243,17 @@ public sealed class TemplateClass : UserControl
 
             Controls.Add(Label);
             Controls.Add(Slot);
+        }
+
+        /// <summary>Scales the row's height, slot glyph and label font by the zoom
+        /// collapse factor so the row re-flows to the collapsed card.</summary>
+        public void ApplyScale(double k)
+        {
+            Height = Math.Max(12, (int)Math.Round(26 * k));
+            var s = Math.Max(9, (int)Math.Round(18 * k));
+            Slot.Width = s;
+            Slot.Height = s;
+            Label.Font = new Font(Font.FontFamily, Math.Max(4f, 8.5f * (float)k), FontStyle.Regular);
         }
 
         protected override void OnLayout(LayoutEventArgs e)
@@ -366,12 +408,44 @@ public sealed class TemplateClass : UserControl
         if (_node is null || Parent is null) return;
 
         var pan = GetCanvasPanOffset();
+        // The world origin is translated by the layout's ActualOffset (the grid axis lands at
+        // panOffset + ActualOffset); the node must share that origin so it collapses toward the
+        // axis on zoom instead of toward the bare pan offset. Falls back to (0,0) for hosts
+        // whose node has no tree yet.
+        var content = _node.Parent?.Layout?.ActualOffset ?? new Offset();
         Location = new Point(
-            (int)Math.Round(_node.Anchor.Horizontal) + pan.X,
-            (int)Math.Round(_node.Anchor.Vertical) + pan.Y);
+            (int)Math.Round(_node.Anchor.Horizontal) + pan.X + (int)Math.Round(content.Horizontal),
+            (int)Math.Round(_node.Anchor.Vertical) + pan.Y + (int)Math.Round(content.Vertical));
         Size = new Size(
             (int)Math.Round(_node.Size.Width),
             (int)Math.Round(_node.Size.Height));
+
+        // Re-flow the internal metrics by the zoom collapse factor (1/Scale) so the
+        // header/rows/slots shrink with the card instead of clipping at low scale.
+        _collapse = ComputeCollapseFactor();
+        ApplyScale();
+    }
+
+    /// <summary>1/Scale (identity at scale 1): the factor the card's fixed design
+    /// metrics must shrink by so nothing clips when the node collapses on zoom.</summary>
+    private double ComputeCollapseFactor()
+    {
+        var h = _node?.Parent?.Layout?.Scale?.Horizontal ?? 1d;
+        return h == 0d ? 1d : 1d / h;
+    }
+
+    /// <summary>Applies the current collapse factor to the header band and the dynamic
+    /// outputs panel (rows, glyphs, port), then re-measures the slot anchors so links
+    /// track the scaled glyphs and repaints.</summary>
+    private void ApplyScale()
+    {
+        _header.Height = Math.Max(14, (int)Math.Round(36 * _collapse));
+        _dynamicOutputs.SetCollapse(_collapse);
+        // Re-measure the slot views at their new (scaled) bounds so link endpoints
+        // keep pointing at the glyphs — PointToScreen reads the actual control bounds,
+        // so this must run after the resize above settles.
+        WorkflowSlotLayoutBehavior.Refresh(this);
+        Invalidate();
     }
 
     /// <summary>
