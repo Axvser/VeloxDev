@@ -462,3 +462,6 @@ Docs/VeloxDev.Docs/Assets/Docs/*/tree.json
 
 # Claude Work Path
 .claude/
+
+# Template verify scratch output
+.scratch/
