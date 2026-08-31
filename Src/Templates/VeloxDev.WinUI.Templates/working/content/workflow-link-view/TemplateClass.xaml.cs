@@ -3,9 +3,10 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Globalization;
+// Alias Path: `using Microsoft.UI.Xaml.Shapes;` would collide with System.IO.Path (implicit usings).
+using Path = Microsoft.UI.Xaml.Shapes.Path;
 using VeloxDev.WorkflowSystem;
 using Windows.Foundation;
 
@@ -20,14 +21,9 @@ public sealed partial class TemplateClass : UserControl
     private static readonly DoubleCollection VirtualStrokeDashArray = [4, 2];
 
     private readonly Path _path;
-    private readonly Path _arrowPath;
     private readonly SolidColorBrush _strokeBrush = new(ParseColor("TemplateLinkColor"));
     private readonly PathGeometry _pathGeometry = new();
     private readonly PathFigure _pathFigure = new() { IsClosed = false };
-    private readonly PathGeometry _arrowGeometry = new();
-    private readonly PathFigure _arrowFigure = new() { IsClosed = true };
-    private readonly LineSegment _arrowLeftSegment = new();
-    private readonly LineSegment _arrowRightSegment = new();
     private readonly Point[] _points = new Point[4];
     private bool _updatePending;
     private bool _isLoaded;
@@ -40,9 +36,7 @@ public sealed partial class TemplateClass : UserControl
 
         var container = new Grid();
         _path = new Path { Stroke = _strokeBrush, StrokeThickness = TemplateLinkThickness, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false };
-        _arrowPath = new Path { Fill = _strokeBrush, IsHitTestVisible = false };
         container.Children.Add(_path);
-        container.Children.Add(_arrowPath);
         this.Content = container;
 
         Loaded += OnLoaded;
@@ -113,13 +107,6 @@ public sealed partial class TemplateClass : UserControl
         {
             _pathGeometry.Figures.Add(_pathFigure);
         }
-
-        if (_arrowFigure.Segments.Count == 0)
-        {
-            _arrowFigure.Segments.Add(_arrowLeftSegment);
-            _arrowFigure.Segments.Add(_arrowRightSegment);
-            _arrowGeometry.Figures.Add(_arrowFigure);
-        }
     }
 
     private void ScheduleUpdate()
@@ -152,7 +139,6 @@ public sealed partial class TemplateClass : UserControl
         if (!CanRender)
         {
             _path.Data = null;
-            _arrowPath.Data = null;
             return;
         }
 
@@ -174,34 +160,6 @@ public sealed partial class TemplateClass : UserControl
         }
 
         _path.Data = _pathGeometry;
-
-        // Arrowhead
-        if (!IsVirtualLink)
-        {
-            var from = _points[^2];
-            var tip = _points[^1];
-            double tx = tip.X - from.X, ty = tip.Y - from.Y;
-            double len = Math.Sqrt(tx * tx + ty * ty);
-            if (len <= 0.001)
-            {
-                _arrowPath.Data = null;
-                return;
-            }
-
-            tx /= len;
-            ty /= len;
-            double nx = -ty, ny = tx;
-            double al = 12, aw = 8;
-            var baseP = new Point(tip.X - tx * al, tip.Y - ty * al);
-            _arrowFigure.StartPoint = tip;
-            _arrowLeftSegment.Point = new Point(baseP.X + nx * (aw / 2), baseP.Y + ny * (aw / 2));
-            _arrowRightSegment.Point = new Point(baseP.X - nx * (aw / 2), baseP.Y - ny * (aw / 2));
-            _arrowPath.Data = _arrowGeometry;
-        }
-        else
-        {
-            _arrowPath.Data = null;
-        }
     }
 
     private void BuildPoints()

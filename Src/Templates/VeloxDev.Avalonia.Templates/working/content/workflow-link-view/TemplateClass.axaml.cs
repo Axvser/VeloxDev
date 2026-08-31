@@ -124,9 +124,6 @@ public partial class TemplateClass : Control
 
         for (int i = 0; i < points.Count - 1; i++)
             context.DrawLine(pen, points[i], points[i + 1]);
-
-        if (!IsVirtualLink)
-            DrawArrowhead(context, points[^2], points[^1], color);
     }
 
     private bool IsVirtualLink
@@ -148,30 +145,5 @@ public partial class TemplateClass : Control
             new Point(EndLeft - stub, EndTop),
             new Point(EndLeft, EndTop)
         ];
-    }
-
-    private void DrawArrowhead(DrawingContext context, Point from, Point tip, Color color)
-    {
-        var t = new Vector(tip.X - from.X, tip.Y - from.Y);
-        double len = t.Length;
-        if (len < 0.001) return;
-        t = t.Normalize();
-
-        double al = 12, aw = 8;
-        var perp = new Vector(-t.Y, t.X);
-        var baseP = new Point(tip.X - t.X * al, tip.Y - t.Y * al);
-        var w1 = new Point(baseP.X + perp.X * (aw / 2), baseP.Y + perp.Y * (aw / 2));
-        var w2 = new Point(baseP.X - perp.X * (aw / 2), baseP.Y - perp.Y * (aw / 2));
-
-        var arrowGeo = new StreamGeometry();
-        using (var ctx = arrowGeo.Open())
-        {
-            ctx.BeginFigure(tip, true);
-            ctx.LineTo(w1);
-            ctx.LineTo(w2);
-        }
-
-        var brush = new ImmutableSolidColorBrush(color);
-        context.DrawGeometry(brush, null, arrowGeo);
     }
 }

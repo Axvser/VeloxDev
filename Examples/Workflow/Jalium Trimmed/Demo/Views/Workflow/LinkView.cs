@@ -210,23 +210,5 @@ public class LinkView : FrameworkElement
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         dc.DrawGeometry(null, pen, geometry);
-
-        // Segment-aligned 12x8 arrowhead (matching WPF/WinUI/Avalonia/WinForms/MAUI).
-        const double al = 12, aw = 8;
-        double tx = toP.X - fromP.X, ty = toP.Y - fromP.Y;
-        double len2 = tx * tx + ty * ty;
-        if (len2 >= 0.001)
-        {
-            double len = Math.Sqrt(len2);
-            tx /= len; ty /= len;
-            double nx = -ty, ny = tx;
-            double baseX = toP.X - tx * al, baseY = toP.Y - ty * al;
-            var arrow = new PathFigure { StartPoint = toP, IsClosed = true, IsFilled = true };
-            arrow.Segments.Add(new LineSegment(new Point(baseX + nx * (aw / 2), baseY + ny * (aw / 2)), true));
-            arrow.Segments.Add(new LineSegment(new Point(baseX - nx * (aw / 2), baseY - ny * (aw / 2)), true));
-            var arrowGeometry = new PathGeometry();
-            arrowGeometry.Figures.Add(arrow);
-            dc.DrawGeometry(s_brush, null, arrowGeometry);
-        }
     }
 }

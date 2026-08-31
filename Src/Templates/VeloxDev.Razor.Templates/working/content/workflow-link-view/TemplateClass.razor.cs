@@ -99,7 +99,6 @@ public partial class TemplateClass : ComponentBase, IDisposable
     private string CanvasWidthCss => CanvasWidth.ToString("0.#");
     private string CanvasHeightCss => CanvasHeight.ToString("0.#");
     private string ThicknessCss => Thickness.ToString("0.#");
-    private string MarkerSuffix => Link?.GetHashCode().ToString("X8") ?? "virtual";
 
     /// <inheritdoc />
     protected override void OnInitialized()

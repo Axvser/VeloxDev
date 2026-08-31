@@ -83,9 +83,6 @@ public partial class TemplateClass : UserControl
 
         for (int i = 0; i < points.Count - 1; i++)
             ctx.DrawLine(pen, points[i], points[i + 1]);
-
-        if (!IsVirtualLink)
-            DrawArrowhead(ctx, points[^2], points[^1], brush, thickness);
     }
 
     private List<Point> BuildPoints()
@@ -98,27 +95,6 @@ public partial class TemplateClass : UserControl
         var p1 = new Point(s.X + stub, s.Y);
         var p4 = new Point(e.X - stub, e.Y);
         return [s, p1, p4, e];
-    }
-
-    private static void DrawArrowhead(DrawingContext ctx, Point from, Point tip, Brush brush, double thickness)
-    {
-        var t = new Vector(tip.X - from.X, tip.Y - from.Y);
-        if (t.LengthSquared < 0.001) return;
-        t.Normalize();
-        double al = 12, aw = 8;
-        var perp = new Vector(-t.Y, t.X);
-        var baseP = new Point(tip.X - t.X * al, tip.Y - t.Y * al);
-        var w1 = new Point(baseP.X + perp.X * (aw / 2), baseP.Y + perp.Y * (aw / 2));
-        var w2 = new Point(baseP.X - perp.X * (aw / 2), baseP.Y - perp.Y * (aw / 2));
-        var geo = new StreamGeometry();
-        using (var c = geo.Open())
-        {
-            c.BeginFigure(tip, true, true);
-            c.LineTo(w1, true, false);
-            c.LineTo(w2, true, false);
-        }
-        geo.Freeze();
-        ctx.DrawGeometry(brush, null, geo);
     }
 
     #endregion

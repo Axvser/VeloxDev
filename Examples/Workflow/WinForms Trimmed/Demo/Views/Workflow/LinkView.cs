@@ -230,7 +230,7 @@ public sealed class LinkView : Control
     }
 
     // Fresh compute, never a cached _isVirtual: a pooled view recycled from a virtual
-    // (gesture) link onto a real link must not keep painting dashed/arrowhead-less.
+    // (gesture) link onto a real link must not keep painting dashed.
     private bool IsVirtualLink(IWorkflowLinkViewModel link)
         => link.Sender?.Parent is null && link.Receiver?.Parent is null;
 
@@ -285,11 +285,6 @@ public sealed class LinkView : Control
         }
 
         g.DrawLines(pen, points);
-
-        if (!_isVirtual)
-        {
-            DrawArrowhead(g, points[^2], points[^1]);
-        }
     }
 
     private PointF[] BuildPoints()
@@ -301,32 +296,6 @@ public sealed class LinkView : Control
         var p1 = new PointF(s.X + (float)stub, s.Y);
         var p4 = new PointF(e.X - (float)stub, e.Y);
         return [s, p1, p4, e];
-    }
-
-    private void DrawArrowhead(Graphics g, PointF from, PointF tip)
-    {
-        float tx = tip.X - from.X;
-        float ty = tip.Y - from.Y;
-        float len = (float)Math.Sqrt(tx * tx + ty * ty);
-        if (len < 0.03f) return;
-
-        // Unit vector along the last segment, plus its perpendicular.
-        float ux = tx / len;
-        float uy = ty / len;
-        const float al = 12f, aw = 8f;
-        float bx = tip.X - ux * al;
-        float by = tip.Y - uy * al;
-        float px = -uy, py = ux;
-
-        var pts = new[]
-        {
-            tip,
-            new PointF(bx + px * (aw / 2f), by + py * (aw / 2f)),
-            new PointF(bx - px * (aw / 2f), by - py * (aw / 2f)),
-        };
-
-        using var brush = new SolidBrush(_lineColor);
-        g.FillPolygon(brush, pts);
     }
 
     private static Color ParseColor(string hex)

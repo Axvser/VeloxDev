@@ -111,52 +111,7 @@ public partial class LinkView : ContentView
             canvas.DrawLine(firstTurnX, startY, secondTurnX, endY);
             canvas.DrawLine(secondTurnX, endY, endX, endY);
 
-            if (!owner.IsVirtualLink)
-            {
-                DrawArrowhead(canvas, secondTurnX, endY, endX, endY, color);
-            }
-
             canvas.StrokeDashPattern = null;
-        }
-
-        private static void DrawArrowhead(
-            ICanvas canvas,
-            float fromX,
-            float fromY,
-            float tipX,
-            float tipY,
-            Color color)
-        {
-            if (canvas is null || color is null) return;
-            var dx = tipX - fromX;
-            var dy = tipY - fromY;
-            var length = MathF.Sqrt((dx * dx) + (dy * dy));
-            if (length <= float.Epsilon)
-            {
-                return;
-            }
-
-            dx /= length;
-            dy /= length;
-            const float arrowLength = 12f;
-            const float arrowWidth = 8f;
-            var normalX = -dy;
-            var normalY = dx;
-            var baseX = tipX - (dx * arrowLength);
-            var baseY = tipY - (dy * arrowLength);
-
-            var arrow = new PathF();
-            arrow.MoveTo(tipX, tipY);
-            arrow.LineTo(
-                baseX + (normalX * (arrowWidth / 2f)),
-                baseY + (normalY * (arrowWidth / 2f)));
-            arrow.LineTo(
-                baseX - (normalX * (arrowWidth / 2f)),
-                baseY - (normalY * (arrowWidth / 2f)));
-            arrow.Close();
-
-            canvas.FillColor = color;
-            canvas.FillPath(arrow);
         }
     }
 }

@@ -1,22 +1,14 @@
 @namespace TemplateNamespace
 @using VeloxDev.WorkflowSystem
-@* VeloxDev customization: Customize line color, thickness, dash, and arrowhead via the override parameters in TemplateClass.razor.cs. *@
+@* VeloxDev customization: Customize line color, thickness, and dash via the override parameters in TemplateClass.razor.cs. *@
 
 @if (EffectiveCanRender && Link is not null)
 {
     var points = BuildPoints();
-    var markerId = $"veloxdev-arrow-{MarkerSuffix}";
     var dash = EffectiveIsVirtual ? "6 4" : "none";
-    var markerEnd = EffectiveIsVirtual ? "" : $"url(#{markerId})";
 
     <svg width="@CanvasWidthCss" height="@CanvasHeightCss"
          style="position:absolute;left:0;top:0;overflow:visible;">
-        <defs>
-            <marker id="@markerId" markerWidth="10" markerHeight="7"
-                    refX="9" refY="3.5" orient="auto">
-                <polygon points="0 0, 10 3.5, 0 7" fill="@LineColor" />
-            </marker>
-        </defs>
         @if (EffectiveIsVirtual)
         {
             <polyline points="@points"
@@ -30,8 +22,7 @@
             <polyline points="@points"
                       fill="none"
                       stroke="@LineColor"
-                      stroke-width="@ThicknessCss"
-                      marker-end="@markerEnd" />
+                      stroke-width="@ThicknessCss" />
         }
     </svg>
 }
