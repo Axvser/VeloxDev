@@ -318,7 +318,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
+        // Scale is a collapse factor: higher Scale renders nodes smaller (zoom out), so wheel-up
+        // (delta > 0) zooms in by dividing Scale and wheel-down zooms out by multiplying it.
+        var factor = e.Delta > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
         viewModel.Layout.Scale = new Scale(next, next);
         e.Handled = true;

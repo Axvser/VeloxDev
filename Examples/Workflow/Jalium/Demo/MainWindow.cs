@@ -292,18 +292,20 @@ internal sealed class MainWindow : Window
     /// (the Core Anchor/Size getters).</summary>
     protected override bool OnPreviewWindowKeyDown(Key key, ModifierKeys modifiers, bool isRepeat)
     {
-        // Ctrl + '+'/'-' zooms (mirrors Ctrl + wheel; plain +/- stays unhandled so it can't fire by accident).
+        // Ctrl + '+' zooms in, Ctrl + '-' zooms out (mirrors Ctrl + wheel; plain +/- stays unhandled
+        // so it can't fire by accident). Scale is a collapse factor — higher Scale renders nodes smaller
+        // (zoom out) — so zoom-in divides Scale and zoom-out multiplies it.
         if (modifiers == ModifierKeys.Control)
         {
             if (key == Key.Add || key == Key.OemPlus)
             {
-                ZoomBy(1.1);
+                ZoomBy(1 / 1.1);
                 return true;
             }
 
             if (key == Key.Subtract || key == Key.OemMinus)
             {
-                ZoomBy(1 / 1.1);
+                ZoomBy(1.1);
                 return true;
             }
         }
@@ -317,7 +319,7 @@ internal sealed class MainWindow : Window
     {
         if (Keyboard.Modifiers == ModifierKeys.Control)
         {
-            ZoomBy(delta > 0 ? 1.1 : 1 / 1.1);
+            ZoomBy(delta > 0 ? 1 / 1.1 : 1.1);
             return true;
         }
 

@@ -72,11 +72,12 @@ public class TemplateClass : Canvas
         double factor;
         if (e.Key == Key.Add || e.Key == Key.OemPlus)
         {
-            factor = 1.1;
+            // '+' zooms in: Scale is a collapse factor, so zoom-in divides it.
+            factor = 1 / 1.1;
         }
         else if (e.Key == Key.Subtract || e.Key == Key.OemMinus)
         {
-            factor = 1 / 1.1;
+            factor = 1.1;
         }
         else
         {
