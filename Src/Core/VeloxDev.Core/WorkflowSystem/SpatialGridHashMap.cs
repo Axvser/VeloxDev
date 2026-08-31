@@ -17,6 +17,8 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
     private readonly HashSet<T> _queryScratch = [];
     private Viewport _bounds;
     private bool _boundsDirty;
+    private bool _reindexing;
+    private bool _rerunPending;
 
     public Viewport Bounds
     {
@@ -140,26 +142,71 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         var newBounds = item.Bounds;
         if (oldBounds.Equals(newBounds)) return;
 
-        // Gracefully handle transitions between empty and non-empty bounds.
-        // Items with empty/NaN bounds are tracked but not indexed; when their
-        // bounds become real, index them (PropertyChanged is reliable after view layout).
-        if (oldBounds.IsEmpty)
+        // Re-entrancy guard: a zoom cascade fires many items' Bounds changes; mutating the grid
+        // Dictionary while it is mid-operation corrupts its internal state (a later set_Item can
+        // then throw IndexOutOfRange). Defer the grid update and re-sync once the outer pass settles.
+        if (_reindexing)
         {
-            if (!newBounds.IsEmpty)
-                IndexItem(item, newBounds);
-        }
-        else if (newBounds.IsEmpty)
-        {
-            DeindexItem(item, oldBounds);
-        }
-        else
-        {
-            DeindexItem(item, oldBounds);
-            IndexItem(item, newBounds);
+            _trackedItems[item] = newBounds;
+            _rerunPending = true;
+            return;
         }
 
-        _trackedItems[item] = newBounds;
-        InvalidateBounds();
+        _reindexing = true;
+        try
+        {
+            // Gracefully handle transitions between empty and non-empty bounds.
+            // Items with empty/NaN bounds are tracked but not indexed; when their
+            // bounds become real, index them (PropertyChanged is reliable after view layout).
+            if (oldBounds.IsEmpty)
+            {
+                if (!newBounds.IsEmpty)
+                    IndexItem(item, newBounds);
+            }
+            else if (newBounds.IsEmpty)
+            {
+                DeindexItem(item, oldBounds);
+            }
+            else
+            {
+                DeindexItem(item, oldBounds);
+                IndexItem(item, newBounds);
+            }
+
+            _trackedItems[item] = newBounds;
+            InvalidateBounds();
+        }
+        finally
+        {
+            _reindexing = false;
+        }
+
+        if (_rerunPending)
+        {
+            _rerunPending = false;
+            ResyncGrid();
+        }
+    }
+
+    /// <summary>Rebuilds the grid from the tracked items' current bounds, picking up any bounds that
+    /// changed during a nested pass (deferred by the re-entrancy guard).</summary>
+    private void ResyncGrid()
+    {
+        _reindexing = true;
+        try
+        {
+            _grid.Clear();
+            foreach (var pair in _trackedItems.ToArray())
+            {
+                if (!pair.Value.IsEmpty)
+                    IndexItem(pair.Key, pair.Value);
+            }
+            _queryScratch.Clear();
+        }
+        finally
+        {
+            _reindexing = false;
+        }
     }
 
     private void IndexItem(T item, Viewport bounds)

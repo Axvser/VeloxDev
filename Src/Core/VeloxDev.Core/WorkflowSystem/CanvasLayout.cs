@@ -85,8 +85,15 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
         var baseWidth = OriginSize.Width + PositiveOffset.Horizontal + NegativeOffset.Horizontal;
         var baseHeight = OriginSize.Height + PositiveOffset.Vertical + NegativeOffset.Vertical;
 
-        ActualSize.Width = baseWidth;
-        ActualSize.Height = baseHeight;
+        // Auto-extend on zoom-in: the node Anchor/Size getters divide by Scale, so when Scale < 1 the
+        // collapsed content grows by 1/Scale beyond the world extent and would overflow the canvas.
+        // Grow the scrollable size to fit (Scale > 1 collapses content toward the origin, which already
+        // fits). The viewport/surface recompute from ActualSize, so the scroll range follows.
+        var sx = Scale.Horizontal > 0 && Scale.Horizontal < 1 ? 1d / Scale.Horizontal : 1d;
+        var sy = Scale.Vertical > 0 && Scale.Vertical < 1 ? 1d / Scale.Vertical : 1d;
+
+        ActualSize.Width = baseWidth * sx;
+        ActualSize.Height = baseHeight * sy;
         OnPropertyChanged(nameof(ActualSize));
 
         var negativeLeft = NegativeOffset.Horizontal;
