@@ -11,7 +11,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 public sealed class WorkflowSurfaceBehavior
 {
-    private sealed class SurfaceState
+    private sealed class SurfaceState : IMessageFilter
     {
         public bool IsEnabled { get; set; }
         public bool ZoomEnabled { get; set; }
@@ -21,6 +21,70 @@ public sealed class WorkflowSurfaceBehavior
         public string? PointerPressSourceName { get; set; }
         public string? MinimapOverlayName { get; set; }
         public IWorkflowTreeViewModel? WorkflowTree { get; set; }
+
+        private const int WmMouseWheel = 0x020A;
+        internal Control? _filterHost;
+
+        /// <summary>
+        /// Global pre-processing for the Ctrl+wheel zoom gesture. With no offset compensation the
+        /// gesture must be intercepted before ANY scrollable control — including the workflow's
+        /// scroll viewer and a node card's internal AutoScroll panels — has a chance to scroll. The
+        /// wheel message is addressed to the control under the cursor (WM_MOUSEWHEEL targets the
+        /// focused/focused-under-mouse window), so message handlers on the surface only ever see
+        /// wheel events routed to the surface itself; a wheel over a child window is delivered to
+        /// that child and never bubbles. This filter therefore resolves the surface host from the
+        /// message's target control, zooms, marks the message handled so the native wheel message is
+        /// dropped (no scroll anywhere), and swallows it (never forwards to the target).
+        /// </summary>
+        bool IMessageFilter.PreFilterMessage(ref Message m)
+        {
+            if (m.Msg != WmMouseWheel || Control.ModifierKeys != Keys.Control)
+            {
+                return false;
+            }
+
+            var host = ResolveSurfaceHost(m.HWnd);
+            if (host is null)
+            {
+                return false;
+            }
+
+            var tree = ResolveTree(host);
+            if (tree is null)
+            {
+                return false;
+            }
+
+            var delta = unchecked((short)((uint)m.WParam.ToInt64() >> 16));
+            var factor = delta > 0 ? 1.1 : 1 / 1.1;
+            var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
+            tree.Layout.Scale = new Scale(next, next);
+
+            m.Result = IntPtr.Zero;
+            return true; // swallow the message: the target control never scrolls
+        }
+
+        private Control? ResolveSurfaceHost(IntPtr hwnd)
+        {
+            var target = Control.FromHandle(hwnd);
+            var host = target;
+            while (host is not null)
+            {
+                if (host is not null && ReferenceEquals(host, _filterHost))
+                {
+                    return host;
+                }
+
+                if (States.TryGetValue(host, out var state) && state.ZoomEnabled)
+                {
+                    return host;
+                }
+
+                host = host.Parent;
+            }
+
+            return null;
+        }
     }
 
     private static readonly ConditionalWeakTable<Control, SurfaceState> States = new();
@@ -86,13 +150,20 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         state.ZoomEnabled = value;
+        state._filterHost = value ? element : null;
         if (value)
         {
             element.MouseWheel += OnZoomMouseWheel;
+            // A message filter catches the Ctrl+wheel gesture before any descendant control
+            // (e.g. a node card's internal AutoScroll panel, or the surface's own scroll viewer)
+            // can scroll with it. Hooking WndProc on the element only catches wheel events routed
+            // to the element itself — wheel sent to a child window never reaches it.
+            Application.AddMessageFilter(state);
         }
         else
         {
             element.MouseWheel -= OnZoomMouseWheel;
+            Application.RemoveMessageFilter(state);
         }
     }
 
@@ -112,6 +183,13 @@ public sealed class WorkflowSurfaceBehavior
         var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
         var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
         tree.Layout.Scale = new Scale(next, next);
+
+        // Mark the wheel event handled so the Ctrl+wheel gesture only zooms — without this the
+        // MouseWheel bubbles up to the AutoScroll parent and scrolls the viewport while zooming.
+        if (e is HandledMouseEventArgs handled)
+        {
+            handled.Handled = true;
+        }
     }
 
     /// <summary>

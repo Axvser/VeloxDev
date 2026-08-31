@@ -365,9 +365,14 @@ public sealed class NodeView : UserControl
         if (_node is null || Parent is null) return;
 
         var pan = GetCanvasPanOffset();
+        // The world origin is translated by the layout's ActualOffset (the grid axis lands at
+        // panOffset + ActualOffset); the node must share that origin so it collapses toward the
+        // axis on zoom instead of toward the bare pan offset. Falls back to (0,0) for hosts
+        // whose node has no tree yet.
+        var content = _node.Parent?.Layout?.ActualOffset ?? new Offset();
         Location = new Point(
-            (int)Math.Round(_node.Anchor.Horizontal) + pan.X,
-            (int)Math.Round(_node.Anchor.Vertical) + pan.Y);
+            (int)Math.Round(_node.Anchor.Horizontal) + pan.X + (int)Math.Round(content.Horizontal),
+            (int)Math.Round(_node.Anchor.Vertical) + pan.Y + (int)Math.Round(content.Vertical));
         Size = new Size(
             (int)Math.Round(_node.Size.Width),
             (int)Math.Round(_node.Size.Height));

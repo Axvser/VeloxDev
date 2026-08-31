@@ -446,14 +446,44 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             LayoutCard(node, card);
             SyncAllSlotAnchors();
             UpdateCanvasMinSize();
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+            SyncMinimap();
+            // One canvas refresh per wheel notch (coalesced across the 2×N Anchor/Size events) fills
+            // the region a moved card vacated — the self-drawn canvas redraws the grid + links there,
+            // erasing the pre-zoom ghost. Card subtrees repaint on their own child-window cycle.
+            ScheduleZoomRedraw();
         }
         else
         {
             card.Refresh(node);
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
+            SyncMinimap();
+        }
+    }
+
+    private bool _zoomCanvasRefreshPending;
+
+    /// <summary>
+    /// Coalesces the 2×N Anchor/Size events of one wheel notch into a single canvas refresh, so the
+    /// pre-zoom card positions get erased on the self-drawn canvas (the grid + links fill the region a
+    /// moved child window vacates — WinForms does not invalidate it). Synchronous like the Trimmed
+    /// demo's ApplyPan Update: one sync redraw per notch keeps the zoom ghost-free, and coalescing the
+    /// burst into one means the UI thread blocks once per notch, not 2×N times.
+    /// </summary>
+    private void ScheduleZoomRedraw()
+    {
+        if (_zoomCanvasRefreshPending) return;
+        _zoomCanvasRefreshPending = true;
+
+        void RefreshCanvas()
+        {
+            _zoomCanvasRefreshPending = false;
+            if (IsDisposed || !IsHandleCreated) return;
+            Invalidate();
+            Update();
         }
 
-        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
-        SyncMinimap();
+        BeginInvoke(RefreshCanvas);
     }
 
     private void RefreshAllCards()
@@ -819,8 +849,12 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             return;
         }
 
-        var maxX = _session.Tree.Nodes.Max(n => n.Anchor.Horizontal + n.Size.Width);
-        var maxY = _session.Tree.Nodes.Max(n => n.Anchor.Vertical + n.Size.Height);
+        // Node Anchor/Size getters collapse toward the world origin by 1/scale, so the scroll
+        // extent must come from the world bounds (collapsed × scale). Using the collapsed bounds
+        // would shrink AutoScrollMinSize on zoom, re-clamp AutoScrollPosition, and move the axis.
+        var scale = _session.Tree.Layout.Scale.Horizontal;
+        var maxX = _session.Tree.Nodes.Max(n => (n.Anchor.Horizontal + n.Size.Width) * scale);
+        var maxY = _session.Tree.Nodes.Max(n => (n.Anchor.Vertical + n.Size.Height) * scale);
         var w = (int)Math.Ceiling(maxX + _panOffset.X + 120);
         var h = (int)Math.Ceiling(maxY + _panOffset.Y + 120);
         AutoScrollMinSize = new System.Drawing.Size(Math.Max(1280, w), Math.Max(760, h));
