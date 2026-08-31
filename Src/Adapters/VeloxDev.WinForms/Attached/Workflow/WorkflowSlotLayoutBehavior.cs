@@ -549,16 +549,15 @@ public sealed class WorkflowSlotLayoutBehavior
 
         if (coordinateHost is not null)
         {
-            // PointToClient yields the center in the coordinate host's client space
-            // (world + ActualOffset); subtract via the shared screen-space helper.
+            // PointToClient yields the center in the coordinate host's (the canvas) client
+            // space, which is exactly where links are rendered — the node's Location already
+            // includes pan + ActualOffset, so NO offset subtraction. Using
+            // SlotAnchorFromVisualCenter here would subtract ActualOffset and offset every
+            // link by -ActualOffset (a constant up-left shift whenever NegativeOffset is set).
             var coordinatePoint = coordinateHost.PointToClient(screenPoint);
-            var layout = node.Parent?.Layout;
-            if (layout is not null)
-            {
-                slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(
-                    coordinatePoint.X, coordinatePoint.Y, slot.Anchor.Layer, layout);
-                return;
-            }
+            slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(
+                coordinatePoint.X, coordinatePoint.Y, slot.Anchor.Layer);
+            return;
         }
 
         var localPoint = host.PointToClient(screenPoint);
