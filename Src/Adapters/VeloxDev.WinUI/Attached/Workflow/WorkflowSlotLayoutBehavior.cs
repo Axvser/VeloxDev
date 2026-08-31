@@ -225,21 +225,24 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
 
         // LayoutUpdated can fire nested during a measure; guard so a synchronous sync from
-        // OnLayoutUpdated doesn't re-enter. Writes only model properties, so it settles in one pass.
+        // OnLayoutUpdated doesn't re-enter. The guard is exception-safe (try/finally): a throw from
+        // TransformToVisual mid-layout must not leave Syncing set, or every later sync would be
+        // suppressed and slot anchors (and the links bound to them) would go stale permanently.
         state.Syncing = true;
-        if (control.DataContext is not IWorkflowNodeViewModel node)
+        try
         {
-            state.Syncing = false;
-            return;
-        }
+            if (control.DataContext is not IWorkflowNodeViewModel node)
+            {
+                return;
+            }
 
-        var parentHost = control;
-        var coordinateHost = ResolveCoordinateHost(control, parentHost);
-        var slotNames = GetAllSlotNames(control);
-        var enumeratorNames = GetAllSlotEnumeratorNames(control);
+            var parentHost = control;
+            var coordinateHost = ResolveCoordinateHost(control, parentHost);
+            var slotNames = GetAllSlotNames(control);
+            var enumeratorNames = GetAllSlotEnumeratorNames(control);
 
-        // Rebuild the set of property names that should trigger ScheduleSync on change.
-        state.SlotPropertyNames.Clear();
+            // Rebuild the set of property names that should trigger ScheduleSync on change.
+            state.SlotPropertyNames.Clear();
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
             // Control names (e.g. "PART_OutputSlots") differ from ViewModel property
@@ -263,17 +266,20 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             state.SlotPropertyNames.Add("OutputSlot");
             state.SlotPropertyNames.Add("OutputSlots");
 
-        foreach (var slotName in slotNames)
-        {
-            SyncNamedSlot(parentHost, control, coordinateHost, node, slotName);
-        }
+            foreach (var slotName in slotNames)
+            {
+                SyncNamedSlot(parentHost, control, coordinateHost, node, slotName);
+            }
 
-        foreach (var enumeratorName in enumeratorNames)
-        {
-            SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName);
+            foreach (var enumeratorName in enumeratorNames)
+            {
+                SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName);
+            }
         }
-
-        state.Syncing = false;
+        finally
+        {
+            state.Syncing = false;
+        }
     }
 
     private static void SyncNamedSlot(UserControl parentHost, UserControl host, FrameworkElement? coordinateHost, IWorkflowNodeViewModel node, string? controlName)

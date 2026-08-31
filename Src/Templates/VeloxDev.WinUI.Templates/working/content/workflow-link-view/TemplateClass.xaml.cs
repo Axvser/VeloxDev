@@ -35,28 +35,14 @@ public sealed partial class TemplateClass : UserControl
         IsHitTestVisible = false;
 
         var container = new Grid();
-        // Stretch=None: the polyline geometry draws at its natural (canvas-local) coordinates. The
-        // Path is pinned to the canvas size (UpdatePath) so a geometry change does not re-measure/
-        // re-layout the element — a retained Path that re-layouts on Data change lands one frame
-        // behind the node collapse during zoom, which shows up as link jitter/lag.
-        _path = new Path { Stroke = _strokeBrush, StrokeThickness = TemplateLinkThickness, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false, Stretch = Stretch.None };
+        _path = new Path { Stroke = _strokeBrush, StrokeThickness = TemplateLinkThickness, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false };
         container.Children.Add(_path);
         this.Content = container;
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        SizeChanged += OnLinkSizeChanged;
         DataContextChanged += (_, _) => ScheduleUpdate();
         ScheduleUpdate();
-    }
-
-    private void OnLinkSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        // The LinkView is sized to the canvas; keep the pinned Path size in sync and redraw.
-        if (_isLoaded)
-        {
-            UpdatePath();
-        }
     }
 
     #region Dependency properties
@@ -178,10 +164,6 @@ public sealed partial class TemplateClass : UserControl
             ((LineSegment)_pathFigure.Segments[i - 1]).Point = _points[i];
         }
 
-        // Pin the Path to the canvas size so the geometry change below is a pure render invalidation
-        // (no re-measure/re-layout) — keeps the link in the same frame as the node during zoom.
-        _path.Width = Math.Max(1, ActualWidth);
-        _path.Height = Math.Max(1, ActualHeight);
         _path.Data = _pathGeometry;
     }
 
