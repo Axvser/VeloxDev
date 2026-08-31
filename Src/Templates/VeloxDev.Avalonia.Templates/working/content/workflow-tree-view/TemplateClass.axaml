@@ -44,7 +44,7 @@
                 BorderBrush="TemplateSurfaceBorderBrush"
                 BorderThickness="TemplateSurfaceBorderThickness"
                 CornerRadius="TemplateSurfaceCornerRadius">
-            <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+            <local:GridDecorator x:Name="PART_GridDecorator">
                 <ScrollViewer x:Name="PART_ScrollViewer" HorizontalScrollBarVisibility="Auto" IsScrollInertiaEnabled="False" >
                     <Canvas x:Name="PART_Canvas"
                             Width="{Binding Layout.ActualSize.Width}" Height="{Binding Layout.ActualSize.Height}" HorizontalAlignment="Left" VerticalAlignment="Top"
@@ -58,7 +58,7 @@
                         </Canvas.DataTemplates>
                     </Canvas>
                 </ScrollViewer>
-            </local:WorkflowGridDecorator>
+            </local:GridDecorator>
         </Border>
         <!-- Minimap -->
         <local:MinimapOverlay x:Name="PART_MinimapOverlay"

@@ -30,9 +30,9 @@
                             Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
                             Canvas.ZIndex="-1" />
         </DataTemplate>
-        <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
-                                      NodeTemplate="{StaticResource NodeTemplate}"
-                                      LinkTemplate="{StaticResource LinkTemplate}" />
+        <local:TemplateSelector x:Key="WorkflowTemplateSelector"
+                                NodeTemplate="{StaticResource NodeTemplate}"
+                                LinkTemplate="{StaticResource LinkTemplate}" />
     </UserControl.Resources>
     <Grid>
         <Border x:Name="PART_SurfaceBorder"
@@ -40,7 +40,7 @@
                 BorderBrush="TemplateSurfaceBorderBrush"
                 BorderThickness="TemplateSurfaceBorderThickness"
                 CornerRadius="TemplateSurfaceCornerRadius">
-            <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+            <local:GridDecorator x:Name="PART_GridDecorator">
                 <ScrollViewer x:Name="PART_ScrollViewer"
                               HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Auto"
@@ -57,7 +57,7 @@
                         </Canvas.RenderTransform>
                     </Canvas>
                 </ScrollViewer>
-            </local:WorkflowGridDecorator>
+            </local:GridDecorator>
         </Border>
         <local:MinimapOverlay x:Name="PART_MinimapOverlay"
                               HorizontalAlignment="Right"

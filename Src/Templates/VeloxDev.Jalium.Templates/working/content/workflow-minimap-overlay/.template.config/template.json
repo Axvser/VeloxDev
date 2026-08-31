@@ -24,34 +24,6 @@
       "description": "Namespace for the generated view.",
       "defaultValue": "VeloxDevWorkflowDemo",
       "replaces": "TemplateNamespace"
-    },
-    "minimapBackground": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Minimap background.",
-      "defaultValue": "#D2141922",
-      "replaces": "TemplateMinimapBackground"
-    },
-    "minimapBorder": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Minimap border color.",
-      "defaultValue": "#DC94A3B8",
-      "replaces": "TemplateMinimapBorder"
-    },
-    "nodeFill": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Node rectangle fill.",
-      "defaultValue": "#DC38BDF8",
-      "replaces": "TemplateNodeFill"
-    },
-    "viewportStroke": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Viewport rectangle stroke.",
-      "defaultValue": "#F0FFFFFF",
-      "replaces": "TemplateViewportStroke"
     }
   },
   "primaryOutputs": [

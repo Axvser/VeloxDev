@@ -27,13 +27,6 @@
       "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
     },
-    "slotBackground": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Slot hit-test background color.",
-      "defaultValue": "#01000000",
-      "replaces": "TemplateSlotBackground"
-    },
     "slotColor": {
       "type": "parameter",
       "datatype": "text",

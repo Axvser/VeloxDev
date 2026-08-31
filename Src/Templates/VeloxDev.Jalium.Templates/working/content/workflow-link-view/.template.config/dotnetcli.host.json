@@ -4,14 +4,6 @@
     "namespace": {
       "longName": "namespace",
       "shortName": "ns"
-    },
-    "linkColor": {
-      "longName": "line-color",
-      "shortName": "lc"
-    },
-    "linkThickness": {
-      "longName": "line-thickness",
-      "shortName": "lt"
     }
   }
 }

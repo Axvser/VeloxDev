@@ -5,10 +5,6 @@
       "longName": "namespace",
       "shortName": "ns"
     },
-    "gridBackground": {
-      "longName": "background",
-      "shortName": "bg"
-    },
     "minorGridColor": {
       "longName": "minor-grid-color",
       "shortName": "mic"

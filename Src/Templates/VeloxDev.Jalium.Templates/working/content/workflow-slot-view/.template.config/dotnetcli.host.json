@@ -4,22 +4,6 @@
     "namespace": {
       "longName": "namespace",
       "shortName": "ns"
-    },
-    "slotBackground": {
-      "longName": "background",
-      "shortName": "bg"
-    },
-    "slotColor": {
-      "longName": "color",
-      "shortName": "sc"
-    },
-    "slotBorderColor": {
-      "longName": "border-color",
-      "shortName": "bc"
-    },
-    "slotPath": {
-      "longName": "slot-path",
-      "shortName": "sp"
     }
   }
 }

@@ -4,22 +4,6 @@
     "namespace": {
       "longName": "namespace",
       "shortName": "ns"
-    },
-    "minimapBackground": {
-      "longName": "background",
-      "shortName": "bg"
-    },
-    "minimapBorder": {
-      "longName": "border",
-      "shortName": "bdr"
-    },
-    "nodeFill": {
-      "longName": "node-fill",
-      "shortName": "nf"
-    },
-    "viewportStroke": {
-      "longName": "viewport-stroke",
-      "shortName": "vs"
     }
   }
 }

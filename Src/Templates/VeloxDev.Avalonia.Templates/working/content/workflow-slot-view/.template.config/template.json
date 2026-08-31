@@ -34,20 +34,6 @@
       "defaultValue": "#01000000",
       "replaces": "TemplateSlotBackground"
     },
-    "slotColor": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Slot standby color.",
-      "defaultValue": "#DD1E1E1E",
-      "replaces": "TemplateSlotColor"
-    },
-    "slotBorderColor": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Slot border color.",
-      "defaultValue": "#FFFFFFFF",
-      "replaces": "TemplateSlotBorderColor"
-    },
     "slotPath": {
       "type": "parameter",
       "datatype": "text",

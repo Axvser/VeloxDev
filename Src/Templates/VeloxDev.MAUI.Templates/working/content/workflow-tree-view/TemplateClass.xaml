@@ -19,7 +19,7 @@
         <DataTemplate x:Key="LinkTemplate">
             <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}" EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}" CanRender="{Binding IsVisible}" />
         </DataTemplate>
-        <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" LinkTemplate="{StaticResource LinkTemplate}" />
+        <local:TemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" LinkTemplate="{StaticResource LinkTemplate}" />
     </ContentView.Resources>
 
     <Grid>
@@ -28,7 +28,7 @@
                 StrokeThickness="TemplateSurfaceBorderThickness"
                 StrokeShape="RoundRectangle TemplateSurfaceCornerRadius"
                 BackgroundColor="TemplateSurfaceBackground">
-            <local:WorkflowGridDecorator x:Name="PART_GridDecorator">
+            <local:GridDecorator x:Name="PART_GridDecorator">
                 <ScrollView x:Name="PART_ScrollViewer"
                             Orientation="Both">
                     <AbsoluteLayout x:Name="PART_RulerOffsetHost"
@@ -40,7 +40,7 @@
                                         behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
                     </AbsoluteLayout>
                 </ScrollView>
-            </local:WorkflowGridDecorator>
+            </local:GridDecorator>
         </Border>
         <local:MinimapOverlay x:Name="PART_MinimapOverlay"
                               HorizontalOptions="End"

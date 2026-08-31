@@ -24,34 +24,6 @@
       "description": "Namespace for the generated view.",
       "defaultValue": "VeloxDevWorkflowDemo",
       "replaces": "TemplateNamespace"
-    },
-    "surfaceBackground": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Surface background.",
-      "defaultValue": "#1E1E1E",
-      "replaces": "TemplateSurfaceBackground"
-    },
-    "surfaceBorderBrush": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Surface border color.",
-      "defaultValue": "#33FFFFFF",
-      "replaces": "TemplateSurfaceBorderBrush"
-    },
-    "surfaceBorderThickness": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Surface border thickness.",
-      "defaultValue": "1",
-      "replaces": "TemplateSurfaceBorderThickness"
-    },
-    "surfaceCornerRadius": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Surface corner radius.",
-      "defaultValue": "3",
-      "replaces": "TemplateSurfaceCornerRadius"
     }
   },
   "primaryOutputs": [

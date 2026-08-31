@@ -47,13 +47,6 @@
       "description": "Workflow surface border thickness.",
       "defaultValue": "1",
       "replaces": "TemplateSurfaceBorderThickness"
-    },
-    "surfaceCornerRadius": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Workflow surface corner radius.",
-      "defaultValue": "3",
-      "replaces": "TemplateSurfaceCornerRadius"
     }
   },
   "primaryOutputs": [

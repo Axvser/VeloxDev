@@ -25,13 +25,6 @@
       "defaultValue": "VeloxDevWorkflowDemo",
       "replaces": "TemplateNamespace"
     },
-    "gridBackground": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Surface background.",
-      "defaultValue": "#1E1E1E",
-      "replaces": "TemplateGridBackground"
-    },
     "minorGridColor": {
       "type": "parameter",
       "datatype": "text",
@@ -43,7 +36,7 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Major grid line color.",
-      "defaultValue": "#4D4D4D",
+      "defaultValue": "#3A3D40",
       "replaces": "TemplateMajorGridColor"
     },
     "axisColor": {

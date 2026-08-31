@@ -4,22 +4,6 @@
     "namespace": {
       "longName": "namespace",
       "shortName": "ns"
-    },
-    "surfaceBackground": {
-      "longName": "background",
-      "shortName": "bg"
-    },
-    "surfaceBorderBrush": {
-      "longName": "border-brush",
-      "shortName": "bb"
-    },
-    "surfaceBorderThickness": {
-      "longName": "border-thickness",
-      "shortName": "bt"
-    },
-    "surfaceCornerRadius": {
-      "longName": "corner-radius",
-      "shortName": "cr"
     }
   }
 }

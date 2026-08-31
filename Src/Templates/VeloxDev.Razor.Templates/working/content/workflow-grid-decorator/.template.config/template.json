@@ -1,7 +1,13 @@
 {
   "$schema": "http://json.schemastore.org/template",
   "author": "Axvser",
-  "classifications": [ "VeloxDev", "Workflow", "Razor", "Blazor", "Code" ],
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "Razor",
+    "Blazor",
+    "Code"
+  ],
   "identity": "VeloxDev.Razor.WorkflowGridDecorator",
   "name": "VeloxDev Razor Workflow Grid Decorator",
   "description": "A lightweight Razor/Blazor workflow grid implementing IWorkflowGridDecorator.",
@@ -20,27 +26,6 @@
       "description": "Namespace for the generated decorator.",
       "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
-    },
-    "gridBackground": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Grid background color.",
-      "defaultValue": "#1E1E1E",
-      "replaces": "TemplateGridBackground"
-    },
-    "minorGridColor": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Minor grid line color.",
-      "defaultValue": "#2A2D2E",
-      "replaces": "TemplateMinorGridColor"
-    },
-    "majorGridColor": {
-      "type": "parameter",
-      "datatype": "text",
-      "description": "Major grid line color.",
-      "defaultValue": "#3A3D40",
-      "replaces": "TemplateMajorGridColor"
     },
     "axisColor": {
       "type": "parameter",
@@ -93,7 +78,11 @@
     }
   },
   "primaryOutputs": [
-    { "path": "TemplateClass.razor" },
-    { "path": "TemplateClass.razor.cs" }
+    {
+      "path": "TemplateClass.razor"
+    },
+    {
+      "path": "TemplateClass.razor.cs"
+    }
   ]
 }

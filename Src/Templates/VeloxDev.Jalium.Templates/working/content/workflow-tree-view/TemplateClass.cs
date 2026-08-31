@@ -64,7 +64,9 @@ public class TemplateClass : Canvas
 
     private void OnZoomKeyDown(object? sender, KeyEventArgs e)
     {
-        if (_tree is null)
+        // Ctrl + '+'/'-' zooms (plain +/- stays unhandled so it can't fire by accident), mirroring
+        // the demos' window-level Ctrl + wheel / Ctrl + '-' handling.
+        if (_tree is null || !e.IsControlDown)
         {
             return;
         }
@@ -158,13 +160,27 @@ public class TemplateClass : Canvas
 
     private void UpdateViewport()
     {
-        if (_tree is null || _scrollViewer is null) return;
+        if (_tree is null) return;
         var layout = _tree.Layout;
+        double hx = _scrollViewer?.HorizontalOffset ?? 0;
+        double vy = _scrollViewer?.VerticalOffset ?? 0;
+        double vw = _scrollViewer?.ViewportWidth ?? 0;
+        double vh = _scrollViewer?.ViewportHeight ?? 0;
+        if (vw <= 0 || vh <= 0)
+        {
+            // The scroll viewer isn't measured yet (SetTree can run before the window lays out, and
+            // the Jalium viewer may not fire ScrollChanged on initial layout). Fall back to the whole
+            // canvas so the first Virtualize materializes the initial nodes/links immediately instead
+            // of no-op'ing on a 0-size viewport and deferring everything to the first real scroll.
+            hx = layout.ActualOffset.Horizontal;
+            vy = layout.ActualOffset.Vertical;
+            vw = Math.Max(CanvasWidth, layout.ActualSize.Width);
+            vh = Math.Max(CanvasHeight, layout.ActualSize.Height);
+        }
         _tree.GetHelper().Viewport = new Viewport(
-            _scrollViewer.HorizontalOffset - layout.ActualOffset.Horizontal,
-            _scrollViewer.VerticalOffset - layout.ActualOffset.Vertical,
-            _scrollViewer.ViewportWidth,
-            _scrollViewer.ViewportHeight);
+            hx - layout.ActualOffset.Horizontal,
+            vy - layout.ActualOffset.Vertical,
+            vw, vh);
     }
 
     private Point ToCanvas(double wx, double wy) => new(wx + OriginX, wy + OriginY);
