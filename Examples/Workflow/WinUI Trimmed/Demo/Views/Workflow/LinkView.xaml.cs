@@ -70,7 +70,12 @@ public sealed partial class LinkView : UserControl
     public Windows.UI.Color LineColor { get => (Windows.UI.Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        => ((LinkView)d).ScheduleUpdate();
+    {
+        // Synchronous redraw: the endpoint DPs are bound to measured slot anchors which are written
+        // in-frame (synchronously on LayoutUpdated), so redraw now or the link lags a frame and
+        // jitters while zooming.
+        ((LinkView)d).UpdatePath();
+    }
 
     private bool IsVirtualLink
         => IsVirtual
