@@ -17,6 +17,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
         public bool SyncPending { get; set; }
         public bool Syncing { get; set; }
+        public EventHandler<object>? LayoutUpdatedHandler { get; set; }
         public HashSet<string> SlotPropertyNames { get; } = [];
     }
 
@@ -95,7 +96,14 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.DataContextChanged += OnDataContextChanged;
-        control.LayoutUpdated += OnLayoutUpdated;
+        // LayoutUpdated's sender is ALWAYS null (per Microsoft docs), so capture the control in a
+        // closure and sync synchronously (post-layout, same frame) — the async DispatcherQueue hop
+        // made slot anchors (and the links bound to them) lag a frame behind the node collapse.
+        if (control.GetValue(StateProperty) is LayoutState state)
+        {
+            state.LayoutUpdatedHandler = (_, _) => Sync(control);
+            control.LayoutUpdated += state.LayoutUpdatedHandler;
+        }
         control.SizeChanged += OnSizeChanged;
         UpdatePropertyChangedSubscription(control);
         ScheduleSync(control);
@@ -106,12 +114,20 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         control.Loaded -= OnLoaded;
         control.Unloaded -= OnUnloaded;
         control.DataContextChanged -= OnDataContextChanged;
-        control.LayoutUpdated -= OnLayoutUpdated;
         control.SizeChanged -= OnSizeChanged;
 
-        if (control.GetValue(StateProperty) is LayoutState state && state.PropertyChangedSource is not null)
+        if (control.GetValue(StateProperty) is LayoutState state)
         {
-            state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
+            if (state.LayoutUpdatedHandler is not null)
+            {
+                control.LayoutUpdated -= state.LayoutUpdatedHandler;
+                state.LayoutUpdatedHandler = null;
+            }
+
+            if (state.PropertyChangedSource is not null)
+            {
+                state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
+            }
         }
 
         control.ClearValue(StateProperty);
@@ -144,22 +160,13 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         ScheduleSync(control);
     }
 
-    private static void OnLayoutUpdated(object? sender, object e)
-    {
-        if (sender is UserControl control)
-        {
-            // Synchronous: the node has just been re-laid-out (e.g. collapsed on zoom), so measure
-            // the slots NOW — the async DispatcherQueue hop made link endpoints lag one or more
-            // frames behind the node collapse, which shows up as jitter while zooming.
-            Sync(control);
-        }
-    }
-
     private static void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (sender is UserControl control)
         {
-            ScheduleSync(control);
+            // SizeChanged fires only after layout passes are finalized (per Microsoft docs); sync
+            // synchronously so slot anchors update in the same frame as the node's resize.
+            Sync(control);
         }
     }
 
