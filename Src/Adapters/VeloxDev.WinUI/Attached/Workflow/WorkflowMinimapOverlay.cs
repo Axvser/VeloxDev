@@ -154,6 +154,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
     private WorkflowBounds _lastViewport;
     private bool _pendingRefresh = true;
+    private bool _isUnloaded;
     private bool _isDragging;
     private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
     private readonly HashSet<IWorkflowLinkViewModel> _subscribedLinks = [];
@@ -180,7 +181,12 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
             if (_refreshTimer is not null)
             {
                 _refreshTimer.Interval = TimeSpan.FromMilliseconds(16);
-                _refreshTimer.Tick += (s, e) => RebuildShapes();
+                _refreshTimer.Tick += (s, e) =>
+                {
+                    if (_isUnloaded) return;
+                    try { RebuildShapes(); }
+                    catch (System.Runtime.InteropServices.COMException) { /* app teardown: the DependencyObject may already be destroyed */ }
+                };
             }
         }
         catch { }
@@ -189,7 +195,8 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         PointerMoved += OnPointerMovedHandler;
         PointerReleased += OnPointerReleasedHandler;
         PointerCaptureLost += OnPointerCaptureLostHandler;
-        Loaded += (s, e) => ResolveScrollViewer();
+        Loaded += (s, e) => { _isUnloaded = false; ResolveScrollViewer(); };
+        Unloaded += (_, _) => { _isUnloaded = true; _refreshTimer?.Stop(); };
     }
 
     private void ResolveScrollViewer()
@@ -478,6 +485,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     private void RebuildShapes()
     {
         _refreshTimer?.Stop();
+        if (_isUnloaded) return;
 
         if (!IsMinimapVisible)
         {
