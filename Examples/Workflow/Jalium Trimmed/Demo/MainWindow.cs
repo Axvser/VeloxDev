@@ -21,6 +21,8 @@ namespace Demo;
 internal sealed class MainWindow : Window
 {
     private IWorkflowTreeViewModel? _tree;
+    private readonly WorkflowTreeView _surface;
+    private readonly ScrollViewer _viewer;
 
     public MainWindow()
     {
@@ -32,18 +34,20 @@ internal sealed class MainWindow : Window
         var tree = new TreeViewModel();
         LoadTree(tree);
 
-        var surface = new WorkflowTreeView
+        _surface = new WorkflowTreeView
         {
             TemplateSelector = TemplateSelector.CreateSelector(),
         };
+        var surface = _surface;
 
-        var viewer = new ScrollViewer
+        _viewer = new ScrollViewer
         {
             Content = surface,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             PanningMode = PanningMode.None, // surface handles mouse-pan itself
         };
+        var viewer = _viewer;
         // Attach before SetTree so the surface has a scroll viewer to compute its viewport from the
         // moment the tree is set — the first Virtualize then runs immediately (full-canvas fallback
         // until the viewer measures) instead of waiting for a ScrollChanged that may never fire.
@@ -89,8 +93,8 @@ internal sealed class MainWindow : Window
     }
 
     /// <summary>Window-level preview key: fires for every key regardless of which child has focus.
-    /// Zoom the workspace with + / - ; each node collapses toward the world origin by 1/scale
-    /// (the Core Anchor/Size getters).</summary>
+    /// Zoom the workspace with + / - ; the viewport center is held fixed (ViewportCenter zoom keeps
+    /// the world point under the viewport center on-screen while scaling).</summary>
     protected override bool OnPreviewWindowKeyDown(Key key, ModifierKeys modifiers, bool isRepeat)
     {
         // Ctrl + '+' zooms in, Ctrl + '-' zooms out (mirrors Ctrl + wheel; plain +/- stays unhandled
@@ -115,7 +119,7 @@ internal sealed class MainWindow : Window
     }
 
     /// <summary>Window-level preview wheel: fires for every wheel event regardless of focus/routing.
-    /// Ctrl + wheel zooms the workspace (each node collapses toward the origin by 1/scale).</summary>
+    /// Ctrl + wheel zooms the workspace while holding the viewport center fixed.</summary>
     protected override bool OnPreviewWindowMouseWheel(int delta, Point position)
     {
         if (_tree is not null && Keyboard.Modifiers == ModifierKeys.Control)
@@ -127,10 +131,57 @@ internal sealed class MainWindow : Window
         return base.OnPreviewWindowMouseWheel(delta, position);
     }
 
-    private static void ZoomBy(IWorkflowTreeViewModel tree, double factor)
+    /// <summary>
+    /// Zooms about the world point currently under the viewport center so that point stays on-screen
+    /// (the Core <see cref="ZoomCenter.ViewportCenter"/> contract). A plain Scale change would collapse
+    /// every node toward the world origin, so a node centered under the viewport would visibly drift
+    /// off-center on every notch — capture the pivot, collapse about it and re-center the scroll.
+    /// Scale is a collapse factor: higher Scale renders nodes smaller (zoom out), so zoom-in divides
+    /// Scale and zoom-out multiplies it.
+    /// </summary>
+    private void ZoomBy(IWorkflowTreeViewModel tree, double factor)
     {
         var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
-        tree.Layout.Scale = new Scale(next, next);
+        var layout = tree.Layout;
+
+        if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
+        {
+            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                _viewer.HorizontalOffset, _viewer.VerticalOffset, _viewer.ViewportWidth, _viewer.ViewportHeight, layout);
+            layout.CollapsePivot = new Anchor(wx, wy, 0);
+            layout.Scale = new Scale(next, next);
+
+            // Re-layout so the ScrollViewer adopts the new extent (zoom-in auto-extends the canvas)
+            // BEFORE reading ScrollableWidth/Height. Otherwise the clamp lands against the stale extent
+            // and the next wheel tick re-captures the off-center pivot — the compounding drift reads
+            // as zoom jitter.
+            _surface.UpdateLayout();
+            _viewer.UpdateLayout();
+
+            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, _viewer.ViewportWidth, _viewer.ViewportHeight);
+            var maxH = _viewer.ScrollableWidth;
+            var maxV = _viewer.ScrollableHeight;
+
+            // Overscroll-expand the canvas so the pivot is always reachable; a plain clamp would push
+            // the pivot off-center and drift on each notch. The canvas geometry is untouched by the
+            // zoom (ActualOffset == NegativeOffset, fixed) — only the scroll moves.
+            var newX = WorkflowSurfaceMath.ClampScrollOffset(tx, maxH, layout, horizontal: true);
+            var newY = WorkflowSurfaceMath.ClampScrollOffset(ty, maxV, layout, horizontal: false);
+            if (Math.Abs(newX - tx) > double.Epsilon || Math.Abs(newY - ty) > double.Epsilon)
+            {
+                _surface.UpdateLayout();
+                _viewer.UpdateLayout();
+                maxH = _viewer.ScrollableWidth;
+                maxV = _viewer.ScrollableHeight;
+            }
+
+            _viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(tx, 0, maxH));
+            _viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(ty, 0, maxV));
+        }
+        else
+        {
+            tree.Layout.Scale = new Scale(next, next);
+        }
     }
 
     private static void LoadTree(TreeViewModel tree)

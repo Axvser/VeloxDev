@@ -307,7 +307,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        var host = EnumerateVisualAncestors(source).OfType<FrameworkElement>().FirstOrDefault(GetIsEnabled);
+        // The wheel handler is hooked to the surface host itself (HookZoom), so the sender IS a
+        // candidate host — include it, because EnumerateVisualAncestors starts from the visual parent
+        // and would skip it, making zoom dead when the surface element is the enabled host.
+        var host = GetIsEnabled(source)
+            ? source
+            : EnumerateVisualAncestors(source).OfType<FrameworkElement>().FirstOrDefault(GetIsEnabled);
         if (host is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
         {
             return;
@@ -318,12 +323,67 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        // Scale is a collapse factor: higher Scale renders nodes smaller (zoom out), so wheel-up
-        // (delta > 0) zooms in by dividing Scale and wheel-down zooms out by multiplying it.
-        var factor = e.Delta > 0 ? 1 / 1.1 : 1.1;
-        var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
-        viewModel.Layout.Scale = new Scale(next, next);
+        ZoomBy(host, viewModel, e.Delta > 0 ? 1 / 1.1 : 1.1);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Scales the workflow about the world point currently under the viewport center, keeping that
+    /// point on-screen (the <see cref="ZoomCenter.ViewportCenter"/> contract). Pure <see cref="Scale"/>
+    /// change would collapse every node toward the world origin, so a node centered under the viewport
+    /// would visibly drift off-center on every notch — this captures the pivot, collapses about it and
+    /// re-centers the scroll so the pivot stays put. Scale is a collapse factor: higher Scale renders
+    /// nodes smaller (zoom out), so zooming in divides Scale and zooming out multiplies it.
+    /// </summary>
+    /// <param name="host">The surface element that carries the <see cref="IsEnabledProperty"/> attached
+    /// state (and its resolved <see cref="ScrollViewer"/>); pass the element returned by the enabled
+    /// host resolution.</param>
+    /// <param name="viewModel">The workflow tree being zoomed.</param>
+    /// <param name="factor">The scale multiplier to apply (1/1.1 zoom-in, 1.1 zoom-out).</param>
+    public static void ZoomBy(FrameworkElement host, IWorkflowTreeViewModel viewModel, double factor)
+    {
+        var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
+        var layout = viewModel.Layout;
+
+        if (layout.ZoomCenter == ZoomCenter.ViewportCenter
+            && host.GetValue(StateProperty) is SurfaceState state
+            && state.ScrollViewer is { } sv)
+        {
+            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, layout);
+            layout.CollapsePivot = new Anchor(wx, wy, 0);
+            layout.Scale = new Scale(next, next);
+
+            // Re-layout so the ScrollViewer adopts the new extent BEFORE reading ScrollableWidth/Height.
+            // Otherwise the clamp lands against the stale extent and the next wheel tick re-captures the
+            // off-center pivot — the compounding drift reads as zoom jitter.
+            ApplyLayout(host, state);
+            sv.UpdateLayout();
+
+            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, sv.ViewportWidth, sv.ViewportHeight);
+            var maxH = sv.ScrollableWidth;
+            var maxV = sv.ScrollableHeight;
+
+            // Overscroll-expand the canvas so the pivot is always reachable; a plain clamp would push
+            // the pivot off-center and drift on each notch. The canvas geometry is untouched by the
+            // zoom (ActualOffset == NegativeOffset, fixed) — only the scroll moves.
+            var newX = WorkflowSurfaceMath.ClampScrollOffset(tx, maxH, layout, horizontal: true);
+            var newY = WorkflowSurfaceMath.ClampScrollOffset(ty, maxV, layout, horizontal: false);
+            if (Math.Abs(newX - tx) > double.Epsilon || Math.Abs(newY - ty) > double.Epsilon)
+            {
+                ApplyLayout(host, state);
+                sv.UpdateLayout();
+                maxH = sv.ScrollableWidth;
+                maxV = sv.ScrollableHeight;
+            }
+
+            sv.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(tx, 0, maxH));
+            sv.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(ty, 0, maxV));
+        }
+        else
+        {
+            layout.Scale = new Scale(next, next);
+        }
         System.Diagnostics.Debug.WriteLine($"[WorkflowSurfaceBehavior] zoom wheel -> Scale {next}");
     }
 

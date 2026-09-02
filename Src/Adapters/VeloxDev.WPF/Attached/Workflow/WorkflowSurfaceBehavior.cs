@@ -303,7 +303,55 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
-        viewModel.Layout.Scale = new Scale(next, next);
+        var layout = viewModel.Layout;
+
+        if (layout.ZoomCenter == ZoomCenter.ViewportCenter
+            && host.GetValue(StateProperty) is SurfaceState state
+            && state.ScrollViewer is { } sv)
+        {
+            // Capture the world point under the viewport center, collapse the nodes about it, then
+            // scroll so that point stays put: nodes near the viewport center remain visible while zooming.
+            // The canvas geometry is untouched by the zoom (ActualOffset == NegativeOffset, fixed) — only
+            // the scroll moves, so the canvas position never jitters.
+            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, layout);
+            layout.CollapsePivot = new Anchor(wx, wy, 0);
+            layout.Scale = new Scale(next, next);
+
+            // Let the ScrollViewer adopt the (possibly auto-extended) extent BEFORE reading the max.
+            // Zoom-in below scale 1 grows the canvas, zoom-out may shrink it; the clamp must see the
+            // settled extent or the pivot lands off-center and the next tick re-captures the drift.
+            ApplyLayout(host, state);
+            state.Canvas?.UpdateLayout();
+            sv.UpdateLayout();
+            host.UpdateLayout();
+
+            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, sv.ViewportWidth, sv.ViewportHeight);
+            var maxH = GetHorizontalScrollMaximum(sv);
+            var maxV = GetVerticalScrollMaximum(sv);
+
+            // Overscroll-expand the canvas (same mechanism as panning past an edge) so the pivot is
+            // always reachable; a plain clamp would push the pivot off-center and drift on each tick.
+            var newX = WorkflowSurfaceMath.ClampScrollOffset(tx, maxH, layout, horizontal: true);
+            var newY = WorkflowSurfaceMath.ClampScrollOffset(ty, maxV, layout, horizontal: false);
+            if (Math.Abs(newX - tx) > double.Epsilon || Math.Abs(newY - ty) > double.Epsilon)
+            {
+                // Expansion changed the extent; re-apply and re-read the max so tx/ty land inside it.
+                ApplyLayout(host, state);
+                state.Canvas?.UpdateLayout();
+                sv.UpdateLayout();
+                host.UpdateLayout();
+                maxH = GetHorizontalScrollMaximum(sv);
+                maxV = GetVerticalScrollMaximum(sv);
+            }
+
+            sv.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(tx, 0, maxH));
+            sv.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(ty, 0, maxV));
+        }
+        else
+        {
+            layout.Scale = new Scale(next, next);
+        }
         e.Handled = true;
     }
 

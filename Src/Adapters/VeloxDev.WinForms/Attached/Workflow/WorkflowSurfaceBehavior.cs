@@ -58,7 +58,24 @@ public sealed class WorkflowSurfaceBehavior
             var delta = unchecked((short)((uint)m.WParam.ToInt64() >> 16));
             var factor = delta > 0 ? 1.1 : 1 / 1.1;
             var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
-            tree.Layout.Scale = new Scale(next, next);
+            var layout = tree.Layout;
+
+            if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
+            {
+                var scrollOffset = ResolveScrollOffset(host, tree);
+                var clientSize = ResolveClientSize(host);
+                var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                    scrollOffset.Horizontal, scrollOffset.Vertical, clientSize.Width, clientSize.Height, layout);
+                layout.CollapsePivot = new Anchor(wx, wy, 0);
+                layout.Scale = new Scale(next, next);
+                var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, clientSize.Width, clientSize.Height);
+                ApplyScrollOffset(host, tx, ty);
+                Refresh(host);
+            }
+            else
+            {
+                layout.Scale = new Scale(next, next);
+            }
 
             m.Result = IntPtr.Zero;
             return true; // swallow the message: the target control never scrolls
@@ -182,7 +199,24 @@ public sealed class WorkflowSurfaceBehavior
 
         var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
         var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
-        tree.Layout.Scale = new Scale(next, next);
+        var layout = tree.Layout;
+
+        if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
+        {
+            var scrollOffset = ResolveScrollOffset(control, tree);
+            var clientSize = ResolveClientSize(control);
+            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                scrollOffset.Horizontal, scrollOffset.Vertical, clientSize.Width, clientSize.Height, layout);
+            layout.CollapsePivot = new Anchor(wx, wy, 0);
+            layout.Scale = new Scale(next, next);
+            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, clientSize.Width, clientSize.Height);
+            ApplyScrollOffset(control, tx, ty);
+            Refresh(control);
+        }
+        else
+        {
+            layout.Scale = new Scale(next, next);
+        }
 
         // Mark the wheel event handled so the Ctrl+wheel gesture only zooms — without this the
         // MouseWheel bubbles up to the AutoScroll parent and scrolls the viewport while zooming.
@@ -459,13 +493,120 @@ public sealed class WorkflowSurfaceBehavior
 
     private static Offset ResolveScrollOffset(Control host, IWorkflowTreeViewModel? tree)
     {
+        // Effective scroll = the negative of the host's world-origin translate (pan), so
+        // WorldAtViewportCenter sees scroll space consistent with node positioning. The node views
+        // sit at node.Anchor + pan (+ ActualOffset for hosts that translate the content separately),
+        // never at node.Anchor + ViewportOffset — falling back to ViewportOffset double-subtracts
+        // the content offset and makes the captured pivot drift on every wheel notch.
         if (host is ScrollableControl scrollable && scrollable.AutoScroll)
         {
-            return new Offset(-scrollable.AutoScrollPosition.X, -scrollable.AutoScrollPosition.Y);
+            // Full demo host: node translate = _panOffset + AutoScrollPosition; the scroll range
+            // is clamped >= 0, so the pivot can only be reached within it (overscroll clamps).
+            var pan = ResolvePanOffset(host) ?? new System.Drawing.Point();
+            return new Offset(-(pan.X + scrollable.AutoScrollPosition.X), -(pan.Y + scrollable.AutoScrollPosition.Y));
         }
 
-        // Fall back to the persisted viewport offset when no scrollable container is exposed.
+        // Signed-pan host (template / Trimmed demo): the canvas stays fixed over the viewport and
+        // node views are positioned at node.Anchor + PanOffset, so effective scroll = -PanOffset.
+        var signedPan = ResolvePanOffset(host);
+        if (signedPan is not null)
+        {
+            return new Offset(-signedPan.Value.X, -signedPan.Value.Y);
+        }
+
+        // No pan translate exposed: fall back to the persisted viewport offset (world space).
         return tree?.Layout?.ViewportOffset ?? new Offset();
+    }
+
+    /// <summary>
+    /// Applies a ViewportCenter-zoom scroll (effective scroll space) back into the host's pan
+    /// translate. Mirrors the capture path in <see cref="ResolveScrollOffset"/>: an AutoScroll host
+    /// receives AutoScrollPosition (negative-signed getter), a signed-pan host receives the scroll
+    /// through its own OnMinimapScrollRequested(sx, sy) → _panOffset = (-sx, -sy) + ApplyPan — the
+    /// exact "put world point (sx, sy) at the viewport origin" contract the recenter needs. Going
+    /// through the host keeps the private pan field, node positions, grid/minimap and viewport all
+    /// consistent — writing the canvas PanOffset property directly would be clobbered by the
+    /// deferred ApplyPan the Layout property change schedules.
+    /// </summary>
+    private static void ApplyScrollOffset(Control host, double x, double y)
+    {
+        if (host is ScrollableControl scrollable && scrollable.AutoScroll)
+        {
+            // WinForms AutoScrollPosition setter negates its argument (getter = −setter), and the
+            // node translate includes the pan offset, so to land the effective scroll at (x, y)
+            // the setter must receive (x + panOffset). Verify: getter scr = −(x + pan), effective
+            // scroll = −(pan + scr) = x. The (x + pan) shape mirrors the demo's own minimap
+            // compensation (_panOffset = −sx − scroll → setter = sx + panOffset).
+            var pan = ResolvePanOffset(host) ?? new System.Drawing.Point();
+            scrollable.AutoScrollPosition = new System.Drawing.Point((int)Math.Round(x + pan.X), (int)Math.Round(y + pan.Y));
+            return;
+        }
+
+        // Signed-pan host: recenter via its minimap-scroll handler (same "_panOffset = (-sx, -sy);
+        // ApplyPan()" logic as panning). Skip the full demo (AutoScroll) — handled above — and any
+        // control whose handler would recurse into the message filter.
+        var target = ResolveNamedCanvas(host) ?? host;
+        for (var p = target; p is not null; p = p.Parent)
+        {
+            var method = p.GetType().GetMethod(
+                "OnMinimapScrollRequested",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+                binder: null,
+                new[] { typeof(double), typeof(double) },
+                modifiers: null);
+            if (method is not null)
+            {
+                try
+                {
+                    method.Invoke(p, new object[] { x, y });
+                }
+                catch
+                {
+                    // Best-effort; the refresh cycle after this still re-pushes the viewport.
+                }
+
+                return;
+            }
+        }
+    }
+
+    /// <summary>Resolves the named canvas configured on the host state, if any.</summary>
+    private static Control? ResolveNamedCanvas(Control host)
+    {
+        var state = GetState(host);
+        return !string.IsNullOrWhiteSpace(state.CanvasName) ? FindControlByName(host, state.CanvasName!) : null;
+    }
+
+    /// <summary>
+    /// Reads the signed pan translate a host exposes as a <c>Point PanOffset</c> property (the
+    /// template / Trimmed demo surface canvas) or keeps in a private <c>_panOffset</c> field (the
+    /// full demo's self-drawn canvas). Same reflective lookup as the node-view template's
+    /// <c>GetCanvasPanOffset</c> — the surface canvas is a private nested control, so the adapter
+    /// cannot name its type. Returns <see langword="null"/> when no pan translate exists.
+    /// </summary>
+    private static System.Drawing.Point? ResolvePanOffset(Control host)
+    {
+        // The pan translate lives on the named canvas (the host tree-view owns it privately and
+        // pushes it in ApplyPan), so start the reflection from the canvas, not the host.
+        var canvas = ResolveNamedCanvas(host);
+        for (var p = canvas ?? host; p is not null; p = p.Parent)
+        {
+            var property = p.GetType().GetProperty("PanOffset");
+            if (property?.CanRead == true && property.PropertyType == typeof(System.Drawing.Point))
+            {
+                return (System.Drawing.Point)property.GetValue(p)!;
+            }
+
+            // Full demo (self-drawn canvas): the pan lives in a private _panOffset field.
+            var field = p.GetType().GetField(
+                "_panOffset", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (field?.FieldType == typeof(System.Drawing.Point))
+            {
+                return (System.Drawing.Point)field.GetValue(p)!;
+            }
+        }
+
+        return null;
     }
 
     private static System.Drawing.Size ResolveClientSize(Control host)

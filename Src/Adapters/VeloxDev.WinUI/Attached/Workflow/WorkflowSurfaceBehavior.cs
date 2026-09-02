@@ -317,7 +317,54 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var delta = e.GetCurrentPoint(source as UIElement ?? host).Properties.MouseWheelDelta;
         var factor = delta > 0 ? 1.1 : 1 / 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
-        viewModel.Layout.Scale = new Scale(next, next);
+        var layout = viewModel.Layout;
+
+        if (layout.ZoomCenter == ZoomCenter.ViewportCenter
+            && host.GetValue(StateProperty) is SurfaceState state
+            && state.ScrollViewer is { } sv)
+        {
+            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, layout);
+            layout.CollapsePivot = new Anchor(wx, wy, 0);
+            layout.Scale = new Scale(next, next);
+
+            // Force a layout pass so the ScrollViewer adopts the new extent BEFORE we land the scroll.
+            // Otherwise ChangeView clamps against the stale extent, the pivot lands off-center, and the
+            // next wheel notch re-captures from that error — the compounding drift reads as zoom jitter.
+            ApplyLayout(host, state);
+            state.Canvas?.UpdateLayout();
+            sv.UpdateLayout();
+            host.UpdateLayout();
+
+            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, sv.ViewportWidth, sv.ViewportHeight);
+            var maxH = GetHorizontalScrollMaximum(sv);
+            var maxV = GetVerticalScrollMaximum(sv);
+
+            // Overscroll-expand the canvas so the pivot is always reachable; a plain clamp would push
+            // the pivot off-center and drift on each notch. The canvas geometry is untouched by the
+            // zoom (ActualOffset == NegativeOffset, fixed) — only the scroll moves.
+            var newX = WorkflowSurfaceMath.ClampScrollOffset(tx, maxH, layout, horizontal: true);
+            var newY = WorkflowSurfaceMath.ClampScrollOffset(ty, maxV, layout, horizontal: false);
+            if (Math.Abs(newX - tx) > double.Epsilon || Math.Abs(newY - ty) > double.Epsilon)
+            {
+                ApplyLayout(host, state);
+                state.Canvas?.UpdateLayout();
+                sv.UpdateLayout();
+                host.UpdateLayout();
+                maxH = GetHorizontalScrollMaximum(sv);
+                maxV = GetVerticalScrollMaximum(sv);
+            }
+
+            sv.ChangeView(
+                WorkflowSurfaceMath.ClampValue(tx, 0, maxH),
+                WorkflowSurfaceMath.ClampValue(ty, 0, maxV),
+                null,
+                disableAnimation: true);
+        }
+        else
+        {
+            layout.Scale = new Scale(next, next);
+        }
         e.Handled = true;
     }
 

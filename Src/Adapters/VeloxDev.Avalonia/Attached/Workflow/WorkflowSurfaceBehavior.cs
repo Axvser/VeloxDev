@@ -277,7 +277,49 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         var factor = e.Delta.Y > 0 ? 1.1 : 1 / 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
-        viewModel.Layout.Scale = new Scale(next, next);
+        var layout = viewModel.Layout;
+
+        if (layout.ZoomCenter == ZoomCenter.ViewportCenter
+            && host.GetValue(StateProperty) is SurfaceState state
+            && state.ScrollViewer is { } sv)
+        {
+            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                sv.Offset.X, sv.Offset.Y, sv.Viewport.Width, sv.Viewport.Height, layout);
+            layout.CollapsePivot = new Anchor(wx, wy, 0);
+            layout.Scale = new Scale(next, next);
+
+            // Re-layout so the ScrollViewer adopts the new extent BEFORE reading the max. Otherwise the
+            // clamp lands against the stale extent, the pivot lands off-center, and the next wheel tick
+            // re-captures from that error — the compounding drift reads as zoom jitter.
+            ApplyLayout(host, state);
+            sv.UpdateLayout();
+
+            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, sv.Viewport.Width, sv.Viewport.Height);
+            var maxH = GetHorizontalScrollMaximum(sv);
+            var maxV = GetVerticalScrollMaximum(sv);
+
+            // Overscroll-expand the canvas (same mechanism as panning past an edge) so the pivot is
+            // always reachable; a plain clamp would push the pivot off-center and drift on each tick.
+            // The canvas geometry is untouched by the zoom (ActualOffset == NegativeOffset, fixed) —
+            // only the scroll moves.
+            var newX = WorkflowSurfaceMath.ClampScrollOffset(tx, maxH, layout, horizontal: true);
+            var newY = WorkflowSurfaceMath.ClampScrollOffset(ty, maxV, layout, horizontal: false);
+            if (Math.Abs(newX - tx) > double.Epsilon || Math.Abs(newY - ty) > double.Epsilon)
+            {
+                ApplyLayout(host, state);
+                sv.UpdateLayout();
+                maxH = GetHorizontalScrollMaximum(sv);
+                maxV = GetVerticalScrollMaximum(sv);
+            }
+
+            sv.Offset = new Vector(
+                WorkflowSurfaceMath.ClampValue(tx, 0, maxH),
+                WorkflowSurfaceMath.ClampValue(ty, 0, maxV));
+        }
+        else
+        {
+            layout.Scale = new Scale(next, next);
+        }
         e.Handled = true;
     }
 

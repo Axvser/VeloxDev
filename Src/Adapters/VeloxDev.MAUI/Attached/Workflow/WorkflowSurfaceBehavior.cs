@@ -471,10 +471,75 @@ public sealed class WorkflowSurfaceBehavior
         var delta = e.GetCurrentPoint(source).Properties.MouseWheelDelta;
         var factor = delta > 0 ? 1.1 : 1 / 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
-        viewModel.Layout.Scale = new Scale(next, next);
+        var layout = viewModel.Layout;
+
+        if (layout.ZoomCenter == ZoomCenter.ViewportCenter && state.ScrollViewer is { } sv)
+        {
+            // Capture the world point under the viewport center, collapse about it, then recenter the
+            // scroll via the deferred async path (MAUI's native extent re-measures asynchronously).
+            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                sv.ScrollX, sv.ScrollY, sv.Width, sv.Height, layout);
+            layout.CollapsePivot = new Anchor(wx, wy, 0);
+            layout.Scale = new Scale(next, next);
+            RecenterOnWorldPointAsync(control, state, wx, wy);
+        }
+        else
+        {
+            layout.Scale = new Scale(next, next);
+        }
         e.Handled = true;
     }
 #endif
+
+    /// <summary>
+    /// Fire-and-forget recenter after a viewport-center zoom: sets the scroll so the world point
+    /// <paramref name="worldX"/>/<paramref name="worldY"/> (the pivot the nodes just collapsed about)
+    /// sits at the viewport center. Reads the native scroll and viewport AFTER yielding so MAUI's
+    /// async layout has settled on the new scale/pivot.
+    /// </summary>
+    private static async void RecenterOnWorldPointAsync(ContentView host, SurfaceState state, double worldX, double worldY)
+    {
+        try
+        {
+            if (state.ScrollViewer is null)
+            {
+                return;
+            }
+
+            await Task.Yield();
+
+            var viewModel = ResolveTreeViewModel(host, state);
+            if (viewModel is null)
+            {
+                return;
+            }
+
+            var svW = double.IsNaN(state.ScrollViewer.Width) ? 1 : state.ScrollViewer.Width;
+            var svH = double.IsNaN(state.ScrollViewer.Height) ? 1 : state.ScrollViewer.Height;
+            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(worldX, worldY, viewModel.Layout, svW, svH);
+            // Overscroll-expand the canvas so the pivot is always reachable; a plain clamp would push
+            // the pivot off-center and the next wheel tick re-captures the drift as jitter.
+            _ = WorkflowSurfaceMath.ClampScrollOffset(tx, GetHorizontalScrollMaximum(state), viewModel.Layout, horizontal: true);
+            _ = WorkflowSurfaceMath.ClampScrollOffset(ty, GetVerticalScrollMaximum(state), viewModel.Layout, horizontal: false);
+            tx = Math.Max(0, Math.Min(tx, GetHorizontalScrollMaximum(state)));
+            ty = Math.Max(0, Math.Min(ty, GetVerticalScrollMaximum(state)));
+
+            if (!double.IsFinite(tx)) tx = 0;
+            if (!double.IsFinite(ty)) ty = 0;
+
+            if (Math.Abs(state.ScrollViewer.ScrollX - tx) > 0.5
+                || Math.Abs(state.ScrollViewer.ScrollY - ty) > 0.5)
+            {
+                await state.ScrollViewer.ScrollToAsync(tx, ty, false);
+            }
+
+            UpdateVisibleRegion(host, state);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[WorkflowSurfaceBehavior] RecenterAfterZoom error: {ex.Message}");
+        }
+    }
 
     private static void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
     {
@@ -502,7 +567,19 @@ public sealed class WorkflowSurfaceBehavior
                 break;
             case GestureStatus.Running:
                 var factor = Math.Max(0.1, Math.Min(10, state.ZoomStartScale * e.Scale));
-                tree.Layout.Scale = new Scale(factor, factor);
+                var layout = tree.Layout;
+                if (layout.ZoomCenter == ZoomCenter.ViewportCenter && state.ScrollViewer is { } sv)
+                {
+                    var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                        sv.ScrollX, sv.ScrollY, sv.Width, sv.Height, layout);
+                    layout.CollapsePivot = new Anchor(wx, wy, 0);
+                    layout.Scale = new Scale(factor, factor);
+                    RecenterOnWorldPointAsync(host, state, wx, wy);
+                }
+                else
+                {
+                    layout.Scale = new Scale(factor, factor);
+                }
                 break;
         }
     }
