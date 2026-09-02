@@ -192,7 +192,9 @@ public class CanvasLayoutTests
     [TestMethod]
     public void ScaleChange_DoesNotAffectActualSizeOrOffset()
     {
-        var layout = new CanvasLayout();
+        // World-origin mode is pinned here: Scale must not change the extent (nodes collapse per-node,
+        // the canvas stays the same size). ViewportCenter mode does change the extent by design.
+        var layout = new CanvasLayout { ZoomCenter = ZoomCenter.WorldOrigin };
         layout.NegativeOffset = new Offset(50, 30);
         var widthBefore = layout.ActualSize.Width;
         var heightBefore = layout.ActualSize.Height;
@@ -230,5 +232,144 @@ public class CanvasLayoutTests
         var adapted = layout.AdaptTo(new Size(3000, 2000));
         Assert.AreEqual(2d, adapted.Scale.Horizontal);
         Assert.AreEqual(2d, adapted.Scale.Vertical);
+    }
+
+    // ── ZoomCenter + CollapsePivot ───────────────────────────────────────────
+
+    [TestMethod]
+    public void ZoomCenter_DefaultIsViewportCenter()
+    {
+        // The CanvasLayout default is ViewportCenter (the product default the user selected).
+        var layout = new CanvasLayout();
+        Assert.AreEqual(ZoomCenter.ViewportCenter, layout.ZoomCenter);
+    }
+
+    [TestMethod]
+    public void ZoomCenter_CanBeSet()
+    {
+        var layout = new CanvasLayout { ZoomCenter = ZoomCenter.WorldOrigin };
+        Assert.AreEqual(ZoomCenter.WorldOrigin, layout.ZoomCenter);
+    }
+
+    [TestMethod]
+    public void CollapsePivot_DefaultIsZero()
+    {
+        var layout = new CanvasLayout();
+        Assert.AreEqual(0d, layout.CollapsePivot.Horizontal);
+        Assert.AreEqual(0d, layout.CollapsePivot.Vertical);
+    }
+
+    [TestMethod]
+    public void CollapsePivot_CanBeSet()
+    {
+        var layout = new CanvasLayout();
+        layout.CollapsePivot = new Anchor(270, 190, 0);
+        Assert.AreEqual(270d, layout.CollapsePivot.Horizontal);
+        Assert.AreEqual(190d, layout.CollapsePivot.Vertical);
+    }
+
+    [TestMethod]
+    public void CollapsePivot_DoesNotChangeActualSize_OrUpdateIt()
+    {
+        var layout = new CanvasLayout();
+        layout.NegativeOffset = new Offset(50, 30);
+        var widthBefore = layout.ActualSize.Width;
+        var heightBefore = layout.ActualSize.Height;
+        var raised = false;
+        layout.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(CanvasLayout.ActualSize)) raised = true; };
+
+        // The adapter writes the pivot immediately before Scale in one gesture; a pivot-only change
+        // must not resize the canvas or re-raise ActualSize.
+        layout.CollapsePivot = new Anchor(270, 190, 0);
+        Assert.AreEqual(widthBefore, layout.ActualSize.Width);
+        Assert.AreEqual(heightBefore, layout.ActualSize.Height);
+        Assert.IsFalse(raised, "a pivot-only write must not re-raise ActualSize");
+    }
+
+    [TestMethod]
+    public void Equals_DifferentZoomCenter_ReturnsFalse()
+    {
+        var a = new CanvasLayout { ZoomCenter = ZoomCenter.WorldOrigin };
+        var b = new CanvasLayout { ZoomCenter = ZoomCenter.ViewportCenter };
+        Assert.IsFalse(a.Equals(b));
+    }
+
+    [TestMethod]
+    public void Clone_PreservesZoomCenterAndPivot()
+    {
+        var layout = new CanvasLayout
+        {
+            ZoomCenter = ZoomCenter.ViewportCenter,
+            CollapsePivot = new Anchor(270, 190, 0),
+        };
+        var clone = (CanvasLayout)layout.Clone();
+        Assert.AreEqual(ZoomCenter.ViewportCenter, clone.ZoomCenter);
+        Assert.AreEqual(270d, clone.CollapsePivot.Horizontal);
+        Assert.AreEqual(190d, clone.CollapsePivot.Vertical);
+
+        clone.CollapsePivot = new Anchor(1, 1, 0);
+        Assert.AreEqual(270d, layout.CollapsePivot.Horizontal);
+    }
+
+    [TestMethod]
+    public void ViewportCenter_ScaleHalf_ExtentCoversCollapsedContent()
+    {
+        // Zoom-in auto-extends: Scale 0.5 → collapsed content grows by 1/0.5 = 2×, so the extent is
+        // base×2 = [0,3840]. ActualOffset stays == NegativeOffset (zoom never translates the canvas).
+        var layout = new CanvasLayout
+        {
+            ZoomCenter = ZoomCenter.ViewportCenter,
+            CollapsePivot = new Anchor(300, 200, 0),
+            Scale = new Scale(0.5, 0.5),
+        };
+        Assert.AreEqual(1920d * 2, layout.ActualSize.Width);   // [0,3840]
+        Assert.AreEqual(1080d * 2, layout.ActualSize.Height);  // [0,2160]
+        Assert.AreEqual(0d, layout.ActualOffset.Horizontal);
+        Assert.AreEqual(0d, layout.ActualOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void ViewportCenter_ScaleTwo_KeepsOriginExtent()
+    {
+        // Scale 2 collapses content toward the origin (which already fits), so the extent stays base.
+        // The canvas geometry is identical to WorldOrigin mode — zoom is purely a scroll change.
+        var layout = new CanvasLayout
+        {
+            ZoomCenter = ZoomCenter.ViewportCenter,
+            CollapsePivot = new Anchor(300, 200, 0),
+            Scale = new Scale(2, 2),
+        };
+        Assert.AreEqual(1920d, layout.ActualSize.Width);    // base
+        Assert.AreEqual(1080d, layout.ActualSize.Height);   // base
+        Assert.AreEqual(0d, layout.ActualOffset.Horizontal);
+        Assert.AreEqual(0d, layout.ActualOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void ViewportCenter_ScaleOne_MatchesOriginExtent()
+    {
+        // At scale 1 the pivot-aware extent reduces exactly to the world-origin extent: switching the
+        // enum while at rest must change nothing.
+        var vc = new CanvasLayout
+        {
+            ZoomCenter = ZoomCenter.ViewportCenter,
+            CollapsePivot = new Anchor(300, 200, 0),
+        };
+        var origin = new CanvasLayout { ZoomCenter = ZoomCenter.WorldOrigin };
+        Assert.AreEqual(origin.ActualSize.Width, vc.ActualSize.Width);
+        Assert.AreEqual(origin.ActualSize.Height, vc.ActualSize.Height);
+        Assert.AreEqual(origin.ActualOffset.Horizontal, vc.ActualOffset.Horizontal);
+        Assert.AreEqual(origin.ActualOffset.Vertical, vc.ActualOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void WorldOrigin_ScaleHalf_KeepsOriginExtent()
+    {
+        // World-origin mode is completely unaffected: extent is base*2, offset stays NegativeOffset.
+        var layout = new CanvasLayout { Scale = new Scale(0.5, 0.5) };
+        Assert.AreEqual(1920 * 2, layout.ActualSize.Width);
+        Assert.AreEqual(1080 * 2, layout.ActualSize.Height);
+        Assert.AreEqual(0d, layout.ActualOffset.Horizontal);
+        Assert.AreEqual(0d, layout.ActualOffset.Vertical);
     }
 }

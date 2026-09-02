@@ -54,6 +54,12 @@ public static class WorkflowSurfaceMath
     /// <paramref name="threshold"/> is a dead-band on the overshoot magnitude: the canvas only expands when
     /// the overshoot exceeds it. WPF/Avalonia/WinUI pass <c>0</c> (always expand); the MAUI minimap passes
     /// <c>0.5</c> to avoid expanding for sub-pixel jitter.
+    ///
+    /// The canvas geometry is identical in both zoom modes (nodes always collapse toward the world origin;
+    /// <see cref="CanvasLayout.ActualOffset"/> == NegativeOffset, extent = world + auto-extend), so the
+    /// overshoot is written 1:1 in both. Viewport-center zoom never translates the canvas — it keeps the
+    /// pivot under the viewport center purely by scrolling, and growing the offset by <c>excess</c> makes
+    /// the exact centering scroll reachable.
     /// </summary>
     public static double ClampScrollOffset(double desired, double max, CanvasLayout layout, bool horizontal, double threshold = 0d)
     {
@@ -232,6 +238,64 @@ public static class WorkflowSurfaceMath
         => (worldX - viewportWidth / 2 + contentOffsetX, worldY - viewportHeight / 2 + contentOffsetY);
 
     /// <summary>
+    /// Scroll-space coordinates of the center of the currently visible viewport:
+    /// <c>center = scrollOffset + viewportSize/2</c>. This is the point whose world position a
+    /// viewport-center zoom keeps fixed (<see cref="LayoutPivot"/>). Clamped to the scrollable
+    /// range so it stays meaningful even before the surface lays out.
+    /// </summary>
+    public static (double X, double Y) ScrollCenter(double scrollX, double scrollY, double viewportWidth, double viewportHeight)
+        => (scrollX + viewportWidth / 2, scrollY + viewportHeight / 2);
+
+    /// <summary>
+    /// The world point currently under the center of the visible viewport, through the layout's coordinate
+    /// chain. Nodes always render at canvas-local origin-collapsed <c>world/scale</c>; the surface
+    /// translates by <see cref="CanvasLayout.ActualOffset"/> and the scroll offset subtracts, so the
+    /// collapsed coordinate at the viewport center is <c>screenCenter − ActualOffset</c>, and inverting
+    /// the collapse gives <c>world = (screenCenter − ActualOffset)·scale</c>. In viewport-center mode the
+    /// adapter captures this world point, writes it as the new <see cref="CanvasLayout.CollapsePivot"/>,
+    /// and scrolls to <see cref="PivotCenterScroll"/> so it stays at the viewport center. The canvas
+    /// geometry is untouched by the zoom — only the scroll moves.
+    /// </summary>
+    public static (double WorldX, double WorldY) WorldAtViewportCenter(
+        double scrollX, double scrollY, double viewportWidth, double viewportHeight,
+        CanvasLayout layout)
+    {
+        var (cx, cy) = ScrollCenter(scrollX, scrollY, viewportWidth, viewportHeight);
+        var sx = layout.Scale.Horizontal == 0 ? 1 : layout.Scale.Horizontal;
+        var sy = layout.Scale.Vertical == 0 ? 1 : layout.Scale.Vertical;
+        return (
+            (cx - layout.ActualOffset.Horizontal) * sx,
+            (cy - layout.ActualOffset.Vertical) * sy);
+    }
+
+    /// <summary>
+    /// Scroll-space offset that puts the world <paramref name="pivotX"/>/<paramref name="pivotY"/> (the
+    /// <see cref="CanvasLayout.CollapsePivot"/>) at the center of a viewport of the given size. Nodes
+    /// appear at <c>world/scale + ActualOffset − scroll</c>, so <c>scroll = pivot/scale + ActualOffset − viewportSize/2</c>.
+    /// The canvas is not translated or resized by the zoom — <see cref="CanvasLayout.ActualOffset"/>
+    /// stays == NegativeOffset, so this scroll target is the only thing that moves.
+    /// </summary>
+    public static (double X, double Y) PivotCenterScroll(
+        double pivotX, double pivotY, CanvasLayout layout,
+        double viewportWidth, double viewportHeight)
+    {
+        var sx = layout.Scale.Horizontal == 0 ? 1 : layout.Scale.Horizontal;
+        var sy = layout.Scale.Vertical == 0 ? 1 : layout.Scale.Vertical;
+        return (pivotX / sx + layout.ActualOffset.Horizontal - viewportWidth / 2,
+                pivotY / sy + layout.ActualOffset.Vertical - viewportHeight / 2);
+    }
+
+    /// <summary>
+    /// The collapse pivot the layout currently anchors: <see cref="CanvasLayout.CollapsePivot"/> in
+    /// ViewportCenter mode, otherwise the world origin. This is the world point whose screen position a
+    /// viewport-center zoom keeps fixed.
+    /// </summary>
+    public static Anchor LayoutPivot(CanvasLayout layout)
+        => layout.ZoomCenter == ZoomCenter.ViewportCenter
+            ? new Anchor(layout.CollapsePivot.Horizontal, layout.CollapsePivot.Vertical, 0)
+            : new Anchor(0, 0, 0);
+
+    /// <summary>
     /// Floors a minimap thumbnail size to a minimum pixel count: <c>max(min, size · scale)</c>.
     /// Every minimap inlined this to keep tiny nodes visible (WinForms/MAUI/Avalonia/WPF/WinUI
     /// used 2, Jalium/Razor used 1).
@@ -239,7 +303,7 @@ public static class WorkflowSurfaceMath
     public static double MinThumbSize(double size, double scale, double min)
         => Math.Max(min, size * scale);
 
-    // ── ⑥ Scale (collapse toward the world origin) ──────────────────────────
+    // ── ⑥ Scale (collapse toward the world origin / viewport-center pivot) ──────
 
     /// <summary>
     /// Per-node scale factor used to collapse the node toward the world origin <c>(0,0)</c>: a node whose

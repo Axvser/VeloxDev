@@ -32,7 +32,9 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
     private readonly WorkflowNodeScaleTracker _scaleTracker = new();
 
     // Anchor/Size are hand-written (not [VeloxProperty]) so their getters can collapse toward the
-    // world origin by the layout scale. The stored fields keep the original world values.
+    // world origin by the layout scale. The stored fields keep the original world values. The canvas
+    // geometry is the same in both zoom modes — ViewportCenter zoom keeps the pivot under the viewport
+    // center purely by scrolling, so the origin collapse here stays correct for both.
     public Anchor Anchor
     {
         get => anchor.Collapse(Parent?.Layout?.Scale);

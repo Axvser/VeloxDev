@@ -15,6 +15,10 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
 
     [VeloxProperty] private Offset viewportOffset = new(0, 0);
 
+    [VeloxProperty] private ZoomCenter zoomCenter = ZoomCenter.ViewportCenter;
+
+    [VeloxProperty] private Anchor collapsePivot = new(0, 0, 0);
+
     public CanvasLayout AdaptTo(
         Size targetOriginSize,
         out double suggestedViewportX,
@@ -27,6 +31,8 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
             NegativeOffset = new Offset(NegativeOffset.Horizontal, NegativeOffset.Vertical),
             Scale          = new Scale(Scale.Horizontal, Scale.Vertical),
             ViewportOffset = new Offset(ViewportOffset.Horizontal, ViewportOffset.Vertical),
+            ZoomCenter     = ZoomCenter,
+            CollapsePivot  = new Anchor(CollapsePivot.Horizontal, CollapsePivot.Vertical, CollapsePivot.Layer),
         };
 
         var newActualWidth  = targetOriginSize.Width  + PositiveOffset.Horizontal + NegativeOffset.Horizontal;
@@ -46,7 +52,8 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
            OriginSize == other.OriginSize &&
            PositiveOffset == other.PositiveOffset &&
            NegativeOffset == other.NegativeOffset &&
-           Scale == other.Scale;
+           Scale == other.Scale &&
+           ZoomCenter == other.ZoomCenter;
 
     public object Clone() => new CanvasLayout()
     {
@@ -55,6 +62,8 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
         NegativeOffset = new Offset(this.NegativeOffset.Horizontal, this.NegativeOffset.Vertical),
         Scale = new Scale(this.Scale.Horizontal, this.Scale.Vertical),
         ViewportOffset = new Offset(this.ViewportOffset.Horizontal, this.ViewportOffset.Vertical),
+        ZoomCenter = this.ZoomCenter,
+        CollapsePivot = new Anchor(this.CollapsePivot.Horizontal, this.CollapsePivot.Vertical, this.CollapsePivot.Layer),
     };
 
     public override bool Equals(object? obj)
@@ -64,14 +73,15 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
             return OriginSize == layout.OriginSize &&
                    PositiveOffset == layout.PositiveOffset &&
                    NegativeOffset == layout.NegativeOffset &&
-                   Scale == layout.Scale;
+                   Scale == layout.Scale &&
+                   ZoomCenter == layout.ZoomCenter;
         }
         return false;
     }
 
     public override int GetHashCode()
     {
-        return HashCode.Combine(OriginSize, PositiveOffset, NegativeOffset, Scale);
+        return HashCode.Combine(OriginSize, PositiveOffset, NegativeOffset, Scale, ZoomCenter);
     }
 
     [VeloxCommand]
@@ -82,6 +92,12 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
     }
     private void Update()
     {
+        // The canvas geometry is the same in both zoom modes: nodes always collapse toward the world
+        // origin (Anchor/Size getters divide by Scale), and the canvas sits at scroll −NegativeOffset
+        // with the world extent plus a zoom-in auto-extend. Viewport-center zoom keeps that geometry
+        // and moves the viewport instead — the collapse pivot's world point is held under the viewport
+        // center purely by scrolling (WorkflowSurfaceMath.PivotCenterScroll), never by translating or
+        // resizing the canvas. Zoom therefore never makes the canvas itself move.
         var baseWidth = OriginSize.Width + PositiveOffset.Horizontal + NegativeOffset.Horizontal;
         var baseHeight = OriginSize.Height + PositiveOffset.Vertical + NegativeOffset.Vertical;
 
@@ -94,12 +110,9 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
 
         ActualSize.Width = baseWidth * sx;
         ActualSize.Height = baseHeight * sy;
+        ActualOffset = new Offset(NegativeOffset.Horizontal, NegativeOffset.Vertical);
+
         OnPropertyChanged(nameof(ActualSize));
-
-        var negativeLeft = NegativeOffset.Horizontal;
-        var negativeTop = NegativeOffset.Vertical;
-
-        ActualOffset = new Offset(negativeLeft, negativeTop);
     }
     partial void OnOriginSizeChanged(Size oldValue, Size newValue) => Update();
     partial void OnPositiveOffsetChanged(Offset oldValue, Offset newValue) => Update();
@@ -107,4 +120,9 @@ public sealed partial class CanvasLayout : ICloneable, IEquatable<CanvasLayout>
 
     /// <summary>Scale only affects per-node view transforms, not world-space layout; re-raise ActualSize/Offset so views refresh.</summary>
     partial void OnScaleChanged(Scale oldValue, Scale newValue) => Update();
+
+    /// <summary>CollapsePivot is written by the adapter immediately before Scale in one zoom gesture; the scale change that
+    /// follows recomputes the extent, so a pivot-only change must not also resize the canvas.</summary>
+    partial void OnCollapsePivotChanged(Anchor oldValue, Anchor newValue) { }
+    partial void OnZoomCenterChanged(ZoomCenter oldValue, ZoomCenter newValue) { }
 }
