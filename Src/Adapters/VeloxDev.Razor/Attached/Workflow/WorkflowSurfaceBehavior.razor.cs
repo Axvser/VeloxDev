@@ -171,18 +171,131 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         }
     }
 
-    /// <summary>JS wheel callback: -1 (zoom out) or +1 (zoom in).</summary>
+    /// <summary>
+    /// JS wheel callback. The argument is the signed wheel delta-y accumulated by the coalescing
+    /// wheel handler: a human fast-flick sends several wheel events inside one SignalR round-trip, so
+    /// the JS sums their deltas and we apply the NET count of notches here as compounding 1.1× steps
+    /// in a SINGLE call. Each step captures the same world pivot and collapses nodes about it, but
+    /// only the FINAL state is pushed to the DOM (one atomic <c>applyZoomSurface</c>), so a burst can
+    /// never paint an intermediate stale frame and no notches are lost. Positive delta = zoom in.
+    /// </summary>
     [JSInvokable]
-    public void OnWheelZoom(int direction)
+    public void OnWheelZoom(int wheelDelta)
     {
         if (Tree is null)
         {
             return;
         }
 
-        var factor = direction > 0 ? 1.1 : 1 / 1.1;
-        var next = Math.Max(0.1, Math.Min(10, Tree.Layout.Scale.Horizontal * factor));
-        Tree.Layout.Scale = new Scale(next, next);
+        var layout = Tree.Layout;
+
+        if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
+        {
+            // Capture the world point under the viewport center ONCE for the whole burst — the scroll
+            // state is unchanged until the single final apply, so the same pivot stays valid across
+            // every compounding step.
+            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                _scrollLeft - _offsetX, _scrollTop - _offsetY, _viewportW, _viewportH, layout);
+            layout.CollapsePivot = new Anchor(wx, wy, 0);
+
+            var notches = Math.Abs(wheelDelta) / 120d;
+            var count = (int)Math.Max(1, Math.Round(notches));
+            var factor = wheelDelta > 0 ? 1.1 : 1 / 1.1;
+
+            for (var i = 0; i < count; i++)
+            {
+                var next = Math.Max(0.1, Math.Min(10, layout.Scale.Horizontal * factor));
+                layout.Scale = new Scale(next, next);
+            }
+
+            // The canvas content auto-extends on zoom-in below scale 1 (ActualSize = world / scale),
+            // and clamping may grow NegativeOffset (content moves right/down). Push the new offset and
+            // the new extent to the DOM atomically with the scroll below; first compute the scroll
+            // against the post-change model extent exactly like the XAML adapters.
+            //
+            // Content width = the model ActualSize (the links layer) but at least the DOM host's
+            // currently-reachable width (_canvasW − edge) so an edge-pan-expanded host is never clamped
+            // shorter than what the user already scrolled to. The clamp max is the effective scroll
+            // extent (content − viewport), matching what the JS host will expose after we grow it.
+            var contentW = Math.Max(1, Math.Max(layout.ActualSize.Width, _canvasW - _offsetX));
+            var contentH = Math.Max(1, Math.Max(layout.ActualSize.Height, _canvasH - _offsetY));
+            var (tx0, ty0) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, _viewportW, _viewportH);
+            _ = WorkflowSurfaceMath.ClampScrollOffset(tx0, Math.Max(0, contentW - _viewportW), layout, horizontal: true);
+            _ = WorkflowSurfaceMath.ClampScrollOffset(ty0, Math.Max(0, contentH - _viewportH), layout, horizontal: false);
+
+            // The clamp may have grown NegativeOffset, which moved the content — re-derive the scroll
+            // from the NEW offset/scale/extent so the pivot lands exactly under the viewport center
+            // (first-pass PivotCenterScroll used the pre-clamp offset).
+            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, _viewportW, _viewportH);
+            tx = Math.Max(0, tx);
+            ty = Math.Max(0, ty);
+
+            // One atomic JS step: re-translate content to the new ActualOffset, grow the host so the
+            // scroll range covers the (possibly auto-extended) model content, then scroll — all in a
+            // single synchronous block the browser paints as one frame, so there is no intermediate
+            // frame where the world sits at the old translate under the new scroll (the old left-right
+            // flicker). Effective-space lengths: the JS adds its own edge reserve back.
+            //
+            // Node geometry joins the same atomic block: after Scale changed, every node's collapsed
+            // Anchor/Size getter (world / scale) is already correct, so we marshal them and the JS
+            // repositions the existing pooled wrappers synchronously here, then keeps re-asserting them
+            // (surfaceZoomState settle loop) until the async .NET per-node renders converge — so a
+            // stale render can never paint even one frame of old collapsed values.
+            if (_module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
+            {
+                _ = _module.InvokeVoidAsync("applyZoomSurface",
+                    ScrollViewerId,
+                    layout.ActualOffset.Horizontal, layout.ActualOffset.Vertical,
+                    contentW, contentH,
+                    tx, ty,
+                    NodeZoomGeometry());
+            }
+        }
+        else
+        {
+            var notches = Math.Abs(wheelDelta) / 120d;
+            var count = (int)Math.Max(1, Math.Round(notches));
+            var factor = wheelDelta > 0 ? 1.1 : 1 / 1.1;
+            for (var i = 0; i < count; i++)
+            {
+                var next = Math.Max(0.1, Math.Min(10, layout.Scale.Horizontal * factor));
+                layout.Scale = new Scale(next, next);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Marshals each node's collapsed geometry (world / scale) so JS can reposition the pooled
+    /// wrappers synchronously inside <c>applyZoomSurface</c> — the same browser frame as the scroll.
+    /// The node's <c>Anchor</c>/<c>Size</c> getters already return collapsed (post-scale) values once
+    /// <see cref="CanvasLayout.Scale"/> is set, so this needs no per-node scale bookkeeping here.
+    /// Marshaled as a <c>string[][]</c> (JS interop handles double[] cleanly but the wrapper contract
+    /// is stringly-typed like the slot-layout batches); the target element is resolved by the
+    /// <c>data-veloxdev-node-id</c> each wrapper renders, so no DOM-order assumption is needed.
+    /// </summary>
+    private string[][]? NodeZoomGeometry()
+    {
+        if (Tree?.Nodes is null) return null;
+
+        var batch = new List<string[]>(Tree.Nodes.Count);
+        foreach (var node in Tree.Nodes)
+        {
+            if (node is null) continue;
+            var id = WorkflowRuntimeIds.Get(node);
+            var anchor = node.Anchor;
+            var size = node.Size;
+            if (size.Width <= 0d || size.Height <= 0d) continue;
+            batch.Add(
+            [
+                id,
+                anchor.Horizontal.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                anchor.Vertical.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                size.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                size.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            ]);
+        }
+
+        return batch.Count == 0 ? null : batch.ToArray();
     }
 
     [JSInvokable]

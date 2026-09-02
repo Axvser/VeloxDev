@@ -3,6 +3,7 @@ using System.ComponentModel;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -47,6 +48,13 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
     // (immediate, compositor-friendly), so the Anchor PropertyChanged handler must NOT reposition or
     // re-render mid-drag — that would snap the node back to a stale .NET value each frame.
     private bool _isDragging;
+
+    /// <summary>
+    /// Stable per-node id rendered as <c>data-veloxdev-node-id</c> so the surface's JS
+    /// <c>applyZoomSurface</c> can map a collapsed-geometry array to this exact wrapper
+    /// (reference-stable across re-renders, like the slot ids).
+    /// </summary>
+    private string? NodeId => Node is null ? null : WorkflowRuntimeIds.Get(Node);
 
     private string WrapperStyle
     {

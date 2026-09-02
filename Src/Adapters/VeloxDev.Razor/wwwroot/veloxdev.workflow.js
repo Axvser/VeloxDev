@@ -85,6 +85,12 @@ window.veloxdevWorkflow = (() => {
     // too, or they collapse toward the edge instead of the world origin under workspace zoom.
     const surfaceLayouts = {};
 
+    // Per-surface host-size growers, keyed by scroller id. The workspace-zoom path (ensureCanvasSize)
+    // must grow the DOM canvas host when the model ActualSize auto-extends; the grow runs inside
+    // initSurface where it can report the new size back to .NET. Fallback path below sets the host
+    // style directly.
+    const surfaceSizers = {};
+
     function setMinimapMapping(scrollerId, scale, ox, oy, minX, minY, maxX, maxY) {
         minimapMappings[scrollerId] =
             (isFinite(scale) && scale > 0) ? { scale, ox, oy, minX, minY, maxX, maxY } : null;
@@ -171,6 +177,235 @@ window.veloxdevWorkflow = (() => {
         const axisYEl = host.querySelector('.veloxdev-wf-axis-y');
         if (axisYEl) axisYEl.style.top = gy + 'px';
     }
+
+    // Grows the canvas host to the given pixel size (grow-only) and reports the new size back to
+    // .NET. Called by the workspace-zoom path: zoom-in below scale 1 auto-extends the model
+    // ActualSize (the links layer re-renders larger), so the DOM scroll content must grow to match
+    // or the pivot-centering scroll clamps short of the model extent and the node drifts each notch.
+    function ensureCanvasSize(scrollerId, width, height) {
+        const grow = surfaceSizers[scrollerId];
+        if (grow) { grow(width, height); return; }
+        const el = document.getElementById(scrollerId);
+        if (!el) return;
+        const host = el.querySelector('.veloxdev-wf-canvas-host');
+        if (!host) return;
+        const w = Math.max(width || 0, host.offsetWidth || 0);
+        const h = Math.max(height || 0, host.offsetHeight || 0);
+        if (w !== (host.offsetWidth || 0) || h !== (host.offsetHeight || 0)) {
+            host.style.width = w + 'px';
+            host.style.height = h + 'px';
+        }
+    }
+
+    // Applies one node's collapsed geometry to its pooled wrapper + card in place. The wrapper is
+    // keyed by data-veloxdev-node-id (stable across re-renders); its child .veloxdev-wf-node-card is
+    // laid out at the DESIGN size (260x180 in NodeView) and uniformly scaled by collapsedWidth/260.
+    // This runs synchronously inside applyZoomSurface so node geometry lands in the SAME browser
+    // frame as the scroll step — never one async render behind it (the zoom flicker).
+    function applyNodeGeometry(nodeWrappers, geometry) {
+        if (!nodeWrappers || !geometry || !geometry.length) return;
+        for (let i = 0; i < geometry.length; i++) {
+            const g = geometry[i];
+            if (!g || g.length < 5) continue;
+            const el = nodeWrappers[g[0]];
+            if (!el) continue;
+            const left = parseFloat(g[1]); const top = parseFloat(g[2]);
+            const width = parseFloat(g[3]); const height = parseFloat(g[4]);
+            if (!(width > 0) || !(height > 0)) continue;
+            el.style.left = left + 'px';
+            el.style.top = top + 'px';
+            el.style.width = width + 'px';
+            el.style.height = height + 'px';
+            // Collapse the card to its DESIGN size (width/260 keeps a single source of truth that
+            // matches the NodeView ScaleCss: card scale == collapsed width / design width 260).
+            const card = el.querySelector('.veloxdev-wf-node-card');
+            if (card) {
+                const s = width / 260;
+                card.style.transform = 'scale(' + s.toFixed(4) + ')';
+                card.style.transformOrigin = 'top left';
+            }
+        }
+    }
+
+    // One atomic workspace-zoom step: re-translate content/grid/axis to the NEW layout offset, grow
+    // the canvas host to the auto-extended model content size, set the scroll, and reposition every
+    // node's pooled wrapper to its collapsed geometry — all in a single synchronous block so the
+    // browser paints them together. Without this, setting scrollLeft from .NET while the content
+    // translate is still the OLD value paints one frame with the wrapper in the old spot (a left-right
+    // jump every zoom notch), and a host that never grows leaves the pivot-centering scroll clamped
+    // short of the model extent (drift on every notch).
+    //
+    // All lengths except the layout offset are EFFECTIVE (canvas/world) lengths: the DOM translate
+    // = this edge reserve (st.edgeX) + layout offset, the host pixel width = st.edgeX + content width,
+    // and the scroll range must reach st.edgeX + contentW − viewport. JS owns the edge reserve, so it
+    // adds it here; .NET should never pass a raw host/scroll value built from its own (lagging) edge.
+    //
+    // nodeGeometry (optional, last) is a string[][] of [nodeId, collapsedLeft, collapsedTop,
+    // collapsedWidth, collapsedHeight] built by the .NET side AFTER Scale changed, so the values are
+    // already the post-collapse CSS lengths. The wrappers were found by scanning once per surface.
+    function applyZoomSurface(scrollerId, layoutX, layoutY, contentW, contentH, scrollX, scrollY, nodeGeometry) {
+        const el = document.getElementById(scrollerId);
+        if (!el) return;
+        const host = el.querySelector('.veloxdev-wf-canvas-host');
+        if (host) {
+            const st = surfaceLayouts[scrollerId];
+            const edgeX = st ? st.edgeX : 0;
+            const edgeY = st ? st.edgeY : 0;
+            // Translate the whole content + grid + axis block to the new layout offset BEFORE the
+            // scroll lands, so the world-to-viewport relationship is consistent in this frame.
+            const gx = edgeX + (layoutX || 0);
+            const gy = edgeY + (layoutY || 0);
+            const contentEl = host.querySelector('.veloxdev-wf-canvas-content');
+            if (contentEl) {
+                contentEl.style.left = gx + 'px';
+                contentEl.style.top = gy + 'px';
+            }
+            if (st) { st.layoutX = layoutX || 0; st.layoutY = layoutY || 0; }
+            const gridEl = host.querySelector('.veloxdev-wf-grid');
+            if (gridEl) gridEl.style.backgroundPosition = gx + 'px ' + gy + 'px';
+            const axisXEl = host.querySelector('.veloxdev-wf-axis-x');
+            if (axisXEl) axisXEl.style.left = gx + 'px';
+            const axisYEl = host.querySelector('.veloxdev-wf-axis-y');
+            if (axisYEl) axisYEl.style.top = gy + 'px';
+            // Grow the host to cover the auto-extended model content (grow-only; a re-render or a
+            // later edge-pan can only enlarge it further). The scroll range must reach the pivot.
+            const hostW = edgeX + (contentW || 0);
+            const hostH = edgeY + (contentH || 0);
+            const w = Math.max(hostW, host.offsetWidth || 0);
+            const h = Math.max(hostH, host.offsetHeight || 0);
+            if (w !== (host.offsetWidth || 0)) host.style.width = w + 'px';
+            if (h !== (host.offsetHeight || 0)) host.style.height = h + 'px';
+            // Reposition every node's pooled wrapper + card to the collapsed geometry in this same
+            // block (lazy map built once per surface) — the scroll below and these writes share a
+            // frame, so a fast wheel can never paint nodes at the old scale under the new scroll.
+            let nodeWrappers = surfaceNodeWrappers[scrollerId];
+            if (!nodeWrappers && nodeGeometry && nodeGeometry.length) {
+                const map = {};
+                const wrappers = host.querySelectorAll('.veloxdev-wf-node-drag');
+                for (let i = 0; i < wrappers.length; i++) {
+                    const id = wrappers[i].getAttribute('data-veloxdev-node-id');
+                    if (id) map[id] = wrappers[i];
+                }
+                nodeWrappers = map;
+                surfaceNodeWrappers[scrollerId] = map;
+            }
+            applyNodeGeometry(nodeWrappers, nodeGeometry);
+            // Apply the effective scroll (add the edge reserve the effective value already excluded).
+            el.scrollLeft = Math.max(0, edgeX + (scrollX || 0));
+            el.scrollTop = Math.max(0, edgeY + (scrollY || 0));
+            // Stamp this step's authoritative collapsed node geometry and (re)start the settle guard,
+            // so a stale async .NET node render that lands later (each node re-renders as its own
+            // SignalR message, and under a human fast-flick several zoom steps overlap server-side)
+            // can never paint even one frame of old collapsed values. The translate + host size +
+            // scroll were already written above and are JS-owned (async renders never touch them), so
+            // only node geometry needs guarding. stampedAt anchors a time-based settle tail below.
+            surfaceZoomState[scrollerId] = {
+                stampedAt: performance.now(),
+                geometry: nodeGeometry || null
+            };
+            scheduleZoomSettle(scrollerId);
+        }
+        // Report the settled DOM geometry (host size + scroll + offsets) back to .NET so its canvas
+        // bookkeeping is correct for the next zoom notch. Runs even when the scroll didn't move.
+        const reporter = surfaceReporters[scrollerId];
+        if (reporter) reporter();
+    }
+
+    // Per-surface node-wrapper lookup (by data-veloxdev-node-id), built lazily on the first zoom that
+    // carries node geometry. Cleared when the surface is disposed; a node added/removed mid-session is
+    // still found because applyNodeGeometry misses are harmless and the map re-syncs on the next zoom.
+    const surfaceNodeWrappers = {};
+
+    // Authoritative collapsed node geometry stamped by each applyZoomSurface step. A per-surface
+    // settle loop (scheduleZoomSettle) re-asserts it every animation frame for a short tail after the
+    // last zoom step, so a STALE async .NET node render that lands late (each node re-renders as its
+    // own SignalR message; when two zoom bursts overlap server-side, the first burst's renders can
+    // arrive after the second burst already applied) is overwritten before it can be composited —
+    // never a painted flash-back. Only node geometry is guarded: async renders never write the
+    // content translate, host size, or scroll (those are JS-owned), so re-asserting them would only
+    // risk fighting a user pan. Keyed by scroller id.
+    const surfaceZoomState = {};
+
+    // True while a surface's settle loop is running (one rAF chain per surface).
+    const surfaceSettleRunning = {};
+
+    // Re-asserts a surface's stamped collapsed node geometry onto the live wrappers. Returns true if
+    // any write actually changed the DOM (a stale async render landed and was corrected).
+    function applyZoomGeometrySettle(scrollerId) {
+        const z = surfaceZoomState[scrollerId];
+        const geometry = z ? z.geometry : null;
+        if (!geometry || !geometry.length) return false;
+        const el = document.getElementById(scrollerId);
+        if (!el) return false;
+        const host = el.querySelector('.veloxdev-wf-canvas-host');
+        if (!host) return false;
+        let nodeWrappers = surfaceNodeWrappers[scrollerId];
+        if (!nodeWrappers) {
+            const map = {};
+            const wrappers = host.querySelectorAll('.veloxdev-wf-node-drag');
+            for (let i = 0; i < wrappers.length; i++) {
+                const id = wrappers[i].getAttribute('data-veloxdev-node-id');
+                if (id) map[id] = wrappers[i];
+            }
+            nodeWrappers = map;
+            surfaceNodeWrappers[scrollerId] = map;
+        }
+        let dirty = false;
+        for (let i = 0; i < geometry.length; i++) {
+            const g = geometry[i];
+            if (!g || g.length < 5) continue;
+            const wEl = nodeWrappers[g[0]];
+            if (!wEl) continue;
+            const l = parseFloat(g[1]), t = parseFloat(g[2]);
+            const w = parseFloat(g[3]), h = parseFloat(g[4]);
+            if (!(w > 0) || !(h > 0)) continue;
+            const leftStr = l + 'px', topStr = t + 'px', wStr = w + 'px', hStr = h + 'px';
+            if (wEl.style.left !== leftStr) { wEl.style.left = leftStr; dirty = true; }
+            if (wEl.style.top !== topStr) { wEl.style.top = topStr; dirty = true; }
+            if (wEl.style.width !== wStr) { wEl.style.width = wStr; dirty = true; }
+            if (wEl.style.height !== hStr) { wEl.style.height = hStr; dirty = true; }
+            const card = wEl.querySelector('.veloxdev-wf-node-card');
+            if (card) {
+                const s = w / 260;
+                const tf = 'scale(' + s.toFixed(4) + ')';
+                const cur = card.style.transform;
+                if (cur !== tf && cur !== 'none') { card.style.transform = tf; dirty = true; }
+            }
+        }
+        return dirty;
+    }
+
+    // Keeps a surface's settle loop alive: every animation frame it re-asserts the stamped geometry
+    // so no stale async render can be painted, until the stamp has been stable for SETTLE_TAIL_MS
+    // after the LAST zoom step (a fresh applyZoomSurface re-stamps and extends the tail, so a running
+    // burst never terminates mid-way). Stops immediately if the user starts a real pan/drag (their
+    // action supersedes the stamp).
+    const SETTLE_TAIL_MS = 250;
+    function scheduleZoomSettle(scrollerId) {
+        if (surfaceSettleRunning[scrollerId]) return;
+        surfaceSettleRunning[scrollerId] = true;
+        const tick = function () {
+            const z = surfaceZoomState[scrollerId];
+            if (!z) { surfaceSettleRunning[scrollerId] = false; return; }
+            applyZoomGeometrySettle(scrollerId);
+            // Keep re-asserting until the tail after the last stamp elapses (late async renders are
+            // overwritten whenever they land inside the window; the re-assert is idempotent once the
+            // DOM matches, so extra clean frames are cheap). A real pointer gesture pre-empts the
+            // guard via the scroller's pointerdown handler (deletes the stamp), so the next tick sees
+            // no state and halts — the guard never fights a user pan or drag.
+            if (z && performance.now() - z.stampedAt < SETTLE_TAIL_MS) {
+                requestAnimationFrame(tick);
+            } else {
+                surfaceSettleRunning[scrollerId] = false;
+                delete surfaceZoomState[scrollerId];
+            }
+        };
+        requestAnimationFrame(tick);
+    }
+
+    // Per-surface DOM→.NET reporters, keyed by scroller id. Used by applyZoomSurface to sync .NET's
+    // canvas bookkeeping after it mutates translate + host size + scroll in one block.
+    const surfaceReporters = {};
 
     function initSurface(scrollerEl, canvasHostEl, dotnetRef, initialW, initialH, contentX, contentY, initialOffsetX, initialOffsetY) {
         if (!scrollerEl || !canvasHostEl) return null;
@@ -270,6 +505,7 @@ window.veloxdevWorkflow = (() => {
                     offsets.x, offsets.y);
             }
         }
+        surfaceReporters[scrollerEl.id] = report;
 
         // Syncs the JS offset state to the reserved ruler band. The content wrapper is positioned
         // at the ruler offset, so read it from the DOM and align the local offset counter. The
@@ -374,6 +610,15 @@ window.veloxdevWorkflow = (() => {
         document.addEventListener('mouseup', onUp);
         scrollerEl.addEventListener('auxclick', function (e) { if (e.button === 1) e.preventDefault(); });
 
+        // A zoom-settle guard must never fight a real drag/pan. Deleting the zoom state here means
+        // the next settle tick observes the state gone and halts, and any stale geometry a concurrent
+        // zoom left is harmless (a node drag re-renders/positions via its own path). Uses pointerdown
+        // so every pointer-derived gesture (mouse, pen, touch) pre-empts the guard identically.
+        scrollerEl.addEventListener('pointerdown', onUserPointerDown);
+        function onUserPointerDown() {
+            delete surfaceZoomState[scrollerEl.id];
+        }
+
         // Reserve the ruler band before the initial report so the viewport offset is correct
         // from the first frame and the ruler ticks align with the grid.
         ensureRulerReserve();
@@ -381,16 +626,60 @@ window.veloxdevWorkflow = (() => {
         // Initial report (fills viewport size before the user interacts).
         report();
 
+        // Host-size grower for the workspace-zoom path: grows the canvas host to fit the auto-extended
+        // model extent and reports the new size so .NET's canvas bookkeeping stays in sync.
+        surfaceSizers[scrollerEl.id] = function (width, height) {
+            const w = Math.max(width || 0, canvasHostEl.offsetWidth || 0);
+            const h = Math.max(height || 0, canvasHostEl.offsetHeight || 0);
+            if (w !== (canvasHostEl.offsetWidth || 0) || h !== (canvasHostEl.offsetHeight || 0)) {
+                canvasHostEl.style.width = w + 'px';
+                canvasHostEl.style.height = h + 'px';
+                report();
+                return true;
+            }
+            return false;
+        };
+
+        // The host is sized from the model extent (edge + ActualSize), which can be SMALLER than the
+        // scroller when the window is large — leaving an unreachable blank strip at the right/bottom
+        // (scrollWidth is forced to == clientWidth when host < client, so no scroll can fill it; only
+        // an edge-drag expandCanvas grows it). Grow the host right/bottom so the canvas (grid) covers
+        // the whole visible area, once at init and again whenever the scroller resizes (window resize,
+        // panel expand/collapse). Right/bottom-only: the world origin (edge + layout offset) never
+        // moves, so nodes/links stay put while the newly revealed area appears to the right/bottom.
+        function ensureFillsViewport() {
+            const gw = Math.max(canvasHostEl.offsetWidth || 0, scrollerEl.clientWidth || 0);
+            const gh = Math.max(canvasHostEl.offsetHeight || 0, scrollerEl.clientHeight || 0);
+            if (gw !== (canvasHostEl.offsetWidth || 0) || gh !== (canvasHostEl.offsetHeight || 0)) {
+                canvasHostEl.style.width = gw + 'px';
+                canvasHostEl.style.height = gh + 'px';
+                scheduleReport();
+            }
+        }
+        ensureFillsViewport();
+        let roFill = null;
+        if (window.ResizeObserver) {
+            roFill = new ResizeObserver(ensureFillsViewport);
+            roFill.observe(scrollerEl);
+        }
+
         return {
             dispose: function () {
                 delete surfaceRegistry[scrollerEl.id];
+                delete surfaceSizers[scrollerEl.id];
                 delete surfaceLayouts[scrollerEl.id];
+                delete surfaceReporters[scrollerEl.id];
+                delete surfaceNodeWrappers[scrollerEl.id];
+                delete surfaceZoomState[scrollerEl.id];
+                delete surfaceSettleRunning[scrollerEl.id];
                 scrollerEl.removeEventListener('scroll', onScroll);
                 document.removeEventListener('keydown', keydown);
                 document.removeEventListener('keyup', keyup);
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
+                scrollerEl.removeEventListener('pointerdown', onUserPointerDown);
                 if (pendingReport) cancelAnimationFrame(pendingReport);
+                if (roFill) roFill.disconnect();
                 scrollerEl.style.cursor = '';
             }
         };
@@ -700,11 +989,32 @@ window.veloxdevWorkflow = (() => {
     // ════════════════════════════════════════════════════════════
     function initWheelZoom(scrollerEl, dotnetRef) {
         if (!scrollerEl || !dotnetRef) return null;
-        async function onWheel(e) {
-            if (!e.ctrlKey) return;
-            e.preventDefault();
-            e.stopPropagation();
-            await dotnetRef.invokeMethodAsync('OnWheelZoom', e.deltaY > 0 ? -1 : 1);
+        // Coalescing queue: at most ONE .NET zoom step is in flight at a time, and wheel events that
+        // arrive while one is processing (a human fast-flick sends several before a SignalR round-trip
+        // returns) accumulate into a pending net delta applied right after. Without this the notches
+        // would run concurrently on the server — each re-renders every node's collapsed geometry as a
+        // separate async pass, so they can paint OUT OF ORDER across the burst (a frame where a node
+        // sits at an older scale under an already-newer scroll = the flash). Serializing + coalescing
+        // keeps node geometry monotonic: the DOM only ever advances one settled zoom step at a time.
+        let busy = false;
+        let pending = 0;
+        async function pump() {
+            if (busy) return;
+            const delta = pending;
+            if (delta === 0) return;
+            busy = true;
+            pending = 0;
+            try {
+                // Send the NET wheel-delta (count of notches) so a burst that outpaces one SignalR
+                // round-trip is applied server-side as that many compounding steps in ONE serialized
+                // call — the DOM only ever advances to the final settled state, never one stale step.
+                await dotnetRef.invokeMethodAsync('OnWheelZoom', delta);
+            } finally {
+                busy = false;
+                // Drain whatever accumulated while this step was in flight (each wheel already
+                // prevented default, so coalescing loses nothing — only the number of server trips).
+                if (pending !== 0) pump();
+            }
             // Layout.Scale change collapses every node toward the origin (Anchor/Size getters divide by
             // scale): each node wrapper repositions via setNodePosition and re-renders its size. Wait a
             // frame for those to apply, then re-measure so the slot anchors (and the links drawn from
@@ -712,6 +1022,13 @@ window.veloxdevWorkflow = (() => {
             requestAnimationFrame(function () {
                 document.dispatchEvent(new CustomEvent('veloxdev-wf-layout-changed'));
             });
+        }
+        function onWheel(e) {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            e.stopPropagation();
+            pending += e.deltaY > 0 ? -120 : 120;
+            pump();
         }
         scrollerEl.addEventListener('wheel', onWheel, { passive: false });
         return {
@@ -866,6 +1183,8 @@ window.veloxdevWorkflow = (() => {
         refreshMinimapViewport,
         scrollByDelta,
         setSurfaceLayout,
+        ensureCanvasSize,
+        applyZoomSurface,
         initNodeDrag,
         initSlotConnection,
         initSlotLayout,
@@ -887,6 +1206,8 @@ export const setMinimapViewport = window.veloxdevWorkflow.setMinimapViewport;
 export const refreshMinimapViewport = window.veloxdevWorkflow.refreshMinimapViewport;
 export const scrollByDelta = window.veloxdevWorkflow.scrollByDelta;
 export const setSurfaceLayout = window.veloxdevWorkflow.setSurfaceLayout;
+export const ensureCanvasSize = window.veloxdevWorkflow.ensureCanvasSize;
+export const applyZoomSurface = window.veloxdevWorkflow.applyZoomSurface;
 export const initNodeDrag = window.veloxdevWorkflow.initNodeDrag;
 export const initSlotConnection = window.veloxdevWorkflow.initSlotConnection;
 export const initSlotLayout = window.veloxdevWorkflow.initSlotLayout;

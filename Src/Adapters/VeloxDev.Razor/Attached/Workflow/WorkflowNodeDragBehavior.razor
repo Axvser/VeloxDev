@@ -1,5 +1,7 @@
 @namespace VeloxDev.WorkflowSystem.AttachedBehaviors
-
-<div class="veloxdev-wf-node-drag" style="@WrapperStyle" @ref="_element">
+@* data-veloxdev-node-id lets the surface's applyZoomSurface map a per-node geometry array to
+   this exact wrapper element (no DOM-order coupling), so it can reposition collapsed nodes in the
+   same synchronous block as the scroll instead of one async render behind. *@
+<div class="veloxdev-wf-node-drag" data-veloxdev-node-id="@NodeId" style="@WrapperStyle" @ref="_element">
     @ChildContent
 </div>
