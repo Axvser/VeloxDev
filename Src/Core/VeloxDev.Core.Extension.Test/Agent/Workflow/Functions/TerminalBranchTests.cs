@@ -28,7 +28,7 @@ public class TerminalBranchTests
         router.SelectedValue = NetworkRequestMethod.Patch;
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         var finalize = session.Tree.Nodes.OfType<NodeViewModel>().Single(n => n.Title == "Finalize");
         Assert.AreEqual("Idle", finalize.LastStatus,
@@ -50,7 +50,7 @@ public class TerminalBranchTests
         boolSelector.Condition = false;
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(compiler.Graphs[0], context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(compiler.Graphs[0], context, CancellationToken.None);
 
         var hot = session.Tree.Nodes.OfType<NodeViewModel>().First(n => n.Title == "Hot Path");
         var cold = session.Tree.Nodes.OfType<NodeViewModel>().First(n => n.Title == "Cold Path");

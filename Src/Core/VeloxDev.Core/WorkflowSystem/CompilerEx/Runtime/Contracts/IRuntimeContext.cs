@@ -23,8 +23,8 @@ public interface IRuntimeContext : ITaskContext
     /// <summary>Runtime logs (with sequence prefixes).</summary>
     ObservableCollection<string> Logs { get; set; }
 
-    /// <summary>The ActionEntry currently executing.</summary>
-    ActionEntry? CurrentEntry { get; set; }
+    /// <summary>The CompileSegment currently executing.</summary>
+    CompileSegment? CurrentEntry { get; set; }
 
     /// <summary>Index of the current node within its chain.</summary>
     int NodeIndex { get; set; }
@@ -58,7 +58,7 @@ public interface IRuntimeContext : ITaskContext
     /// <summary>Whether the flow ended early because "the node errored but does not implement <see cref="IRedirectable"/>" (status set to -1).</summary>
     bool EndedWithError { get; set; }
 
-    /// <summary>The engine-requested redirect target Order (may be cross-chain). <see cref="CompilerEngine.RunAsync"/> re-runs the whole graph with it.</summary>
+    /// <summary>The engine-requested redirect target Order (may be cross-chain). <see cref="RuntimeEngine.RunAsync"/> re-runs the whole graph with it.</summary>
     int? PendingRedirectTarget { get; set; }
 
     /// <summary>
@@ -90,7 +90,7 @@ public interface IRuntimeContext : ITaskContext
     [AgentContext(AgentLanguages.English, "Register a node's output for this run stamped with the current attempt: the engine writes it after driving each node, and multi-input joins aggregate per input group")]
     void RegisterOutput(IWorkflowNodeViewModel node, object? value);
 
-    /// <summary>Clears the output registry (once at the start of each <see cref="CompilerEngine.RunAsync"/>).</summary>
+    /// <summary>Clears the output registry (once at the start of each <see cref="RuntimeEngine.RunAsync"/>).</summary>
     [AgentContext(AgentLanguages.Chinese, "清空产物登记表：每次 RunAsync 开始清空一次，重定向重跑不清空（由 pass 戳过滤陈旧产物）")]
     [AgentContext(AgentLanguages.English, "Clear the product registry once at the start of each RunAsync (not cleared on redirect re-runs; stale outputs are filtered by pass stamp)")]
     void ResetOutputs();

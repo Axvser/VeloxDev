@@ -1776,7 +1776,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     /// <summary>
     /// Compiles the sub-graph reachable from a start node (typically a controller) and runs it
-    /// through the execution engine (<see cref="CompilerEngine"/>), exactly like the demo's Run
+    /// through the runtime engine (<see cref="RuntimeEngine"/>), exactly like the demo's Run
     /// button. The engine drives the CHAIN: it injects an <see cref="IRuntimeContext"/> session into
     /// every <see cref="IRuntimeAware"/> node, selects branches via <see cref="ICompileTimeRouter"/>,
     /// and handles redirects — the node's own ReceiveAsync executes in "compiled-step" mode and does
@@ -1801,7 +1801,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 return Error("Compile produced no graphs from this start node.");
 
             var context = new RuntimeContext { Data = seed };
-            await new CompilerEngine().RunAsync(graphs[0], context, cancellationToken).ConfigureAwait(false);
+            await new RuntimeEngine().RunAsync(graphs[0], context, cancellationToken).ConfigureAwait(false);
 
             return new JObject
             {
@@ -1973,7 +1973,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
 
     // ────────────────────────── Compiler Functions ──────────────────────────
 
-    [Description("Compiles the workflow sub-graph reachable from a start node (typically the controller/entry node) and returns the compiled plan: execution entries, routing branches with their options/skipped/terminal flags, fan-out groups, and every compile-aware node's Order / ChainIndex / Offset. Order = -1 means the node is on a pruned static branch — absolute stop (do NOT drive it as part of the live chain). Compiling also attaches compile identity to nodes (updates IsCompileStopped badges). Use GetCompileStatus afterwards to read the identity without recompiling.")]
+    [Description("Compiles the workflow sub-graph reachable from a start node (typically the controller/entry node) and returns the compiled plan: compiled segments (chain / branch / parallel), routing branches with their options/skipped/terminal flags, fan-out groups, and every compile-aware node's Order / ChainIndex / Offset. Order = -1 means the node is on a pruned static branch — absolute stop (do NOT drive it as part of the live chain). Compiling also attaches compile identity to nodes (updates IsCompileStopped badges). Use GetCompileStatus afterwards to read the identity without recompiling.")]
     private async Task<string> CompileWorkflow(
         [Description("Node index of the compile entry point (usually the controller/entry node).")] int startNodeIndex,
         CancellationToken cancellationToken = default)
@@ -2058,16 +2058,16 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             AppendEntry(entries, entry, depth);
     }
 
-    private static void AppendEntry(JArray entries, ActionEntry entry, int depth)
+    private static void AppendEntry(JArray entries, CompileSegment entry, int depth)
     {
         var obj = new JObject { ["depth"] = depth };
         switch (entry)
         {
-            case ExecuteEntry exec:
+            case ChainSegment exec:
                 obj["type"] = "Execute";
                 obj["nodes"] = new JArray(exec.Nodes.Select(n => n.GetType().Name));
                 break;
-            case BranchEntry branch:
+            case BranchSegment branch:
                 obj["type"] = "Branch";
                 obj["router"] = branch.Router?.GetType().Name;
                 obj["isDynamic"] = branch.IsDynamic;
@@ -2086,7 +2086,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 }
                 obj["options"] = options;
                 break;
-            case ParallelEntry parallel:
+            case ParallelSegment parallel:
                 obj["type"] = "Parallel";
                 obj["branches"] = parallel.Branches.Count;
                 foreach (var g in parallel.Branches)

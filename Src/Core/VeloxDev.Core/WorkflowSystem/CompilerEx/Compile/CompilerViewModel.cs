@@ -9,10 +9,10 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// The compile entry point: decomposes the sub-graph reachable from one start node (Controller) into several
 /// compiled graphs (multi-graph semantics).
 /// v1 decomposition algorithm (direct pruning, no cycles):
-///  - linear segment (single input / single output) → ExecuteEntry;
-///  - node implementing <see cref="ICompileTimeRouter"/> → BranchEntry (static branches are pruned by the current
+///  - linear segment (single input / single output) → ChainSegment;
+///  - node implementing <see cref="ICompileTimeRouter"/> → BranchSegment (static branches are pruned by the current
 ///    key, dynamic branches are all kept);
-///  - route key pointing to multiple downstream nodes → ParallelEntry (fan-out/join); no downstream → IsTerminal
+///  - route key pointing to multiple downstream nodes → ParallelSegment (fan-out/join); no downstream → IsTerminal
 ///    terminal branch;
 ///  - the node all branch exits jointly point to → join point, used as the start of the next chain segment in the
 ///    parent graph (order carries an offset, not reset to zero);
@@ -43,7 +43,7 @@ public sealed partial class CompilerViewModel
     private async Task<CompiledGraph> CompileGraphAsync(
         IWorkflowNodeViewModel start, CompileState state, CancellationToken ct)
     {
-        var entries = new List<ActionEntry>();
+        var entries = new List<CompileSegment>();
         var chain = new List<IWorkflowNodeViewModel>();
         var offset = state.Counter;
         var node = start;
@@ -74,7 +74,7 @@ public sealed partial class CompilerViewModel
                 var options = new ObservableCollection<BranchOption>();
                 var exits = new List<IWorkflowNodeViewModel?>();
 
-                // Generic route compilation: each key's sub-graph may be a single path or a fan-out (ParallelEntry).
+                // Generic route compilation: each key's sub-graph may be a single path or a fan-out (ParallelSegment).
                 // No downstream → terminal branch; single target → normal sub-graph; multiple targets → fan-out
                 // (parallel group, join point = CommonNext).
                 foreach (var kv in routeTable)
@@ -94,7 +94,7 @@ public sealed partial class CompilerViewModel
                         exits.Add(LastNode(sub));
                         continue;
                     }
-                    // Multiple targets → fan-out: compile each sub-graph into a ParallelEntry.
+                    // Multiple targets → fan-out: compile each sub-graph into a ParallelSegment.
                     var branches = new List<CompiledGraph>();
                     var subExits = new List<IWorkflowNodeViewModel?>();
                     foreach (var t in kv.Value)
@@ -110,9 +110,9 @@ public sealed partial class CompilerViewModel
                         Label = label,
                         Graph = new CompiledGraph
                         {
-                            Entries = new ObservableCollection<ActionEntry>
+                            Entries = new ObservableCollection<CompileSegment>
                             {
-                                new ParallelEntry { Branches = new ObservableCollection<CompiledGraph>(branches) },
+                                new ParallelSegment { Branches = new ObservableCollection<CompiledGraph>(branches) },
                             }
                         },
                     });
@@ -135,7 +135,7 @@ public sealed partial class CompilerViewModel
                     }
                 }
 
-                entries.Add(new BranchEntry
+                entries.Add(new BranchSegment
                 {
                     Router = node,
                     Options = options,
@@ -172,7 +172,7 @@ public sealed partial class CompilerViewModel
                 FlushChain(entries, chain, state, offset);
 
                 // Plain-node fan-out: a non-router node with several valid downstream targets broadcasts its
-                // result to all of them as a ParallelEntry, then continues from their common join point
+                // result to all of them as a ParallelSegment, then continues from their common join point
                 // (same semantics as a router's single-key fan-out).
                 if (validTargets.Count > 1)
                 {
@@ -184,7 +184,7 @@ public sealed partial class CompilerViewModel
                         branches.Add(sub);
                         exits.Add(LastNode(sub));
                     }
-                    entries.Add(new ParallelEntry { Branches = new ObservableCollection<CompiledGraph>(branches) });
+                    entries.Add(new ParallelSegment { Branches = new ObservableCollection<CompiledGraph>(branches) });
 
                     node = CommonNext(exits);
                     if (node is not null)
@@ -205,18 +205,18 @@ public sealed partial class CompilerViewModel
         }
 
         FlushChain(entries, chain, state, offset);
-        return new CompiledGraph { Entries = new ObservableCollection<ActionEntry>(entries) };
+        return new CompiledGraph { Entries = new ObservableCollection<CompileSegment>(entries) };
     }
 
-    /// <summary>Flushes the current linear chain into an ExecuteEntry and assigns each node in the chain a compile identity.</summary>
-    private static void FlushChain(List<ActionEntry> entries, List<IWorkflowNodeViewModel> chain,
+    /// <summary>Flushes the current linear chain into an ChainSegment and assigns each node in the chain a compile identity.</summary>
+    private static void FlushChain(List<CompileSegment> entries, List<IWorkflowNodeViewModel> chain,
         CompileState state, int offset)
     {
         if (chain.Count == 0) return;
         for (int i = 0; i < chain.Count; i++)
             AttachCompileContext(chain[i], state.Counter + i, i, offset, state);
         state.Counter += chain.Count;
-        entries.Add(new ExecuteEntry { Nodes = new ObservableCollection<IWorkflowNodeViewModel>(chain) });
+        entries.Add(new ChainSegment { Nodes = new ObservableCollection<IWorkflowNodeViewModel>(chain) });
         chain.Clear();
     }
 
@@ -273,11 +273,11 @@ public sealed partial class CompilerViewModel
         return null;
     }
 
-    private static IWorkflowNodeViewModel? LastNode(ActionEntry entry) => entry switch
+    private static IWorkflowNodeViewModel? LastNode(CompileSegment entry) => entry switch
     {
-        ExecuteEntry exec when exec.Nodes.Count > 0 => exec.Nodes[exec.Nodes.Count - 1],
-        BranchEntry branch when branch.Options.Count > 0 => LastNode(branch.Options[branch.Options.Count - 1].Graph),
-        ParallelEntry par when par.Branches.Count > 0 => LastNode(par.Branches[par.Branches.Count - 1]),
+        ChainSegment exec when exec.Nodes.Count > 0 => exec.Nodes[exec.Nodes.Count - 1],
+        BranchSegment branch when branch.Options.Count > 0 => LastNode(branch.Options[branch.Options.Count - 1].Graph),
+        ParallelSegment par when par.Branches.Count > 0 => LastNode(par.Branches[par.Branches.Count - 1]),
         _ => null,
     };
 

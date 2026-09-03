@@ -19,7 +19,7 @@ public class RedirectTests
         gate.FailCount = 2;
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         Assert.AreEqual(3, context.Attempt, "3 chain passes (2 redirects + 1 success)");
         Assert.AreEqual("Completed", work.LastStatus, "Work ran");
@@ -38,7 +38,7 @@ public class RedirectTests
         Exception? caught = null;
         try
         {
-            await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+            await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
         }
         catch (Exception ex) { caught = ex; }
 
@@ -56,7 +56,7 @@ public class RedirectTests
         var graph = compiler.Graphs[0];
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         Assert.AreEqual(-1, context.CurrentOrder, "flow ended at the standard -1 stop state");
         Assert.AreEqual("Stopped", context.Status, "run status reflects the stopped end");
@@ -66,11 +66,11 @@ public class RedirectTests
     [TestMethod]
     public async Task RedirectCrossChain_SkipsPriorAndReruns()
     {
-        // Graph: Controller → Pre → Bool(True → [B, Gate, Sink]). Gate redirects back 3 steps = Pre (the previous ExecuteEntry).
+        // Graph: Controller → Pre → Bool(True → [B, Gate, Sink]). Gate redirects back 3 steps = Pre (the previous ChainSegment).
         var (_, graph, gate, _, sink) = BuildBranchRedirectGraph(redirectBackSteps: 3, failCount: 1);
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         Assert.AreEqual(2, context.Attempt, "two graph passes (one redirect across chains)");
         Assert.AreEqual("Completed", sink.LastStatus, "flow recovered after the cross-chain fall back");
@@ -86,7 +86,7 @@ public class RedirectTests
         var (_, graph, _, _, sink) = BuildBranchRedirectGraph(redirectBackSteps: 2, failCount: 1);
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         Assert.AreEqual(2, context.Attempt, "two graph passes");
         Assert.AreEqual(1, context.Logs.Count(l => l.Contains("BoolSelectorNodeViewModel")),
@@ -153,7 +153,7 @@ public class RedirectTests
         Exception? caught = null;
         try
         {
-            await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+            await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
         }
         catch (Exception ex) { caught = ex; }
 

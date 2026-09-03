@@ -7,7 +7,7 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
 /// Verifies plain-node fan-out (a non-router node whose output fans out to several downstreams) — the compiler
-/// must turn it into a ParallelEntry and continue from the common join point, instead of stopping the walk
+/// must turn it into a ParallelSegment and continue from the common join point, instead of stopping the walk
 /// at the fan-out source (previously only routers could fan out). Regression for the desktop JSON example's
 /// "compile doesn't walk fully" report.
 /// </summary>
@@ -48,9 +48,9 @@ public class PlainNodeFanOutTests
         Assert.AreEqual(1, graphs.Count, "single controller → one compiled graph");
         var graph = graphs[0];
 
-        Assert.IsTrue(graph.Entries.Any(e => e is ParallelEntry),
-            "plain-node fan-out must compile to a ParallelEntry (not stop the walk at the fan-out source)");
-        Assert.IsTrue(graph.Entries.Any(e => e is ExecuteEntry),
+        Assert.IsTrue(graph.Entries.Any(e => e is ParallelSegment),
+            "plain-node fan-out must compile to a ParallelSegment (not stop the walk at the fan-out source)");
+        Assert.IsTrue(graph.Entries.Any(e => e is ChainSegment),
             "the join node still compiles as a linear segment after the fan-out");
 
         foreach (var n in new IWorkflowNodeViewModel[] { controller, a, b, c, d })

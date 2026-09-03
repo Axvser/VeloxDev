@@ -5,8 +5,8 @@ using VeloxDev.Core.WorkflowSystem.CompilerEx;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// Verifies the new CompilerEx decomposition algorithm: linear segments → ExecuteEntry, selectors →
-/// BranchEntry (nested sub-graphs), branch downstream orders carry an offset (not reset to zero); in
+/// Verifies the new CompilerEx decomposition algorithm: linear segments → ChainSegment, selectors →
+/// BranchSegment (nested sub-graphs), branch downstream orders carry an offset (not reset to zero); in
 /// both modes every node is visited by the compiler — under Static, skipped branch nodes receive a
 /// reset signal (Order = -1, absolute stop), under Dynamic all branches get live orders.
 /// </summary>
@@ -24,14 +24,14 @@ public class CompilerExTests
         var graph = graphs[0];
 
         // ── Structure: linear segment → Bool branch → join linear segment → Enum branch → tail ──
-        Assert.IsInstanceOfType<ExecuteEntry>(graph.Entries[0], "first entry is a linear chain");
-        Assert.IsInstanceOfType<BranchEntry>(graph.Entries[1], "second entry is a branch (bool selector)");
-        Assert.IsInstanceOfType<ExecuteEntry>(graph.Entries[2], "third entry is the post-branch join chain");
-        Assert.IsInstanceOfType<BranchEntry>(graph.Entries[3], "fourth entry is a branch (enum selector)");
-        Assert.IsInstanceOfType<ExecuteEntry>(graph.Entries[4], "fifth entry is the tail chain");
+        Assert.IsInstanceOfType<ChainSegment>(graph.Entries[0], "first entry is a linear chain");
+        Assert.IsInstanceOfType<BranchSegment>(graph.Entries[1], "second entry is a branch (bool selector)");
+        Assert.IsInstanceOfType<ChainSegment>(graph.Entries[2], "third entry is the post-branch join chain");
+        Assert.IsInstanceOfType<BranchSegment>(graph.Entries[3], "fourth entry is a branch (enum selector)");
+        Assert.IsInstanceOfType<ChainSegment>(graph.Entries[4], "fifth entry is the tail chain");
 
         // Demo defaults to Dynamic: both branches get live orders (no pruning).
-        var boolBranch = (BranchEntry)graph.Entries[1];
+        var boolBranch = (BranchSegment)graph.Entries[1];
         Assert.AreEqual(2, boolBranch.Options.Count, "bool selector has True/False options");
         Assert.IsTrue(boolBranch.IsDynamic, "demo default dynamic → both branches alive");
         Assert.IsNotNull(boolBranch.Router, "branch carries its router node");
@@ -58,8 +58,8 @@ public class CompilerExTests
 
         // ── Branch sub-graph nesting: True → [Hot Path], False → [Cold Path] ──
         var trueSub = trueOpt.Graph!;
-        Assert.IsInstanceOfType<ExecuteEntry>(trueSub.Entries[0]);
-        var hotNode = (NodeViewModel)((ExecuteEntry)trueSub.Entries[0]).Nodes[0];
+        Assert.IsInstanceOfType<ChainSegment>(trueSub.Entries[0]);
+        var hotNode = (NodeViewModel)((ChainSegment)trueSub.Entries[0]).Nodes[0];
         Assert.AreEqual("Hot Path", hotNode.Title,
             "True branch sub-graph is the Hot Path chain");
     }
@@ -93,7 +93,7 @@ public class CompilerExTests
 
         var graph = compiler.Graphs[0];
         var context = new RuntimeContext();
-        var engine = new CompilerEngine();
+        var engine = new RuntimeEngine();
         await engine.RunAsync(graph, context, CancellationToken.None);
 
         Assert.AreEqual("Completed", context.Status, "engine completes the run");

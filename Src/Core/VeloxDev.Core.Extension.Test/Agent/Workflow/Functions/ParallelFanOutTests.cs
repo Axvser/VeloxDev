@@ -5,7 +5,7 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// Verifies fan-out (ParallelEntry) + join wait: one route key points to multiple downstreams, all
+/// Verifies fan-out (ParallelSegment) + join wait: one route key points to multiple downstreams, all
 /// paths execute, and the join point runs after all branches.
 /// </summary>
 [TestClass]
@@ -20,15 +20,15 @@ public class ParallelFanOutTests
         compiler.CompileAsync(controller).GetAwaiter().GetResult();
         var graph = compiler.Graphs[0];
 
-        // Compiled structure: True branch → ParallelEntry (two-way fan-out).
-        var branch = graph.Entries.OfType<BranchEntry>().Single();
+        // Compiled structure: True branch → ParallelSegment (two-way fan-out).
+        var branch = graph.Entries.OfType<BranchSegment>().Single();
         var trueOpt = branch.Options.First(o => Equals(o.Key, true));
-        var parallel = Assert.IsInstanceOfType<ParallelEntry>(trueOpt.Graph!.Entries[0]);
+        var parallel = Assert.IsInstanceOfType<ParallelSegment>(trueOpt.Graph!.Entries[0]);
         Assert.AreEqual(2, parallel.Branches.Count, "True → two fan-out branches");
 
         sel.Condition = true;
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         Assert.AreEqual("Completed", t1.LastStatus, "T1 ran");
         Assert.AreEqual("Completed", t2.LastStatus, "T2 ran");

@@ -24,7 +24,7 @@ public sealed partial class RuntimeContext : IRuntimeContext
     [VeloxProperty] private ObservableCollection<string> _logs = [];
 
     // ── Execution position / decision state (maintained by the engine) ──
-    [VeloxProperty] private ActionEntry? _currentEntry;
+    [VeloxProperty] private CompileSegment? _currentEntry;
     [VeloxProperty] private int _nodeIndex = -1;
     [VeloxProperty] private object? _branchKey;
     [VeloxProperty] private int _attempt;

@@ -4,11 +4,11 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// Compiled execution engine: drives node execution along a compiled graph (<see cref="CompiledGraph"/>).
+/// Runtime engine: drives node execution along a compiled graph (<see cref="CompiledGraph"/>).
 /// It does not rely on nodes broadcasting on their own — the engine "takes the data and drives the next node":
-///  - ExecuteEntry: drives nodes one by one along a linear segment;
-///  - BranchEntry: drives the router itself, then selects a branch via <see cref="ICompileTimeRouter.ResolveRouteKey"/> and drives the chosen subgraph;
-///  - ParallelEntry: fan-out group, executes each branch in order (sequential order carries the "wait for all upstream" merge semantics).
+///  - ChainSegment: drives nodes one by one along a linear segment;
+///  - BranchSegment: drives the router itself, then selects a branch via <see cref="ICompileTimeRouter.ResolveRouteKey"/> and drives the chosen subgraph;
+///  - ParallelSegment: fan-out group, executes each branch in order (sequential order carries the "wait for all upstream" merge semantics).
 /// When a node calls <see cref="IRuntimeContext.Error"/>/<see cref="IRuntimeContext.Warn"/> or throws inside ReceiveAsync,
 /// it is treated as a redirect request: if the node implements <see cref="IRedirectable"/>, the engine re-runs the
 /// whole graph with the returned compile state (CompileContext.Order), skipping nodes before the target (possibly cross-chain);
@@ -16,7 +16,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// If the node does not implement IRedirectable, the whole flow ends with the standard -1 status.
 /// Before each drive the engine injects <see cref="IRuntimeContext"/> into <see cref="IRuntimeAware"/> nodes.
 /// </summary>
-public sealed class CompilerEngine
+public sealed class RuntimeEngine
 {
     public async Task RunAsync(CompiledGraph graph, IRuntimeContext context, CancellationToken ct)
     {
@@ -77,13 +77,13 @@ public sealed class CompilerEngine
             bool terminated;
             switch (entry)
             {
-                case ExecuteEntry exec:
+                case ChainSegment exec:
                     terminated = await RunExecuteAsync(exec, context, ct, redirectTarget);
                     break;
-                case BranchEntry branch:
+                case BranchSegment branch:
                     terminated = await RunBranchAsync(branch, context, ct, redirectTarget);
                     break;
-                case ParallelEntry parallel:
+                case ParallelSegment parallel:
                     terminated = await RunParallelAsync(parallel, context, ct, redirectTarget);
                     break;
                 default:
@@ -102,7 +102,7 @@ public sealed class CompilerEngine
     /// <see cref="IRuntimeContext.PendingRedirectTarget"/> so RunAsync re-runs the whole graph with that target;
     /// without it the flow ends with status -1. Returns true when the flow ends early.
     /// </summary>
-    private async Task<bool> RunExecuteAsync(ExecuteEntry exec, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunExecuteAsync(ChainSegment exec, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
         for (int i = 0; i < exec.Nodes.Count; i++)
         {
@@ -163,7 +163,7 @@ public sealed class CompilerEngine
     /// branch is skipped; when the target is the router itself → **re-route only**, without recomputing
     /// (the router's ReceiveAsync is not driven); the branch is selected directly by the runtime key.
     /// </summary>
-    private async Task<bool> RunBranchAsync(BranchEntry branch, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunBranchAsync(BranchSegment branch, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
         if (branch.Router is null) return false;
         var routerOrder = NodeOrder(branch.Router);
@@ -201,7 +201,7 @@ public sealed class CompilerEngine
     /// source payload is restored before each branch — otherwise the previous branch's output would leak
     /// into the next branch as its input. A terminal branch hit inside any branch ends the whole run.
     /// </summary>
-    private async Task<bool> RunParallelAsync(ParallelEntry parallel, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
+    private async Task<bool> RunParallelAsync(ParallelSegment parallel, IRuntimeContext context, CancellationToken ct, int? redirectTarget)
     {
         var sourceData = context.Data;   // the fan-out source's output, broadcast to every branch
         foreach (var branch in parallel.Branches)

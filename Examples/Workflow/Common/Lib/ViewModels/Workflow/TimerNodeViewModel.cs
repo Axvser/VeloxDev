@@ -9,7 +9,7 @@ namespace Demo.ViewModels;
 /// <summary>
 /// Timer node: acts as a data source that emits the current timestamp each run, and fans out to every
 /// downstream target through a single route key ("tick") — the compiler turns that fan-out into a
-/// ParallelEntry so two Python workers run against the same tick and their outputs join downstream.
+/// ParallelSegment so two Python workers run against the same tick and their outputs join downstream.
 /// </summary>
 [AgentContext(AgentLanguages.Chinese, "定时器节点：作为数据源，每次执行产出当前时间戳，并通过单一路由键 tick 扇出到所有下游（供并行计算与汇合演示）。默认大小 200×140")]
 [AgentContext(AgentLanguages.English, "Timer node: acts as a data source that emits the current timestamp each run and fans out to all downstream targets via the single route key 'tick' (for parallel computation and join demos). Default size: 200×140")]
@@ -77,7 +77,7 @@ public partial class TimerNodeViewModel : ICompileTimeRouter, ICompileTimeAware
     public bool HasExecutionOrder => LastExecutionOrder > 0 || IsCompileStopped;
     public string ExecutionOrderText => IsCompileStopped ? "⊘" : LastExecutionOrder > 0 ? $"#{LastExecutionOrder}" : "-";
 
-    /// <summary>Single route key fan-out: the key is always "tick", so the compiler emits one branch whose sub-graph is a ParallelEntry over all downstream targets.</summary>
+    /// <summary>Single route key fan-out: the key is always "tick", so the compiler emits one branch whose sub-graph is a ParallelSegment over all downstream targets.</summary>
     public Task<object?> ResolveRouteKey(object? payload) => Task.FromResult<object?>("tick");
 
     /// <summary>Route table: one branch "tick" carrying every downstream target of <see cref="OutputSlot"/> (empty list = terminal).</summary>

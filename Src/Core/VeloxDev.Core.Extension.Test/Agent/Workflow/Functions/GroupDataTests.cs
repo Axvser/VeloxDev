@@ -13,7 +13,7 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 [TestClass]
 public class GroupDataTests
 {
-    /// <summary>Fan-out (ParallelEntry) → join: each branch's output enters the dictionary.</summary>
+    /// <summary>Fan-out (ParallelSegment) → join: each branch's output enters the dictionary.</summary>
     [TestMethod]
     public async Task FanOutJoin_ReceivesGroupedInputs()
     {
@@ -25,7 +25,7 @@ public class GroupDataTests
         var graph = compiler.Graphs[0];
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         var group = Assert.IsInstanceOfType<IGroupData>(join.LastGroupData,
             "join runs after both fan-out branches and receives a GroupData dictionary");
@@ -46,7 +46,7 @@ public class GroupDataTests
         var graph = compiler.Graphs[0];
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         var group = Assert.IsInstanceOfType<IGroupData>(join.LastGroupData,
             "join still receives a GroupData (both branches alive at compile time)");
@@ -68,7 +68,7 @@ public class GroupDataTests
         var graph = compiler.Graphs[0];
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         Assert.IsNull(sink.LastGroupData, "single-input chain must not inject a GroupData");
         Assert.AreEqual(5, sink.LastData, "bare Data flows through the chain (5 from the upstream node)");
@@ -85,7 +85,7 @@ public class GroupDataTests
         var graph = compiler.Graphs[0];
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         // pass 1 takes True (FlipGate switches the route to False and redirects back to the router); pass 2 takes False (only Y is re-driven and registered).
         Assert.AreEqual(2, context.Attempt, "branch flip happens on attempt 1; pass 2 re-runs toward the router");
@@ -110,7 +110,7 @@ public class GroupDataTests
         var graph = compiler.Graphs[0];
 
         var context = new RuntimeContext();
-        await new CompilerEngine().RunAsync(graph, context, CancellationToken.None);
+        await new RuntimeEngine().RunAsync(graph, context, CancellationToken.None);
 
         // gate(5) warns on the 1st time and redirects back to join(4); pass 2 skips the whole Order<4 prefix (including the not-re-driven True branch A).
         Assert.AreEqual(2, context.Attempt, "gate warns on attempt 1 and redirects back to the join");

@@ -48,7 +48,7 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         _runCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         try
         {
-            await new CompilerEngine().RunAsync(graph, context, _runCts.Token);
+            await new RuntimeEngine().RunAsync(graph, context, _runCts.Token);
         }
         finally
         {

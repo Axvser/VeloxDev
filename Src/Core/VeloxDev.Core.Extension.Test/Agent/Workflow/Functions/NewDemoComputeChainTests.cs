@@ -27,19 +27,19 @@ public class NewDemoComputeChainTests
         var graph = graphs[0];
 
         // Structure: [Controller chain] → [Timer branch → Generate Dataset fan-out (Parallel) → join Merge → Enum branch].
-        Assert.IsInstanceOfType<ExecuteEntry>(graph.Entries[0], "first entry is the Controller chain");
+        Assert.IsInstanceOfType<ChainSegment>(graph.Entries[0], "first entry is the Controller chain");
         var timerBranch = graph.Entries[1];
-        Assert.IsInstanceOfType<BranchEntry>(timerBranch, "Timer is the single-key router");
-        var tickOption = ((BranchEntry)timerBranch).Options.First(o => Equals(o.Key, "tick"));
+        Assert.IsInstanceOfType<BranchSegment>(timerBranch, "Timer is the single-key router");
+        var tickOption = ((BranchSegment)timerBranch).Options.First(o => Equals(o.Key, "tick"));
         var timerSub = tickOption.Graph!;
-        Assert.IsInstanceOfType<ExecuteEntry>(timerSub.Entries[0], "Generate Dataset is the linear segment after the Timer");
-        Assert.IsInstanceOfType<ParallelEntry>(timerSub.Entries[1],
-            "the plain-node fan-out (Generate Dataset → 3 analyzers) compiles to a ParallelEntry");
-        Assert.AreEqual(3, ((ParallelEntry)timerSub.Entries[1]).Branches.Count,
+        Assert.IsInstanceOfType<ChainSegment>(timerSub.Entries[0], "Generate Dataset is the linear segment after the Timer");
+        Assert.IsInstanceOfType<ParallelSegment>(timerSub.Entries[1],
+            "the plain-node fan-out (Generate Dataset → 3 analyzers) compiles to a ParallelSegment");
+        Assert.AreEqual(3, ((ParallelSegment)timerSub.Entries[1]).Branches.Count,
             "three analyzers run as the fan-out branches");
-        Assert.IsInstanceOfType<ExecuteEntry>(timerSub.Entries[2], "the join node (Merge Report) follows the fan-out");
-        Assert.IsInstanceOfType<BranchEntry>(timerSub.Entries[3], "the Enum Selector is the decision router");
-        Assert.IsTrue(((BranchEntry)timerSub.Entries[3]).IsDynamic, "the enum routes at runtime by the grade");
+        Assert.IsInstanceOfType<ChainSegment>(timerSub.Entries[2], "the join node (Merge Report) follows the fan-out");
+        Assert.IsInstanceOfType<BranchSegment>(timerSub.Entries[3], "the Enum Selector is the decision router");
+        Assert.IsTrue(((BranchSegment)timerSub.Entries[3]).IsDynamic, "the enum routes at runtime by the grade");
 
         // Compile identity: Controller 0, Timer 1, Generate Dataset 2, Merge Report 6, Enum 7.
         var timer = session.Tree.Nodes.OfType<TimerNodeViewModel>().Single();
@@ -203,7 +203,7 @@ public class NewDemoComputeChainTests
             await compiler.CompileAsync(session.Controller);
 
             var context = new RuntimeContext();
-            await new CompilerEngine().RunAsync(compiler.Graphs[0], context, CancellationToken.None);
+            await new RuntimeEngine().RunAsync(compiler.Graphs[0], context, CancellationToken.None);
 
             Assert.AreEqual("Completed", context.Status,
                 "the voltage chain must run end to end: " + string.Join("\n", context.Logs.TakeLast(8)));

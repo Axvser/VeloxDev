@@ -5,7 +5,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// <summary>
 /// The routing contract a node declares for "upstream data → broadcast targets":
 /// - At compile-time <see cref="GetRouteTable"/> declares the branch structure (key → downstream nodes), and the
-///   compiler generates BranchEntry from it;
+///   compiler generates BranchSegment from it;
 /// - At runtime <see cref="ResolveRouteKey"/> receives the current data payload and returns the key → decides which
 ///   branch to broadcast to.
 /// Static selectors (preset keys) ignore the payload; dynamic routing computes the key from the payload and returns
