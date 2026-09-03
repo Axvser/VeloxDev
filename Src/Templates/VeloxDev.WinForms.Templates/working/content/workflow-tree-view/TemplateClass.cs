@@ -74,12 +74,13 @@ public sealed class TemplateClass : UserControl
     private Point _panPressScreen;
     private Point _panOffsetAtPress;
 
-    // World-origin translation. Initialized to (RulerThickness, RulerThickness) = (36,36)
-    // so tick "0" and the axis grid line land at the ruler-band edge (matching the full
-    // demo's _panOffset); the grid draws at value - worldLeft and nodes at anchor + panOffset,
-    // so the two stay aligned as you pan. ApplyPan pushes this into the canvas + grid + minimap
-    // on every layout (see ScheduleLayout), so the initial offset takes effect without a drag.
-    private Point _panOffset = new((int)SurfaceCanvas.DefaultRulerThickness, (int)SurfaceCanvas.DefaultRulerThickness);
+    // World-origin translation (signed pan). Starts at (0, 0): the world origin is placed by
+    // Layout.ActualOffset alone, so the surface is "unscrolled" at rest — canvas scroll offset 0 and
+    // helper.Viewport = world − ActualOffset — matching the XAML adapters (which fold the ruler band
+    // into a separate render transform, not into the pan). The grid draws at value - worldLeft and
+    // nodes at anchor + panOffset + ActualOffset, so the two stay aligned as you pan. ApplyPan pushes
+    // this into the canvas + grid + minimap on every layout (see ScheduleLayout).
+    private Point _panOffset = new(0, 0);
 
     // Link renderers (VirtualLink + all real links) painted by the canvas OnPaint.
     // They are deliberately NOT child controls — mirroring the full demo, which draws
@@ -278,11 +279,9 @@ public sealed class TemplateClass : UserControl
             using var majorPen = new Pen(_majorGridColor, 1f);
             using var axisPen = new Pen(_axisColor, 1.2f);
 
-            // Grid x = value - worldLeft. The pan offset starts at the ruler-band edge
-            // (36,36), so world origin "0" lands at x=36 and grid lines align with nodes
-            // at anchor + panOffset. No +ruler term — that was the inset-model offset that
-            // desynced the grid from the nodes. Lines span the full viewport so they extend
-            // under the translucent bands.
+            // Grid x = value - worldLeft; nodes sit at anchor + panOffset + ActualOffset, so both
+            // share the same world origin and stay aligned while panning (pan starts at 0 at rest).
+            // Lines span the full viewport so they extend under the translucent bands.
             var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
@@ -890,6 +889,21 @@ public sealed class TemplateClass : UserControl
     {
         if (IsDisposed) return;
 
+        // Never report a negative canvas viewport (scroll < 0) on the left/top edge, matching the
+        // XAML adapters: any pan that would overshoot the origin is folded back into NegativeOffset
+        // growth (pan + ActualOffset stays invariant, so nothing visibly moves). The surface is then
+        // "scroll offset 0 at rest" and only grows the world left/up when you pan past the edge.
+        if (_tree?.Layout is { } layout && (_panOffset.X > 0 || _panOffset.Y > 0))
+        {
+            int growX = Math.Max(0, _panOffset.X);
+            int growY = Math.Max(0, _panOffset.Y);
+            layout.NegativeOffset += new Offset(growX, growY);
+            // Re-base the drag origin by the folded amount so the SAME mouse position maps to panOffset 0;
+            // otherwise every re-entrant ApplyPan at the same absolute delta re-folds and the pan runs away.
+            _panOffsetAtPress = new Point(_panOffsetAtPress.X - growX, _panOffsetAtPress.Y - growY);
+            _panOffset = new Point(_panOffset.X - growX, _panOffset.Y - growY);
+        }
+
         // The overlay needs the surface parented (FindForm); create it lazily here too
         // so panning before OnHandleCreated still works.
         EnsureRulerOverlay();
@@ -979,10 +993,9 @@ public sealed class TemplateClass : UserControl
             if (IsDisposed) return;
             ApplyCanvasSize();
             WorkflowSurfaceBehavior.Refresh(this);
-            // Push the current pan offset (the initial world-origin translation at the
-            // ruler-band edge) into the canvas, grid, and minimap once the surface is laid
-            // out; ApplyPan is otherwise only called from user panning. Runs on every
-            // layout, so resize keeps the floating rulers tracking too.
+            // Push the current pan offset (signed; 0 at rest) into the canvas, grid, and minimap
+            // once the surface is laid out; ApplyPan is otherwise only called from user panning.
+            // Runs on every layout, so resize keeps the floating rulers tracking too.
             ApplyPan();
         };
 
