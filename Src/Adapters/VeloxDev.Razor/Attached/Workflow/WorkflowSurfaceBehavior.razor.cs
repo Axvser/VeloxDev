@@ -342,8 +342,13 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             var layout = Tree.Layout;
             var contentX = layout?.ActualOffset.Horizontal ?? 0;
             var contentY = layout?.ActualOffset.Vertical ?? 0;
-            var viewportX = WorkflowSurfaceMath.ToWorld(scrollLeft, _offsetX + contentX);
-            var viewportY = WorkflowSurfaceMath.ToWorld(scrollTop, _offsetY + contentY);
+            // Canonical (reported) frame — matches the XAML adapters: the reserved ruler inset and any
+            // left/top overscroll growth are a visual translate only, so the world-left reported here is
+            // scroll − (ActualOffset + overscroll). The decorator re-adds the ruler reserve for ticks.
+            var effX = contentX + Math.Max(0, _offsetX - RulerThickness);
+            var effY = contentY + Math.Max(0, _offsetY - RulerThickness);
+            var viewportX = WorkflowSurfaceMath.ToWorld(scrollLeft, effX);
+            var viewportY = WorkflowSurfaceMath.ToWorld(scrollTop, effY);
             try
             {
                 Tree.GetHelper().Viewport = new Viewport(viewportX, viewportY, _viewportW, _viewportH);
@@ -367,7 +372,11 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             // longer depends on a re-render. Only canvas growth (edge expansion) changes the links-
             // layer size (SurfaceCanvas context), so only then do we re-render the whole surface.
             _feed.Publish(_viewport);
-            PushMinimapViewport(viewportX, viewportY);
+            // The minimap is drawn over node/world content, so it must use the PHYSICAL visible world
+            // rect (which includes the edge translate) — not the canonical (ruler-excluded) one.
+            var physX = WorkflowSurfaceMath.ToWorld(scrollLeft, _offsetX + contentX);
+            var physY = WorkflowSurfaceMath.ToWorld(scrollTop, _offsetY + contentY);
+            PushMinimapViewport(physX, physY);
             PushSurfaceLayout(contentX, contentY);
             if (grew)
             {
@@ -431,12 +440,17 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private SurfaceViewport BuildViewport()
         => new(
             Tree ?? throw new InvalidOperationException("WorkflowSurfaceBehavior requires a Tree."),
-            _scrollLeft - _offsetX,
-            _scrollTop - _offsetY,
+            _scrollLeft,
+            _scrollTop,
             _viewportW,
             _viewportH,
-            Tree.Layout?.ActualOffset.Horizontal ?? 0,
-            Tree.Layout?.ActualOffset.Vertical ?? 0);
+            EffectiveContentX,
+            EffectiveContentY);
+
+    /// <summary>Effective world origin in the canonical frame: ActualOffset + any left/top overscroll
+    /// growth beyond the reserved ruler (which is a visual translate, like the XAML adapters).</summary>
+    private double EffectiveContentX => (Tree?.Layout?.ActualOffset.Horizontal ?? 0) + Math.Max(0, _offsetX - RulerThickness);
+    private double EffectiveContentY => (Tree?.Layout?.ActualOffset.Vertical ?? 0) + Math.Max(0, _offsetY - RulerThickness);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()

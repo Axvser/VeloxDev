@@ -76,11 +76,13 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
     private string RulerThicknessCss => RulerThickness.ToString("0.#") + "px";
 
     // The bands span the full surface width/height (background always covers the strip); only the
-    // tick layer translates. ScrollOffsetX = scrollLeft - _offsetX, so -ScrollOffsetX = _offsetX -
-    // scrollLeft places the layer's origin exactly on the content boundary, and a world v tick
-    // (band-local v) lands at surface _offsetX + v - scrollLeft — where the canvas draws world v.
-    private string TopTransform => $"translateX({(-ScrollOffsetX).ToString("0.#")}px)";
-    private string LeftTransform => $"translateY({(-ScrollOffsetY).ToString("0.#")}px)";
+    // tick layer translates. The viewport is reported in canonical coordinates (ScrollOffset = raw
+    // scroll offset >= 0, ContentOffset = effective world-origin = ActualOffset + overscroll), so the
+    // physical grid/axis line for world v sits at v + ContentOffset + RulerThickness - ScrollOffset
+    // (the RulerThickness reserve is a visual-only canvas translate). Translate the tick layer by that
+    // term and draw a world tick at band-local v to land exactly on the physical grid line.
+    private string TopTransform => $"translateX({(ContentOffsetX + RulerThickness - ScrollOffsetX).ToString("0.#")}px)";
+    private string LeftTransform => $"translateY({(ContentOffsetY + RulerThickness - ScrollOffsetY).ToString("0.#")}px)";
     private string TickLengthCss(bool isMajor)
         => (isMajor ? Math.Max(0, RulerThickness - 6) : Math.Max(6, RulerThickness * 0.35)).ToString("0.#") + "px";
     private string AxisColorCss => string.IsNullOrEmpty(AxisColor) ? TickColor : AxisColor;
@@ -137,21 +139,21 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
     /// viewport-visible range plus one spacing of margin so edges stay covered while scrolling.
     /// </summary>
     private IEnumerable<(double Pos, bool IsMajor, bool IsZero)> TopTicks
-        => ComputeTicks(ScrollOffsetX, Viewport?.ViewportWidth ?? 0);
+        => ComputeTicks(ScrollOffsetX - ContentOffsetX - RulerThickness, Viewport?.ViewportWidth ?? 0);
 
     /// <summary>
     /// Tick positions along the vertical (left) ruler, in band-local pixels. See <see cref="TopTicks"/>.
     /// </summary>
     private IEnumerable<(double Pos, bool IsMajor, bool IsZero)> LeftTicks
-        => ComputeTicks(ScrollOffsetY, Viewport?.ViewportHeight ?? 0);
+        => ComputeTicks(ScrollOffsetY - ContentOffsetY - RulerThickness, Viewport?.ViewportHeight ?? 0);
 
-    private IEnumerable<(double Pos, bool IsMajor, bool IsZero)> ComputeTicks(double scroll, double extent)
+    private IEnumerable<(double Pos, bool IsMajor, bool IsZero)> ComputeTicks(double rangeStart, double extent)
     {
         var spacing = Math.Max(8, Spacing);
         var majorStep = spacing * Math.Max(1, MajorLineEvery);
 
-        var first = Math.Floor(scroll / spacing) * spacing;
-        for (var v = first; v <= scroll + extent + spacing; v += spacing)
+        var first = Math.Floor(rangeStart / spacing) * spacing;
+        for (var v = first; v <= rangeStart + extent + spacing; v += spacing)
         {
             var isZero = Math.Abs(v) < 0.001;
             var isMajor = isZero

@@ -27,6 +27,12 @@ public partial class InfoOverlay : ComponentBase, IDisposable
     [Inject]
     public IJSRuntime JS { get; set; } = default!;
 
+    /// <summary>Live surface viewport broadcast (scroll/pan/zoom), so the HUD updates without a full re-render.</summary>
+    [CascadingParameter]
+    public SurfaceViewportFeed? ViewportFeed { get; set; }
+
+    private SurfaceViewport? _liveViewport;
+
     private string[] _lines = [];
     private string _copyText = "";
     private string _copyLabel = "复制";
@@ -45,6 +51,16 @@ public partial class InfoOverlay : ComponentBase, IDisposable
     }
 
     /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        if (ViewportFeed is not null)
+        {
+            ViewportFeed.Changed += OnViewportChanged;
+        }
+    }
+
+    /// <inheritdoc />
     protected override void OnParametersSet()
     {
         base.OnParametersSet();
@@ -54,6 +70,12 @@ public partial class InfoOverlay : ComponentBase, IDisposable
             _subscribedTree = Tree;
             SubscribeTree();
         }
+    }
+
+    private void OnViewportChanged(SurfaceViewport vp)
+    {
+        _liveViewport = vp;
+        InvokeAsync(StateHasChanged);
     }
 
     private void Recompute()
@@ -68,7 +90,8 @@ public partial class InfoOverlay : ComponentBase, IDisposable
         var layout = Tree.Layout;
         var actual = layout.ActualSize;
         double ox, oy, sx, sy, vw, vh;
-        if (Viewport is { } vp)
+        var vp = _liveViewport ?? Viewport;
+        if (vp is not null)
         {
             ox = vp.ContentOffsetX;
             oy = vp.ContentOffsetY;
@@ -186,6 +209,11 @@ public partial class InfoOverlay : ComponentBase, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        if (ViewportFeed is not null)
+        {
+            ViewportFeed.Changed -= OnViewportChanged;
+        }
+
         UnsubscribeTree();
     }
 
