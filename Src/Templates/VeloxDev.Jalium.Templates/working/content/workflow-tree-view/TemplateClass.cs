@@ -30,9 +30,19 @@ public class TemplateClass : Canvas
         DashStyle = new DashStyle(new double[] { 4, 2 }),
     };
 
-    /// <summary>World-origin translate (the tree's layout offset). Views position at world + origin.</summary>
-    public double OriginX => _tree?.Layout.ActualOffset.Horizontal ?? 0;
-    public double OriginY => _tree?.Layout.ActualOffset.Vertical ?? 0;
+    /// <summary>Visual-only content inset = the ruler-band thickness, so content is drawn below/right of
+    /// the floating rulers and the world axes land on their inner corner (matches the XAML adapters).</summary>
+    public const double RulerReserve = 36;
+
+    /// <summary>Visual world-origin translate = Layout.ActualOffset + the ruler reserve. Views position at
+    /// world + this origin; the minimap's physical content origin also uses it.</summary>
+    public double OriginX => (_tree?.Layout.ActualOffset.Horizontal ?? 0) + RulerReserve;
+    public double OriginY => (_tree?.Layout.ActualOffset.Vertical ?? 0) + RulerReserve;
+
+    /// <summary>Canonical (reported) world origin = Layout.ActualOffset, excluding the ruler reserve —
+    /// feeds the info HUD / helper so numbers stay identical across adapters.</summary>
+    public double ContentOriginX => _tree?.Layout.ActualOffset.Horizontal ?? 0;
+    public double ContentOriginY => _tree?.Layout.ActualOffset.Vertical ?? 0;
 
     /// <summary>Raised after any model change so overlays (rulers, minimap) can redraw.</summary>
     public Action? Changed;

@@ -154,8 +154,10 @@ public class TemplateClass : Canvas
     {
         if (_node is null) return;
         var origin = _node.Parent?.Layout.ActualOffset ?? new Offset();
-        Canvas.SetLeft(this, _node.Anchor.Horizontal + origin.Horizontal);
-        Canvas.SetTop(this, _node.Anchor.Vertical + origin.Vertical);
+        // + the ruler reserve (36) so content is inset below/right of the floating rulers and the world
+        // axes land on their inner corner (the tree's OriginX adds the same reserve).
+        Canvas.SetLeft(this, _node.Anchor.Horizontal + origin.Horizontal + 36);
+        Canvas.SetTop(this, _node.Anchor.Vertical + origin.Vertical + 36);
         Width = _node.Size.Width;
         Height = _node.Size.Height;
         _viewbox.Width = Width;

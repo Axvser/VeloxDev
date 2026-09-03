@@ -190,12 +190,15 @@ public class TemplateClass : FrameworkElement
         }
 
         var origin = _link.Sender.Parent?.Parent?.Layout.ActualOffset ?? new Offset();
+        // + the ruler reserve (36) to match the inset node views (see the node-view template).
+        var rx = origin.Horizontal + 36;
+        var ry = origin.Vertical + 36;
         var from = PortCenter(_link.Sender);
         var to = PortCenter(_link.Receiver);
         if (from is null || to is null) return; // an endpoint has no position — nothing to draw
 
-        var fromP = new Point(from.Value.X + origin.Horizontal, from.Value.Y + origin.Vertical);
-        var toP = new Point(to.Value.X + origin.Horizontal, to.Value.Y + origin.Vertical);
+        var fromP = new Point(from.Value.X + rx, from.Value.Y + ry);
+        var toP = new Point(to.Value.X + rx, to.Value.Y + ry);
         var pen = new Pen(s_brush, 2);
 
         // Golden-ratio polyline aligned with the other GUI schemes (mirrors the item template).

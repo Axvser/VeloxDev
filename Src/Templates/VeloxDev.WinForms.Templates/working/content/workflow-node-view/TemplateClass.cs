@@ -412,10 +412,12 @@ public sealed class TemplateClass : UserControl
         // panOffset + ActualOffset); the node must share that origin so it collapses toward the
         // axis on zoom instead of toward the bare pan offset. Falls back to (0,0) for hosts
         // whose node has no tree yet.
+        // + the ruler reserve: content is inset below/right of the floating rulers so the world axes
+        // land on their inner corner (the tree feeds the grid/rulers the same visual origin).
         var content = _node.Parent?.Layout?.ActualOffset ?? new Offset();
         Location = new Point(
-            (int)Math.Round(_node.Anchor.Horizontal) + pan.X + (int)Math.Round(content.Horizontal),
-            (int)Math.Round(_node.Anchor.Vertical) + pan.Y + (int)Math.Round(content.Vertical));
+            (int)Math.Round(_node.Anchor.Horizontal) + pan.X + (int)Math.Round(content.Horizontal) + 36,
+            (int)Math.Round(_node.Anchor.Vertical) + pan.Y + (int)Math.Round(content.Vertical) + 36);
         Size = new Size(
             (int)Math.Round(_node.Size.Width),
             (int)Math.Round(_node.Size.Height));
