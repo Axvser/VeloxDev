@@ -275,7 +275,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
         }
 
-        var factor = e.Delta.Y > 0 ? 1.1 : 1 / 1.1;
+        // Wheel up (positive Delta.Y) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+        var factor = e.Delta.Y > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
         var layout = viewModel.Layout;
 

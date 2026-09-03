@@ -469,7 +469,8 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         var delta = e.GetCurrentPoint(source).Properties.MouseWheelDelta;
-        var factor = delta > 0 ? 1.1 : 1 / 1.1;
+        // Wheel up (positive delta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+        var factor = delta > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, viewModel.Layout.Scale.Horizontal * factor));
         var layout = viewModel.Layout;
 

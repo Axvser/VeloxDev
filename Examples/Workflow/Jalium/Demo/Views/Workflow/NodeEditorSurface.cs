@@ -85,7 +85,8 @@ internal sealed class NodeEditorSurface : Canvas
             return;
         }
 
-        var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
+        // Wheel up (positive delta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+        var factor = e.Delta > 0 ? 1 / 1.1 : 1.1;
         var next = System.Math.Max(0.1, System.Math.Min(10, _tree.Layout.Scale.Horizontal * factor));
         _tree.Layout.Scale = new Scale(next, next);
         e.Handled = true;

@@ -56,7 +56,8 @@ public sealed class WorkflowSurfaceBehavior
             }
 
             var delta = unchecked((short)((uint)m.WParam.ToInt64() >> 16));
-            var factor = delta > 0 ? 1.1 : 1 / 1.1;
+            // Wheel up (positive delta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+            var factor = delta > 0 ? 1 / 1.1 : 1.1;
             var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
             var layout = tree.Layout;
 
@@ -197,7 +198,8 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
+        // Wheel up (positive delta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+        var factor = e.Delta > 0 ? 1 / 1.1 : 1.1;
         var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
         var layout = tree.Layout;
 

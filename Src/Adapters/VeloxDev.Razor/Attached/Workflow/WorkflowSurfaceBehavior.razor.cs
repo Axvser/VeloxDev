@@ -200,7 +200,9 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
             var notches = Math.Abs(wheelDelta) / 120d;
             var count = (int)Math.Max(1, Math.Round(notches));
-            var factor = wheelDelta > 0 ? 1.1 : 1 / 1.1;
+            // Wheel up arrives as positive wheelDelta (the JS handler negates the browser's deltaY)
+            // and zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+            var factor = wheelDelta > 0 ? 1 / 1.1 : 1.1;
 
             for (var i = 0; i < count; i++)
             {
@@ -255,7 +257,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         {
             var notches = Math.Abs(wheelDelta) / 120d;
             var count = (int)Math.Max(1, Math.Round(notches));
-            var factor = wheelDelta > 0 ? 1.1 : 1 / 1.1;
+            // Wheel up (positive wheelDelta) zooms in: Scale is a collapse factor, so zoom-in divides it by 1/1.1.
+            var factor = wheelDelta > 0 ? 1 / 1.1 : 1.1;
             for (var i = 0; i < count; i++)
             {
                 var next = Math.Max(0.1, Math.Min(10, layout.Scale.Horizontal * factor));
