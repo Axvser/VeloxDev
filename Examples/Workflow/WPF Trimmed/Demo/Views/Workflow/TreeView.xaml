@@ -62,5 +62,18 @@
                                       VerticalAlignment="Top"
                                       Margin="0,12,12,0"
                                       ScrollViewerName="PART_ScrollViewer" />
+        <!-- Realtime canvas-info HUD (floating decorator layer). Scroll/content offsets come from the
+             grid decorator's DPs (fed by WorkflowSurfaceBehavior on scroll/pan/zoom); viewport size from
+             the surface border so it also tracks window resize. The overlay subscribes to the Core model
+             itself (scale / ActualSize / helper VisibleItems). -->
+        <workflowViews:InfoOverlay HorizontalAlignment="Left"
+                                   VerticalAlignment="Bottom"
+                                   Margin="46,0,0,12"
+                                   ScrollOffsetX="{Binding ScrollOffsetX, ElementName=PART_GridDecorator}"
+                                   ScrollOffsetY="{Binding ScrollOffsetY, ElementName=PART_GridDecorator}"
+                                   ContentOffsetX="{Binding ContentOffsetX, ElementName=PART_GridDecorator}"
+                                   ContentOffsetY="{Binding ContentOffsetY, ElementName=PART_GridDecorator}"
+                                   ViewportWidth="{Binding ActualWidth, ElementName=PART_SurfaceBorder}"
+                                   ViewportHeight="{Binding ActualHeight, ElementName=PART_SurfaceBorder}" />
     </Grid>
 </UserControl>

@@ -1,0 +1,10 @@
+@namespace Demo.Components.Workflow
+@* Realtime canvas-info HUD (bottom-left, floating). The container div is pointer-events:none so drags
+   fall through to the surface; only the copy button (pointer-events:auto) is interactive. *@
+<div class="veloxdev-wf-info">
+    @foreach (var line in Lines)
+    {
+        <div>@line</div>
+    }
+    <button class="veloxdev-wf-info-copy" @onclick="CopyInfo">@CopyLabel</button>
+</div>

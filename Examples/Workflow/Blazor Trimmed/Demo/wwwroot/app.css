@@ -49,3 +49,34 @@ html, body {
     border-radius: 4px;
     overflow: hidden;
 }
+
+/* ── Canvas-info HUD (floating decorator layer, bottom-left) ─────────────── */
+.veloxdev-wf-info {
+    position: absolute;
+    left: 44px;
+    bottom: 12px;
+    z-index: 60;
+    width: max-content;
+    padding: 8px 12px 40px 12px;
+    background: rgba(18, 21, 27, 0.92);
+    border: 1px solid rgba(142, 163, 184, 0.8);
+    border-radius: 6px;
+    color: #DDE4EA;
+    font: 12px "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    white-space: nowrap;
+    pointer-events: none; /* text layer click-through */
+}
+.veloxdev-wf-info div { line-height: 18px; }
+.veloxdev-wf-info-copy {
+    pointer-events: auto; /* only the button is interactive */
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    font-size: 11px;
+    padding: 2px 8px;
+    color: #7EC8FF;
+    background: #1E3A5F;
+    border: 1px solid #7EC8FF;
+    border-radius: 4px;
+    cursor: pointer;
+}

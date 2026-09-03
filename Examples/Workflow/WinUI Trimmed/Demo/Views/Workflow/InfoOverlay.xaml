@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl x:Class="Demo.Views.Workflow.InfoOverlay"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Realtime canvas-info HUD. The text layer (Border + TextBlock) is hit-test transparent so
+         drags fall through to the surface; only the 复制 button is interactive. The host binds
+         ScrollOffset/ContentOffset/Viewport DPs (same feed as the minimap) and WorkflowTree; the
+         control subscribes to the Core model for scale / actual size / visible counts. -->
+    <Grid>
+        <Border IsHitTestVisible="False"
+                CornerRadius="6"
+                Background="#E612151B"
+                BorderBrush="#CC8EA3B8"
+                BorderThickness="1"
+                Padding="12,8,58,8">
+            <TextBlock x:Name="InfoText"
+                       Foreground="#DDE4EA"
+                       FontSize="12"
+                       LineHeight="18"
+                       IsHitTestVisible="False" />
+        </Border>
+        <Button x:Name="CopyButton"
+                Content="复制"
+                FontSize="11"
+                Padding="8,2"
+                Margin="0,0,8,8"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Background="#1E3A5F"
+                Foreground="#7EC8FF"
+                BorderBrush="#7EC8FF"
+                BorderThickness="1"
+                Click="OnCopyClicked" />
+    </Grid>
+</UserControl>

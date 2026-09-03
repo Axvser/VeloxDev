@@ -41,5 +41,11 @@
                               VerticalOptions="Start"
                               Margin="0,12,12,0"
                               ScrollViewerName="PART_ScrollViewer" />
+        <!-- Realtime canvas-info HUD (floating decorator layer, bottom-left). Refreshes from the Core
+             model + the host's ScrollView.Scrolled (TreeView.xaml.cs). -->
+        <local:InfoOverlay x:Name="InfoOverlay"
+                           HorizontalOptions="Start"
+                           VerticalOptions="End"
+                           Margin="44,0,0,12" />
     </Grid>
 </ContentView>

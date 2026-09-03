@@ -25,6 +25,8 @@
             <MinimapOverlay Viewport="vp"
                             Width="180" Height="120"
                             ScrollViewerId="@ScrollViewerId" />
+            @* Realtime canvas-info HUD (bottom-left floating text + copy button). *@
+            <InfoOverlay Tree="Tree" Viewport="vp" />
         </Minimap>
         <ChildContent Context="sc">
             @* Links layer: one full-canvas link view per connection (absolute, overflow visible). *@

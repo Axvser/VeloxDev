@@ -65,12 +65,17 @@ public class TreeView : Canvas
     {
         _scrollViewer = viewer;
         // The ruler bands are viewport-fixed, so a scroll must repaint the surface (grid + rulers).
-        viewer.ScrollChanged += (_, _) =>
+        // SizeChanged keeps helper.Viewport (culling + info HUD) current when the viewer resizes but
+        // does not scroll — Jalium may not raise ScrollChanged for a viewport-size change.
+        void OnViewportMetricsChanged()
         {
             UpdateViewport();
             InvalidateVisual();
             Changed?.Invoke();
-        };
+        }
+
+        viewer.ScrollChanged += (_, _) => OnViewportMetricsChanged();
+        viewer.SizeChanged += (_, _) => OnViewportMetricsChanged();
     }
 
     /// <summary>The bound workflow tree (for overlays like the minimap).</summary>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Realtime canvas-info HUD. The root layer is InputTransparent (CascadeInputTransparent=False) so
+     drags fall through to the surface; the Border + Label are also input-transparent, leaving only the
+     复制 button interactive. The TreeView host refreshes it on scroll/viewport changes and it subscribes
+     to the Core model for layout / visible counts. -->
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Demo.Controls.InfoOverlay">
+    <Grid InputTransparent="True" CascadeInputTransparent="False">
+        <Border InputTransparent="True"
+                Stroke="#CC8EA3B8"
+                StrokeThickness="1"
+                StrokeShape="RoundRectangle 6"
+                BackgroundColor="#E612151B"
+                Padding="12,8,58,8">
+            <Label x:Name="InfoText"
+                   TextColor="#DDE4EA"
+                   FontSize="12"
+                   LineHeight="1.3"
+                   InputTransparent="True" />
+        </Border>
+        <Button x:Name="CopyButton"
+                Text="复制"
+                FontSize="11"
+                Padding="8,2"
+                Margin="0,0,8,8"
+                HorizontalOptions="End"
+                VerticalOptions="End"
+                BackgroundColor="#1E3A5F"
+                TextColor="#7EC8FF"
+                BorderColor="#7EC8FF"
+                BorderWidth="1"
+                Clicked="OnCopyClicked" />
+    </Grid>
+</ContentView>

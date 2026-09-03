@@ -68,9 +68,22 @@ internal sealed class MainWindow : Window
             Margin = new Thickness(0, 40, 16, 0),
         };
 
-        // Feed the minimap's offsets/viewport on every scroll or model change (the base's
-        // WorkflowMinimapOverlay repaints and drag-pans from these values). The grid + ruler band
-        // are drawn by the TreeView's own OnRender (GridDecorator), like the other GUI adapters.
+        // Realtime canvas-info decorator layer (floating text HUD): anchored bottom-left, hit-test
+        // transparent. It subscribes to the Core model itself (Layout.ActualSize / Scale / helper
+        // VisibleItems) and is fed the same scroll + content-offset + viewport numbers as the minimap,
+        // so the read-out stays live while panning / zooming / dragging beneath it.
+        var info = new InfoOverlay
+        {
+            WorkflowTree = tree,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(16, 0, 0, 18),
+        };
+
+        // Feed the minimap's and info HUD's offsets/viewport on every scroll or model change (the
+        // minimap base's WorkflowMinimapOverlay repaints and drag-pans from these values; InfoOverlay
+        // redraws from them). The grid + ruler band are drawn by the TreeView's own OnRender
+        // (GridDecorator), like the other GUI adapters.
         void RefreshOverlays()
         {
             minimap.ContentOffsetX = surface.OriginX;
@@ -79,15 +92,26 @@ internal sealed class MainWindow : Window
             minimap.ScrollOffsetY = viewer.VerticalOffset;
             minimap.ViewportWidth = viewer.ViewportWidth;
             minimap.ViewportHeight = viewer.ViewportHeight;
+
+            info.ContentOffsetX = surface.OriginX;
+            info.ContentOffsetY = surface.OriginY;
+            info.ScrollOffsetX = viewer.HorizontalOffset;
+            info.ScrollOffsetY = viewer.VerticalOffset;
+            info.ViewportWidth = viewer.ViewportWidth;
+            info.ViewportHeight = viewer.ViewportHeight;
         }
 
+        // SizeChanged catches the viewer's first measure (Jalium may not fire ScrollChanged on the
+        // initial layout, which is why TreeView.UpdateViewport falls back to the whole canvas).
         viewer.ScrollChanged += (_, _) => RefreshOverlays();
+        viewer.SizeChanged += (_, _) => RefreshOverlays();
         surface.Changed += RefreshOverlays;
         RefreshOverlays();
 
         var root = new Grid();
         root.Children.Add(viewer);
         root.Children.Add(minimap);
+        root.Children.Add(info);
 
         Content = root;
     }

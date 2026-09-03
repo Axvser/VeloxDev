@@ -51,6 +51,9 @@ public sealed class TreeView : UserControl
     /// <summary>Optional minimap overlay that implements <see cref="IWorkflowMinimapOverlay"/>.</summary>
     public Control? PART_MinimapOverlay { get; private set; }
 
+    /// <summary>Realtime canvas-info HUD (bottom-left floating text panel + copy button).</summary>
+    private readonly InfoOverlay _infoOverlay = new();
+
     /// <summary>Floating translucent ruler overlay (owned popup), created once the surface is parented.</summary>
     private RulerOverlayForm? _rulerOverlay;
 
@@ -157,6 +160,10 @@ public sealed class TreeView : UserControl
         PART_Canvas.MouseMove += OnCanvasMouseMove;
         PART_Canvas.MouseUp += OnCanvasMouseUp;
         PART_Canvas.MouseCaptureChanged += OnCanvasMouseCaptureChanged;
+
+        // Realtime canvas-info HUD: floating bottom-left, above the scroll viewer.
+        Controls.Add(_infoOverlay);
+        _infoOverlay.BringToFront();
 
         HandleCreated += OnHandleCreated;
         Resize += OnSurfaceResize;
@@ -648,6 +655,7 @@ public sealed class TreeView : UserControl
             }
 
             AttachTree();
+            _infoOverlay.Bind(value);
             ScheduleLayout();
         }
     }
@@ -966,6 +974,9 @@ public sealed class TreeView : UserControl
         {
             // The tree helper may not support viewport writes on some hosts; ignore.
         }
+
+        // Keep the canvas-info HUD current after every pan/layout (reads helper.Viewport).
+        _infoOverlay.UpdateText();
     }
 
     private void ScheduleLayout()
