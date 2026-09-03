@@ -24,6 +24,15 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <Compile Remove="WorkflowSystem\GUI\Events\**" />
+	  <Compile Remove="WorkflowSystem\GUI\Performance\**" />
+	  <EmbeddedResource Remove="WorkflowSystem\GUI\Events\**" />
+	  <EmbeddedResource Remove="WorkflowSystem\GUI\Performance\**" />
+	  <None Remove="WorkflowSystem\GUI\Events\**" />
+	  <None Remove="WorkflowSystem\GUI\Performance\**" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
 		<PackageReference Include="VeloxDev.Core.Generator" Version="8.0.0" />
 	</ItemGroup>
