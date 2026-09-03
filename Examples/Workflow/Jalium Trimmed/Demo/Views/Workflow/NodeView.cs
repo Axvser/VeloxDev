@@ -153,9 +153,12 @@ public class NodeView : Canvas
     private void ApplyPosition()
     {
         if (_node is null) return;
+        // + ruler reserve: content is inset below/right of the floating rulers so the world axes land
+        // on their inner corner (the surface OriginX/Y add the same reserve, keeping world↔screen and
+        // grid/ticks aligned).
         var origin = _node.Parent?.Layout.ActualOffset ?? new Offset();
-        Canvas.SetLeft(this, _node.Anchor.Horizontal + origin.Horizontal);
-        Canvas.SetTop(this, _node.Anchor.Vertical + origin.Vertical);
+        Canvas.SetLeft(this, _node.Anchor.Horizontal + origin.Horizontal + GridDecorator.RulerThickness);
+        Canvas.SetTop(this, _node.Anchor.Vertical + origin.Vertical + GridDecorator.RulerThickness);
         Width = _node.Size.Width;
         Height = _node.Size.Height;
         _viewbox.Width = Width;

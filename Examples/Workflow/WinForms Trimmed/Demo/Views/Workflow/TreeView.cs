@@ -30,6 +30,11 @@ namespace Demo.Views.Workflow;
 /// </summary>
 public sealed class TreeView : UserControl
 {
+    /// <summary>Visual-only content inset = the ruler-band thickness, so content is drawn below/right of
+    /// the floating rulers and the world axes land on their inner corner (matching WPF/Blazor). This is a
+    /// screen-space translate only; canonical helper.Viewport / HUD numbers still exclude it.</summary>
+    public const double RulerReserve = SurfaceCanvas.DefaultRulerThickness;
+
     /// <summary>Scrollable viewport host (AutoScroll). The surface behavior reads scroll offsets from this control.</summary>
     public ScrollableControl PART_ScrollViewer { get; }
 
@@ -937,12 +942,17 @@ public sealed class TreeView : UserControl
             _tree?.Layout?.ActualOffset.Horizontal ?? 0,
             _tree?.Layout?.ActualOffset.Vertical ?? 0);
 
+        // Visual content origin = ActualOffset + the ruler reserve (a pure screen-space inset so the
+        // world axes land on the rulers' inner corner). The canonical helper.Viewport below still uses
+        // `content` alone, so reported numbers stay identical to the other adapters.
+        var contentVisual = new Offset(content.Horizontal + RulerReserve, content.Vertical + RulerReserve);
+
         if (PART_GridDecorator is IWorkflowGridDecorator grid)
         {
             grid.ScrollOffsetX = -_panOffset.X;
             grid.ScrollOffsetY = -_panOffset.Y;
-            grid.ContentOffsetX = content.Horizontal;
-            grid.ContentOffsetY = content.Vertical;
+            grid.ContentOffsetX = contentVisual.Horizontal;
+            grid.ContentOffsetY = contentVisual.Vertical;
             PART_GridDecorator.Invalidate();
         }
 
@@ -952,8 +962,8 @@ public sealed class TreeView : UserControl
         {
             _rulerOverlay.ScrollOffsetX = -_panOffset.X;
             _rulerOverlay.ScrollOffsetY = -_panOffset.Y;
-            _rulerOverlay.ContentOffsetX = content.Horizontal;
-            _rulerOverlay.ContentOffsetY = content.Vertical;
+            _rulerOverlay.ContentOffsetX = contentVisual.Horizontal;
+            _rulerOverlay.ContentOffsetY = contentVisual.Vertical;
             SyncRulerOverlay();
         }
 
@@ -961,8 +971,8 @@ public sealed class TreeView : UserControl
         {
             minimap.ScrollOffsetX = -_panOffset.X;
             minimap.ScrollOffsetY = -_panOffset.Y;
-            minimap.ContentOffsetX = content.Horizontal;
-            minimap.ContentOffsetY = content.Vertical;
+            minimap.ContentOffsetX = contentVisual.Horizontal;
+            minimap.ContentOffsetY = contentVisual.Vertical;
             minimap.ViewportWidth = PART_ScrollViewer.ClientSize.Width;
             minimap.ViewportHeight = PART_ScrollViewer.ClientSize.Height;
             PART_MinimapOverlay.Invalidate();

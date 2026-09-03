@@ -191,12 +191,15 @@ public class LinkView : FrameworkElement
         }
 
         var origin = _link.Sender.Parent?.Parent?.Layout.ActualOffset ?? new Offset();
+        // + ruler reserve to match the inset NodeViews (see NodeView.ApplyPosition).
+        var rx = origin.Horizontal + GridDecorator.RulerThickness;
+        var ry = origin.Vertical + GridDecorator.RulerThickness;
         var from = PortCenter(_link.Sender);
         var to = PortCenter(_link.Receiver);
         if (from is null || to is null) return; // an endpoint has no position — nothing to draw
 
-        var fromP = new Point(from.Value.X + origin.Horizontal, from.Value.Y + origin.Vertical);
-        var toP = new Point(to.Value.X + origin.Horizontal, to.Value.Y + origin.Vertical);
+        var fromP = new Point(from.Value.X + rx, from.Value.Y + ry);
+        var toP = new Point(to.Value.X + rx, to.Value.Y + ry);
         var pen = new Pen(s_brush, 2);
 
         // Golden-ratio polyline aligned with the other GUI schemes (mirrors the item template).

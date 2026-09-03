@@ -93,8 +93,8 @@ internal sealed class MainWindow : Window
             minimap.ViewportWidth = viewer.ViewportWidth;
             minimap.ViewportHeight = viewer.ViewportHeight;
 
-            info.ContentOffsetX = surface.OriginX;
-            info.ContentOffsetY = surface.OriginY;
+            info.ContentOffsetX = surface.ContentOriginX; // canonical (ruler reserve excluded)
+            info.ContentOffsetY = surface.ContentOriginY;
             info.ScrollOffsetX = viewer.HorizontalOffset;
             info.ScrollOffsetY = viewer.VerticalOffset;
             info.ViewportWidth = viewer.ViewportWidth;

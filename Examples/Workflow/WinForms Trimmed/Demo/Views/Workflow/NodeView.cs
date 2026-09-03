@@ -412,9 +412,11 @@ public sealed class NodeView : UserControl
         // axis on zoom instead of toward the bare pan offset. Falls back to (0,0) for hosts
         // whose node has no tree yet.
         var content = _node.Parent?.Layout?.ActualOffset ?? new Offset();
+        // + ruler reserve: content is inset below/right of the floating rulers so the world axes land on
+        // their inner corner (ApplyPan feeds the grid/rulers the same visual origin, so they stay aligned).
         Location = new Point(
-            (int)Math.Round(_node.Anchor.Horizontal) + pan.X + (int)Math.Round(content.Horizontal),
-            (int)Math.Round(_node.Anchor.Vertical) + pan.Y + (int)Math.Round(content.Vertical));
+            (int)Math.Round(_node.Anchor.Horizontal) + pan.X + (int)Math.Round(content.Horizontal) + (int)TreeView.RulerReserve,
+            (int)Math.Round(_node.Anchor.Vertical) + pan.Y + (int)Math.Round(content.Vertical) + (int)TreeView.RulerReserve);
         Size = new Size(
             (int)Math.Round(_node.Size.Width),
             (int)Math.Round(_node.Size.Height));
