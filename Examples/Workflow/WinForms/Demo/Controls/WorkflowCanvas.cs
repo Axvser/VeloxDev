@@ -762,18 +762,23 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
         // Convert world coordinates to client and draw the grid full-area (no clip, no
         // content-area guard) so grid lines extend under the translucent ruler bands.
-        var startX = Math.Floor((-origin.X) / GridSpacing) * GridSpacing;
-        for (var x = startX; x <= -origin.X + cw + GridSpacing; x += GridSpacing)
+        // worldLeft is -origin.X here: the content canvas is translated by origin (the ruler bands float
+        // above it), so the canonical family reads client = GridX(world, worldLeft, 0) and the first
+        // visible grid line = GridFirstLine(worldLeft, GridSpacing).
+        double worldLeft = -origin.X;
+        var startX = WorkflowSurfaceMath.GridFirstLine(worldLeft, GridSpacing);
+        for (var x = startX; x <= worldLeft + cw + GridSpacing; x += GridSpacing)
         {
-            var sx = (float)(x + origin.X);
+            var sx = (float)WorkflowSurfaceMath.GridX(x, worldLeft, 0);
             var pen = NearZero(x) ? axis : IsMajor(x) ? major : minor;
             g.DrawLine(pen, sx, 0, sx, ch);
         }
 
-        var startY = Math.Floor((-origin.Y) / GridSpacing) * GridSpacing;
-        for (var y = startY; y <= -origin.Y + ch + GridSpacing; y += GridSpacing)
+        double worldTop = -origin.Y;
+        var startY = WorkflowSurfaceMath.GridFirstLine(worldTop, GridSpacing);
+        for (var y = startY; y <= worldTop + ch + GridSpacing; y += GridSpacing)
         {
-            var sy = (float)(y + origin.Y);
+            var sy = (float)WorkflowSurfaceMath.GridY(y, worldTop, 0);
             var pen = NearZero(y) ? axis : IsMajor(y) ? major : minor;
             g.DrawLine(pen, 0, sy, cw, sy);
         }

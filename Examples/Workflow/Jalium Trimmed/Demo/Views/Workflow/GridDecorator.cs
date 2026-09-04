@@ -1,6 +1,7 @@
 using Jalium.UI;
 using Jalium.UI.Interop;
 using Jalium.UI.Media;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
@@ -36,7 +37,7 @@ public static class GridDecorator
     {
         double worldLeft = -originX;
         double worldRight = worldLeft + width;
-        for (double g = Math.Floor(worldLeft / GridStep) * GridStep; g <= worldRight; g += GridStep)
+        for (double g = WorkflowSurfaceMath.GridFirstLine(worldLeft, GridStep); g <= worldRight; g += GridStep)
         {
             double x = g + originX;
             Pen pen = g == 0 ? s_axisPen : (Math.Abs(g % MajorStep) < 0.001 ? s_majorPen : s_minorPen);
@@ -45,7 +46,7 @@ public static class GridDecorator
 
         double worldTop = -originY;
         double worldBottom = worldTop + height;
-        for (double g = Math.Floor(worldTop / GridStep) * GridStep; g <= worldBottom; g += GridStep)
+        for (double g = WorkflowSurfaceMath.GridFirstLine(worldTop, GridStep); g <= worldBottom; g += GridStep)
         {
             double y = g + originY;
             Pen pen = g == 0 ? s_axisPen : (Math.Abs(g % MajorStep) < 0.001 ? s_majorPen : s_minorPen);
@@ -67,8 +68,8 @@ public static class GridDecorator
         dc.DrawLine(s_dividerPen, new Point(scrollX, scrollY + ruler), new Point(scrollX + viewportWidth, scrollY + ruler));
 
         // Top ruler: ticks at world grid x crossing the viewport, canvas x = world + originX.
-        double worldLeft = scrollX - originX;
-        for (double g = Math.Floor(worldLeft / GridStep) * GridStep; g + originX <= scrollX + viewportWidth; g += GridStep)
+        double worldLeft = WorkflowSurfaceMath.GridWorldLeft(scrollX, originX);
+        for (double g = WorkflowSurfaceMath.GridFirstLine(worldLeft, GridStep); g + originX <= scrollX + viewportWidth; g += GridStep)
         {
             double x = g + originX;
             if (x < scrollX + ruler) continue;
@@ -85,8 +86,8 @@ public static class GridDecorator
         }
 
         // Left ruler: ticks at world grid y crossing the viewport, canvas y = world + originY.
-        double worldTop = scrollY - originY;
-        for (double g = Math.Floor(worldTop / GridStep) * GridStep; g + originY <= scrollY + viewportHeight; g += GridStep)
+        double worldTop = WorkflowSurfaceMath.GridWorldTop(scrollY, originY);
+        for (double g = WorkflowSurfaceMath.GridFirstLine(worldTop, GridStep); g + originY <= scrollY + viewportHeight; g += GridStep)
         {
             double y = g + originY;
             if (y < scrollY + ruler) continue;

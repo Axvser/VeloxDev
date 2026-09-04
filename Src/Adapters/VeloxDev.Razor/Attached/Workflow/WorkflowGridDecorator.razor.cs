@@ -152,7 +152,7 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
         var spacing = Math.Max(8, Spacing);
         var majorStep = spacing * Math.Max(1, MajorLineEvery);
 
-        var first = Math.Floor(rangeStart / spacing) * spacing;
+        var first = WorkflowSurfaceMath.GridFirstLine(rangeStart, spacing);
         for (var v = first; v <= rangeStart + extent + spacing; v += spacing)
         {
             var isZero = Math.Abs(v) < 0.001;

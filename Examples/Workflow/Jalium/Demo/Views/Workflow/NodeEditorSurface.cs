@@ -501,7 +501,7 @@ internal sealed class NodeEditorSurface : Canvas
     {
         double worldLeft = -OriginX;
         double worldRight = worldLeft + Width;
-        for (double g = Math.Floor(worldLeft / GridStep) * GridStep; g <= worldRight; g += GridStep)
+        for (double g = WorkflowSurfaceMath.GridFirstLine(worldLeft, GridStep); g <= worldRight; g += GridStep)
         {
             double x = g + OriginX;
             Pen pen = g == 0 ? s_axisPen : (Math.Abs(g % MajorStep) < 0.001 ? s_majorPen : s_minorPen);
@@ -510,7 +510,7 @@ internal sealed class NodeEditorSurface : Canvas
 
         double worldTop = -OriginY;
         double worldBottom = worldTop + Height;
-        for (double g = Math.Floor(worldTop / GridStep) * GridStep; g <= worldBottom; g += GridStep)
+        for (double g = WorkflowSurfaceMath.GridFirstLine(worldTop, GridStep); g <= worldBottom; g += GridStep)
         {
             double y = g + OriginY;
             Pen pen = g == 0 ? s_axisPen : (Math.Abs(g % MajorStep) < 0.001 ? s_majorPen : s_minorPen);
@@ -533,8 +533,8 @@ internal sealed class NodeEditorSurface : Canvas
         dc.DrawLine(s_dividerPen, new Point(scrollX, scrollY + ruler), new Point(scrollX + vw, scrollY + ruler));
 
         // Top ruler: ticks at world grid x crossing the viewport, canvas x = world + originX.
-        double worldLeft = scrollX - originX;
-        for (double g = Math.Floor(worldLeft / GridStep) * GridStep; g + originX <= scrollX + vw; g += GridStep)
+        double worldLeft = WorkflowSurfaceMath.GridWorldLeft(scrollX, originX);
+        for (double g = WorkflowSurfaceMath.GridFirstLine(worldLeft, GridStep); g + originX <= scrollX + vw; g += GridStep)
         {
             double x = g + originX;
             if (x < scrollX + ruler) continue;
@@ -551,8 +551,8 @@ internal sealed class NodeEditorSurface : Canvas
         }
 
         // Left ruler: ticks at world grid y crossing the viewport, canvas y = world + originY.
-        double worldTop = scrollY - originY;
-        for (double g = Math.Floor(worldTop / GridStep) * GridStep; g + originY <= scrollY + vh; g += GridStep)
+        double worldTop = WorkflowSurfaceMath.GridWorldTop(scrollY, originY);
+        for (double g = WorkflowSurfaceMath.GridFirstLine(worldTop, GridStep); g + originY <= scrollY + vh; g += GridStep)
         {
             double y = g + originY;
             if (y < scrollY + ruler) continue;
