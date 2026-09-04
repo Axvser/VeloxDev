@@ -94,6 +94,16 @@ public sealed class WorkflowSlotLayoutBehavior
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.BindingContextChanged += OnBindingContextChanged;
+
+        // WinUI/WPF parity: subscribe the node's native resize so the slot anchors are
+        // measured synchronously at the exact post-arrange instant, not by the 16ms
+        // coalescing timer chasing a moving collapse. A zoom collapse always changes the
+        // node's allocated size, and MAUI's SizeChanged fires from the platform arrange
+        // once the node (and its arranged subtree) reached its final size for that pass —
+        // the layout-completed signal WPF gets from LayoutUpdated. Position-only moves
+        // (drag) keep the size constant, so they still ride the property-change timer path.
+        control.SizeChanged += OnNodeResized;
+
         UpdatePropertyChangedSubscription(control);
         ScheduleSync(control);
     }
@@ -103,6 +113,7 @@ public sealed class WorkflowSlotLayoutBehavior
         control.Loaded -= OnLoaded;
         control.Unloaded -= OnUnloaded;
         control.BindingContextChanged -= OnBindingContextChanged;
+        control.SizeChanged -= OnNodeResized;
 
         if (control.GetValue(StateProperty) is LayoutState state)
         {
@@ -139,6 +150,20 @@ public sealed class WorkflowSlotLayoutBehavior
             {
                 state.SyncTimer.Stop();
             }
+        }
+    }
+
+    private static void OnNodeResized(object? sender, EventArgs e)
+    {
+        if (sender is ContentView control)
+        {
+            // Synchronous, in-arrange measurement: MAUI's native layout has already committed
+            // the node's collapsed frame (and its arranged subtree) by the time SizeChanged
+            // fires, so reading the slot centers here returns the final post-zoom geometry —
+            // no 16ms lag, no settle chain to wedge. Deliberately NOT routed through
+            // ScheduleSync: a coalescing timer would re-introduce the async read of a
+            // mid-collapse frame the parity hook exists to eliminate.
+            Sync(control);
         }
     }
 
