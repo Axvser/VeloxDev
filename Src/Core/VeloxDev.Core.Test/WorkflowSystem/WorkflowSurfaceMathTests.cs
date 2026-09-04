@@ -342,4 +342,192 @@ public class WorkflowSurfaceMathTests
     {
         Assert.AreEqual(5d, WorkflowSurfaceMath.MinThumbSize(10, 0.5, 4));
     }
+
+    // ── Screen ↔ world conversion ───────────────────────────────────────────
+
+    [TestMethod]
+    public void ToWorld_ScrollMinusActualOffset_WorldSpace()
+    {
+        Assert.AreEqual(90d, WorkflowSurfaceMath.ToWorld(120, 30));
+        // Overscrolled origin (negative offset): world 0 sits below the scroll origin.
+        Assert.AreEqual(80d, WorkflowSurfaceMath.ToWorld(50, -30));
+    }
+
+    [TestMethod]
+    public void ToScreen_AddsActualOffset()
+    {
+        var layout = new CanvasLayout { NegativeOffset = new Offset(40, 30) };
+        var screen = WorkflowSurfaceMath.ToScreen(60, 50, layout);
+        Assert.AreEqual(100d, screen.Horizontal);
+        Assert.AreEqual(80d, screen.Vertical);
+    }
+
+    [TestMethod]
+    public void ToWorldAnchor_SubtractsActualOffsetAndKeepsLayer()
+    {
+        var layout = new CanvasLayout { NegativeOffset = new Offset(40, 30) };
+        var anchor = WorkflowSurfaceMath.ToWorldAnchor(200, 160, 2, layout);
+        Assert.AreEqual(160d, anchor.Horizontal);
+        Assert.AreEqual(130d, anchor.Vertical);
+        Assert.AreEqual(2, anchor.Layer);
+    }
+
+    // ── Overscroll clamp (canvas expansion) ─────────────────────────────────
+
+    [TestMethod]
+    public void ClampScrollOffset_NegativeDesired_ReturnsZeroExpandsNegativeOffset()
+    {
+        var layout = new CanvasLayout();
+        var scroll = WorkflowSurfaceMath.ClampScrollOffset(-50, 1000, layout, horizontal: true);
+        Assert.AreEqual(0d, scroll);
+        Assert.AreEqual(50d, layout.NegativeOffset.Horizontal);
+        Assert.AreEqual(0d, layout.NegativeOffset.Vertical);
+        Assert.AreEqual(0d, layout.PositiveOffset.Horizontal);
+    }
+
+    [TestMethod]
+    public void ClampScrollOffset_PastMax_ReturnsMaxExpandsPositiveOffsetOnAxis()
+    {
+        var layout = new CanvasLayout();
+        var scroll = WorkflowSurfaceMath.ClampScrollOffset(1100, 1000, layout, horizontal: false);
+        Assert.AreEqual(1000d, scroll);
+        Assert.AreEqual(0d, layout.PositiveOffset.Horizontal);
+        Assert.AreEqual(100d, layout.PositiveOffset.Vertical);
+        Assert.AreEqual(0d, layout.NegativeOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void ClampScrollOffset_WithinRange_ReturnsDesiredWithoutMutation()
+    {
+        var layout = new CanvasLayout();
+        var scroll = WorkflowSurfaceMath.ClampScrollOffset(400, 1000, layout, horizontal: true);
+        Assert.AreEqual(400d, scroll);
+        Assert.AreEqual(0d, layout.NegativeOffset.Horizontal);
+        Assert.AreEqual(0d, layout.PositiveOffset.Horizontal);
+    }
+
+    [TestMethod]
+    public void ClampScrollOffset_OvershootBelowThreshold_ClampsWithoutExpanding()
+    {
+        var layout = new CanvasLayout();
+        Assert.AreEqual(0d, WorkflowSurfaceMath.ClampScrollOffset(-5, 1000, layout, horizontal: true, threshold: 20));
+        Assert.AreEqual(0d, layout.NegativeOffset.Horizontal);
+        Assert.AreEqual(1000d, WorkflowSurfaceMath.ClampScrollOffset(1004, 1000, layout, horizontal: false, threshold: 20));
+        Assert.AreEqual(0d, layout.PositiveOffset.Vertical);
+    }
+
+    // ── Slot anchors ────────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void SlotAnchorFromVisualCenter_SubtractsActualOffset()
+    {
+        var layout = new CanvasLayout { NegativeOffset = new Offset(40, 30) };
+        var anchor = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(200, 160, 3, layout);
+        Assert.AreEqual(160d, anchor.Horizontal);
+        Assert.AreEqual(130d, anchor.Vertical);
+        Assert.AreEqual(3, anchor.Layer);
+    }
+
+    [TestMethod]
+    public void SlotAnchorFromNode_AddsLocalOffsetToNodeAnchor()
+    {
+        var anchor = WorkflowSurfaceMath.SlotAnchorFromNode(100, 50, 10, -5, 1);
+        Assert.AreEqual(110d, anchor.Horizontal);
+        Assert.AreEqual(45d, anchor.Vertical);
+        Assert.AreEqual(1, anchor.Layer);
+    }
+
+    [TestMethod]
+    public void SlotAnchorFromCanvasLocal_IsIdentityOnCanvasCoordinates()
+    {
+        var anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(200, 160, 4);
+        Assert.AreEqual(200d, anchor.Horizontal);
+        Assert.AreEqual(160d, anchor.Vertical);
+        Assert.AreEqual(4, anchor.Layer);
+    }
+
+    [TestMethod]
+    public void SlotAnchor_VariantChoiceShiftsByActualOffset()
+    {
+        // Picking the wrong variant is the documented silent-offset bug: a canvas-local center fed
+        // through the screen-space contract lands ActualOffset away from the node's slot.
+        var layout = new CanvasLayout { NegativeOffset = new Offset(40, 30) };
+        var canvasLocal = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(200, 160, 3);
+        var visual = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(200, 160, 3, layout);
+        Assert.AreEqual(200d, canvasLocal.Horizontal);
+        Assert.AreEqual(160d, visual.Horizontal);
+        Assert.AreEqual(40d, canvasLocal.Horizontal - visual.Horizontal);
+    }
+
+    // ── WorkflowBounds ──────────────────────────────────────────────────────
+
+    [TestMethod]
+    public void WorkflowBounds_FromNode_ExposesEdges()
+    {
+        var b = WorkflowBounds.FromNode(10, 20, 30, 40);
+        Assert.AreEqual(10d, b.Left);
+        Assert.AreEqual(20d, b.Top);
+        Assert.AreEqual(30d, b.Width);
+        Assert.AreEqual(40d, b.Height);
+        Assert.AreEqual(40d, b.Right);
+        Assert.AreEqual(60d, b.Bottom);
+        Assert.IsFalse(b.IsEmpty);
+    }
+
+    [TestMethod]
+    public void WorkflowBounds_ZeroWidth_IsEmpty()
+    {
+        var b = WorkflowBounds.FromNode(0, 0, 0, 10);
+        Assert.IsTrue(b.IsEmpty);
+        var negative = WorkflowBounds.FromNode(0, 0, -5, 10);
+        Assert.IsTrue(negative.IsEmpty);
+    }
+
+    [TestMethod]
+    public void WorkflowBounds_FromNodes_SpansAllInputs()
+    {
+        var b = WorkflowBounds.FromNodes(
+        [
+            (X: -20d, Y: -10d, W: 10d, H: 10d),
+            (X: 10d, Y: 5d, W: 5d, H: 5d),
+        ]);
+        Assert.AreEqual(-20d, b.Left);
+        Assert.AreEqual(-10d, b.Top);
+        Assert.AreEqual(15d, b.Right);   // -20+10 == -10 < 10+5 == 15
+        Assert.AreEqual(10d, b.Bottom);  // -10+10 == 0 < 5+5 == 10
+        Assert.AreEqual(35d, b.Width);
+        Assert.AreEqual(20d, b.Height);
+    }
+
+    [TestMethod]
+    public void WorkflowBounds_FromNodes_EmptyIsEmptyBounds()
+    {
+        var b = WorkflowBounds.FromNodes(System.Array.Empty<(double X, double Y, double W, double H)>());
+        Assert.IsTrue(b.IsEmpty);
+        Assert.AreEqual(0d, b.Width);
+        Assert.AreEqual(0d, b.Height);
+    }
+
+    [TestMethod]
+    public void WorkflowBounds_Union_OverlappingMergesBounding()
+    {
+        var b = WorkflowBounds.Union(
+            WorkflowBounds.FromNode(0, 0, 10, 10),
+            WorkflowBounds.FromNode(5, 5, 10, 10));
+        Assert.AreEqual(0d, b.Left);
+        Assert.AreEqual(0d, b.Top);
+        Assert.AreEqual(15d, b.Width);
+        Assert.AreEqual(15d, b.Height);
+    }
+
+    [TestMethod]
+    public void WorkflowBounds_Union_EmptySideReturnsOther()
+    {
+        var other = WorkflowBounds.FromNode(3, 4, 5, 6);
+        var b = WorkflowBounds.Union(default, other);
+        Assert.AreEqual(3d, b.Left);
+        Assert.AreEqual(4d, b.Top);
+        Assert.AreEqual(5d, b.Width);
+        Assert.AreEqual(6d, b.Height);
+    }
 }
