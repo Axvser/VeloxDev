@@ -119,24 +119,24 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         {
             var spacing = Math.Max(8, owner.GridSpacing);
             var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
-            var worldLeft = owner.ScrollOffsetX - owner.ContentOffsetX;
-            var worldTop = owner.ScrollOffsetY - owner.ContentOffsetY;
+            var worldLeft = WorkflowSurfaceMath.GridWorldLeft(owner.ScrollOffsetX, owner.ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridWorldTop(owner.ScrollOffsetY, owner.ContentOffsetY);
             var worldRight = worldLeft + bounds.Width;
             var worldBottom = worldTop + bounds.Height;
 
-            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = (float)ruler + (float)(value - worldLeft);
+                var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, ruler);
                 canvas.StrokeColor = IsNearZero(value) ? Color.FromArgb("#38BDF8") : IsMajorLine(value, majorStep) ? Color.FromArgb("#31445C") : Color.FromArgb("#223043");
                 canvas.StrokeSize = IsNearZero(value) ? 1.2f : 1f;
                 canvas.DrawLine(x, 0, x, bounds.Height);
             }
 
-            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = (float)ruler + (float)(value - worldTop);
+                var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, ruler);
                 canvas.StrokeColor = IsNearZero(value) ? Color.FromArgb("#38BDF8") : IsMajorLine(value, majorStep) ? Color.FromArgb("#31445C") : Color.FromArgb("#223043");
                 canvas.StrokeSize = IsNearZero(value) ? 1.2f : 1f;
                 canvas.DrawLine(0, y, bounds.Width, y);
@@ -165,8 +165,8 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         {
             var spacing = Math.Max(8, owner.GridSpacing);
             var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
-            var worldLeft = owner.ScrollOffsetX - owner.ContentOffsetX;
-            var worldTop = owner.ScrollOffsetY - owner.ContentOffsetY;
+            var worldLeft = WorkflowSurfaceMath.GridWorldLeft(owner.ScrollOffsetX, owner.ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridWorldTop(owner.ScrollOffsetY, owner.ContentOffsetY);
             var worldRight = worldLeft + bounds.Width;
             var worldBottom = worldTop + bounds.Height;
 
@@ -175,10 +175,10 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             canvas.DrawLine((float)ruler, 0, (float)ruler, bounds.Height);
             canvas.DrawLine(0, (float)ruler, bounds.Width, (float)ruler);
 
-            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = (float)ruler + (float)(value - worldLeft);
+                var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, ruler);
                 if (x < ruler)
                 {
                     continue;
@@ -195,10 +195,10 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
                 }
             }
 
-            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = (float)ruler + (float)(value - worldTop);
+                var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, ruler);
                 if (y < ruler)
                 {
                     continue;

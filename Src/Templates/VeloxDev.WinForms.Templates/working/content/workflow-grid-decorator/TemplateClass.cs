@@ -107,8 +107,8 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
     {
         var spacing = Math.Max(8, _gridSpacing);
         var majorStep = spacing * Math.Max(1, _majorLineEvery);
-        var worldLeft = ScrollOffsetX - ContentOffsetX;
-        var worldTop = ScrollOffsetY - ContentOffsetY;
+        var worldLeft = WorkflowSurfaceMath.GridWorldLeft(ScrollOffsetX, ContentOffsetX);
+        var worldTop = WorkflowSurfaceMath.GridWorldTop(ScrollOffsetY, ContentOffsetY);
         var worldRight = worldLeft + bounds.Width;
         var worldBottom = worldTop + bounds.Height;
 
@@ -119,18 +119,18 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         // Grid x = ruler + (value - worldLeft): the standalone decorator draws the world
         // grid beneath a content viewport translated by RulerThickness, so the origin stays
         // at the band edge. Lines span the full viewport so they extend under the bands.
-        var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+        var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
-            var x = (float)(ruler + (value - worldLeft));
+            var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, ruler);
             var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
             g.DrawLine(pen, x, 0, x, bounds.Height);
         }
 
-        var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+        var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
-            var y = (float)(ruler + (value - worldTop));
+            var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, ruler);
             var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
             g.DrawLine(pen, 0, y, bounds.Width, y);
         }
@@ -140,8 +140,8 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
     {
         var spacing = Math.Max(8, _gridSpacing);
         var majorStep = spacing * Math.Max(1, _majorLineEvery);
-        var worldLeft = ScrollOffsetX - ContentOffsetX;
-        var worldTop = ScrollOffsetY - ContentOffsetY;
+        var worldLeft = WorkflowSurfaceMath.GridWorldLeft(ScrollOffsetX, ContentOffsetX);
+        var worldTop = WorkflowSurfaceMath.GridWorldTop(ScrollOffsetY, ContentOffsetY);
         var worldRight = worldLeft + bounds.Width;
         var worldBottom = worldTop + bounds.Height;
 
@@ -158,10 +158,10 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         // x < ruler so the corner junction and left band stay clean (no ticks/labels).
         var saved = g.Save();
         g.SetClip(new RectangleF((float)ruler, 0, Math.Max(0, bounds.Width - (float)ruler), (float)ruler));
-        var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+        var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
-            var x = (float)(ruler + (value - worldLeft));
+            var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, ruler);
             if (x < ruler)
             {
                 continue;
@@ -184,10 +184,10 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         // Left ruler.
         saved = g.Save();
         g.SetClip(new RectangleF(0, (float)ruler, (float)ruler, Math.Max(0, bounds.Height - (float)ruler)));
-        var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+        var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
-            var y = (float)(ruler + (value - worldTop));
+            var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, ruler);
             if (y < ruler)
             {
                 continue;

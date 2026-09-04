@@ -738,7 +738,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     {
         if (double.IsNaN(value) || double.IsInfinity(value)) return 0f;
         if (double.IsNaN(max) || double.IsInfinity(max)) return 0f;
-        return (float)Math.Max(0, Math.Min(value, max));
+        return (float)WorkflowSurfaceMath.ClampValue(value, 0, max);
     }
 
     /// <summary>

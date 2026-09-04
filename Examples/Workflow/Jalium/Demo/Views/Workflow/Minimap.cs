@@ -149,8 +149,8 @@ internal sealed class Minimap : Border
         double vh = Math.Max(2, _viewer.ViewportHeight * scale);
         vw = Math.Min(vw, MiniW);
         vh = Math.Min(vh, MiniH);
-        v.X = Math.Max(0, Math.Min(MiniW - vw, v.X));
-        v.Y = Math.Max(0, Math.Min(MiniH - vh, v.Y));
+        v.X = WorkflowSurfaceMath.ClampValue(v.X, 0, MiniW - vw);
+        v.Y = WorkflowSurfaceMath.ClampValue(v.Y, 0, MiniH - vh);
         dc.DrawRectangle(s_viewportFill, s_viewportPen, new Rect(v.X, v.Y, vw, vh));
     }
 }

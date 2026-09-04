@@ -474,8 +474,8 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
             scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false);
 
             _scrollViewer.ChangeView(
-                Math.Max(0, Math.Min(scrollX, maxH)),
-                Math.Max(0, Math.Min(scrollY, maxV)),
+                WorkflowSurfaceMath.ClampValue(scrollX, 0, maxH),
+                WorkflowSurfaceMath.ClampValue(scrollY, 0, maxV),
                 null, true);
         }
     }

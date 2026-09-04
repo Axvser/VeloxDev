@@ -269,8 +269,8 @@ public sealed class MinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowMi
         double vy = l.Oy + (ScrollOffsetY - ContentOffsetY - l.MinY) * l.Scale;
         double vw = Math.Max(4, ViewportWidth * l.Scale);
         double vh = Math.Max(4, ViewportHeight * l.Scale);
-        vx = Math.Max(0, Math.Min(Width - vw, vx));
-        vy = Math.Max(0, Math.Min(Height - vh, vy));
+        vx = WorkflowSurfaceMath.ClampValue(vx, 0, Width - vw);
+        vy = WorkflowSurfaceMath.ClampValue(vy, 0, Height - vh);
         return new RectangleF((float)vx, (float)vy, (float)vw, (float)vh);
     }
 

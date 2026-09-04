@@ -159,23 +159,23 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
             var ruler = Math.Max(0, owner.RulerThickness);
             var spacing = Math.Max(8, owner.GridSpacing);
             var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
-            var worldLeft = owner.ScrollOffsetX - owner.ContentOffsetX;
-            var worldTop = owner.ScrollOffsetY - owner.ContentOffsetY;
+            var worldLeft = WorkflowSurfaceMath.GridWorldLeft(owner.ScrollOffsetX, owner.ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridWorldTop(owner.ScrollOffsetY, owner.ContentOffsetY);
             var worldRight = worldLeft + bounds.Width;
             var worldBottom = worldTop + bounds.Height;
 
-            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = ruler + (value - worldLeft);
+                var x = WorkflowSurfaceMath.GridX(value, worldLeft, ruler);
                 var pen = IsNearZero(value) ? AxisPen : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
                 context.DrawLine(pen, new Point(x, 0), new Point(x, bounds.Height));
             }
 
-            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = ruler + (value - worldTop);
+                var y = WorkflowSurfaceMath.GridY(value, worldTop, ruler);
                 var pen = IsNearZero(value) ? AxisPen : IsMajorLine(value, majorStep) ? MajorGridPen : MinorGridPen;
                 context.DrawLine(pen, new Point(0, y), new Point(bounds.Width, y));
             }
@@ -204,16 +204,16 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
 
             var spacing = Math.Max(8, owner.GridSpacing);
             var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
-            var worldLeft = owner.ScrollOffsetX - owner.ContentOffsetX;
-            var worldTop = owner.ScrollOffsetY - owner.ContentOffsetY;
+            var worldLeft = WorkflowSurfaceMath.GridWorldLeft(owner.ScrollOffsetX, owner.ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridWorldTop(owner.ScrollOffsetY, owner.ContentOffsetY);
             var worldRight = worldLeft + bounds.Width;
             var worldBottom = worldTop + bounds.Height;
 
             // Top ruler: ticks at world grid x crossing the viewport; skip the left band region.
-            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = ruler + (value - worldLeft);
+                var x = WorkflowSurfaceMath.GridX(value, worldLeft, ruler);
                 if (x < ruler)
                 {
                     continue;
@@ -231,10 +231,10 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
             }
 
             // Left ruler: ticks at world grid y crossing the viewport; skip the top band region.
-            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = ruler + (value - worldTop);
+                var y = WorkflowSurfaceMath.GridY(value, worldTop, ruler);
                 if (y < ruler)
                 {
                     continue;

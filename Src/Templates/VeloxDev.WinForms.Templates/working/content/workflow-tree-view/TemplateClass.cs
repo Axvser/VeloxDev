@@ -275,8 +275,8 @@ public sealed class TemplateClass : UserControl
         {
             var spacing = Math.Max(8, GridSpacing);
             var majorStep = spacing * Math.Max(1, MajorFreq);
-            var worldLeft = ScrollOffsetX - ContentOffsetX;
-            var worldTop = ScrollOffsetY - ContentOffsetY;
+            var worldLeft = WorkflowSurfaceMath.GridWorldLeft(ScrollOffsetX, ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridWorldTop(ScrollOffsetY, ContentOffsetY);
             var worldRight = worldLeft + bounds.Width;
             var worldBottom = worldTop + bounds.Height;
 
@@ -287,18 +287,18 @@ public sealed class TemplateClass : UserControl
             // Grid x = value - worldLeft; nodes sit at anchor + panOffset + ActualOffset, so both
             // share the same world origin and stay aligned while panning (pan starts at 0 at rest).
             // Lines span the full viewport so they extend under the translucent bands.
-            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = (float)(value - worldLeft);
+                var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, 0);
                 var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
                 g.DrawLine(pen, x, 0, x, bounds.Height);
             }
 
-            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = (float)(value - worldTop);
+                var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, 0);
                 var pen = SelectPen(value, majorStep, minorPen, majorPen, axisPen);
                 g.DrawLine(pen, 0, y, bounds.Width, y);
             }
@@ -479,8 +479,8 @@ public sealed class TemplateClass : UserControl
 
             var spacing = Math.Max(8, GridSpacing);
             var majorStep = spacing * Math.Max(1, MajorFreq);
-            var worldLeft = ScrollOffsetX - ContentOffsetX;
-            var worldTop = ScrollOffsetY - ContentOffsetY;
+            var worldLeft = WorkflowSurfaceMath.GridWorldLeft(ScrollOffsetX, ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridWorldTop(ScrollOffsetY, ContentOffsetY);
             var worldRight = worldLeft + cw;
             var worldBottom = worldTop + ch;
 
@@ -488,10 +488,10 @@ public sealed class TemplateClass : UserControl
             // the grid at the same x), so ticks stay aligned with grid lines while the
             // content scrolls under the viewport-fixed band. Skip x < ruler so the corner
             // junction and left band stay clean (no ticks or labels there).
-            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = (float)(value - worldLeft);
+                var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, 0);
                 if (x < ruler)
                 {
                     continue;
@@ -509,10 +509,10 @@ public sealed class TemplateClass : UserControl
             }
 
             // Left ruler.
-            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = (float)(value - worldTop);
+                var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, 0);
                 if (y < ruler)
                 {
                     continue;

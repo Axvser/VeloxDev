@@ -1077,18 +1077,18 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
 
             var spacing = Math.Max(8, GridSpacing);
             var majorStep = spacing * Math.Max(1, MajorFreq);
-            var worldLeft = ScrollOffsetX - ContentOffsetX;
-            var worldTop = ScrollOffsetY - ContentOffsetY;
+            var worldLeft = WorkflowSurfaceMath.GridWorldLeft(ScrollOffsetX, ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridWorldTop(ScrollOffsetY, ContentOffsetY);
             var worldRight = worldLeft + cw;
             var worldBottom = worldTop + ch;
 
             // Top ruler. Ticks share the grid's x = value - worldLeft (the canvas draws the grid at
             // the same x), so ticks stay aligned with grid lines while the content scrolls under the
             // viewport-fixed band. Skip x < ruler so the corner junction and left band stay clean.
-            var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+            var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
             for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
             {
-                var x = (float)(value - worldLeft);
+                var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, 0);
                 if (x < ruler)
                 {
                     continue;
@@ -1106,10 +1106,10 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
             }
 
             // Left ruler.
-            var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+            var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
             for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
             {
-                var y = (float)(value - worldTop);
+                var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, 0);
                 if (y < ruler)
                 {
                     continue;

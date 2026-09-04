@@ -522,8 +522,8 @@ public sealed class WorkflowSurfaceBehavior
             // the pivot off-center and the next wheel tick re-captures the drift as jitter.
             _ = WorkflowSurfaceMath.ClampScrollOffset(tx, GetHorizontalScrollMaximum(state), viewModel.Layout, horizontal: true);
             _ = WorkflowSurfaceMath.ClampScrollOffset(ty, GetVerticalScrollMaximum(state), viewModel.Layout, horizontal: false);
-            tx = Math.Max(0, Math.Min(tx, GetHorizontalScrollMaximum(state)));
-            ty = Math.Max(0, Math.Min(ty, GetVerticalScrollMaximum(state)));
+            tx = WorkflowSurfaceMath.ClampValue(tx, 0, GetHorizontalScrollMaximum(state));
+            ty = WorkflowSurfaceMath.ClampValue(ty, 0, GetVerticalScrollMaximum(state));
 
             if (!double.IsFinite(tx)) tx = 0;
             if (!double.IsFinite(ty)) ty = 0;
@@ -920,8 +920,8 @@ public sealed class WorkflowSurfaceBehavior
         // jumps forward in one frame to catch the anchor. Clamping the applied target to the
         // live native extent makes every ChangeView land exactly, so the content eases with
         // the re-measure instead of jumping (and never over-shoots on release).
-        var appliedOffsetX = Math.Max(0, Math.Min(newOffsetX, GetNativeScrollMaximum(state, horizontal: true)));
-        var appliedOffsetY = Math.Max(0, Math.Min(newOffsetY, GetNativeScrollMaximum(state, horizontal: false)));
+        var appliedOffsetX = WorkflowSurfaceMath.ClampValue(newOffsetX, 0, GetNativeScrollMaximum(state, horizontal: true));
+        var appliedOffsetY = WorkflowSurfaceMath.ClampValue(newOffsetY, 0, GetNativeScrollMaximum(state, horizontal: false));
 
         if (layoutChanged)
         {
@@ -1146,8 +1146,8 @@ public sealed class WorkflowSurfaceBehavior
 
             // ToScreen: screen = world + ActualOffset (the pending viewport is in world space).
             var target = WorkflowSurfaceMath.ToScreen(state.PendingViewportX, state.PendingViewportY, viewModel.Layout);
-            var targetX = Math.Max(0, Math.Min(target.Horizontal, GetHorizontalScrollMaximum(state)));
-            var targetY = Math.Max(0, Math.Min(target.Vertical, GetVerticalScrollMaximum(state)));
+            var targetX = WorkflowSurfaceMath.ClampValue(target.Horizontal, 0, GetHorizontalScrollMaximum(state));
+            var targetY = WorkflowSurfaceMath.ClampValue(target.Vertical, 0, GetVerticalScrollMaximum(state));
 
             if (Math.Abs(state.ScrollViewer.ScrollX - targetX) > 0.5
                 || Math.Abs(state.ScrollViewer.ScrollY - targetY) > 0.5)

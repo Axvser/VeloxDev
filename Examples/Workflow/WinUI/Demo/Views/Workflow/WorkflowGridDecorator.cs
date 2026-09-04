@@ -327,17 +327,17 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
         var spacing = Math.Max(8, GridSpacing);
         var majorStep = spacing * Math.Max(1, MajorLineEvery);
-        var worldLeft = ScrollOffsetX - ContentOffsetX;
-        var worldTop = ScrollOffsetY - ContentOffsetY;
+        var worldLeft = WorkflowSurfaceMath.GridWorldLeft(ScrollOffsetX, ContentOffsetX);
+        var worldTop = WorkflowSurfaceMath.GridWorldTop(ScrollOffsetY, ContentOffsetY);
         var worldRight = worldLeft + width;
         var worldBottom = worldTop + height;
 
         // Vertical grid lines.
-        var firstVertical = Math.Floor(worldLeft / spacing) * spacing;
+        var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
         var vIndex = 0;
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
-            var x = ruler + (value - worldLeft);
+            var x = WorkflowSurfaceMath.GridX(value, worldLeft, ruler);
             var line = _gridVertical[vIndex];
             line.X1 = x; line.Y1 = 0; line.X2 = x; line.Y2 = height;
             var nearZero = IsNearZero(value);
@@ -349,11 +349,11 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         HideExcess(_gridVertical, vIndex);
 
         // Horizontal grid lines.
-        var firstHorizontal = Math.Floor(worldTop / spacing) * spacing;
+        var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
         var hIndex = 0;
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
-            var y = ruler + (value - worldTop);
+            var y = WorkflowSurfaceMath.GridY(value, worldTop, ruler);
             var line = _gridHorizontal[hIndex];
             line.X1 = 0; line.Y1 = y; line.X2 = width; line.Y2 = y;
             var nearZero = IsNearZero(value);
@@ -369,7 +369,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         var lIndex = 0;
         for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
         {
-            var x = ruler + (value - worldLeft);
+            var x = WorkflowSurfaceMath.GridX(value, worldLeft, ruler);
             if (x < ruler)
             {
                 continue;
@@ -407,7 +407,7 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         lIndex = 0;
         for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
         {
-            var y = ruler + (value - worldTop);
+            var y = WorkflowSurfaceMath.GridY(value, worldTop, ruler);
             if (y < ruler)
             {
                 continue;

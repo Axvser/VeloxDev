@@ -430,8 +430,8 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true);
             scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false);
 
-            _scrollViewer.ScrollToHorizontalOffset(Math.Max(0, Math.Min(scrollX, maxH)));
-            _scrollViewer.ScrollToVerticalOffset(Math.Max(0, Math.Min(scrollY, maxV)));
+            _scrollViewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(scrollX, 0, maxH));
+            _scrollViewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(scrollY, 0, maxV));
         }
     }
 
