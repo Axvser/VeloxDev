@@ -6,39 +6,17 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 public sealed class WorkflowSlotLayoutBehavior
 {
-    /// <summary>≈1 frame; lets a native layout pass land between ticks.</summary>
-    private const int SettleIntervalMs = 16;
-
-    /// <summary>First-tick latency for post-arrange triggers (SizeChanged). The node
-    /// frame is already final when this is armed, so a sub-frame wait just lets the
-    /// current UI callback (the arrange pass that follows SizeChanged) finish before
-    /// the tick — enough to land the measurement in the same rendered frame instead
-    /// of waiting out the full 16ms settle cadence.</summary>
-    private const int PostArrangeIntervalMs = 4;
-
-    /// <summary>Upper bound on consecutive re-checks while geometry keeps moving,
-    /// so a pathological infinite cascade cannot spin forever. Every fresh trigger
-    /// (property change / real resize) resets the budget, so real zoom cascades
-    /// never hit the cap.</summary>
-    private const int MaxSettleAttempts = 16;
-
     private sealed class LayoutState
     {
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
         public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
-
-        /// <summary>True while a settle chain is armed (coalesces burst triggers).</summary>
-        public bool Settling { get; set; }
-
-        /// <summary>Consecutive re-checks in the current settle chain.</summary>
-        public int SettleAttempts { get; set; }
-
+        public bool SyncPending { get; set; }
         public HashSet<string> SlotPropertyNames { get; } = [];
 
         /// <summary>
-        /// Coalescing single-shot timer that drives the slot-measure settle chain.
-        /// Replaces nested BeginInvoke which had fragile ordering dependencies on
-        /// the dispatcher queue across different MAUI platforms.
+        /// Coalescing timer that fires once per frame after layout settles.
+        /// Replaces nested BeginInvoke which had fragile ordering dependencies
+        /// on the dispatcher queue across different MAUI platforms.
         /// </summary>
         public IDispatcherTimer? SyncTimer { get; set; }
     }
@@ -116,16 +94,6 @@ public sealed class WorkflowSlotLayoutBehavior
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.BindingContextChanged += OnBindingContextChanged;
-
-        // SizeChanged fires from MAUI's native arrange only when the view's
-        // allocated size actually changes — i.e. the exact moment ViewManager's
-        // SetLayoutBounds collapse takes effect after a real layout pass. Unlike
-        // the node VM property change (raised pre-layout), this is the post-arrange
-        // signal, so re-arming the settle chain here catches collapses whose native
-        // layout landed after the property-change tick had already measured stale
-        // geometry — the slot-drift source during zoom.
-        control.SizeChanged += OnNodeResized;
-
         UpdatePropertyChangedSubscription(control);
         ScheduleSync(control);
     }
@@ -135,7 +103,6 @@ public sealed class WorkflowSlotLayoutBehavior
         control.Loaded -= OnLoaded;
         control.Unloaded -= OnUnloaded;
         control.BindingContextChanged -= OnBindingContextChanged;
-        control.SizeChanged -= OnNodeResized;
 
         if (control.GetValue(StateProperty) is LayoutState state)
         {
@@ -163,26 +130,14 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private static void OnNodeResized(object? sender, EventArgs e)
-    {
-        if (sender is ContentView control)
-        {
-            // Post-native-arrange trigger: refresh the settle budget (and start a
-            // chain if none is running) so the measurement chases the collapse that
-            // actually landed, rather than the pre-layout property change.
-            ScheduleSync(control, postArrange: true);
-        }
-    }
-
     private static void OnUnloaded(object? sender, EventArgs e)
     {
         if (sender is ContentView control && control.GetValue(StateProperty) is LayoutState state)
         {
-            state.Settling = false;
+            state.SyncPending = false;
             if (state.SyncTimer is not null)
             {
                 state.SyncTimer.Stop();
-                state.SyncTimer = null;
             }
         }
     }
@@ -230,100 +185,58 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private static void ScheduleSync(ContentView control, bool postArrange = false)
+    private static void ScheduleSync(ContentView control)
     {
-        if (control.GetValue(StateProperty) is not LayoutState state)
+        if (control.GetValue(StateProperty) is not LayoutState state || state.SyncPending)
         {
             return;
         }
 
-        // Every trigger (node VM property change, real resize via SizeChanged,
-        // drag) refreshes the settle budget so an in-flight chain keeps chasing
-        // the layout instead of giving up mid-cascade.
-        state.Settling = true;
-        state.SettleAttempts = 0;
+        state.SyncPending = true;
 
-        if (state.SyncTimer is not null)
-        {
-            return; // one coalescing timer already running; the chain observes the reset budget
-        }
-
-        // Use an IDispatcherTimer (≈1-frame cadence) instead of nested BeginInvoke.
+        // Use an IDispatcherTimer (≈1-frame delay) instead of nested BeginInvoke.
         // MAUI lacks WPF's DispatcherPriority.Render, so the original two-level
         // dispatch was a fragile ordering hack that depended on queue ordering.
         // A per-control coalescing timer:
         //   • Naturally waits for the layout pass between ticks
         //   • Eliminates race with ViewManager.ApplyLayout (SetLayoutBounds)
         //   • Works consistently across Android/iOS/Windows
-        //   • Multiple rapid requests coalesce into a single settle chain
+        //   • Multiple rapid requests coalesce into a single Sync call
         // The closure is short-lived (single-shot timer), so allocation impact is
         // negligible compared to the performance gain from eliminating the race.
-        // postArrange triggers (node actually resized) can measure sooner because the
-        // layout has already run; plain property changes must wait a full frame for it.
         var timer = control.Dispatcher.CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(postArrange ? PostArrangeIntervalMs : SettleIntervalMs);
+        timer.Interval = TimeSpan.FromMilliseconds(16);  // ≈1 frame
         timer.IsRepeating = false;
-        timer.Tick += (s, e) => TickSync(control, timer);
-        state.SyncTimer = timer;
+        timer.Tick += (s, e) =>
+        {
+            try
+            {
+                timer.Stop();
+                if (control.GetValue(StateProperty) is not LayoutState currentState)
+                    return;
+
+                currentState.SyncPending = false;
+                currentState.SyncTimer = null;
+                Sync(control);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // IDispatcherTimer.Tick exceptions are NOT caught by MAUI
+                // and bubble unhandled to WinUI's UnhandledException event.
+                // This is a known MAUI/WinUI gap (dotnet/maui #12245, #10341).
+                System.Diagnostics.Debug.WriteLine(
+                    $"[WorkflowSlotLayout] Sync error: {ex.Message}");
+            }
+        };
         timer.Start();
+        state.SyncTimer = timer;
     }
 
-    /// <summary>One settle tick: measure the slots, then re-arm for the next frame
-    /// while a pass actually changed geometry. MAUI's layout is platform-async and
-    /// can cascade over several passes (collapse → ApplyScale child reflow), so a
-    /// single fixed-delay measurement can capture a mid-cascade frame and then never
-    /// refresh again — the anchors stay stale until the next unrelated trigger (the
-    /// observed multi-frame slot drift during zoom). Re-checking until the geometry
-    /// stops moving guarantees the anchors converge to the final post-zoom layout
-    /// within a frame or two of the last pass instead of lingering on a stale write.</summary>
-    private static void TickSync(ContentView control, IDispatcherTimer timer)
-    {
-        try
-        {
-            timer.Stop();
-
-            if (control.GetValue(StateProperty) is not LayoutState state)
-            {
-                return;
-            }
-
-            var modified = Sync(control);
-
-            if (modified > 0 && state.Settling && state.SettleAttempts < MaxSettleAttempts)
-            {
-                // Layout is still cascading (anchors moved since the last write).
-                // Re-check next frame so the measurement converges to the final geometry.
-                state.SettleAttempts++;
-                state.SyncTimer = timer;
-                timer.Start();
-                return;
-            }
-
-            state.Settling = false;
-            state.SyncTimer = null;
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            // IDispatcherTimer.Tick exceptions are NOT caught by MAUI
-            // and bubble unhandled to WinUI's UnhandledException event.
-            // This is a known MAUI/WinUI gap (dotnet/maui #12245, #10341).
-            System.Diagnostics.Debug.WriteLine(
-                $"[WorkflowSlotLayout] Sync error: {ex.Message}");
-
-            if (control.GetValue(StateProperty) is LayoutState state)
-            {
-                state.Settling = false;
-                state.SyncTimer = null;
-            }
-        }
-    }
-
-    /// <returns>The number of slot anchors this pass actually changed (0 = converged).</returns>
-    private static int Sync(ContentView control)
+    private static void Sync(ContentView control)
     {
         if (control.BindingContext is not IWorkflowNodeViewModel node)
         {
-            return 0;
+            return;
         }
 
         var parentHost = control;
@@ -359,68 +272,48 @@ public sealed class WorkflowSlotLayoutBehavior
             state.SlotPropertyNames.Add("OutputSlots");
         }
 
-        var modified = 0;
         foreach (var slotName in slotNames)
         {
-            if (SyncNamedSlot(parentHost, control, coordinateHost, node, slotName))
-            {
-                modified++;
-            }
+            SyncNamedSlot(parentHost, control, coordinateHost, node, slotName);
         }
 
         foreach (var enumeratorName in enumeratorNames)
         {
-            if (SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName))
-            {
-                modified++;
-            }
+            SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName);
         }
-
-        return modified;
     }
 
-    /// <returns>True when the slot anchor was actually updated.</returns>
-    private static bool SyncNamedSlot(ContentView parentHost, ContentView host, VisualElement? coordinateHost, IWorkflowNodeViewModel node, string? controlName)
+    private static void SyncNamedSlot(ContentView parentHost, ContentView host, VisualElement? coordinateHost, IWorkflowNodeViewModel node, string? controlName)
     {
         if (string.IsNullOrWhiteSpace(controlName))
         {
-            return false;
+            return;
         }
 
         if (parentHost.FindByName<VisualElement>(controlName) is VisualElement slotControl)
         {
-            return SyncSlot(host, coordinateHost, slotControl, node);
+            SyncSlot(host, coordinateHost, slotControl, node);
         }
-
-        return false;
     }
 
-    /// <returns>True when at least one slot anchor was actually updated.</returns>
-    private static bool SyncSlotEnumerator(ContentView parentHost, ContentView host, VisualElement? coordinateHost, IWorkflowNodeViewModel node, string enumeratorName)
+    private static void SyncSlotEnumerator(ContentView parentHost, ContentView host, VisualElement? coordinateHost, IWorkflowNodeViewModel node, string enumeratorName)
     {
         if (parentHost.FindByName<Layout>(enumeratorName) is not Layout itemsLayout)
         {
-            return false;
+            return;
         }
 
-        var modified = false;
         foreach (var slotView in FindDescendants<VisualElement>(itemsLayout).Where(static x => x.BindingContext is IWorkflowSlotViewModel))
         {
-            if (SyncSlot(host, coordinateHost, slotView, node))
-            {
-                modified = true;
-            }
+            SyncSlot(host, coordinateHost, slotView, node);
         }
-
-        return modified;
     }
 
-    /// <returns>True when the slot anchor was actually updated.</returns>
-    private static bool SyncSlot(ContentView host, VisualElement? coordinateHost, VisualElement control, IWorkflowNodeViewModel node)
+    private static void SyncSlot(ContentView host, VisualElement? coordinateHost, VisualElement control, IWorkflowNodeViewModel node)
     {
         if (control.BindingContext is not IWorkflowSlotViewModel slot || control.Width <= 0 || control.Height <= 0)
         {
-            return false;
+            return;
         }
 
         Anchor newAnchor;
@@ -429,7 +322,7 @@ public sealed class WorkflowSlotLayoutBehavior
             var centerOnCanvas = GetCenterRelativeTo(control, coordinateHost);
             if (centerOnCanvas is null)
             {
-                return false;
+                return;
             }
 
             // MAUI measures the center relative to the canvas (coordinate host) by summing
@@ -444,7 +337,7 @@ public sealed class WorkflowSlotLayoutBehavior
             var center = GetCenterRelativeTo(control, host);
             if (center is null)
             {
-                return false;
+                return;
             }
 
             // SlotAnchorFromNode: anchor = nodeAnchor + local offset (no coordinate host).
@@ -458,12 +351,9 @@ public sealed class WorkflowSlotLayoutBehavior
         //   SyncSlot → slot.Anchor setter → PropertyChanged → ApplyLayout
         //   → MAUI layout → SizeChanged/X/Y → ScheduleSync → SyncSlot ...
         if (slot.Anchor.Horizontal == newAnchor.Horizontal && slot.Anchor.Vertical == newAnchor.Vertical)
-        {
-            return false;
-        }
+            return;
 
         slot.Anchor = newAnchor;
-        return true;
     }
 
     private static VisualElement? ResolveCoordinateHost(ContentView control, ContentView parentHost)
