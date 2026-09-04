@@ -6,11 +6,13 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
 /// Assigns stable, process-lifetime unique ids to workflow components by reference, so Blazor
-/// elements can carry a <c>data-slot-id</c> attribute that round-trips through JavaScript and
+/// elements can carry a <c>data-*-id</c> attribute that round-trips through JavaScript and
 /// resolves back to the same object. The ids are stable across re-renders because the key is the
-/// component instance itself (reference equality, held weakly).
+/// component instance itself (reference equality, held weakly). Public so demo/template link views
+/// can stamp their endpoint slots with the same ids the adapter behaviors use for node/slot DOM
+/// elements — the zoom JS then re-syncs link polylines from those live slots in the collapse frame.
 /// </summary>
-internal static class WorkflowRuntimeIds
+public static class WorkflowRuntimeIds
 {
     private static readonly ConditionalWeakTable<object, string> Ids = new();
 

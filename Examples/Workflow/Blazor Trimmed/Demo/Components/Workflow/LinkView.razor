@@ -1,12 +1,22 @@
 @namespace Demo.Components.Workflow
 @using VeloxDev.WorkflowSystem
+@using VeloxDev.WorkflowSystem.AttachedBehaviors
 
 @if (EffectiveCanRender && Link is not null)
 {
+    // Stable DOM ids (mirroring the adapter's node/slot data ids) so the zoom JS can re-sync this
+    // link's polyline from the live endpoint slots in the same frame the nodes collapse.
+    var link = Link;
+    var wfLinkId = link is null ? null : WorkflowRuntimeIds.Get(link);
+    var wfSenderSlotId = link?.Sender is { } wfSender ? WorkflowRuntimeIds.Get(wfSender) : null;
+    var wfReceiverSlotId = link?.Receiver is { } wfReceiver ? WorkflowRuntimeIds.Get(wfReceiver) : null;
     var points = BuildPoints();
     var dash = EffectiveIsVirtual ? "6 4" : "none";
 
     <svg width="@CanvasWidthCss" height="@CanvasHeightCss"
+         data-veloxdev-link-id="@wfLinkId"
+         data-veloxdev-sender-slot="@wfSenderSlotId"
+         data-veloxdev-receiver-slot="@wfReceiverSlotId"
          style="position:absolute;left:0;top:0;overflow:visible;">
         @if (EffectiveIsVirtual)
         {

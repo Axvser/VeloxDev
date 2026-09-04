@@ -227,6 +227,93 @@ window.veloxdevWorkflow = (() => {
         }
     }
 
+    // ════════════════════════════════════════════════════════════
+    // ZOOM LINK SYNC — rewrites link polylines from the live endpoint
+    // slots in the same frame the nodes collapse (Route A for Blazor).
+    // ════════════════════════════════════════════════════════════
+    // Link endpoints normally round-trip through .NET: initSlotLayout measures the slot DOM,
+    // reports OnSlotLayoutBatch, .NET writes slot.Anchor, and the LinkView re-renders the polyline.
+    // That is inherently async (≥1 frame behind the node collapse), so during a wheel zoom the
+    // links paint at the old scale under the already-collapsed nodes/scroll for a frame — the
+    // endpoint drift/flicker this path eliminates. The golden-ratio stub coefficient is mirrored
+    // from the .NET LinkView.BuildPoints so the JS-written points are pixel-identical to what a
+    // later .NET render produces once it re-measures the same geometry.
+    const LINK_PHI = 0.6180339887;
+
+    // Resolves a link's live <polyline> by its stamped data-veloxdev-link-id. Link SVGs are not
+    // pooled, but Blazor diffs attributes in place across re-renders, so the element identity
+    // survives and a per-pass re-query is all this costs.
+    function resolveLinkPolyline(host, linkId) {
+        if (!host || !linkId) return null;
+        const svg = host.querySelector('[data-veloxdev-link-id="' + linkId + '"]');
+        return svg ? svg.querySelector('polyline') : null;
+    }
+
+    // Measures one link's endpoints from the LIVE slot elements using the same formula as
+    // initSlotLayout's measure() (element center relative to the canvas, minus the content-wrapper
+    // translate) and formats the polyline with LinkView's signed golden-ratio stubs. Returns '' when
+    // an endpoint has no measurable slot DOM yet (virtual-gesture receiver, virtualized node, fresh
+    // mount) — .NET owns those links until a real measurement lands, so the caller leaves them alone.
+    function linkPointsFromSlotElements(host, senderSlotId, receiverSlotId) {
+        if (!host || !senderSlotId || !receiverSlotId) return '';
+        const canvasEl = host.querySelector('.veloxdev-wf-canvas');
+        if (!canvasEl) return '';
+        const sEl = canvasEl.querySelector('[data-veloxdev-slot-id="' + senderSlotId + '"]');
+        const rEl = canvasEl.querySelector('[data-veloxdev-slot-id="' + receiverSlotId + '"]');
+        if (!sEl || !rEl) return '';
+        const sr = sEl.getBoundingClientRect();
+        const rr = rEl.getBoundingClientRect();
+        if (sr.width <= 0 || sr.height <= 0 || rr.width <= 0 || rr.height <= 0) return '';
+        const rect = canvasEl.getBoundingClientRect();
+        const contentEl = canvasEl.querySelector('.veloxdev-wf-canvas-content');
+        const contentX = contentEl ? contentEl.offsetLeft : 0;
+        const contentY = contentEl ? contentEl.offsetTop : 0;
+        const sx = (sr.left + sr.width / 2) - rect.left - contentX;
+        const sy = (sr.top + sr.height / 2) - rect.top - contentY;
+        const ex = (rr.left + rr.width / 2) - rect.left - contentX;
+        const ey = (rr.top + rr.height / 2) - rect.top - contentY;
+        if (!isFinite(sx) || !isFinite(sy) || !isFinite(ex) || !isFinite(ey)) return '';
+        const dx = ex - sx;
+        // Signed stub keeps the orthogonal bend on the correct side when dragging leftward.
+        const stub = dx / 2.0 * (1.0 - LINK_PHI);
+        const p1x = sx + stub;
+        const p4x = ex - stub;
+        return sx.toFixed(1) + ',' + sy.toFixed(1) + ' ' +
+            p1x.toFixed(1) + ',' + sy.toFixed(1) + ' ' +
+            p4x.toFixed(1) + ',' + ey.toFixed(1) + ' ' +
+            ex.toFixed(1) + ',' + ey.toFixed(1);
+    }
+
+    // Writes every link's polyline points synchronously from its endpoints' CURRENT slot DOM. Runs
+    // inside applyZoomSurface immediately after applyNodeGeometry collapsed the node wrappers, so a
+    // zoom step paints nodes + links + scroll in ONE browser frame. Reading getBoundingClientRect
+    // after the geometry writes forces a synchronous layout, so the measured centers are exactly the
+    // collapsed values .NET will converge on — never a stale pre-collapse endpoint. Only links whose
+    // endpoints are materialized and measurable are stamped; the rest (.NET-owned until measured)
+    // are skipped. Returns the stamped [{linkId, points}] records for the zoom settle guard to
+    // re-assert against stale async .NET renders.
+    function applyZoomLinkPoints(host) {
+        if (!host) return null;
+        const linkEls = host.querySelectorAll('[data-veloxdev-link-id]');
+        if (!linkEls.length) return null;
+        const stamped = [];
+        for (let i = 0; i < linkEls.length; i++) {
+            const svg = linkEls[i];
+            const linkId = svg.getAttribute('data-veloxdev-link-id');
+            const points = linkPointsFromSlotElements(
+                host,
+                svg.getAttribute('data-veloxdev-sender-slot'),
+                svg.getAttribute('data-veloxdev-receiver-slot'));
+            if (!points) continue;
+            const poly = svg.querySelector('polyline');
+            if (poly && poly.getAttribute('points') !== points) {
+                poly.setAttribute('points', points);
+            }
+            stamped.push({ linkId: linkId, points: points });
+        }
+        return stamped.length ? stamped : null;
+    }
+
     // One atomic workspace-zoom step: re-translate content/grid/axis to the NEW layout offset, grow
     // the canvas host to the auto-extended model content size, set the scroll, and reposition every
     // node's pooled wrapper to its collapsed geometry — all in a single synchronous block so the
@@ -290,18 +377,27 @@ window.veloxdevWorkflow = (() => {
                 surfaceNodeWrappers[scrollerId] = map;
             }
             applyNodeGeometry(nodeWrappers, nodeGeometry);
+            // Collapse the link endpoints in this same block: read each endpoint slot's live center
+            // (getBoundingClientRect after the wrapper writes above forces the new layout) and write
+            // the polyline. Without this the links wait for the async measure→.NET anchor→render
+            // round trip and paint one or more frames at the old scale under the new nodes/scroll.
+            const stampedLinks = (nodeGeometry && nodeGeometry.length)
+                ? applyZoomLinkPoints(host)
+                : null;
             // Apply the effective scroll (add the edge reserve the effective value already excluded).
             el.scrollLeft = Math.max(0, edgeX + (scrollX || 0));
             el.scrollTop = Math.max(0, edgeY + (scrollY || 0));
-            // Stamp this step's authoritative collapsed node geometry and (re)start the settle guard,
-            // so a stale async .NET node render that lands later (each node re-renders as its own
-            // SignalR message, and under a human fast-flick several zoom steps overlap server-side)
-            // can never paint even one frame of old collapsed values. The translate + host size +
-            // scroll were already written above and are JS-owned (async renders never touch them), so
-            // only node geometry needs guarding. stampedAt anchors a time-based settle tail below.
+            // Stamp this step's authoritative collapsed node geometry AND link points, then (re)start
+            // the settle guard, so a stale async .NET render that lands later (each node re-renders
+            // as its own SignalR message, and under a human fast-flick several zoom steps overlap
+            // server-side) can never paint even one frame of old collapsed values. The translate +
+            // host size + scroll were already written above and are JS-owned (async renders never
+            // touch them), so only node geometry and link points need guarding. stampedAt anchors a
+            // time-based settle tail below.
             surfaceZoomState[scrollerId] = {
                 stampedAt: performance.now(),
-                geometry: nodeGeometry || null
+                geometry: nodeGeometry || null,
+                links: stampedLinks
             };
             scheduleZoomSettle(scrollerId);
         }
@@ -316,14 +412,14 @@ window.veloxdevWorkflow = (() => {
     // still found because applyNodeGeometry misses are harmless and the map re-syncs on the next zoom.
     const surfaceNodeWrappers = {};
 
-    // Authoritative collapsed node geometry stamped by each applyZoomSurface step. A per-surface
-    // settle loop (scheduleZoomSettle) re-asserts it every animation frame for a short tail after the
-    // last zoom step, so a STALE async .NET node render that lands late (each node re-renders as its
-    // own SignalR message; when two zoom bursts overlap server-side, the first burst's renders can
-    // arrive after the second burst already applied) is overwritten before it can be composited —
-    // never a painted flash-back. Only node geometry is guarded: async renders never write the
-    // content translate, host size, or scroll (those are JS-owned), so re-asserting them would only
-    // risk fighting a user pan. Keyed by scroller id.
+    // Authoritative collapsed node geometry and link points stamped by each applyZoomSurface step. A
+    // per-surface settle loop (scheduleZoomSettle) re-asserts them every animation frame for a short
+    // tail after the last zoom step, so a STALE async .NET render that lands late (each node/endpoint
+    // re-renders as its own SignalR message; when two zoom bursts overlap server-side, the first
+    // burst's renders can arrive after the second burst already applied) is overwritten before it can
+    // be composited — never a painted flash-back. Only node geometry and link points are guarded:
+    // async renders never write the content translate, host size, or scroll (those are JS-owned), so
+    // re-asserting them would only risk fighting a user pan. Keyed by scroller id.
     const surfaceZoomState = {};
 
     // True while a surface's settle loop is running (one rAF chain per surface).
@@ -375,6 +471,29 @@ window.veloxdevWorkflow = (() => {
         return dirty;
     }
 
+    // Re-asserts a surface's stamped link points onto its live polylines, mirroring
+    // applyZoomGeometrySettle for nodes: a stale async .NET LinkView render (an older zoom step's
+    // anchors landing after the newest step already applied) is overwritten with the stamped
+    // collapsed points before it can be painted. Returns true if any write actually changed the DOM.
+    function applyZoomLinkSettle(scrollerId) {
+        const z = surfaceZoomState[scrollerId];
+        const links = z ? z.links : null;
+        if (!links || !links.length) return false;
+        const el = document.getElementById(scrollerId);
+        if (!el) return false;
+        const host = el.querySelector('.veloxdev-wf-canvas-host');
+        if (!host) return false;
+        let dirty = false;
+        for (let i = 0; i < links.length; i++) {
+            const l = links[i];
+            const poly = resolveLinkPolyline(host, l.linkId);
+            if (!poly) continue;
+            const cur = poly.getAttribute('points');
+            if (cur !== l.points) { poly.setAttribute('points', l.points); dirty = true; }
+        }
+        return dirty;
+    }
+
     // Keeps a surface's settle loop alive: every animation frame it re-asserts the stamped geometry
     // so no stale async render can be painted, until the stamp has been stable for SETTLE_TAIL_MS
     // after the LAST zoom step (a fresh applyZoomSurface re-stamps and extends the tail, so a running
@@ -388,6 +507,7 @@ window.veloxdevWorkflow = (() => {
             const z = surfaceZoomState[scrollerId];
             if (!z) { surfaceSettleRunning[scrollerId] = false; return; }
             applyZoomGeometrySettle(scrollerId);
+            applyZoomLinkSettle(scrollerId);
             // Keep re-asserting until the tail after the last stamp elapses (late async renders are
             // overwritten whenever they land inside the window; the re-assert is idempotent once the
             // DOM matches, so extra clean frames are cheap). A real pointer gesture pre-empts the
