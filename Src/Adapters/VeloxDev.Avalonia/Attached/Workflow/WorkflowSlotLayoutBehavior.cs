@@ -16,6 +16,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
     {
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
         public bool SyncPending { get; set; }
+        public bool Syncing { get; set; }
         public HashSet<string> SlotPropertyNames { get; } = [];
     }
 
@@ -124,8 +125,12 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
 
     private static void OnLayoutUpdated(object? sender, EventArgs e)
     {
+        // Synchronous post-layout write-back (mirrors the WinUI adapter). Zoom collapse moves node
+        // geometry via binding -> layout; reading the slot center here, before this frame's render,
+        // guarantees the link-endpoint anchors are refreshed in the same frame as the node collapse
+        // instead of lagging one Dispatcher.Post(Render) cadence (the slot drift / flicker source).
         if (sender is UserControl control)
-            ScheduleSync(control);
+            Sync(control);
     }
 
     private static void OnControlPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -187,17 +192,24 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
 
     private static void Sync(UserControl control)
     {
+        if (control.GetValue(StateProperty) is not LayoutState state)
+            return;
+
+        if (state.Syncing)
+            return;
+
         if (control.DataContext is not IWorkflowNodeViewModel node)
             return;
 
-        var parentHost = control;
-        var coordinateHost = ResolveCoordinateHost(control, parentHost);
-        var slotNames = GetAllSlotNames(control);
-        var enumeratorNames = GetAllSlotEnumeratorNames(control);
-
-        // Rebuild the set of property names that should trigger ScheduleSync on change.
-        if (control.GetValue(StateProperty) is LayoutState state)
+        state.Syncing = true;
+        try
         {
+            var parentHost = control;
+            var coordinateHost = ResolveCoordinateHost(control, parentHost);
+            var slotNames = GetAllSlotNames(control);
+            var enumeratorNames = GetAllSlotEnumeratorNames(control);
+
+            // Rebuild the set of property names that should trigger ScheduleSync on change.
             state.SlotPropertyNames.Clear();
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
             state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
@@ -221,13 +233,17 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             state.SlotPropertyNames.Add("InputSlot");
             state.SlotPropertyNames.Add("OutputSlot");
             state.SlotPropertyNames.Add("OutputSlots");
+
+            foreach (var slotName in slotNames)
+                SyncNamedSlot(parentHost, control, coordinateHost, node, slotName);
+
+            foreach (var enumeratorName in enumeratorNames)
+                SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName);
         }
-
-        foreach (var slotName in slotNames)
-            SyncNamedSlot(parentHost, control, coordinateHost, node, slotName);
-
-        foreach (var enumeratorName in enumeratorNames)
-            SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName);
+        finally
+        {
+            state.Syncing = false;
+        }
     }
 
     private static void SyncNamedSlot(UserControl parentHost, UserControl host, Control? coordinateHost, IWorkflowNodeViewModel node, string? controlName)
