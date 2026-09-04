@@ -102,6 +102,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         control.DataContextChanged += OnDataContextChanged;
         control.IsVisibleChanged += OnIsVisibleChanged;
         control.LayoutUpdated += OnLayoutUpdated;
+        control.SizeChanged += OnSizeChanged;
         UpdatePropertyChangedSubscription(control);
         ScheduleSync(control);
     }
@@ -113,6 +114,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         control.DataContextChanged -= OnDataContextChanged;
         control.IsVisibleChanged -= OnIsVisibleChanged;
         control.LayoutUpdated -= OnLayoutUpdated;
+        control.SizeChanged -= OnSizeChanged;
 
         if (control.GetValue(StateProperty) is LayoutState state && state.PropertyChangedSource is not null)
         {
@@ -165,6 +167,18 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         // instead of lagging one BeginInvoke(Render) cadence (the slot drift / flicker source).
         if (sender is UserControl control)
         {
+            Sync(control);
+        }
+    }
+
+    private static void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is UserControl control)
+        {
+            // Zoom collapse changes the node's Size every tick. LayoutUpdated can fire during an
+            // intermediate measure/arrange pass before the node's resize (and its Viewbox-scaled slot
+            // children) settle; SizeChanged fires only once the node's layout reaches its final size
+            // for this update. Syncing here keeps slot anchors on the node's final, in-frame geometry.
             Sync(control);
         }
     }
