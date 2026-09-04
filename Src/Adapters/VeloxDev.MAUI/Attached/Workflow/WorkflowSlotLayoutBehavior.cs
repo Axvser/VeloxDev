@@ -19,6 +19,16 @@ public sealed class WorkflowSlotLayoutBehavior
         /// on the dispatcher queue across different MAUI platforms.
         /// </summary>
         public IDispatcherTimer? SyncTimer { get; set; }
+
+        /// <summary>
+        /// WinUI-native LayoutUpdated hook (Windows). Object-typed so LayoutState compiles on
+        /// every TFM; only touched inside #if WINDOWS blocks. LayoutUpdated is the end-of-layout
+        /// pass signal the other workflow families sync on; MAUI's managed SizeChanged fires
+        /// mid-arrange and reads a transient frame.
+        /// </summary>
+        public object? NativeLayoutElement { get; set; }
+        public EventHandler<object>? NativeLayoutUpdatedHandler { get; set; }
+        public bool ResizeFallbackActive { get; set; }
     }
 
     public static readonly BindableProperty IsEnabledProperty = BindableProperty.CreateAttached(
@@ -95,14 +105,21 @@ public sealed class WorkflowSlotLayoutBehavior
         control.Unloaded += OnUnloaded;
         control.BindingContextChanged += OnBindingContextChanged;
 
-        // WinUI/WPF parity: subscribe the node's native resize so the slot anchors are
-        // measured synchronously at the exact post-arrange instant, not by the 16ms
-        // coalescing timer chasing a moving collapse. A zoom collapse always changes the
-        // node's allocated size, and MAUI's SizeChanged fires from the platform arrange
-        // once the node (and its arranged subtree) reached its final size for that pass —
-        // the layout-completed signal WPF gets from LayoutUpdated. Position-only moves
-        // (drag) keep the size constant, so they still ride the property-change timer path.
+#if WINDOWS
+        // Sync on the node's WinUI-native LayoutUpdated — the true end-of-layout-pass signal
+        // (the one WinUI/WPF families sync on). MAUI's managed SizeChanged fires DURING the
+        // arrange, before the node's inner slot layout settles, so a zoom collapse measured
+        // there reads a transient overshoot that the links (bound to those anchors) paint for
+        // a frame — the residual per-notch endpoint pop. LayoutUpdated runs after the whole
+        // subtree is arranged, giving final geometry in the same frame the node lands. The
+        // platform element is created when the handler attaches, so hook on HandlerChanged too.
+        control.HandlerChanged += OnNodeHandlerChanged;
+        TryInstallResizeSignal(control);
+#else
+        // Non-Windows MAUI: no framework LayoutUpdated exposed; keep the managed SizeChanged
+        // resize signal used before. (Windows no longer subscribes: it mis-measures in-arrange.)
         control.SizeChanged += OnNodeResized;
+#endif
 
         UpdatePropertyChangedSubscription(control);
         ScheduleSync(control);
@@ -113,10 +130,24 @@ public sealed class WorkflowSlotLayoutBehavior
         control.Loaded -= OnLoaded;
         control.Unloaded -= OnUnloaded;
         control.BindingContextChanged -= OnBindingContextChanged;
+#if WINDOWS
+        control.HandlerChanged -= OnNodeHandlerChanged;
+        UnhookNativeLayoutUpdated(control);
+#else
         control.SizeChanged -= OnNodeResized;
+#endif
 
         if (control.GetValue(StateProperty) is LayoutState state)
         {
+#if WINDOWS
+            // The managed SizeChanged was only ever a fallback until the native LayoutUpdated
+            // hook attached — remove it if a detach happens while it is still the active signal.
+            if (state.ResizeFallbackActive)
+            {
+                control.SizeChanged -= OnNodeResized;
+                state.ResizeFallbackActive = false;
+            }
+#endif
             if (state.SyncTimer is not null)
             {
                 state.SyncTimer.Stop();
@@ -132,6 +163,85 @@ public sealed class WorkflowSlotLayoutBehavior
 
         control.ClearValue(StateProperty);
     }
+
+#if WINDOWS
+    private static void OnNodeHandlerChanged(object? sender, EventArgs e)
+    {
+        if (sender is ContentView control)
+        {
+            TryInstallResizeSignal(control);
+        }
+    }
+
+    /// <summary>
+    /// Prefers the node's WinUI-native LayoutUpdated as the resize signal; falls back to the
+    /// managed SizeChanged until (and unless) the native element is available. LayoutUpdated is
+    /// the end-of-layout-pass event the WinUI/WPF families sync on: the node subtree is fully
+    /// arranged, so slot centers read FINAL geometry. MAUI's managed SizeChanged fires DURING the
+    /// arrange — a zoom collapse measured there reads a transient overshoot that the links bound
+    /// to those anchors paint for a frame (the residual per-notch endpoint pop). The fallback is
+    /// kept only so Windows can never silently lose resize sync if the platform element isn't a
+    /// FrameworkElement.
+    /// </summary>
+    private static void TryInstallResizeSignal(ContentView control)
+    {
+        if (control.GetValue(StateProperty) is not LayoutState state)
+        {
+            return;
+        }
+
+        if (state.NativeLayoutUpdatedHandler is null
+            && control.Handler?.PlatformView is Microsoft.UI.Xaml.FrameworkElement native)
+        {
+            state.NativeLayoutElement = native;
+            state.NativeLayoutUpdatedHandler = (_, _) =>
+            {
+                // Sync synchronously inside LayoutUpdated: layout has completed for this subtree,
+                // so slot centers read final. The dirty check in SyncSlot makes repeated passes a
+                // no-op once the geometry settles — no re-arm chain, nothing to wedge.
+                if (control.GetValue(StateProperty) is not null)
+                {
+                    Sync(control);
+                }
+            };
+            native.LayoutUpdated += state.NativeLayoutUpdatedHandler;
+
+            // Post-pass signal installed — drop the managed fallback so it can't write its
+            // mid-arrange measurement anymore.
+            if (state.ResizeFallbackActive)
+            {
+                control.SizeChanged -= OnNodeResized;
+                state.ResizeFallbackActive = false;
+            }
+            return;
+        }
+
+        // Platform element not materialized yet (HandlerChanged fires as the handler attaches)
+        // or not a FrameworkElement — keep the managed SizeChanged fallback in the meantime.
+        if (!state.ResizeFallbackActive && state.NativeLayoutUpdatedHandler is null)
+        {
+            control.SizeChanged += OnNodeResized;
+            state.ResizeFallbackActive = true;
+        }
+    }
+
+    private static void UnhookNativeLayoutUpdated(ContentView control)
+    {
+        if (control.GetValue(StateProperty) is not LayoutState state)
+        {
+            return;
+        }
+
+        if (state.NativeLayoutElement is Microsoft.UI.Xaml.FrameworkElement native
+            && state.NativeLayoutUpdatedHandler is not null)
+        {
+            native.LayoutUpdated -= state.NativeLayoutUpdatedHandler;
+        }
+
+        state.NativeLayoutElement = null;
+        state.NativeLayoutUpdatedHandler = null;
+    }
+#endif
 
     private static void OnLoaded(object? sender, EventArgs e)
     {
@@ -155,14 +265,12 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static void OnNodeResized(object? sender, EventArgs e)
     {
+        // Non-Windows fallback only. On Windows this hook is NOT used: MAUI's managed
+        // SizeChanged fires DURING the arrange, before the node's inner slots settle, so
+        // the measured anchors overshoot the final geometry for ~10ms (see git history:
+        // the per-notch endpoint pop). Windows syncs on the platform LayoutUpdated instead.
         if (sender is ContentView control)
         {
-            // Synchronous, in-arrange measurement: MAUI's native layout has already committed
-            // the node's collapsed frame (and its arranged subtree) by the time SizeChanged
-            // fires, so reading the slot centers here returns the final post-zoom geometry —
-            // no 16ms lag, no settle chain to wedge. Deliberately NOT routed through
-            // ScheduleSync: a coalescing timer would re-introduce the async read of a
-            // mid-collapse frame the parity hook exists to eliminate.
             Sync(control);
         }
     }
