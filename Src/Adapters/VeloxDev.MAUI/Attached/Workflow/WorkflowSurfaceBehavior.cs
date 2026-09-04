@@ -481,16 +481,77 @@ public sealed class WorkflowSurfaceBehavior
             var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
                 sv.ScrollX, sv.ScrollY, sv.Width, sv.Height, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
+            // Fold the link endpoints to the incoming scale NOW, in this same UI turn that
+            // schedules the node collapse, so a link draw in either this frame or the next
+            // reads already-current endpoints instead of the pre-zoom ones.
+            PrecollapseSlotAnchors(viewModel, layout.Scale.Horizontal, next);
             layout.Scale = new Scale(next, next);
             RecenterOnWorldPointAsync(control, state, wx, wy);
         }
         else
         {
+            PrecollapseSlotAnchors(viewModel, layout.Scale.Horizontal, next);
             layout.Scale = new Scale(next, next);
         }
         e.Handled = true;
     }
 #endif
+
+    /// <summary>
+    /// Folds every link endpoint to the incoming collapse scale synchronously, in the same UI
+    /// turn that schedules the node collapse. On MAUI Windows a node's SizeChanged is raised a
+    /// frame AFTER its native layout/render lands, so slot anchors measured there (or by the 16ms
+    /// fallback timer) trail the node's on-screen move by one frame — the per-notch endpoint "pop".
+    /// A collapse is an origin-scaling of canvas geometry (Anchor.Collapse returns raw × (1/scale);
+    /// CollapsePivot is realized later by a scroll recenter, which never moves canvas coordinates),
+    /// so every stored anchor maps across the change by <c>oldScale / newScale</c>. Writing that
+    /// fold here keeps endpoints current in the same frame the nodes land; the post-arrange
+    /// measurement in WorkflowSlotLayoutBehavior only refines slots whose in-node offset drifts
+    /// (content enumerators). Template-agnostic: it multiplies the anchor value links already read.
+    /// </summary>
+    private static void PrecollapseSlotAnchors(IWorkflowTreeViewModel tree, double oldScale, double newScale)
+    {
+        if (tree is null || !double.IsFinite(oldScale) || !double.IsFinite(newScale)
+            || oldScale <= 0 || newScale <= 0)
+        {
+            return;
+        }
+
+        var ratio = oldScale / newScale;
+        if (Math.Abs(ratio - 1d) < 1e-9)
+        {
+            return;
+        }
+
+        foreach (var link in tree.Links)
+        {
+            FoldAnchor(link.Sender, ratio);
+            FoldAnchor(link.Receiver, ratio);
+        }
+
+        if (tree.VirtualLink is { } virtualLink)
+        {
+            FoldAnchor(virtualLink.Sender, ratio);
+            FoldAnchor(virtualLink.Receiver, ratio);
+        }
+    }
+
+    private static void FoldAnchor(IWorkflowSlotViewModel slot, double ratio)
+    {
+        var anchor = slot.Anchor;
+        if (!double.IsFinite(anchor.Horizontal) || !double.IsFinite(anchor.Vertical))
+        {
+            return; // not laid out yet (NaN anchor) — nothing to fold
+        }
+
+        var folded = new Anchor(anchor.Horizontal * ratio, anchor.Vertical * ratio, anchor.Layer);
+        if (folded.Horizontal == anchor.Horizontal && folded.Vertical == anchor.Vertical)
+        {
+            return; // dirty-check: don't churn PropertyChanged on a no-op
+        }
+
+        slot.Anchor = folded;
+    }
 
     /// <summary>
     /// Fire-and-forget recenter after a viewport-center zoom: sets the scroll so the world point
@@ -574,11 +635,13 @@ public sealed class WorkflowSurfaceBehavior
                     var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
                         sv.ScrollX, sv.ScrollY, sv.Width, sv.Height, layout);
                     layout.CollapsePivot = new Anchor(wx, wy, 0);
+                    PrecollapseSlotAnchors(tree, layout.Scale.Horizontal, factor);
                     layout.Scale = new Scale(factor, factor);
                     RecenterOnWorldPointAsync(host, state, wx, wy);
                 }
                 else
                 {
+                    PrecollapseSlotAnchors(tree, layout.Scale.Horizontal, factor);
                     layout.Scale = new Scale(factor, factor);
                 }
                 break;
