@@ -445,8 +445,12 @@ public sealed class TemplateClass : UserControl
         _dynamicOutputs.SetCollapse(_collapse);
         // Re-measure the slot views at their new (scaled) bounds so link endpoints
         // keep pointing at the glyphs — PointToScreen reads the actual control bounds,
-        // so this must run after the resize above settles.
-        WorkflowSlotLayoutBehavior.Refresh(this);
+        // so this must run after the resize above settles. SetCollapse's
+        // ResumeLayout(true) settles the panel synchronously, so SyncNow can write the
+        // anchors back in this same turn — a deferred Refresh would drain only after
+        // the surface's forced synchronous repaint, leaving links stale for one frame
+        // during zoom collapse (the Slot 双端 drift).
+        WorkflowSlotLayoutBehavior.SyncNow(this);
         Invalidate();
     }
 

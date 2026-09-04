@@ -271,6 +271,51 @@ public sealed class WorkflowSlotLayoutBehavior
         ScheduleSync(control);
     }
 
+    /// <summary>
+    /// Synchronously re-measures and writes back the slot anchors of a node view.
+    /// The deferred <see cref="Refresh"/> path coalesces to the message loop, which
+    /// drains after any forced synchronous repaint (e.g. a surface ApplyPan that
+    /// calls <c>Update()</c>) — so during zoom collapse / canvas expansion the links
+    /// repaint with stale endpoints for one frame. Call this right after the node
+    /// view's geometry has been moved or scaled so link endpoints refresh in the
+    /// same turn, before that forced repaint.
+    /// </summary>
+    /// <remarks>
+    /// Falls back to the deferred path when the control has no handle yet (nothing
+    /// to measure) or measurement throws because a descendant slot's geometry is
+    /// still settling.
+    /// </remarks>
+    public static void SyncNow(Control control)
+    {
+        if (control is null)
+        {
+            throw new ArgumentNullException(nameof(control));
+        }
+
+        if (!States.TryGetValue(control, out var state) || !state.IsEnabled || control.IsDisposed)
+        {
+            return;
+        }
+
+        if (!control.IsHandleCreated)
+        {
+            ScheduleSync(control);
+            return;
+        }
+
+        try
+        {
+            Sync(control);
+        }
+        catch (InvalidOperationException)
+        {
+            // A descendant slot control had no usable geometry yet (e.g. called
+            // during handle creation before child handles exist). Re-queue so the
+            // anchor still lands after the layout settles.
+            ScheduleSync(control);
+        }
+    }
+
     private static void Attach(Control control)
     {
         var state = GetState(control);

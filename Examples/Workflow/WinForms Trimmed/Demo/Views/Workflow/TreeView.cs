@@ -926,15 +926,16 @@ public sealed class TreeView : UserControl
         // later, reposition existing ones, then re-measure slot anchors so links
         // track the pan (the layout behavior computes anchors from the slots' screen
         // position, which changed when the nodes moved). Repositioning is synchronous
-        // here; the anchor re-sync is deferred to the message loop (ScheduleSync),
-        // which coalesces during a drag and runs before the canvas repaints.
+        // here and each ApplyPosition re-measures its slots synchronously (SyncNow);
+        // the anchors are therefore fresh before the forced synchronous repaint below,
+        // so links never paint one frame at stale endpoints.
         ((SurfaceCanvas)PART_Canvas).PanOffset = _panOffset;
         foreach (Control child in PART_Canvas.Controls)
         {
             if (child is NodeView nodeView)
             {
                 nodeView.ApplyPosition();
-                WorkflowSlotLayoutBehavior.Refresh(nodeView);
+                WorkflowSlotLayoutBehavior.SyncNow(nodeView);
             }
         }
 
