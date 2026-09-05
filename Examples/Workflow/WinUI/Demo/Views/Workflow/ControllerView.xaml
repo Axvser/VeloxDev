@@ -14,74 +14,78 @@
     behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
     mc:Ignorable="d">
 
-    <Grid Clip="{x:Null}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <!-- Design-canvas: DataTemplate binds Width/Height to the collapsed Node.Size; the Viewbox
+         uniformly scales this fixed 220x340 design grid (Controller's [DefaultSize]) into that host. -->
+    <Viewbox Stretch="Uniform">
+        <Grid Clip="{x:Null}" Width="220" Height="340">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="52" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="88" />
+            </Grid.RowDefinitions>
 
-        <Border Grid.RowSpan="3"
-                BorderThickness="1"
-                CornerRadius="5"
-                BorderBrush="White"
-                Background="#2D2D2D" />
+            <Border Grid.RowSpan="3"
+                    BorderThickness="1"
+                    CornerRadius="5"
+                    BorderBrush="White"
+                    Background="#2D2D2D" />
 
-        <Border Grid.Row="0"
-                CornerRadius="5,5,0,0"
-                Background="#2D2D2D"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-            <TextBlock Text="Network Flow Controller"
-                       VerticalAlignment="Center"
-                       HorizontalAlignment="Center"
-                       Foreground="White" />
-        </Border>
+            <Border Grid.Row="0"
+                    CornerRadius="5,5,0,0"
+                    Background="#2D2D2D"
+                    behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                    behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+                <TextBlock Text="Network Flow Controller"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"
+                           Foreground="White" />
+            </Border>
 
-        <Border Grid.Row="1" Background="#252525" Padding="12">
-            <ScrollViewer MinHeight="40">
-            <StackPanel Spacing="4">
-                <TextBlock Text="Seed" Foreground="#DCDCDC" FontSize="11" />
-                <TextBox FontSize="11"
-                         Text="{Binding SeedPayload, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            </StackPanel>
-            </ScrollViewer>
-        </Border>
+            <Border Grid.Row="1" Background="#252525" Padding="12">
+                <ScrollViewer>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Seed" Foreground="#DCDCDC" FontSize="11" />
+                        <TextBox FontSize="11"
+                                 Text="{Binding SeedPayload, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
 
-        <Border Grid.Row="2" Background="#2D2D2D" CornerRadius="0,0,5,5" Padding="8">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Button Grid.Row="0" Grid.Column="0" Margin="0,0,3,3" Command="{Binding CompileCommand}">
-                    <TextBlock Text="Compile" Foreground="White" />
-                </Button>
-                <Button Grid.Row="0" Grid.Column="1" Margin="3,0,0,3" Command="{Binding RunCommand}"
-                        IsEnabled="{Binding HasCompiledGraphs}">
-                    <TextBlock Text="Run" Foreground="White" />
-                </Button>
-                <Button Grid.Row="1" Grid.Column="0" Margin="0,3,3,0" Command="{Binding StopCommand}">
-                    <TextBlock Text="Stop" Foreground="White" />
-                </Button>
-                <Button Grid.Row="1" Grid.Column="1" Margin="3,3,0,0" Command="{Binding CloseWorkflowCommand}">
-                    <TextBlock Text="Close" Foreground="White" />
-                </Button>
-            </Grid>
-        </Border>
+            <Border Grid.Row="2" Background="#2D2D2D" CornerRadius="0,0,5,5" Padding="8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Row="0" Grid.Column="0" Margin="0,0,3,3" Command="{Binding CompileCommand}">
+                        <TextBlock Text="Compile" Foreground="White" />
+                    </Button>
+                    <Button Grid.Row="0" Grid.Column="1" Margin="3,0,0,3" Command="{Binding RunCommand}"
+                            IsEnabled="{Binding HasCompiledGraphs}">
+                        <TextBlock Text="Run" Foreground="White" />
+                    </Button>
+                    <Button Grid.Row="1" Grid.Column="0" Margin="0,3,3,0" Command="{Binding StopCommand}">
+                        <TextBlock Text="Stop" Foreground="White" />
+                    </Button>
+                    <Button Grid.Row="1" Grid.Column="1" Margin="3,3,0,0" Command="{Binding CloseWorkflowCommand}">
+                        <TextBlock Text="Close" Foreground="White" />
+                    </Button>
+                </Grid>
+            </Border>
 
-        <local:SlotView x:Name="PART_OutputSlot"
-                        Width="20"
-                        Height="20"
-                        Grid.RowSpan="3"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        Margin="0,0,-10,0"
-                        DataContext="{Binding OutputSlot}"
-                        SlotState="{Binding State}" />
-    </Grid>
+            <local:SlotView x:Name="PART_OutputSlot"
+                            Width="20"
+                            Height="20"
+                            Grid.RowSpan="3"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,-10,0"
+                            DataContext="{Binding OutputSlot}"
+                            SlotState="{Binding State}" />
+        </Grid>
+    </Viewbox>
 </UserControl>

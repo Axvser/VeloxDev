@@ -12,7 +12,8 @@
 			 behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_InputSlotsList,PART_OutputSlotsList"
 			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:PythonScriptNodeViewModel">
-	<Grid RowDefinitions="40,Auto,*" ClipToBounds="False">
+	<Viewbox Stretch="Uniform">
+	<Grid RowDefinitions="40,Auto,*" Width="280" Height="260" ClipToBounds="False">
 		<Border Grid.RowSpan="3"
 				CornerRadius="6"
 				BorderThickness="1.5"
@@ -152,4 +153,5 @@
 			</Grid>
 		</Border>
 	</Grid>
+	</Viewbox>
 </UserControl>

@@ -18,86 +18,90 @@
         <local:BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     </UserControl.Resources>
 
-    <Grid Clip="{x:Null}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <!-- Design-canvas: DataTemplate binds Width/Height to the collapsed Node.Size; the Viewbox
+         uniformly scales this fixed 280x380 design grid (Enum selector's [DefaultSize]) into that host. -->
+    <Viewbox Stretch="Uniform">
+        <Grid Clip="{x:Null}" Width="280" Height="380">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="48" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-        <Border Grid.RowSpan="2"
-                CornerRadius="6"
-                BorderThickness="1.5"
-                BorderBrush="#d6a0ff"
-                Background="#2a1e35"/>
+            <Border Grid.RowSpan="2"
+                    CornerRadius="6"
+                    BorderThickness="1.5"
+                    BorderBrush="#d6a0ff"
+                    Background="#2a1e35"/>
 
-        <Grid Grid.RowSpan="2" Canvas.ZIndex="6" Clip="{x:Null}">
-            <local:SlotView x:Name="PART_InputSlot"
-                            Width="20" Height="20"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Center"
-                            Margin="-10,0,0,0"
-                            DataContext="{Binding InputSlot}"
-                            SlotState="{Binding State}"/>
+            <Grid Grid.RowSpan="2" Canvas.ZIndex="6" Clip="{x:Null}">
+                <local:SlotView x:Name="PART_InputSlot"
+                                Width="20" Height="20"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Margin="-10,0,0,0"
+                                DataContext="{Binding InputSlot}"
+                                SlotState="{Binding State}"/>
+            </Grid>
+
+            <Border Grid.Row="0"
+                    Background="#3a2550"
+                    CornerRadius="4,4,0,0"
+                    BorderThickness="0,0,0,0.5"
+                    BorderBrush="#d6a0ff"
+                    behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                    behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                    <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
+                    <Border Background="#1f3d1f" BorderBrush="#7bd97b" BorderThickness="1" CornerRadius="10" Padding="6,1"
+                            Visibility="{Binding HasExecutionOrder, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold"/>
+                    </Border>
+                    <Border Background="#2b1540" BorderBrush="#d6a0ff" BorderThickness="1" CornerRadius="10" Padding="6,1">
+                        <TextBlock Text="{Binding LastRouted}" Foreground="#e4d8ff" FontWeight="Bold"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1" Background="#2a1e35" CornerRadius="0,0,4,4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="14" Spacing="8">
+                        <TextBlock Text="Selected Method" Foreground="#bfbfbf" FontSize="11"/>
+                        <ComboBox ItemsSource="{Binding EnumValues}"
+                                  SelectedItem="{Binding SelectedValue, Mode=TwoWay}"
+                                  HorizontalAlignment="Stretch"/>
+                        <TextBlock Text="Compile Mode" Foreground="#bfbfbf" FontSize="11"/>
+                        <ComboBox ItemsSource="{Binding CompileModeOptions}"
+                                  SelectedItem="{Binding CompileMode, Mode=TwoWay}"
+                                  HorizontalAlignment="Stretch"/>
+                        <TextBlock Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,6,0,0"/>
+                        <ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2" Clip="{x:Null}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" Foreground="#d6a0ff" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"/>
+                                        <local:SlotView Grid.Column="1" Width="16" Height="16"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        Margin="0,0,-8,0"
+                                                        DataContext="{Binding Slot}"
+                                                        SlotState="{Binding Slot.State}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
         </Grid>
-
-        <Border Grid.Row="0"
-                Background="#3a2550"
-                CornerRadius="4,4,0,0"
-                BorderThickness="0,0,0,0.5"
-                BorderBrush="#d6a0ff"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
-                <Border Background="#1f3d1f" BorderBrush="#7bd97b" BorderThickness="1" CornerRadius="10" Padding="6,1"
-                        Visibility="{Binding HasExecutionOrder, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold"/>
-                </Border>
-                <Border Background="#2b1540" BorderBrush="#d6a0ff" BorderThickness="1" CornerRadius="10" Padding="6,1">
-                    <TextBlock Text="{Binding LastRouted}" Foreground="#e4d8ff" FontWeight="Bold"/>
-                </Border>
-            </StackPanel>
-        </Border>
-
-        <Border Grid.Row="1" Background="#2a1e35" CornerRadius="0,0,4,4">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="14" Spacing="8">
-                <TextBlock Text="Selected Method" Foreground="#bfbfbf" FontSize="11"/>
-                <ComboBox ItemsSource="{Binding EnumValues}"
-                          SelectedItem="{Binding SelectedValue, Mode=TwoWay}"
-                          HorizontalAlignment="Stretch"/>
-                <TextBlock Text="Compile Mode" Foreground="#bfbfbf" FontSize="11"/>
-                <ComboBox ItemsSource="{Binding CompileModeOptions}"
-                          SelectedItem="{Binding CompileMode, Mode=TwoWay}"
-                          HorizontalAlignment="Stretch"/>
-                <TextBlock Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,6,0,0"/>
-                <ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Name}" Foreground="#d6a0ff" FontWeight="SemiBold"
-                                           VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"/>
-                                <local:SlotView Grid.Column="1" Width="16" Height="16"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Center"
-                                                Margin="0,0,-8,0"
-                                                DataContext="{Binding Slot}"
-                                                SlotState="{Binding Slot.State}"/>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-            </ScrollViewer>
-        </Border>
-    </Grid>
+    </Viewbox>
 </UserControl>

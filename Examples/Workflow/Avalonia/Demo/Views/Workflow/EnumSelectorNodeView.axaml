@@ -2,7 +2,7 @@
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-			 mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="360"
+			 mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="380"
 			 x:Class="Demo.EnumSelectorNodeView"
 			 xmlns:local="using:Demo"
             xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
@@ -13,7 +13,8 @@
 			 behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlotsList"
 			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:EnumSelectorNodeViewModel">
-	<Grid RowDefinitions="48,*" ClipToBounds="False">
+	<Viewbox Stretch="Uniform">
+	<Grid RowDefinitions="48,*" Width="280" Height="380" ClipToBounds="False">
 		<Border Grid.RowSpan="2"
 				CornerRadius="6"
 				BorderThickness="1.5"
@@ -53,7 +54,7 @@
 			</StackPanel>
 		</Border>
 		<Border Grid.Row="1" Background="#2a1e35" CornerRadius="0,0,4,4" ClipToBounds="True">
-			<ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MinHeight="40">
+			<ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
 			<StackPanel Margin="14" Spacing="8">
 				<TextBlock Text="Selected Method" Foreground="#bfbfbf" FontSize="11"/>
 				<ComboBox ItemsSource="{Binding EnumValues}"
@@ -89,4 +90,5 @@
 			</ScrollViewer>
 		</Border>
 	</Grid>
+	</Viewbox>
 </UserControl>

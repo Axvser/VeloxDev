@@ -12,7 +12,8 @@
 			 behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
 			 behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas"
 			 x:DataType="vm:TimerNodeViewModel">
-	<Grid RowDefinitions="40,*" ClipToBounds="False">
+	<Viewbox Stretch="Uniform">
+	<Grid RowDefinitions="40,*" Width="200" Height="140" ClipToBounds="False">
 		<Grid.Styles>
 			<Style Selector="local|SlotView">
 				<Setter Property="Foreground" Value="White"/>
@@ -78,4 +79,5 @@
 			</ScrollViewer>
 		</Border>
 	</Grid>
+	</Viewbox>
 </UserControl>

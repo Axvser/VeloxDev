@@ -88,10 +88,15 @@ internal abstract class NodeViewBase : Canvas
     {
         Node = node;
         Children.Clear();
+        // The design (scale-1) canvas is the node TYPE's [DefaultSize], never the live collapsed
+        // node.Size (which is DefaultSize × collapse). This keeps the authored card geometry aligned to
+        // the type (Controller 220×340, Timer 200×140, Python 280×260, Enum 280×380) no matter what zoom
+        // the node was created at; the Viewbox below scales that fixed design canvas to the collapsed box.
+        (double designWidth, double designHeight) = ResolveDesignSize(node);
+        DesignWidth = designWidth;
+        DesignHeight = designHeight;
         Width = node.Size.Width;
         Height = node.Size.Height;
-        DesignWidth = node.Size.Width;
-        DesignHeight = node.Size.Height;
         _inputStates = new SlotState[NodePorts.Inputs(node).Count];
         _outputStates = new SlotState[NodePorts.Outputs(node).Count];
 
@@ -116,6 +121,19 @@ internal abstract class NodeViewBase : Canvas
         {
             notify.PropertyChanged += OnNodePropertyChangedHandler;
         }
+    }
+
+    /// <summary>The type's [DefaultSize] attribute is the single source of the node's design canvas;
+    /// falls back to the live node.Size only when a type declares no DefaultSize.</summary>
+    private static (double Width, double Height) ResolveDesignSize(IWorkflowNodeViewModel node)
+    {
+        if (Attribute.GetCustomAttribute(node.GetType(), typeof(DefaultSizeAttribute)) is DefaultSizeAttribute d
+            && d.Width > 0 && d.Height > 0)
+        {
+            return (d.Width, d.Height);
+        }
+
+        return (node.Size.Width, node.Size.Height);
     }
 
     /// <summary>Writes port colors for the given input/output state arrays and repaints.</summary>

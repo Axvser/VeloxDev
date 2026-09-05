@@ -7,7 +7,7 @@
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_InputSlotsList,PART_OutputSlotsList"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid RowDefinitions="Auto,Auto,*">
+    <Grid x:Name="DesignGrid" RowDefinitions="40,Auto,*">
         <Border Grid.RowSpan="3"
                 Stroke="#6EC6FF"
                 StrokeThickness="1.5"
@@ -83,9 +83,7 @@
                                 BackgroundColor="#0D1117"
                                 TextColor="#E6EDF3"
                                 FontFamily="monospace"
-                                FontSize="12"
-                                MinimumHeightRequest="40"
-                                AutoSize="TextChanges" />
+                                FontSize="12" />
                     </Grid>
                 </Border>
 

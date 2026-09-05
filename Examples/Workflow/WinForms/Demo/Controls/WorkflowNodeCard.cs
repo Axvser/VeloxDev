@@ -26,6 +26,18 @@ internal sealed class WorkflowNodeCard : UserControl
     private readonly Panel _bodyPanel;
     private readonly Panel _footerPanel;
 
+    // ── Uniform design-coordinate scaling ─────────────────────────────────────────
+    // The card host is sized by the canvas to the node's collapsed box (node.Size =
+    // [DefaultSize] × collapse). The interior is authored once at the type's DESIGN size
+    // and re-scaled uniformly on every layout by k = current / design (fonts, row/column
+    // styles, paddings, glyphs), mirroring the Trimmed WinForms ApplyScale so content can
+    // never overflow the collapsed card.
+    private float _designW;
+    private float _designH;
+    private double _k = 1d;
+    private bool _layoutReady;
+    private bool _applyingScale;
+
     // ── ViewModel subscription ────────────────────────────────────────────────────────
     private IWorkflowNodeViewModel? _node;
     private INotifyPropertyChanged? _nodeNotifier;
@@ -42,7 +54,6 @@ internal sealed class WorkflowNodeCard : UserControl
     private TableLayoutPanel? _outputSlotsLayout;
     private readonly List<(Label label, Views.SlotView slot)> _dynamicSlotRows = [];
     private TableLayoutPanel? _inputSlotsLayout;
-    private Panel? _enumBodyHost;
     private TextBox? _scriptBox;
     private Label? _descriptionLabel;
     private Label? _pythonStatusLabel;
@@ -111,6 +122,11 @@ internal sealed class WorkflowNodeCard : UserControl
         UnsubscribeVm();
         _node = node;
         Tag = node;
+        SetDesignSize(node);
+        // Build at design (k=1) and let the first layout after the canvas sizes the card re-scale to the
+        // current collapsed factor. Guards against a card being bound while the workspace is already zoomed.
+        _k = 1d;
+        _layoutReady = false;
 
         if (node is INotifyPropertyChanged n)
         {
@@ -120,6 +136,7 @@ internal sealed class WorkflowNodeCard : UserControl
 
         BuildLayout(node);
         Refresh(node);
+        _layoutReady = true;
     }
 
     /// <summary>Unbinds and resets the card to an empty state.</summary>
@@ -219,28 +236,12 @@ internal sealed class WorkflowNodeCard : UserControl
     protected override void OnLayout(LayoutEventArgs levent)
     {
         base.OnLayout(levent);
-        PositionOverlaySlotButtons();
-        ClampEnumBodyToCard();
-    }
-
-    /// <summary>
-    /// The Enum body is an AutoScroll host whose fixed 40px MinimumSize can exceed the collapsed card's
-    /// body row when the workspace is zoomed out (node height shrinks below header + body min). WinForms
-    /// clips child windows at the card bounds, but a minimum larger than the row would still shove the
-    /// host's lower scrollbar/viewport past the card border where it becomes unreachable. Cap the minimum
-    /// at the actual body-row height so the scroll/clip body always ends exactly at the card border and the
-    /// Enum output rows stay reachable inside it.
-    /// </summary>
-    private void ClampEnumBodyToCard()
-    {
-        if (_enumBodyHost is null || _bodyPanel is null) return;
-
-        var available = Math.Max(0, _bodyPanel.ClientSize.Height);
-        var min = new System.Drawing.Size(0, Math.Min(40, available));
-        if (_enumBodyHost.MinimumSize != min)
+        if (_layoutReady && !_applyingScale)
         {
-            _enumBodyHost.MinimumSize = min;
+            ApplyScaleToCurrent();
         }
+
+        PositionOverlaySlotButtons();
     }
 
     /// <summary>Positions the floating slot buttons at the card's left-center / right-center edges.</summary>
@@ -256,6 +257,136 @@ internal sealed class WorkflowNodeCard : UserControl
                 Width - OutputSlotButton.Width / 2,
                 (Height - OutputSlotButton.Height) / 2);
     }
+
+    // ── Uniform scale application ─────────────────────────────────────────────────
+    /// <summary>Records the card's design (scale-1) dimensions for the bound node type — matching
+    /// each node view-model's [DefaultSize] (Controller 220×340, Timer 200×140, Python 280×260,
+    /// Enum 280×380).</summary>
+    private void SetDesignSize(IWorkflowNodeViewModel node)
+    {
+        switch (node)
+        {
+            case ControllerViewModel:
+                _designW = 220; _designH = 340; break;
+            case TimerNodeViewModel:
+                _designW = 200; _designH = 140; break;
+            case PythonScriptNodeViewModel:
+                _designW = 280; _designH = 260; break;
+            case EnumSelectorNodeViewModel:
+                _designW = 280; _designH = 380; break;
+            default:
+                _designW = 220; _designH = 340; break;
+        }
+    }
+
+    /// <summary>Recomputes the current uniform factor k = collapsed / design and re-scales the interior.</summary>
+    private void ApplyScaleToCurrent()
+    {
+        if (_designW <= 0 || _designH <= 0) return;
+        var w = Width;
+        var h = Height;
+        if (w <= 0 || h <= 0) return;
+
+        // The node collapses uniformly (node.Size = [DefaultSize] × collapse); the smaller ratio is
+        // used so the proportional interior always fits inside the host box on both axes.
+        var k = Math.Min(w / (double)_designW, h / (double)_designH);
+        if (k <= 0) return;
+        ApplyScale(k);
+    }
+
+    /// <summary>Scales the existing interior metrics (fonts, row/column absolute styles, margins,
+    /// paddings, minimums, in-card slot glyphs) by the ratio to the requested uniform factor k.</summary>
+    private void ApplyScale(double k)
+    {
+        if (_rootLayout is null || _applyingScale) return;
+        _applyingScale = true;
+        try
+        {
+            var r = k / _k;
+            _k = k;
+            if (Math.Abs(r - 1d) < 0.001d) return;
+
+            _rootLayout.SuspendLayout();
+            try
+            {
+                ScaleControlTree(_rootLayout, r, k);
+            }
+            finally
+            {
+                _rootLayout.ResumeLayout(true);
+            }
+        }
+        finally
+        {
+            _applyingScale = false;
+        }
+
+        Invalidate();
+    }
+
+    private static void ScaleControlTree(Control c, double r, double k)
+    {
+        if (c.IsDisposed) return;
+
+        if (c is TableLayoutPanel tlp)
+        {
+            foreach (ColumnStyle cs in tlp.ColumnStyles)
+            {
+                if (cs.SizeType == SizeType.Absolute) cs.Width = Math.Max(1f, cs.Width * (float)r);
+            }
+
+            foreach (RowStyle rs in tlp.RowStyles)
+            {
+                if (rs.SizeType == SizeType.Absolute) rs.Height = Math.Max(1f, rs.Height * (float)r);
+            }
+        }
+
+        // Text-bearing controls scale with the card so rows/fonts stay proportional.
+        if (c is Label or Button or TextBox or ComboBox)
+        {
+            var f = c.Font;
+            if (f is not null)
+            {
+                c.Font = new Font(f.FontFamily, Math.Max(0.5f, f.SizeInPoints * (float)r), f.Style);
+            }
+        }
+
+        // In-card dynamic port glyphs scale with the card from their DESIGN size (20 × k), so a
+        // round-trip to a tiny zoom cannot drift via the minimum clamp. Edge-anchored overlay slot
+        // buttons live OUTSIDE _rootLayout and are intentionally not scaled (canvas positions them).
+        if (c is Views.SlotView sv)
+        {
+            var s = Math.Max(9, (int)Math.Round(20 * k));
+            sv.Width = s;
+            sv.Height = s;
+        }
+
+        if (c.Padding != Padding.Empty)
+            c.Padding = ScalePadding(c.Padding, r);
+        if (c.Margin != Padding.Empty)
+            c.Margin = ScalePadding(c.Margin, r);
+        if (c.MinimumSize != System.Drawing.Size.Empty)
+            c.MinimumSize = ScaleSize(c.MinimumSize, r);
+        if (c.MaximumSize != System.Drawing.Size.Empty)
+            c.MaximumSize = ScaleSize(c.MaximumSize, r);
+
+        foreach (Control child in c.Controls)
+        {
+            ScaleControlTree(child, r, k);
+        }
+    }
+
+    private static Padding ScalePadding(Padding p, double r)
+        => new(
+            Math.Max(0, (int)Math.Round(p.Left * r)),
+            Math.Max(0, (int)Math.Round(p.Top * r)),
+            Math.Max(0, (int)Math.Round(p.Right * r)),
+            Math.Max(0, (int)Math.Round(p.Bottom * r)));
+
+    private static System.Drawing.Size ScaleSize(System.Drawing.Size s, double r)
+        => new(
+            Math.Max(0, (int)Math.Round(s.Width * r)),
+            Math.Max(0, (int)Math.Round(s.Height * r)));
 
     protected override void Dispose(bool disposing)
     {
@@ -415,7 +546,6 @@ internal sealed class WorkflowNodeCard : UserControl
             Margin = Padding.Empty, Padding = Padding.Empty,
             BackColor = Color.FromArgb(42, 30, 53),
         };
-        _enumBodyHost = bodyHost;
         var bodyTlp = new TableLayoutPanel
         {
             Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
@@ -522,7 +652,7 @@ internal sealed class WorkflowNodeCard : UserControl
             AcceptsReturn = true,
             WordWrap = false,
             ScrollBars = ScrollBars.Both,
-            Font = new Font("Consolas", 10F),
+            Font = ScaledFont("Consolas", 10F, FontStyle.Regular),
             BackColor = Color.FromArgb(13, 17, 23),
             ForeColor = Color.FromArgb(230, 237, 243),
             BorderStyle = BorderStyle.FixedSingle,
@@ -702,7 +832,7 @@ internal sealed class WorkflowNodeCard : UserControl
         for (var i = 0; i < inputs.Length; i++)
         {
             _inputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            var btn = new Views.SlotView { Margin = new Padding(2, 4, 2, 4) };
+            var btn = MakeDynamicSlot();
             btn.ViewModel = inputs[i].Slot;
             _inputSlotsLayout.Controls.Add(btn, 0, i);
             var lbl = MakeLabel(Color.FromArgb(110, 198, 255), 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleLeft);
@@ -718,7 +848,7 @@ internal sealed class WorkflowNodeCard : UserControl
             lbl.Dock = DockStyle.Fill;
             lbl.Text = outputs[i].Name;
             _outputSlotsLayout.Controls.Add(lbl, 0, i);
-            var btn = new Views.SlotView { Margin = new Padding(2, 4, 2, 4) };
+            var btn = MakeDynamicSlot();
             btn.ViewModel = outputs[i].Slot;
             _outputSlotsLayout.Controls.Add(btn, 1, i);
             _pythonSlotRows.Add(btn);
@@ -782,7 +912,7 @@ internal sealed class WorkflowNodeCard : UserControl
             lbl.Text = entries[i].Name;
             _outputSlotsLayout.Controls.Add(lbl, 0, i);
 
-            var btn = new Views.SlotView { Margin = new Padding(2, 4, 2, 4) };
+            var btn = MakeDynamicSlot();
             btn.ViewModel = entries[i].Slot;
             _outputSlotsLayout.Controls.Add(btn, 1, i);
             _dynamicSlotRows.Add((lbl, btn));
@@ -905,7 +1035,6 @@ internal sealed class WorkflowNodeCard : UserControl
         _controllerDesc = null;
         _outputSlotsLayout = null;
         _inputSlotsLayout = null;
-        _enumBodyHost = null;
         _scriptBox = null;
         _descriptionLabel = null;
         _pythonStatusLabel = null;
@@ -982,14 +1111,25 @@ internal sealed class WorkflowNodeCard : UserControl
         return host;
     }
 
-    private static Label MakeLabel(Color fore, float size, FontStyle style, bool autoSize,
+    /// <summary>The current uniform scale factor (design × k = rendered metric).</summary>
+    private float K => (float)Math.Max(0.05, _k);
+
+    /// <summary>Creates the font for a control at the current uniform scale (design size × k).</summary>
+    private Font ScaledFont(string family, float size, FontStyle style)
+        => new(family, Math.Max(0.5f, size * K), style);
+
+    /// <summary>Scales an in-card metric (font size, glyph, padding) by the current uniform factor k,
+    /// so content authored at the design size stays proportional inside the collapsed card.</summary>
+    private int S(float design) => (int)Math.Round(design * K);
+
+    private Label MakeLabel(Color fore, float size, FontStyle style, bool autoSize,
         ContentAlignment align = ContentAlignment.MiddleLeft, string text = "")
         => new()
         {
             AutoSize = autoSize,
             ForeColor = fore,
             BackColor = Color.Transparent,
-            Font = new Font("Microsoft YaHei UI", size, style),
+            Font = ScaledFont("Microsoft YaHei UI", size, style),
             Margin = Padding.Empty,
             Padding = Padding.Empty,
             TextAlign = align,
@@ -997,30 +1137,31 @@ internal sealed class WorkflowNodeCard : UserControl
             Dock = autoSize ? DockStyle.None : DockStyle.Fill,
         };
 
-    private static Label MakeBadge(Color fore, Color back)
+    private Label MakeBadge(Color fore, Color back)
         => new()
         {
             AutoSize = true,
             ForeColor = fore,
             BackColor = back,
             BorderStyle = BorderStyle.FixedSingle,
-            Font = new Font("Microsoft YaHei UI", 8.2F, FontStyle.Bold),
-            Margin = new Padding(8, 0, 0, 0),
-            Padding = new Padding(6, 2, 6, 2),
+            Font = ScaledFont("Microsoft YaHei UI", 8.2F, FontStyle.Bold),
+            Margin = new Padding(S(8), 0, 0, 0),
+            Padding = new Padding(S(6), Math.Max(1, S(2)), S(6), Math.Max(1, S(2))),
             Visible = false,
         };
 
-    private static TextBox MakeTextBox()
+    private TextBox MakeTextBox()
         => new()
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(55, 55, 55),
             ForeColor = Color.White,
             BorderStyle = BorderStyle.FixedSingle,
-            Margin = new Padding(0, 2, 0, 2),
+            Font = ScaledFont("Microsoft YaHei UI", 9F, FontStyle.Regular),
+            Margin = new Padding(0, Math.Max(1, S(2)), 0, Math.Max(1, S(2))),
         };
 
-    private static ComboBox MakeComboBox()
+    private ComboBox MakeComboBox()
         => new()
         {
             Dock = DockStyle.Fill,
@@ -1028,8 +1169,21 @@ internal sealed class WorkflowNodeCard : UserControl
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Margin = new Padding(0, 2, 0, 2),
+            Font = ScaledFont("Microsoft YaHei UI", 9F, FontStyle.Regular),
+            Margin = new Padding(0, Math.Max(1, S(2)), 0, Math.Max(1, S(2))),
         };
+
+    /// <summary>Creates an in-card dynamic slot glyph at the current uniform scale (the row's AutoSize
+    /// height follows). Edge-anchored overlay slot buttons are created elsewhere and stay unscaled.</summary>
+    private Views.SlotView MakeDynamicSlot()
+    {
+        var s = Math.Max(9, S(20));
+        return new Views.SlotView
+        {
+            Size = new System.Drawing.Size(s, s),
+            Margin = new Padding(Math.Max(0, S(2)), Math.Max(1, S(4)), Math.Max(0, S(2)), Math.Max(1, S(4))),
+        };
+    }
 
     private Button MakeCmdButton(string text, string cmdProp)
     {
@@ -1040,6 +1194,7 @@ internal sealed class WorkflowNodeCard : UserControl
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(45, 45, 45),
             ForeColor = Color.White,
+            Font = ScaledFont("Microsoft YaHei UI", 9F, FontStyle.Regular),
             Text = text,
             Tag = cmdProp,
             AccessibleName = text,

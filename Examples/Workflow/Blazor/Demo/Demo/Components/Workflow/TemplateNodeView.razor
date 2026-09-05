@@ -7,14 +7,22 @@
     <WorkflowSlotLayoutBehavior Node="Node" IsEnabled="true">
         <WorkflowNodeDragBehavior Node="Node" IsEnabled="true"
                                   Style="@($"width:{Node.Size.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}px;height:{Node.Size.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}px;")">
+            @* The card is authored at its DESIGN size (the type's [DefaultSize]) and uniformly scaled
+               into the collapsed Node.Size host by a CSS transform (the Blazor equivalent of the XAML
+               Viewbox). Header text, body content, scrollbars and slot glyphs shrink together, so the
+               interior never re-flows / overflows the collapsed card on zoom. Body content scrolls at
+               design coordinates inside the body (overflow-y auto). Edge slot hosts live outside the
+               scrollable body-content (but inside the card), so the half-outside glyphs stay reachable. *@
+            @{ var design = Design; var headerHeight = 36; }
             <div class="veloxdev-wf-node-card @(IsRunning ? "veloxdev-wf-node-running" : null)"
-                 style="position:relative;width:100%;height:100%;
+                 style="position:relative;width:@(design.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))px;height:@(design.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture))px;
+                        transform:scale(@ScaleCss);transform-origin:top left;
                         background:@CardBackgroundCss;
                         border:@BorderThicknessCss solid @BorderBrushCss;
                         border-radius:@CornerRadiusCss;
                         overflow:@(AllowOverflow ? "visible" : "hidden");">
                 <div class="veloxdev-wf-node-header"
-                     style="height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;
+                     style="height:@(headerHeight)px;display:flex;align-items:center;gap:8px;padding:0 12px;
                             color:@ForegroundCss;font-weight:bold;font-size:13px;
                             background:@HeaderBackgroundCss;
                             border-bottom:1px solid @HeaderDividerCss;">
@@ -36,7 +44,7 @@
                         </span>
                     }
                 </div>
-                <div class="veloxdev-wf-node-body" style="position:absolute;left:0;right:0;top:36px;bottom:0;min-height:0;">
+                <div class="veloxdev-wf-node-body" style="position:absolute;left:0;right:0;top:@(headerHeight)px;bottom:0;min-height:0;">
                     @if (BodyContent is not null)
                     {
                         <div class="veloxdev-wf-node-body-content"

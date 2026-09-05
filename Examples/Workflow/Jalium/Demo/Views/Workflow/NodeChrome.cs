@@ -84,6 +84,11 @@ internal static class NodeChrome
             BorderThickness = new Thickness(1.5),
             BorderBrush = accent,
             Background = CardBg,
+            // Design-canvas self-clip: body content (description wraps, many enum output rows, the script
+            // editor) is clipped to the card's design rectangle, so nothing can draw past the border while
+            // the whole card is uniformly scaled by the Viewbox. Ports are drawn above this card by the
+            // base's CardLayer, so they are not clipped.
+            ClipToBounds = true,
             Child = body,
         };
     }

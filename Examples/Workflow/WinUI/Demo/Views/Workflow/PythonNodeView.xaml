@@ -17,165 +17,195 @@
         <local:BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     </UserControl.Resources>
 
-    <Grid Clip="{x:Null}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <!-- Design-canvas: DataTemplate binds Width/Height to the collapsed Node.Size; the Viewbox
+         uniformly scales this fixed 280x260 design grid (Python's [DefaultSize]) into that host.
+         The left/right port strips are inset 8px past the card edges with their content pushed back
+         8px so the -8px edge port glyphs stay centered on the card edge yet remain inside the scroll
+         clip (no horizontal clipping); rows scroll at design coordinates when they exceed the body. -->
+    <Viewbox Stretch="Uniform">
+        <Grid Clip="{x:Null}" Width="280" Height="260">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-        <Border Grid.RowSpan="3"
-                CornerRadius="6"
-                BorderThickness="1.5"
-                BorderBrush="#6ec6ff"
-                Background="#1e2a35"/>
+            <Border Grid.RowSpan="2"
+                    CornerRadius="6"
+                    BorderThickness="1.5"
+                    BorderBrush="#6ec6ff"
+                    Background="#1e2a35"/>
 
-        <Border Grid.Row="0"
-                Background="#253545"
-                CornerRadius="4,4,0,0"
-                BorderThickness="0,0,0,0.5"
-                BorderBrush="#6ec6ff"
-                behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
-                behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
-                <Border Background="#1f3d1f" BorderBrush="#7bd97b" BorderThickness="1" CornerRadius="10" Padding="6,1"
-                        Visibility="{Binding HasExecutionOrder, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold"/>
-                </Border>
-                <Border Background="#2b2440" BorderBrush="#b799ff" BorderThickness="1" CornerRadius="10" Padding="6,1">
-                    <TextBlock Text="{Binding LastStatus}" Foreground="#e4d8ff" FontWeight="SemiBold"/>
-                </Border>
-            </StackPanel>
-        </Border>
+            <Border Grid.Row="0"
+                    Background="#253545"
+                    CornerRadius="4,4,0,0"
+                    BorderThickness="0,0,0,0.5"
+                    BorderBrush="#6ec6ff"
+                    behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
+                    behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                    <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold"/>
+                    <Border Background="#1f3d1f" BorderBrush="#7bd97b" BorderThickness="1" CornerRadius="10" Padding="6,1"
+                            Visibility="{Binding HasExecutionOrder, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding ExecutionOrderText}" Foreground="#c8ffc8" FontWeight="Bold"/>
+                    </Border>
+                    <Border Background="#2b2440" BorderBrush="#b799ff" BorderThickness="1" CornerRadius="10" Padding="6,1">
+                        <TextBlock Text="{Binding LastStatus}" Foreground="#e4d8ff" FontWeight="SemiBold"/>
+                    </Border>
+                </StackPanel>
+            </Border>
 
-        <Border Grid.Row="1" Padding="12,3" BorderBrush="#30363d" BorderThickness="0,0,0,1">
-            <TextBlock Text="{Binding Description}" Foreground="#8b949e" FontSize="10" TextWrapping="Wrap"/>
-        </Border>
+            <Border Grid.Row="1" Background="#1e2a35" CornerRadius="0,0,4,4">
+                <Grid Clip="{x:Null}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
 
-        <Border Grid.Row="2" Background="#1e2a35" CornerRadius="0,0,4,4">
-            <Grid Clip="{x:Null}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+                    <!-- Purpose description (wraps; no hard cap) -->
+                    <Border Grid.Row="0" Padding="12,3" BorderBrush="#30363d" BorderThickness="0,0,0,1">
+                        <TextBlock Text="{Binding Description}"
+                                   Foreground="#8b949e"
+                                   FontSize="10"
+                                   TextWrapping="Wrap"/>
+                    </Border>
 
-                <!-- Input port strip (fixed, left; scrolls when the dynamic slots outgrow the body) -->
-                <ScrollViewer Grid.Column="0"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding InputSlots.Items}"
-                                  x:Name="PART_InputSlotsList"
-                                  Clip="{x:Null}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="0,4" Clip="{x:Null}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <local:SlotView Grid.Column="0"
-                                                    Width="16" Height="16"
-                                                    HorizontalAlignment="Left"
-                                                    VerticalAlignment="Center"
-                                                    Margin="-8,0,0,0"
-                                                    DataContext="{Binding Slot}"
-                                                    SlotState="{Binding State}"/>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Name}"
-                                               Foreground="#6ec6ff"
-                                               FontWeight="SemiBold"
-                                               FontSize="11"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Left"
-                                               Margin="4,0,0,0"
-                                               TextTrimming="CharacterEllipsis"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                    <Grid Grid.Row="1" Clip="{x:Null}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="64" />
+                        </Grid.ColumnDefinitions>
 
-                <!-- Script editor -->
-                <Border Grid.Column="1" Margin="4,6" BorderBrush="#30363d" BorderThickness="1" CornerRadius="4" Background="#0d1117">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <Border Grid.Row="0" Background="#161b22" BorderBrush="#30363d" BorderThickness="0,0,0,1" Padding="8,4">
+                        <!-- Input port strip (scrollable, left). The ScrollViewer is inset 8px past the card edge and
+                             the ItemsControl is pushed back 8px so the -8px edge port glyph stays centered on the card
+                             edge yet remains inside the scroll clip (no horizontal clipping); rows scroll when they
+                             exceed the body. -->
+                        <ScrollViewer Grid.Column="0"
+                                      Margin="-8,0,0,0"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding InputSlots.Items}"
+                                          x:Name="PART_InputSlotsList"
+                                          Clip="{x:Null}"
+                                          Margin="8,0,0,0"
+                                          VerticalAlignment="Stretch">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,4" Clip="{x:Null}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <local:SlotView Grid.Column="0"
+                                                            Width="16" Height="16"
+                                                            HorizontalAlignment="Left"
+                                                            VerticalAlignment="Center"
+                                                            Margin="-8,0,0,0"
+                                                            DataContext="{Binding Slot}"
+                                                            SlotState="{Binding State}"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Name}"
+                                                       Foreground="#6ec6ff"
+                                                       FontWeight="SemiBold"
+                                                       FontSize="11"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Left"
+                                                       Margin="4,0,0,0"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <!-- Script editor -->
+                        <Border Grid.Column="1" Margin="4,6" BorderBrush="#30363d" BorderThickness="1" CornerRadius="4" Background="#0d1117">
                             <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="script.py" Foreground="#7ee787" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold"/>
-                                <TextBlock Grid.Column="1" Text="Python 3" Foreground="#6e7681" FontSize="10"/>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Border Grid.Row="0" Background="#161b22" BorderBrush="#30363d" BorderThickness="0,0,0,1" Padding="8,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="script.py" Foreground="#7ee787" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="1" Text="Python 3" Foreground="#6e7681" FontSize="10"/>
+                                    </Grid>
+                                </Border>
+                                <TextBox Grid.Row="1"
+                                         Text="{Binding Script, UpdateSourceTrigger=PropertyChanged}"
+                                         AcceptsReturn="True"
+                                         TextWrapping="NoWrap"
+                                         FontFamily="Consolas"
+                                         FontSize="12"
+                                         Foreground="#e6edf3"
+                                         Background="#0d1117"
+                                         BorderThickness="0"
+                                         Padding="6,4"
+                                         ToolTipService.ToolTip="{Binding LastOutput}"/>
                             </Grid>
                         </Border>
-                        <TextBox Grid.Row="1"
-                                 Text="{Binding Script, UpdateSourceTrigger=PropertyChanged}"
-                                 AcceptsReturn="True"
-                                 MinHeight="40"
-                                 TextWrapping="NoWrap"
-                                 FontFamily="Consolas"
-                                 FontSize="12"
-                                 Foreground="#e6edf3"
-                                 Background="#0d1117"
-                                 BorderThickness="0"
-                                 Padding="6,4"
-                                 ToolTipService.ToolTip="{Binding LastOutput}"/>
-                    </Grid>
-                </Border>
 
-                <!-- Output port strip (fixed, right; scrolls when the dynamic slots outgrow the body) -->
-                <ScrollViewer Grid.Column="2"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding OutputSlots.Items}"
-                                  x:Name="PART_OutputSlotsList"
-                                  Clip="{x:Null}"
-                                  HorizontalAlignment="Right">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="0,4" Clip="{x:Null}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0"
-                                               Text="{Binding Name}"
-                                               Foreground="#6ec6ff"
-                                               FontWeight="SemiBold"
-                                               FontSize="11"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Right"
-                                               Margin="0,0,4,0"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <local:SlotView Grid.Column="1"
-                                                    Width="16" Height="16"
-                                                    HorizontalAlignment="Right"
-                                                    VerticalAlignment="Center"
-                                                    Margin="0,0,-8,0"
-                                                    DataContext="{Binding Slot}"
-                                                    SlotState="{Binding State}"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </Grid>
-        </Border>
-    </Grid>
+                        <!-- Output port strip (scrollable, right). Mirror of the left strip: the ScrollViewer viewport
+                             extends 8px past the right card edge and content is inset 8px so the edge port glyph is never
+                             clipped horizontally. FlowDirection RTL moves the vertical scrollbar to the LEFT (against the
+                             editor) so a visible scrollbar never steals the width where the right-edge output glyphs live. -->
+                        <ScrollViewer Grid.Column="2"
+                                      Margin="0,0,-8,0"
+                                      FlowDirection="RightToLeft"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding OutputSlots.Items}"
+                                          x:Name="PART_OutputSlotsList"
+                                          Clip="{x:Null}"
+                                          Margin="0,0,8,0"
+                                          FlowDirection="LeftToRight"
+                                          HorizontalAlignment="Right"
+                                          VerticalAlignment="Stretch">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,4" Clip="{x:Null}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding Name}"
+                                                       Foreground="#6ec6ff"
+                                                       FontWeight="SemiBold"
+                                                       FontSize="11"
+                                                       VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right"
+                                                       Margin="0,0,4,0"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <local:SlotView Grid.Column="1"
+                                                            Width="16" Height="16"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Center"
+                                                            Margin="0,0,-8,0"
+                                                            DataContext="{Binding Slot}"
+                                                            SlotState="{Binding State}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+    </Viewbox>
 </UserControl>

@@ -87,11 +87,67 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     private bool HasLoadBadge => _hasLoadBadge;
     private string LoadText => _loadText;
 
+    // Design-canvas geometry: the card is authored at the node type's DESIGN size and uniformly
+    // scaled into the collapsed Node.Size host via a CSS transform (the Blazor equivalent of the
+    // XAML Viewbox). The design size is single-sourced from the type's [DefaultSize] attribute;
+    // node types without a DefaultSize (e.g. the generic catch-all card) fall back to their live
+    // Size, which is the raw size at scale 1.
+    private IWorkflowNodeViewModel? _designNode;
+    private (double Width, double Height) _design = (260, 180);
+
     private string BackgroundCss => Background ?? ToCss("#DDFFFFFF");
     private string ForegroundCss => Foreground ?? ToCss("#DD1E1E1E");
     private string BorderBrushCss => _isRunning ? RunningAccent : (BorderBrush ?? ToCss("#331E1E1E"));
     private string BorderThicknessCss => WithCssUnits(BorderThickness ?? "1", "px");
     private string CornerRadiusCss => WithCssUnits(CornerRadius ?? "6", "px");
+
+    private (double Width, double Height) Design
+    {
+        get
+        {
+            if (!ReferenceEquals(_designNode, Node))
+            {
+                _designNode = Node;
+                _design = ResolveDesignSize();
+            }
+
+            return _design;
+        }
+    }
+
+    /// <summary>CSS scale factor for the design-size card = the zoom collapse factor
+    /// (collapsed width / design width). 1 at scale 1, 0.5 at scale 2.</summary>
+    private string ScaleCss
+    {
+        get
+        {
+            if (Node is null) return "1";
+            var width = Node.Size.Width;
+            var designWidth = Design.Width;
+            if (width <= 0 || designWidth <= 0) return "1";
+            return (width / designWidth).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    private (double Width, double Height) ResolveDesignSize()
+    {
+        var node = Node;
+        if (node is not null)
+        {
+            // [DefaultSize] is the single source of each node type's authored design size.
+            if (Attribute.GetCustomAttribute(node.GetType(), typeof(DefaultSizeAttribute))
+                    is DefaultSizeAttribute d && d.Width > 0 && d.Height > 0)
+            {
+                return (d.Width, d.Height);
+            }
+
+            // No DefaultSize (e.g. a generic catch-all card): the raw size at scale 1 is the design size.
+            return (node.Size.Width > 0 ? node.Size.Width : 260,
+                    node.Size.Height > 0 ? node.Size.Height : 180);
+        }
+
+        return (260, 180);
+    }
     private string CardBackgroundCss => _isRunning ? RunningCardBg : BackgroundCss;
     private string HeaderBackgroundCss => _isRunning ? RunningHeader : "transparent";
     private string HeaderDividerCss => _isRunning ? RunningDivider : "rgba(255,255,255,0.08)";
@@ -161,12 +217,13 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
 
     private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Skip geometry: Anchor/Size fires every frame while the node is dragged (MoveCommand +
-        // slot re-measure). The position is owned by WorkflowNodeDragBehavior via JS, and the card
-        // does not depend on it, so re-rendering here is pure waste. Everything else re-renders so
-        // the execution state (IsRunning, LastExecutionOrder, RunCount/WaitCount) drives the step
-        // badge and running highlight live during a run.
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        // Skip Anchor: it fires every frame while the node is dragged (MoveCommand + slot
+        // re-measure), the position is owned by WorkflowNodeDragBehavior via JS, and the card
+        // does not depend on it, so re-rendering here is pure waste. Size is different: it changes
+        // on zoom collapse, and the card must re-render to refresh its design-canvas CSS scale.
+        // Everything else re-renders so the execution state (IsRunning, LastExecutionOrder,
+        // RunCount/WaitCount) drives the step badge and running highlight live during a run.
+        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor))
         {
             return;
         }

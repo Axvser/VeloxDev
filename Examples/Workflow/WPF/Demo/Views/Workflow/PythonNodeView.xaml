@@ -7,7 +7,7 @@
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"
              mc:Ignorable="d"
              ClipToBounds="False"
-             d:DesignHeight="260" d:DesignWidth="300"
+             d:DesignHeight="260" d:DesignWidth="280"
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_InputSlotsList,PART_OutputSlotsList"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
