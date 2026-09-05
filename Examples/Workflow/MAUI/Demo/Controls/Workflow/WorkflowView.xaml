@@ -193,18 +193,6 @@
                     StrokeShape="RoundRectangle 3"
                     BackgroundColor="#0B1120">
                 <controls:WorkflowGridDecorator x:Name="PART_GridDecorator">
-                    <!-- Viewport-sized link layer: a sibling of the scroll viewer (NOT inside the
-                         growing world canvas, so it never hits the Win2D texture cap). Renders every
-                         connection in one GraphicsView at px = Ruler + anchor + ContentOffset − Scroll.
-                         Child order gives z: grid background < links < node views < ruler bands. -->
-                    <behaviors:WorkflowLinkOverlay WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
-                                                  ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
-                                                  ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
-                                                  ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
-                                                  ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
-                                                  RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
-                                                  LinkLineColor="#22D3EE"
-                                                  VirtualLineColor="#E2E8F0" />
                     <ScrollView x:Name="PART_ScrollViewer"
                                 Orientation="Both"
                                 BackgroundColor="Transparent">
@@ -214,7 +202,14 @@
                             <AbsoluteLayout x:Name="PART_Canvas"
                                             BackgroundColor="Transparent"
                                             behaviors:ViewPool.ItemsSource="{Binding NodeItemsSource, Source={x:Reference Root}}"
-                                            behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}" />
+                                            behaviors:ViewPool.TemplateSelector="{StaticResource NodeSelector}">
+                                <!-- Single link layer: renders every connection in one GraphicsView
+                                     (world-anchored, fills the canvas, translates with it). The node
+                                     ViewPool must therefore only materialize node views — WorkflowView
+                                     filters links out of NodeItemsSource. -->
+                                <controls:LinkLayerView AbsoluteLayout.LayoutFlags="All"
+                                                        AbsoluteLayout.LayoutBounds="0,0,1,1" />
+                            </AbsoluteLayout>
                         </AbsoluteLayout>
                     </ScrollView>
                 </controls:WorkflowGridDecorator>

@@ -487,14 +487,6 @@ public sealed class WorkflowSurfaceBehavior
         else
         {
             layout.Scale = new Scale(next, next);
-            // World-origin zoom (no recenter pass): if the negative cover grew, re-apply the layout
-            // so the canvas translate/size follow the grown ActualOffset right away. Viewport-center
-            // zoom rides the async RecenterOnWorldPointAsync path above instead.
-            if (EnsureNegativeCover(viewModel))
-            {
-                ApplyLayout(control, state);
-                UpdateVisibleRegion(control, state);
-            }
         }
         e.Handled = true;
     }
@@ -523,13 +515,6 @@ public sealed class WorkflowSurfaceBehavior
                 return;
             }
 
-            // A deep zoom-in collapses negative-world content to w/Scale, and the fixed
-            // NegativeOffset (== ActualOffset) stops covering it below some scale — content
-            // escapes the scrollable region on the left/top and links truncate there. Grow the
-            // cover first (monotonic, no-op for positive-only content) so the PivotCenterScroll
-            // below reads the NEW ActualOffset and auto-shifts the recenter by exactly the growth.
-            EnsureNegativeCover(viewModel);
-
             var svW = double.IsNaN(state.ScrollViewer.Width) ? 1 : state.ScrollViewer.Width;
             var svH = double.IsNaN(state.ScrollViewer.Height) ? 1 : state.ScrollViewer.Height;
             var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(worldX, worldY, viewModel.Layout, svW, svH);
@@ -555,59 +540,6 @@ public sealed class WorkflowSurfaceBehavior
         {
             System.Diagnostics.Debug.WriteLine($"[WorkflowSurfaceBehavior] RecenterAfterZoom error: {ex.Message}");
         }
-    }
-
-    /// <summary>
-    /// After a scale write, grows <see cref="CanvasLayout.NegativeOffset"/> so the most-negative
-    /// content stays inside the scrollable region. Zoom-in collapses every node toward the world
-    /// origin (Anchor/Size getters divide by Scale), so negative-world content moves to w/Scale —
-    /// more negative as you zoom in — while the fixed NegativeOffset (= ActualOffset) no longer
-    /// covers it below some scale and content on the left/top escapes reach (scroll floor is 0).
-    /// Content at collapsed &lt; −ActualOffset is what truncates links in the ±quadrant demos.
-    ///
-    /// The reachability rule (canvas-local &gt;= 0) is exactly ActualOffset &gt;= −min(collapsed).
-    /// Because the collapsed anchors are read AFTER the scale write, this stays in the collapsed
-    /// frame automatically; the ruler reserve means the rule is conservative by a few px, which is
-    /// harmless. Growth is monotonic (never shrinks an offset the user expanded) and the B2 guard
-    /// (min &gt;= 0 → no-op) keeps positive-only surfaces bit-for-bit unchanged.
-    /// </summary>
-    /// <returns>True if the cover grew (caller should re-apply layout so the canvas/extent follows).</returns>
-    private static bool EnsureNegativeCover(IWorkflowTreeViewModel viewModel)
-    {
-        var layout = viewModel.Layout;
-        double minX = double.MaxValue;
-        double minY = double.MaxValue;
-        foreach (var node in viewModel.Nodes)
-        {
-            // Anchor already reflects the scale just applied (collapsed = world / Scale).
-            var a = node.Anchor;
-            if (a.Horizontal < minX)
-            {
-                minX = a.Horizontal;
-            }
-
-            if (a.Vertical < minY)
-            {
-                minY = a.Vertical;
-            }
-        }
-
-        // No content, or positive-only content: nothing to cover.
-        if (minX >= 0d && minY >= 0d)
-        {
-            return false;
-        }
-
-        var current = layout.NegativeOffset;
-        var newX = Math.Max(current.Horizontal, minX < 0d ? -minX : current.Horizontal);
-        var newY = Math.Max(current.Vertical, minY < 0d ? -minY : current.Vertical);
-        if (Math.Abs(newX - current.Horizontal) < 0.01d && Math.Abs(newY - current.Vertical) < 0.01d)
-        {
-            return false;
-        }
-
-        layout.NegativeOffset = new Offset(newX, newY);
-        return true;
     }
 
     private static void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
@@ -648,12 +580,6 @@ public sealed class WorkflowSurfaceBehavior
                 else
                 {
                     layout.Scale = new Scale(factor, factor);
-                    // World-origin pinch (no recenter pass) — see the wheel else-branch comment.
-                    if (EnsureNegativeCover(tree))
-                    {
-                        ApplyLayout(host, state);
-                        UpdateVisibleRegion(host, state);
-                    }
                 }
                 break;
         }

@@ -106,7 +106,7 @@ public partial class WorkflowView : ContentView
     /// <summary>
     /// View-model collection fed to the canvas <c>ViewPool</c>. Mirrors
     /// <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/> but drops link view
-    /// models — links are rendered by the shared link overlay, so the
+    /// models — links are rendered by the single <see cref="LinkLayerView"/>, so the
     /// pool must not materialize one GraphicsView per link.
     /// </summary>
     public static readonly BindableProperty NodeItemsSourceProperty = BindableProperty.Create(
@@ -438,7 +438,8 @@ public partial class WorkflowView : ContentView
     /// <summary>
     /// Mirrors <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/> but drops link
     /// view models, so the node ViewPool only ever materializes node views. Links are
-    /// rendered by the shared link overlay instead of one GraphicsView per link.
+    /// rendered by the single <see cref="LinkLayerView"/> instead of one GraphicsView
+    /// per link.
     /// </summary>
     private sealed class NodeOnlyVisibleItems : ObservableCollection<IWorkflowViewModel>
     {
