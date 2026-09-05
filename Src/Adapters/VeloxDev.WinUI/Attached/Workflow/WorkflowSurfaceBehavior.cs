@@ -328,6 +328,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
+            // Deep zoom-in collapses negative-world content past the fixed canvas translate (ActualOffset
+            // == NegativeOffset); grow the cover BEFORE ApplyLayout adopts the new offset. PivotCenterScroll
+            // below reads the grown offset, so the extra cover is absorbed by the scroll target and the
+            // pivot stays centered — no manual delta needed. See EnsureNegativeCover.
+            EnsureNegativeCover(viewModel);
 
             // Force a layout pass so the ScrollViewer adopts the new extent BEFORE we land the scroll.
             // Otherwise ChangeView clamps against the stale extent, the pivot lands off-center, and the
@@ -365,8 +370,63 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         else
         {
             layout.Scale = new Scale(next, next);
+            // World-origin zoom: the canvas translate only changes when the layout is re-applied, so if
+            // the cover grew, push the new offset through the same layout pass the viewport-center branch
+            // does (the trim demo is viewport-center, so this path normally stays dormant).
+            if (EnsureNegativeCover(viewModel)
+                && host.GetValue(StateProperty) is SurfaceState fallbackState
+                && fallbackState.Canvas is { } fallbackCanvas
+                && fallbackState.ScrollViewer is { } fallbackViewer)
+            {
+                ApplyLayout(host, fallbackState);
+                fallbackCanvas.UpdateLayout();
+                fallbackViewer.UpdateLayout();
+                host.UpdateLayout();
+            }
         }
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Grows the layout's negative cover so content with negative world anchors stays reachable after a
+    /// zoom-in. Zoom-in makes Scale smaller, collapsing world coordinates toward minus-infinity (node
+    /// Anchor/Size getters divide by Scale), while the canvas translate stays pinned at
+    /// <see cref="CanvasLayout.NegativeOffset"/> — so once <c>Scale &lt; −worldMin / NegativeOffset</c> the
+    /// most negative content (and the link polylines drawn in the same canvas-local collapsed frame) falls
+    /// left/top of the scrollable region the viewport can show, truncating. Mirroring the existing
+    /// overscroll semantics in <see cref="WorkflowSurfaceMath.ClampScrollOffset"/>, this writes the required
+    /// cover back into <see cref="CanvasLayout.NegativeOffset"/>. Positive-only content returns unchanged
+    /// (no-op guard), and the offset only ever grows — never shrinks — matching how pan overscroll behaves.
+    /// </summary>
+    private static bool EnsureNegativeCover(IWorkflowTreeViewModel viewModel)
+    {
+        var layout = viewModel.Layout;
+        double minX = double.MaxValue;
+        double minY = double.MaxValue;
+        foreach (var node in viewModel.Nodes)
+        {
+            // Anchor already reflects the scale just applied (collapsed = world / Scale).
+            var a = node.Anchor;
+            if (a.Horizontal < minX) minX = a.Horizontal;
+            if (a.Vertical < minY) minY = a.Vertical;
+        }
+
+        // No content, or positive-only content: nothing to cover.
+        if (minX >= 0d && minY >= 0d)
+        {
+            return false;
+        }
+
+        var current = layout.NegativeOffset;
+        var newX = Math.Max(current.Horizontal, minX < 0d ? -minX : current.Horizontal);
+        var newY = Math.Max(current.Vertical, minY < 0d ? -minY : current.Vertical);
+        if (Math.Abs(newX - current.Horizontal) < 0.01d && Math.Abs(newY - current.Vertical) < 0.01d)
+        {
+            return false;
+        }
+
+        layout.NegativeOffset = new Offset(newX, newY);
+        return true;
     }
 
     private static void OnPointerPressed(object sender, PointerRoutedEventArgs e)
