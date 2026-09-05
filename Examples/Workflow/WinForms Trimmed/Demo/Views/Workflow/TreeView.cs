@@ -16,6 +16,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using VeloxDev.WorkflowSystem.StandardEx;
 // `Size` collides between System.Drawing and VeloxDev.WorkflowSystem; a drawing
 // alias keeps `new Size(width, height)` unambiguous in generated code.
 using Size = System.Drawing.Size;
@@ -992,6 +993,9 @@ public sealed class TreeView : UserControl
 
         try
         {
+            // Count the floating ruler band (RulerReserve) into virtualization; this custom surface
+            // drives Viewport directly, bypassing the adapter surface that auto-syncs the inset.
+            _tree?.SetVirtualizeInset(left: RulerReserve, top: RulerReserve);
             _tree?.GetHelper().Viewport = new Viewport(
                 -_panOffset.X - content.Horizontal,
                 -_panOffset.Y - content.Vertical,

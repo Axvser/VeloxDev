@@ -5,6 +5,7 @@ using Jalium.UI.Input;
 using Jalium.UI.Media;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace Demo.Views.Workflow;
 
@@ -196,6 +197,10 @@ public class TreeView : Canvas
             vw = Math.Max(CanvasWidth, layout.ActualSize.Width);
             vh = Math.Max(CanvasHeight, layout.ActualSize.Height);
         }
+        // Count the floating ruler band into virtualization so nodes near its inner-facing edge are
+        // not culled a ruler-thickness early (this custom surface drives Viewport directly, bypassing
+        // the adapter's WorkflowSurfaceBehavior which auto-syncs the inset).
+        _tree.SetVirtualizeInset(left: GridDecorator.RulerThickness, top: GridDecorator.RulerThickness);
         _tree.GetHelper().Viewport = new Viewport(
             hx - layout.ActualOffset.Horizontal,
             vy - layout.ActualOffset.Vertical,
