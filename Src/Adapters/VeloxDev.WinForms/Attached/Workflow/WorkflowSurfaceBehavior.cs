@@ -69,6 +69,10 @@ public sealed class WorkflowSurfaceBehavior
                     scrollOffset.Horizontal, scrollOffset.Vertical, clientSize.Width, clientSize.Height, layout);
                 layout.CollapsePivot = new Anchor(wx, wy, 0);
                 layout.Scale = new Scale(next, next);
+                // Deep zoom-in collapses negative-world content to w/Scale past the fixed NegativeOffset;
+                // grow the cover first (monotonic, no-op for positive-only content) so the PivotCenterScroll
+                // below and the Refresh read the NEW ActualOffset.
+                WorkflowSurfaceMath.EnsureNegativeCover(tree);
                 var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, clientSize.Width, clientSize.Height);
                 ApplyScrollOffset(host, tx, ty);
                 Refresh(host);
@@ -76,6 +80,12 @@ public sealed class WorkflowSurfaceBehavior
             else
             {
                 layout.Scale = new Scale(next, next);
+                // World-origin zoom keeps content top-left aligned: nothing downstream reads the new
+                // ActualOffset, so push the grown cover (if any) through the repaint path explicitly.
+                if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
+                {
+                    Refresh(host);
+                }
             }
 
             m.Result = IntPtr.Zero;
@@ -211,6 +221,10 @@ public sealed class WorkflowSurfaceBehavior
                 scrollOffset.Horizontal, scrollOffset.Vertical, clientSize.Width, clientSize.Height, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
+            // Deep zoom-in collapses negative-world content to w/Scale past the fixed NegativeOffset;
+            // grow the cover first (monotonic, no-op for positive-only content) so the PivotCenterScroll
+            // below and the Refresh read the NEW ActualOffset.
+            WorkflowSurfaceMath.EnsureNegativeCover(tree);
             var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, clientSize.Width, clientSize.Height);
             ApplyScrollOffset(control, tx, ty);
             Refresh(control);
@@ -218,6 +232,12 @@ public sealed class WorkflowSurfaceBehavior
         else
         {
             layout.Scale = new Scale(next, next);
+            // World-origin zoom keeps content top-left aligned: nothing downstream reads the new
+            // ActualOffset, so push the grown cover (if any) through the repaint path explicitly.
+            if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
+            {
+                Refresh(control);
+            }
         }
 
         // Mark the wheel event handled so the Ctrl+wheel gesture only zooms — without this the

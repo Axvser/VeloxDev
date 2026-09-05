@@ -353,6 +353,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
+            // Deep zoom-in collapses negative-world content past the fixed canvas translate (ActualOffset
+            // == NegativeOffset); grow the cover BEFORE the extent is re-read so the surface adopts it.
+            // Positive-only content is a no-op.
+            WorkflowSurfaceMath.EnsureNegativeCover(viewModel);
 
             // Re-layout so the ScrollViewer adopts the new extent BEFORE reading ScrollableWidth/Height.
             // Otherwise the clamp lands against the stale extent and the next wheel tick re-captures the
@@ -383,6 +387,15 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         else
         {
             layout.Scale = new Scale(next, next);
+            // World-origin zoom (dormant in the viewport-center demos): re-layout if the cover grew so
+            // the surface adopts the new ActualSize/ActualOffset.
+            if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel)
+                && host.GetValue(StateProperty) is SurfaceState fallbackState
+                && fallbackState.ScrollViewer is { } fallbackViewer)
+            {
+                ApplyLayout(host, fallbackState);
+                fallbackViewer.UpdateLayout();
+            }
         }
         System.Diagnostics.Debug.WriteLine($"[WorkflowSurfaceBehavior] zoom wheel -> Scale {next}");
     }

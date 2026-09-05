@@ -179,7 +179,7 @@ internal sealed class MainWindow : Window
             // nodes stay reachable at the new collapse factor; on this default positive-anchor graph the
             // guard is a no-op. ActualOffset re-raises ActualSize/ActualOffset → the surface resizes and
             // re-virtualizes synchronously, so the UpdateLayout below adopts the grown extent.
-            EnsureNegativeCover(tree);
+            WorkflowSurfaceMath.EnsureNegativeCover(tree);
 
             // Re-layout so the ScrollViewer adopts the new extent (zoom-in auto-extends the canvas)
             // BEFORE reading ScrollableWidth/Height. Otherwise the clamp lands against the stale extent
@@ -205,18 +205,21 @@ internal sealed class MainWindow : Window
                 maxV = _viewer.ScrollableHeight;
             }
 
-            _viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(tx, 0, maxH));
-            _viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(ty, 0, maxV));
+            var committedX = WorkflowSurfaceMath.ClampValue(tx, 0, maxH);
+            var committedY = WorkflowSurfaceMath.ClampValue(ty, 0, maxV);
+            _viewer.ScrollToHorizontalOffset(committedX);
+            _viewer.ScrollToVerticalOffset(committedY);
 
             // Re-run virtualization on the committed collapsed geometry now instead of waiting for the
             // helper's ~10 fps dirty tick (a stale viewport there would leave deep-zoom links culled for
-            // ~100 ms after each zoom notch).
-            _surface.NotifyZoomCommitted();
+            // ~100 ms after each zoom notch). Pass the committed scroll target — reading the viewer's
+            // offset right after ScrollTo can see a not-yet-applied (pre-zoom) value.
+            _surface.NotifyZoomCommitted(committedX, committedY);
         }
         else
         {
             tree.Layout.Scale = new Scale(next, next);
-            if (EnsureNegativeCover(tree))
+            if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
             {
                 // The cover grew the canvas; adopt the new extent so the viewer's scroll range is current.
                 _surface.UpdateLayout();
@@ -224,35 +227,6 @@ internal sealed class MainWindow : Window
             }
             _surface.NotifyZoomCommitted();
         }
-    }
-
-    /// <summary>
-    /// Negative-side reachability guard (mirrors the Phase-B rule shipped to the MAUI/WinUI adapters):
-    /// when a node's collapsed anchor is negative (a node dragged into negative world space folds
-    /// further toward the origin as Scale drops), the fixed overscroll cover (NegativeOffset) stops
-    /// covering it — the content's minimum position scrolls off unreachably and left/top links truncate
-    /// on deep zoom. Grow NegativeOffset monotonically to −min(collapsed anchor) so the minimum content
-    /// position stays ≥ 0 (reachable at scroll 0). Positive-only content (this demo's default graph) is
-    /// a strict no-op, and zoom-out never shrinks the cover back once the user has dragged into negative
-    /// space. Call sites read collapsed anchors, so this must run after the Scale write.
-    /// </summary>
-    private static bool EnsureNegativeCover(IWorkflowTreeViewModel tree)
-    {
-        var layout = tree.Layout;
-        double minX = double.MaxValue, minY = double.MaxValue;
-        foreach (var node in tree.Nodes)
-        {
-            var a = node.Anchor; // collapsed at the current Scale
-            if (a.Horizontal < minX) minX = a.Horizontal;
-            if (a.Vertical < minY) minY = a.Vertical;
-        }
-        if (minX >= 0d && minY >= 0d) return false; // B2 guard: positive content needs no cover growth.
-        var current = layout.NegativeOffset;
-        var newX = Math.Max(current.Horizontal, minX < 0d ? -minX : current.Horizontal);
-        var newY = Math.Max(current.Vertical, minY < 0d ? -minY : current.Vertical);
-        if (newX == current.Horizontal && newY == current.Vertical) return false;
-        layout.NegativeOffset = new Offset(newX, newY);
-        return true;
     }
 
     private static void LoadTree(TreeViewModel tree)

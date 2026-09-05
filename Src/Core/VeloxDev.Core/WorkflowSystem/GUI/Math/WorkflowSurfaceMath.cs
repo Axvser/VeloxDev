@@ -331,6 +331,74 @@ public static class WorkflowSurfaceMath
     }
 
     private static double SafeInverse(double value) => value == 0 ? 1 : 1 / value;
+
+    // ── ⑦ Negative cover (deep-zoom reachability) ─────────────────────────────
+
+    /// <summary>
+    /// Grows the layout's negative cover so content with negative world anchors stays reachable after a
+    /// zoom-in. This is the single canonical copy of a rule that WPF/WinUI/MAUI/Razor surface behaviors
+    /// and the Jalium demo previously inlined as <c>EnsureNegativeCover</c>.
+    ///
+    /// Why it is needed: zoom-in makes <see cref="CanvasLayout.Scale"/> smaller, and every node's
+    /// <see cref="IWorkflowNodeViewModel.Anchor"/> getter collapses toward the world origin (world ÷ Scale),
+    /// so negative-world content folds further negative on every notch. Meanwhile the canvas translate stays
+    /// pinned at <see cref="CanvasLayout.NegativeOffset"/> (ActualOffset == NegativeOffset) and the scroll
+    /// floor is 0 — once <c>collapsed &lt; −NegativeOffset</c>, that content (and the link polylines drawn in the
+    /// same canvas-local collapsed frame) escapes the scrollable region on the left/top and truncates with no
+    /// way to scroll it back. Reachability is exactly <c>ActualOffset ≥ −min(collapsed anchor)</c>.
+    ///
+    /// Callers must invoke this AFTER writing the new <see cref="CanvasLayout.Scale"/> (the collapsed anchors
+    /// it reads are derived from that scale) and BEFORE any later read of <see cref="CanvasLayout.ActualOffset"/>
+    /// / <see cref="CanvasLayout.ActualSize"/> (extent/translate, PivotCenterScroll, clamp) so the grown cover
+    /// is absorbed by the same layout pass. Growth is monotonic (never shrinks an offset the user already
+    /// expanded), and the B2 guard (min ≥ 0 → no-op) keeps positive-only surfaces bit-for-bit unchanged.
+    /// </summary>
+    /// <returns>True if the cover grew (the caller should re-apply layout where its branch would otherwise
+    /// skip a layout pass; viewport-center branches re-apply unconditionally and can ignore the value).</returns>
+    public static bool EnsureNegativeCover(IWorkflowTreeViewModel? tree)
+    {
+        if (tree is null || tree.Nodes is null)
+        {
+            return false;
+        }
+
+        var layout = tree.Layout;
+        double minX = double.MaxValue;
+        double minY = double.MaxValue;
+        foreach (var node in tree.Nodes)
+        {
+            // Anchor already reflects the scale just applied (collapsed = world / Scale).
+            var a = node.Anchor;
+            if (a.Horizontal < minX)
+            {
+                minX = a.Horizontal;
+            }
+
+            if (a.Vertical < minY)
+            {
+                minY = a.Vertical;
+            }
+        }
+
+        // No content, or positive-only content: nothing to cover.
+        if (minX >= 0d && minY >= 0d)
+        {
+            return false;
+        }
+
+        var current = layout.NegativeOffset;
+        var newX = Math.Max(current.Horizontal, minX < 0d ? -minX : current.Horizontal);
+        var newY = Math.Max(current.Vertical, minY < 0d ? -minY : current.Vertical);
+        if (Math.Abs(newX - current.Horizontal) < 0.01d && Math.Abs(newY - current.Vertical) < 0.01d)
+        {
+            return false;
+        }
+
+        // The setter fires CanvasLayout.Update(), which re-raises ActualSize and ActualOffset (== NegativeOffset)
+        // in the same tick — the fix never touches the canvas translate directly.
+        layout.NegativeOffset = new Offset(newX, newY);
+        return true;
+    }
 }
 
 /// <summary>

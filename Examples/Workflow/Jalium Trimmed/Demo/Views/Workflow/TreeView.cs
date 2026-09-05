@@ -48,6 +48,16 @@ public class TreeView : Canvas
     private IWorkflowTreeViewModel? _tree;
     private ScrollViewer? _scrollViewer;
 
+    /// <summary>Committed zoom scroll target (see <see cref="NotifyZoomCommitted(double, double)"/>).
+    /// Jalium's ScrollTo can land asynchronously, so a ScrollChanged that fires before the offset
+    /// settles would rewrite <see cref="IWorkflowTreeHelper.Viewport"/> from a stale (pre-zoom) offset
+    /// and the next Virtualize would cull the freshly materialized links while the endpoint nodes (which
+    /// enter the pool by their own rects) stay. While the pin is live the viewport is held at the
+    /// committed target; it clears the moment the viewer reports the target (ScrollTo landed) or after
+    /// <see cref="ZoomPinLifetimeMs"/> so a later genuine user scroll always falls back to live offsets.</summary>
+    private (double X, double Y, long Ticks)? _zoomPin;
+    private const double ZoomPinLifetimeMs = 250;
+
     private enum DragKind { None, Node, Link, Pan }
     private DragKind _dragKind;
     private IWorkflowNodeViewModel? _dragNode;
@@ -141,10 +151,38 @@ public class TreeView : Canvas
 
     private void UpdateViewport()
     {
+        // After a zoom commit the committed target is authoritative until the viewer actually lands
+        // there: Jalium's ScrollTo can settle asynchronously, so a ScrollChanged that fires mid-settle
+        // (or before the move at all) carries a stale offset. Holding the pin keeps the viewport window
+        // at the committed target so a stale rewrite cannot cull freshly materialized links; the pin is
+        // cleared when the viewer reports the target (landed) or ages past ZoomPinLifetimeMs (so a
+        // later genuine pan/wheel read of the live offset is never blocked).
+        if (_scrollViewer is { } pinnedViewer && _zoomPin is { } pin)
+        {
+            var landed = Math.Abs(pinnedViewer.HorizontalOffset - pin.X) < 0.5
+                      && Math.Abs(pinnedViewer.VerticalOffset - pin.Y) < 0.5;
+            var ageMs = (System.DateTime.UtcNow.Ticks - pin.Ticks) / System.TimeSpan.TicksPerMillisecond;
+            if (landed || ageMs > ZoomPinLifetimeMs)
+            {
+                _zoomPin = null;
+            }
+            else
+            {
+                UpdateViewport(pin.X, pin.Y);
+                return;
+            }
+        }
+
+        UpdateViewport(_scrollViewer?.HorizontalOffset ?? 0, _scrollViewer?.VerticalOffset ?? 0);
+    }
+
+    /// <summary>Recompute <see cref="IWorkflowTreeHelper.Viewport"/> from explicit scroll offsets
+    /// (hx/vy) rather than re-reading the viewer. Zoom commit passes the target it already computed so
+    /// virtualization does not depend on whether ScrollTo... applied the offset synchronously.</summary>
+    private void UpdateViewport(double hx, double vy)
+    {
         if (_tree is null) return;
         var layout = _tree.Layout;
-        double hx = _scrollViewer?.HorizontalOffset ?? 0;
-        double vy = _scrollViewer?.VerticalOffset ?? 0;
         double vw = _scrollViewer?.ViewportWidth ?? 0;
         double vh = _scrollViewer?.ViewportHeight ?? 0;
         if (vw <= 0 || vh <= 0)
@@ -172,10 +210,22 @@ public class TreeView : Canvas
     /// has no equality short-circuit (it always rebuilds; the spatial extension re-entrancy-guards
     /// itself), so recomputing the viewport here keeps VisibleItems in lock-step with the committed zoom.
     /// </summary>
-    public void NotifyZoomCommitted()
+    public void NotifyZoomCommitted() => NotifyZoomCommitted(
+        _scrollViewer?.HorizontalOffset ?? 0,
+        _scrollViewer?.VerticalOffset ?? 0);
+
+    /// <summary>Virtualize against a COMMITTED scroll target. Reading the viewer's offset immediately
+    /// after ScrollTo... can see a not-yet-applied (pre-zoom) value — Jalium does not guarantee the
+    /// offset lands synchronously and its ScrollChanged is unreliable — so a per-notch re-virtualize
+    /// there would cull against a stale window and deep-zoom links would stay dropped ~100ms.</summary>
+    public void NotifyZoomCommitted(double hx, double vy)
     {
         if (_tree is null) return;
-        UpdateViewport();
+        // Pin the committed target so a delayed ScrollChanged (which can carry a not-yet-applied,
+        // pre-zoom offset in Jalium) cannot overwrite the window we're about to write below. The pin is
+        // released by UpdateViewport() once the viewer reports it or after ZoomPinLifetimeMs.
+        _zoomPin = (hx, vy, System.DateTime.UtcNow.Ticks);
+        UpdateViewport(hx, vy);
         _tree.GetHelper().Virtualize(_tree.GetHelper().Viewport);
         InvalidateVisual();
         Changed?.Invoke();

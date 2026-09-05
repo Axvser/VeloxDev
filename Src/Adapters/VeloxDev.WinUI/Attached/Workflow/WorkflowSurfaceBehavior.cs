@@ -328,6 +328,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
+            // Deep zoom-in collapses negative-world content past the fixed canvas translate (ActualOffset
+            // == NegativeOffset); grow the cover BEFORE ApplyLayout adopts the new offset. PivotCenterScroll
+            // below reads the grown offset, so the extra cover is absorbed by the scroll target and the
+            // pivot stays centered — no manual delta needed. See WorkflowSurfaceMath.EnsureNegativeCover.
+            WorkflowSurfaceMath.EnsureNegativeCover(viewModel);
 
             // Force a layout pass so the ScrollViewer adopts the new extent BEFORE we land the scroll.
             // Otherwise ChangeView clamps against the stale extent, the pivot lands off-center, and the
@@ -356,15 +361,43 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 maxV = GetVerticalScrollMaximum(sv);
             }
 
-            sv.ChangeView(
-                WorkflowSurfaceMath.ClampValue(tx, 0, maxH),
-                WorkflowSurfaceMath.ClampValue(ty, 0, maxV),
-                null,
-                disableAnimation: true);
+            var committedX = WorkflowSurfaceMath.ClampValue(tx, 0, maxH);
+            var committedY = WorkflowSurfaceMath.ClampValue(ty, 0, maxV);
+            sv.ChangeView(committedX, committedY, null, disableAnimation: true);
+
+            // Synchronous re-virtualize at the COMMITTED scroll target (mirrors Jalium
+            // TreeView.NotifyZoomCommitted). The helper otherwise re-virtualizes on its ~10fps dirty
+            // tick / Low-priority viewport queue, so during a zoom burst the pooled node/link views lag
+            // the freshly collapsed anchors by ~100ms — links vanish/pop for that window. Use the
+            // committed offset, not sv.HorizontalOffset, which ChangeView may not have applied yet.
+            VirtualizeAtScroll(viewModel, committedX, committedY, sv.ViewportWidth, sv.ViewportHeight);
         }
         else
         {
             layout.Scale = new Scale(next, next);
+            // World-origin zoom: the canvas translate only changes when the layout is re-applied, so if
+            // the cover grew, push the new offset through the same layout pass the viewport-center branch
+            // does (the trim demo is viewport-center, so this path normally stays dormant).
+            if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel)
+                && host.GetValue(StateProperty) is SurfaceState fallbackState
+                && fallbackState.Canvas is { } fallbackCanvas
+                && fallbackState.ScrollViewer is { } fallbackViewer)
+            {
+                ApplyLayout(host, fallbackState);
+                fallbackCanvas.UpdateLayout();
+                fallbackViewer.UpdateLayout();
+                host.UpdateLayout();
+            }
+
+            // Re-virtualize even when the cover did not grow: collapse can shrink a box that straddled
+            // the window edge out of it, and pooled views otherwise only catch up on the ~10fps dirty
+            // tick / Low-priority queue. Scroll is unchanged here, so the current offsets are valid.
+            if (host.GetValue(StateProperty) is SurfaceState elseState
+                && elseState.ScrollViewer is { } elseViewer)
+            {
+                VirtualizeAtScroll(viewModel, elseViewer.HorizontalOffset, elseViewer.VerticalOffset,
+                    elseViewer.ViewportWidth, elseViewer.ViewportHeight);
+            }
         }
         e.Handled = true;
     }
@@ -586,6 +619,23 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         // Persist the viewport position so it survives serialization round-trip.
         viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
+    }
+
+    /// <summary>Re-run viewport virtualization against a committed scroll offset after a zoom. The
+    /// helper otherwise virtualizes on its ~10fps dirty timer / the Low-priority viewport queue, so
+    /// pooled node/link views lag the freshly collapsed anchors; <see cref="Virtualize"/> has no
+    /// equality short-circuit (always rebuilds; the spatial extension re-entrancy-guards itself), so
+    /// this keeps VisibleItems in lock-step with the committed zoom even when the window is unchanged.</summary>
+    private static void VirtualizeAtScroll(IWorkflowTreeViewModel viewModel,
+        double scrollX, double scrollY, double viewportW, double viewportH)
+    {
+        var layout = viewModel.Layout;
+        var helper = viewModel.GetHelper();
+        helper.Viewport = new Viewport(
+            WorkflowSurfaceMath.ToWorld(scrollX, layout.ActualOffset.Horizontal),
+            WorkflowSurfaceMath.ToWorld(scrollY, layout.ActualOffset.Vertical),
+            viewportW, viewportH);
+        helper.Virtualize(helper.Viewport);
     }
 
     private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state)

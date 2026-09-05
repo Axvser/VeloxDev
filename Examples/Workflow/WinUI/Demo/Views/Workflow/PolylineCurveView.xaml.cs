@@ -36,9 +36,14 @@ public sealed partial class PolylineCurveView : UserControl
         InitializeComponent();
         Canvas.SetZIndex(this, -100);
 
-        var container = new Grid();
-        _path = new Path { Stroke = _strokeBrush, StrokeThickness = 2, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false };
-        _arrowPath = new Path { Fill = _strokeBrush, IsHitTestVisible = false };
+        // The polyline/arrow geometry is in raw collapsed (canvas-local) coordinates, so at deep zoom
+        // its negative top/left half extends beyond this element's bounds. WinUI clips element content
+        // to its bounds unless Clip is nulled (the root/grid pattern the sibling NodeView uses); WPF
+        // links are OnRender-drawn and never clipped. Null the whole chain so the retained Paths draw
+        // their negative-coordinate geometry the same way WPF does.
+        var container = new Grid { Clip = null };
+        _path = new Path { Stroke = _strokeBrush, StrokeThickness = 2, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false, Clip = null };
+        _arrowPath = new Path { Fill = _strokeBrush, IsHitTestVisible = false, Clip = null };
         container.Children.Add(_path);
         container.Children.Add(_arrowPath);
         this.Content = container;

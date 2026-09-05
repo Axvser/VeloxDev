@@ -319,6 +319,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
 
+            // Deep zoom-in collapses negative-world content past the fixed canvas translate (ActualOffset
+            // == NegativeOffset); grow the cover BEFORE ApplyLayout adopts the new offset. PivotCenterScroll
+            // below reads the grown offset, so the extra cover is absorbed by the scroll target and the
+            // pivot stays centered — no manual delta needed. Positive-only content is a no-op.
+            WorkflowSurfaceMath.EnsureNegativeCover(viewModel);
+
             // Let the ScrollViewer adopt the (possibly auto-extended) extent BEFORE reading the max.
             // Zoom-in below scale 1 grows the canvas, zoom-out may shrink it; the clamp must see the
             // settled extent or the pivot lands off-center and the next tick re-captures the drift.
@@ -352,6 +358,19 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         else
         {
             layout.Scale = new Scale(next, next);
+            // World-origin zoom: the canvas translate only changes when the layout is re-applied, so if
+            // the cover grew, push the new offset through the same layout pass the viewport-center branch
+            // does (the trimmed demos are viewport-center, so this path normally stays dormant).
+            if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel)
+                && host.GetValue(StateProperty) is SurfaceState fallbackState
+                && fallbackState.Canvas is { } fallbackCanvas
+                && fallbackState.ScrollViewer is { } fallbackViewer)
+            {
+                ApplyLayout(host, fallbackState);
+                fallbackCanvas.UpdateLayout();
+                fallbackViewer.UpdateLayout();
+                host.UpdateLayout();
+            }
         }
         e.Handled = true;
     }

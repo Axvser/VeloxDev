@@ -6,14 +6,24 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>A poolable link view for the node-editor surface: orthogonal polyline (golden-ratio stubs)
-/// with a 12x8 arrowhead on real links. Sized to the host canvas and drawn at the port centers
-/// (node.Anchor + geometry) + layout offset (world + ActualOffset — the authoritative model), so it never
-/// goes stale on pan. The link comes from DataContext; only real visible links render — the drag-preview
-/// VirtualLink is drawn inline by the surface.</summary>
+/// <summary>A poolable link view for the node-editor surface: orthogonal polyline (golden-ratio stubs).
+/// Self-bounded like a NodeView: the element is positioned at the polyline's own canvas-local bounding
+/// box and sized to it, and OnRender bakes the geometry back to element-local coordinates — so the
+/// element box always equals the drawn content and travels with it through any zoom.
+///
+/// Why self-bounded (Jalium deep-zoom truncation fix): the renderer culls a CHILD entirely when its
+/// layout box (RenderSize mapped through the child's offset) misses the viewport clip
+/// (Visual.ShouldRenderChild) — it does NOT look at the child's drawn content. The old full-canvas
+/// box — a single element at (0,0) sized only on Loaded / parent.SizeChanged — could go stale during a
+/// zoom burst; once the scrolled clip passed its right edge the whole link layer was skipped while the
+/// self-bounded NodeViews kept rendering. Baking geometry back by the box origin cancels the
+/// repositioning, so the on-screen output is identical to the old drawing; only the cull box changes.
+/// The link comes from DataContext; only real visible links render — the drag-preview VirtualLink is
+/// drawn inline by the surface.</summary>
 public class LinkView : FrameworkElement
 {
     private const double Phi = 0.6180339887;
+    private const double BoxPad = 6; // pen half-width + antialias air, so the box always covers the stroke
 
     private static readonly SolidColorBrush s_brush = new(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF));
 
@@ -23,43 +33,16 @@ public class LinkView : FrameworkElement
     private INotifyPropertyChanged? _senderNodeNotify;
     private INotifyPropertyChanged? _receiverNodeNotify;
 
+    private double _viewX; // canvas-local position the element was laid at (Canvas.Left/Top)
+    private double _viewY;
+    private double _viewW;
+    private double _viewH;
+
     public LinkView()
     {
         IsHitTestVisible = false;
         Panel.SetZIndex(this, -100);
         DataContextChanged += OnDataContextChanged;
-        AddHandler(FrameworkElement.LoadedEvent, new RoutedEventHandler(OnLoaded));
-    }
-
-    private void OnLoaded(object? sender, RoutedEventArgs e)
-    {
-        SizeToParent();
-    }
-
-    private void SizeToParent()
-    {
-        if (VisualTreeHelper.GetParent(this) is FrameworkElement parent && parent.ActualWidth > 0 && parent.ActualHeight > 0)
-        {
-            Width = parent.ActualWidth;
-            Height = parent.ActualHeight;
-            parent.SizeChanged -= OnParentSizeChanged;
-            parent.SizeChanged += OnParentSizeChanged;
-        }
-        else
-        {
-            // Fallback so the view still renders before the parent is measured.
-            Width = Math.Max(Width, 2000);
-            Height = Math.Max(Height, 2000);
-        }
-    }
-
-    private void OnParentSizeChanged(object? sender, SizeChangedEventArgs e)
-    {
-        if (sender is FrameworkElement parent)
-        {
-            Width = parent.ActualWidth;
-            Height = parent.ActualHeight;
-        }
     }
 
     private void OnDataContextChanged(object? sender, DependencyPropertyChangedEventArgs e)
@@ -85,10 +68,17 @@ public class LinkView : FrameworkElement
         if (_link?.Sender.Parent?.Parent?.Layout is INotifyPropertyChanged layout)
         {
             _layoutNotify = layout;
-            _layoutHandler = (_, _) => InvalidateVisual();
+            // Every layout change (zoom Scale, cover growth → ActualOffset) folds the endpoints, so the
+            // self-box must be recomputed alongside the repaint — same cadence NodeView.ApplyPosition uses.
+            _layoutHandler = (_, _) =>
+            {
+                UpdateBounds();
+                InvalidateVisual();
+            };
             layout.PropertyChanged += _layoutHandler;
         }
 
+        UpdateBounds();
         InvalidateVisual();
     }
 
@@ -114,6 +104,7 @@ public class LinkView : FrameworkElement
     {
         if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
         {
+            UpdateBounds();
             InvalidateVisual();
         }
     }
@@ -128,7 +119,11 @@ public class LinkView : FrameworkElement
         }
     }
 
-    private void OnLinkChanged(object? sender, PropertyChangedEventArgs e) => InvalidateVisual();
+    private void OnLinkChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        UpdateBounds();
+        InvalidateVisual();
+    }
 
     /// <summary>True only for the tree's drag-preview VirtualLink: its endpoints are placeholder
     /// <see cref="SlotDefaultViewModel"/>s, not real slots mounted to nodes. The surface draws that
@@ -176,40 +171,85 @@ public class LinkView : FrameworkElement
         return new Point(node.Anchor.Horizontal + designLocal.X * sx, node.Anchor.Vertical + designLocal.Y * sy);
     }
 
-    protected override void OnRender(DrawingContext dc)
+    /// <summary>Both polyline endpoints in canvas-local coordinates (folded port + layout offset + ruler
+    /// reserve), the same frame NodeView.ApplyPosition and the surface's OriginX/Y draw in. Null when an
+    /// endpoint has no position.</summary>
+    private (Point FromP, Point ToP)? EndpointsCanvasLocal()
     {
-        base.OnRender(dc);
-        if ((RenderSize.Width <= 0 || RenderSize.Height <= 0) && VisualTreeHelper.GetParent(this) is FrameworkElement p)
+        if (_link is null)
         {
-            Width = p.ActualWidth;
-            Height = p.ActualHeight;
+            return null;
         }
-
-        if (_link is null || !_link.IsVisible || IsDragPreview(_link))
-        {
-            return;
-        }
-
         var origin = _link.Sender.Parent?.Parent?.Layout.ActualOffset ?? new Offset();
         // + ruler reserve to match the inset NodeViews (see NodeView.ApplyPosition).
         var rx = origin.Horizontal + GridDecorator.RulerThickness;
         var ry = origin.Vertical + GridDecorator.RulerThickness;
         var from = PortCenter(_link.Sender);
         var to = PortCenter(_link.Receiver);
-        if (from is null || to is null) return; // an endpoint has no position — nothing to draw
+        if (from is null || to is null) return null; // an endpoint has no position — nothing to bound or draw
+        return (new Point(from.Value.X + rx, from.Value.Y + ry),
+                new Point(to.Value.X + rx, to.Value.Y + ry));
+    }
 
-        var fromP = new Point(from.Value.X + rx, from.Value.Y + ry);
-        var toP = new Point(to.Value.X + rx, to.Value.Y + ry);
+    /// <summary>Move and size this element to the polyline's own canvas-local bounding box, so its layout
+    /// box always equals (margin aside) its drawn content — the renderer culls children by that box, not
+    /// by content, and a full-canvas stale box is exactly what vanished at deep zoom. Called on every
+    /// model change that folds/moves the endpoints, on the same cadence as NodeView.ApplyPosition.</summary>
+    private void UpdateBounds()
+    {
+        if (_link is null || !_link.IsVisible || IsDragPreview(_link))
+        {
+            return;
+        }
+        if (EndpointsCanvasLocal() is not { } ep)
+        {
+            return;
+        }
+
+        double x1 = Math.Min(ep.FromP.X, ep.ToP.X) - BoxPad;
+        double y1 = Math.Min(ep.FromP.Y, ep.ToP.Y) - BoxPad;
+        double x2 = Math.Max(ep.FromP.X, ep.ToP.X) + BoxPad;
+        double y2 = Math.Max(ep.FromP.Y, ep.ToP.Y) + BoxPad;
+
+        _viewX = x1;
+        _viewY = y1;
+        _viewW = Math.Max(1, x2 - x1);
+        _viewH = Math.Max(1, y2 - y1);
+        Canvas.SetLeft(this, _viewX);
+        Canvas.SetTop(this, _viewY);
+        Width = _viewW;
+        Height = _viewH;
+    }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        base.OnRender(dc);
+
+        if (_link is null || !_link.IsVisible || IsDragPreview(_link))
+        {
+            return;
+        }
+        if (EndpointsCanvasLocal() is not { } ep)
+        {
+            return;
+        }
+
+        // Bake the canvas-local geometry back into element-local space: the element was laid at
+        // (_viewX,_viewY), so local = canvas − (_viewX,_viewY). This cancels the repositioning in
+        // UpdateBounds, leaving the on-screen output identical to drawing at (0,0) — the polyline only
+        // ever leaves the element's own box if the box were stale, which is now impossible by construction.
+        var from = new Point(ep.FromP.X - _viewX, ep.FromP.Y - _viewY);
+        var to = new Point(ep.ToP.X - _viewX, ep.ToP.Y - _viewY);
         var pen = new Pen(s_brush, 2);
 
         // Golden-ratio polyline aligned with the other GUI schemes (mirrors the item template).
-        double dx = toP.X - fromP.X;
+        double dx = to.X - from.X;
         double stub = dx / 2.0 * (1.0 - Phi);
-        var p1 = new Point(fromP.X + stub, fromP.Y);
-        var p2 = new Point(toP.X - stub, toP.Y);
+        var p1 = new Point(from.X + stub, from.Y);
+        var p2 = new Point(to.X - stub, to.Y);
 
-        var figure = new PathFigure { StartPoint = fromP, IsClosed = false, IsFilled = false };
-        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, toP }, true));
+        var figure = new PathFigure { StartPoint = from, IsClosed = false, IsFilled = false };
+        figure.Segments.Add(new PolyLineSegment(new[] { p1, p2, to }, true));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         dc.DrawGeometry(null, pen, geometry);

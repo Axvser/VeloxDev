@@ -288,6 +288,11 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
                 sv.Offset.X, sv.Offset.Y, sv.Viewport.Width, sv.Viewport.Height, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
             layout.Scale = new Scale(next, next);
+            // Deep zoom-in collapses negative-world content past the fixed canvas translate (ActualOffset
+            // == NegativeOffset); grow the cover BEFORE ApplyLayout adopts the new offset. PivotCenterScroll
+            // below reads the grown offset, so the extra cover is absorbed by the scroll target and the
+            // pivot stays centered. Positive-only content is a no-op.
+            WorkflowSurfaceMath.EnsureNegativeCover(viewModel);
 
             // Re-layout so the ScrollViewer adopts the new extent BEFORE reading the max. Otherwise the
             // clamp lands against the stale extent, the pivot lands off-center, and the next wheel tick
@@ -320,6 +325,15 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         else
         {
             layout.Scale = new Scale(next, next);
+            // World-origin zoom (dormant in the viewport-center demos): re-apply the layout if the cover
+            // grew so the canvas translate/extent follow the new ActualOffset.
+            if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel)
+                && host.GetValue(StateProperty) is SurfaceState fallbackState
+                && fallbackState.ScrollViewer is { } fallbackViewer)
+            {
+                ApplyLayout(host, fallbackState);
+                fallbackViewer.UpdateLayout();
+            }
         }
         e.Handled = true;
     }

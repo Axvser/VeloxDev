@@ -18,15 +18,16 @@
                             Canvas.ZIndex="{Binding Anchor.Layer}" />
         </DataTemplate>
         <DataTemplate x:Key="LinkTemplate">
+            <!-- Width/Height are NOT bound here: LinkView drives its own box (position −ActualOffset,
+                 size = model ActualSize) in code so the box is authoritative and never lags an
+                 ElementName ActualWidth binding while the canvas grows during deep zoom. -->
             <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}"
                             StartTop="{Binding Sender.Anchor.Vertical}"
-                                     EndLeft="{Binding Receiver.Anchor.Horizontal}"
-                                     EndTop="{Binding Receiver.Anchor.Vertical}"
-                                     CanRender="{Binding IsVisible}"
-                                     LineColor="#DDFFFFFF"
-                                     Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"
-                                     Height="{Binding ElementName=PART_Canvas, Path=ActualHeight}"
-                                     Canvas.ZIndex="-1" />
+                            EndLeft="{Binding Receiver.Anchor.Horizontal}"
+                            EndTop="{Binding Receiver.Anchor.Vertical}"
+                            CanRender="{Binding IsVisible}"
+                            LineColor="#DDFFFFFF"
+                            Canvas.ZIndex="-1" />
         </DataTemplate>
         <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
                                       NodeTemplate="{StaticResource NodeTemplate}"

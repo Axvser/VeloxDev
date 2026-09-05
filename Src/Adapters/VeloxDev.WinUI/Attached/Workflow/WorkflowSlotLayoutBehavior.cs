@@ -18,6 +18,15 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         public bool SyncPending { get; set; }
         public bool Syncing { get; set; }
         public EventHandler<object>? LayoutUpdatedHandler { get; set; }
+        // The coordinate host (PART_Canvas) re-arranges its children AFTER the node's own subtree
+        // layout finishes. WinUI's LayoutUpdated is per-element, so syncing on the node's own
+        // LayoutUpdated can measure the slot at the node's PRE-move canvas position while the link
+        // endpoint (bound to the measured anchor) then lags the node by a frame during collapse-zoom
+        // — the transient "link end dangles off its port while zooming" symptom. Hooking the host's
+        // LayoutUpdated reads the post-arrange geometry (the WPF adapter is immune because WPF's
+        // LayoutUpdated fires once per whole-tree layout pass, i.e. always post-arrange).
+        public FrameworkElement? CoordinateHost { get; set; }
+        public EventHandler<object>? CoordinateHostLayoutHandler { get; set; }
         public HashSet<string> SlotPropertyNames { get; } = [];
     }
 
@@ -124,6 +133,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
                 state.LayoutUpdatedHandler = null;
             }
 
+            DetachCoordinateHost(state);
+
             if (state.PropertyChangedSource is not null)
             {
                 state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
@@ -133,10 +144,40 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         control.ClearValue(StateProperty);
     }
 
+    private static void AttachCoordinateHost(UserControl control)
+    {
+        if (control.GetValue(StateProperty) is not LayoutState state || state.CoordinateHost is not null)
+        {
+            return;
+        }
+
+        var host = ResolveCoordinateHost(control, control);
+        if (host is null)
+        {
+            return;
+        }
+
+        state.CoordinateHost = host;
+        state.CoordinateHostLayoutHandler = (_, _) => Sync(control);
+        host.LayoutUpdated += state.CoordinateHostLayoutHandler;
+    }
+
+    private static void DetachCoordinateHost(LayoutState state)
+    {
+        if (state.CoordinateHost is not null && state.CoordinateHostLayoutHandler is not null)
+        {
+            state.CoordinateHost.LayoutUpdated -= state.CoordinateHostLayoutHandler;
+        }
+
+        state.CoordinateHost = null;
+        state.CoordinateHostLayoutHandler = null;
+    }
+
     private static void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (sender is UserControl control)
         {
+            AttachCoordinateHost(control);
             ScheduleSync(control);
         }
     }
@@ -145,6 +186,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     {
         if (sender is UserControl control && control.GetValue(StateProperty) is LayoutState state)
         {
+            DetachCoordinateHost(state);
             state.SyncPending = false;
         }
     }

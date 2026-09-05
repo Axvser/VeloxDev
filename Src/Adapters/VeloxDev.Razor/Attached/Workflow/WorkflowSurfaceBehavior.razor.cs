@@ -210,6 +210,12 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
                 layout.Scale = new Scale(next, next);
             }
 
+            // Deep zoom-in collapses negative-world content to w/Scale past the fixed NegativeOffset,
+            // pushing left/top content outside the reachable DOM host. Grow the cover now (monotonic,
+            // no-op for positive-only content) so the contentW/H, clamps and the atomic
+            // applyZoomSurface below all read the NEW ActualOffset/ActualSize in the same frame.
+            WorkflowSurfaceMath.EnsureNegativeCover(Tree);
+
             // The canvas content auto-extends on zoom-in below scale 1 (ActualSize = world / scale),
             // and clamping may grow NegativeOffset (content moves right/down). Push the new offset and
             // the new extent to the DOM atomically with the scroll below; first compute the scroll

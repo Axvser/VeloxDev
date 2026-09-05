@@ -487,6 +487,14 @@ public sealed class WorkflowSurfaceBehavior
         else
         {
             layout.Scale = new Scale(next, next);
+            // World-origin zoom keeps content aligned to the top-left, so a cover that grew to keep
+            // negative-quadrant content reachable must be re-applied here — nothing downstream (no
+            // PivotCenterScroll) would otherwise pick up the new ActualOffset.
+            if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel))
+            {
+                ApplyLayout(control, state);
+                UpdateVisibleRegion(control, state);
+            }
         }
         e.Handled = true;
     }
@@ -513,6 +521,21 @@ public sealed class WorkflowSurfaceBehavior
             if (viewModel is null)
             {
                 return;
+            }
+
+            // A deep zoom-in collapses negative-world content to w/Scale, and the fixed NegativeOffset
+            // (== ActualOffset) stops covering it below some scale — content escapes the scrollable
+            // region on the left/top and links truncate there. Grow the cover first (monotonic, no-op
+            // for positive-only content) so the PivotCenterScroll below reads the NEW ActualOffset and
+            // auto-shifts the recenter by exactly the growth.
+            if (WorkflowSurfaceMath.EnsureNegativeCover(viewModel))
+            {
+                // The cover grew the model ActualOffset/ActualSize. Push the canvas element (translate +
+                // WidthRequest) to the new values BEFORE the native scroll max below is read — otherwise
+                // GetHorizontalScrollMaximum still reflects the pre-cover extent, the clamp lands short,
+                // and the grown negative content stays out of reach (left/top truncation lags a notch).
+                ApplyLayout(host, state);
+                await Task.Yield(); // let MAUI's async native extent re-measure against the grown canvas
             }
 
             var svW = double.IsNaN(state.ScrollViewer.Width) ? 1 : state.ScrollViewer.Width;
@@ -580,6 +603,13 @@ public sealed class WorkflowSurfaceBehavior
                 else
                 {
                     layout.Scale = new Scale(factor, factor);
+                    // Same world-origin re-apply as the wheel path: grow the cover when deep zoom-in
+                    // collapses content past the fixed NegativeOffset, then push the new extent out.
+                    if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
+                    {
+                        ApplyLayout(host, state);
+                        UpdateVisibleRegion(host, state);
+                    }
                 }
                 break;
         }

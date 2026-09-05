@@ -340,8 +340,11 @@ public sealed class ViewManager(Panel panel)
                 view.Height = node.Size.Height > 0 ? node.Size.Height : double.NaN;
                 break;
             case IWorkflowLinkViewModel:
-                Canvas.SetLeft(view, 0);
-                Canvas.SetTop(view, 0);
+                // Link views own their position: Trimmed LinkView places itself at −ActualOffset and
+                // bakes +ActualOffset into its geometry (offset frame), so a deep-zoom link's negative
+                // half stays inside its own box instead of being cut. Pinning to (0,0) here would
+                // clobber that on Sender/Receiver/Anchor changes and shift the whole line by the cover.
+                // Views that do not self-position keep their default (0,0) — identical to the old pin.
                 break;
         }
     }
