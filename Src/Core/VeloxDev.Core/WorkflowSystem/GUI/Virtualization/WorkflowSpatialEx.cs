@@ -236,16 +236,30 @@ public static class WorkflowSpatialEx
     public static void SetVirtualizeInset(this IWorkflowTreeViewModel tree,
         double left = 0d, double top = 0d, double right = 0d, double bottom = 0d)
     {
+        // Called on every surface pass, so keep it allocation-free and change-detecting: after the
+        // first call the CWT entry persists (never re-inserted); when the four sides are unchanged
+        // (the common case — a static ruler band) this does nothing but one cheap lookup + compares.
+        left = Math.Max(0, left);
+        top = Math.Max(0, top);
+        right = Math.Max(0, right);
+        bottom = Math.Max(0, bottom);
+
         if (!Insets.TryGetValue(tree, out var inset))
         {
-            inset = new VirtualizeInsets();
+            inset = new VirtualizeInsets { Left = left, Top = top, Right = right, Bottom = bottom };
             Insets.Add(tree, inset);
+            return;
         }
 
-        inset.Left = Math.Max(0, left);
-        inset.Top = Math.Max(0, top);
-        inset.Right = Math.Max(0, right);
-        inset.Bottom = Math.Max(0, bottom);
+        if (inset.Left == left && inset.Top == top && inset.Right == right && inset.Bottom == bottom)
+        {
+            return;
+        }
+
+        inset.Left = left;
+        inset.Top = top;
+        inset.Right = right;
+        inset.Bottom = bottom;
     }
 
     /// <summary>
