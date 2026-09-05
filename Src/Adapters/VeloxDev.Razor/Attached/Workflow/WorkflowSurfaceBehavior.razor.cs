@@ -2,6 +2,7 @@ using System;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -369,6 +370,10 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             var effY = contentY + Math.Max(0, _offsetY - RulerThickness);
             var viewportX = WorkflowSurfaceMath.ToWorld(scrollLeft, effX);
             var viewportY = WorkflowSurfaceMath.ToWorld(scrollTop, effY);
+
+            // Keep the virtualization visible-region correction in sync with the reserved ruler band
+            // so nodes beneath it are not culled a ruler-thickness early.
+            Tree.SetVirtualizeInset(left: RulerThickness, top: RulerThickness);
             try
             {
                 Tree.GetHelper().Viewport = new Viewport(viewportX, viewportY, _viewportW, _viewportH);

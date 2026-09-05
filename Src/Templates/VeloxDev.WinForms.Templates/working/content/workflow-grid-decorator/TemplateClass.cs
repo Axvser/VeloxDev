@@ -64,6 +64,9 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public double ContentOffsetY { get; set; }
 
+    /// <inheritdoc />
+    public double RulerBand => RulerThickness;
+
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         base.OnPaintBackground(e);

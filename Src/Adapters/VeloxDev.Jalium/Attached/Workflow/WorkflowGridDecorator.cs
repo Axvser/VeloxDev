@@ -42,6 +42,9 @@ public class WorkflowGridDecorator : Decorator, IWorkflowGridDecorator
     public double ContentOffsetX { get => (double)GetValue(ContentOffsetXProperty); set => SetValue(ContentOffsetXProperty, value); }
     public double ContentOffsetY { get => (double)GetValue(ContentOffsetYProperty); set => SetValue(ContentOffsetYProperty, value); }
 
+    /// <inheritdoc />
+    public double RulerBand => RulerThickness;
+
     private static void OnVisualChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is UIElement element)

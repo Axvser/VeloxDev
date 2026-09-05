@@ -25,4 +25,12 @@ public interface IWorkflowGridDecorator
 
     /// <summary>Vertical content offset of the canvas (<c>CanvasLayout.ActualOffset.Vertical</c>).</summary>
     double ContentOffsetY { get; set; }
+
+    /// <summary>
+    /// Thickness of the floating ruler/scale band this decorator draws that overlaps the TOP/LEFT edges
+    /// of the canvas content (0 when the decorator draws no such band). The adapter surfaces read this
+    /// each pass and forward it to <c>WorkflowSpatialEx.SetVirtualizeInset</c> so spatial virtualization
+    /// does not cull nodes that are still visible beneath the ruler band.
+    /// </summary>
+    double RulerBand { get; }
 }

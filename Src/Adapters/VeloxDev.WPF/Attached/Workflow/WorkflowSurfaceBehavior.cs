@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors
 {
@@ -606,6 +607,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             decorator.ScrollOffsetY = state.ScrollViewer.VerticalOffset;
             decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
             decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
+
+            // Keep the virtualization visible-region correction in sync with the decorator's
+            // floating ruler band so nodes beneath it are not culled a ruler-thickness early.
+            viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
         }
     }
 

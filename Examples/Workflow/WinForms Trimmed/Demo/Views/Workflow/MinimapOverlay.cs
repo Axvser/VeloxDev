@@ -100,6 +100,9 @@ public sealed class MinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowMi
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public double ContentOffsetY { get; set; }
 
+    /// <inheritdoc />
+    public double RulerBand => 0;
+
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public double ViewportWidth { get; set; } = 1;

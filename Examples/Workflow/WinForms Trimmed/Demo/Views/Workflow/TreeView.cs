@@ -243,6 +243,9 @@ public sealed class TreeView : UserControl
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public double ContentOffsetY { get; set; }
 
+        /// <inheritdoc />
+        public double RulerBand => 0;
+
         protected override void OnPaintBackground(PaintEventArgs e)
         {
             // The grid renders in the background pass so it sits under the node cards

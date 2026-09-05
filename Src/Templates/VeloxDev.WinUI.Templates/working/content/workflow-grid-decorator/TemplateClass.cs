@@ -208,6 +208,9 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         set => SetValue(ContentOffsetYProperty, value);
     }
 
+    /// <inheritdoc />
+    public double RulerBand => RulerThickness;
+
     private static void OnLayoutPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var decorator = (TemplateClass)d;

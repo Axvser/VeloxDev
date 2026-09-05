@@ -131,6 +131,8 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     public double ScrollOffsetY { get => GetValue(ScrollOffsetYProperty); set => SetValue(ScrollOffsetYProperty, value); }
     public double ContentOffsetX { get => GetValue(ContentOffsetXProperty); set => SetValue(ContentOffsetXProperty, value); }
     public double ContentOffsetY { get => GetValue(ContentOffsetYProperty); set => SetValue(ContentOffsetYProperty, value); }
+    /// <inheritdoc />
+    public double RulerBand => 0;
     public IWorkflowTreeViewModel? WorkflowTree { get => GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
     public double ViewportWidth { get => GetValue(ViewportWidthProperty); set => SetValue(ViewportWidthProperty, value); }
     public double ViewportHeight { get => GetValue(ViewportHeightProperty); set => SetValue(ViewportHeightProperty, value); }

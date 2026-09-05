@@ -16,6 +16,12 @@ public static class WorkflowSpatialEx
     // fires CollectionChanged → event handler → Viewport changes again), we bail early — the
     // outer call already computes the correct final state.
     private static readonly ConcurrentDictionary<object, byte> Virtualizing = new();
+    // Per-tree visible-region correction: an external surface can account for a floating ruler /
+    // scale band that overlays a strip of the canvas (top/left by default) whose thickness the
+    // Viewport does not know about. The inset is applied ONLY to the virtualization query bounds
+    // (never to the authoritative Viewport property or to rendering), so nodes near the ruler's
+    // inner-facing edge are not culled a ruler-thickness too early.
+    private static readonly ConditionalWeakTable<object, VirtualizeInsets> Insets = new();
 
     /// <summary>
     /// Enables spatial virtualization for the specified workflow tree view model by creating or retrieving a spatial
@@ -123,11 +129,28 @@ public static class WorkflowSpatialEx
                 "The workflow must first successfully enable the spatial map before it can be virtualized.");
         }
 
+        // Visible-region correction: inflate the query bounds by the externally set inset (e.g. the
+        // floating ruler band thickness on an edge) WITHOUT touching the authoritative Viewport
+        // property or any rendering — nodes near the ruler's inner-facing edge are then only culled
+        // once they leave the (corrected) visible region, not a ruler-thickness earlier.
+        Insets.TryGetValue(tree, out var inset);
+        var query = viewport;
+        if (inset is not null && (inset.Left > 0 || inset.Top > 0 || inset.Right > 0 || inset.Bottom > 0))
+        {
+            query = new Viewport(
+                viewport.Horizontal - inset.Left,
+                viewport.Vertical - inset.Top,
+                viewport.Width + inset.Left + inset.Right,
+                viewport.Height + inset.Top + inset.Bottom);
+            if (query.Width <= 0 || query.Height <= 0)
+                return;
+        }
+
         // 1. Query AgentBounds
         //    E.g. A visible → A↔B brought in → B↔C, B↔D, B↔E also included
         //    so that when B becomes fully visible, all its connections are ready
         //    without flicker.
-        var agentBounds = manager.QueryAgentBounds(viewport, expansionDepth: 1).ToArray();
+        var agentBounds = manager.QueryAgentBounds(query, expansionDepth: 1).ToArray();
 
         // 2. Collect unique nodes from both ends of each AgentBounds
         var visibleNodes = new HashSet<IWorkflowNodeViewModel>(
@@ -139,7 +162,7 @@ public static class WorkflowSpatialEx
         }
 
         // 3. Also collect individually visible nodes (isolated nodes with no links)
-        foreach (var node in manager.QueryNodes(viewport))
+        foreach (var node in manager.QueryNodes(query))
             visibleNodes.Add(node);
 
         // 4. Build desired items: VirtualLink + all nodes + all links, in one pass
@@ -201,6 +224,31 @@ public static class WorkflowSpatialEx
     }
 
     /// <summary>
+    /// Sets an external visible-region correction for virtualization: an amount to inflate the query
+    /// bounds on each edge when computing which nodes are visible, so overlays that occupy a strip of
+    /// the canvas (a floating ruler / scale band on the top/left edges) do not cause nodes to be culled
+    /// early on the edge facing the canvas interior.
+    ///
+    /// The authoritative <see cref="Viewport"/> property is never changed and rendering is untouched;
+    /// the inset is read only inside <see cref="Virtualize"/> when the visible set is computed. Callers
+    /// (surfaces/adapters) should set it from the ruler band's actual thickness on the occupied edges.
+    /// </summary>
+    public static void SetVirtualizeInset(this IWorkflowTreeViewModel tree,
+        double left = 0d, double top = 0d, double right = 0d, double bottom = 0d)
+    {
+        if (!Insets.TryGetValue(tree, out var inset))
+        {
+            inset = new VirtualizeInsets();
+            Insets.Add(tree, inset);
+        }
+
+        inset.Left = Math.Max(0, left);
+        inset.Top = Math.Max(0, top);
+        inset.Right = Math.Max(0, right);
+        inset.Bottom = Math.Max(0, bottom);
+    }
+
+    /// <summary>
     /// Selects and returns all workflow nodes that intersect with the specified viewport.
     /// This method leverages the spatial hash map for efficient spatial queries, allowing
     /// for optimized retrieval of nodes within a given rectangular area.
@@ -258,6 +306,15 @@ public static class WorkflowSpatialEx
         {
             observable.Remove(item);
         }
+    }
+
+    /// <summary>Per-tree virtualization visible-region correction (see <see cref="SetVirtualizeInset"/>).</summary>
+    private sealed class VirtualizeInsets
+    {
+        public double Left;
+        public double Top;
+        public double Right;
+        public double Bottom;
     }
 }
 

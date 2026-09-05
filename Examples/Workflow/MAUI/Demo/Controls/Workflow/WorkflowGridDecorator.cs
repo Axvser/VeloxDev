@@ -68,6 +68,8 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
     public double ScrollOffsetY { get => (double)GetValue(ScrollOffsetYProperty); set => SetValue(ScrollOffsetYProperty, value); }
     public double ContentOffsetX { get => (double)GetValue(ContentOffsetXProperty); set => SetValue(ContentOffsetXProperty, value); }
     public double ContentOffsetY { get => (double)GetValue(ContentOffsetYProperty); set => SetValue(ContentOffsetYProperty, value); }
+    /// <inheritdoc />
+    public double RulerBand => RulerThickness;
 
     /// <summary>
     /// A single pan frame can write several decorator DPs back-to-back (ApplyVisibleRegion

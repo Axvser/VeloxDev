@@ -82,6 +82,9 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public double ContentOffsetY { get; set; }
 
+    /// <inheritdoc />
+    public double RulerBand => RulerThickness;
+
     // ── Public properties ─────────────────────────────────────────────────────────────
 
     [Browsable(false)]

@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 using Windows.System;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -651,6 +652,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         decorator.ScrollOffsetY = state.ScrollViewer.VerticalOffset;
         decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
         decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
+
+        // Keep the virtualization visible-region correction in sync with the decorator's
+        // floating ruler band so nodes beneath it are not culled a ruler-thickness early.
+        viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
     }
 
     private static void UpdateMinimapOverlay(IWorkflowTreeViewModel viewModel, SurfaceState state)

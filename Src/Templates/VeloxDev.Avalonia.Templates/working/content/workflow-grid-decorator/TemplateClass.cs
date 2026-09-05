@@ -119,6 +119,9 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set => SetValue(ContentOffsetYProperty, value);
     }
 
+    /// <inheritdoc />
+    public double RulerBand => RulerThickness;
+
     private static void OnVisualPropertyChanged(TemplateClass decorator, AvaloniaPropertyChangedEventArgs e)
     {
         decorator._gridLayer.InvalidateVisual();

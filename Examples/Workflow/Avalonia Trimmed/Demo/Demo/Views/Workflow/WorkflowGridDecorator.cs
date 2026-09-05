@@ -119,6 +119,9 @@ public sealed class WorkflowGridDecorator : Panel, IWorkflowGridDecorator
         set => SetValue(ContentOffsetYProperty, value);
     }
 
+    /// <inheritdoc />
+    public double RulerBand => RulerThickness;
+
     private static void OnVisualPropertyChanged(WorkflowGridDecorator decorator, AvaloniaPropertyChangedEventArgs e)
     {
         decorator._gridLayer.InvalidateVisual();

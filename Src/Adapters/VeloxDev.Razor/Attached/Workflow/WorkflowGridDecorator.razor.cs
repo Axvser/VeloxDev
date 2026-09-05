@@ -71,6 +71,9 @@ public partial class WorkflowGridDecorator : ComponentBase, IWorkflowGridDecorat
     /// <inheritdoc />
     public double ContentOffsetY { get; set; }
 
+    /// <inheritdoc />
+    public double RulerBand => RulerThickness;
+
     // The corner/band inline styles need an explicit px unit — a unitless length (e.g. "28") is
     // invalid CSS and the browser drops it, collapsing the corner, bands, and tick lines to 0×0.
     private string RulerThicknessCss => RulerThickness.ToString("0.#") + "px";

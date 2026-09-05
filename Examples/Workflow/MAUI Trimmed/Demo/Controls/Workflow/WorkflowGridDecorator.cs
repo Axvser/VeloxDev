@@ -102,6 +102,9 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
         set => SetValue(ContentOffsetYProperty, value);
     }
 
+    /// <inheritdoc />
+    public double RulerBand => RulerThickness;
+
     private static void OnVisualPropertyChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
         if (bindable is WorkflowGridDecorator decorator)

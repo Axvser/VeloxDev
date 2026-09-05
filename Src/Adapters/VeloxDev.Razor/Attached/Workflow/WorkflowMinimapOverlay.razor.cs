@@ -94,6 +94,9 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     public double ContentOffsetY { get; set; }
 
     /// <inheritdoc />
+    public double RulerBand => 0;
+
+    /// <inheritdoc />
     public double ViewportWidth { get; set; }
 
     /// <inheritdoc />
