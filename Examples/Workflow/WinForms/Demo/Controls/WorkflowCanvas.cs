@@ -812,11 +812,6 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
     {
         switch (node)
         {
-            case BoolSelectorNodeViewModel b:
-                if (b.InputSlot is not null) yield return b.InputSlot;
-                if (b.TrueSlot is not null) yield return b.TrueSlot;
-                if (b.FalseSlot is not null) yield return b.FalseSlot;
-                break;
             case EnumSelectorNodeViewModel e:
                 if (e.InputSlot is not null) yield return e.InputSlot;
                 if (e.OutputSlots is not null)
@@ -824,10 +819,6 @@ public sealed class WorkflowCanvas : Panel, IWorkflowGridDecorator
                     foreach (var s in e.OutputSlots.Cast<IWorkflowSlotViewModel>())
                         yield return s;
                 }
-                break;
-            case NodeViewModel nv:
-                if (nv.InputSlot is not null) yield return nv.InputSlot;
-                if (nv.OutputSlot is not null) yield return nv.OutputSlot;
                 break;
             case ControllerViewModel cv:
                 if (cv.OutputSlot is not null) yield return cv.OutputSlot;

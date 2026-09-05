@@ -1,4 +1,3 @@
-using Demo.ViewModels;
 using Jalium.UI;
 using Jalium.UI.Controls;
 using Jalium.UI.Media;
@@ -6,34 +5,23 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>Generic task-executor node card: title + status in the header, a delay readout in the
-/// body, one input port on the left and one output port on the right (drawn by the base at the
-/// NodePorts centers the surface hit-tests).</summary>
+/// <summary>Generic node card catch-all: the card chrome (title + ports) is provided by the base.
+/// Used only for node types without a dedicated view in <see cref="NodeViewFactory"/>; it no longer
+/// depends on the pruned plain-worker view-model.</summary>
 internal sealed class NodeView : NodeViewBase
 {
     protected override Brush Accent => NodeChrome.DefaultBorder;
 
-    protected override string InitialStatus(IWorkflowNodeViewModel node)
-        => (node as NodeViewModel)?.LastStatus ?? string.Empty;
+    protected override string InitialStatus(IWorkflowNodeViewModel node) => string.Empty;
 
     protected override void Build(IWorkflowNodeViewModel node, Grid content)
     {
-        var vm = (NodeViewModel)node;
-        var body = new StackPanel { Margin = new Thickness(12), Spacing = 6 };
-        body.Children.Add(new TextBlock
-        {
-            Text = $"Delay: {vm.DelayMilliseconds} ms",
-            Foreground = NodeChrome.SubFg,
-            FontSize = 11,
-        });
-        content.Children.Add(body);
+        // No worker-specific body: specific node types (Controller/Timer/Enum/Python) get
+        // dedicated views, so a generic catch-all card just shows chrome + ports.
     }
 
     protected override void OnNodePropertyChanged(string propertyName)
     {
-        if (propertyName is nameof(NodeViewModel.LastStatus) && StatusText is not null && Node is NodeViewModel vm)
-        {
-            StatusText.Text = vm.LastStatus;
-        }
+        // No worker-status reads to update.
     }
 }

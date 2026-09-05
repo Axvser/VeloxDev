@@ -38,10 +38,6 @@ internal static class NodePorts
         {
             case PythonScriptNodeViewModel python:
                 return python.OutputSlots.Items.Select(i => ((IWorkflowSlotViewModel)i.Slot, i.Name)).ToList();
-            case BoolSelectorNodeViewModel b:
-                return b.OutputSlots.Items.Select(i => ((IWorkflowSlotViewModel)i.Slot, i.Name)).ToList();
-            case LogicGateNodeViewModel g:
-                return g.OutputSlots.Items.Select(i => ((IWorkflowSlotViewModel)i.Slot, i.Name)).ToList();
             case EnumSelectorNodeViewModel e:
                 return e.OutputSlots.Items.Select(i => ((IWorkflowSlotViewModel)i.Slot, i.Name)).ToList();
         }

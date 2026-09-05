@@ -34,14 +34,6 @@
                                   Canvas.ZIndex="{Binding Anchor.Layer}"
                                   IsEnabled="{Binding IsEnabled}"/>
         </DataTemplate>
-        <DataTemplate x:Key="BoolSelectorTemplate">
-            <local:BoolSelectorNodeView Width="{Binding Size.Width}"
-                                        Height="{Binding Size.Height}"
-                                        Canvas.Left="{Binding Anchor.Horizontal}"
-                                        Canvas.Top="{Binding Anchor.Vertical}"
-                                        Canvas.ZIndex="{Binding Anchor.Layer}"
-                                        IsEnabled="{Binding IsEnabled}"/>
-        </DataTemplate>
         <DataTemplate x:Key="EnumSelectorTemplate">
             <local:EnumSelectorNodeView Width="{Binding Size.Width}"
                                         Height="{Binding Size.Height}"
@@ -80,7 +72,6 @@
         <local:CustomTemplateSelector x:Key="NodeSelector"
                                       ControllerTemplate="{StaticResource ControllerTemplate}"
                                       NodeTemplate="{StaticResource NodeTemplate}"
-                                      BoolSelectorTemplate="{StaticResource BoolSelectorTemplate}"
                                       EnumSelectorTemplate="{StaticResource EnumSelectorTemplate}"
                                       PythonTemplate="{StaticResource PythonTemplate}"
                                       TimerTemplate="{StaticResource TimerTemplate}"

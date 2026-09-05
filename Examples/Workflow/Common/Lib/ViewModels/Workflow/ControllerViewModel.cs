@@ -8,6 +8,7 @@ namespace Demo.ViewModels;
 [AgentContext(AgentLanguages.Chinese, "派生的Node组件之一，作为任务发起者")]
 [AgentContext(AgentLanguages.English, "A derived Node component that acts as a workflow initiator/controller. Default size: 300×260. Never use Size(0,0).")]
 [WorkflowBuilder.Node<NodeHelper>]
+[DefaultSize(220, 340)]
 public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
 {
     public ControllerViewModel() => InitializeWorkflow();

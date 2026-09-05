@@ -8,7 +8,7 @@
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_OutputSlot"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid RowDefinitions="52,*,88">
+    <Grid RowDefinitions="Auto,*,Auto">
         <Border Grid.RowSpan="3"
                 Stroke="White"
                 StrokeThickness="1"
@@ -27,7 +27,7 @@
         </Border>
 
         <Border Grid.Row="1" BackgroundColor="#252525" Padding="12">
-            <ScrollView>
+            <ScrollView MinimumHeightRequest="40">
             <VerticalStackLayout Spacing="4">
                 <Label Text="Seed" TextColor="#DCDCDC" FontSize="11" />
                 <Entry Text="{Binding SeedPayload}" FontSize="11" />

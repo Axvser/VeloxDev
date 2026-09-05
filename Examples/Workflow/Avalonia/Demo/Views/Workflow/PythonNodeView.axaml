@@ -37,7 +37,7 @@
 		</Border>
 
 		<Border Grid.Row="1" Padding="12,3" BorderBrush="#30363d" BorderThickness="0,0,0,1">
-			<TextBlock Text="{Binding Description}" Foreground="#8b949e" FontSize="10" TextWrapping="Wrap" MaxHeight="26"/>
+			<TextBlock Text="{Binding Description}" Foreground="#8b949e" FontSize="10" TextWrapping="Wrap"/>
 		</Border>
 
 		<Border Grid.Row="2" Background="#1e2a35" CornerRadius="0,0,4,4">
@@ -57,8 +57,9 @@
 					</Style>
 				</Grid.Styles>
 
-				<!-- Input port strip (fixed, left) -->
-				<ItemsControl Grid.Column="0"
+				<!-- Input port strip (scrollable, left) -->
+				<ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+				<ItemsControl
 							  ItemsSource="{Binding InputSlots.Items}"
 							  x:Name="PART_InputSlotsList"
 							  ClipToBounds="False">
@@ -85,6 +86,7 @@
 						</DataTemplate>
 					</ItemsControl.ItemTemplate>
 				</ItemsControl>
+				</ScrollViewer>
 
 				<!-- Script editor -->
 				<Border Grid.Column="1" Margin="4,6" BorderBrush="#30363d" BorderThickness="1" CornerRadius="4" Background="#0d1117">
@@ -109,8 +111,9 @@
 					</DockPanel>
 				</Border>
 
-				<!-- Output port strip (fixed, right) -->
-				<ItemsControl Grid.Column="2"
+				<!-- Output port strip (scrollable, right) -->
+				<ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+				<ItemsControl
 							  ItemsSource="{Binding OutputSlots.Items}"
 							  x:Name="PART_OutputSlotsList"
 							  ClipToBounds="False"
@@ -138,6 +141,7 @@
 						</DataTemplate>
 					</ItemsControl.ItemTemplate>
 				</ItemsControl>
+				</ScrollViewer>
 			</Grid>
 		</Border>
 	</Grid>

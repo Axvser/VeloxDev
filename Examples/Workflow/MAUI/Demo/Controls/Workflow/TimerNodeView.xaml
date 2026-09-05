@@ -7,7 +7,7 @@
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot,PART_OutputSlot"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid RowDefinitions="40,*">
+    <Grid RowDefinitions="Auto,*">
         <Border Grid.RowSpan="2"
                 Stroke="#6EC6FF"
                 StrokeThickness="1.5"
@@ -50,12 +50,14 @@
         </Border>
 
         <Border Grid.Row="1" BackgroundColor="#1E2A35" StrokeShape="RoundRectangle 0,0,4,4">
+            <ScrollView MinimumHeightRequest="40">
             <VerticalStackLayout Margin="14" Spacing="6">
                 <Label Text="Interval (ms)" TextColor="#BFBFBF" FontSize="11" />
                 <Entry Text="{Binding IntervalMilliseconds}" Keyboard="Numeric" FontSize="11" />
                 <Label Text="Last Tick" TextColor="#BFBFBF" FontSize="11" />
                 <Label Text="{Binding LastTick}" TextColor="#6EC6FF" FontAttributes="Bold" FontSize="11" LineBreakMode="WordWrap" />
             </VerticalStackLayout>
+            </ScrollView>
         </Border>
     </Grid>
 </ContentView>

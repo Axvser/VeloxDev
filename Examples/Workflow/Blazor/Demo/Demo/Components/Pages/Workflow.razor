@@ -4,6 +4,7 @@
 @using System.Collections.Specialized
 @using System.ComponentModel
 @using VeloxDev.AI
+@using VeloxDev.WorkflowSystem
 @implements IDisposable
 
 <PageTitle>VeloxDev Workflow — Blazor Demo</PageTitle>
@@ -190,41 +191,6 @@
                                             </OutputSlots>
                                         </TemplateNodeView>
                                         break;
-                                    case NodeViewModel w:
-                                        <TemplateNodeView Node="w"
-                                                          AllowOverflow="true"
-                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
-                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
-                                            <BodyContent>
-                                                <WorkflowNodeView Node="w" />
-                                            </BodyContent>
-                                            <InputSlots>
-                                                <WorkflowSlotConnectionBehavior Slot="w.InputSlot" Tree="tree" IsEnabled="true">
-                                                    <TemplateSlotView Slot="w.InputSlot" Tree="tree" SlotSize="20" />
-                                                </WorkflowSlotConnectionBehavior>
-                                            </InputSlots>
-                                            <OutputSlots>
-                                                <WorkflowSlotConnectionBehavior Slot="w.OutputSlot" Tree="tree" IsEnabled="true">
-                                                    <TemplateSlotView Slot="w.OutputSlot" Tree="tree" SlotSize="20" />
-                                                </WorkflowSlotConnectionBehavior>
-                                            </OutputSlots>
-                                        </TemplateNodeView>
-                                        break;
-                                    case BoolSelectorNodeViewModel b:
-                                        <TemplateNodeView Node="b"
-                                                          AllowOverflow="true"
-                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
-                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
-                                            <BodyContent>
-                                                <WorkflowBoolSelectorView Selector="b" Tree="tree" />
-                                            </BodyContent>
-                                            <InputSlots>
-                                                <WorkflowSlotConnectionBehavior Slot="b.InputSlot" Tree="tree" IsEnabled="true">
-                                                    <TemplateSlotView Slot="b.InputSlot" Tree="tree" SlotSize="20" />
-                                                </WorkflowSlotConnectionBehavior>
-                                            </InputSlots>
-                                        </TemplateNodeView>
-                                        break;
                                     case EnumSelectorNodeViewModel e:
                                         <TemplateNodeView Node="e"
                                                           AllowOverflow="true"
@@ -268,6 +234,17 @@
                                                     <TemplateSlotView Slot="t.OutputSlot" Tree="tree" SlotSize="20" />
                                                 </WorkflowSlotConnectionBehavior>
                                             </OutputSlots>
+                                        </TemplateNodeView>
+                                        break;
+                                    case IWorkflowNodeViewModel g:
+                                        @* Generic catch-all: render any remaining node in a plain card. *@
+                                        <TemplateNodeView Node="g"
+                                                          AllowOverflow="true"
+                                                          Background="#DD2D2D2D" Foreground="#DDECECEC"
+                                                          BorderBrush="#DD4B5563" BorderThickness="1.5" CornerRadius="6">
+                                            <BodyContent>
+                                                <WorkflowNodeView Node="g" />
+                                            </BodyContent>
                                         </TemplateNodeView>
                                         break;
                                 }

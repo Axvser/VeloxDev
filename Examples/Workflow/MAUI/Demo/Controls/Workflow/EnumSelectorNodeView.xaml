@@ -8,7 +8,7 @@
              behaviors:WorkflowSlotLayoutBehavior.SlotNames="PART_InputSlot"
              behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_OutputSlotsList"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid RowDefinitions="48,*">
+    <Grid RowDefinitions="Auto,*">
         <Border Grid.RowSpan="2"
                 Stroke="#D6A0FF"
                 StrokeThickness="1.5"
@@ -43,6 +43,7 @@
         </Border>
 
         <Border Grid.Row="1" BackgroundColor="#2A1E35" StrokeShape="RoundRectangle 0,0,4,4">
+            <ScrollView MinimumHeightRequest="40">
             <VerticalStackLayout Margin="14" Spacing="8">
                 <Label Text="Selected Method" TextColor="#BFBFBF" FontSize="11" />
                 <Picker Title="Select Method"
@@ -77,6 +78,7 @@
                     </BindableLayout.ItemTemplate>
                 </VerticalStackLayout>
             </VerticalStackLayout>
+            </ScrollView>
         </Border>
     </Grid>
 </ContentView>

@@ -56,6 +56,8 @@
         </Border>
 
         <Border Grid.Row="1" Background="#2a1e35" CornerRadius="0,0,4,4">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="14">
                 <TextBlock Text="Selected Method" Foreground="#bfbfbf" FontSize="11"/>
                 <ComboBox Margin="0,4,0,0"
@@ -90,6 +92,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </StackPanel>
+            </ScrollViewer>
         </Border>
     </Grid>
 	</Viewbox>

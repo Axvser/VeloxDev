@@ -10,12 +10,13 @@ namespace Demo.ViewModels;
 [AgentContext(AgentLanguages.Chinese, "枚举选择器节点，可将输入按枚举成员路由到多个执行路径。默认大小为 280×380。")]
 [AgentContext(AgentLanguages.English, "Enum selector node that routes input to multiple execution paths based on enum members. Default size: 280×380.")]
 [WorkflowBuilder.Node<EnumSelectorHelper>(workSemaphore: 1)]
+[DefaultSize(280, 380)]
 public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTimeAware
 {
     public EnumSelectorNodeViewModel()
     {
         InitializeWorkflow();
-        OutputSlots.SetSelector(typeof(NetworkRequestMethod));
+        OutputSlots.SetSelector(typeof(VoltageRange));
     }
 
     [AgentContext(AgentLanguages.Chinese, "输入口（接收端）")]
@@ -23,11 +24,9 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 
     [AgentContext(AgentLanguages.Chinese, "输出口（发送端）")]
-    [AgentContext(AgentLanguages.English, "Output slot (sender). Supports enum types (NetworkRequestMethod, VoltageRange, ModelProtocol) " +
-        "and the instance-driven CustomRouteSelector. " +
-        "For CustomRouteSelector pass its JSON to 'selectorTypeOrJson' and 'Demo.ViewModels.CustomRouteSelector' to 'nonEnumTypeName' when calling SetEnumSlotCollection.")]
+    [AgentContext(AgentLanguages.English, "Output slot (sender). Supports the demo's VoltageRange routing enum.")]
     [VeloxProperty]
-    [SlotSelectors(typeof(NetworkRequestMethod), typeof(VoltageRange), typeof(ModelProtocol), typeof(CustomRouteSelector))]
+    [SlotSelectors(typeof(VoltageRange))]
     public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }
 
     partial void OnOutputSlotsChanged(SlotEnumerator<SlotViewModel>? oldValue, SlotEnumerator<SlotViewModel>? newValue)

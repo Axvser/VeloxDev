@@ -7,7 +7,7 @@
              behaviors:WorkflowSlotLayoutBehavior.IsEnabled="True"
              behaviors:WorkflowSlotLayoutBehavior.SlotEnumeratorNames="PART_InputSlotsList,PART_OutputSlotsList"
              behaviors:WorkflowSlotLayoutBehavior.CoordinateHostName="PART_Canvas">
-    <Grid RowDefinitions="40,Auto,*">
+    <Grid RowDefinitions="Auto,Auto,*">
         <Border Grid.RowSpan="3"
                 Stroke="#6EC6FF"
                 StrokeThickness="1.5"
@@ -33,11 +33,11 @@
             <Border.StrokeShape>
                 <RoundRectangle CornerRadius="0" />
             </Border.StrokeShape>
-            <Label Text="{Binding Description}" TextColor="#8B949E" FontSize="10" LineBreakMode="WordWrap" MaxLines="2" />
+            <Label Text="{Binding Description}" TextColor="#8B949E" FontSize="10" LineBreakMode="WordWrap" />
         </Border>
 
         <Border Grid.Row="2" BackgroundColor="#1E2A35" StrokeShape="RoundRectangle 0,0,4,4">
-            <Grid ColumnDefinitions="64,*,64">
+            <Grid ColumnDefinitions="Auto,*,Auto">
                 <!-- Input port strip (fixed, left) -->
                 <VerticalStackLayout x:Name="PART_InputSlotsList"
                                      Grid.Column="0"
@@ -83,6 +83,7 @@
                                 TextColor="#E6EDF3"
                                 FontFamily="monospace"
                                 FontSize="12"
+                                MinimumHeightRequest="40"
                                 AutoSize="TextChanges" />
                     </Grid>
                 </Border>

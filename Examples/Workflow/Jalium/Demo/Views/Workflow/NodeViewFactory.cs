@@ -11,8 +11,6 @@ internal static class NodeViewFactory
     {
         ControllerViewModel => new ControllerView(),
         TimerNodeViewModel => new TimerNodeView(),
-        LogicGateNodeViewModel => new LogicGateNodeView(),
-        BoolSelectorNodeViewModel => new BoolSelectorNodeView(),
         EnumSelectorNodeViewModel => new EnumSelectorNodeView(),
         PythonScriptNodeViewModel => new PythonNodeView(),
         _ => new NodeView(),

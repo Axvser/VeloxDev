@@ -34,22 +34,9 @@ internal sealed class WorkflowNodeCard : UserControl
     // ── Dynamic control references ──────────────────────────────────────────────────────────
     private Label? _titleLabel;
     private Label? _orderBadge;
-    private Label? _loadBadge;
-    private Label? _durationValue;
     private Label? _routedBadge;
-    private TextBox? _delayBox;
-    private TextBox? _titleBox;
-    private CheckBox? _autoBroadcastCheck;
-    private Label? _runCountLabel;
-    private Label? _waitCountLabel;
-    private Label? _traceLabel;
-    private Label? _statusLabel;
-    private Label? _bodyDuration;
-    private Label? _errorLabel;
-    private Label? _responseLabel;
     private TextBox? _seedBox;
     private Label? _controllerDesc;
-    private CheckBox? _conditionCheck;
     private ComboBox? _enumCombo;
     private ComboBox? _routerModeCombo;
     private TableLayoutPanel? _outputSlotsLayout;
@@ -158,9 +145,7 @@ internal sealed class WorkflowNodeCard : UserControl
         {
             switch (node)
             {
-                case NodeViewModel w: ApplyWorker(w); break;
                 case ControllerViewModel c: ApplyController(c); break;
-                case BoolSelectorNodeViewModel b: ApplyBoolSelector(b); break;
                 case EnumSelectorNodeViewModel e: ApplyEnumSelector(e); break;
                 case PythonScriptNodeViewModel p: ApplyPython(p); break;
                 case TimerNodeViewModel t: ApplyTimer(t); break;
@@ -182,23 +167,11 @@ internal sealed class WorkflowNodeCard : UserControl
         Color border, header, body, footer;
         switch (_node)
         {
-            case NodeViewModel w:
-                border = ParseColor(w.ChromeBorderBrush, Color.FromArgb(75, 85, 99));
-                header = ParseColor(w.HeaderBackground, DarkHeader);
-                body = ParseColor(w.ChromeBackground, DarkBody);
-                footer = DarkHeader;
-                break;
             case ControllerViewModel c:
                 border = c.IsActive ? Color.FromArgb(103, 232, 249) : Color.White;
                 header = c.IsActive ? Color.FromArgb(21, 94, 117) : DarkHeader;
                 body = DarkBody;
                 footer = DarkHeader;
-                break;
-            case BoolSelectorNodeViewModel:
-                border = Color.FromArgb(110, 198, 255);
-                header = Color.FromArgb(37, 53, 69);
-                body = Color.FromArgb(30, 42, 53);
-                footer = body;
                 break;
             case EnumSelectorNodeViewModel:
                 border = Color.FromArgb(214, 160, 255);
@@ -324,9 +297,7 @@ internal sealed class WorkflowNodeCard : UserControl
 
         switch (node)
         {
-            case NodeViewModel: BuildWorker(); break;
             case ControllerViewModel: BuildController(); break;
-            case BoolSelectorNodeViewModel: BuildBoolSelector(); break;
             case EnumSelectorNodeViewModel: BuildEnumSelector(); break;
             case PythonScriptNodeViewModel: BuildPython(); break;
             case TimerNodeViewModel: BuildTimer(); break;
@@ -344,145 +315,6 @@ internal sealed class WorkflowNodeCard : UserControl
         _rootLayout.ResumeLayout();
     }
 
-    // ── Layout: Worker node ─────────────────────────────────────────────────────
-    private void BuildWorker()
-    {
-        SetRows(52F, 54F, true);
-
-        // ── Header ──
-        var headerTlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
-            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = DarkHeader,
-        };
-        headerTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        headerTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92F));
-
-        var titleFlow = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false, Margin = Padding.Empty,
-            Padding = new Padding(12, 14, 12, 10), BackColor = DarkHeader,
-        };
-        _titleLabel = MakeLabel(Color.White, 11F, FontStyle.Bold, autoSize: true);
-        _orderBadge = MakeBadge(Color.FromArgb(200, 255, 200), Color.FromArgb(31, 61, 31));
-        _loadBadge = MakeBadge(Color.FromArgb(228, 216, 255), Color.FromArgb(43, 36, 64));
-        titleFlow.Controls.Add(_titleLabel);
-        titleFlow.Controls.Add(_orderBadge);
-        titleFlow.Controls.Add(_loadBadge);
-        headerTlp.Controls.Add(titleFlow, 0, 0);
-
-        var durationTlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
-            Margin = Padding.Empty, Padding = new Padding(0, 8, 12, 6), BackColor = DarkHeader,
-        };
-        durationTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 16F));
-        durationTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        durationTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        durationTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8F, FontStyle.Regular, autoSize: false, ContentAlignment.BottomRight, "耗时"), 0, 0);
-        _durationValue = MakeLabel(Color.FromArgb(126, 200, 255), 16F, FontStyle.Bold, autoSize: false, ContentAlignment.TopRight);
-        durationTlp.Controls.Add(_durationValue, 0, 1);
-        headerTlp.Controls.Add(durationTlp, 1, 0);
-        _headerPanel.Controls.Add(headerTlp);
-
-        // ── Body ──
-        var bodyHost = new Panel
-        {
-            Dock = DockStyle.Fill, AutoScroll = true,
-            BackColor = DarkBody, Padding = new Padding(14),
-        };
-        var bodyTlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 1, RowCount = 4, Margin = Padding.Empty, Padding = Padding.Empty, BackColor = DarkBody,
-        };
-        bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        bodyTlp.Controls.Add(MakeEditorRow("Delay (ms)", out _delayBox), 0, 0);
-        bodyTlp.Controls.Add(MakeEditorRow("Title", out _titleBox), 0, 1);
-        bodyTlp.Controls.Add(MakeCheckRow("执行完成后自动广播到下游", out _autoBroadcastCheck), 0, 2);
-        bodyTlp.Controls.Add(BuildExecPanel(), 0, 3);
-        bodyHost.Controls.Add(bodyTlp);
-        _bodyPanel.Controls.Add(bodyHost);
-
-        // ── Footer ──
-        var footerTlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
-            Margin = Padding.Empty, Padding = new Padding(1), BackColor = DarkBody,
-        };
-        footerTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        footerTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        footerTlp.Controls.Add(MakeCmdButton("Run", nameof(NodeViewModel.ReceiveCommand)), 0, 0);
-        footerTlp.Controls.Add(MakeCmdButton("Forward", nameof(NodeViewModel.BroadcastCommand)), 1, 0);
-        _footerPanel.Controls.Add(footerTlp);
-
-        InputSlotButton = AddSlotButton(null);
-        OutputSlotButton = AddSlotButton(null);
-    }
-
-    private Panel BuildExecPanel()
-    {
-        var panel = new Panel
-        {
-            Dock = DockStyle.Top, Height = 146,
-            Margin = Padding.Empty, Padding = new Padding(10), BackColor = DarkExec,
-        };
-        panel.Paint += OnExecPanelPaint;
-
-        var tlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
-            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = DarkExec,
-        };
-        tlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        int[] rowHeights = [20, 20, 20, 36, 20, 20, 0];
-        for (var i = 0; i < rowHeights.Length; i++)
-        {
-            tlp.RowStyles.Add(i < rowHeights.Length - 1
-                ? new RowStyle(SizeType.Absolute, rowHeights[i])
-                : new RowStyle(SizeType.Percent, 100F));
-        }
-
-        tlp.Controls.Add(MakeLabel(Color.FromArgb(126, 200, 255), 9F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleLeft, "Execution"), 0, 0);
-        _runCountLabel = MakeLabel(Color.FromArgb(255, 213, 74), 8.6F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleLeft);
-        _waitCountLabel = MakeLabel(Color.FromArgb(214, 183, 255), 8.6F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleLeft);
-        _traceLabel = MakeLabel(Color.FromArgb(158, 231, 158), 8.6F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleLeft);
-        _statusLabel = MakeLabel(Color.White, 8.6F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleLeft);
-        _bodyDuration = MakeLabel(Color.FromArgb(126, 200, 255), 16F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleLeft);
-        tlp.Controls.Add(_runCountLabel, 0, 1);
-        tlp.Controls.Add(_waitCountLabel, 0, 2);
-        tlp.Controls.Add(_traceLabel, 0, 3);
-        tlp.Controls.Add(_statusLabel, 0, 4);
-        tlp.Controls.Add(_bodyDuration, 0, 5);
-
-        var bottomTlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
-            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = DarkExec,
-        };
-        bottomTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
-        bottomTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        bottomTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _errorLabel = MakeLabel(Color.FromArgb(255, 155, 155), 8.2F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft);
-        _responseLabel = MakeLabel(Color.FromArgb(207, 207, 207), 8.2F, FontStyle.Regular, autoSize: false, ContentAlignment.TopLeft);
-        bottomTlp.Controls.Add(_errorLabel, 0, 0);
-        bottomTlp.Controls.Add(_responseLabel, 0, 1);
-        tlp.Controls.Add(bottomTlp, 0, 6);
-        panel.Controls.Add(tlp);
-        return panel;
-    }
-
-    private void OnExecPanelPaint(object? sender, PaintEventArgs e)
-    {
-        if (sender is not Panel p || _node is not NodeViewModel node) return;
-        var borderColor = ParseColor(node.ExecutionBorderBrush, Color.Transparent);
-        if (borderColor == Color.Transparent) return;
-        var rect = new Rectangle(0, 0, p.Width - 1, p.Height - 1);
-        using var pen = new Pen(borderColor, 1.5F);
-        e.Graphics.DrawRectangle(pen, rect);
-    }
-
     // ── Layout: Controller ──────────────────────────────────────────────────────
     private void BuildController()
     {
@@ -495,6 +327,7 @@ internal sealed class WorkflowNodeCard : UserControl
         var bodyHost = new Panel
         {
             Dock = DockStyle.Fill, AutoScroll = true,
+            MinimumSize = new System.Drawing.Size(0, 40),
             BackColor = DarkBody, Padding = new Padding(12),
         };
         var bodyTlp = new TableLayoutPanel
@@ -534,62 +367,6 @@ internal sealed class WorkflowNodeCard : UserControl
         OutputSlotButton = AddSlotButton(null);
     }
 
-    // ── Layout: BoolSelector ────────────────────────────────────────────────────
-    private void BuildBoolSelector()
-    {
-        SetRows(48F, 0F, false);
-
-        var flow = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false, Margin = Padding.Empty,
-            Padding = new Padding(12, 14, 12, 10), BackColor = Color.FromArgb(37, 53, 69),
-        };
-        _titleLabel = MakeLabel(Color.White, 10.5F, FontStyle.Bold, autoSize: true);
-        _routedBadge = MakeBadge(Color.FromArgb(200, 255, 200), Color.FromArgb(31, 61, 31));
-        flow.Controls.Add(_titleLabel);
-        flow.Controls.Add(_routedBadge);
-        _headerPanel.Controls.Add(flow);
-
-        var bodyTlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5,
-            Margin = Padding.Empty, Padding = new Padding(14), BackColor = Color.FromArgb(30, 42, 53),
-        };
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-
-        _conditionCheck = new CheckBox
-        {
-            AutoSize = true, ForeColor = Color.FromArgb(220, 220, 220),
-            Text = "Condition = True", Margin = Padding.Empty, Dock = DockStyle.Fill,
-            UseVisualStyleBackColor = false,
-        };
-        _conditionCheck.CheckedChanged += OnConditionChanged;
-        bodyTlp.Controls.Add(_conditionCheck, 0, 0);
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Compile Mode"), 0, 1);
-        _routerModeCombo = MakeComboBox();
-        _routerModeCombo.SelectedIndexChanged += OnRouterModeChanged;
-        bodyTlp.Controls.Add(_routerModeCombo, 0, 2);
-        bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Output Slots"), 0, 3);
-
-        _outputSlotsLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty,
-            Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
-        };
-        _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
-        bodyTlp.Controls.Add(_outputSlotsLayout, 0, 4);
-        _bodyPanel.Controls.Add(bodyTlp);
-
-        InputSlotButton = AddSlotButton(null);
-    }
-
     // ── Layout: EnumSelector ────────────────────────────────────────────────────
     private void BuildEnumSelector()
     {
@@ -607,17 +384,22 @@ internal sealed class WorkflowNodeCard : UserControl
         flow.Controls.Add(_routedBadge);
         _headerPanel.Controls.Add(flow);
 
+        // Whole body scrolls (Auto row heights, content-sized) so an arbitrary number of dynamic
+        // output rows stays reachable and is never hard-clipped when the node is small.
+        var bodyHost = new Panel
+        {
+            Dock = DockStyle.Fill, AutoScroll = true,
+            MinimumSize = new System.Drawing.Size(0, 40),
+            Margin = Padding.Empty, Padding = Padding.Empty,
+            BackColor = Color.FromArgb(42, 30, 53),
+        };
         var bodyTlp = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6,
+            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1, RowCount = 6,
             Margin = Padding.Empty, Padding = new Padding(14), BackColor = Color.FromArgb(42, 30, 53),
         };
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        for (var i = 0; i < 6; i++) bodyTlp.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Selected Method"), 0, 0);
         _enumCombo = MakeComboBox();
@@ -631,13 +413,15 @@ internal sealed class WorkflowNodeCard : UserControl
 
         _outputSlotsLayout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty,
+            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2, Margin = Padding.Empty,
             Padding = Padding.Empty, BackColor = Color.FromArgb(42, 30, 53),
         };
         _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
         bodyTlp.Controls.Add(_outputSlotsLayout, 0, 5);
-        _bodyPanel.Controls.Add(bodyTlp);
+        bodyHost.Controls.Add(bodyTlp);
+        _bodyPanel.Controls.Add(bodyHost);
 
         InputSlotButton = AddSlotButton(null);
     }
@@ -659,48 +443,54 @@ internal sealed class WorkflowNodeCard : UserControl
         flow.Controls.Add(_pythonStatusLabel);
         _headerPanel.Controls.Add(flow);
 
-        // Ports live in fixed left/right strips, isolated from the middle editor (description + script).
+        // Purpose description spans the full body width above the editor row (Auto row, wraps; no cap),
+        // so wrapped text is never hard-clipped; the editor row below fills the remaining space. The
+        // port strips are isolated in fixed left/right columns and scroll so extra dynamic ports stay
+        // reachable no matter how many the selector produces.
         var bodyHost = new Panel
         {
             Dock = DockStyle.Fill, AutoScroll = true,
+            MinimumSize = new System.Drawing.Size(0, 40),
             BackColor = Color.FromArgb(30, 42, 53), Padding = Padding.Empty,
         };
+        var pythonBody = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
+        };
+        pythonBody.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // full-width description
+        pythonBody.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));  // editor row
+
+        _descriptionLabel = MakeLabel(Color.FromArgb(139, 148, 158), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.TopLeft);
+        _descriptionLabel.Dock = DockStyle.Fill;
+        _descriptionLabel.Margin = new Padding(10, 6, 10, 2);
+        pythonBody.Controls.Add(_descriptionLabel, 0, 0);
+
         var bodyGrid = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1,
             Margin = Padding.Empty, Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
         };
+        bodyGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         bodyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64F));   // input ports (left)
-        bodyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));   // middle: description + script
+        bodyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));   // middle: script editor
         bodyGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64F));   // output ports (right)
 
         _inputSlotsLayout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty,
+            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2, Margin = Padding.Empty,
             Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
         };
         _inputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
         _inputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        bodyGrid.Controls.Add(_inputSlotsLayout, 0, 0);
+        bodyGrid.Controls.Add(MakePortStrip(_inputSlotsLayout, Color.FromArgb(30, 42, 53)), 0, 0);
 
         var middle = new Panel
         {
             Dock = DockStyle.Fill, Margin = Padding.Empty,
             Padding = new Padding(4, 6, 4, 6), BackColor = Color.FromArgb(30, 42, 53),
         };
-        var middleTlp = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
-            Margin = Padding.Empty, Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
-        };
-        middleTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        middleTlp.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // description
-        middleTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));  // script editor
-
-        _descriptionLabel = MakeLabel(Color.FromArgb(139, 148, 158), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.TopLeft);
-        _descriptionLabel.Dock = DockStyle.Fill;
-        _descriptionLabel.MaximumSize = new System.Drawing.Size(0, 36);
-        middleTlp.Controls.Add(_descriptionLabel, 0, 0);
 
         _scriptBox = new TextBox
         {
@@ -716,20 +506,21 @@ internal sealed class WorkflowNodeCard : UserControl
             Margin = new Padding(0, 2, 0, 0),
         };
         _scriptBox.TextChanged += OnScriptTextChanged;
-        middleTlp.Controls.Add(_scriptBox, 0, 1);
-        middle.Controls.Add(middleTlp);
+        middle.Controls.Add(_scriptBox);
         bodyGrid.Controls.Add(middle, 1, 0);
 
         _outputSlotsLayout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty,
+            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2, Margin = Padding.Empty,
             Padding = Padding.Empty, BackColor = Color.FromArgb(30, 42, 53),
         };
         _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         _outputSlotsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
-        bodyGrid.Controls.Add(_outputSlotsLayout, 2, 0);
+        bodyGrid.Controls.Add(MakePortStrip(_outputSlotsLayout, Color.FromArgb(30, 42, 53)), 2, 0);
 
-        bodyHost.Controls.Add(bodyGrid);
+        pythonBody.Controls.Add(bodyGrid, 0, 1);
+        bodyHost.Controls.Add(pythonBody);
         _bodyPanel.Controls.Add(bodyHost);
     }
 
@@ -750,15 +541,22 @@ internal sealed class WorkflowNodeCard : UserControl
         flow.Controls.Add(_orderBadge);
         _headerPanel.Controls.Add(flow);
 
+        // Auto rows in a scrollable host: content takes its natural height and the body scrolls
+        // instead of clipping when the node is small or the tick text wraps long.
+        var bodyHost = new Panel
+        {
+            Dock = DockStyle.Fill, AutoScroll = true,
+            MinimumSize = new System.Drawing.Size(0, 40),
+            Margin = Padding.Empty, Padding = Padding.Empty,
+            BackColor = Color.FromArgb(30, 42, 53),
+        };
         var bodyTlp = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
-            Margin = Padding.Empty, Padding = new Padding(14), BackColor = Color.FromArgb(30, 42, 53),
+            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1, RowCount = 4,
+            Margin = Padding.Empty, Padding = new Padding(14, 10, 14, 10), BackColor = Color.FromArgb(30, 42, 53),
         };
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
-        bodyTlp.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        for (var i = 0; i < 4; i++) bodyTlp.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         bodyTlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
         bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Interval (ms)"), 0, 0);
@@ -768,35 +566,14 @@ internal sealed class WorkflowNodeCard : UserControl
         bodyTlp.Controls.Add(MakeLabel(Color.FromArgb(191, 191, 191), 8.5F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, "Last Tick"), 0, 2);
         _tickLabel = MakeLabel(Color.FromArgb(110, 198, 255), 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.TopLeft);
         bodyTlp.Controls.Add(_tickLabel, 0, 3);
-        _bodyPanel.Controls.Add(bodyTlp);
+        bodyHost.Controls.Add(bodyTlp);
+        _bodyPanel.Controls.Add(bodyHost);
 
         InputSlotButton = AddSlotButton(null);
         OutputSlotButton = AddSlotButton(null);
     }
 
     // ── Data application ──────────────────────────────────────────────────────────────
-    private void ApplyWorker(NodeViewModel n)
-    {
-        SetText(_titleLabel, n.Title);
-        SetText(_orderBadge, n.ExecutionOrderText);
-        SetVisible(_orderBadge, n.HasExecutionOrder);
-        SetText(_loadBadge, n.WorkLoadText);
-        SetVisible(_loadBadge, n.HasWorkLoad);
-        SetText(_durationValue, n.LastDuration);
-        SetText(_delayBox, n.DelayMilliseconds.ToString(CultureInfo.InvariantCulture));
-        SetText(_titleBox, n.Title);
-        SetChecked(_autoBroadcastCheck, n.AutoBroadcast);
-        SetText(_runCountLabel, $"Active: {n.RunCount}");
-        SetText(_waitCountLabel, $"Queued: {n.WaitCount}");
-        SetText(_traceLabel, $"Order: {n.LastExecutionTrace}");
-        SetText(_statusLabel, $"Status: {n.LastStatus}");
-        SetText(_bodyDuration, n.LastDuration);
-        SetText(_errorLabel, $"Error: {n.LastError}");
-        SetText(_responseLabel, n.LastResponsePreview);
-        InputSlotButton!.ViewModel = n.InputSlot;
-        OutputSlotButton!.ViewModel = n.OutputSlot;
-    }
-
     private void ApplyController(ControllerViewModel c)
     {
         SetText(_seedBox, c.SeedPayload);
@@ -823,18 +600,7 @@ internal sealed class WorkflowNodeCard : UserControl
         combo.SelectedItem = selected;
     }
 
-    private void ApplyBoolSelector(BoolSelectorNodeViewModel b)
-    {
-        SetText(_titleLabel, b.Title);
-        SetText(_routedBadge, b.LastRouted);
-        SetVisible(_routedBadge, !string.IsNullOrEmpty(b.LastRouted) && b.LastRouted != "-");
-        SetChecked(_conditionCheck, b.Condition);
-        PopulateRouterModeCombo(b.CompileMode);
-        InputSlotButton!.ViewModel = b.InputSlot;
-        RebuildBoolSlots(b);
-    }
-
-    /// <summary>Populates the route compile-mode dropdown (shared by Bool/Enum cards).</summary>
+    /// <summary>Populates the route compile-mode dropdown (shared by router cards).</summary>
     private void PopulateRouterModeCombo(RouterCompileMode selected)
     {
         if (_routerModeCombo is null) return;
@@ -912,7 +678,7 @@ internal sealed class WorkflowNodeCard : UserControl
 
         for (var i = 0; i < inputs.Length; i++)
         {
-            _inputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+            _inputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             var btn = new Views.SlotView { Margin = new Padding(2, 4, 2, 4) };
             btn.ViewModel = inputs[i].Slot;
             _inputSlotsLayout.Controls.Add(btn, 0, i);
@@ -924,7 +690,7 @@ internal sealed class WorkflowNodeCard : UserControl
         }
         for (var i = 0; i < outputs.Length; i++)
         {
-            _outputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+            _outputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             var lbl = MakeLabel(Color.FromArgb(110, 198, 255), 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleRight);
             lbl.Dock = DockStyle.Fill;
             lbl.Text = outputs[i].Name;
@@ -937,20 +703,6 @@ internal sealed class WorkflowNodeCard : UserControl
 
         _inputSlotsLayout.ResumeLayout();
         _outputSlotsLayout.ResumeLayout();
-    }
-
-    // ── Dynamic slot rows (BoolSelector) ──────────────────────────────────────────
-    private void RebuildBoolSlots(BoolSelectorNodeViewModel b)
-    {
-        if (_outputSlotsLayout is null) return;
-
-        var entries = new (string Name, IWorkflowSlotViewModel? Slot)[]
-        {
-            ("False", b.FalseSlot),
-            ("True", b.TrueSlot),
-        };
-
-        RebuildDynamicSlots(entries, Color.FromArgb(110, 198, 255));
     }
 
     private void RebuildEnumSlots(EnumSelectorNodeViewModel e)
@@ -1001,7 +753,7 @@ internal sealed class WorkflowNodeCard : UserControl
 
         for (var i = 0; i < entries.Count; i++)
         {
-            _outputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+            _outputSlotsLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             var lbl = MakeLabel(labelColor, 8.8F, FontStyle.Bold, autoSize: false, ContentAlignment.MiddleRight);
             lbl.Dock = DockStyle.Fill;
             lbl.Text = entries[i].Name;
@@ -1044,39 +796,11 @@ internal sealed class WorkflowNodeCard : UserControl
         if (_node is not null) Refresh(_node);
     }
 
-    private void OnDelayTextChanged(object? sender, EventArgs e)
-    {
-        if (_updatingFromVm || _node is not NodeViewModel node || _delayBox is null) return;
-        if (int.TryParse(_delayBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) && node.DelayMilliseconds != v)
-            node.DelayMilliseconds = v;
-    }
-
-    private void OnTitleTextChanged(object? sender, EventArgs e)
-    {
-        if (_updatingFromVm || _node is not NodeViewModel node || _titleBox is null) return;
-        if (!string.Equals(node.Title, _titleBox.Text, StringComparison.Ordinal))
-            node.Title = _titleBox.Text;
-    }
-
-    private void OnAutoBroadcastChanged(object? sender, EventArgs e)
-    {
-        if (_updatingFromVm || _node is not NodeViewModel node || _autoBroadcastCheck is null) return;
-        if (node.AutoBroadcast != _autoBroadcastCheck.Checked)
-            node.AutoBroadcast = _autoBroadcastCheck.Checked;
-    }
-
     private void OnSeedTextChanged(object? sender, EventArgs e)
     {
         if (_updatingFromVm || _node is not ControllerViewModel c || _seedBox is null) return;
         if (!string.Equals(c.SeedPayload, _seedBox.Text, StringComparison.Ordinal))
             c.SeedPayload = _seedBox.Text;
-    }
-
-    private void OnConditionChanged(object? sender, EventArgs e)
-    {
-        if (_updatingFromVm || _node is not BoolSelectorNodeViewModel node || _conditionCheck is null) return;
-        if (node.Condition != _conditionCheck.Checked)
-            node.Condition = _conditionCheck.Checked;
     }
 
     private void OnScriptTextChanged(object? sender, EventArgs e)
@@ -1106,7 +830,6 @@ internal sealed class WorkflowNodeCard : UserControl
         if (_routerModeCombo.SelectedItem is not RouterCompileMode mode) return;
         switch (_node)
         {
-            case BoolSelectorNodeViewModel b when b.CompileMode != mode: b.CompileMode = mode; break;
             case EnumSelectorNodeViewModel en when en.CompileMode != mode: en.CompileMode = mode; break;
         }
     }
@@ -1152,13 +875,11 @@ internal sealed class WorkflowNodeCard : UserControl
 
     private void ResetRefs()
     {
-        _titleLabel = _orderBadge = _loadBadge = _durationValue = _routedBadge = null;
-        _delayBox = _titleBox = _seedBox = null;
-        _autoBroadcastCheck = _conditionCheck = null;
+        _titleLabel = _orderBadge = _routedBadge = null;
+        _seedBox = null;
         _enumCombo = null;
         _routerModeCombo = null;
-        _runCountLabel = _waitCountLabel = _traceLabel = _statusLabel = _bodyDuration = null;
-        _errorLabel = _responseLabel = _controllerDesc = null;
+        _controllerDesc = null;
         _outputSlotsLayout = null;
         _inputSlotsLayout = null;
         _scriptBox = null;
@@ -1219,6 +940,24 @@ internal sealed class WorkflowNodeCard : UserControl
     private static Panel MakeSection()
         => new() { Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = Padding.Empty, BackColor = DarkBody };
 
+    /// <summary>Wraps a growing port list in a vertical AutoScroll viewport so extra dynamic port
+    /// rows are reachable (never hard-clipped) and the strip keeps a small minimum height even when
+    /// the node collapses.</summary>
+    private static Panel MakePortStrip(Control inner, Color back)
+    {
+        var host = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            MinimumSize = new System.Drawing.Size(0, 28),
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = back,
+        };
+        host.Controls.Add(inner);
+        return host;
+    }
+
     private static Label MakeLabel(Color fore, float size, FontStyle style, bool autoSize,
         ContentAlignment align = ContentAlignment.MiddleLeft, string text = "")
         => new()
@@ -1246,44 +985,6 @@ internal sealed class WorkflowNodeCard : UserControl
             Padding = new Padding(6, 2, 6, 2),
             Visible = false,
         };
-
-    private TableLayoutPanel MakeEditorRow(string caption, out TextBox textBox)
-    {
-        var row = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 0, 0, 10),
-            Padding = Padding.Empty, BackColor = DarkBody,
-        };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        row.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 9F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, caption), 0, 0);
-        textBox = MakeTextBox();
-        textBox.TextChanged += caption.Contains("Delay") ? OnDelayTextChanged : OnTitleTextChanged;
-        row.Controls.Add(textBox, 1, 0);
-        return row;
-    }
-
-    private TableLayoutPanel MakeCheckRow(string caption, out CheckBox check)
-    {
-        var row = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 0, 0, 10),
-            Padding = Padding.Empty, BackColor = DarkBody,
-        };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        check = new CheckBox
-        {
-            Dock = DockStyle.Fill, Margin = Padding.Empty,
-            UseVisualStyleBackColor = false, BackColor = DarkBody,
-        };
-        check.CheckedChanged += OnAutoBroadcastChanged;
-        row.Controls.Add(check, 0, 0);
-        row.Controls.Add(MakeLabel(Color.FromArgb(220, 220, 220), 8.8F, FontStyle.Regular, autoSize: false, ContentAlignment.MiddleLeft, caption), 1, 0);
-        return row;
-    }
 
     private static TextBox MakeTextBox()
         => new()

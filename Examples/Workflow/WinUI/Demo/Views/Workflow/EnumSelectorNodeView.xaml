@@ -20,7 +20,7 @@
 
     <Grid Clip="{x:Null}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="48" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -60,6 +60,7 @@
         </Border>
 
         <Border Grid.Row="1" Background="#2a1e35" CornerRadius="0,0,4,4">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" MinHeight="40">
             <StackPanel Margin="14" Spacing="8">
                 <TextBlock Text="Selected Method" Foreground="#bfbfbf" FontSize="11"/>
                 <ComboBox ItemsSource="{Binding EnumValues}"
@@ -91,6 +92,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </StackPanel>
+            </ScrollViewer>
         </Border>
     </Grid>
 </UserControl>

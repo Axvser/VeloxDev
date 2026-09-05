@@ -66,7 +66,7 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     private string _title = "";
 
     // Execution feedback: read reflectively from the node view-model (present on the demo's
-    // NodeViewModel, BoolSelector and EnumSelector) so any card can show which step it ran in
+    // remaining node view-models, e.g. EnumSelector) so any card can show which step it ran in
     // (#N order badge) and glow while it is executing, mirroring the XAML adapters.
     private bool _isRunning;
     private bool _hasOrderBadge;
@@ -74,7 +74,7 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     private bool _hasLoadBadge;
     private string _loadText = "";
 
-    // Colors mirror NodeViewModel's running chrome (#FFD54A accent on amber-tinted surfaces) so
+    // Colors mirror the demo's running chrome (#FFD54A accent on amber-tinted surfaces) so
     // the Blazor card matches the WinForms/WPF running look.
     private const string RunningAccent = "#FFD54A";
     private const string RunningHeader = "#413612";

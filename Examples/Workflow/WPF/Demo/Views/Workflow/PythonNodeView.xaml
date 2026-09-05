@@ -56,13 +56,12 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Purpose description (one-two lines, ellipsized) -->
+                <!-- Purpose description (wraps; no hard cap) -->
                 <Border Grid.Row="0" Padding="12,3" BorderBrush="#30363D" BorderThickness="0,0,0,1">
                     <TextBlock Text="{Binding Description}"
                                Foreground="#8B949E"
                                FontSize="10"
-                               TextWrapping="Wrap"
-                               MaxHeight="26" />
+                               TextWrapping="Wrap" />
                 </Border>
 
                 <Grid Grid.Row="1">
@@ -72,9 +71,11 @@
                     <ColumnDefinition Width="64" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Input port strip (fixed, left) -->
-                <ItemsControl Grid.Column="0"
-                              ItemsSource="{Binding InputSlots.Items}"
+                <!-- Input port strip (scrollable, left) -->
+                <ScrollViewer Grid.Column="0"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding InputSlots.Items}"
                               x:Name="PART_InputSlotsList"
                               ClipToBounds="False"
                               VerticalAlignment="Stretch">
@@ -105,6 +106,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </ScrollViewer>
 
                 <!-- Python editor frame: a file-tab header, a dark code editor (the only part that scrolls), and a status bar. -->
                 <Border Grid.Column="1"
@@ -163,9 +165,11 @@
                     </DockPanel>
                 </Border>
 
-                <!-- Output port strip (fixed, right) -->
-                <ItemsControl Grid.Column="2"
-                              ItemsSource="{Binding OutputSlots.Items}"
+                <!-- Output port strip (scrollable, right) -->
+                <ScrollViewer Grid.Column="2"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding OutputSlots.Items}"
                               x:Name="PART_OutputSlotsList"
                               ClipToBounds="False"
                               HorizontalAlignment="Right"
@@ -198,6 +202,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </ScrollViewer>
                 </Grid>
             </Grid>
         </Border>

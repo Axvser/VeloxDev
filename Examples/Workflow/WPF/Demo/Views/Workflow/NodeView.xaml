@@ -93,7 +93,7 @@
         </Border>
 
         <Border Grid.Row="1" Background="#252525">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" MinHeight="40">
                 <StackPanel Margin="14">
                     <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
@@ -129,7 +129,7 @@
                             <TextBlock Text="{Binding LastStatus, StringFormat=Status: {0}}" Foreground="White" FontWeight="SemiBold" />
                             <TextBlock Text="{Binding LastDuration}" Foreground="{Binding DurationForeground}" FontSize="24" FontWeight="Bold" />
                             <TextBlock Text="{Binding LastError, StringFormat=Error: {0}}" Foreground="#FF9B9B" TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding LastResponsePreview}" Foreground="#CFCFCF" TextWrapping="Wrap" MaxHeight="90" />
+                            <TextBlock Text="{Binding LastResponsePreview}" Foreground="#CFCFCF" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

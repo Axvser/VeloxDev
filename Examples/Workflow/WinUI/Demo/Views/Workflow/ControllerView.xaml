@@ -16,9 +16,9 @@
 
     <Grid Clip="{x:Null}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="52" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="88" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Border Grid.RowSpan="3"
@@ -39,7 +39,7 @@
         </Border>
 
         <Border Grid.Row="1" Background="#252525" Padding="12">
-            <ScrollViewer>
+            <ScrollViewer MinHeight="40">
             <StackPanel Spacing="4">
                 <TextBlock Text="Seed" Foreground="#DCDCDC" FontSize="11" />
                 <TextBox FontSize="11"

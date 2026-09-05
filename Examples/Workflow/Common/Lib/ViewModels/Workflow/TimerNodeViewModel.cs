@@ -14,6 +14,7 @@ namespace Demo.ViewModels;
 [AgentContext(AgentLanguages.Chinese, "定时器节点：作为数据源，每次执行产出当前时间戳，并通过单一路由键 tick 扇出到所有下游（供并行计算与汇合演示）。默认大小 200×140")]
 [AgentContext(AgentLanguages.English, "Timer node: acts as a data source that emits the current timestamp each run and fans out to all downstream targets via the single route key 'tick' (for parallel computation and join demos). Default size: 200×140")]
 [WorkflowBuilder.Node<TimerHelper>(workSemaphore: 1)]
+[DefaultSize(200, 140)]
 public partial class TimerNodeViewModel : ICompileTimeRouter, ICompileTimeAware
 {
     public TimerNodeViewModel() => InitializeWorkflow();

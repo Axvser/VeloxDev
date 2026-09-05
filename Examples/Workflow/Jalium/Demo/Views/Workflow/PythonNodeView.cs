@@ -34,7 +34,6 @@ internal sealed class PythonNodeView : NodeViewBase
                 Foreground = NodeChrome.SubFg,
                 FontSize = 10,
                 TextWrapping = TextWrapping.Wrap,
-                MaxHeight = 28,
                 Margin = new Thickness(12, 6, 12, 4),
             };
             Grid.SetRow(desc, 0);

@@ -19,7 +19,7 @@
 
     <Grid Clip="{x:Null}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="40" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
@@ -50,15 +50,15 @@
         </Border>
 
         <Border Grid.Row="1" Padding="12,3" BorderBrush="#30363d" BorderThickness="0,0,0,1">
-            <TextBlock Text="{Binding Description}" Foreground="#8b949e" FontSize="10" TextWrapping="Wrap" MaxHeight="26"/>
+            <TextBlock Text="{Binding Description}" Foreground="#8b949e" FontSize="10" TextWrapping="Wrap"/>
         </Border>
 
         <Border Grid.Row="2" Background="#1e2a35" CornerRadius="0,0,4,4">
             <Grid Clip="{x:Null}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <!-- Input port strip (fixed, left) -->
@@ -114,6 +114,7 @@
                         <TextBox Grid.Row="1"
                                  Text="{Binding Script, UpdateSourceTrigger=PropertyChanged}"
                                  AcceptsReturn="True"
+                                 MinHeight="40"
                                  TextWrapping="NoWrap"
                                  FontFamily="Consolas"
                                  FontSize="12"

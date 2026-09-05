@@ -68,12 +68,14 @@
 		</Border>
 
 		<Border Grid.Row="1" Background="#1e2a35" CornerRadius="0,0,4,4">
+			<ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
 			<StackPanel Margin="14" Spacing="6">
 				<TextBlock Text="Interval (ms)" Foreground="#bfbfbf" FontSize="11"/>
 				<TextBox Text="{Binding IntervalMilliseconds, UpdateSourceTrigger=PropertyChanged}" FontSize="11"/>
 				<TextBlock Text="Last Tick" Foreground="#bfbfbf" FontSize="11"/>
 				<TextBlock Text="{Binding LastTick}" Foreground="#6ec6ff" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap"/>
 			</StackPanel>
+			</ScrollViewer>
 		</Border>
 	</Grid>
 </UserControl>

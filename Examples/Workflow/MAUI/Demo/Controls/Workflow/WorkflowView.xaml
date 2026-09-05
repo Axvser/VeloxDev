@@ -13,17 +13,13 @@
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
              behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder">
     <ContentView.Resources>
-        <DataTemplate x:Key="NodeTemplate" x:DataType="vm:NodeViewModel">
+        <DataTemplate x:Key="NodeTemplate">
             <controls:NodeView WidthRequest="{Binding Size.Width}"
                                HeightRequest="{Binding Size.Height}" />
         </DataTemplate>
         <DataTemplate x:Key="ControllerTemplate" x:DataType="vm:ControllerViewModel">
             <controls:ControllerView WidthRequest="{Binding Size.Width}"
                                      HeightRequest="{Binding Size.Height}" />
-        </DataTemplate>
-        <DataTemplate x:Key="BoolSelectorTemplate" x:DataType="vm:BoolSelectorNodeViewModel">
-            <controls:BoolSelectorNodeView WidthRequest="{Binding Size.Width}"
-                                           HeightRequest="{Binding Size.Height}" />
         </DataTemplate>
         <DataTemplate x:Key="EnumSelectorTemplate" x:DataType="vm:EnumSelectorNodeViewModel">
             <controls:EnumSelectorNodeView WidthRequest="{Binding Size.Width}"
@@ -40,7 +36,6 @@
         <controls:CustomTemplateSelector x:Key="NodeSelector"
                                          ControllerTemplate="{StaticResource ControllerTemplate}"
                                          NodeTemplate="{StaticResource NodeTemplate}"
-                                         BoolSelectorTemplate="{StaticResource BoolSelectorTemplate}"
                                          EnumSelectorTemplate="{StaticResource EnumSelectorTemplate}"
                                          PythonTemplate="{StaticResource PythonTemplate}"
                                          TimerTemplate="{StaticResource TimerTemplate}" />

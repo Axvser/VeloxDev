@@ -153,7 +153,7 @@ public partial class TreeViewModel
 
     public void RefreshWorkflowRunningState()
     {
-        var isRunning = Nodes.OfType<NodeViewModel>().Any(node => node.IsRunning || node.RunCount > 0 || node.WaitCount > 0);
+        var isRunning = Nodes.OfType<ControllerViewModel>().Any(c => c.IsActive);
         SetWorkflowRunning(isRunning);
     }
 
@@ -161,19 +161,6 @@ public partial class TreeViewModel
     {
         ExecutionLog.Clear();
         _executionSequence = 0;
-
-        foreach (var node in Nodes.OfType<NodeViewModel>())
-        {
-            node.LastExecutionOrder = 0;
-            node.LastExecutionTrace = "未执行";
-            node.LastStatus = "Idle";
-            node.LastDuration = "-";
-            node.LastError = string.Empty;
-            node.IsRunning = false;
-            node.RunCount = 0;
-            node.WaitCount = 0;
-        }
-
         SetWorkflowRunning(false);
     }
 
@@ -265,26 +252,6 @@ public partial class TreeViewModel
         var json = this.Serialize();
         using var writer = new StreamWriter(path, append: false);
         await writer.WriteAsync(json).ConfigureAwait(false);
-    }
-
-    [VeloxCommand]
-    private Task AgentContextTest()
-    {
-        var context = this.AsAgentScope()
-            .WithPromptLanguage(AgentLanguages.Chinese)
-            .WithComponents([
-                typeof(NodeViewModel),
-                typeof(ControllerViewModel),
-                typeof(SlotViewModel),
-                typeof(LinkViewModel),
-                typeof(TreeViewModel)])
-            .ProvideAllContexts(AgentLanguages.English);
-
-        ExecutionLog.Add(context);
-
-        File.WriteAllText(@"E://agent.md", context);
-
-        return Task.CompletedTask;
     }
 
     private void SetWorkflowRunning(bool isRunning)

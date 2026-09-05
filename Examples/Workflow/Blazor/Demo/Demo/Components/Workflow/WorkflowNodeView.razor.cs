@@ -1,84 +1,30 @@
-using Demo.ViewModels;
 using Microsoft.AspNetCore.Components;
 using System.ComponentModel;
+using VeloxDev.WorkflowSystem;
 
 namespace Demo.Components.Workflow;
 
+/// <summary>
+/// Generic catch-all node body. The demo's node types (Controller/Timer/Enum/Python) each get a
+/// dedicated body view; this generic body is only used for node types without a specific view.
+/// It no longer depends on the pruned plain-worker/Bool-selector view-models, so it reads only
+/// what <see cref="IWorkflowNodeViewModel"/> exposes and lets the surrounding
+/// <see cref="TemplateNodeView"/> card render title/execution feedback.
+/// </summary>
 public partial class WorkflowNodeView : ComponentBase, IDisposable
 {
     [Parameter]
-    public NodeViewModel? Node { get; set; }
-
-    private string _title = "";
-    private string _duration = "";
-    private string _statusText = "";
-    private string _traceText = "";
-    private int _delayMs;
-    private bool _autoBroadcast;
-    private bool _hasOrderBadge;
-    private bool _hasLoadBadge;
-    private string _orderText = "";
-    private string _loadText = "";
-
-    private bool HasFeedback => _hasOrderBadge || _hasLoadBadge || !string.IsNullOrEmpty(_statusText);
+    public IWorkflowNodeViewModel? Node { get; set; }
 
     protected override void OnInitialized()
     {
-        SyncFromViewModel();
         if (Node is INotifyPropertyChanged n)
             n.PropertyChanged += OnNodePropertyChanged;
     }
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        InvokeAsync(() =>
-        {
-            SyncFromViewModel();
-            StateHasChanged();
-        });
-    }
-
-    private void SyncFromViewModel()
-    {
-        if (Node is null) return;
-        _title = Node.Title;
-        _duration = Node.LastDuration;
-        _statusText = Node.LastStatus;
-        _traceText = Node.LastExecutionTrace;
-        _orderText = Node.ExecutionOrderText;
-        _loadText = Node.WorkLoadText;
-        _delayMs = Node.DelayMilliseconds;
-        _autoBroadcast = Node.AutoBroadcast;
-        _hasOrderBadge = Node.HasExecutionOrder;
-        _hasLoadBadge = Node.HasWorkLoad;
-    }
-
-    private string GetBorderStyle() => Node?.ChromeBorderBrush is { } b
-        ? $"border-color:{b};" : "border-color:#4B5563;";
-
-    private string GetHeaderStyle() => Node?.HeaderBackground is { } h
-        ? $"background:{h};" : "background:#2d2d2d;";
-
-    private string GetDurationStyle() => Node?.DurationForeground is { } f
-        ? $"color:{f};" : "color:#7EC8FF;";
-
-    private void OnDelayChanged(ChangeEventArgs e)
-    {
-        if (Node is null) return;
-        if (int.TryParse(e.Value?.ToString(), out var ms))
-            Node.DelayMilliseconds = ms;
-    }
-
-    private void OnTitleChanged(ChangeEventArgs e)
-    {
-        if (Node is null) return;
-        Node.Title = e.Value?.ToString() ?? "";
-    }
-
-    private void OnAutoBroadcastChanged(ChangeEventArgs e)
-    {
-        if (Node is null) return;
-        Node.AutoBroadcast = e.Value?.ToString() == "true";
+        InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
