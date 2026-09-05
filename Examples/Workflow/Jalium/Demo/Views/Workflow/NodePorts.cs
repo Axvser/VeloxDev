@@ -50,19 +50,44 @@ internal static class NodePorts
     public static string TitleOf(IWorkflowNodeViewModel node)
         => node.GetType().GetProperty("Title")?.GetValue(node)?.ToString() ?? string.Empty;
 
+    /// <summary>Vertical space under the title bar that port rows may occupy at the DESIGN size (a small
+    /// bottom gap is reserved so packed rows do not touch the card's lower edge).</summary>
+    public static double RowUsableHeight(double designHeight)
+        => System.Math.Max(0, designHeight - TitleBarH - 6);
+
+    /// <summary>Vertical pitch between consecutive port rows so an arbitrary number of dynamic rows stays
+    /// on the card: the fixed <see cref="RowH"/> when the rows fit under the title bar, otherwise the pitch
+    /// is compressed to the usable height so no row is pushed below the card (best-effort packing).</summary>
+    public static double RowPitchFor(int count, double designHeight)
+    {
+        if (count <= 0)
+        {
+            return RowH;
+        }
+
+        double usable = RowUsableHeight(designHeight);
+        return count * RowH <= usable ? RowH : System.Math.Max(4, usable / count);
+    }
+
     /// <summary>Input port center at the DESIGN size (used to compute the scaled world center).</summary>
     public static Point InputCenterLocalDesign(IWorkflowNodeViewModel node, int i, double designHeight)
     {
-        double y = Inputs(node).Count > 1
-            ? TitleBarH + RowH * i + RowH / 2
-            : designHeight / 2;
-        return new Point(InputPortX, y);
+        int count = Inputs(node).Count;
+        if (count <= 1)
+        {
+            return new Point(InputPortX, designHeight / 2);
+        }
+
+        double pitch = RowPitchFor(count, designHeight);
+        return new Point(InputPortX, TitleBarH + pitch * i + pitch / 2);
     }
 
     /// <summary>Output port center at the DESIGN size (used to compute the scaled world center).</summary>
-    public static Point OutputCenterLocalDesign(IWorkflowNodeViewModel node, int i, double designWidth)
+    public static Point OutputCenterLocalDesign(IWorkflowNodeViewModel node, int i, double designWidth, double designHeight)
     {
-        double y = TitleBarH + RowH * i + RowH / 2;
+        int count = Outputs(node).Count;
+        double pitch = RowPitchFor(count, designHeight);
+        double y = TitleBarH + pitch * i + pitch / 2;
         return new Point(designWidth - OutputInset, y);
     }
 

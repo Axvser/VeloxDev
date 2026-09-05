@@ -57,11 +57,15 @@
 					</Style>
 				</Grid.Styles>
 
-				<!-- Input port strip (scrollable, left) -->
-				<ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+				<!-- Input port strip (scrollable, left). Viewport extends 8px past the card edge and the content is
+					 inset 8px so the -8px edge port glyph stays centered on the card edge yet never horizontally
+					 clipped; rows scroll when they exceed the body height. -->
+				<ScrollViewer Grid.Column="0" MinHeight="40" Margin="-8,0,0,0"
+							  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
 				<ItemsControl
 							  ItemsSource="{Binding InputSlots.Items}"
 							  x:Name="PART_InputSlotsList"
+							  Margin="8,0,0,0"
 							  ClipToBounds="False">
 					<ItemsControl.ItemTemplate>
 						<DataTemplate>
@@ -111,11 +115,14 @@
 					</DockPanel>
 				</Border>
 
-				<!-- Output port strip (scrollable, right) -->
-				<ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+				<!-- Output port strip (scrollable, right). Mirror of the left strip: viewport extends 8px past the
+					 right card edge and content is inset 8px so the edge port glyph is never clipped horizontally. -->
+				<ScrollViewer Grid.Column="2" MinHeight="40" Margin="0,0,-8,0"
+							  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
 				<ItemsControl
 							  ItemsSource="{Binding OutputSlots.Items}"
 							  x:Name="PART_OutputSlotsList"
+							  Margin="0,0,8,0"
 							  ClipToBounds="False"
 							  HorizontalAlignment="Right">
 					<ItemsControl.ItemTemplate>

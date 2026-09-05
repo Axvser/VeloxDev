@@ -55,9 +55,10 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="1" Background="#2a1e35" CornerRadius="0,0,4,4">
+        <Border Grid.Row="1" Background="#2a1e35" CornerRadius="0,0,4,4" ClipToBounds="True">
             <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
+                          HorizontalScrollBarVisibility="Disabled"
+                          MinHeight="40">
             <StackPanel Margin="14">
                 <TextBlock Text="Selected Method" Foreground="#bfbfbf" FontSize="11"/>
                 <ComboBox Margin="0,4,0,0"

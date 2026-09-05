@@ -60,7 +60,7 @@
         </Border>
 
         <Border Grid.Row="1" Background="#2a1e35" CornerRadius="0,0,4,4">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" MinHeight="40">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="14" Spacing="8">
                 <TextBlock Text="Selected Method" Foreground="#bfbfbf" FontSize="11"/>
                 <ComboBox ItemsSource="{Binding EnumValues}"
@@ -72,6 +72,11 @@
                           HorizontalAlignment="Stretch"/>
                 <TextBlock Text="Output Slots" Foreground="#bfbfbf" FontSize="11" Margin="0,6,0,0"/>
                 <ItemsControl ItemsSource="{Binding OutputSlots.Items}" x:Name="PART_OutputSlotsList">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Grid Margin="0,2">

@@ -46,6 +46,7 @@ internal abstract class NodeViewBase : Canvas
     protected void AddOutputLabels(Grid content)
     {
         var outputs = NodePorts.Outputs(Node);
+        double pitch = NodePorts.RowPitchFor(outputs.Count, DesignHeight);
         var grid = new Grid
         {
             HorizontalAlignment = HorizontalAlignment.Right,
@@ -59,7 +60,7 @@ internal abstract class NodeViewBase : Canvas
                 continue;
             }
 
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.FromPixels(NodePorts.RowH) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.FromPixels(pitch) });
             var label = new TextBlock
             {
                 Text = outputs[i].Name,
@@ -166,7 +167,7 @@ internal abstract class NodeViewBase : Canvas
         var outputs = NodePorts.Outputs(Node);
         for (int i = 0; i < outputs.Count; i++)
         {
-            dc.DrawEllipse(PortBrush(_outputStates[i]), null, NodePorts.OutputCenterLocalDesign(Node, i, DesignWidth), 7, 7);
+            dc.DrawEllipse(PortBrush(_outputStates[i]), null, NodePorts.OutputCenterLocalDesign(Node, i, DesignWidth, DesignHeight), 7, 7);
         }
     }
 

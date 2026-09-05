@@ -214,7 +214,8 @@ internal sealed class NodeEditorSurface : Canvas
     {
         _cards.TryGetValue(node, out var card);
         var designWidth = card?.DesignWidth ?? node.Size.Width;
-        return ScaledCenter(node, NodePorts.OutputCenterLocalDesign(node, i, designWidth));
+        var designHeight = card?.DesignHeight ?? node.Size.Height;
+        return ScaledCenter(node, NodePorts.OutputCenterLocalDesign(node, i, designWidth, designHeight));
     }
 
     private Point GetSlotPortCenter(IWorkflowSlotViewModel slot)

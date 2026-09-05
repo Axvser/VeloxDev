@@ -467,6 +467,8 @@ html, body {
     gap: 4px;
     flex: 1;
     min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 .selector-slot-row {
     display: flex;
@@ -474,6 +476,7 @@ html, body {
     justify-content: flex-end;
     gap: 6px;
     margin-right: -16px;
+    flex: 0 0 auto;
 }
 .selector-slot-label {
     font-size: 11px;

@@ -38,9 +38,9 @@
 
         <Border Grid.Row="2" BackgroundColor="#1E2A35" StrokeShape="RoundRectangle 0,0,4,4">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <!-- Input port strip (fixed, left) -->
+                <!-- Input port strip (fixed, left; scrolls when the dynamic slots outgrow the body) -->
+                <ScrollView Grid.Column="0" Orientation="Vertical">
                 <VerticalStackLayout x:Name="PART_InputSlotsList"
-                                     Grid.Column="0"
                                      BindableLayout.ItemsSource="{Binding InputSlots.Items}"
                                      Spacing="2">
                     <BindableLayout.ItemTemplate>
@@ -67,6 +67,7 @@
                         </DataTemplate>
                     </BindableLayout.ItemTemplate>
                 </VerticalStackLayout>
+                </ScrollView>
 
                 <!-- Script editor -->
                 <Border Grid.Column="1" Margin="4,6" Stroke="#30363D" StrokeThickness="1" StrokeShape="RoundRectangle 4" BackgroundColor="#0D1117">
@@ -88,9 +89,9 @@
                     </Grid>
                 </Border>
 
-                <!-- Output port strip (fixed, right) -->
+                <!-- Output port strip (fixed, right; scrolls when the dynamic slots outgrow the body) -->
+                <ScrollView Grid.Column="2" Orientation="Vertical">
                 <VerticalStackLayout x:Name="PART_OutputSlotsList"
-                                     Grid.Column="2"
                                      BindableLayout.ItemsSource="{Binding OutputSlots.Items}"
                                      Spacing="2"
                                      HorizontalOptions="End">
@@ -118,6 +119,7 @@
                         </DataTemplate>
                     </BindableLayout.ItemTemplate>
                 </VerticalStackLayout>
+                </ScrollView>
             </Grid>
         </Border>
     </Grid>

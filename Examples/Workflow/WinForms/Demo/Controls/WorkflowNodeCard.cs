@@ -42,6 +42,7 @@ internal sealed class WorkflowNodeCard : UserControl
     private TableLayoutPanel? _outputSlotsLayout;
     private readonly List<(Label label, Views.SlotView slot)> _dynamicSlotRows = [];
     private TableLayoutPanel? _inputSlotsLayout;
+    private Panel? _enumBodyHost;
     private TextBox? _scriptBox;
     private Label? _descriptionLabel;
     private Label? _pythonStatusLabel;
@@ -219,6 +220,27 @@ internal sealed class WorkflowNodeCard : UserControl
     {
         base.OnLayout(levent);
         PositionOverlaySlotButtons();
+        ClampEnumBodyToCard();
+    }
+
+    /// <summary>
+    /// The Enum body is an AutoScroll host whose fixed 40px MinimumSize can exceed the collapsed card's
+    /// body row when the workspace is zoomed out (node height shrinks below header + body min). WinForms
+    /// clips child windows at the card bounds, but a minimum larger than the row would still shove the
+    /// host's lower scrollbar/viewport past the card border where it becomes unreachable. Cap the minimum
+    /// at the actual body-row height so the scroll/clip body always ends exactly at the card border and the
+    /// Enum output rows stay reachable inside it.
+    /// </summary>
+    private void ClampEnumBodyToCard()
+    {
+        if (_enumBodyHost is null || _bodyPanel is null) return;
+
+        var available = Math.Max(0, _bodyPanel.ClientSize.Height);
+        var min = new System.Drawing.Size(0, Math.Min(40, available));
+        if (_enumBodyHost.MinimumSize != min)
+        {
+            _enumBodyHost.MinimumSize = min;
+        }
     }
 
     /// <summary>Positions the floating slot buttons at the card's left-center / right-center edges.</summary>
@@ -393,6 +415,7 @@ internal sealed class WorkflowNodeCard : UserControl
             Margin = Padding.Empty, Padding = Padding.Empty,
             BackColor = Color.FromArgb(42, 30, 53),
         };
+        _enumBodyHost = bodyHost;
         var bodyTlp = new TableLayoutPanel
         {
             Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
@@ -882,6 +905,7 @@ internal sealed class WorkflowNodeCard : UserControl
         _controllerDesc = null;
         _outputSlotsLayout = null;
         _inputSlotsLayout = null;
+        _enumBodyHost = null;
         _scriptBox = null;
         _descriptionLabel = null;
         _pythonStatusLabel = null;

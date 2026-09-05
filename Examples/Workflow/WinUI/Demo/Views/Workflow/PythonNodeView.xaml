@@ -61,38 +61,46 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Input port strip (fixed, left) -->
-                <ItemsControl Grid.Column="0"
-                              ItemsSource="{Binding InputSlots.Items}"
-                              x:Name="PART_InputSlotsList"
-                              Clip="{x:Null}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,4" Clip="{x:Null}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <local:SlotView Grid.Column="0"
-                                                Width="16" Height="16"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Center"
-                                                Margin="-8,0,0,0"
-                                                DataContext="{Binding Slot}"
-                                                SlotState="{Binding State}"/>
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding Name}"
-                                           Foreground="#6ec6ff"
-                                           FontWeight="SemiBold"
-                                           FontSize="11"
-                                           VerticalAlignment="Center"
-                                           HorizontalAlignment="Left"
-                                           Margin="4,0,0,0"
-                                           TextTrimming="CharacterEllipsis"/>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <!-- Input port strip (fixed, left; scrolls when the dynamic slots outgrow the body) -->
+                <ScrollViewer Grid.Column="0"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding InputSlots.Items}"
+                                  x:Name="PART_InputSlotsList"
+                                  Clip="{x:Null}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4" Clip="{x:Null}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <local:SlotView Grid.Column="0"
+                                                    Width="16" Height="16"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Center"
+                                                    Margin="-8,0,0,0"
+                                                    DataContext="{Binding Slot}"
+                                                    SlotState="{Binding State}"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Name}"
+                                               Foreground="#6ec6ff"
+                                               FontWeight="SemiBold"
+                                               FontSize="11"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Left"
+                                               Margin="4,0,0,0"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
 
                 <!-- Script editor -->
                 <Border Grid.Column="1" Margin="4,6" BorderBrush="#30363d" BorderThickness="1" CornerRadius="4" Background="#0d1117">
@@ -126,39 +134,47 @@
                     </Grid>
                 </Border>
 
-                <!-- Output port strip (fixed, right) -->
-                <ItemsControl Grid.Column="2"
-                              ItemsSource="{Binding OutputSlots.Items}"
-                              x:Name="PART_OutputSlotsList"
-                              Clip="{x:Null}"
-                              HorizontalAlignment="Right">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,4" Clip="{x:Null}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0"
-                                           Text="{Binding Name}"
-                                           Foreground="#6ec6ff"
-                                           FontWeight="SemiBold"
-                                           FontSize="11"
-                                           VerticalAlignment="Center"
-                                           HorizontalAlignment="Right"
-                                           Margin="0,0,4,0"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <local:SlotView Grid.Column="1"
-                                                Width="16" Height="16"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Center"
-                                                Margin="0,0,-8,0"
-                                                DataContext="{Binding Slot}"
-                                                SlotState="{Binding State}"/>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <!-- Output port strip (fixed, right; scrolls when the dynamic slots outgrow the body) -->
+                <ScrollViewer Grid.Column="2"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding OutputSlots.Items}"
+                                  x:Name="PART_OutputSlotsList"
+                                  Clip="{x:Null}"
+                                  HorizontalAlignment="Right">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4" Clip="{x:Null}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding Name}"
+                                               Foreground="#6ec6ff"
+                                               FontWeight="SemiBold"
+                                               FontSize="11"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Right"
+                                               Margin="0,0,4,0"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <local:SlotView Grid.Column="1"
+                                                    Width="16" Height="16"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    Margin="0,0,-8,0"
+                                                    DataContext="{Binding Slot}"
+                                                    SlotState="{Binding State}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
             </Grid>
         </Border>
     </Grid>

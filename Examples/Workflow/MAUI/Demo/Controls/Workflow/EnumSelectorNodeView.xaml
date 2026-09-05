@@ -43,7 +43,7 @@
         </Border>
 
         <Border Grid.Row="1" BackgroundColor="#2A1E35" StrokeShape="RoundRectangle 0,0,4,4">
-            <ScrollView MinimumHeightRequest="40">
+            <ScrollView>
             <VerticalStackLayout Margin="14" Spacing="8">
                 <Label Text="Selected Method" TextColor="#BFBFBF" FontSize="11" />
                 <Picker Title="Select Method"
