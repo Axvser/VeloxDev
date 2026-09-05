@@ -416,6 +416,106 @@ public class WorkflowSurfaceMathTests
         Assert.AreEqual(0d, layout.PositiveOffset.Vertical);
     }
 
+    // ── Discrete (proportional) overscroll growth — extendRatio ─────────────
+
+    [TestMethod]
+    public void ClampScrollOffset_RatioZero_ExactExcessBackCompat()
+    {
+        // Default ratio (0) reproduces the pixel-for-pixel behaviour byte-for-byte: positive edge returns
+        // max with PositiveOffset += excess; negative edge returns 0 with NegativeOffset += excess.
+        var layout = new CanvasLayout();
+        Assert.AreEqual(1000d, WorkflowSurfaceMath.ClampScrollOffset(1100, 1000, layout, horizontal: false));
+        Assert.AreEqual(100d, layout.PositiveOffset.Vertical);
+
+        var negative = new CanvasLayout();
+        Assert.AreEqual(0d, WorkflowSurfaceMath.ClampScrollOffset(-50, 1000, negative, horizontal: true));
+        Assert.AreEqual(50d, negative.NegativeOffset.Horizontal);
+    }
+
+    [TestMethod]
+    public void ClampScrollOffset_PositiveOvershoot_RatioBeatsExcess_GrowsQuantum()
+    {
+        // Vertical base extent is the default OriginSize height 1080 → quantum = 0.15 × 1080 = 162 > excess 5.
+        var layout = new CanvasLayout();
+        var scroll = WorkflowSurfaceMath.ClampScrollOffset(2005, 2000, layout, horizontal: false, extendRatio: 0.15);
+        Assert.AreEqual(2000d, scroll);
+        Assert.AreEqual(0d, layout.PositiveOffset.Horizontal);
+        Assert.AreEqual(162d, layout.PositiveOffset.Vertical, 1e-9);
+        Assert.AreEqual(0d, layout.NegativeOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void ClampScrollOffset_PositiveOvershoot_ExcessBeatsRatio_GrowsExcess()
+    {
+        // excess 300 > quantum 162 → the exact overshoot wins; growth never less than the excess.
+        var layout = new CanvasLayout();
+        var scroll = WorkflowSurfaceMath.ClampScrollOffset(2300, 2000, layout, horizontal: false, extendRatio: 0.15);
+        Assert.AreEqual(2000d, scroll);
+        Assert.AreEqual(300d, layout.PositiveOffset.Vertical);
+    }
+
+    [TestMethod]
+    public void ClampScrollOffset_NegativeOvershoot_Ratio_GrowsQuantumReturnsCompensation()
+    {
+        // Horizontal base 1920 → quantum = 0.15 × 1920 = 288 > excess 50. Discrete growth on the negative
+        // edge must return the grown amount so the caller scrolls forward by it, cancelling the ActualOffset
+        // translate and keeping the grabbed content stable (no lurch).
+        var layout = new CanvasLayout();
+        var scroll = WorkflowSurfaceMath.ClampScrollOffset(-50, 1000, layout, horizontal: true, extendRatio: 0.15);
+        Assert.AreEqual(288d, scroll, 1e-9);
+        Assert.AreEqual(288d, layout.NegativeOffset.Horizontal, 1e-9);
+        Assert.AreEqual(0d, layout.NegativeOffset.Vertical);
+        Assert.AreEqual(0d, layout.PositiveOffset.Horizontal);
+    }
+
+    [TestMethod]
+    public void ClampScrollOffset_NegativeOvershoot_RatioZero_ReturnsZero()
+    {
+        // Without a ratio the negative growth is the pan itself → return stays 0 (back-compat).
+        var layout = new CanvasLayout();
+        var scroll = WorkflowSurfaceMath.ClampScrollOffset(-50, 1000, layout, horizontal: true, extendRatio: 0d);
+        Assert.AreEqual(0d, scroll);
+        Assert.AreEqual(50d, layout.NegativeOffset.Horizontal);
+    }
+
+    [TestMethod]
+    public void ClampScrollOffset_ThresholdSuppressesRatioGrowth()
+    {
+        // The dead-band gates before any growth: extendRatio must not bypass it.
+        var layout = new CanvasLayout();
+        Assert.AreEqual(1000d, WorkflowSurfaceMath.ClampScrollOffset(1004, 1000, layout, horizontal: true, threshold: 20, extendRatio: 0.15));
+        Assert.AreEqual(0d, layout.PositiveOffset.Horizontal);
+        Assert.AreEqual(0d, layout.NegativeOffset.Horizontal);
+    }
+
+    [TestMethod]
+    public void ClampScrollOffset_BaseIncludesOriginPlusNegPlusPos()
+    {
+        // base = Origin 500 + Negative 200 + Positive 300 = 1000 → quantum 150; the pre-seeded offsets are
+        // part of the extent the quantum scales with (300 + 150 = 450).
+        var layout = new CanvasLayout
+        {
+            OriginSize = new Size(500, 100),
+            NegativeOffset = new Offset(200, 0),
+            PositiveOffset = new Offset(300, 0),
+        };
+        var scroll = WorkflowSurfaceMath.ClampScrollOffset(510, 500, layout, horizontal: true, extendRatio: 0.15);
+        Assert.AreEqual(500d, scroll);
+        Assert.AreEqual(450d, layout.PositiveOffset.Horizontal, 1e-9);
+    }
+
+    [TestMethod]
+    public void ClampScrollOffset_Negative_CompensationNeverExceedsNewReachability()
+    {
+        // The scroll target the caller must apply (the returned growth) stays within reach: growing
+        // NegativeOffset by G grows ActualSize by ≥ G at every scale, so G ≤ new max is guaranteed.
+        var layout = new CanvasLayout();
+        var compensation = WorkflowSurfaceMath.ClampScrollOffset(-50, 1000, layout, horizontal: true, extendRatio: 0.15);
+        Assert.AreEqual(288d, compensation, 1e-9);
+        Assert.AreEqual(1920d + 288d, layout.ActualSize.Width, 1e-6); // default Origin 1920 + Negative 288, scale 1
+        Assert.IsTrue(compensation <= layout.ActualSize.Width);
+    }
+
     // ── Slot anchors ────────────────────────────────────────────────────────
 
     [TestMethod]

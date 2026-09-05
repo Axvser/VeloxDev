@@ -524,8 +524,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var maxH = GetHorizontalScrollMaximum(state.ScrollViewer);
         var maxV = GetVerticalScrollMaximum(state.ScrollViewer);
 
-        var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, viewModel.Layout, horizontal: true);
-        var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, viewModel.Layout, horizontal: false);
+        var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(
+            desiredX, maxH, viewModel.Layout, horizontal: true, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio);
+        var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(
+            desiredY, maxV, viewModel.Layout, horizontal: false, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio);
         var layoutChanged = newOffsetX != desiredX || newOffsetY != desiredY;
 
         if (layoutChanged)

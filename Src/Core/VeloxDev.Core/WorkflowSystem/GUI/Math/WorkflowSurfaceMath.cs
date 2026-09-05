@@ -16,6 +16,14 @@ namespace VeloxDev.WorkflowSystem;
 [AgentContext(AgentLanguages.English, "Pure coordinate math shared by workflow-surface adapters: viewport, pan overscroll, grid, slot anchor, minimap")]
 public static class WorkflowSurfaceMath
 {
+    /// <summary>
+    /// Default proportional growth for continuous drag-pan overscroll: when a pan pushes past a content edge the
+    /// canvas grows by at least this fraction of the current axis extent (see <see cref="ClampScrollOffset"/>),
+    /// instead of pixel-for-pixel with the mouse. Adapters wire it into their drag-pan call sites only;
+    /// zoom-pivot/cover and minimap sites stay exact (ratio 0).
+    /// </summary>
+    public const double DefaultPanExtendRatio = 0.15;
+
     // ── ① Viewport / screen↔world conversion ─────────────────────────────────
 
     /// <summary>
@@ -55,21 +63,37 @@ public static class WorkflowSurfaceMath
     /// the overshoot exceeds it. WPF/Avalonia/WinUI pass <c>0</c> (always expand); the MAUI minimap passes
     /// <c>0.5</c> to avoid expanding for sub-pixel jitter.
     ///
-    /// The canvas geometry is identical in both zoom modes (nodes always collapse toward the world origin;
-    /// <see cref="CanvasLayout.ActualOffset"/> == NegativeOffset, extent = world + auto-extend), so the
-    /// overshoot is written 1:1 in both. Viewport-center zoom never translates the canvas — it keeps the
-    /// pivot under the viewport center purely by scrolling, and growing the offset by <c>excess</c> makes
-    /// the exact centering scroll reachable.
+    /// <paramref name="extendRatio"/> makes expansion discrete instead of pixel-for-pixel. When &gt; 0 the written
+    /// growth is <c>max(excess, extendRatio × axis extent)</c>, so one pan past an edge buys headroom proportional
+    /// to the current canvas instead of re-growing (and re-laying-out / re-decorating) on every overshoot frame.
+    /// Ratio 0 (default) keeps the exact 1:1 behaviour, so zoom-pivot/cover and minimap call sites are unchanged.
+    ///
+    /// Positive vs negative edge semantics differ because <see cref="CanvasLayout.ActualOffset"/> == NegativeOffset:
+    ///  - Positive (past the far edge): growth only lengthens the extent — rendered content never moves and the
+    ///    return value stays the caller's <paramref name="max"/>; the fresh headroom is then glided through by
+    ///    ordinary scrolling on subsequent frames.
+    ///  - Negative (before origin): growth raises ActualOffset, which translates every rendered element, so a
+    ///    quantized step would lurch content under the cursor. To compensate, when <paramref name="extendRatio"/>
+    ///    &gt; 0 the method returns the grown amount instead of 0 — the caller scrolls forward by the same delta,
+    ///    cancelling the translate and keeping the grabbed content stable while gaining the headroom. At ratio 0 the
+    ///    exact 1:1 growth *is* the pan, so the return stays 0.
     /// </summary>
-    public static double ClampScrollOffset(double desired, double max, CanvasLayout layout, bool horizontal, double threshold = 0d)
+    public static double ClampScrollOffset(double desired, double max, CanvasLayout layout, bool horizontal,
+        double threshold = 0d, double extendRatio = 0d)
     {
         if (desired < 0)
         {
             var excess = -desired;
             if (excess > threshold)
+            {
+                var growth = OvershootGrowth(excess, layout, horizontal, extendRatio);
                 layout.NegativeOffset = horizontal
-                    ? new Offset(layout.NegativeOffset.Horizontal + excess, layout.NegativeOffset.Vertical)
-                    : new Offset(layout.NegativeOffset.Horizontal, layout.NegativeOffset.Vertical + excess);
+                    ? new Offset(layout.NegativeOffset.Horizontal + growth, layout.NegativeOffset.Vertical)
+                    : new Offset(layout.NegativeOffset.Horizontal, layout.NegativeOffset.Vertical + growth);
+                // Scroll compensation: when the growth is discrete (extendRatio > 0) the caller scrolls forward
+                // by the grown amount, so translate(+growth) and scroll(+growth) cancel under the cursor.
+                return extendRatio > 0 ? growth : 0;
+            }
             return 0;
         }
 
@@ -77,14 +101,35 @@ public static class WorkflowSurfaceMath
         {
             var excess = desired - max;
             if (excess > threshold)
+            {
+                var growth = OvershootGrowth(excess, layout, horizontal, extendRatio);
                 layout.PositiveOffset = horizontal
-                    ? new Offset(layout.PositiveOffset.Horizontal + excess, layout.PositiveOffset.Vertical)
-                    : new Offset(layout.PositiveOffset.Horizontal, layout.PositiveOffset.Vertical + excess);
+                    ? new Offset(layout.PositiveOffset.Horizontal + growth, layout.PositiveOffset.Vertical)
+                    : new Offset(layout.PositiveOffset.Horizontal, layout.PositiveOffset.Vertical + growth);
+            }
             return max;
         }
 
         return desired;
     }
+
+    /// <summary>
+    /// Discrete overshoot growth for <see cref="ClampScrollOffset"/>: the exact <paramref name="excess"/> when
+    /// <paramref name="extendRatio"/> is 0, otherwise the larger of the excess and a quantum proportional to the
+    /// current axis extent — so a pan past an edge extends by a step relative to the canvas, never just one pixel.
+    /// </summary>
+    private static double OvershootGrowth(double excess, CanvasLayout layout, bool horizontal, double extendRatio)
+        => extendRatio > 0 ? Math.Max(excess, extendRatio * AxisBaseExtent(layout, horizontal)) : excess;
+
+    /// <summary>
+    /// World extent of an axis before any zoom auto-extend: <c>OriginSize + PositiveOffset + NegativeOffset</c>.
+    /// Mirrors the baseWidth/baseHeight terms CanvasLayout recomputes inside its layout Update — the quantum is
+    /// scaled by the same extent the canvas grows from, so the two cannot drift.
+    /// </summary>
+    private static double AxisBaseExtent(CanvasLayout layout, bool horizontal)
+        => horizontal
+            ? layout.OriginSize.Width + layout.PositiveOffset.Horizontal + layout.NegativeOffset.Horizontal
+            : layout.OriginSize.Height + layout.PositiveOffset.Vertical + layout.NegativeOffset.Vertical;
 
     /// <summary>
     /// Maximum scroll offset for a ScrollViewer: <c>max = max(0, extent − viewport)</c>.

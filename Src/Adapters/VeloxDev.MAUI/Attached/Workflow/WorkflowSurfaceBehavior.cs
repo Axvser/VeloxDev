@@ -923,8 +923,10 @@ public sealed class WorkflowSurfaceBehavior
         // ClampScrollOffset writes the overshoot into NegativeOffset (before origin) or
         // PositiveOffset (past the content edge) and returns the clamped offset to apply.
         // threshold 0 = always expand, matching the previous inline branches.
-        var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, viewModel.Layout, horizontal: true, threshold: 0);
-        var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, viewModel.Layout, horizontal: false, threshold: 0);
+        var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(
+            desiredX, maxH, viewModel.Layout, horizontal: true, threshold: 0, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio);
+        var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(
+            desiredY, maxV, viewModel.Layout, horizontal: false, threshold: 0, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio);
 
         if (layoutChanged)
         {

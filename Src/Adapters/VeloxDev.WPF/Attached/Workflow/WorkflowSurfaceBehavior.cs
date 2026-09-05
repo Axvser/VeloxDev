@@ -523,8 +523,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         // Canonical overscroll clamp: expands the canvas via Negative/PositiveOffset when panning past
         // the content edge, then returns the clamped scroll offset (WorkflowSurfaceMath.ClampScrollOffset).
-        var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, viewModel.Layout, horizontal: true);
-        var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, viewModel.Layout, horizontal: false);
+        var newOffsetX = WorkflowSurfaceMath.ClampScrollOffset(
+            desiredX, maxH, viewModel.Layout, horizontal: true, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio);
+        var newOffsetY = WorkflowSurfaceMath.ClampScrollOffset(
+            desiredY, maxV, viewModel.Layout, horizontal: false, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio);
         var layoutChanged = newOffsetX != desiredX || newOffsetY != desiredY;
 
         if (layoutChanged)
