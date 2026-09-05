@@ -180,7 +180,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// never paint an intermediate stale frame and no notches are lost. Positive delta = zoom in.
     /// </summary>
     [JSInvokable]
-    public void OnWheelZoom(int wheelDelta)
+    public async Task OnWheelZoom(int wheelDelta, double scrollX, double scrollY, double viewportW, double viewportH, double reachW, double reachH)
     {
         if (Tree is null)
         {
@@ -191,11 +191,21 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
         if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
         {
+            // One zoom transaction: while active, every per-node geometry writer (wrapper SyncPosition,
+            // size re-renders, tree re-renders) stands down — the atomic applyZoomSurface below is the
+            // sole geometry authority for the gesture, so no intermediate browser frame can paint
+            // collapsed nodes against the old translate/scroll (the zoom flicker).
+            using var _zoomScope = WorkflowGeometryScope.Zoom();
+
             // Capture the world point under the viewport center ONCE for the whole burst — the scroll
             // state is unchanged until the single final apply, so the same pivot stays valid across
             // every compounding step.
-            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
-                _scrollLeft - _offsetX, _scrollTop - _offsetY, _viewportW, _viewportH, layout);
+            // scrollX/Y, viewportW/H and reachW/H are captured LIVE from the DOM by the JS wheel handler
+            // at burst start (eff = DOM scroll − the JS edge reserve). A fast second burst therefore
+            // zooms about the exact world point under the viewport right now — never the last REPORTED
+            // scroll, whose one-round-trip lag used to bake an off-center offset in as ground truth (the
+            // deep-zoom non-recovering drift).
+            var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(scrollX, scrollY, viewportW, viewportH, layout);
             layout.CollapsePivot = new Anchor(wx, wy, 0);
 
             var notches = Math.Abs(wheelDelta) / 120d;
@@ -222,19 +232,20 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             // against the post-change model extent exactly like the XAML adapters.
             //
             // Content width = the model ActualSize (the links layer) but at least the DOM host's
-            // currently-reachable width (_canvasW − edge) so an edge-pan-expanded host is never clamped
-            // shorter than what the user already scrolled to. The clamp max is the effective scroll
-            // extent (content − viewport), matching what the JS host will expose after we grow it.
-            var contentW = Math.Max(1, Math.Max(layout.ActualSize.Width, _canvasW - _offsetX));
-            var contentH = Math.Max(1, Math.Max(layout.ActualSize.Height, _canvasH - _offsetY));
-            var (tx0, ty0) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, _viewportW, _viewportH);
-            _ = WorkflowSurfaceMath.ClampScrollOffset(tx0, Math.Max(0, contentW - _viewportW), layout, horizontal: true);
-            _ = WorkflowSurfaceMath.ClampScrollOffset(ty0, Math.Max(0, contentH - _viewportH), layout, horizontal: false);
+            // currently-reachable content (reachW, read live by the JS wheel handler) so an edge-pan-
+            // expanded host is never clamped shorter than what the user already scrolled to. The clamp
+            // max is the effective scroll extent (content − viewport), matching what the JS host will
+            // expose after we grow it.
+            var contentW = Math.Max(1, Math.Max(layout.ActualSize.Width, reachW));
+            var contentH = Math.Max(1, Math.Max(layout.ActualSize.Height, reachH));
+            var (tx0, ty0) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, viewportW, viewportH);
+            _ = WorkflowSurfaceMath.ClampScrollOffset(tx0, Math.Max(0, contentW - viewportW), layout, horizontal: true);
+            _ = WorkflowSurfaceMath.ClampScrollOffset(ty0, Math.Max(0, contentH - viewportH), layout, horizontal: false);
 
             // The clamp may have grown NegativeOffset, which moved the content — re-derive the scroll
             // from the NEW offset/scale/extent so the pivot lands exactly under the viewport center
             // (first-pass PivotCenterScroll used the pre-clamp offset).
-            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, _viewportW, _viewportH);
+            var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, viewportW, viewportH);
             tx = Math.Max(0, tx);
             ty = Math.Max(0, ty);
 
@@ -249,9 +260,12 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             // repositions the existing pooled wrappers synchronously here, then keeps re-asserting them
             // (surfaceZoomState settle loop) until the async .NET per-node renders converge — so a
             // stale render can never paint even one frame of old collapsed values.
+            // Await the single atomic apply so the DOM (translate + host grow + scroll + node/link
+            // geometry) is fully stamped before this burst returns — the next burst's live DOM read is
+            // then the settled final state, never a half-applied intermediate.
             if (_module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
             {
-                _ = _module.InvokeVoidAsync("applyZoomSurface",
+                await _module.InvokeVoidAsync("applyZoomSurface",
                     ScrollViewerId,
                     layout.ActualOffset.Horizontal, layout.ActualOffset.Vertical,
                     contentW, contentH,

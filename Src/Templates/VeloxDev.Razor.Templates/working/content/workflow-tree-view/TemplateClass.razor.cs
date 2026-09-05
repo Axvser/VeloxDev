@@ -4,6 +4,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using Microsoft.AspNetCore.Components;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace TemplateNamespace;
 
@@ -136,9 +137,15 @@ public partial class TemplateClass : ComponentBase, IDisposable
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Live node position + link updates while dragging (Anchor/Size changes).
+        // Live node position + link updates while dragging (Anchor/Size changes). During a zoom the
+        // surface stamps collapsed node geometry + links synchronously in JS (applyZoomSurface);
+        // re-rendering the whole tree here would rebuild the links/nodes layer from round-tripped
+        // values mid-zoom and flicker.
         if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        {
+            if (WorkflowGeometryScope.IsZooming) return;
             InvokeAsync(StateHasChanged);
+        }
     }
 
     private void OnNodesOrLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)

@@ -157,7 +157,7 @@
                         @* Links layer: one full-canvas TemplateLinkView per connection (template product,
                            absolute, overflow visible). Each link draws the golden-ratio orthogonal polyline. *@
                         <div class="veloxdev-wf-links"
-                             style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0")px;height:@sc.Height.ToString("0")px;pointer-events:none;">
+                             style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;height:@sc.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;pointer-events:none;">
                             @foreach (var link in tree.Links)
                             {
                                 <TemplateLinkView Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />

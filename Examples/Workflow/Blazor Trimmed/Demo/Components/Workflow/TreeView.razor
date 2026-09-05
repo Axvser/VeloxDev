@@ -30,7 +30,7 @@
         </Minimap>
         <ChildContent Context="sc">
             @* Links layer: one full-canvas link view per connection (absolute, overflow visible). *@
-            <div class="veloxdev-wf-links" style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0")px;height:@sc.Height.ToString("0")px;pointer-events:none;">
+            <div class="veloxdev-wf-links" style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;height:@sc.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;pointer-events:none;">
                 @foreach (var link in Tree.Links)
                 {
                     <LinkView Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />
@@ -60,11 +60,12 @@
         @{ var names = SlotNamesOf(node); }
         <NodeView Node="node" Tree="Tree" AllowOverflow="true">
             <InputSlots>
+                @* SlotView already opens the connection behavior for its slot; do not wrap it in
+                   another one (a double-stamped wrapper doubles the measured anchors and the
+                   connection gesture handlers). *@
                 @foreach (var slot in InputSlotsOf(node))
                 {
-                    <WorkflowSlotConnectionBehavior Slot="slot" Tree="Tree" IsEnabled="true">
-                        <SlotView Slot="slot" Tree="Tree" SlotSize="18" />
-                    </WorkflowSlotConnectionBehavior>
+                    <SlotView Slot="slot" Tree="Tree" SlotSize="18" />
                 }
             </InputSlots>
             <OutputSlots>

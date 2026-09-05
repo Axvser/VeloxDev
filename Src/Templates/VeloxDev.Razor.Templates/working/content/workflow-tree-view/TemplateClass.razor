@@ -29,7 +29,7 @@
         </Minimap>
         <ChildContent Context="sc">
             @* Links layer: one full-canvas link view per connection (absolute, overflow visible). *@
-            <div class="veloxdev-wf-links" style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0")px;height:@sc.Height.ToString("0")px;pointer-events:none;">
+            <div class="veloxdev-wf-links" style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;height:@sc.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;pointer-events:none;">
                 @foreach (var link in Tree.Links)
                 {
                     <LinkView Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />

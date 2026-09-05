@@ -216,8 +216,20 @@
 }
 
 /* Slot connection wrapper. pointer-events:auto lets slots nested inside
-   pointer-events:none overlay containers still receive gestures. */
+   pointer-events:none overlay containers still receive gestures. The flex centering + zero
+   line-height make the wrapper box shrink-wrap the glyph, so any box-centered slot
+   measurement (or the port's own geometry) lands on the drawing instead of drifting by the
+   inline <svg> baseline gap. */
 .veloxdev-wf-slot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
     cursor: crosshair;
     pointer-events: auto;
+}
+
+/* The slot glyph itself must not reserve a text-baseline strip. */
+.veloxdev-wf-slot-svg {
+    display: block;
 }

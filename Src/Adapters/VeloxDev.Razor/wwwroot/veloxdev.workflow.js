@@ -240,6 +240,16 @@ window.veloxdevWorkflow = (() => {
     // later .NET render produces once it re-measures the same geometry.
     const LINK_PHI = 0.6180339887;
 
+    // The on-screen box to measure for a slot: prefer the actual glyph (<svg.veloxdev-wf-slot-svg>)
+    // inside the stamped wrapper, so link endpoints sit on the drawing's center and not on the wrapper
+    // box — an inline <svg> leaves a baseline-gap strip below it that makes the wrapper center drift
+    // off the glyph. Falls back to the wrapper when no glyph element is present.
+    function glyphRect(el) {
+        if (!el) return null;
+        const glyph = el.querySelector('.veloxdev-wf-slot-svg');
+        return glyph ? glyph.getBoundingClientRect() : el.getBoundingClientRect();
+    }
+
     // Resolves a link's live <polyline> by its stamped data-veloxdev-link-id. Link SVGs are not
     // pooled, but Blazor diffs attributes in place across re-renders, so the element identity
     // survives and a per-pass re-query is all this costs.
@@ -261,9 +271,9 @@ window.veloxdevWorkflow = (() => {
         const sEl = canvasEl.querySelector('[data-veloxdev-slot-id="' + senderSlotId + '"]');
         const rEl = canvasEl.querySelector('[data-veloxdev-slot-id="' + receiverSlotId + '"]');
         if (!sEl || !rEl) return '';
-        const sr = sEl.getBoundingClientRect();
-        const rr = rEl.getBoundingClientRect();
-        if (sr.width <= 0 || sr.height <= 0 || rr.width <= 0 || rr.height <= 0) return '';
+        const sr = glyphRect(sEl);
+        const rr = glyphRect(rEl);
+        if (!sr || !rr || sr.width <= 0 || sr.height <= 0 || rr.width <= 0 || rr.height <= 0) return '';
         const rect = canvasEl.getBoundingClientRect();
         const contentEl = canvasEl.querySelector('.veloxdev-wf-canvas-content');
         const contentX = contentEl ? contentEl.offsetLeft : 0;
@@ -997,19 +1007,24 @@ window.veloxdevWorkflow = (() => {
             const contentX = contentEl ? contentEl.offsetLeft : 0;
             const contentY = contentEl ? contentEl.offsetTop : 0;
             const batch = [];
+            // Slot wrappers may be double-stamped (a generic host wrapping a SlotView that already
+            // opens the connection behavior). Measure every stamped box but collapse to the LAST
+            // (innermost) one per slot id — one anchor write per slot, no duplicate link redraws.
+            const seen = Object.create(null);
             hostEl.querySelectorAll('[data-veloxdev-slot-id]').forEach(function (el) {
                 const id = el.getAttribute('data-veloxdev-slot-id');
                 if (!id) return;
-                const r = el.getBoundingClientRect();
-                if (r.width <= 0 && r.height <= 0) return;
+                const r = glyphRect(el);
+                if (!r || (r.width <= 0 && r.height <= 0)) return;
                 // World coordinates relative to the canvas origin; getBoundingClientRect already
                 // accounts for the scroller offset, and we subtract the content translate so slot
                 // anchors match node anchors. Sent as strings so the .NET string[][] parameter
                 // marshals without an exception.
                 const cx = ((r.left + r.width / 2) - canvasRect.left - contentX).toFixed(2);
                 const cy = ((r.top + r.height / 2) - canvasRect.top - contentY).toFixed(2);
-                batch.push([id, cx, cy]);
+                seen[id] = [id, cx, cy];
             });
+            for (const id in seen) batch.push(seen[id]);
             if (!batch.length) return;
             const key = batch.map(b => b[0] + ':' + b[1] + ',' + b[2]).join(';');
             if (key === lastKey) return;
@@ -1128,7 +1143,23 @@ window.veloxdevWorkflow = (() => {
                 // Send the NET wheel-delta (count of notches) so a burst that outpaces one SignalR
                 // round-trip is applied server-side as that many compounding steps in ONE serialized
                 // call — the DOM only ever advances to the final settled state, never one stale step.
-                await dotnetRef.invokeMethodAsync('OnWheelZoom', delta);
+                //
+                // Capture geometry from the LIVE DOM at burst start, not from the server's last
+                // REPORTED scroll (that lags a report round-trip): if a second burst fires before the
+                // report lands the server would zoom about a stale scroll, baking an off-center offset
+                // in as the new ground truth — the deep-zoom non-recovering drift. eff = DOM scroll −
+                // the edge reserve JS owns; reach = the current host content (scrollWidth − edge), so
+                // an edge-pan-expanded host is never clamped shorter than what is already reachable.
+                const st = surfaceLayouts[scrollerEl.id];
+                const edgeX = st ? (st.edgeX || 0) : 0;
+                const edgeY = st ? (st.edgeY || 0) : 0;
+                await dotnetRef.invokeMethodAsync('OnWheelZoom', delta,
+                    scrollerEl.scrollLeft - edgeX,
+                    scrollerEl.scrollTop - edgeY,
+                    scrollerEl.clientWidth,
+                    scrollerEl.clientHeight,
+                    scrollerEl.scrollWidth - edgeX,
+                    scrollerEl.scrollHeight - edgeY);
             } finally {
                 busy = false;
                 // Drain whatever accumulated while this step was in flight (each wheel already

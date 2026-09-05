@@ -63,7 +63,7 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
             var anchor = Node?.Anchor;
             var position = anchor is null
                 ? "position:absolute;left:0px;top:0px;"
-                : $"position:absolute;left:{anchor.Horizontal.ToString("0.#")}px;top:{anchor.Vertical.ToString("0.#")}px;z-index:{anchor.Layer + 2};";
+                : $"position:absolute;left:{anchor.Horizontal.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}px;top:{anchor.Vertical.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}px;z-index:{anchor.Layer + 2};";
             return position + Style;
         }
     }
@@ -92,6 +92,14 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
     {
         if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor))
         {
+            // During a zoom the collapse of every node is stamped synchronously by the surface's
+            // applyZoomSurface (atomic with the scroll/translate); standing down here stops a per-node
+            // setNodePosition from reaching the browser first and painting a misplaced wrapper.
+            if (WorkflowGeometryScope.IsZooming)
+            {
+                return;
+            }
+
             // JS moves the wrapper live during a drag; for external moves (undo/redo, layout
             // commands) reposition it directly via JS — no re-render, mirroring the XAML adapters'
             // ViewManager.ApplyLayout (Canvas.SetLeft/Top only).
@@ -102,6 +110,13 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
         }
         else if (e.PropertyName is nameof(IWorkflowNodeViewModel.Size))
         {
+            // During a zoom the JS already re-stamped the collapsed card transform; a re-render here
+            // would fight it with differently-rounded bytes.
+            if (WorkflowGeometryScope.IsZooming)
+            {
+                return;
+            }
+
             // Size changes are rare (selector swapping content); a re-render is fine.
             InvokeAsync(StateHasChanged);
         }

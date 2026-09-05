@@ -6,7 +6,8 @@
 @if (Node is not null)
 {
     <WorkflowSlotLayoutBehavior Node="Node" IsEnabled="true">
-        <WorkflowNodeDragBehavior Node="Node" IsEnabled="true" Style="@($"width:{Node.Size.Width:F0}px;height:{Node.Size.Height:F0}px;")">
+        <WorkflowNodeDragBehavior Node="Node" IsEnabled="true"
+                                  Style="@($"width:{Node.Size.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}px;height:{Node.Size.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}px;")">
             @* The card is laid out at its DESIGN size (260x180) and uniformly scaled by the zoom
                collapse factor (collapsed width / 260) via a CSS transform — matching the other
                frameworks' Viewbox. Header text, output labels and slot glyphs shrink together, so
