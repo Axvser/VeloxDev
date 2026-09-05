@@ -164,6 +164,23 @@ public class TreeView : Canvas
             vw, vh);
     }
 
+    /// <summary>
+    /// Raised by the host after a zoom gesture is committed (Scale and the layout offsets settled) so
+    /// viewport virtualization re-runs synchronously. The helper otherwise virtualizes on its ~10 fps
+    /// dirty timer (TreeHelper.Update), so after a zoom burst the pooled node/link views lag the freshly
+    /// collapsed anchors by up to ~100 ms — deep-zoom links vanish or detach for that window. Virtualize
+    /// has no equality short-circuit (it always rebuilds; the spatial extension re-entrancy-guards
+    /// itself), so recomputing the viewport here keeps VisibleItems in lock-step with the committed zoom.
+    /// </summary>
+    public void NotifyZoomCommitted()
+    {
+        if (_tree is null) return;
+        UpdateViewport();
+        _tree.GetHelper().Virtualize(_tree.GetHelper().Viewport);
+        InvalidateVisual();
+        Changed?.Invoke();
+    }
+
     private Point ToCanvas(double wx, double wy) => new(wx + OriginX, wy + OriginY);
 
     // ── Port geometry (authoritative model: node.Anchor + designLocal·s) ──
