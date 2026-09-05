@@ -23,10 +23,10 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
             LogicGateNodeViewModel => NodeTemplate ?? throw new InvalidOperationException("NodeTemplate is not set."),
             PythonScriptNodeViewModel => PythonTemplate ?? throw new InvalidOperationException("PythonTemplate is not set."),
             NodeViewModel => NodeTemplate ?? throw new InvalidOperationException("NodeTemplate is not set."),
-            // Links are NOT pooled anymore — the single LinkLayerView renders them.
+            // Links are NOT pooled anymore — the shared WorkflowLinkOverlay renders them.
             // WorkflowView.NodeItemsSource filters them out, so a link reaching this
             // selector means the pool was fed an unfiltered collection.
-            IWorkflowLinkViewModel => throw new InvalidOperationException("LinkViewModels must not be pooled; the LinkLayerView renders links."),
+            IWorkflowLinkViewModel => throw new InvalidOperationException("LinkViewModels must not be pooled; the WorkflowLinkOverlay renders links."),
             _ => throw new InvalidOperationException($"Unknown data type: {item?.GetType().Name}")
         };
 }
