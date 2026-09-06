@@ -481,18 +481,37 @@ public class TreeView : Canvas
             }
             case DragKind.Pan when _scrollViewer != null:
             {
+                if (_tree is null)
+                {
+                    break;
+                }
                 var now = e.GetPosition(_scrollViewer);
                 double dx = now.X - _lastPanMouse.X;
                 double dy = now.Y - _lastPanMouse.Y;
                 _lastPanMouse = now;
+
+                // Canonical overscroll extension (same policy as the adapter-driven surfaces, incl.
+                // VeloxDev.Jalium's WorkflowSurfaceBehavior): grow the canvas by a DISCRETE quantum
+                // proportional to the axis extent (WorkflowSurfaceMath.DefaultPanExtendRatio), not
+                // pixel-for-pixel on every overscroll frame. On the negative edge the helper returns
+                // the grown amount so scrolling forward by it cancels the translate under the cursor.
                 double targetH = _scrollViewer.HorizontalOffset - dx;
                 double targetV = _scrollViewer.VerticalOffset - dy;
-                if (targetH < 0) { GrowLeft(-targetH); targetH = 0; }
-                else if (targetH > _scrollViewer.ScrollableWidth) { GrowRight(targetH - _scrollViewer.ScrollableWidth); }
-                if (targetV < 0) { GrowTop(-targetV); targetV = 0; }
-                else if (targetV > _scrollViewer.ScrollableHeight) { GrowBottom(targetV - _scrollViewer.ScrollableHeight); }
-                _scrollViewer.ScrollToHorizontalOffset(targetH);
-                _scrollViewer.ScrollToVerticalOffset(targetV);
+                double maxH = _scrollViewer.ScrollableWidth;
+                double maxV = _scrollViewer.ScrollableHeight;
+                var newX = WorkflowSurfaceMath.ClampScrollOffset(
+                    targetH, maxH, _tree.Layout, horizontal: true, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio);
+                var newY = WorkflowSurfaceMath.ClampScrollOffset(
+                    targetV, maxV, _tree.Layout, horizontal: false, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio);
+                if (newX != targetH || newY != targetV)
+                {
+                    // Offsets grew: adopt the new canvas extent so the viewer's scroll range is current.
+                    UpdateCanvasSize();
+                    InvalidateVisual();
+                    Changed?.Invoke();
+                }
+                _scrollViewer.ScrollToHorizontalOffset(newX);
+                _scrollViewer.ScrollToVerticalOffset(newY);
                 e.Handled = true;
                 break;
             }
