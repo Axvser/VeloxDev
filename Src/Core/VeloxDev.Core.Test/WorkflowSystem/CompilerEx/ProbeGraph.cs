@@ -21,11 +21,11 @@ internal static class ProbeGraph
         return graphs[0];
     }
 
-    /// <summary>用运行引擎驱动一个编译图,返回会话(供断言 Status/Attempt/logs)。</summary>
+    /// <summary>用运行引擎驱动一个编译图,返回会话(供断言 Status/Attempt/logs)。可指定要跟踪的目标节点。</summary>
     public static async Task<RuntimeContext> RunAsync(
-        CompiledGraph graph, object? seed = null, CancellationToken ct = default)
+        CompiledGraph graph, object? seed = null, CancellationToken ct = default, ProbeNode? target = null)
     {
-        var context = new RuntimeContext { Data = seed };
+        var context = new RuntimeContext { Data = seed, Target = target };
         await new RuntimeEngine().RunAsync(graph, context, ct);
         return context;
     }

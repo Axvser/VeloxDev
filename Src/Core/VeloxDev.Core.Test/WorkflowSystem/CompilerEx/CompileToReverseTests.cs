@@ -3,9 +3,10 @@ using VeloxDev.Core.WorkflowSystem.CompilerEx;
 namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// 反向编译(CompileAsync + CompileRole.Terminal):给定目标节点,只编译它的祖先锥(Sources 反向、沿有效边)并自动从锥的
-/// 入口前沿执行,算出目标的结果 —— 不需要指定启动节点。锥内路由器被当作普通数据流节点(锥已编码
-/// 唯一通往目标的支路),因此结果 = 一次恰好走那条支路的正向运行。
+/// 反向编译(CompileAsync + CompileRole.Terminal):给定目标节点,只编译它的祖先锥(Sources 反向、沿有效边)
+/// 并自动从锥的入口前沿执行 —— 不需要指定启动节点。与正向编译语义一致:锥内路由器保留真实分支选择,
+/// 只编"通往目标的支";若运行期路由器选到别的支,目标不被驱动、流程就此结束(targetReached=false),
+/// 不产出假想值。
 /// </summary>
 [TestClass]
 public class CompileToReverseTests
@@ -26,13 +27,14 @@ public class CompileToReverseTests
         ProbeGraph.Wire(a, b);
 
         var reverse = await CompileTerminalAsync(b);
-        var reverseSession = await ProbeGraph.RunAsync(reverse);
+        var reverseSession = await ProbeGraph.RunAsync(reverse, target: b);
 
         // 锥 {s,a,b} 的入口 = s → 编译产物与从 s 正向跑完全一致。
         var forward = await CompileRootAsync(s);
-        var forwardSession = await ProbeGraph.RunAsync(forward);
+        var forwardSession = await ProbeGraph.RunAsync(forward, target: b);
 
         Assert.AreEqual("Completed", reverseSession.Status);
+        Assert.IsTrue(reverseSession.TargetReached, "linear target must be reached");
         Assert.AreEqual("B", reverseSession.Data, "reverse run must end with the target's own output");
         Assert.AreEqual("B", forwardSession.Data, "must equal the forward run's result for the same node");
         CollectionAssert.AreEqual(
@@ -41,9 +43,39 @@ public class CompileToReverseTests
     }
 
     [TestMethod]
-    public async Task RouterOnConePath_FlattenedAndLocksToTargetBranch_IgnoringRuntimeSelection()
+    public async Task RouterOnConePath_SelectedBranchMatchesTarget_ReachesAndReturnsResult()
     {
-        // 动态 Router,但 UI 选的是 B;目标在 A 分支深处 → 反向编译必须沿 A,不看 Selection。
+        // 动态 Router,选中 A(目标所在支)→ 反向编译走真实 BranchSegment,只有通往目标的支被编译。
+        var router = new RouterNode("router") { CompileMode = RouterCompileMode.Dynamic, Selection = "A" };
+        var a1 = new ProbeNode("a1") { Handler = (_, _) => "a1" };
+        var target = new ProbeNode("target") { Handler = (_, _) => "A-result" };
+        var b1 = new ProbeNode("b1") { Handler = (_, _) => "b1" };
+        router.RouteTable["A"] = [a1];
+        router.RouteTable["B"] = [b1];
+        ProbeGraph.Wire(router, a1);
+        ProbeGraph.Wire(router, b1);
+        ProbeGraph.Wire(a1, target);
+
+        var graph = await CompileTerminalAsync(target);
+        var session = await ProbeGraph.RunAsync(graph, target: target);
+
+        Assert.AreEqual("Completed", session.Status);
+        Assert.IsTrue(session.TargetReached, "selecting the target's branch must reach the target");
+        Assert.AreEqual("A-result", session.Data);
+        Assert.IsEmpty(b1.Calls, "sibling branch B must not run");
+        var branch = graph.Entries.OfType<BranchSegment>().SingleOrDefault();
+        Assert.IsNotNull(branch, "the router keeps real BranchSegment semantics (not flattened)");
+        Assert.HasCount(1, branch!.Options, "only the branch leading to the target is compiled");
+        Assert.AreEqual("A", branch.Options[0].Key);
+        Assert.HasCount(1, router.Calls);
+        Assert.HasCount(1, a1.Calls);
+        Assert.HasCount(1, target.Calls);
+    }
+
+    [TestMethod]
+    public async Task RouterOnConePath_SelectedSiblingBranch_TargetNotReached_FlowEndsWithoutValue()
+    {
+        // 动态 Router 选中 B,目标在 A 支 → 与正向一致:目标的分支未被选中,目标不执行、流程结束,不给假想值。
         var router = new RouterNode("router") { CompileMode = RouterCompileMode.Dynamic, Selection = "B" };
         var a1 = new ProbeNode("a1") { Handler = (_, _) => "a1" };
         var target = new ProbeNode("target") { Handler = (_, _) => "A-result" };
@@ -55,15 +87,14 @@ public class CompileToReverseTests
         ProbeGraph.Wire(a1, target);
 
         var graph = await CompileTerminalAsync(target);
-        var session = await ProbeGraph.RunAsync(graph);
+        var session = await ProbeGraph.RunAsync(graph, target: target);
 
-        Assert.AreEqual("Completed", session.Status);
-        Assert.AreEqual("A-result", session.Data, "target output along branch A");
-        Assert.IsEmpty(b1.Calls, "branch B is not an ancestor of the target and must not run");
-        Assert.IsTrue(graph.Entries.All(e => e is ChainSegment), "routers on the cone must compile flat (no BranchSegment)");
-        Assert.HasCount(1, router.Calls, "router itself is still driven once");
-        Assert.HasCount(1, a1.Calls);
-        Assert.HasCount(1, target.Calls);
+        Assert.AreEqual("Completed", session.Status, "the run itself completes (ends) normally");
+        Assert.IsFalse(session.TargetReached, "the target's branch was not selected → target must NOT be reached");
+        Assert.IsEmpty(target.Calls, "the target must not be driven");
+        Assert.IsEmpty(a1.Calls, "the target's branch head must not be driven");
+        Assert.IsNull(session.Data, "no value may be fabricated when the target is unreached");
+        Assert.HasCount(1, router.Calls, "the router itself is still driven before its decision");
     }
 
     [TestMethod]
@@ -85,9 +116,10 @@ public class CompileToReverseTests
         ProbeGraph.Wire(join, target);
 
         var graph = await CompileTerminalAsync(target);
-        var session = await ProbeGraph.RunAsync(graph);
+        var session = await ProbeGraph.RunAsync(graph, target: target);
 
         Assert.AreEqual("Completed", session.Status);
+        Assert.IsTrue(session.TargetReached, "target after the funnel join must be reached");
         Assert.AreEqual("T", session.Data);
         Assert.IsInstanceOfType<IGroupData>(joinPayload);
         var group = Assert.IsInstanceOfType<IGroupData>(joinPayload);
@@ -112,9 +144,10 @@ public class CompileToReverseTests
         ProbeGraph.Wire(e2, target);
 
         var graph = await CompileTerminalAsync(target);
-        var session = await ProbeGraph.RunAsync(graph);
+        var session = await ProbeGraph.RunAsync(graph, target: target);
 
         Assert.AreEqual("Completed", session.Status);
+        Assert.IsTrue(session.TargetReached, "two-source funnel must reach the target");
         Assert.AreEqual("N", session.Data);
         Assert.IsInstanceOfType<IGroupData>(targetPayload);
         var group = Assert.IsInstanceOfType<IGroupData>(targetPayload);
@@ -134,9 +167,10 @@ public class CompileToReverseTests
         var leaf = new ProbeNode("leaf") { Handler = (_, _) => "leaf" };
 
         var graph = CompileTerminalAsync(leaf).GetAwaiter().GetResult();
-        var session = ProbeGraph.RunAsync(graph).GetAwaiter().GetResult();
+        var session = ProbeGraph.RunAsync(graph, target: leaf).GetAwaiter().GetResult();
 
         Assert.AreEqual("Completed", session.Status);
+        Assert.IsTrue(session.TargetReached, "an entry-less leaf is trivially reached");
         Assert.AreEqual("leaf", session.Data);
         Assert.HasCount(1, leaf.Calls);
     }

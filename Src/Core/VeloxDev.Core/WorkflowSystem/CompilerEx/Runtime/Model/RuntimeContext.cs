@@ -18,6 +18,12 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// <summary>Runtime execution session — always false (only the compile phase is true).</summary>
     public bool IsCompilePhase => false;
 
+    /// <summary>Optional target node the caller wants this run to reach (result/terminal runs).</summary>
+    public IWorkflowNodeViewModel? Target { get; set; }
+
+    /// <summary>Whether <see cref="Target"/> was actually driven this run (false = condition not satisfied / branch not taken).</summary>
+    public bool TargetReached { get; set; }
+
     // ── Shared context ──
     [VeloxProperty] private Guid _uid = Guid.NewGuid();
     [VeloxProperty] private int _sequence = 0;

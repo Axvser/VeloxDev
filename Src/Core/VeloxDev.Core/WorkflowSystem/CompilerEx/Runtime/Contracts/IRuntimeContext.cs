@@ -45,6 +45,15 @@ public interface IRuntimeContext : ITaskContext
     int CurrentOrder { get; set; }
 
     /// <summary>
+    /// Optional target node a run should track (result/terminal runs set this). The engine sets
+    /// <see cref="TargetReached"/> once the node matching <see cref="Target"/> is actually driven.
+    /// </summary>
+    IWorkflowNodeViewModel? Target { get; set; }
+
+    /// <summary>Whether the <see cref="Target"/> node was actually driven during this run (false = its branch was not taken / condition not satisfied).</summary>
+    bool TargetReached { get; set; }
+
+    /// <summary>
     /// Chained result (shadows <see cref="IContext.Data"/> to add a setter): after driving each node the engine
     /// writes back the <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/> return value for downstream nodes
     /// to read. The base data-flow carrier <see cref="ITaskContext"/> stays read-only; only the runtime session

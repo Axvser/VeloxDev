@@ -5,14 +5,15 @@ using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
-// Reverse (sink-driven) compilation — reached from CompileAsync(role: CompileRole.Terminal): compile & run only
-// the minimal producer subgraph needed to compute a target node's output — no controller / start node required.
+// Reverse (sink-driven) compilation — reached from CompileAsync(role: CompileRole.Terminal): compile the minimal
+// producer subgraph needed to compute a target node's output — no controller / start node required.
 //
 // Semantics: the compiled artifact is the forward decomposition of the target's ANCESTOR CONE (all nodes that can
 // reach the target through valid output edges), executed from the cone's own entry frontier (nodes with no in-cone
-// input). Every router on the way is treated as a plain data-flow node: the cone already encodes the single branch
-// that leads to the target, so no route table is consulted and the runtime result equals a normal forward run that
-// happened to take that branch.
+// input). Routers on the way KEEP their real branch semantics: only the branch that leads into the cone is
+// compiled, so a router that actually decides on a sibling branch at runtime simply does not reach the target —
+// the flow ends there, exactly like forward semantics. The target is never fabricated; reachability is reported
+// by the caller (see RuntimeContext.Target / TargetReached).
 
 public sealed partial class CompilerViewModel
 {
@@ -74,17 +75,14 @@ public sealed partial class CompilerViewModel
 
     /// <summary>
     /// Compiles the restricted cone into a single CompiledGraph. One entry → plain forward compile from it
-    /// (routers flattened). Several independent entries → each compiles into a fan-out branch, and after all of them
-    /// the common join (the cone's funnel point, usually the target) continues as a normal chain.
+    /// (routers keep real BranchSegment semantics, but only branches that lead into the cone are compiled).
+    /// Several independent entries → each compiles into a fan-out branch, and after all of them the common join
+    /// (the cone's funnel point, usually the target) continues as a normal chain.
     /// </summary>
     private async Task<CompiledGraph> CompileConeAsync(
         IWorkflowNodeViewModel target, ConeInfo info, CancellationToken ct)
     {
-        var state = new CompileState
-        {
-            Cone = info.Nodes,
-            FlatRouters = true,
-        };
+        var state = new CompileState { Cone = info.Nodes };
 
         // Entry frontier: cone nodes with no in-cone predecessors (controllers / data sources / no-input nodes).
         var entries = info.Nodes

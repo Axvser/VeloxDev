@@ -28,6 +28,7 @@ public sealed class RuntimeEngine
         // outputs are filtered by pass stamp (CollectGroupedInputs = this pass's outputs ∪ the
         // contract-preserved prefix before the redirect target).
         context.ResetOutputs();
+        context.TargetReached = false;
         int? redirectTarget = null;
         var redirects = 0;
         try
@@ -226,6 +227,8 @@ public sealed class RuntimeEngine
     private static async Task DriveAsync(IWorkflowNodeViewModel node, IRuntimeContext context, CancellationToken ct)
     {
         if (node is null || context is null) return;
+        if (context.Target is { } target && ReferenceEquals(node, target))
+            context.TargetReached = true;
         if (node is IRuntimeAware aware)
             aware.AttachRuntimeContext(context);
         // Execution status code = compile-time fixed number (stop nodes with Order = -1 are not driven, but keep the status code).

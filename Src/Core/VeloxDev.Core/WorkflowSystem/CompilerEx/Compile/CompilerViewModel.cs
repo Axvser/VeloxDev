@@ -78,15 +78,19 @@ public sealed partial class CompilerViewModel
                 break;
             resumedAfterBranch = false;
 
-            // Reverse/restricted compilation (CompileRole.Terminal) flattens routers: it follows the cone's own edges
-            // toward the target instead of asking the router to pick a branch, so no route table is consulted.
-            if (node is ICompileTimeRouter router && !state.FlatRouters)
+            if (node is ICompileTimeRouter router)
             {
                 FlushChain(entries, chain, state, offset);
                 AttachCompileContext(node, state.Counter, 0, offset, state);
                 state.Counter++;
 
                 var routeTable = await router.GetRouteTable();
+                // Reverse/restricted compilation (CompileRole.Terminal) keeps the router's real branch semantics
+                // but keeps only the branch that actually leads into the target's cone — sibling branches are not
+                // compiled. If the router's own decision selects a branch outside the cone at runtime, the flow
+                // simply ends before the target (the target is not reached), exactly like forward semantics.
+                if (state.Cone is not null)
+                    routeTable = RestrictRouteToCone(node, routeTable, state.Cone);
                 var currentKey = await router.ResolveRouteKey(null);   // compile-time payload = null
                 var isDynamic = currentKey is null;
                 var options = new ObservableCollection<BranchOption>();
@@ -140,8 +144,9 @@ public sealed partial class CompilerViewModel
 
                 // Static mode (key known at compile-time): downstream nodes in the full topology not on an active
                 // branch get a "reset signal" (CompileContext.Order = -1, absolute stop) — every node is reached
-                // by the compiler in both modes.
-                if (!isDynamic)
+                // by the compiler in both modes. Under a reverse cone the sibling branches are simply absent, so
+                // there is nothing to reset.
+                if (!isDynamic && state.Cone is null)
                 {
                     var liveTargets = new HashSet<IWorkflowNodeViewModel>(
                         routeTable.Values.Where(v => v is not null).SelectMany(v => v!)
@@ -270,6 +275,36 @@ public sealed partial class CompilerViewModel
             foreach (var t in AllTargets(n))
                 if (t is not null) queue.Enqueue(t);
         }
+    }
+
+    /// <summary>
+    /// Under a reverse cone, keep only the router's route entries whose targets actually lie inside the cone (i.e.
+    /// the branch(es) that can reach the terminal node). Exactly one such branch may exist — if several different
+    /// route keys reach the cone, the target could only be produced by running several branches of the same router
+    /// in one run, which forward semantics cannot do; that cone is refused rather than guessed.
+    /// </summary>
+    private static IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> RestrictRouteToCone(
+        IWorkflowNodeViewModel router,
+        IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> routeTable,
+        ISet<IWorkflowNodeViewModel> cone)
+    {
+        var coneBranches = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>();
+        foreach (var kv in routeTable)
+        {
+            if (kv.Value is null) continue;
+            var inCone = kv.Value.Where(t => t is not null && cone.Contains(t)).ToList();
+            if (inCone.Count == 0) continue;
+            coneBranches[kv.Key] = inCone;
+        }
+
+        if (coneBranches.Count > 1)
+        {
+            throw new InvalidOperationException(
+                "CompileAsync(CompileRole.Terminal): the router '" + router.GetType().Name + "' has more than one " +
+                "branch reaching the terminal node. A single forward run can only take one branch, so this target " +
+                "cannot be computed; no result is fabricated.");
+        }
+        return coneBranches;
     }
 
     /// <summary>All of the node's downstream targets (the Targets of its output slots, deduplicated).</summary>
@@ -405,12 +440,6 @@ public sealed partial class CompilerViewModel
         /// continued into, and joins/nexts are computed over cone edges only. Null for the plain forward compile.
         /// </summary>
         public ISet<IWorkflowNodeViewModel>? Cone;
-
-        /// <summary>
-        /// Reverse compilation treats every ICompileTimeRouter as an ordinary data-flow node (no route table, no
-        /// branch selection) — the cone already encodes the only branch relevant to the target.
-        /// </summary>
-        public bool FlatRouters;
 
         /// <summary>Join point → input source node list (registered from each branch exit at compile-time, so the join point's compile identity can backfill InputNodes).</summary>
         public readonly Dictionary<IWorkflowNodeViewModel, IReadOnlyList<IWorkflowNodeViewModel>> JoinInputs =

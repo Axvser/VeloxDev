@@ -97,6 +97,58 @@ public class WorkflowLifecycleFidelityTests
     }
 
     [TestMethod]
+    public void CompileNodeResult_SingleNodeTree_ProducesTerminalCompilePlan()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(node);
+        var scope = new WorkflowAgentScope(tree);
+
+        var result = InvokeTool(scope, "CompileNodeResult", ("nodeIndex", 0));
+
+        var json = JObject.Parse(result);
+        Assert.AreEqual("ok", json["status"]?.Value<string>());
+        Assert.AreEqual("Terminal", json["role"]?.Value<string>(), "terminal compile must report its role");
+        Assert.AreEqual(1, json["graphCount"]?.Value<int>());
+    }
+
+    [TestMethod]
+    public void GetNodeResult_WithoutAllowNodeExecution_IsRejectedByPolicy()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(node);
+        var scope = new WorkflowAgentScope(tree); // node execution off by default
+
+        var result = InvokeTool(scope, "GetNodeResult", ("nodeIndex", 0));
+
+        var json = JObject.Parse(result);
+        Assert.AreEqual("error", json["status"]?.Value<string>());
+        StringAssert.Contains(json["message"]?.Value<string>() ?? string.Empty, "disabled",
+            "GetNodeResult must be gated by host policy, like the other node-execution tools");
+    }
+
+    [TestMethod]
+    public void GetNodeResult_SingleNodeTree_RunsToCompletionWithTerminalRole()
+    {
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        tree.GetHelper().CreateNode(node);
+        var scope = new WorkflowAgentScope(tree).WithAllowNodeExecution(true);
+
+        var result = InvokeTool(scope, "GetNodeResult", ("nodeIndex", 0));
+
+        var json = JObject.Parse(result);
+        Assert.AreEqual("ok", json["status"]?.Value<string>());
+        Assert.AreEqual("Terminal", json["role"]?.Value<string>());
+        Assert.AreEqual("Completed", json["runStatus"]?.Value<string>(),
+            "a single node's ancestor cone must run and complete on its own");
+        Assert.IsTrue(json["targetReached"]?.Value<bool>() ?? false,
+            "the queried node itself must be reported as reached");
+        Assert.IsFalse(json["endedWithError"]?.Value<bool>() ?? true);
+    }
+
+    [TestMethod]
     public void SlotEnumerator_RoundTripsSelectorType()
     {
         var node = new NodeDefaultViewModel();

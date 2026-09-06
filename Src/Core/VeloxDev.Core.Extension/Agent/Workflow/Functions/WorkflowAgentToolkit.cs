@@ -68,6 +68,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             T(ValidateWorkflow, nameof(ValidateWorkflow)),
             T(GetFullTopology, nameof(GetFullTopology)),
             T(CompileWorkflow, nameof(CompileWorkflow)),
+            T(CompileNodeResult, nameof(CompileNodeResult)),
             T(GetCompileStatus, nameof(GetCompileStatus)),
             T(GetExecutionLog, nameof(GetExecutionLog)));
 
@@ -112,7 +113,9 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             T(ReverseBroadcastNode, nameof(ReverseBroadcastNode)),
             // Chain-level entry: drives the compiled graph with the execution engine
             // (the demo's Run path). Distinct from ExecuteNode (node-level EXEC).
-            T(RunCompiledWorkflow, nameof(RunCompiledWorkflow)));
+            T(RunCompiledWorkflow, nameof(RunCompiledWorkflow)),
+            // Terminal/result entry: compute a single node's result from its ancestor cone.
+            T(GetNodeResult, nameof(GetNodeResult)));
 
         // ── Generic command execution (gated by WithAllowedGenericCommands) ──
         Add(WorkflowToolCategory.Command,
@@ -251,7 +254,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         "GetEnumSlotByValue", "GetLinkDetail", "GetNodeStatistics", "ListCreatableTypes",
         "ValidateWorkflow", "SearchForward", "SearchReverse", "SearchAllRelative",
         "IsConnected", "FindPath", "RequestSelection", "RequestConfirmation",
-        "CompileWorkflow", "GetCompileStatus", "GetExecutionLog",
+        "CompileWorkflow", "CompileNodeResult", "GetCompileStatus", "GetExecutionLog",
     };
 
     /// <summary>
@@ -1784,28 +1787,59 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     /// distinct from <see cref="ExecuteNode"/> (node-level EXEC via ReceiveCommand).
     /// </summary>
     [Description("Runs the compiled workflow (chain-level execution) from a start node, typically a controller. Compiles the reachable sub-graph, creates a runtime session (IRuntimeContext), and drives the whole chain via the execution engine — the same entry the demo's Run button uses. Nodes execute their ReceiveAsync with an IRuntimeContext (compiled-step semantics; no auto-broadcast — the engine drives the chain). Returns the session outcome: runStatus (Completed/Stopped), execution log, final data, attempts, and whether it ended with an error. DIFFERENT from ExecuteNode, which executes a single node via ReceiveCommand (node-level EXEC). Disabled by default: requires WithAllowNodeExecution(true).")]
-    private async Task<string> RunCompiledWorkflow(
+    private Task<string> RunCompiledWorkflow(
         [Description("Node index of the compile entry point (usually a controller).")] int startNodeIndex,
         [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,
         CancellationToken cancellationToken = default)
+        => RunCompiledRoleAsync(startNodeIndex, CompileRole.Root, nameof(RunCompiledWorkflow), seed, cancellationToken);
+
+    [Description("Computes a node's RESULT in isolation (reverse/terminal compile + run): discovers the node's ancestor cone — all upstream producers feeding it, traced backward from its input slots — and drives it with the execution engine from the cone's entry frontier, so no controller/start node is needed. Returns the session outcome plus the node's final 'data' (the value it would produce in a normal run that took the same upstream path). DIFFERENT from RunCompiledWorkflow (runs the whole chain from a start node) and from ExecuteNode (single-node EXEC via ReceiveCommand). Disabled by default: requires WithAllowNodeExecution(true).")]
+    private Task<string> GetNodeResult(
+        [Description("Node index whose result to compute (its output becomes the run's final data).")] int nodeIndex,
+        [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,
+        CancellationToken cancellationToken = default)
+        => RunCompiledRoleAsync(nodeIndex, CompileRole.Terminal, nameof(GetNodeResult), seed, cancellationToken);
+
+    /// <summary>Shared chain-run body for the two compile roles (RunCompiledWorkflow = Root, GetNodeResult = Terminal).</summary>
+    private async Task<string> RunCompiledRoleAsync(
+        int nodeIndex, CompileRole role, string toolName, string? seed, CancellationToken ct)
     {
         if (!_scope.AllowNodeExecution)
-            return Error("RunCompiledWorkflow is disabled by host policy. The host must enable node execution via WithAllowNodeExecution(true).");
-        if (!TryGetNode(startNodeIndex, out var node, out var error)) return error;
+            return Error($"{toolName} is disabled by host policy. The host must enable node execution via WithAllowNodeExecution(true).");
+        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
 
         try
         {
             var compiler = new CompilerViewModel();
-            var graphs = await compiler.CompileAsync(node!, CompileRole.Root).ConfigureAwait(false);
+            var graphs = await compiler.CompileAsync(node!, role).ConfigureAwait(false);
             if (graphs.Count == 0)
-                return Error("Compile produced no graphs from this start node.");
+                return Error(role == CompileRole.Terminal
+                    ? "Compile produced no graph for this terminal node."
+                    : "Compile produced no graphs from this start node.");
 
-            var context = new RuntimeContext { Data = seed };
-            await new RuntimeEngine().RunAsync(graphs[0], context, cancellationToken).ConfigureAwait(false);
+            var context = new RuntimeContext
+            {
+                Data = seed,
+                Target = role == CompileRole.Terminal ? node : null,
+            };
+            await new RuntimeEngine().RunAsync(graphs[0], context, ct).ConfigureAwait(false);
+
+            // Forward-consistent semantics: a Terminal run only reports a result when the target node was
+            // actually driven. If a router on its cone decided on a sibling branch, the target is simply not
+            // reached and no value is fabricated.
+            if (role == CompileRole.Terminal && !context.TargetReached)
+            {
+                return Error(
+                    $"Target node '{node.GetType().Name}' (id {GetComponentId(node)}) was NOT reached in this run: " +
+                    "the router selected a branch that does not lead to it, so its condition was not satisfied. " +
+                    "No result was produced.");
+            }
 
             return new JObject
             {
                 ["status"] = "ok",
+                ["role"] = role.ToString(),
+                ["targetReached"] = context.TargetReached,
                 ["runStatus"] = context.Status,
                 ["endedWithError"] = context.EndedWithError,
                 ["attempts"] = context.Attempt,
@@ -1974,15 +2008,25 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     // ────────────────────────── Compiler Functions ──────────────────────────
 
     [Description("Compiles the workflow sub-graph reachable from a start node (typically the controller/entry node) and returns the compiled plan: compiled segments (chain / branch / parallel), routing branches with their options/skipped/terminal flags, fan-out groups, and every compile-aware node's Order / ChainIndex / Offset. Order = -1 means the node is on a pruned static branch — absolute stop (do NOT drive it as part of the live chain). Compiling also attaches compile identity to nodes (updates IsCompileStopped badges). Use GetCompileStatus afterwards to read the identity without recompiling.")]
-    private async Task<string> CompileWorkflow(
+    private Task<string> CompileWorkflow(
         [Description("Node index of the compile entry point (usually the controller/entry node).")] int startNodeIndex,
         CancellationToken cancellationToken = default)
+        => CompileRoleAsync(startNodeIndex, CompileRole.Root, cancellationToken);
+
+    [Description("Reverse-compiles a node's ancestor cone (the upstream producers feeding it, traced backward from its input slots) and returns the compiled plan that computes just that node's result: compiled segments plus every compile-aware node's Order / ChainIndex / Offset. No controller/start node is needed — the cone's entry frontier is derived automatically. Same artifact shape as CompileWorkflow, but scoped to the node instead of the whole reachable chain. Compiling also attaches compile identity to the cone's nodes. Use GetCompileStatus afterwards to read the identity without recompiling.")]
+    private Task<string> CompileNodeResult(
+        [Description("Node index whose ancestor cone to compile (its output is what a terminal run would compute).")] int nodeIndex,
+        CancellationToken cancellationToken = default)
+        => CompileRoleAsync(nodeIndex, CompileRole.Terminal, cancellationToken);
+
+    /// <summary>Shared compile-plan body for the two compile roles (CompileWorkflow = Root, CompileNodeResult = Terminal).</summary>
+    private async Task<string> CompileRoleAsync(int nodeIndex, CompileRole role, CancellationToken ct)
     {
-        if (!TryGetNode(startNodeIndex, out var node, out var error)) return error;
+        if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
             var compiler = new CompilerViewModel();
-            var graphs = await compiler.CompileAsync(node!, CompileRole.Root).ConfigureAwait(false);
+            var graphs = await compiler.CompileAsync(node!, role).ConfigureAwait(false);
 
             var entries = new JArray();
             foreach (var g in graphs)
@@ -1991,6 +2035,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             return new JObject
             {
                 ["status"] = "ok",
+                ["role"] = role.ToString(),
                 ["graphCount"] = graphs.Count,
                 ["entries"] = entries,
                 ["nodeOrders"] = BuildCompileOrders(),
@@ -2002,7 +2047,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         }
     }
 
-    [Description("Returns the current compile identity of every compile-aware node (Order / ChainIndex / Offset, isStopped = Order == -1) WITHOUT recompiling. Call CompileWorkflow first to populate it.")]
+    [Description("Returns the current compile identity of every compile-aware node (Order / ChainIndex / Offset, isStopped = Order == -1) WITHOUT recompiling. Call CompileWorkflow / CompileNodeResult first to populate it.")]
     private string GetCompileStatus()
     {
         var orders = BuildCompileOrders();
