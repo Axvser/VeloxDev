@@ -36,6 +36,9 @@
 | 设置插槽通道 | SetSlotChannel | Slot.SetChannelCommand |
 | 查看连接详情 | GetLinkDetail | 仅只读查询 |
 | 对多节点执行（接收） | ExecuteNodes | Node.ReceiveCommand × N |
+| 编译计划（Root / Terminal） | CompileWorkflow / CompileNodeResult | CompilerViewModel（无 IVeloxCommand） |
+| 运行整条编译链 | RunCompiledWorkflow | Compiler + RuntimeEngine（Root 角色） |
+| 计算单个节点结果（Terminal） | GetNodeResult | Compiler + RuntimeEngine（Terminal 角色） |
 | 节点统计 | GetNodeStatistics | 入度/出度、已连接节点 |
 | 列出可创建类型 | ListCreatableTypes | 发现可用节点/插槽类型 |
 | 验证工作流 | ValidateWorkflow | 检查问题（零尺寸、孤立节点等） |

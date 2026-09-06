@@ -36,6 +36,9 @@
 | Set slot channel | SetSlotChannel | Slot.SetChannelCommand |
 | Inspect link | GetLinkDetail | Introspection (no mutation) |
 | Execute node (many) | ExecuteNodes | Node.ReceiveCommand × N |
+| Compile plan (Root / Terminal) | CompileWorkflow / CompileNodeResult | CompilerViewModel (no IVeloxCommand) |
+| Run compiled chain | RunCompiledWorkflow | Compiler + RuntimeEngine (Root role) |
+| Run a single node's result (Terminal) | GetNodeResult | Compiler + RuntimeEngine (Terminal role) |
 | Node statistics | GetNodeStatistics | In/out degree, connected nodes |
 | List creatable types | ListCreatableTypes | Discover available node/slot types |
 | Validate workflow | ValidateWorkflow | Check for issues (zero size, isolated nodes) |

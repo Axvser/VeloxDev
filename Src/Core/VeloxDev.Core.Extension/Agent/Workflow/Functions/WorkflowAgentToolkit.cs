@@ -1793,7 +1793,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         CancellationToken cancellationToken = default)
         => RunCompiledRoleAsync(startNodeIndex, CompileRole.Root, nameof(RunCompiledWorkflow), seed, cancellationToken);
 
-    [Description("Computes a node's RESULT in isolation (reverse/terminal compile + run): discovers the node's ancestor cone — all upstream producers feeding it, traced backward from its input slots — and drives it with the execution engine from the cone's entry frontier, so no controller/start node is needed. Returns the session outcome plus the node's final 'data' (the value it would produce in a normal run that took the same upstream path). DIFFERENT from RunCompiledWorkflow (runs the whole chain from a start node) and from ExecuteNode (single-node EXEC via ReceiveCommand). Disabled by default: requires WithAllowNodeExecution(true).")]
+    [Description("Computes a node's RESULT in isolation (Terminal role): discovers the node's ancestor cone — all upstream producers feeding it, traced backward from its input slots — and drives it with the execution engine from the cone's own entry frontier, so no controller/start node is needed. Routers inside the cone KEEP real branch selection: only the branch leading to this node is compiled, so the result exactly matches a normal run that took that branch. IMPORTANT error contract: if a router on the cone actually selects a SIBLING branch at runtime, the target is NOT reached — the tool returns status:error with message naming the target ('... was NOT reached ... No result was produced.') and no data; never treat another branch's final payload as this node's result. To succeed, first point the router at the branch that leads to this node (set CompileMode/Selection via PatchNodeProperties or SetEnumSlotCollection), then retry; or ask for a node that sits on the actually-selected branch. Returns targetReached:true when the node was driven. DIFFERENT from RunCompiledWorkflow (runs the whole chain from a Root/start node) and from ExecuteNode (single-node EXEC via ReceiveCommand). Disabled by default: requires WithAllowNodeExecution(true).")]
     private Task<string> GetNodeResult(
         [Description("Node index whose result to compute (its output becomes the run's final data).")] int nodeIndex,
         [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,
@@ -1835,17 +1835,20 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                     "No result was produced.");
             }
 
-            return new JObject
+            var outcome = new JObject
             {
                 ["status"] = "ok",
                 ["role"] = role.ToString(),
-                ["targetReached"] = context.TargetReached,
                 ["runStatus"] = context.Status,
                 ["endedWithError"] = context.EndedWithError,
                 ["attempts"] = context.Attempt,
                 ["data"] = context.Data is not null ? JToken.FromObject(context.Data) : JValue.CreateNull(),
                 ["logs"] = new JArray(context.Logs),
-            }.ToString(Formatting.None);
+            };
+            // targetReached is meaningful only for Terminal (result) runs; a Root chain run has no target.
+            if (role == CompileRole.Terminal)
+                outcome["targetReached"] = context.TargetReached;
+            return outcome.ToString(Formatting.None);
         }
         catch (OperationCanceledException)
         {
@@ -2013,7 +2016,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         CancellationToken cancellationToken = default)
         => CompileRoleAsync(startNodeIndex, CompileRole.Root, cancellationToken);
 
-    [Description("Reverse-compiles a node's ancestor cone (the upstream producers feeding it, traced backward from its input slots) and returns the compiled plan that computes just that node's result: compiled segments plus every compile-aware node's Order / ChainIndex / Offset. No controller/start node is needed — the cone's entry frontier is derived automatically. Same artifact shape as CompileWorkflow, but scoped to the node instead of the whole reachable chain. Compiling also attaches compile identity to the cone's nodes. Use GetCompileStatus afterwards to read the identity without recompiling.")]
+    [Description("Reverse-compiles a node's ancestor cone (Terminal role, read-only): the upstream producers feeding the node, traced backward from its input slots; returns the compiled plan that computes just that node's result — compiled segments plus every compile-aware node's Order / ChainIndex / Offset. No controller/start node is needed: the cone's entry frontier is derived automatically. Routers on the cone keep real BranchSegment semantics and only the branch leading to the node is compiled (sibling branches are absent, not Order=-1). If MORE THAN ONE route key of the same router reaches the node, compilation returns an error — a single forward run can only take one branch, so that node has no result; ask for a node on one of those branches instead. Same artifact shape as CompileWorkflow, scoped to the node instead of the whole reachable chain. Compiling attaches compile identity to the cone's nodes. Use GetCompileStatus afterwards to read the identity without recompiling.")]
     private Task<string> CompileNodeResult(
         [Description("Node index whose ancestor cone to compile (its output is what a terminal run would compute).")] int nodeIndex,
         CancellationToken cancellationToken = default)
