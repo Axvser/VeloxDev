@@ -5,6 +5,7 @@ using Jalium.UI.Input;
 using Jalium.UI.Media;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace TemplateNamespace;
 
@@ -30,14 +31,12 @@ public class TemplateClass : Canvas
         DashStyle = new DashStyle(new double[] { 4, 2 }),
     };
 
-    /// <summary>Visual-only content inset = the ruler-band thickness, so content is drawn below/right of
-    /// the floating rulers and the world axes land on their inner corner (matches the XAML adapters).</summary>
-    public const double RulerReserve = 36;
-
-    /// <summary>Visual world-origin translate = Layout.ActualOffset + the ruler reserve. Views position at
-    /// world + this origin; the minimap's physical content origin also uses it.</summary>
-    public double OriginX => (_tree?.Layout.ActualOffset.Horizontal ?? 0) + RulerReserve;
-    public double OriginY => (_tree?.Layout.ActualOffset.Vertical ?? 0) + RulerReserve;
+    /// <summary>Visual world-origin translate: the tree's layout offset PLUS the ruler-band reserve, so
+    /// content is inset below/right of the floating rulers and the world axes land on the rulers' inner
+    /// corner (matching WPF/Blazor). Views position at world + this origin; it is also the physical
+    /// "scroll − origin" the minimap uses.</summary>
+    public double OriginX => (_tree?.Layout.ActualOffset.Horizontal ?? 0) + GridDecorator.RulerThickness;
+    public double OriginY => (_tree?.Layout.ActualOffset.Vertical ?? 0) + GridDecorator.RulerThickness;
 
     /// <summary>Canonical (reported) world origin = Layout.ActualOffset, excluding the ruler reserve —
     /// feeds the info HUD / helper so numbers stay identical across adapters.</summary>
@@ -49,6 +48,16 @@ public class TemplateClass : Canvas
 
     private IWorkflowTreeViewModel? _tree;
     private ScrollViewer? _scrollViewer;
+
+    /// <summary>Committed zoom scroll target (see <see cref="NotifyZoomCommitted(double, double)"/>).
+    /// Jalium's ScrollTo can land asynchronously, so a ScrollChanged that fires before the offset
+    /// settles would rewrite <see cref="IWorkflowTreeViewModelHelper.Viewport"/> from a stale (pre-zoom) offset
+    /// and the next Virtualize would cull the freshly materialized links while the endpoint nodes (which
+    /// enter the pool by their own rects) stay. While the pin is live the viewport is held at the
+    /// committed target; it clears the moment the viewer reports the target (ScrollTo landed) or after
+    /// <see cref="ZoomPinLifetimeMs"/> so a later genuine user scroll always falls back to live offsets.</summary>
+    private (double X, double Y, long Ticks)? _zoomPin;
+    private const double ZoomPinLifetimeMs = 250;
 
     private enum DragKind { None, Node, Link, Pan }
     private DragKind _dragKind;
@@ -69,49 +78,23 @@ public class TemplateClass : Canvas
         AddHandler(MouseMoveEvent, new MouseEventHandler(OnMouseMove));
         AddHandler(MouseUpEvent, new MouseButtonEventHandler(OnMouseUp));
         AddHandler(LostMouseCaptureEvent, new MouseEventHandler(OnLostMouseCapture));
-        KeyDown += OnZoomKeyDown;
-    }
-
-    private void OnZoomKeyDown(object? sender, KeyEventArgs e)
-    {
-        // Ctrl + '+'/'-' zooms (plain +/- stays unhandled so it can't fire by accident), mirroring
-        // the demos' window-level Ctrl + wheel / Ctrl + '-' handling.
-        if (_tree is null || !e.IsControlDown)
-        {
-            return;
-        }
-
-        double factor;
-        if (e.Key == Key.Add || e.Key == Key.OemPlus)
-        {
-            // '+' zooms in: Scale is a collapse factor, so zoom-in divides it.
-            factor = 1 / 1.1;
-        }
-        else if (e.Key == Key.Subtract || e.Key == Key.OemMinus)
-        {
-            factor = 1.1;
-        }
-        else
-        {
-            return;
-        }
-
-        // The Core Anchor/Size getters collapse the nodes toward the world origin by Layout.Scale.
-        var next = System.Math.Max(0.1, System.Math.Min(10, _tree.Layout.Scale.Horizontal * factor));
-        _tree.Layout.Scale = new Scale(next, next);
-        e.Handled = true;
     }
 
     public void AttachScrollViewer(ScrollViewer viewer)
     {
         _scrollViewer = viewer;
         // The ruler bands are viewport-fixed, so a scroll must repaint the surface (grid + rulers).
-        viewer.ScrollChanged += (_, _) =>
+        // SizeChanged keeps helper.Viewport (culling + info HUD) current when the viewer resizes but
+        // does not scroll — Jalium may not raise ScrollChanged for a viewport-size change.
+        void OnViewportMetricsChanged()
         {
             UpdateViewport();
             InvalidateVisual();
             Changed?.Invoke();
-        };
+        }
+
+        viewer.ScrollChanged += (_, _) => OnViewportMetricsChanged();
+        viewer.SizeChanged += (_, _) => OnViewportMetricsChanged();
     }
 
     /// <summary>The bound workflow tree (for overlays like the minimap).</summary>
@@ -153,8 +136,7 @@ public class TemplateClass : Canvas
         else if (e.PropertyName == nameof(VeloxDev.WorkflowSystem.CanvasLayout.Scale))
         {
             // The Core Anchor/Size getters collapse toward the origin by Layout.Scale; re-render so the
-            // virtual-link preview (OutputCenter) and any surface drawing reflect the collapsed coordinates.
-            // Node views reposition themselves via the Core scale tracker re-raising Anchor/Size.
+            // self-drawn node views (positioned at node.Anchor) reflect the collapsed coordinates.
             InvalidateVisual();
             Changed?.Invoke();
         }
@@ -170,10 +152,38 @@ public class TemplateClass : Canvas
 
     private void UpdateViewport()
     {
+        // After a zoom commit the committed target is authoritative until the viewer actually lands
+        // there: Jalium's ScrollTo can settle asynchronously, so a ScrollChanged that fires mid-settle
+        // (or before the move at all) carries a stale offset. Holding the pin keeps the viewport window
+        // at the committed target so a stale rewrite cannot cull freshly materialized links; the pin is
+        // cleared when the viewer reports the target (landed) or ages past ZoomPinLifetimeMs (so a
+        // later genuine pan/wheel read of the live offset is never blocked).
+        if (_scrollViewer is { } pinnedViewer && _zoomPin is { } pin)
+        {
+            var landed = Math.Abs(pinnedViewer.HorizontalOffset - pin.X) < 0.5
+                      && Math.Abs(pinnedViewer.VerticalOffset - pin.Y) < 0.5;
+            var ageMs = (System.DateTime.UtcNow.Ticks - pin.Ticks) / System.TimeSpan.TicksPerMillisecond;
+            if (landed || ageMs > ZoomPinLifetimeMs)
+            {
+                _zoomPin = null;
+            }
+            else
+            {
+                UpdateViewport(pin.X, pin.Y);
+                return;
+            }
+        }
+
+        UpdateViewport(_scrollViewer?.HorizontalOffset ?? 0, _scrollViewer?.VerticalOffset ?? 0);
+    }
+
+    /// <summary>Recompute <see cref="IWorkflowTreeViewModelHelper.Viewport"/> from explicit scroll offsets
+    /// (hx/vy) rather than re-reading the viewer. Zoom commit passes the target it already computed so
+    /// virtualization does not depend on whether ScrollTo... applied the offset synchronously.</summary>
+    private void UpdateViewport(double hx, double vy)
+    {
         if (_tree is null) return;
         var layout = _tree.Layout;
-        double hx = _scrollViewer?.HorizontalOffset ?? 0;
-        double vy = _scrollViewer?.VerticalOffset ?? 0;
         double vw = _scrollViewer?.ViewportWidth ?? 0;
         double vh = _scrollViewer?.ViewportHeight ?? 0;
         if (vw <= 0 || vh <= 0)
@@ -187,10 +197,45 @@ public class TemplateClass : Canvas
             vw = Math.Max(CanvasWidth, layout.ActualSize.Width);
             vh = Math.Max(CanvasHeight, layout.ActualSize.Height);
         }
+        // Count the floating ruler band into virtualization so nodes near its inner-facing edge are
+        // not culled a ruler-thickness early (this custom surface drives Viewport directly, bypassing
+        // the adapter's WorkflowSurfaceBehavior which auto-syncs the inset).
+        _tree.SetVirtualizeInset(left: GridDecorator.RulerThickness, top: GridDecorator.RulerThickness);
         _tree.GetHelper().Viewport = new Viewport(
             hx - layout.ActualOffset.Horizontal,
             vy - layout.ActualOffset.Vertical,
             vw, vh);
+    }
+
+    /// <summary>
+    /// Raised by the host after a zoom gesture is committed (Scale and the layout offsets settled) so
+    /// viewport virtualization re-runs synchronously. The helper otherwise virtualizes on its ~10 fps
+    /// dirty timer (TreeHelper.Update), so after a zoom burst the pooled node/link views lag the freshly
+    /// collapsed anchors by up to ~100 ms — deep-zoom links vanish or detach for that window. Virtualize
+    /// has no equality short-circuit (it always rebuilds; the spatial extension re-entrancy-guards
+    /// itself), so recomputing the viewport here keeps VisibleItems in lock-step with the committed zoom.
+    /// Zoom is host-driven: mirror the demos' window-level Ctrl+wheel / Ctrl+'+'/'-' handling (pivot via
+    /// WorkflowSurfaceMath.WorldAtViewportCenter/PivotCenterScroll, then call this to commit).
+    /// </summary>
+    public void NotifyZoomCommitted() => NotifyZoomCommitted(
+        _scrollViewer?.HorizontalOffset ?? 0,
+        _scrollViewer?.VerticalOffset ?? 0);
+
+    /// <summary>Virtualize against a COMMITTED scroll target. Reading the viewer's offset immediately
+    /// after ScrollTo... can see a not-yet-applied (pre-zoom) value — Jalium does not guarantee the
+    /// offset lands synchronously and its ScrollChanged is unreliable — so a per-notch re-virtualize
+    /// there would cull against a stale window and deep-zoom links would stay dropped ~100ms.</summary>
+    public void NotifyZoomCommitted(double hx, double vy)
+    {
+        if (_tree is null) return;
+        // Pin the committed target so a delayed ScrollChanged (which can carry a not-yet-applied,
+        // pre-zoom offset in Jalium) cannot overwrite the window we're about to write below. The pin is
+        // released by UpdateViewport() once the viewer reports it or after ZoomPinLifetimeMs.
+        _zoomPin = (hx, vy, System.DateTime.UtcNow.Ticks);
+        UpdateViewport(hx, vy);
+        _tree.GetHelper().Virtualize(_tree.GetHelper().Viewport);
+        InvalidateVisual();
+        Changed?.Invoke();
     }
 
     private Point ToCanvas(double wx, double wy) => new(wx + OriginX, wy + OriginY);

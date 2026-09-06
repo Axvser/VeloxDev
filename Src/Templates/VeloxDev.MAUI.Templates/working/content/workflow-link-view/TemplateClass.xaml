@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- VeloxDev customization: Customize line geometry, color, thickness, and virtual-link rendering in the code-behind. -->
+<!-- VeloxDev customization: The shared, viewport-sized links layer. Hosts the adapter's
+     WorkflowLinkOverlay — ONE GraphicsView that draws every visible link plus the virtual preview.
+     Per-link GraphicsViews were removed from the Trimmed demos (a canvas-sized / per-link GraphicsView
+     exceeds the Win2D texture cap at deep zoom and silently disappears), so keep this overlay-based
+     shape: place ONE LinkView as a sibling of the scroll viewer on your surface and bind it to the
+     decorator's scroll/content offsets (see the workflow-tree-view template). -->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="TemplateNamespace.TemplateClass"
+             x:Name="Root"
              InputTransparent="True">
-    <GraphicsView x:Name="PART_Graphics" />
+    <behaviors:WorkflowLinkOverlay WorkflowTree="{Binding WorkflowTree, Source={x:Reference Root}}"
+                                   ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference Root}}"
+                                   ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference Root}}"
+                                   ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference Root}}"
+                                   ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference Root}}"
+                                   RulerThickness="{Binding RulerThickness, Source={x:Reference Root}}"
+                                   LinkLineColor="{Binding LinkLineColor, Source={x:Reference Root}}"
+                                   VirtualLineColor="{Binding VirtualLineColor, Source={x:Reference Root}}"
+                                   StrokeWidth="{Binding StrokeWidth, Source={x:Reference Root}}" />
 </ContentView>

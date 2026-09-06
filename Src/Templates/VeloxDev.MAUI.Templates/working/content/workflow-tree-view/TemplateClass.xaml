@@ -16,10 +16,10 @@
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView WidthRequest="{Binding Size.Width}" HeightRequest="{Binding Size.Height}" />
         </DataTemplate>
-        <DataTemplate x:Key="LinkTemplate">
-            <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}" EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}" CanRender="{Binding IsVisible}" />
-        </DataTemplate>
-        <local:TemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" LinkTemplate="{StaticResource LinkTemplate}" />
+        <!-- Links are NOT pooled anymore: the shared link layer renders them in one viewport-sized
+             GraphicsView (see LinkView below), so the pool only materializes node views and the
+             selector needs no LinkTemplate. -->
+        <local:TemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" />
     </ContentView.Resources>
 
     <Grid>
@@ -29,6 +29,16 @@
                 StrokeShape="RoundRectangle TemplateSurfaceCornerRadius"
                 BackgroundColor="TemplateSurfaceBackground">
             <local:GridDecorator x:Name="PART_GridDecorator">
+                <!-- Viewport-sized link layer (sibling of the scroll viewer, never inside the growing
+                     world canvas → no Win2D texture cap on deep zoom). One GraphicsView draw at
+                     px = Ruler + anchor + ContentOffset − Scroll. z order: grid < links < nodes < rulers. -->
+                <local:LinkView WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
+                                ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                ScrollOffsetY="{Binding ScrollOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                ContentOffsetX="{Binding ContentOffsetX, Source={x:Reference PART_GridDecorator}}"
+                                ContentOffsetY="{Binding ContentOffsetY, Source={x:Reference PART_GridDecorator}}"
+                                RulerThickness="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}"
+                                StrokeWidth="2" />
                 <ScrollView x:Name="PART_ScrollViewer"
                             Orientation="Both">
                     <AbsoluteLayout x:Name="PART_RulerOffsetHost"
@@ -36,7 +46,7 @@
                                     TranslationY="{Binding RulerThickness, Source={x:Reference PART_GridDecorator}}">
                         <AbsoluteLayout x:Name="PART_Canvas"
                                         BackgroundColor="Transparent"
-                                        behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"
+                                        behaviors:ViewPool.ItemsSource="{Binding NodeItemsSource, Source={x:Reference Root}}"
                                         behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}" />
                     </AbsoluteLayout>
                 </ScrollView>

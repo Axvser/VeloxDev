@@ -1,9 +1,12 @@
 // VeloxDev customization: Customize line geometry, color, and thickness here.
+// Keep the offset-frame contract: geometry is baked +ActualOffset and this element self-positions at
+// -ActualOffset sized to the model ActualSize, so collapse-zoom never clips a link's negative half.
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using System;
+using System.ComponentModel;
 using System.Globalization;
 // Alias Path: `using Microsoft.UI.Xaml.Shapes;` would collide with System.IO.Path (implicit usings).
 using Path = Microsoft.UI.Xaml.Shapes.Path;
@@ -27,6 +30,17 @@ public sealed partial class TemplateClass : UserControl
     private readonly Point[] _points = new Point[4];
     private bool _updatePending;
     private bool _isLoaded;
+    private CanvasLayout? _layout;
+    private PropertyChangedEventHandler? _layoutHandler;
+    private double _offsetX;
+    private double _offsetY;
+
+    // Offset-frame origin actually applied: the geometry is baked +(_offsetX,_offsetY) and this element
+    // is placed at −(_offsetX,_offsetY), so an endpoint's DRAWN canvas-local coordinate still equals its
+    // raw DP value (alignment with the nodes is unchanged) while the geometry now lives INSIDE this
+    // element's box — no element-bounds clip can cut the negative half of a deep-zoom link.
+    internal double OffsetFrameX => _offsetX;
+    internal double OffsetFrameY => _offsetY;
 
     public TemplateClass()
     {
@@ -34,14 +48,19 @@ public sealed partial class TemplateClass : UserControl
         Canvas.SetZIndex(this, -100);
         IsHitTestVisible = false;
 
-        var container = new Grid();
-        _path = new Path { Stroke = _strokeBrush, StrokeThickness = TemplateLinkThickness, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false };
+        // The polyline geometry is in raw collapsed (canvas-local) coordinates, so at deep zoom its
+        // negative top/left half extends beyond this element's bounds. WinUI clips element content to
+        // its bounds unless Clip is nulled — the same root/grid pattern NodeView uses for its
+        // overhanging ports. WPF links are OnRender-drawn and never clipped, which is why they survive;
+        // this null chain reproduces that "no clip" behavior for the retained Path.
+        var container = new Grid { Clip = null };
+        _path = new Path { Stroke = _strokeBrush, StrokeThickness = TemplateLinkThickness, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false, Clip = null };
         container.Children.Add(_path);
         this.Content = container;
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        DataContextChanged += (_, _) => ScheduleUpdate();
+        DataContextChanged += OnDataContextChanged;
         ScheduleUpdate();
     }
 
@@ -91,6 +110,7 @@ public sealed partial class TemplateClass : UserControl
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = true;
+        UpdateLayoutSubscription();
         EnsureGeometry();
         ScheduleUpdate();
     }
@@ -99,6 +119,57 @@ public sealed partial class TemplateClass : UserControl
     {
         _isLoaded = false;
         _updatePending = false;
+        UnsubscribeLayout();
+    }
+
+    private void OnDataContextChanged(object sender, DataContextChangedEventArgs args)
+    {
+        // Pool reuse re-assigns DataContext (and hides show a null DataContext first), so the layout
+        // subscription is rebound here every time — the layout it must follow is the TREE's layout.
+        UpdateLayoutSubscription();
+        ScheduleUpdate();
+    }
+
+    /// <summary>Resolve the owning tree (Sender/Receiver → node → tree) and follow its CanvasLayout,
+    /// so when EnsureNegativeCover grows ActualOffset during zoom the offset-frame bake re-runs.</summary>
+    private void UpdateLayoutSubscription()
+    {
+        UnsubscribeLayout();
+
+        if (DataContext is not IWorkflowLinkViewModel link)
+        {
+            return;
+        }
+
+        var tree = link.Sender?.Parent?.Parent as IWorkflowTreeViewModel
+                   ?? link.Receiver?.Parent?.Parent as IWorkflowTreeViewModel;
+        if (tree?.Layout is { } layout)
+        {
+            _layout = layout;
+            _layoutHandler = OnLayoutPropertyChanged;
+            _layout.PropertyChanged += _layoutHandler;
+        }
+    }
+
+    private void UnsubscribeLayout()
+    {
+        if (_layout is not null && _layoutHandler is not null)
+        {
+            _layout.PropertyChanged -= _layoutHandler;
+        }
+
+        _layout = null;
+        _layoutHandler = null;
+    }
+
+    private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // Only the two quantities this view bakes/positions against need a rebuild. ViewportOffset
+        // changes on every pan tick and must NOT trigger redraws (they would fight smooth panning).
+        if (e.PropertyName is nameof(CanvasLayout.ActualOffset) or nameof(CanvasLayout.ActualSize))
+        {
+            ScheduleUpdate();
+        }
     }
 
     private void EnsureGeometry()
@@ -147,7 +218,34 @@ public sealed partial class TemplateClass : UserControl
             return;
         }
 
-        BuildPoints();
+        // Offset frame: bake the canvas translate (+ActualOffset) into the geometry AND shift this
+        // element to −ActualOffset. The box then spans [−ActualOffset, ActualSize − ActualOffset] in
+        // canvas-local, and the baked geometry is always inside this element's own [0, ActualSize]
+        // box — collapse-zoom can never push a link's negative half out of its element bounds, which
+        // is what a WinUI element-bounds clip would cut. Rendered position is unchanged: an element
+        // at −o drawing point (g+o) lands at canvas-local g, the exact coordinate the raw DPs hold and
+        // the nodes sit at. Width/Height come from the model canvas size (not the arranged ActualWidth)
+        // so the box is authoritative even where an ElementName ActualWidth binding would lag.
+        double ox = 0, oy = 0, w = double.NaN, h = double.NaN;
+        if (_layout is not null)
+        {
+            ox = _layout.ActualOffset.Horizontal;
+            oy = _layout.ActualOffset.Vertical;
+            w = _layout.ActualSize.Width;
+            h = _layout.ActualSize.Height;
+        }
+
+        _offsetX = ox;
+        _offsetY = oy;
+        Canvas.SetLeft(this, -ox);
+        Canvas.SetTop(this, -oy);
+        if (w > 0 && h > 0)
+        {
+            Width = w;
+            Height = h;
+        }
+
+        BuildPoints(ox, oy);
         var color = LineColor;
         var thickness = TemplateLinkThickness;
         _strokeBrush.Color = color;
@@ -167,15 +265,15 @@ public sealed partial class TemplateClass : UserControl
         _path.Data = _pathGeometry;
     }
 
-    private void BuildPoints()
+    private void BuildPoints(double ox, double oy)
     {
         double dx = EndLeft - StartLeft;
         const double phi = 0.6180339887;
         double stub = dx / 2.0 * (1.0 - phi);
-        _points[0] = new Point(StartLeft, StartTop);
-        _points[1] = new Point(StartLeft + stub, StartTop);
-        _points[2] = new Point(EndLeft - stub, EndTop);
-        _points[3] = new Point(EndLeft, EndTop);
+        _points[0] = new Point(StartLeft + ox, StartTop + oy);
+        _points[1] = new Point(StartLeft + stub + ox, StartTop + oy);
+        _points[2] = new Point(EndLeft - stub + ox, EndTop + oy);
+        _points[3] = new Point(EndLeft + ox, EndTop + oy);
     }
 
     private static Windows.UI.Color ParseColor(string hex)
