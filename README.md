@@ -232,13 +232,6 @@ Avalonia, WinUI, MAUI, WinForms and Jalium suites expose the same style options 
 
 All templates use `-ns` for the generated namespace.
 
-### Core-only packages *(bring your own adapter)*
-
-| Package | NuGet | Description |
-|---------|-------|-------------|
-| `VeloxDev.Core` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core/) | Workflow model, MVVM source generators, canvas math and the `CompilerEx` execution engine — multi-targeted down to `netstandard2.0`/`.NET Framework 4.6.1`, zero third-party dependencies |
-| `VeloxDev.Core.Extension` | [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core.Extension?color=4caf50&logo=nuget)](https://www.nuget.org/packages/VeloxDev.Core.Extension/) | MAF-based Workflow Agent tools, MCP scope, and runtime extensions |
-
 ---
 
 ## 🗂️ Repository Layout
