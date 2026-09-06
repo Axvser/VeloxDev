@@ -16,7 +16,7 @@ internal static class ProbeGraph
     /// <summary>以 start 为根编译可达子图,返回首个 CompiledGraph。</summary>
     public static CompiledGraph Compile(ProbeNode start)
     {
-        var graphs = new CompilerViewModel().CompileAsync(start).GetAwaiter().GetResult();
+        var graphs = new CompilerViewModel().CompileAsync(start, CompileRole.Root).GetAwaiter().GetResult();
         Assert.IsTrue(graphs.Count > 0, "CompileAsync should produce at least one graph.");
         return graphs[0];
     }

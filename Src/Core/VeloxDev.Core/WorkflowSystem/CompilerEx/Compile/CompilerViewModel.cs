@@ -25,16 +25,32 @@ public sealed partial class CompilerViewModel
 {
     [VeloxProperty] private ObservableCollection<CompiledGraph> _graphs = [];
 
-    public async Task<IReadOnlyList<CompiledGraph>> CompileAsync<T>(T component, CancellationToken ct = default)
+    /// <summary>
+    /// The single compile entry point. The node passed in plays <paramref name="role"/>:
+    /// - <see cref="CompileRole.Root"/>: decompose the sub-graph reachable from the node (a Controller / entry)
+    ///   into compiled graphs, walking downstream along Targets;
+    /// - <see cref="CompileRole.Terminal"/>: reverse-compile the node's ancestor cone along Sources, derive the
+    ///   cone's entry frontier automatically, and compile only what is needed to compute the node's result —
+    ///   no explicit start node required.
+    /// Both roles return one compiled graph (multi-graph semantics) and store it in <see cref="Graphs"/>.
+    /// </summary>
+    public async Task<IReadOnlyList<CompiledGraph>> CompileAsync<T>(
+        T component, CompileRole role, CancellationToken ct = default)
         where T : IWorkflowViewModel
     {
-        if (component is not IWorkflowNodeViewModel start)
+        if (component is not IWorkflowNodeViewModel node)
             throw new ArgumentException(
-                $"CompileAsync requires an IWorkflowNodeViewModel as the start node; received {component?.GetType().Name}.");
+                $"CompileAsync requires an IWorkflowNodeViewModel as the {role} node; received {component?.GetType().Name}.");
 
-        var state = new CompileState();
-        var graphs = new List<CompiledGraph> { await CompileGraphAsync(start, state, ct) };
+        CompiledGraph graph = role switch
+        {
+            CompileRole.Root => await CompileGraphAsync(node, new CompileState(), ct).ConfigureAwait(false),
+            CompileRole.Terminal => await CompileConeAsync(
+                node, await BuildAncestorConeAsync(node, ct).ConfigureAwait(false), ct).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
+        };
 
+        var graphs = new List<CompiledGraph> { graph };
         _graphs.Clear();
         foreach (var g in graphs) _graphs.Add(g);
         return graphs;
@@ -54,7 +70,7 @@ public sealed partial class CompilerViewModel
             // Join boundary: walking linearly into a multi-input node (not the graph start, not a branch-resume
             // point) → stop and hand back to the parent graph to continue from it. The boundary node is not marked
             // visited (it is not yet compiled; it belongs to the parent graph).
-            if (!ReferenceEquals(node, start) && !resumedAfterBranch && HasMultipleInputs(node))
+            if (!ReferenceEquals(node, start) && !resumedAfterBranch && HasMultipleInputs(node, state.Cone))
                 break;
 
             // Nodes already compiled are not processed again (acyclic graph, avoids duplicate compilation).
@@ -62,7 +78,9 @@ public sealed partial class CompilerViewModel
                 break;
             resumedAfterBranch = false;
 
-            if (node is ICompileTimeRouter router)
+            // Reverse/restricted compilation (CompileRole.Terminal) flattens routers: it follows the cone's own edges
+            // toward the target instead of asking the router to pick a branch, so no route table is consulted.
+            if (node is ICompileTimeRouter router && !state.FlatRouters)
             {
                 FlushChain(entries, chain, state, offset);
                 AttachCompileContext(node, state.Counter, 0, offset, state);
@@ -146,7 +164,7 @@ public sealed partial class CompilerViewModel
                 });
 
                 // The join point after a branch: the next node all active branch exits jointly point to.
-                node = CommonNext(exits);
+                node = CommonNext(exits, state.Cone);
                 if (node is not null)
                 {
                     // Join registration: write each branch exit (input source) into JoinInputs so the node's
@@ -186,7 +204,7 @@ public sealed partial class CompilerViewModel
                     }
                     entries.Add(new ParallelSegment { Branches = new ObservableCollection<CompiledGraph>(branches) });
 
-                    node = CommonNext(exits);
+                    node = CommonNext(exits, state.Cone);
                     if (node is not null)
                     {
                         var distinctExits = exits.Where(e => e is not null)
@@ -282,35 +300,42 @@ public sealed partial class CompilerViewModel
     };
 
     /// <summary>The common downstream (join point) of all branch exits; returns null when there is no common downstream (each branch ends on its own).</summary>
-    private static IWorkflowNodeViewModel? CommonNext(List<IWorkflowNodeViewModel?> exits)
+    private static IWorkflowNodeViewModel? CommonNext(
+        List<IWorkflowNodeViewModel?> exits, ISet<IWorkflowNodeViewModel>? cone = null)
     {
         IWorkflowNodeViewModel? common = null;
         var first = true;
         foreach (var exit in exits)
         {
             if (exit is null) continue;
-            var next = SingleTarget(exit);
+            var next = SingleTarget(exit, cone);
             if (first) { common = next; first = false; }
             else if (!ReferenceEquals(next, common)) { common = null; break; }
         }
         return common;
     }
 
-    private static bool HasMultipleInputs(IWorkflowNodeViewModel node)
+    /// <summary>
+    /// Whether the node has &gt;= 2 distinct input sources. Under a reverse cone (CompileRole.Terminal) only sources that
+    /// also live in the cone count — edges out of the cone are not executed and must not force a join boundary.
+    /// </summary>
+    private static bool HasMultipleInputs(IWorkflowNodeViewModel node, ISet<IWorkflowNodeViewModel>? cone = null)
         => node.Slots.Where(s => s is not null)
             .SelectMany(s => s!.Sources ?? [])
             .Select(s => s.Parent)
             .OfType<IWorkflowNodeViewModel>()
             .Distinct()
-            .Count() >= 2;
+            .Count(n => cone is null || cone.Contains(n)) >= 2;
 
-    private static IWorkflowNodeViewModel? SingleTarget(IWorkflowNodeViewModel node)
+    private static IWorkflowNodeViewModel? SingleTarget(
+        IWorkflowNodeViewModel node, ISet<IWorkflowNodeViewModel>? cone = null)
     {
         var targets = node.Slots.Where(s => s is not null)
             .SelectMany(s => s!.Targets ?? [])
             .Select(s => s.Parent)
             .OfType<IWorkflowNodeViewModel>()
             .Distinct()
+            .Where(n => cone is null || cone.Contains(n))
             .ToList();
         return targets.Count == 1 ? targets[0] : null;
     }
@@ -363,7 +388,10 @@ public sealed partial class CompilerViewModel
                 validTargets.Add(target);
             }
         }
-        return validTargets.Distinct().ToList();
+        var distinctTargets = validTargets.Distinct().ToList();
+        if (state.Cone is not null)
+            distinctTargets = distinctTargets.Where(state.Cone.Contains).ToList();
+        return distinctTargets;
     }
 
     /// <summary>Compile cursor: a global order counter plus a visited set (avoids ref parameters so it can be shared across async recursion).</summary>
@@ -371,6 +399,18 @@ public sealed partial class CompilerViewModel
     {
         public int Counter;
         public readonly HashSet<IWorkflowNodeViewModel> Visited = [];
+
+        /// <summary>
+        /// Reverse compilation (CompileRole.Terminal) restricts the walk to this ancestor cone: only nodes in the set are
+        /// continued into, and joins/nexts are computed over cone edges only. Null for the plain forward compile.
+        /// </summary>
+        public ISet<IWorkflowNodeViewModel>? Cone;
+
+        /// <summary>
+        /// Reverse compilation treats every ICompileTimeRouter as an ordinary data-flow node (no route table, no
+        /// branch selection) — the cone already encodes the only branch relevant to the target.
+        /// </summary>
+        public bool FlatRouters;
 
         /// <summary>Join point → input source node list (registered from each branch exit at compile-time, so the join point's compile identity can backfill InputNodes).</summary>
         public readonly Dictionary<IWorkflowNodeViewModel, IReadOnlyList<IWorkflowNodeViewModel>> JoinInputs =

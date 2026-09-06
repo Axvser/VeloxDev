@@ -30,7 +30,7 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     [VeloxCommand]
     private async Task Compile(object? parameters, CancellationToken ct)
     {
-        await Compiler.CompileAsync(this);
+        await Compiler.CompileAsync(this, CompileRole.Root);
         OnPropertyChanged(nameof(HasCompiledGraphs));
     }
 

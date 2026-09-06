@@ -1796,7 +1796,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         try
         {
             var compiler = new CompilerViewModel();
-            var graphs = await compiler.CompileAsync(node!).ConfigureAwait(false);
+            var graphs = await compiler.CompileAsync(node!, CompileRole.Root).ConfigureAwait(false);
             if (graphs.Count == 0)
                 return Error("Compile produced no graphs from this start node.");
 
@@ -1982,7 +1982,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         try
         {
             var compiler = new CompilerViewModel();
-            var graphs = await compiler.CompileAsync(node!).ConfigureAwait(false);
+            var graphs = await compiler.CompileAsync(node!, CompileRole.Root).ConfigureAwait(false);
 
             var entries = new JArray();
             foreach (var g in graphs)
