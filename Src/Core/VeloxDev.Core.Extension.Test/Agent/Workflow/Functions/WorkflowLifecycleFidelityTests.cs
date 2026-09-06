@@ -19,23 +19,29 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 [TestClass]
 public class WorkflowLifecycleFidelityTests
 {
-    private static string InvokeTool(WorkflowAgentToolkit toolkit, string toolName, params (string Name, object? Value)[] args)
+    /// <summary>
+    /// Invokes a workflow tool through its PUBLIC registration path (scope.ProvideTools() →
+    /// AIFunction.InvokeAsync), the same route an AI host uses — not by reflecting into private methods.
+    /// Arguments are bound by parameter name; null values are omitted so the method's defaults apply.
+    /// </summary>
+    private static string InvokeTool(WorkflowAgentScope scope, string toolName, params (string Name, object? Value)[] args)
     {
-        var method = typeof(WorkflowAgentToolkit)
-            .GetMethod(toolName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.IsNotNull(method, $"Tool method '{toolName}' was not found.");
+        var tool = scope.ProvideTools()
+            .FirstOrDefault(t => string.Equals(t.Name, toolName, StringComparison.OrdinalIgnoreCase)) as AIFunction
+            ?? throw new InvalidOperationException($"Tool '{toolName}' was not registered.");
 
-        var parameters = method.GetParameters();
-        var invocationArgs = new object?[parameters.Length];
-        for (int i = 0; i < parameters.Length; i++)
+        var aiArgs = new AIFunctionArguments();
+        foreach (var (name, value) in args)
+            if (value is not null)
+                aiArgs[name] = value;
+
+        var result = tool.InvokeAsync(aiArgs, CancellationToken.None).AsTask().GetAwaiter().GetResult();
+        return result switch
         {
-            var match = args.FirstOrDefault(a => string.Equals(a.Name, parameters[i].Name, StringComparison.OrdinalIgnoreCase));
-            invocationArgs[i] = match == default ? parameters[i].DefaultValue : match.Value;
-        }
-
-        var raw = method.Invoke(toolkit, invocationArgs);
-        Assert.IsInstanceOfType<string>(raw);
-        return (string)raw!;
+            string s => s,
+            JsonElement je => je.GetString() ?? string.Empty,
+            _ => result?.ToString() ?? string.Empty,
+        };
     }
 
     [TestMethod]
@@ -44,11 +50,11 @@ public class WorkflowLifecycleFidelityTests
         var tree = new TreeDefaultViewModel();
         var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node); // synchronous mount (helper path, mirrors CreateNodeCommand)
-        var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree));
+        var scope = new WorkflowAgentScope(tree);
 
         // "Slots" is detected as a slot-collection property, so this exercises the
         // collection-slot registration path directly against the canonical collection.
-        var result = InvokeTool(toolkit, "AddSlotToCollection",
+        var result = InvokeTool(scope, "AddSlotToCollection",
             ("nodeIndex", 0),
             ("propertyName", "Slots"),
             ("fullSlotTypeName", typeof(SlotDefaultViewModel).FullName!),
@@ -75,14 +81,14 @@ public class WorkflowLifecycleFidelityTests
     }
 
     [TestMethod]
-    public async Task ExecuteNode_WaitsForCommandCompletion()
+    public void ExecuteNode_WaitsForCommandCompletion()
     {
         var tree = new TreeDefaultViewModel();
         var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node); // synchronous mount
-        var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree).WithAllowNodeExecution(true));
+        var scope = new WorkflowAgentScope(tree).WithAllowNodeExecution(true);
 
-        var result = await InvokeToolAsync(toolkit, "ExecuteNode", ("nodeIndex", 0), ("parameter", null));
+        var result = InvokeTool(scope, "ExecuteNode", ("nodeIndex", 0));
 
         var json = JObject.Parse(result);
         Assert.AreEqual("ok", json["status"]?.Value<string>());
@@ -116,9 +122,9 @@ public class WorkflowLifecycleFidelityTests
         var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
         node.Anchor = new Anchor(10, 20, 0);
-        var toolkit = new WorkflowAgentToolkit(new WorkflowAgentScope(tree));
+        var scope = new WorkflowAgentScope(tree);
 
-        var result = await InvokeToolAsync(toolkit, "MoveNode", ("nodeIndex", 0), ("offsetX", 50), ("offsetY", 30));
+        var result = InvokeTool(scope, "MoveNode", ("nodeIndex", 0), ("offsetX", 50), ("offsetY", 30));
         var json = JObject.Parse(result);
         Assert.AreEqual("ok", json["status"]?.Value<string>());
 
@@ -174,31 +180,6 @@ public class WorkflowLifecycleFidelityTests
         // The marshal branch runs the tool via Post on the configured context instance.
         var syncCount = sync.PostCount;
         Assert.AreEqual(1, syncCount, $"tool call should have been marshalled once through the UI context (PostCount={syncCount})");
-    }
-
-    private static async Task<string> InvokeToolAsync(WorkflowAgentToolkit toolkit, string toolName, params (string Name, object? Value)[] args)
-    {
-        var method = typeof(WorkflowAgentToolkit)
-            .GetMethod(toolName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.IsNotNull(method, $"Tool method '{toolName}' was not found.");
-
-        var parameters = method.GetParameters();
-        var invocationArgs = new object?[parameters.Length];
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            if (parameters[i].ParameterType == typeof(CancellationToken))
-            {
-                invocationArgs[i] = CancellationToken.None;
-                continue;
-            }
-            var match = args.FirstOrDefault(a => string.Equals(a.Name, parameters[i].Name, StringComparison.OrdinalIgnoreCase));
-            invocationArgs[i] = match == default ? parameters[i].DefaultValue : match.Value;
-        }
-
-        var raw = method.Invoke(toolkit, invocationArgs);
-        if (raw is Task<string> task) return await task.ConfigureAwait(false);
-        Assert.IsInstanceOfType<string>(raw);
-        return (string)raw!;
     }
 
     private sealed class SlotEnumeratorHolder : System.ComponentModel.INotifyPropertyChanged
