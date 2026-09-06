@@ -13,10 +13,10 @@ namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 // 每个节点记录自己每次被驱动的调用(ProbeCall),供断言"驱动顺序/每 pass 数据/重定向跳段"。
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// <summary>一次 ReceiveAsync 驱动调用记录:驱动的节点、运行期 pass、收到的输入数据、阶段。</summary>
+/// <summary>Record of one ReceiveAsync drive: the driven node, the runtime pass attempt, the input data received, and the phase.</summary>
 internal readonly record struct ProbeCall(ProbeNode Node, int Attempt, object? Data, bool Compiled);
 
-/// <summary>空 IVeloxCommand:可计数、可选 Execute 钩子(模拟 ReceiveCommand 投递)。</summary>
+/// <summary>No-op IVeloxCommand: countable, with an optional Execute hook (models ReceiveCommand dispatch).</summary>
 internal sealed class TestCommand : IVeloxCommand
 {
     public event EventHandler? CanExecuteChanged;
@@ -56,7 +56,7 @@ internal sealed class TestCommand : IVeloxCommand
     public Task ChangeSemaphoreAsync(int semaphore) => Task.CompletedTask;
 }
 
-/// <summary>最小 IWorkflowSlotViewModel:Targets/Sources/Parent 可直接接线的数据载体。</summary>
+/// <summary>Minimal IWorkflowSlotViewModel: a data carrier whose Targets/Sources/Parent can be wired directly.</summary>
 internal sealed class TestSlot : IWorkflowSlotViewModel
 {
     public ObservableCollection<IWorkflowSlotViewModel> Targets { get; set; } = [];
@@ -82,8 +82,9 @@ internal sealed class TestSlot : IWorkflowSlotViewModel
 }
 
 /// <summary>
-/// 引擎/编译器驱动用的节点助手:把每次 ReceiveAsync 记入节点 Calls,再交给节点注入的 Handler。
-/// 默认 AccessAsync 放行;可通过节点的 AccessGate 决定单条边是否有效(编译期即被剪)。
+/// Node helper used by the engine/compiler: logs each ReceiveAsync into the node's Calls, then hands over to the
+/// injected Handler. AccessAsync passes by default; the node's AccessGate can reject individual edges (pruned at
+/// compile time).
 /// </summary>
 internal sealed class ProbeHelper : NodeHelper<ProbeNode>
 {
@@ -112,26 +113,26 @@ internal sealed class ProbeHelper : NodeHelper<ProbeNode>
 }
 
 /// <summary>
-/// 探针节点:IWorkflowNodeViewModel + 编译身份(ICompileTimeAware)+ 运行期注入(IRuntimeAware)。
-/// 默认 Handler 为空(ReceiveAsync 返回 null);测试经 Handler/AccessGate 注入每节点行为。
+/// Probe node: IWorkflowNodeViewModel + compile identity (ICompileTimeAware) + runtime injection (IRuntimeAware).
+/// Handler defaults to null (ReceiveAsync returns null); tests inject per-node behavior through Handler/AccessGate.
 /// </summary>
 internal class ProbeNode : IWorkflowNodeViewModel, ICompileTimeAware, IRuntimeAware
 {
     private readonly ProbeHelper _helper;
 
-    /// <summary>驱动记录(仅运行期 ReceiveAsync,编译期 AccessAsync 不记)。</summary>
+    /// <summary>Drive records (runtime ReceiveAsync only; compile-time AccessAsync is not recorded).</summary>
     public List<ProbeCall> Calls { get; } = [];
 
-    /// <summary>节点业务:输入上下文 → 返回值(写入 context.Data 供下游)。</summary>
+    /// <summary>Node business logic: input context → return value (written to context.Data for downstream).</summary>
     public Func<ITaskContext, CancellationToken, object?>? Handler { get; set; }
 
-    /// <summary>边校验门;返回 false = 该边按未连接剪除。</summary>
+    /// <summary>Edge validation gate; returning false treats the edge as unconnected.</summary>
     public Func<IAccessContext, bool>? AccessGate { get; set; }
 
-    /// <summary>ReceiveCommand 收到的投递(边级广播 / 手动 Run 使用);链级引擎不应触发。</summary>
+    /// <summary>Deliveries received via ReceiveCommand (edge broadcast / manual Run); the chain-level engine must not trigger these.</summary>
     public List<ITaskContext> ReceivedDeliveries { get; } = [];
 
-    /// <summary>运行期引擎注入过的会话(IRuntimeAware.AttachRuntimeContext)。</summary>
+    /// <summary>Sessions injected by the runtime engine (IRuntimeAware.AttachRuntimeContext).</summary>
     public List<IRuntimeContext> AttachedContexts { get; } = [];
 
     public IWorkflowNodeViewModelHelper HelperInstance => _helper;
@@ -143,10 +144,10 @@ internal class ProbeNode : IWorkflowNodeViewModel, ICompileTimeAware, IRuntimeAw
     public Size Size { get; set; } = new();
     public ObservableCollection<IWorkflowSlotViewModel> Slots { get; set; } = [];
 
-    /// <summary>入槽(接收端)。</summary>
+    /// <summary>Input slot (receiver side).</summary>
     public TestSlot Input { get; }
 
-    /// <summary>出槽(发送端)。</summary>
+    /// <summary>Output slot (sender side).</summary>
     public TestSlot Output { get; }
 
     public IVeloxCommand MoveCommand { get; } = new TestCommand();
@@ -200,17 +201,18 @@ internal class ProbeNode : IWorkflowNodeViewModel, ICompileTimeAware, IRuntimeAw
 }
 
 /// <summary>
-/// 路由器节点:ICompileTimeRouter。Static 模式编译期只暴露当前选中分支;Dynamic 暴露全部分支,
-/// ResolveRouteKey(null) 返回 null(编译期不可判),运行期再按 Selection 决定。
+/// Router node: ICompileTimeRouter. Static mode exposes only the currently selected branch at compile time;
+/// Dynamic exposes all branches, ResolveRouteKey(null) returns null (undecidable at compile time) and the key is
+/// decided at runtime by Selection.
 /// </summary>
 internal sealed class RouterNode : ProbeNode, ICompileTimeRouter
 {
     public RouterCompileMode CompileMode { get; set; } = RouterCompileMode.Dynamic;
 
-    /// <summary>当前选中的路由键(Static 下编译期即锁定;Dynamic 下运行期生效)。</summary>
+    /// <summary>Currently selected route key (locked at compile time under Static; effective at runtime under Dynamic).</summary>
     public object? Selection { get; set; }
 
-    /// <summary>全部分支表:键 → 下游节点列表(空列表 = terminal)。</summary>
+    /// <summary>Full branch table: key → downstream node list (empty list = terminal).</summary>
     public Dictionary<object, IReadOnlyList<ProbeNode>> RouteTable { get; } = new();
 
     public RouterNode(string? name = null) : base(name) { }
@@ -246,12 +248,13 @@ internal sealed class RouterNode : ProbeNode, ICompileTimeRouter
 }
 
 /// <summary>
-/// 可重定向节点:IWorkflowNodeViewModel + IRedirectable。节点行为触发 Error/Warn 后,
-/// 引擎调用 ResolveRedirectAsync —— 返回前驱 Order 则整图按目标重跑,返回 null 则继续。
+/// Redirectable node: IWorkflowNodeViewModel + IRedirectable. After the node triggers Error/Warn, the engine calls
+/// ResolveRedirectAsync — returning a predecessor Order re-runs the whole graph toward that state, returning null
+/// continues.
 /// </summary>
 internal sealed class RedirectableNode : ProbeNode, IRedirectable
 {
-    /// <summary>重定向决策:输入运行期上下文,返回目标 Order(null = 继续)。</summary>
+    /// <summary>Redirect decision: given the runtime context, returns the target Order (null = continue).</summary>
     public Func<IRuntimeContext, int?>? Resolve { get; set; }
 
     public RedirectableNode(string? name = null) : base(name) { }

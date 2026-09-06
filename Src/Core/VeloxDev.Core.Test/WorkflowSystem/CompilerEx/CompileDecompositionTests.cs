@@ -4,9 +4,10 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// 编译层契约:CompilerViewModel 把可达子图分解成 Chain/Branch/Parallel 段并注入编译身份。
-/// 用自包含探针节点 + 手动接线,验证:分段形状、全局 Order、静态剪枝(Order=-1)、
-/// 动态分支全存活、普通节点扇出 → ParallelSegment + 汇合登记(JoinInputs)、AccessAsync 失效边被剪。
+/// Compile-phase contract: CompilerViewModel decomposes the reachable sub-graph into Chain/Branch/Parallel
+/// segments and injects the compile identity. Verified on self-contained probe nodes + manual wiring: segment
+/// shapes, global Order, static pruning (Order = -1), dynamic keep-all branches, plain-node fan-out →
+/// ParallelSegment + join registration (JoinInputs), and pruning of AccessAsync-rejected edges.
 /// </summary>
 [TestClass]
 public class CompileDecompositionTests

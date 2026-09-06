@@ -3,10 +3,11 @@ using VeloxDev.Core.WorkflowSystem.CompilerEx;
 namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// 反向编译(CompileAsync + CompileRole.Terminal):给定目标节点,只编译它的祖先锥(Sources 反向、沿有效边)
-/// 并自动从锥的入口前沿执行 —— 不需要指定启动节点。与正向编译语义一致:锥内路由器保留真实分支选择,
-/// 只编"通往目标的支";若运行期路由器选到别的支,目标不被驱动、流程就此结束(targetReached=false),
-/// 不产出假想值。
+/// Reverse compilation (CompileAsync + CompileRole.Terminal): given a target node, compiles only its ancestor
+/// cone (walking Sources backward over valid edges) and runs it from the cone's own entry frontier — no start
+/// node required. Consistent with forward semantics: routers on the cone keep real branch selection and only the
+/// branch leading to the target is compiled; if the router selects a sibling branch at runtime, the target is not
+/// driven and the flow ends there (targetReached = false) — no value is fabricated.
 /// </summary>
 [TestClass]
 public class CompileToReverseTests

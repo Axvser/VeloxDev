@@ -3,17 +3,17 @@ using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 
-/// <summary>CompilerEx 契约测试共享的小工具:接线 / 编译 / 运行 / 图结构读取。</summary>
+/// <summary>Shared helpers for the CompilerEx contract tests: wiring / compile / run / graph inspection.</summary>
 internal static class ProbeGraph
 {
-    /// <summary>连接 from 的出槽 → to 的入槽(只维护编译器消费的 Targets/Sources/Parent)。</summary>
+    /// <summary>Connects from's output slot to to's input slot (maintains only the Targets/Sources/Parent the compiler consumes).</summary>
     public static void Wire(ProbeNode from, ProbeNode to)
     {
         from.Output.Targets.Add(to.Input);
         to.Input.Sources.Add(from.Output);
     }
 
-    /// <summary>以 start 为根编译可达子图,返回首个 CompiledGraph。</summary>
+    /// <summary>Compiles the reachable sub-graph rooted at start and returns the first CompiledGraph.</summary>
     public static CompiledGraph Compile(ProbeNode start)
     {
         var graphs = new CompilerViewModel().CompileAsync(start, CompileRole.Root).GetAwaiter().GetResult();
@@ -21,7 +21,7 @@ internal static class ProbeGraph
         return graphs[0];
     }
 
-    /// <summary>用运行引擎驱动一个编译图,返回会话(供断言 Status/Attempt/logs)。可指定要跟踪的目标节点。</summary>
+    /// <summary>Drives a compiled graph with the runtime engine and returns the session (for Status/Attempt/logs asserts). Optionally tracks a target node.</summary>
     public static async Task<RuntimeContext> RunAsync(
         CompiledGraph graph, object? seed = null, CancellationToken ct = default, ProbeNode? target = null)
     {

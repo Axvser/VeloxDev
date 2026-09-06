@@ -5,10 +5,11 @@ using VeloxDev.WorkflowSystem.StandardEx;
 namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// 三种执行入口的语义分界:
-///  ① 单节点任务(ReceiveCommand + ITaskContext)；
-///  ② 边级广播(StandardBroadcastAsync 逐边投递,AccessAsync 门,失败按未连接跳过)；
-///  ③ 链级编译运行(引擎只经 Helper.ReceiveAsync 驱动,传 IRuntimeContext,从不触发节点命令 —— 引擎持有下游派发权)。
+/// Semantic boundary between the three execution entry points:
+///  ① single-node task (ReceiveCommand + ITaskContext);
+///  ② edge-level broadcast (StandardBroadcastAsync per-edge dispatch, AccessAsync gate, rejected edges skipped);
+///  ③ chain-level compiled run (the engine drives only via Helper.ReceiveAsync with an IRuntimeContext and never
+///     triggers node commands — the engine owns downstream dispatch).
 /// </summary>
 [TestClass]
 public class EntrySemanticsTests

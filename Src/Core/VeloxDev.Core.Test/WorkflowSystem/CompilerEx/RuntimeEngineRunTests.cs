@@ -3,9 +3,10 @@ using VeloxDev.Core.WorkflowSystem.CompilerEx;
 namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// 运行时引擎契约:按编译段驱动节点,引擎持有下游派发权(不触发 ReceiveCommand/BroadcastCommand),
-/// ReceiveAsync 返回值回写会话 Data 供下游读取;扇出为"结构并行、顺序执行 + 源负载恢复";
-/// 多输入汇合点把各上游产物聚合成 IGroupData;terminal/报错决定运行终态。
+/// Runtime engine contract: drives nodes along compiled segments; the engine owns downstream dispatch (never
+/// triggers ReceiveCommand/BroadcastCommand). ReceiveAsync return values are written back into the session Data
+/// for downstream reads; fan-out is "structurally parallel, executed in order + source payload restore";
+/// multi-input joins aggregate each upstream's output into an IGroupData; terminal/error decide the final state.
 /// </summary>
 [TestClass]
 public class RuntimeEngineRunTests

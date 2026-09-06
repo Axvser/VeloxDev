@@ -4,9 +4,10 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// 重定向契约:节点内 Error/Warn/异常被视为"回到更早编译状态"的请求。实现 IRedirectable 且目标为前驱 →
-/// 整图按目标 Order 重跑、目标前节点跳过;目标非法(非前驱)→ 忽略继续;目标恰为路由器 → 只重选路、不重算;
-/// 不实现 IRedirectable → 状态 -1;超过上限 → 中止。
+/// Redirect contract: an in-node Error/Warn/exception is treated as a request to fall back to an earlier compile
+/// state. Implementing IRedirectable with a predecessor target re-runs the whole graph toward that Order, skipping
+/// nodes before the target; an invalid (non-predecessor) target is ignored; a target that is the router itself only
+/// re-routes without recomputing; without IRedirectable the status drops to -1; over the limit the run aborts.
 /// </summary>
 [TestClass]
 public class RuntimeRedirectTests
