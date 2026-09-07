@@ -39,7 +39,12 @@ public sealed class TemplateClass : Control
             ControlStyles.ResizeRedraw |
             ControlStyles.UserPaint,
             true);
-        BackColor = ParseColor("TemplateSlotBackground");
+        // Force alpha to 255: the shared slotBackground default is #01000000 (near
+        // transparent), but WinForms Control.BackColor throws unless A == 0xFF and
+        // the control declares SupportsTransparentBackColor. The background only
+        // serves as a no-parent fallback (OnPaintBackground erases to the parent's
+        // opaque color), so an opaque value is all we need.
+        BackColor = Color.FromArgb(255, ParseColor("TemplateSlotBackground"));
         WorkflowSlotConnectionBehavior.SetIsEnabled(this, true);
     }
 
@@ -92,7 +97,7 @@ public sealed class TemplateClass : Control
     {
         // Fill with the parent's opaque background so the glyph blends into the
         // card (or the surface) without any transparent compositing.
-        e.Graphics.Clear(Parent?.BackColor ?? ParseColor("TemplateSlotBackground"));
+        e.Graphics.Clear(Parent?.BackColor ?? Color.FromArgb(255, ParseColor("TemplateSlotBackground")));
     }
 
     /// <summary>Design-time viewBox size of the slot glyph's SVG artboard.</summary>
