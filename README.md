@@ -26,6 +26,8 @@
 
 </div>
 
+> **What this is** — a **node editor / node-graph / workflow-editor** framework for **.NET / C#**. Drag nodes, wire slots into links on a **zoomable, virtualized canvas**, drive the graph with a **compiled dataflow execution engine**, gate every edit behind **undo/redo**, and control it all through an **AI agent** (function calling + **MCP**). One model → **7 GUIs**: WPF · Avalonia · WinUI · MAUI · WinForms · Blazor · Jalium.
+
 ## ✨ What is VeloxDev?
 
 VeloxDev gives .NET developers a complete foundation for building **interactive workflow editors** — the kind where users drag nodes, wire slots together, and watch data flow through a graph at runtime.
@@ -35,6 +37,8 @@ Three ideas hold the whole project together:
 1. **One model, every GUI.** The workflow model, compile-time identity, runtime engine, serialization and undo/redo live in `VeloxDev.Core` with **zero UI dependencies**. Platform adapters (WPF, Avalonia, WinUI, MAUI, WinForms, Razor, Jalium) supply only the views. Your graph data and its execution semantics behave identically on every platform.
 2. **A real execution engine, not just a canvas.** Besides the drag-and-drop surface, `CompilerEx` compiles any reachable sub-graph into a plan (linear chain / branch / parallel fan-out) and drives it deterministically — including **reverse (Terminal) compilation**: ask "what would this node output?" and it computes just the ancestor cone that feeds it, with no controller needed.
 3. **AI is a first-class controller.** A 60+ function-calling *Workflow Agent* lets an LLM inspect, build and mutate graphs at runtime through natural language — with the same undo/redo, validation and lifecycle the GUI uses, plus optional **MCP** tool connectivity.
+
+> **Why not just a WPF node editor?** Libraries like Nodify and NodeNetwork are excellent, but they are **WPF-only canvases** — they draw the graph and stop there. VeloxDev runs the same node graph on Avalonia, WinUI, MAUI, WinForms and Blazor, and layers on what a canvas alone cannot give you: a **compiled forward + reverse execution engine**, and an **AI agent** that edits and runs the graph through the same undoable commands as the GUI.
 
 ### The workflow system
 
