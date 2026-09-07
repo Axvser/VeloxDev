@@ -22,8 +22,32 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Namespace for the generated view.",
-      "defaultValue": "VeloxDevWorkflowDemo",
+      "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
+    },
+    "minimapBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minimap background color. Accepted for cross-GUI CLI parity; the adapter overlay owns the palette.",
+      "defaultValue": "#D2141922"
+    },
+    "minimapBorder": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minimap border color. Accepted for cross-GUI CLI parity; the adapter overlay owns the palette.",
+      "defaultValue": "#DC94A3B8"
+    },
+    "nodeFill": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minimap node fill color. Accepted for cross-GUI CLI parity; the adapter overlay owns the palette.",
+      "defaultValue": "#DC38BDF8"
+    },
+    "viewportStroke": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minimap viewport stroke color. Accepted for cross-GUI CLI parity; the adapter overlay owns the palette.",
+      "defaultValue": "#F0FFFFFF"
     }
   },
   "primaryOutputs": [

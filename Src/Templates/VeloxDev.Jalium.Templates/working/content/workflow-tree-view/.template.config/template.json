@@ -22,8 +22,33 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Namespace for the generated view.",
-      "defaultValue": "VeloxDevWorkflowDemo",
+      "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
+    },
+    "surfaceBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface background color.",
+      "defaultValue": "#1E1E1E",
+      "replaces": "TemplateSurfaceBackground"
+    },
+    "surfaceBorderBrush": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface border brush. Accepted for cross-GUI CLI parity; this GUI's tree has no border element.",
+      "defaultValue": "#33FFFFFF"
+    },
+    "surfaceBorderThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface border thickness. Accepted for cross-GUI CLI parity; this GUI's tree has no border element.",
+      "defaultValue": "1"
+    },
+    "surfaceCornerRadius": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface corner radius. Accepted for cross-GUI CLI parity; this GUI's tree has no border element.",
+      "defaultValue": "3"
     }
   },
   "primaryOutputs": [

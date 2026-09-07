@@ -18,7 +18,7 @@ public class TemplateClass : Canvas
 {
     private const string FontFamilyName = "Segoe UI";
 
-    private static readonly SolidColorBrush s_titleBrush = new(Color.FromArgb(0xDD, 0x1E, 0x1E, 0x1E));
+    private static readonly SolidColorBrush s_titleBrush = new((Color)ColorConverter.ConvertFromString("TemplateNodeForeground"));
     private static readonly SolidColorBrush s_standByBrush = new(Color.FromArgb(0xDD, 0x1E, 0x1E, 0x1E));
     private static readonly SolidColorBrush s_senderBrush = new(Color.FromRgb(0xFF, 0x63, 0x47));
     private static readonly SolidColorBrush s_receiverBrush = new(Color.FromRgb(0x32, 0xCD, 0x32));
@@ -169,9 +169,10 @@ public class TemplateClass : Canvas
     private void DrawCard(DrawingContext dc)
     {
         if (_node is null) return;
-        dc.DrawRoundedRectangle(new SolidColorBrush(Colors.White),
-            new Pen(new SolidColorBrush(Color.FromArgb(0x33, 0x1E, 0x1E, 0x1E)), 1),
-            new Rect(0, 0, SlotView.DesignWidth, SlotView.DesignHeight), 6, 6);
+        dc.DrawRoundedRectangle(
+            new SolidColorBrush((Color)ColorConverter.ConvertFromString("TemplateNodeBackground")),
+            new Pen(new SolidColorBrush((Color)ColorConverter.ConvertFromString("TemplateNodeBorderBrush")), TemplateNodeBorderThickness),
+            new Rect(0, 0, SlotView.DesignWidth, SlotView.DesignHeight), TemplateNodeCornerRadius, TemplateNodeCornerRadius);
 
         var title = new FormattedText(SlotView.TitleOf(_node), FontFamilyName, 14)
         {

@@ -6,7 +6,7 @@
       "shortName": "ns"
     },
     "slotColor": {
-      "longName": "slot-color",
+      "longName": "color",
       "shortName": "sc"
     },
     "slotBorderColor": {
@@ -16,6 +16,10 @@
     "slotPath": {
       "longName": "slot-path",
       "shortName": "sp"
+    },
+    "slotBackground": {
+      "longName": "background",
+      "shortName": "bg"
     }
   }
 }

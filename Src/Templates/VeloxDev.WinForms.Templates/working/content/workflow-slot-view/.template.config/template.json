@@ -30,7 +30,7 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Slot background color. Must be opaque: WinForms throws on a translucent BackColor (A < 255) unless SupportsTransparentBackColor is set.",
-      "defaultValue": "#1E1E1E",
+      "defaultValue": "#01000000",
       "replaces": "TemplateSlotBackground"
     },
     "slotColor": {

@@ -1,7 +1,13 @@
 {
   "$schema": "http://json.schemastore.org/template",
   "author": "Axvser",
-  "classifications": [ "VeloxDev", "Workflow", "Razor", "Blazor", "Code" ],
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "Razor",
+    "Blazor",
+    "Code"
+  ],
   "identity": "VeloxDev.Razor.WorkflowTemplateSelector",
   "name": "VeloxDev Razor Workflow Template Selector",
   "description": "A Razor/Blazor template selector for VeloxDev node, slot, link, and tree view models.",
@@ -23,7 +29,11 @@
     }
   },
   "primaryOutputs": [
-    { "path": "TemplateClass.razor" },
-    { "path": "TemplateClass.razor.cs" }
+    {
+      "path": "TemplateClass.razor"
+    },
+    {
+      "path": "TemplateClass.razor.cs"
+    }
   ]
 }

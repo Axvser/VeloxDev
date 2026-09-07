@@ -22,8 +22,43 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Namespace for the generated view.",
-      "defaultValue": "VeloxDevWorkflowDemo",
+      "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
+    },
+    "nodeBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node card background color.",
+      "defaultValue": "#DDFFFFFF",
+      "replaces": "TemplateNodeBackground"
+    },
+    "nodeForeground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node title/label foreground color.",
+      "defaultValue": "#DD1E1E1E",
+      "replaces": "TemplateNodeForeground"
+    },
+    "nodeBorderBrush": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node card border color.",
+      "defaultValue": "#331E1E1E",
+      "replaces": "TemplateNodeBorderBrush"
+    },
+    "nodeBorderThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node card border thickness.",
+      "defaultValue": "1",
+      "replaces": "TemplateNodeBorderThickness"
+    },
+    "nodeCornerRadius": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Node card corner radius.",
+      "defaultValue": "6",
+      "replaces": "TemplateNodeCornerRadius"
     }
   },
   "primaryOutputs": [

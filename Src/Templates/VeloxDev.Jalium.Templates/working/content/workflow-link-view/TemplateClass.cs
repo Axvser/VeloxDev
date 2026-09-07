@@ -29,7 +29,7 @@ public class TemplateClass : FrameworkElement
     // link aligns with the inset NodeViews; change it together with that constant.
     private const double RulerReserve = 36;
 
-    private static readonly SolidColorBrush s_brush = new(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF));
+    private static readonly SolidColorBrush s_brush = new((Color)ColorConverter.ConvertFromString("TemplateLinkColor"));
 
     private IWorkflowLinkViewModel? _link;
     private INotifyPropertyChanged? _layoutNotify;
@@ -244,7 +244,7 @@ public class TemplateClass : FrameworkElement
         // ever leaves the element's own box if the box were stale, which is now impossible by construction.
         var from = new Point(ep.FromP.X - _viewX, ep.FromP.Y - _viewY);
         var to = new Point(ep.ToP.X - _viewX, ep.ToP.Y - _viewY);
-        var pen = new Pen(s_brush, 2);
+        var pen = new Pen(s_brush, TemplateLinkThickness);
 
         // Golden-ratio polyline aligned with the other GUI schemes (mirrors the workflow-tree-view).
         double dx = to.X - from.X;

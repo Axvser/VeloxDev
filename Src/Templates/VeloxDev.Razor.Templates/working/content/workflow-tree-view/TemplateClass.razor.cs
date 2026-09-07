@@ -173,7 +173,7 @@ public partial class TemplateClass : ComponentBase, IDisposable
     private string RulerBackground { get; } = ToCss("#C8252526");
     private string RulerTickColor { get; } = ToCss("#555555");
     private string RulerDividerColor { get; } = ToCss("#3A3D40");
-    private string NodeForegroundCss { get; } = ToCss("TemplateNodeForeground");
+    private string NodeForegroundCss { get; } = ToCss("#DD1E1E1E");
 
     /// <summary>
     /// Input slots are the pure link-sources rendered on the node's left edge. The

@@ -1,7 +1,13 @@
 {
   "$schema": "http://json.schemastore.org/template",
   "author": "Axvser",
-  "classifications": [ "VeloxDev", "Workflow", "Razor", "Blazor", "Code" ],
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "Razor",
+    "Blazor",
+    "Code"
+  ],
   "identity": "VeloxDev.Razor.WorkflowMinimapOverlay",
   "name": "VeloxDev Razor Workflow Minimap Overlay",
   "description": "A Razor/Blazor minimap overlay implementing IWorkflowMinimapOverlay.",
@@ -51,7 +57,11 @@
     }
   },
   "primaryOutputs": [
-    { "path": "TemplateClass.razor" },
-    { "path": "TemplateClass.razor.cs" }
+    {
+      "path": "TemplateClass.razor"
+    },
+    {
+      "path": "TemplateClass.razor.cs"
+    }
   ]
 }

@@ -12,6 +12,14 @@
     "slotPath": {
       "longName": "slot-path",
       "shortName": "sp"
+    },
+    "slotColor": {
+      "longName": "color",
+      "shortName": "sc"
+    },
+    "slotBorderColor": {
+      "longName": "border-color",
+      "shortName": "bc"
     }
   }
 }

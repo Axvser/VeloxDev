@@ -12,9 +12,9 @@
              Foreground="TemplateNodeForeground">
     <!-- Viewbox scales the card content to the node's current size (which the Core Anchor/Size getters
          collapse toward the world origin), so the content scales adaptively instead of cramping. The
-         child is pinned to the DESIGN size (TemplateNodeWidth/Height) so the scale factor is 1/scale. -->
+         child is pinned to the DESIGN size (260x180) so the scale factor is 1/scale. -->
     <Viewbox Stretch="Uniform">
-    <Grid Width="TemplateNodeWidth" Height="TemplateNodeHeight" ClipToBounds="False">
+    <Grid Width="260" Height="180" ClipToBounds="False">
         <Grid.RowDefinitions>
             <RowDefinition Height="36" />
             <RowDefinition Height="*" />

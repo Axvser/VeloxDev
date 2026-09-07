@@ -22,8 +22,22 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Namespace for the generated view.",
-      "defaultValue": "VeloxDevWorkflowDemo",
+      "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
+    },
+    "linkColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Link line color.",
+      "defaultValue": "#DDFFFFFF",
+      "replaces": "TemplateLinkColor"
+    },
+    "linkThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Link line thickness.",
+      "defaultValue": "2",
+      "replaces": "TemplateLinkThickness"
     }
   },
   "primaryOutputs": [

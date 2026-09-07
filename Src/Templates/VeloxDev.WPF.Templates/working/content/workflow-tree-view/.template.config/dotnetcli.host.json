@@ -16,6 +16,10 @@
     "surfaceBorderThickness": {
       "longName": "border-thickness",
       "shortName": "bt"
+    },
+    "surfaceCornerRadius": {
+      "longName": "corner-radius",
+      "shortName": "cr"
     }
   }
 }

@@ -32,6 +32,18 @@
     "rulerDividerColor": {
       "longName": "ruler-divider-color",
       "shortName": "rdc"
+    },
+    "gridBackground": {
+      "longName": "background",
+      "shortName": "bg"
+    },
+    "minorGridColor": {
+      "longName": "minor-grid-color",
+      "shortName": "mic"
+    },
+    "majorGridColor": {
+      "longName": "major-grid-color",
+      "shortName": "mac"
     }
   }
 }

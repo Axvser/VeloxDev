@@ -40,6 +40,10 @@
     "rulerDividerColor": {
       "longName": "ruler-divider-color",
       "shortName": "rdc"
+    },
+    "gridBackground": {
+      "longName": "background",
+      "shortName": "bg"
     }
   }
 }

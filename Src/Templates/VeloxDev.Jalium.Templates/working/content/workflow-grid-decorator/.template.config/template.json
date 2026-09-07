@@ -9,7 +9,7 @@
   "identity": "VeloxDev.Jalium.WorkflowGridDecorator",
   "name": "VeloxDev Jalium Workflow Grid Decorator",
   "description": "A styled grid decorator for a Jalium.UI workflow surface.",
-  "shortName": "jalium-v-grid",
+  "shortName": "jalium-v-decorator",
   "sourceName": "TemplateClass",
   "defaultName": "GridDecorator",
   "preferNameDirectory": false,
@@ -22,7 +22,7 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Namespace for the generated view.",
-      "defaultValue": "VeloxDevWorkflowDemo",
+      "defaultValue": "MyApp.Views",
       "replaces": "TemplateNamespace"
     },
     "minorGridColor": {
@@ -50,7 +50,7 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Grid spacing in world units.",
-      "defaultValue": "40",
+      "defaultValue": "40d",
       "replaces": "TemplateGridSpacing"
     },
     "majorLineEvery": {
@@ -64,29 +64,35 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Ruler band background.",
-      "defaultValue": "#C82D2D30",
+      "defaultValue": "#C8252526",
       "replaces": "TemplateRulerBackground"
     },
     "rulerTickColor": {
       "type": "parameter",
       "datatype": "text",
       "description": "Ruler tick color.",
-      "defaultValue": "#6E6E6E",
+      "defaultValue": "#555555",
       "replaces": "TemplateRulerTickColor"
     },
     "rulerLabelColor": {
       "type": "parameter",
       "datatype": "text",
       "description": "Ruler label color.",
-      "defaultValue": "#C8C8C8",
+      "defaultValue": "#888888",
       "replaces": "TemplateRulerLabelColor"
     },
     "rulerDividerColor": {
       "type": "parameter",
       "datatype": "text",
       "description": "Ruler divider line color.",
-      "defaultValue": "#4D4D4D",
+      "defaultValue": "#3A3D40",
       "replaces": "TemplateRulerDividerColor"
+    },
+    "gridBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Grid surface background color. Accepted for cross-GUI CLI parity; this GUI's decorator does not paint the surface background.",
+      "defaultValue": "#1E1E1E"
     }
   },
   "primaryOutputs": [

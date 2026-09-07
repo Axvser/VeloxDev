@@ -1,7 +1,13 @@
 {
   "$schema": "http://json.schemastore.org/template",
   "author": "Axvser",
-  "classifications": [ "VeloxDev", "Workflow", "WinForms", "Code", "Tree" ],
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "WinForms",
+    "Code",
+    "Tree"
+  ],
   "identity": "VeloxDev.WinForms.WorkflowTreeView",
   "name": "VeloxDev WinForms Workflow Tree View",
   "description": "A WinForms workflow tree surface composing scroll, canvas, grid decorator, and view pooling.",
@@ -51,6 +57,8 @@
     }
   },
   "primaryOutputs": [
-    { "path": "TemplateClass.cs" }
+    {
+      "path": "TemplateClass.cs"
+    }
   ]
 }

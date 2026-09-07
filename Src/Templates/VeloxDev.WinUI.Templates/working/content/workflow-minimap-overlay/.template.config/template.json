@@ -1,7 +1,12 @@
 {
   "$schema": "http://json.schemastore.org/template",
   "author": "Axvser",
-  "classifications": [ "VeloxDev", "Workflow", "WinUI", "Code" ],
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "WinUI",
+    "Code"
+  ],
   "identity": "VeloxDev.WinUI.WorkflowMinimapOverlay",
   "name": "VeloxDev WinUI Workflow Minimap Overlay",
   "description": "A WinUI minimap overlay implementing IWorkflowMinimapOverlay.",
@@ -51,6 +56,8 @@
     }
   },
   "primaryOutputs": [
-    { "path": "TemplateClass.cs" }
+    {
+      "path": "TemplateClass.cs"
+    }
   ]
 }

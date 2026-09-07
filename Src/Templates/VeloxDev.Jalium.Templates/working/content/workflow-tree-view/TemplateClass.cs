@@ -22,7 +22,7 @@ public class TemplateClass : Canvas
     public const double CanvasHeight = 2000;
     private const double Phi = 0.6180339887;
 
-    private static readonly SolidColorBrush s_surfaceBrush = new(Color.FromRgb(0x1E, 0x1E, 0x1E));
+    private static readonly SolidColorBrush s_surfaceBrush = new((Color)ColorConverter.ConvertFromString("TemplateSurfaceBackground"));
     private static readonly SolidColorBrush s_linkBrush = new(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF));
 
     private static readonly Pen s_linkPen = new(s_linkBrush, 2);

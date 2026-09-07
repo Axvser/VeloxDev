@@ -41,7 +41,8 @@
         <Border x:Name="PART_SurfaceBorder"
                 Background="TemplateSurfaceBackground"
                 BorderBrush="TemplateSurfaceBorderBrush"
-                BorderThickness="TemplateSurfaceBorderThickness">
+                BorderThickness="TemplateSurfaceBorderThickness"
+                CornerRadius="TemplateSurfaceCornerRadius">
             <workflowViews:GridDecorator x:Name="PART_GridDecorator">
                 <ScrollViewer x:Name="PART_ScrollViewer"
                               HorizontalScrollBarVisibility="Auto"

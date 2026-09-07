@@ -75,6 +75,24 @@
       "description": "Divider line between ruler and content area.",
       "defaultValue": "#3A3D40",
       "replaces": "TemplateRulerDividerColor"
+    },
+    "gridBackground": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Grid surface background color. Accepted for cross-GUI CLI parity; this GUI's decorator does not paint the surface background.",
+      "defaultValue": "#1E1E1E"
+    },
+    "minorGridColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Minor grid line color. Accepted for cross-GUI CLI parity when the decorator draws rulers only.",
+      "defaultValue": "#2A2D2E"
+    },
+    "majorGridColor": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Major grid line color. Accepted for cross-GUI CLI parity when the decorator draws rulers only.",
+      "defaultValue": "#3A3D40"
     }
   },
   "primaryOutputs": [

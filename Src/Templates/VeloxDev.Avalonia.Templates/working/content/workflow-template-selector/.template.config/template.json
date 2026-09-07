@@ -1,7 +1,12 @@
 {
   "$schema": "http://json.schemastore.org/template",
   "author": "Axvser",
-  "classifications": [ "VeloxDev", "Workflow", "Avalonia", "Code" ],
+  "classifications": [
+    "VeloxDev",
+    "Workflow",
+    "Avalonia",
+    "Code"
+  ],
   "identity": "VeloxDev.Avalonia.WorkflowTemplateSelector",
   "name": "VeloxDev Avalonia Workflow Template Selector",
   "description": "An Avalonia IDataTemplate selector for VeloxDev node, slot, link, and tree view models.",
@@ -23,6 +28,8 @@
     }
   },
   "primaryOutputs": [
-    { "path": "TemplateClass.cs" }
+    {
+      "path": "TemplateClass.cs"
+    }
   ]
 }

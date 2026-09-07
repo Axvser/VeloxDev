@@ -34,12 +34,23 @@
       "defaultValue": "#1E1E1E",
       "replaces": "TemplateSurfaceBackground"
     },
-    "nodeForeground": {
+    "surfaceBorderBrush": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Output slot name text color.",
-      "defaultValue": "#DD1E1E1E",
-      "replaces": "TemplateNodeForeground"
+      "description": "Surface border brush. Accepted for cross-GUI CLI parity; this GUI's tree has no border element.",
+      "defaultValue": "#33FFFFFF"
+    },
+    "surfaceBorderThickness": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface border thickness. Accepted for cross-GUI CLI parity; this GUI's tree has no border element.",
+      "defaultValue": "1"
+    },
+    "surfaceCornerRadius": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "Surface corner radius. Accepted for cross-GUI CLI parity; this GUI's tree has no border element.",
+      "defaultValue": "3"
     }
   },
   "primaryOutputs": [
