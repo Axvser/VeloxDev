@@ -2,7 +2,9 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
 
@@ -12,9 +14,29 @@ namespace Demo.Views.Workflow;
 /// virtualization. Repaints from the Core model (Layout / helper VisibleItems / Nodes / Links) plus
 /// the ScrollOffset/ContentOffset/Viewport DPs that the host binds (same feed as the minimap). The
 /// 复制 button copies the current multi-line info to the clipboard.
+///
+/// The extra "[测试]" line is fed by WorkflowLinkBehaviors' six static global events — see the TEST-ONLY
+/// region below.
 /// </summary>
 public partial class InfoOverlay : UserControl
 {
+    // =============================================================================================================
+    // [TEST-ONLY] 六个 Link 指针/键盘事件的连带测试挂钩：
+    //   PointerEntered / PointerLeaved / PointerPressed / PointerReleased（原生 MouseEventArgs 系）+ KeyDown + KeyUp。
+    // 订阅的是 WorkflowLinkBehaviors 的静态全局事件，用于在 Trimmed demo 里人工连带验证「armed link →
+    // 行为几何命中 → 全局事件 → 这里显示」这条链路是否通；KeyDown=Delete 时真实执行 link.DeleteCommand。
+    //
+    // ⚠️ 本区域仅用于测试：不计入 WorkflowSystem 的适配器/模板体系。它不是参考消费者、不是 API 面；
+    //     adapter 层与各 workflow-* 模板都不得依赖或引用这里的任何东西。若要从 UHD 移除，删掉本区域 +
+    //     InfoOverlay.xaml 里的 TestFeedText 即可，不影响任何生产路径。
+    // =============================================================================================================
+    private readonly MouseEventHandler _testOnEntered;
+    private readonly MouseEventHandler _testOnLeaved;
+    private readonly MouseButtonEventHandler _testOnPressed;
+    private readonly MouseButtonEventHandler _testOnReleased;
+    private readonly KeyEventHandler _testOnKeyDown;
+    private readonly KeyEventHandler _testOnKeyUp;
+
     public static readonly DependencyProperty ScrollOffsetXProperty = DependencyProperty.Register(
         nameof(ScrollOffsetX), typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
     public static readonly DependencyProperty ScrollOffsetYProperty = DependencyProperty.Register(
@@ -42,7 +64,65 @@ public partial class InfoOverlay : UserControl
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        _testOnEntered = OnTestEntered;
+        _testOnLeaved = OnTestLeaved;
+        _testOnPressed = OnTestPressed;
+        _testOnReleased = OnTestReleased;
+        _testOnKeyDown = OnTestKeyDown;
+        _testOnKeyUp = OnTestKeyUp;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        WorkflowLinkBehaviors.PointerEntered += _testOnEntered;
+        WorkflowLinkBehaviors.PointerLeaved += _testOnLeaved;
+        WorkflowLinkBehaviors.PointerPressed += _testOnPressed;
+        WorkflowLinkBehaviors.PointerReleased += _testOnReleased;
+        WorkflowLinkBehaviors.KeyDown += _testOnKeyDown;
+        WorkflowLinkBehaviors.KeyUp += _testOnKeyUp;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        WorkflowLinkBehaviors.PointerEntered -= _testOnEntered;
+        WorkflowLinkBehaviors.PointerLeaved -= _testOnLeaved;
+        WorkflowLinkBehaviors.PointerPressed -= _testOnPressed;
+        WorkflowLinkBehaviors.PointerReleased -= _testOnReleased;
+        WorkflowLinkBehaviors.KeyDown -= _testOnKeyDown;
+        WorkflowLinkBehaviors.KeyUp -= _testOnKeyUp;
+    }
+
+    private void OnTestEntered(object? sender, MouseEventArgs e) => ShowTestState("Entered", sender);
+    private void OnTestLeaved(object? sender, MouseEventArgs e) => ShowTestState("Leaved", sender);
+    private void OnTestPressed(object? sender, MouseButtonEventArgs e) => ShowTestState("Pressed", sender);
+    private void OnTestReleased(object? sender, MouseButtonEventArgs e) => ShowTestState("Released", sender);
+
+    private void OnTestKeyDown(object? sender, KeyEventArgs e)
+    {
+        // 真实响应 Delete：命中悬停/聚焦 link 时删除它。
+        if (e.Key == Key.Delete && (sender as FrameworkElement)?.DataContext is IWorkflowLinkViewModel link)
+        {
+            link.DeleteCommand.Execute(null);
+        }
+
+        ShowTestState("KeyDown(" + e.Key + ")", sender);
+    }
+
+    private void OnTestKeyUp(object? sender, KeyEventArgs e)
+        => ShowTestState("KeyUp(" + e.Key + ")", sender);
+
+    /// <summary>Updates the "[测试]" line from whichever of the six global events last fired.</summary>
+    private void ShowTestState(string kind, object? sender)
+    {
+        var link = (sender as FrameworkElement)?.DataContext as IWorkflowLinkViewModel;
+        string id = link is IWorkflowIdentifiable identifiable ? ShortRuntimeId(identifiable.RuntimeId) : "—";
+        TestFeedText.Text = "[测试] " + kind + " · Link " + id;
+    }
+
+    private static string ShortRuntimeId(string runtimeId)
+        => runtimeId.Length > 8 ? runtimeId.Substring(0, 8) : runtimeId;
 
     private static void OnVisualChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

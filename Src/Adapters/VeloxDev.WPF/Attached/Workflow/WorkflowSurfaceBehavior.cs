@@ -656,9 +656,13 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return false;
         }
 
+        // Links are canvas content, not background — pressing one should never start a pan. This is the intended
+        // surface policy (not a workaround): an armed link view (WorkflowLinkBehaviors) receives its own press/key
+        // states, and an unarmed link simply does nothing on press. Panning stays available on the blank canvas and
+        // via node drag.
         if (IsWorkflowLinkVisual(source) || ancestors.Any(IsWorkflowLinkVisual))
         {
-            return true;
+            return false;
         }
 
         return source == state.Canvas

@@ -5,12 +5,15 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
 
 /// <summary>
 /// Orthogonal (polyline) connection with golden-ratio stubs.
-/// Passive visual only — no hover, highlight, or keyboard interaction.
+/// Rendering is passive; pointer/key interaction is enabled here at the view's own definition via
+/// WorkflowLinkBehaviors (so no consumer/tree markup has to attach it). In this demo the raised states feed the
+/// InfoOverlay "[测试]" line (TEST-ONLY coupled check — not part of the adapter/template system).
 /// </summary>
 public partial class LinkView : UserControl
 {
@@ -21,6 +24,9 @@ public partial class LinkView : UserControl
         Panel.SetZIndex(this, -100);
 
         DataContextChanged += (_, _) => InvalidateVisual();
+
+        // The link view opts into pointer/key interaction at its own definition.
+        WorkflowLinkBehaviors.SetIsEnabled(this, true);
     }
 
     #region Dependency properties

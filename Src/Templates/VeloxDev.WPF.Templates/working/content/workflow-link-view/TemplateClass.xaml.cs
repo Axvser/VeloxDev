@@ -5,12 +5,18 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace TemplateNamespace;
 
 /// <summary>
 /// Orthogonal (polyline) connection with golden-ratio stubs.
-/// Passive visual only — no hover, highlight, or keyboard interaction.
+/// Rendering is passive (self-drawn in OnRender); pointer/key interaction is enabled here at the view's own
+/// definition via <c>VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowLinkBehaviors</c>, mirroring the Trimmed
+/// demo LinkView (proven feasible). While armed it geometrically hit-tests this view's polyline (rebuilt from the
+/// endpoint slot anchors) and delivers the five states (PointerEntered/Leaved/Pressed/Released + KeyDown) over the
+/// per-link attached handlers and/or the static global events, with native WPF mouse/key event arguments. A
+/// consumer that does not want interaction can set <c>WorkflowLinkBehaviors.IsEnabled="False"</c> on this view.
 /// </summary>
 public partial class TemplateClass : UserControl
 {
@@ -21,6 +27,9 @@ public partial class TemplateClass : UserControl
         Panel.SetZIndex(this, -100);
 
         DataContextChanged += (_, _) => InvalidateVisual();
+
+        // The link view opts into pointer/key interaction at its own definition.
+        WorkflowLinkBehaviors.SetIsEnabled(this, true);
     }
 
     #region Dependency properties
