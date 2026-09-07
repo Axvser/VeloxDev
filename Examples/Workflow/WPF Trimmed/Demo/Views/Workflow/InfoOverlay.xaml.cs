@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -36,6 +37,7 @@ public partial class InfoOverlay : UserControl
     private readonly MouseButtonEventHandler _testOnReleased;
     private readonly KeyEventHandler _testOnKeyDown;
     private readonly KeyEventHandler _testOnKeyUp;
+    private readonly MouseWheelEventHandler _testOnMouseWheel;
 
     public static readonly DependencyProperty ScrollOffsetXProperty = DependencyProperty.Register(
         nameof(ScrollOffsetX), typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
@@ -70,6 +72,7 @@ public partial class InfoOverlay : UserControl
         _testOnReleased = OnTestReleased;
         _testOnKeyDown = OnTestKeyDown;
         _testOnKeyUp = OnTestKeyUp;
+        _testOnMouseWheel = OnTestMouseWheel;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -82,6 +85,7 @@ public partial class InfoOverlay : UserControl
         WorkflowLinkBehaviors.PointerReleased += _testOnReleased;
         WorkflowLinkBehaviors.KeyDown += _testOnKeyDown;
         WorkflowLinkBehaviors.KeyUp += _testOnKeyUp;
+        WorkflowSurfaceBehavior.MouseWheel += _testOnMouseWheel;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -92,6 +96,7 @@ public partial class InfoOverlay : UserControl
         WorkflowLinkBehaviors.PointerReleased -= _testOnReleased;
         WorkflowLinkBehaviors.KeyDown -= _testOnKeyDown;
         WorkflowLinkBehaviors.KeyUp -= _testOnKeyUp;
+        WorkflowSurfaceBehavior.MouseWheel -= _testOnMouseWheel;
     }
 
     private void OnTestEntered(object? sender, MouseEventArgs e) => ShowTestState("Entered", sender);
@@ -112,6 +117,56 @@ public partial class InfoOverlay : UserControl
 
     private void OnTestKeyUp(object? sender, KeyEventArgs e)
         => ShowTestState("KeyUp(" + e.Key + ")", sender);
+
+    /// <summary>Wheel-injection example: Alt+wheel scrolls the canvas horizontally, Shift+wheel vertically.
+    /// Plain wheel is intentionally left to the canvas scroll eating.</summary>
+    private void OnTestMouseWheel(object? sender, MouseWheelEventArgs e)
+    {
+        bool alt = (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
+        bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+        if (!alt && !shift)
+        {
+            return; // 普通滚轮：不接管（画布滚动拦截吃掉）
+        }
+
+        if (sender is not DependencyObject host || FindScrollViewer(host) is not { } viewer)
+        {
+            return;
+        }
+
+        double step = e.Delta > 0 ? -72 : 72;
+        if (alt)
+        {
+            viewer.ScrollToHorizontalOffset(Math.Clamp(viewer.HorizontalOffset + step, 0, viewer.ScrollableWidth));
+        }
+        else
+        {
+            viewer.ScrollToVerticalOffset(Math.Clamp(viewer.VerticalOffset + step, 0, viewer.ScrollableHeight));
+        }
+
+        e.Handled = true;
+        ShowTestState(alt ? "Wheel(Alt→H)" : "Wheel(Shift→V)", sender);
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, i);
+            if (child is ScrollViewer viewer)
+            {
+                return viewer;
+            }
+
+            if (FindScrollViewer(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>Updates the "[测试]" line from whichever of the six global events last fired.</summary>
     private void ShowTestState(string kind, object? sender)

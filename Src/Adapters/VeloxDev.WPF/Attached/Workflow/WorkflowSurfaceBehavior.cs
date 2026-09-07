@@ -67,6 +67,30 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         typeof(WorkflowSurfaceBehavior),
         new PropertyMetadata(false, OnZoomEnabledChanged));
 
+    public static readonly DependencyProperty ConsumeCanvasScrollProperty = DependencyProperty.RegisterAttached(
+        "ConsumeCanvasScroll",
+        typeof(bool),
+        typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(false));
+
+    public static readonly DependencyProperty KeyDownProperty = DependencyProperty.RegisterAttached(
+        "KeyDown",
+        typeof(KeyEventHandler),
+        typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null));
+
+    public static readonly DependencyProperty KeyUpProperty = DependencyProperty.RegisterAttached(
+        "KeyUp",
+        typeof(KeyEventHandler),
+        typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null));
+
+    public static readonly DependencyProperty MouseWheelProperty = DependencyProperty.RegisterAttached(
+        "MouseWheel",
+        typeof(MouseWheelEventHandler),
+        typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null));
+
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
         "State",
         typeof(SurfaceState),
@@ -93,6 +117,27 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     public static bool GetZoomEnabled(DependencyObject element) => (bool)element.GetValue(ZoomEnabledProperty);
     public static void SetZoomEnabled(DependencyObject element, bool value) => element.SetValue(ZoomEnabledProperty, value);
+
+    public static bool GetConsumeCanvasScroll(DependencyObject element) => (bool)element.GetValue(ConsumeCanvasScrollProperty);
+    public static void SetConsumeCanvasScroll(DependencyObject element, bool value) => element.SetValue(ConsumeCanvasScrollProperty, value);
+
+    public static KeyEventHandler? GetKeyDown(DependencyObject element) => (KeyEventHandler?)element.GetValue(KeyDownProperty);
+    public static void SetKeyDown(DependencyObject element, KeyEventHandler? value) => element.SetValue(KeyDownProperty, value);
+    public static KeyEventHandler? GetKeyUp(DependencyObject element) => (KeyEventHandler?)element.GetValue(KeyUpProperty);
+    public static void SetKeyUp(DependencyObject element, KeyEventHandler? value) => element.SetValue(KeyUpProperty, value);
+    public static MouseWheelEventHandler? GetMouseWheel(DependencyObject element) => (MouseWheelEventHandler?)element.GetValue(MouseWheelProperty);
+    public static void SetMouseWheel(DependencyObject element, MouseWheelEventHandler? value) => element.SetValue(MouseWheelProperty, value);
+
+    /// <summary>Global key-down feed for every workflow surface (local injection = attached KeyDown on the host). Runs before the canvas scroll eating, so injected handlers may set Handled to override.</summary>
+    public static event KeyEventHandler? KeyDown;
+
+    /// <summary>Global key-up feed for every workflow surface (local injection = attached KeyUp on the host).</summary>
+    public static event KeyEventHandler? KeyUp;
+
+    /// <summary>Global mouse-wheel feed for every workflow surface (local injection = attached MouseWheel on the host).
+    /// Runs before the canvas scroll eating / zoom, so injected handlers may implement custom scroll (e.g. Alt→horizontal,
+    /// Shift→vertical) and set Handled.</summary>
+    public static event MouseWheelEventHandler? MouseWheel;
 
     public static void Refresh(UserControl host)
     {
@@ -135,6 +180,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.DataContextChanged += OnDataContextChanged;
         control.PreviewMouseMove += OnPreviewMouseMove;
         control.AddHandler(UIElement.MouseUpEvent, MouseUpHandler, true);
+        control.PreviewKeyDown += OnPreviewKeyDown;
+        control.PreviewKeyUp += OnPreviewKeyUp;
+        control.PreviewMouseWheel += OnPreviewMouseWheel;
         ResolveNamedControls(control, state);
         Refresh(control);
     }
@@ -146,6 +194,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         control.DataContextChanged -= OnDataContextChanged;
         control.PreviewMouseMove -= OnPreviewMouseMove;
         control.RemoveHandler(UIElement.MouseUpEvent, MouseUpHandler);
+        control.PreviewKeyDown -= OnPreviewKeyDown;
+        control.PreviewKeyUp -= OnPreviewKeyUp;
+        control.PreviewMouseWheel -= OnPreviewMouseWheel;
 
         if (control.GetValue(StateProperty) is SurfaceState state)
         {
@@ -153,6 +204,114 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         control.ClearValue(StateProperty);
+    }
+
+    private static void OnPreviewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (sender is not UserControl control || control.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        // Local (attached KeyDown on the host) + global key injection runs first — a handler may set Handled to take over.
+        GetKeyDown(control)?.Invoke(control, e);
+        KeyDown?.Invoke(control, e);
+        if (e.Handled || !GetConsumeCanvasScroll(control) || state.ScrollViewer is null)
+        {
+            return;
+        }
+
+        if (IsScrollNavigationKey(e.Key) && Keyboard.FocusedElement is DependencyObject focused
+            && !IsTextEditing(focused)
+            && IsInside(focused, state.ScrollViewer) && NearestScrollViewer(focused) == state.ScrollViewer)
+        {
+            e.Handled = true;
+        }
+    }
+
+    private static void OnPreviewKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (sender is not UserControl control)
+        {
+            return;
+        }
+
+        GetKeyUp(control)?.Invoke(control, e);
+        KeyUp?.Invoke(control, e);
+    }
+
+    private static void OnPreviewMouseWheel(object? sender, MouseWheelEventArgs e)
+    {
+        if (sender is not UserControl control || control.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        // Wheel injection (local attached MouseWheel on the host + global) runs first — set Handled to take over,
+        // e.g. custom modifier+wheel scroll (Alt→horizontal, Shift→vertical).
+        GetMouseWheel(control)?.Invoke(control, e);
+        MouseWheel?.Invoke(control, e);
+        if (e.Handled)
+        {
+            return;
+        }
+
+        if (GetZoomEnabled(control) && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            return;
+        }
+
+        if (!GetConsumeCanvasScroll(control) || state.ScrollViewer is null || e.OriginalSource is not DependencyObject source)
+        {
+            return;
+        }
+
+        if (IsInside(source, state.ScrollViewer) && NearestScrollViewer(source) == state.ScrollViewer)
+        {
+            e.Handled = true;
+        }
+    }
+
+    private static bool IsScrollNavigationKey(Key key)
+        => key == Key.Up || key == Key.Down || key == Key.Left || key == Key.Right
+           || key == Key.Home || key == Key.End || key == Key.PageUp || key == Key.PageDown;
+
+    private static bool IsTextEditing(DependencyObject element)
+    {
+        for (DependencyObject? current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is System.Windows.Controls.Primitives.TextBoxBase
+                or System.Windows.Controls.Primitives.Popup
+                or System.Windows.Controls.ComboBox)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static ScrollViewer? NearestScrollViewer(DependencyObject element)
+    {
+        if (element is ScrollViewer scrollViewer)
+        {
+            return scrollViewer;
+        }
+
+        return EnumerateVisualAncestors(element).OfType<ScrollViewer>().FirstOrDefault();
+    }
+
+    private static bool IsInside(DependencyObject element, DependencyObject root)
+    {
+        for (DependencyObject? current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current == root)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void OnLoaded(object sender, RoutedEventArgs e)
