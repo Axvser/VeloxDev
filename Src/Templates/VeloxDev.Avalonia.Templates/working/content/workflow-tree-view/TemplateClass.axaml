@@ -1,22 +1,25 @@
-<!-- VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the local type names below if you renamed them. -->
+<!-- VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the local type names below if you renamed them.
+     The tree's DataContext is your concrete tree ViewModel (it drives Layout / Helper.VisibleItems), and compiled
+     bindings need a concrete x:DataType as their starting type. Point xmlns:vm at your ViewModels namespace and
+     x:DataType at your tree VM class below; until you do, the build fails HERE on vm:TreeViewModel. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:TemplateNamespace"
              xmlns:local="using:TemplateNamespace"
              xmlns:framework="using:VeloxDev.WorkflowSystem"
              xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="TemplateNamespace.TemplateClass"
+             x:DataType="vm:TreeViewModel"
              behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
              behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
              behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
              behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
              behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
              behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
-             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
-             x:CompileBindings="False">
-    <!-- Replace x:CompileBindings=False with a concrete x:DataType after defining your ViewModel. -->
+             behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay">
 
     <UserControl.DataTemplates>
         <!-- Node Templates -->
