@@ -1,13 +1,10 @@
 <UserControl x:Class="Demo.Views.Workflow.InfoOverlay"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Realtime canvas-info HUD. The text layer (translucent Border + TextBlocks) is hit-test
+    <!-- Realtime canvas-info HUD. The text layer (translucent Border + TextBlock) is hit-test
          transparent so drags fall through to the surface; only the 复制 button is interactive.
          The window/host feeds ScrollOffset/ContentOffset/Viewport DPs the same way as the minimap,
-         and the control subscribes to the Core model for scale / actual size / visible counts.
-
-         TestFeedText is the "[测试]" line fed by WorkflowLinkBehaviors' six static global events —
-         TEST-ONLY, see InfoOverlay.xaml.cs; it is NOT part of the WorkflowSystem adapter/template system. -->
+         and the control subscribes to the Core model for scale / actual size / visible counts. -->
     <Grid>
         <Border IsHitTestVisible="False"
                 CornerRadius="6"
@@ -15,22 +12,12 @@
                 BorderBrush="#CC8EA3B8"
                 BorderThickness="1"
                 Padding="12,8,58,8">
-            <StackPanel>
-                <TextBlock x:Name="TestFeedText"
-                           Foreground="#FFB86C"
-                           FontFamily="Segoe UI"
-                           FontSize="12"
-                           LineHeight="18"
-                           FontWeight="SemiBold"
-                           IsHitTestVisible="False"
-                           Text="[测试] —" />
-                <TextBlock x:Name="InfoText"
-                           Foreground="#DDE4EA"
-                           FontFamily="Segoe UI"
-                           FontSize="12"
-                           LineHeight="18"
-                           IsHitTestVisible="False" />
-            </StackPanel>
+            <TextBlock x:Name="InfoText"
+                       Foreground="#DDE4EA"
+                       FontFamily="Segoe UI"
+                       FontSize="12"
+                       LineHeight="18"
+                       IsHitTestVisible="False" />
         </Border>
         <Button x:Name="CopyButton"
                 Content="复制"
