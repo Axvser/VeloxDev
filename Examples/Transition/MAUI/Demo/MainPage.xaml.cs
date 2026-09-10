@@ -107,7 +107,7 @@ namespace Demo
     {
         // Simple animation: translate + demonstrates a nested property path, directly modifying
         // Fill.StartPoint / Fill.EndPoint
-        private static readonly Transition<Rectangle>.StateSnapshot Animation0 =
+        private static readonly StateSnapshot<Rectangle> Animation0 =
             Transition<Rectangle>.Create()
                 .Property(r => r.TranslationX, 240)
                 .Property(r => ((LinearGradientBrush)r.Fill!).StartPoint, new Point(0, 1))
@@ -133,7 +133,7 @@ namespace Demo
             };
         }
 
-        private static Transition<Rectangle>.StateSnapshot CreateRec0Reset()
+        private static StateSnapshot<Rectangle> CreateRec0Reset()
         {
             return Transition<Rectangle>.Create()
                 .Property(r => r.TranslationX, 0)
@@ -145,7 +145,7 @@ namespace Demo
         // resets are deterministic and reliable).
         // Projection and RenderTransform(Scale) are mutually exclusive on some platforms — clear
         // Projection first, then write the rest.
-        private static void ApplyReset(Transition<Rectangle>.StateSnapshot snapshot, Rectangle target)
+        private static void ApplyReset(StateSnapshot<Rectangle> snapshot, Rectangle target)
         {
             // Two passes: clear Projection first (releasing the mutual exclusion with
             // RenderTransform/Scale), then write everything else.
@@ -159,7 +159,7 @@ namespace Demo
         }
 
         // Delayed animation - rotation
-        private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
+        private static readonly StateSnapshot<Rectangle> Animation1 =
             Transition<Rectangle>.Create()
                 .Await(TimeSpan.FromSeconds(2))
                 .Property(r => r.RotationX, 180)     // MAUI X rotation
@@ -171,7 +171,7 @@ namespace Demo
                 });
 
         // Combined animation - composite transforms
-        private static readonly Transition<Rectangle>.StateSnapshot Animation2 =
+        private static readonly StateSnapshot<Rectangle> Animation2 =
             Transition<Rectangle>.Create()
                 // First segment: translate + scale
                 .Property(r => r.RotationX, 180)

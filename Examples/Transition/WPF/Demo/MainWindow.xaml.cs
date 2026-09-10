@@ -114,7 +114,7 @@ public partial class MainWindow
     // resets are deterministic and reliable).
     // Projection and RenderTransform(Scale) are mutually exclusive on some platforms — clear
     // Projection first, then write the rest.
-    private static void ApplyReset(Transition<Rectangle>.StateSnapshot snapshot, Rectangle target)
+    private static void ApplyReset(StateSnapshot<Rectangle> snapshot, Rectangle target)
     {
         // Two passes: clear Projection first (releasing the mutual exclusion with
         // RenderTransform/Scale), then write everything else.
@@ -128,7 +128,7 @@ public partial class MainWindow
     }
 
     // Rec0's RenderTransform.X / Fill are modified in place, so reset must use a new object
-    private static Transition<Rectangle>.StateSnapshot CreateResetRec0()
+    private static StateSnapshot<Rectangle> CreateResetRec0()
     {
         return Transition<Rectangle>.Create()
             .Property(r => r.RenderTransform, [new TranslateTransform()])
@@ -138,7 +138,7 @@ public partial class MainWindow
     }
 
     // Simple animation: demonstrates a nested property path, directly modifying RenderTransform.X
-    private static readonly Transition<Rectangle>.StateSnapshot Animation0 =
+    private static readonly StateSnapshot<Rectangle> Animation0 =
         Transition<Rectangle>.Create()
             .Property(r => r.Opacity, 0)
             .Property(r => ((TranslateTransform)r.RenderTransform).X, 800)
@@ -151,7 +151,7 @@ public partial class MainWindow
             });
 
     // Delayed animation: reverse rotation
-    private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
+    private static readonly StateSnapshot<Rectangle> Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(5))
             .Property(r => r.RenderTransform, [new RotateTransform(180)], RotationDirection.CounterClockWise)
@@ -163,7 +163,7 @@ public partial class MainWindow
             });
 
     // Combined animation
-    private static readonly Transition<Rectangle>.StateSnapshot Animation2 =
+    private static readonly StateSnapshot<Rectangle> Animation2 =
         Transition<Rectangle>.Create()
             .Property(r => r.RenderTransform,
             [

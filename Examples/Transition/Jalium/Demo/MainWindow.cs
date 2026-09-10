@@ -149,7 +149,7 @@ internal sealed class MainWindow : Window
     // ── Animations (aligned with Avalonia/WPF) ──────────────────────────────
 
     // Simple: nested TranslateTransform.X path + solid fill.
-    private static readonly Transition<Rectangle>.StateSnapshot Animation0 =
+    private static readonly StateSnapshot<Rectangle> Animation0 =
         Transition<Rectangle>.Create()
             .Property(r => ((TranslateTransform)r.RenderTransform!).X, 300)
             .Property(r => r.Fill, new SolidColorBrush(Colors.OrangeRed))
@@ -162,7 +162,7 @@ internal sealed class MainWindow : Window
             });
 
     // Delayed: transform collection (Translate + Rotate) + fill.
-    private static readonly Transition<Rectangle>.StateSnapshot Animation1 =
+    private static readonly StateSnapshot<Rectangle> Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(5))
             .Property(r => r.RenderTransform,
@@ -178,7 +178,7 @@ internal sealed class MainWindow : Window
             });
 
     // Combined: transform collection (Translate + Scale) + fill, then AwaitThen + fill.
-    private static readonly Transition<Rectangle>.StateSnapshot Animation2 =
+    private static readonly StateSnapshot<Rectangle> Animation2 =
         Transition<Rectangle>.Create()
             .Property(r => r.RenderTransform,
                 [new TranslateTransform(200, 0), new ScaleTransform(1.3, 1.3)],

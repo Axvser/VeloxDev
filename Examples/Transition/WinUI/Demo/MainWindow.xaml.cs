@@ -161,7 +161,7 @@ namespace Demo
 
         // Simple animation: demonstrates a nested property path, directly modifying RenderTransform.X,
         // together with gradient changes.
-        private readonly Transition<Rectangle>.StateSnapshot Animation0 =
+        private readonly StateSnapshot<Rectangle> Animation0 =
             Transition<Rectangle>.Create()
                 .Property(r => ((TranslateTransform)r.RenderTransform).X, 400)
                 .Property(r => ((LinearGradientBrush)r.Fill).StartPoint, new Point(0, 1))
@@ -192,7 +192,7 @@ namespace Demo
             };
         }
 
-        private static Transition<Rectangle>.StateSnapshot CreateRec0Reset()
+        private static StateSnapshot<Rectangle> CreateRec0Reset()
         {
             return Transition<Rectangle>.Create()
                 .Property(r => r.RenderTransform, [CreateRec0Transform()])
@@ -204,7 +204,7 @@ namespace Demo
         // resets are deterministic and reliable).
         // WinUI constraint: Projection and RenderTransform(Scale) are mutually exclusive — clear
         // Projection first, then write the rest.
-        private static void ApplyReset(Transition<Rectangle>.StateSnapshot snapshot, Rectangle target)
+        private static void ApplyReset(StateSnapshot<Rectangle> snapshot, Rectangle target)
         {
             // Two passes: clear Projection first (releasing the mutual exclusion with
             // RenderTransform/Scale), then write everything else.
@@ -218,7 +218,7 @@ namespace Demo
         }
 
         // Delayed animation: reverse rotation
-        private readonly Transition<Rectangle>.StateSnapshot Animation1 =
+        private readonly StateSnapshot<Rectangle> Animation1 =
             Transition<Rectangle>.Create()
                 .Await(TimeSpan.FromSeconds(3))
                 .Property(r => r.RenderTransform, [new RotateTransform() { Angle = 180 }], RotationDirection.CounterClockWise)
@@ -238,7 +238,7 @@ namespace Demo
                 });
 
         // Combined animation: reverse projection rotation + color change
-        private readonly Transition<Rectangle>.StateSnapshot Animation2 =
+        private readonly StateSnapshot<Rectangle> Animation2 =
             Transition<Rectangle>.Create()
                 .Property(r => r.Projection,
                     new PlaneProjection()

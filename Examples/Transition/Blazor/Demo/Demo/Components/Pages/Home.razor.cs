@@ -18,7 +18,7 @@ public partial class Home : ComponentBase, IDisposable
     // ---------------------------------------------------------------
 
     // Animation0: simple animation — translate + color + opacity, auto reverse loop
-    private static readonly Transition<BoxModel>.StateSnapshot Animation0 =
+    private static readonly StateSnapshot<BoxModel> Animation0 =
         Transition<BoxModel>.Create()
             .Property(b => b.X, 500)
             .Property(b => b.Color, "#ff7043")
@@ -32,7 +32,7 @@ public partial class Home : ComponentBase, IDisposable
             });
 
     // Animation1: delayed animation — rotate + scale after a 2 second wait
-    private static readonly Transition<BoxModel>.StateSnapshot Animation1 =
+    private static readonly StateSnapshot<BoxModel> Animation1 =
         Transition<BoxModel>.Create()
             .Await(TimeSpan.FromSeconds(2))
             .Property(b => b.Rotate, 360)
@@ -47,7 +47,7 @@ public partial class Home : ComponentBase, IDisposable
             });
 
     // Animation2: combined animation — move right first, then recolor + shrink after a 3s wait
-    private static readonly Transition<BoxModel>.StateSnapshot Animation2 =
+    private static readonly StateSnapshot<BoxModel> Animation2 =
         Transition<BoxModel>.Create()
             .Property(b => b.X, 400)
             .Effect(new TransitionEffect()
@@ -69,9 +69,9 @@ public partial class Home : ComponentBase, IDisposable
     // ---------------------------------------------------------------
     // Initial snapshots (used for Reset)
     // ---------------------------------------------------------------
-    private Transition<BoxModel>.StateSnapshot _snapshot0 = default!;
-    private Transition<BoxModel>.StateSnapshot _snapshot1 = default!;
-    private Transition<BoxModel>.StateSnapshot _snapshot2 = default!;
+    private StateSnapshot<BoxModel> _snapshot0 = default!;
+    private StateSnapshot<BoxModel> _snapshot1 = default!;
+    private StateSnapshot<BoxModel> _snapshot2 = default!;
 
     protected override void OnInitialized()
     {

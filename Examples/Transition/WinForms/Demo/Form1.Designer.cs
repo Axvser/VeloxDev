@@ -222,9 +222,9 @@ namespace Demo
         }
 
         // Save initial snapshots for reset
-        private Transition<Panel>.StateSnapshot initialSnapshot1;
-        private Transition<Panel>.StateSnapshot initialSnapshot2;
-        private Transition<Panel>.StateSnapshot initialSnapshot3;
+        private StateSnapshot<Panel> initialSnapshot1;
+        private StateSnapshot<Panel> initialSnapshot2;
+        private StateSnapshot<Panel> initialSnapshot3;
 
         private void StartAnimations(object sender, System.EventArgs e)
         {
@@ -346,7 +346,7 @@ namespace Demo
         }
 
         // Animation definitions
-        private static readonly Transition<Control>.StateSnapshot Animation0 =
+        private static readonly StateSnapshot<Control> Animation0 =
             Transition<Control>.Create()
                 .Property(c => c.Location, new Point(600, 100))  // move to the right
                 .Property(c => c.Parent.BackColor, Color.Moccasin) // demonstrates nested property animation
@@ -359,7 +359,7 @@ namespace Demo
                     Ease = Eases.Quad.Out
                 });
 
-        private static readonly Transition<Control>.StateSnapshot Animation1 =
+        private static readonly StateSnapshot<Control> Animation1 =
             Transition<Control>.Create()
                 .Await(TimeSpan.FromSeconds(1))  // starts after a 1 second delay
                 .Property(c => c.Size, new Size(150, 150))  // enlarge
@@ -372,7 +372,7 @@ namespace Demo
                     Ease = Eases.Cubic.InOut
                 });
 
-        private static readonly Transition<Control>.StateSnapshot Animation2 =
+        private static readonly StateSnapshot<Control> Animation2 =
             Transition<Control>.Create()
                 .Property(c => c.Location, new Point(400, 400))  // move to the bottom right
                 .Effect(new TransitionEffect()
