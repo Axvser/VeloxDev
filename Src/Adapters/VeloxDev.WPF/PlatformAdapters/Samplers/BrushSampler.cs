@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -39,11 +39,28 @@ namespace VeloxDev.Adapters.NativeSamplers
                 property.SetValue(target, CreateBlendedBrush(startBr, endBr, t));
         }
 
-        private static Color InterpolateColor(Color c1, Color c2, double t) => Color.FromArgb(
-            (byte)(c1.A + (c2.A - c1.A) * t),
-            (byte)(c1.R + (c2.R - c1.R) * t),
-            (byte)(c1.G + (c2.G - c1.G) * t),
-            (byte)(c1.B + (c2.B - c1.B) * t));
+        private static Color InterpolateColor(Color c1, Color c2, double t)
+        {
+            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            var rgb = new BoundedProgress(t, 0d, 255d);
+            rgb.Add(c1.R, c2.R);
+            rgb.Add(c1.G, c2.G);
+            rgb.Add(c1.B, c2.B);
+
+            return Color.FromArgb(
+                Channel(c1.A + (c2.A - c1.A) * t),
+                Channel(rgb.At(c1.R, c2.R)),
+                Channel(rgb.At(c1.G, c2.G)),
+                Channel(rgb.At(c1.B, c2.B)));
+        }
+
+        /// <summary>Saturates instead of wrapping — a bare byte cast turns 300 into 44.</summary>
+        private static byte Channel(double value)
+        {
+            if (value <= 0d) return 0;
+            if (value >= 255d) return 255;
+            return (byte)value;
+        }
 
         private static Brush InterpolateSolidColorBrush(SolidColorBrush start, SolidColorBrush end, double t)
         {

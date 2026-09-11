@@ -1,4 +1,4 @@
-using Avalonia.Media;
+﻿using Avalonia.Media;
 using System;
 using System.Collections.Generic;
 
@@ -78,24 +78,25 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Color InterpolateColor(Color c1, Color c2, double t)
         {
-            if (c1 == default) c1 = Colors.Transparent;
-            if (c2 == default) c2 = Colors.Transparent;
+            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            var rgb = new BoundedProgress(t, 0d, 255d);
+            rgb.Add(c1.R, c2.R);
+            rgb.Add(c1.G, c2.G);
+            rgb.Add(c1.B, c2.B);
 
-#if NETSTANDARD
             return Color.FromArgb(
-                Clamp((byte)(c1.A + (c2.A - c1.A) * t), 0, 255),
-                Clamp((byte)(c1.R + (c2.R - c1.R) * t), 0, 255),
-                Clamp((byte)(c1.G + (c2.G - c1.G) * t), 0, 255),
-                Clamp((byte)(c1.B + (c2.B - c1.B) * t), 0, 255)
-            );
-#else
-            return Color.FromArgb(
-                (byte)Math.Clamp(c1.A + (c2.A - c1.A) * t, 0, 255),
-                (byte)Math.Clamp(c1.R + (c2.R - c1.R) * t, 0, 255),
-                (byte)Math.Clamp(c1.G + (c2.G - c1.G) * t, 0, 255),
-                (byte)Math.Clamp(c1.B + (c2.B - c1.B) * t, 0, 255)
-            );
-#endif
+                Channel(c1.A + (c2.A - c1.A) * t),
+                Channel(rgb.At(c1.R, c2.R)),
+                Channel(rgb.At(c1.G, c2.G)),
+                Channel(rgb.At(c1.B, c2.B)));
+        }
+
+        /// <summary>Saturates instead of wrapping — a bare byte cast turns 300 into 44.</summary>
+        private static byte Channel(double value)
+        {
+            if (value <= 0d) return 0;
+            if (value >= 255d) return 255;
+            return (byte)value;
         }
 
 #if NETSTANDARD
