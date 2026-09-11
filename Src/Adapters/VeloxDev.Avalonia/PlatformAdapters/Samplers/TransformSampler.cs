@@ -26,7 +26,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             var startTransform = NormalizeInput(start);
             var endTransform = NormalizeInput(end);
 
-            if (startTransform.GetType() == endTransform.GetType() && startTransform is not TransformGroup)
+            if (startTransform.GetType() == endTransform.GetType() && IsKnownTransform(startTransform))
             {
                 // Zero per-frame allocation: reuse a scratch transform, recomputing from the pristine start/end.
                 if (working is not Transform wt || wt.GetType() != startTransform.GetType())
@@ -50,6 +50,13 @@ namespace VeloxDev.Adapters.NativeSamplers
             // 4. Interpolate at time t
             property.SetValue(target, InterpolateTransformPairs(transformPairs, t, direction));
         }
+
+        /// <summary>
+        /// 只有这几种变换既能被 <see cref="CloneTransform"/> 克隆、又有逐字段的插值分支。其余（自定义子类）必须走矩阵
+        /// 路径：没有这道门禁，它们会落进快路径的克隆上，而克隆恰好是唯一对它们抛异常的地方。
+        /// </summary>
+        private static bool IsKnownTransform(Transform transform) => transform is
+            TranslateTransform or RotateTransform or ScaleTransform or SkewTransform or Rotate3DTransform or MatrixTransform;
 
         private static Transform CloneTransform(Transform source) => source switch
         {

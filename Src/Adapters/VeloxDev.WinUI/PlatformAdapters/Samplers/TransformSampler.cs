@@ -25,7 +25,7 @@ namespace VeloxDev.Adapters.NativeSamplers
             var s = Normalize(start);
             var e = Normalize(end);
 
-            if (s.GetType() == e.GetType() && s is not TransformGroup)
+            if (s.GetType() == e.GetType() && IsKnownTransform(s))
             {
                 // Zero per-frame allocation: reuse a scratch transform, recomputing from the pristine start/end.
                 if (working is not Transform wt || wt.GetType() != s.GetType())
@@ -44,6 +44,13 @@ namespace VeloxDev.Adapters.NativeSamplers
 
             property.SetValue(target, CombineTransforms(pairs, t));
         }
+
+        /// <summary>
+        /// 只有这几种变换既能被 <see cref="CloneTransform"/> 克隆、又有逐字段的插值分支。其余（自定义子类）必须走矩阵
+        /// 路径：没有这道门禁，它们会落进快路径的克隆上，而克隆恰好是唯一对它们抛异常的地方。
+        /// </summary>
+        private static bool IsKnownTransform(Transform transform) => transform is
+            TranslateTransform or ScaleTransform or RotateTransform or SkewTransform or MatrixTransform;
 
         private static Transform CloneTransform(Transform source) => source switch
         {
