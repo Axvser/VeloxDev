@@ -13,23 +13,26 @@ namespace VeloxDev.Adapters.NativeSamplers
         public object? NormalizeEnd(object? start, object? end, object? options) => end;
 
         /// <summary>
-        /// Computes the string value at normalized time <paramref name="t"/> in [0,1] and updates the property.
-        /// Endpoint exactness is guaranteed here: t &lt;= 0 writes the precise start, t &gt;= 1 writes the precise end.
+        /// Computes the string value at normalized time <paramref name="t"/> and updates the property.
+        /// <paramref name="t"/> may leave [0,1] when the easing curve overshoots.
+        /// Endpoint exactness is guaranteed here: t == 0 writes the caller's precise start text and t == 1 the precise
+        /// end text — a string cannot be reformatted into an equal-but-different value at the endpoints the way a
+        /// value type can.
         /// The CSS color parse is cached in <paramref name="working"/> (once per animation) so middle frames only
         /// build the output string — no per-frame substring/Split/TryParse allocations.
         /// </summary>
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
+            if (t == 0d) { property.SetValue(target, start); return; }
+            if (t == 1d) { property.SetValue(target, end); return; }
 
             var startValue = start as string;
             var endValue = end as string;
 
             if (ReferenceEquals(working, DiscreteMarker))
             {
-                // Discrete: hold the start value until the end (t >= 1 already returned the end value above).
-                property.SetValue(target, startValue);
+                // Discrete: hold the start value until the progress reaches the end.
+                property.SetValue(target, t >= 1d ? endValue : startValue);
                 return;
             }
 
@@ -48,7 +51,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 }
             }
 
-            property.SetValue(target, ToCssColor(InterpolateColor(range.Start, range.End, (float)t)));
+            property.SetValue(target, ToCssColor(InterpolateColor(range.Start, range.End, t)));
         }
 
         private static readonly object DiscreteMarker = new();
@@ -87,18 +90,27 @@ namespace VeloxDev.Adapters.NativeSamplers
             return true;
         }
 
-        private static Color InterpolateColor(Color start, Color end, float progress)
+        private static Color InterpolateColor(Color start, Color end, double t)
         {
+            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            var rgb = new BoundedProgress(t, 0d, 255d);
+            rgb.Add(start.R, end.R);
+            rgb.Add(start.G, end.G);
+            rgb.Add(start.B, end.B);
+
             return Color.FromArgb(
-                InterpolateChannel(start.A, end.A, progress),
-                InterpolateChannel(start.R, end.R, progress),
-                InterpolateChannel(start.G, end.G, progress),
-                InterpolateChannel(start.B, end.B, progress));
+                InterpolateChannel(start.A + (end.A - start.A) * t),
+                InterpolateChannel(rgb.At(start.R, end.R)),
+                InterpolateChannel(rgb.At(start.G, end.G)),
+                InterpolateChannel(rgb.At(start.B, end.B)));
         }
 
-        private static byte InterpolateChannel(byte start, byte end, float progress)
+        /// <summary>Rounds and saturates — a bare byte cast turns 300 into 44.</summary>
+        private static byte InterpolateChannel(double value)
         {
-            return (byte)Math.Round(start + ((end - start) * progress));
+            if (value <= 0d) return 0;
+            if (value >= 255d) return 255;
+            return (byte)Math.Round(value);
         }
 
         private static string ToCssColor(Color color)

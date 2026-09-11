@@ -9,22 +9,29 @@ namespace VeloxDev.TransitionSystem.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
-
             var c1 = (Color)(start ?? default(Color));
             var c2 = (Color)(end ?? c1);
-            var deltaA = c2.A - c1.A;
-            var deltaR = c2.R - c1.R;
-            var deltaG = c2.G - c1.G;
-            var deltaB = c2.B - c1.B;
+
+            // RGB share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            var rgb = new BoundedProgress(t, 0d, 255d);
+            rgb.Add(c1.R, c2.R);
+            rgb.Add(c1.G, c2.G);
+            rgb.Add(c1.B, c2.B);
 
             property.SetValue(target, Color.FromArgb(
-                (byte)(c1.A + deltaA * t),
-                (byte)(c1.R + deltaR * t),
-                (byte)(c1.G + deltaG * t),
-                (byte)(c1.B + deltaB * t)
+                Channel(c1.A + (c2.A - c1.A) * t),
+                Channel(rgb.At(c1.R, c2.R)),
+                Channel(rgb.At(c1.G, c2.G)),
+                Channel(rgb.At(c1.B, c2.B))
             ));
+        }
+
+        /// <summary>Saturates instead of wrapping — a bare byte cast turns 300 into 44.</summary>
+        private static byte Channel(double value)
+        {
+            if (value <= 0d) return 0;
+            if (value >= 255d) return 255;
+            return (byte)value;
         }
     }
 }

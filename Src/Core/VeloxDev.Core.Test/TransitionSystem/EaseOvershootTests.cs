@@ -119,22 +119,58 @@ public class EaseOvershootTests
         Assert.AreEqual(100d, samples[^1], "the final frame of a pass is the exact endpoint");
     }
 
+    private static ITransitionProperty ColorProperty
+        => TransitionProperty.FromProperty(typeof(ColorTarget).GetProperty(nameof(ColorTarget.Color))!);
+
     [TestMethod]
-    public void Sampler_WithARangeInvariant_PinsToItsEndpointForNow()
+    public void ColorSampler_AtOvershoot_StopsAtTheFirstChannelToReachItsLimit()
     {
-        // A sampler that has not been adapted yet keeps its guard, so during an overshoot it holds the endpoint
-        // instead of extrapolating into a value its type cannot represent. Colour is the clearest case: its channels
-        // are bytes, and (byte)(200 + 110 * 1.0) wraps to 54 rather than saturating. This test marks the interim
-        // behaviour — it should be replaced, not deleted, when the special cases are adapted.
+        // (200,100,50) -> (240,180,120) overshooting to t == 1.5. Red is the first channel to reach 255, and because
+        // the channels share one progress the other two stop with it: red 200+40*1.375 = 255, green 100+80*1.375 =
+        // 210, blue 50+70*1.375 = 146.25. Per-channel clamping would have let green and blue run on to 175 / 125 and
+        // shifted the hue.
         var target = new ColorTarget();
         var sampler = new ColorSampler();
-        var property = TransitionProperty.FromProperty(typeof(ColorTarget).GetProperty(nameof(ColorTarget.Color))!);
         object? working = null;
 
-        var end = System.Drawing.Color.FromArgb(255, 255, 0, 0);
-        sampler.InsertFrame(target, property, ref working, System.Drawing.Color.Black, end, null, 1.1);
+        sampler.InsertFrame(target, ColorProperty, ref working,
+            System.Drawing.Color.FromArgb(255, 200, 100, 50),
+            System.Drawing.Color.FromArgb(255, 240, 180, 120), null, 1.5);
 
-        Assert.AreEqual(end, target.Color);
+        Assert.AreEqual(System.Drawing.Color.FromArgb(255, 255, 210, 146), target.Color);
+    }
+
+    [TestMethod]
+    public void ColorSampler_AlphaSaturatesInsteadOfWrapping()
+    {
+        // Alpha is its own range, so it still takes the full eased time: 200 + 50*1.5 = 275, which a bare byte cast
+        // would wrap to 19.
+        var target = new ColorTarget();
+        var sampler = new ColorSampler();
+        object? working = null;
+
+        sampler.InsertFrame(target, ColorProperty, ref working,
+            System.Drawing.Color.FromArgb(200, 0, 0, 0),
+            System.Drawing.Color.FromArgb(250, 0, 0, 0), null, 1.5);
+
+        Assert.AreEqual(255, target.Color.A);
+    }
+
+    [TestMethod]
+    public void ColorSampler_OpaqueTarget_DoesNotTruncateTheColourOvershoot()
+    {
+        // Alpha reaches its limit exactly at t == 1. If alpha were part of the shared group it would cap the progress
+        // at 1 and the colour would never overshoot at all — the common case of fading to an opaque colour.
+        var target = new ColorTarget();
+        var sampler = new ColorSampler();
+        object? working = null;
+
+        sampler.InsertFrame(target, ColorProperty, ref working,
+            System.Drawing.Color.FromArgb(0, 100, 100, 100),
+            System.Drawing.Color.FromArgb(255, 200, 100, 100), null, 1.5);
+
+        Assert.AreEqual(250, target.Color.R, "red keeps overshooting while alpha saturates");
+        Assert.AreEqual(255, target.Color.A);
     }
 
     private sealed class ColorTarget
