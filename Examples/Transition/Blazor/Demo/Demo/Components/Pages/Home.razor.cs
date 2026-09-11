@@ -52,6 +52,75 @@ public partial class Home : ComponentBase, IDisposable
                 Ease = Eases.Circ.InOut,
             });
 
+    // -------------------------------------------------------------------
+    // 过冲演示（Overshoot）
+    //
+    // 上面三条动画的缓动全部落在 [0,1] 内，越不过目标值；Back.Out 峰值 1.100、Elastic.Out 1.373，
+    // 只有它们会冲过目标再回弹。四个并排目标让 Back 与 Elastic、颜色与尺寸能在同一次运行里对比。
+    // 读数必须由定时器采样目标的真实属性：流水线每段都会 Clone() effect，订阅在原始 effect 上的
+    // 处理函数不会触发。
+    // -------------------------------------------------------------------
+
+    // 动画与读数共用同一份常量，避免各写一份字面量后漂移
+    // 位移取 220 而不是参考实现的 300：Elastic.Out 峰值 1.373，300 需要约 480px 的格子才装得下，
+    // 220 能让整段过冲都留在格子里，数值证明由读数给出
+    private const double ShiftTarget = 220d;
+    private const double WidthTarget = 220d;
+    private const double OverStripWidth = 60d;
+
+    private const string OverStartColor = "#3a6ea5";
+    // 目标色每个通道都留有余量（128/128/208），红通道要到进度约 1.99 才撞上限，
+    // 远高于 Back.Out 的峰值 1.10，所以共享进度不被截断，过冲只提亮而不移动色相
+    private const string OverColorTarget = "#8080d0";
+    // 目标色刻意让红通道顶到上限：58 → 246 的退出进度约 1.048，低于 Back.Out 的峰值 1.10，
+    // 于是进度在边界停住（红＝255），而不是绕回（无钳位时裸转 byte 会把 263 变成 7）
+    private const string OverSaturateTarget = "#f6e68c";
+
+    private BoxModel Over0 { get; } = new() { Width = OverStripWidth, Height = OverStripWidth, Color = OverStartColor };
+    private BoxModel Over1 { get; } = new() { Width = OverStripWidth, Height = OverStripWidth, Color = OverStartColor };
+    private BoxModel Over2 { get; } = new() { Width = OverStripWidth, Height = OverStripWidth, Color = OverStartColor };
+    private BoxModel Over3 { get; } = new() { Width = OverStripWidth, Height = OverStripWidth, Color = OverStartColor };
+
+    // 位移：同一个目标上两条不同缓动，用于对比过冲幅度（峰值 Back 1.100、Elastic 1.373）
+    private static readonly Transition<BoxModel> OverScalarBack =
+        Transition<BoxModel>.Create()
+            .Property(b => b.X, ShiftTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+
+    private static readonly Transition<BoxModel> OverScalarElastic =
+        Transition<BoxModel>.Create()
+            .Property(b => b.X, ShiftTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+
+    // 颜色：Razor 适配器把 string 注册成 StringSampler，所以这里走的是 CSS 颜色字符串路径，
+    // 中间帧产出的是 rgba(...) 文本，而两端仍然原样写回调用方给的字符串
+    private static readonly Transition<BoxModel> OverColor =
+        Transition<BoxModel>.Create()
+            .Property(b => b.Color, OverColorTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+
+    // 尺寸：Blazor 的宽度只是一个 double，没有构造器边界；过冲会实打实越过 220 再回来
+    private static readonly Transition<BoxModel> OverSize =
+        Transition<BoxModel>.Create()
+            .Property(b => b.Width, WidthTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+
+    // 饱和：撞上限的通道在边界停住，证明分数是被钳住而不是回绕
+    private static readonly Transition<BoxModel> OverSaturate =
+        Transition<BoxModel>.Create()
+            .Property(b => b.Color, OverSaturateTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+
+    private System.Threading.Timer? _readoutTimer;
+    private volatile bool _disposed;
+
+    /// <summary>读数：显示目标的真实当前值与目标值，过冲只有靠数字才看得出来</summary>
+    private string OvershootReadout =>
+        $"位移 X    目标 {ShiftTarget,6:F1}    当前 {Over0.X,7:F1}"
+        + $"    |    宽度    目标 {WidthTarget,6:F1}    当前 {Over2.Width,7:F1}\n"
+        + $"颜色 余量    目标 {OverColorTarget}    当前 {Over1.Color}\n"
+        + $"颜色 饱和    目标 {OverSaturateTarget}    当前 {Over3.Color}";
+
     // Animation2: combined animation — move right first, then recolor + shrink after a 3s wait
     private static readonly Transition<BoxModel> Animation2 =
         Transition<BoxModel>.Create()
@@ -83,7 +152,34 @@ public partial class Home : ComponentBase, IDisposable
         Box0.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
         Box1.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
         Box2.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
+
+        // 过冲区的目标同样由 PropertyChanged 驱动重渲染（定时器只负责刷新读数）
+        foreach (var box in OvershootTargets)
+            box.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
     }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return Task.CompletedTask;
+
+        // 读数定时器在这里而不是 OnInitialized 里建：预渲染阶段没有交互回路，
+        // OnAfterRenderAsync 只在交互回路首次渲染时执行，正好避开重复创建。
+        // 回调先查 _disposed：定时器线程可能在 Dispose 之后才轮到，
+        // 那时 InvokeAsync 会抛 ObjectDisposedException 且没人接。
+        _readoutTimer = new System.Threading.Timer(
+            _ =>
+            {
+                if (_disposed) return;
+                InvokeAsync(StateHasChanged);
+            },
+            null,
+            TimeSpan.FromMilliseconds(50),
+            TimeSpan.FromMilliseconds(50));
+
+        return Task.CompletedTask;
+    }
+
+    private BoxModel[] OvershootTargets => [Over0, Over1, Over2, Over3];
 
     private void LoadMainThread()
     {
@@ -142,6 +238,62 @@ public partial class Home : ComponentBase, IDisposable
         CreateReset(Box0Color).Effect(TransitionEffects.Empty).Execute(Box0);
         CreateReset(Box1Color).Effect(TransitionEffects.Empty).Execute(Box1);
         CreateReset(Box2Color).Effect(TransitionEffects.Empty).Execute(Box2);
+
+        // 「重置」一并复位过冲区，否则残留在过冲位置的方块会让下一次对比失去基准
+        ResetOvershoot();
+    }
+
+    // -------------------------------------------------------------------
+    // 过冲区的按钮与重置
+    // -------------------------------------------------------------------
+
+    // Prepare 读取目标的实时值作为动画起点，所以不先归位的话，同一个按钮点第二次（或共用 Over0 的兄弟按钮）
+    // 会从目标动到目标，看起来什么都没发生。只归位本次执行的那个目标：整条条带一起重置会掐掉别的元素上
+    // 正在跑的那一段，并排对比就没了。归位直接写值、不走动画，和参考实现一致。
+    private void OverShootScalarBack() => RunScalar(OverScalarBack);
+    private void OverShootScalarElastic() => RunScalar(OverScalarElastic);
+
+    private void RunScalar(Transition<BoxModel> animation)
+    {
+        Transition.Exit(Over0, IncludeMutual: true, IncludeNoMutual: true);
+        Over0.X = 0;
+        animation.Execute(Over0);
+    }
+
+    private void OverShootColor()
+    {
+        Transition.Exit(Over1, IncludeMutual: true, IncludeNoMutual: true);
+        Over1.Color = OverStartColor;
+        OverColor.Execute(Over1);
+    }
+
+    private void OverShootSize()
+    {
+        Transition.Exit(Over2, IncludeMutual: true, IncludeNoMutual: true);
+        Over2.Width = OverStripWidth;
+        OverSize.Execute(Over2);
+    }
+
+    private void OverShootSaturate()
+    {
+        Transition.Exit(Over3, IncludeMutual: true, IncludeNoMutual: true);
+        Over3.Color = OverStartColor;
+        OverSaturate.Execute(Over3);
+    }
+
+    private void OverShootReset() => ResetOvershoot();
+
+    private void ResetOvershoot()
+    {
+        foreach (var box in OvershootTargets)
+            Transition.Exit(box, IncludeMutual: true, IncludeNoMutual: true);
+
+        // 直接写回初始值：绕过异步 Execute 流水线，重置立即生效且确定
+        Over0.X = 0;
+        Over1.Color = OverStartColor;
+        Over2.X = 0;
+        Over2.Width = OverStripWidth;
+        Over3.Color = OverStartColor;
     }
 
     // The BoxModel defaults, expressed as explicit paths. Color is animatable here as well — the Razor adapter
@@ -172,5 +324,12 @@ public partial class Home : ComponentBase, IDisposable
     public void Dispose()
     {
         ExitAnimations();
+
+        // 页面销毁时停掉读数定时器，并终止过冲区的动画（否则回路断开后它们还在写属性）
+        _disposed = true;
+        _readoutTimer?.Dispose();
+        _readoutTimer = null;
+        foreach (var box in OvershootTargets)
+            Transition.Exit(box, IncludeMutual: true, IncludeNoMutual: true);
     }
 }

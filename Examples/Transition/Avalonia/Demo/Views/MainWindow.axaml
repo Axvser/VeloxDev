@@ -3,7 +3,7 @@
         xmlns:vm="using:Demo.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" Width="800" Height="450"
+        mc:Ignorable="d" Width="1000" Height="640"
         x:Class="Demo.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
@@ -16,7 +16,7 @@
         </LinearGradientBrush>
     </Window.Resources>
 	
-    <Grid RowDefinitions="*,100,*,100,*,100,*">
+    <Grid RowDefinitions="*,100,*,100,*,100,*,110,Auto">
 
 		<WrapPanel Grid.Row="0">
 			<Button Width="118" Height="38" Margin="2" Content="主线程互斥" Click="LoadMainThread"/>
@@ -31,5 +31,32 @@
         <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="100" Height="100" HorizontalAlignment="Left" ></Rectangle>
         <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="100" HorizontalAlignment="Center"></Rectangle>
         <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" Width="100"></Rectangle>
+
+		<!-- 过冲条：4 个互不干扰的目标并排，位移、颜色、尺寸可以在同一次运行里直接对比，
+		     而不是一个接一个地看。位移与尺寸走纯数值采样器，能真正越过目标；Fill 走笔刷采样器。 -->
+		<UniformGrid Grid.Row="7" Rows="1" Columns="4" Margin="6">
+			<Rectangle x:Name="Over0" Width="80" Height="60" Fill="#3A6EA5"
+			           HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+			<Rectangle x:Name="Over1" Width="80" Height="60" Fill="#3A6EA5"
+			           HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+			<Rectangle x:Name="Over2" Width="80" Height="60" Fill="#7A5AA5"
+			           HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+			<Rectangle x:Name="Over3" Width="80" Height="60" Fill="{StaticResource Bs1}"
+			           HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+		</UniformGrid>
+
+		<StackPanel Grid.Row="8" Margin="4">
+			<WrapPanel>
+				<Button Width="128" Height="34" Margin="2" Content="位移 Back.Out" Click="OverShootScalarBack"/>
+				<Button Width="140" Height="34" Margin="2" Content="位移 Elastic.Out" Click="OverShootScalarElastic"/>
+				<Button Width="110" Height="34" Margin="2" Content="颜色过冲" Click="OverShootColor"/>
+				<Button Width="110" Height="34" Margin="2" Content="尺寸过冲" Click="OverShootSize"/>
+				<Button Width="110" Height="34" Margin="2" Content="渐变过冲" Click="OverShootGradient"/>
+				<Button Width="110" Height="34" Margin="2" Content="重置过冲" Click="OverShootReset"/>
+			</WrapPanel>
+			<!-- 读数是过冲可观测的关键：数字越过目标再回落，肉眼无法把它和一条更慢的缓动区分开。 -->
+			<TextBlock x:Name="Readout" Margin="4,6,4,2" FontFamily="Consolas" Foreground="#CCCCCC"
+			           Text="按上面任一按钮；读数显示当前值与目标值"></TextBlock>
+		</StackPanel>
     </Grid>
 </Window>

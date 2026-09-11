@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using System;
 using System.Threading.Tasks;
 using VeloxDev.TransitionSystem;
@@ -18,6 +19,9 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         Rec0.RenderTransform = new TranslateTransform();
+
+        // 过冲条就地驱动 RenderTransform.X，所以变换只在这里创建一次。
+        Over0.RenderTransform = new TranslateTransform();
 
         // The reset is expressed as explicit property paths, built only after the window is Opened so it
         // describes an established initial state.
@@ -48,7 +52,17 @@ public partial class MainWindow : Window
                 ApplyReset(CreateResetRec0(), Rec0);
                 ApplyReset(CreateResetRec1(), Rec1);
                 ApplyReset(CreateResetRec2(), Rec2);
+
+                ResetOverShoot();
             };
+
+            // 过冲条的读数：用定时器采样目标属性，而不是订阅 effect 的事件——流水线每段都会 Clone() effect，
+            // 在这里订阅的处理函数不是真正触发的那个。
+            var readout = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(40) };
+            readout.Tick += (s, e) => Readout.Text =
+                $"位移 X   目标 {ShiftTarget,6:F1}   当前 {((TranslateTransform)Over0.RenderTransform!).X,7:F1}"
+                + $"     |     宽度   目标 {WidthTarget,6:F1}   当前 {Over2.Width,7:F1}";
+            readout.Start();
         };
     }
 
@@ -261,4 +275,114 @@ public partial class MainWindow
                 x.FPS = 144;
                 x.Ease = Eases.Sine.In;
             });
+
+    // -----------------------------------------------------------------------------------------------
+    // 过冲
+    //
+    // 上面每一条用到的缓动返回值都落在 [0,1] 内，所以没有一条能越过目标再回来。Back 峰值 1.10、
+    // Elastic 峰值 1.37。过冲能不能真的看到，取决于目标属性落在哪个采样器上：
+    //   - 纯数值（TranslateTransform.X、Width）自由外推，是真正的过冲；
+    //   - 笔刷（Fill）在 t>=1 时直接写终值，只在端点饱和，看到的是"不过冲、不回绕"。
+    // 读数是让过冲可见的东西：数字越过目标再回落，肉眼无法把它和一条更慢的缓动区分开。
+    // -----------------------------------------------------------------------------------------------
+
+    private const double ShiftTarget = 300d;
+    private const double WidthTarget = 220d;
+    private const double WidthStart = 80d;
+
+    // 颜色场景的起始色：过冲条在 XAML 里声明的那个填充色。起始色只有这一份来源，逐场景重置与整条重置都读它。
+    private static readonly Color OverColorStart = Color.FromRgb(0x3A, 0x6E, 0xA5);
+
+    private static readonly Transition<Rectangle> OverScalarBack =
+        Transition<Rectangle>.Create()
+            .Property(r => ((TranslateTransform)r.RenderTransform!).X, ShiftTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+
+    private static readonly Transition<Rectangle> OverScalarElastic =
+        Transition<Rectangle>.Create()
+            .Property(r => ((TranslateTransform)r.RenderTransform!).X, ShiftTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+
+    // 目标色每个通道都留有余量：R/G/B 共用一个归一化进度，任何一个通道触边都会把整组拉住，
+    // 所以颜色既不会回绕，也不会出现逐通道钳制造成的偏色。
+    private static readonly Transition<Rectangle> OverColor =
+        Transition<Rectangle>.Create()
+            .Property(r => r.Fill, new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0xD0)))
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+
+    // Width 是 double，采样器不给它任何边界：这里没有任何东西阻止它变成负数，而 Width 的 setter 会拒绝
+    // 负值。所以这个场景只做放大（80 → 220），弹性曲线也不会跌破起点，非法区间不可达。要让宽高拿到边界，
+    // 得去动画一个 Size 类型的属性。
+    private static readonly Transition<Rectangle> OverSize =
+        Transition<Rectangle>.Create()
+            .Property(r => r.Width, WidthTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+
+    // 非纯色 Fill 走的是混合笔刷路径而不是纯色路径：交叉淡化系数在两端饱和，越界的那段不会写出去。
+    private static readonly Transition<Rectangle> OverBrush =
+        Transition<Rectangle>.Create()
+            .Property(r => r.Fill, CreateShiftedBs1())
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Back.Out });
+
+    private static LinearGradientBrush CreateShiftedBs1()
+    {
+        return new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(Colors.Cyan, 0.25),
+                new GradientStop(Colors.Orange, 0.75)
+            }
+        };
+    }
+
+    // 每次运行都先把自己那个目标同步地放回起始值，而不是动画回去。Prepare 以目标当前值作为动画起点，
+    // 少了这一步，第二次点击——或者共用该元素的兄弟按钮——就会从目标动到目标，看起来什么都没发生。
+    // 只重置这一个元素：别的元素上的运行继续跑，过冲条才保持可对比。
+    private void OverShootScalarBack(object sender, RoutedEventArgs e) => RunScalar(OverScalarBack);
+    private void OverShootScalarElastic(object sender, RoutedEventArgs e) => RunScalar(OverScalarElastic);
+
+    private void RunScalar(Transition<Rectangle> animation)
+    {
+        Transition.Exit(Over0, IncludeMutual: true, IncludeNoMutual: true);
+        ((TranslateTransform)Over0.RenderTransform!).X = 0;
+        animation.Execute(Over0);
+    }
+
+    private void OverShootColor(object sender, RoutedEventArgs e)
+    {
+        Transition.Exit(Over1, IncludeMutual: true, IncludeNoMutual: true);
+        Over1.Fill = new SolidColorBrush(OverColorStart);
+        OverColor.Execute(Over1);
+    }
+
+    private void OverShootSize(object sender, RoutedEventArgs e)
+    {
+        Transition.Exit(Over2, IncludeMutual: true, IncludeNoMutual: true);
+        Over2.Width = WidthStart;
+        OverSize.Execute(Over2);
+    }
+
+    private void OverShootGradient(object sender, RoutedEventArgs e)
+    {
+        Transition.Exit(Over3, IncludeMutual: true, IncludeNoMutual: true);
+        Over3.Fill = CreateBs1Brush();
+        OverBrush.Execute(Over3);
+    }
+
+    private void OverShootReset(object sender, RoutedEventArgs e) => ResetOverShoot();
+
+    private void ResetOverShoot()
+    {
+        foreach (var target in new[] { Over0, Over1, Over2, Over3 })
+            Transition.Exit(target, IncludeMutual: true, IncludeNoMutual: true);
+
+        // 和上面的重置一样直接写回：这里就是 XAML 里声明的值。
+        Over0.RenderTransform = new TranslateTransform();
+        Over1.Fill = new SolidColorBrush(OverColorStart);
+        Over2.Width = WidthStart;
+        Over3.Fill = CreateBs1Brush();
+    }
 }

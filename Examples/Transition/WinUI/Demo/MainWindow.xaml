@@ -22,6 +22,8 @@
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="100"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="110"></RowDefinition>
+            <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0">
@@ -48,5 +50,48 @@
                 </LinearGradientBrush>
             </Rectangle.Fill>
         </Rectangle>
+
+        <!-- 过冲条：4 个互不干扰的目标并排，Back 与 Elastic、颜色与尺寸能在同一次运行里对比，
+             而不是一次看一个。Over3 的渐变是 Yellow → Violet，过冲会推过 Violet 而不是回绕。 -->
+        <Grid Grid.Row="7" Margin="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"></ColumnDefinition>
+                <ColumnDefinition Width="*"></ColumnDefinition>
+                <ColumnDefinition Width="*"></ColumnDefinition>
+                <ColumnDefinition Width="*"></ColumnDefinition>
+            </Grid.ColumnDefinitions>
+            <Rectangle Grid.Column="0" x:Name="Over0" Width="80" Height="60" Fill="#3A6EA5"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+            <Rectangle Grid.Column="1" x:Name="Over1" Width="80" Height="60" Fill="#3A6EA5"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+            <Rectangle Grid.Column="2" x:Name="Over2" Width="80" Height="60" Fill="#7A5AA5"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+            <Rectangle Grid.Column="3" x:Name="Over3" Width="80" Height="60"
+                       HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="Yellow" Offset="0"></GradientStop>
+                        <GradientStop Color="Violet" Offset="1"></GradientStop>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+        </Grid>
+
+        <StackPanel Grid.Row="8" Margin="4">
+            <StackPanel Orientation="Horizontal">
+                <Button Width="128" Height="34" Margin="2" Content="位移 Back.Out" Click="OverShootScalarBack"/>
+                <Button Width="140" Height="34" Margin="2" Content="位移 Elastic.Out" Click="OverShootScalarElastic"/>
+                <Button Width="110" Height="34" Margin="2" Content="颜色过冲" Click="OverShootColor"/>
+                <Button Width="110" Height="34" Margin="2" Content="尺寸过冲" Click="OverShootSize"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Button Width="110" Height="34" Margin="2" Content="渐变过冲" Click="OverShootGradient"/>
+                <Button Width="110" Height="34" Margin="2" Content="重置过冲" Click="OverShootReset"/>
+            </StackPanel>
+            <!-- 读数是过冲能被观察到的关键：数字越过目标再回来，肉眼分辨不出这和一个更慢的缓动。
+                 Fill 的色值同样读出来，颜色过冲是否偏移色相/回绕一眼可辨。 -->
+            <TextBlock x:Name="Readout" Margin="4,6,4,2" FontFamily="Consolas" Foreground="#CCCCCC"
+                       Text="按上面任一按钮；读数显示当前值与目标值"></TextBlock>
+        </StackPanel>
     </Grid>
 </Window>

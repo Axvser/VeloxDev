@@ -46,10 +46,51 @@
         </div>
     </div>
 
+    <!-- 过冲演示区：四个并排目标互不干扰，Back 与 Elastic、颜色与尺寸可在同一次运行里对比。
+         缓动曲线越过 1 时数值会冲过目标再回弹，这只有读数才看得出来。 -->
+    <div class="over-strip-wrap">
+        <div class="over-strip">
+            <div class="over-cell">
+                <span class="over-cell-label">Over0 · 位移 X（Back / Elastic）</span>
+                <div class="box over-box" style="@Over0.Style"></div>
+            </div>
+            <div class="over-cell">
+                <span class="over-cell-label">Over1 · 颜色（余量）</span>
+                <div class="box over-box" style="@Over1.Style"></div>
+            </div>
+            <div class="over-cell">
+                <span class="over-cell-label">Over2 · 宽度</span>
+                <div class="box over-box" style="@Over2.Style"></div>
+            </div>
+            <div class="over-cell">
+                <span class="over-cell-label">Over3 · 颜色（饱和）</span>
+                <div class="box over-box" style="@Over3.Style"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="over-toolbar">
+        <button class="btn btn-primary" @onclick="OverShootScalarBack">位移 Back.Out</button>
+        <button class="btn btn-primary" @onclick="OverShootScalarElastic">位移 Elastic.Out</button>
+        <button class="btn btn-success" @onclick="OverShootColor">颜色过冲</button>
+        <button class="btn btn-info" @onclick="OverShootSize">尺寸过冲</button>
+        <button class="btn btn-warning" @onclick="OverShootSaturate">颜色饱和</button>
+        <button class="btn btn-secondary" @onclick="OverShootReset">重置过冲</button>
+    </div>
+
+    <div class="over-readout">@OvershootReadout</div>
+
     <div class="demo-tips">
         <p><code>Snapshot()</code> — 记录显式指定的属性路径（初始状态）</p>
         <p><code>SnapshotAll()</code> — 自动发现并记录当前对象中所有可动画的属性</p>
         <p><code>Transition.Exit()</code> — 终止对象持有的动画</p>
+        <p>
+            <code>Eases.Back.Out</code> / <code>Eases.Elastic.Out</code> — 实测峰值 1.100 / 1.373，会越过目标再回弹；
+            读数显示的是目标的真实属性（由 50ms 定时器采样，不是 effect 事件——流水线每段都会 Clone effect）。<br />
+            Razor 适配器只注册了 <code>string</code> 采样器（CSS 颜色），没有刷子对象，因此「非纯色刷」场景
+            以「颜色饱和」替代：让红通道撞上 255，验证共享进度在边界停住而不是回绕
+            （无钳位时 58+188×1.088≈263 会被裸转成 7）。
+        </p>
     </div>
 </div>
 
@@ -79,6 +120,39 @@
         left: 10px;
         border-radius: 6px;
         transition: none; /* Fully controlled by VeloxDev; CSS transition disabled */
+    }
+    /* 过冲区：窄窗口横向滚动，避免四格被挤变形 */
+    .over-strip-wrap { margin-top: 2rem; overflow-x: auto; }
+    .over-strip { display: flex; gap: 1rem; }
+    .over-cell {
+        position: relative;
+        flex: 1 1 0;
+        min-width: 400px; /* 容得下 60px 的方块平移 220px（Elastic 峰值约 302px）后仍留在本格内 */
+        height: 120px;
+        background: #1e1e1e;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .over-cell-label {
+        position: absolute;
+        top: .45rem;
+        left: .7rem;
+        font-size: .72rem;
+        color: #757575;
+        letter-spacing: .04em;
+    }
+    .over-box { top: 2.6rem; left: .5rem; }
+    .over-toolbar { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
+    .over-readout {
+        margin-top: .75rem;
+        padding: .75rem 1rem;
+        background: #1e1e1e;
+        border-radius: 8px;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: .85rem;
+        line-height: 1.8;
+        color: #cccccc;
+        white-space: pre-wrap;
     }
     .demo-tips {
         margin-top: 2rem;

@@ -265,8 +265,11 @@ public partial class MainWindow
             .Property(r => r.Fill, new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0xD0)))
             .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
 
-    // Width is bounded at zero, so an overshoot that would drive it negative stops at the limit instead of reaching
-    // a Size constructor, which throws on a negative size.
+    // Width is a double, so it extrapolates without a bound — nothing here stops it going negative, and a Width
+    // setter rejects that. This scenario therefore only grows (80 to 220) and the elastic curve never dips below
+    // its start, so the invalid range is not reachable. A *shrinking* width under an overshooting ease would reach
+    // it: a double carries no range for the sampler to respect. Animating a Size-typed property instead is what
+    // gets the width/height bound.
     private static readonly Transition<Rectangle> OverSize =
         Transition<Rectangle>.Create()
             .Property(r => r.Width, WidthTarget)
@@ -293,12 +296,45 @@ public partial class MainWindow
         };
     }
 
-    private void OverShootScalarBack(object sender, RoutedEventArgs e) => OverScalarBack.Execute(Over0);
-    private void OverShootScalarElastic(object sender, RoutedEventArgs e) => OverScalarElastic.Execute(Over0);
-    private void OverShootColor(object sender, RoutedEventArgs e) => OverColor.Execute(Over1);
-    private void OverShootSize(object sender, RoutedEventArgs e) => OverSize.Execute(Over2);
-    private void OverShootGradient(object sender, RoutedEventArgs e) => OverBrush.Execute(Over3);
+    // Each run first puts its own target back to the starting value, synchronously rather than by animating back.
+    // Prepare reads the target's live value as the animation's start, so without this a second click — or the
+    // sibling button that shares the element — would animate from the target to the target and appear to do
+    // nothing. Only this element is reset, so a run on another one keeps going and the strip stays comparable.
+    private void OverShootScalarBack(object sender, RoutedEventArgs e) => RunScalar(OverScalarBack);
+    private void OverShootScalarElastic(object sender, RoutedEventArgs e) => RunScalar(OverScalarElastic);
+
+    private void RunScalar(Transition<Rectangle> animation)
+    {
+        Transition.Exit(Over0, IncludeMutual: true, IncludeNoMutual: true);
+        ((TranslateTransform)Over0.RenderTransform).X = 0;
+        animation.Execute(Over0);
+    }
+
+    private void OverShootColor(object sender, RoutedEventArgs e)
+    {
+        Transition.Exit(Over1, IncludeMutual: true, IncludeNoMutual: true);
+        Over1.Fill = new SolidColorBrush(OverColorStart);
+        OverColor.Execute(Over1);
+    }
+
+    private void OverShootSize(object sender, RoutedEventArgs e)
+    {
+        Transition.Exit(Over2, IncludeMutual: true, IncludeNoMutual: true);
+        Over2.Width = 80;
+        OverSize.Execute(Over2);
+    }
+
+    private void OverShootGradient(object sender, RoutedEventArgs e)
+    {
+        Transition.Exit(Over3, IncludeMutual: true, IncludeNoMutual: true);
+        Over3.Fill = CreateBs1Brush();
+        OverBrush.Execute(Over3);
+    }
+
     private void OverShootReset(object sender, RoutedEventArgs e) => ResetOverShoot();
+
+    /// <summary>The colour the colour scenario starts from — the strip's declared fill.</summary>
+    private static readonly Color OverColorStart = Color.FromRgb(0x3A, 0x6E, 0xA5);
 
     private void ResetOverShoot()
     {
@@ -307,7 +343,7 @@ public partial class MainWindow
 
         // Written directly, like the reset above: these are the values the XAML declares.
         Over0.RenderTransform = new TranslateTransform();
-        Over1.Fill = new SolidColorBrush(Color.FromRgb(0x3A, 0x6E, 0xA5));
+        Over1.Fill = new SolidColorBrush(OverColorStart);
         Over2.Width = 80;
         Over3.Fill = CreateBs1Brush();
     }
