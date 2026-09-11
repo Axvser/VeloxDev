@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using VeloxDev.TransitionSystem;
 
@@ -59,12 +60,73 @@ public partial class MainWindow : Window
             // 过冲条的读数：用定时器采样目标属性，而不是订阅 effect 的事件——流水线每段都会 Clone() effect，
             // 在这里订阅的处理函数不是真正触发的那个。
             var readout = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(40) };
-            readout.Tick += (s, e) => Readout.Text =
-                $"位移 X   目标 {ShiftTarget,6:F1}   当前 {((TranslateTransform)Over0.RenderTransform!).X,7:F1}"
-                + $"     |     宽度   目标 {WidthTarget,6:F1}   当前 {Over2.Width,7:F1}";
+            readout.Tick += (s, e) =>
+            {
+                Readout.Text =
+                    $"位移 X   目标 {ShiftTarget,6:F1}   当前 {((TranslateTransform)Over0.RenderTransform!).X,7:F1}"
+                    + $"     |     宽度   目标 {WidthTarget,6:F1}   当前 {Over2.Width,7:F1}";
+                OverState.Text = BuildState();
+            };
             readout.Start();
         };
     }
+
+    // -----------------------------------------------------------------------------------------------
+    // 验收观测面
+    //
+    // 人类读数之外再写一份机器可读的载荷：同一支定时器、同一批值，但用固定的 key=value 而不是散文，
+    // 测试就不必去解析一份随时可能被重新排版的版式。载荷只报告"每个目标当前/峰值是多少"，至于哪个场景
+    // 动哪个目标、起止与时长，由测试侧的 manifest 声明 —— 观测与语义各自只有一处来源。
+    // -----------------------------------------------------------------------------------------------
+
+    private readonly Stopwatch _scenarioClock = new();
+    private readonly double[] _targetPeaks = new double[4];
+    private string _scenario = "none";
+    private int _scenarioDurationMs;
+    private long _sequence;
+
+    /// <summary>Records the scenario that is starting and clears that target's previous peak — every click has to begin from a clean observation.</summary>
+    private void BeginScenario(string scenario, int durationMs, int targetIndex)
+    {
+        _scenario = scenario;
+        _scenarioDurationMs = durationMs;
+        _targetPeaks[targetIndex] = double.NegativeInfinity;
+        _scenarioClock.Restart();
+    }
+
+    private string BuildState()
+    {
+        _sequence++;
+
+        // 只有标量目标记录峰值。峰值存在的意义是"刀刃型峰"——采样落在尖峰两侧就会低估它；颜色的过冲是一段
+        // 形状而不是一个尖峰，报当前值就够，测试轮询取最大即可。
+        var x = ((TranslateTransform)Over0.RenderTransform!).X;
+        var width = Over2.Width;
+        _targetPeaks[0] = Math.Max(_targetPeaks[0], x);
+        _targetPeaks[2] = Math.Max(_targetPeaks[2], width);
+
+        // done 由时长推出，而不是订阅 effect.Completed：流水线每段克隆 effect，订阅在原件上的处理函数不触发。
+        var elapsed = _scenarioClock.ElapsedMilliseconds;
+        var done = _scenario != "none" && elapsed >= _scenarioDurationMs + 50 ? 1 : 0;
+
+        return $"v=1;seq={_sequence};scen={_scenario};t={elapsed};done={done};"
+             + $"t0.cur={x:F3};t0.peak={Peak(0)};"
+             + $"t1.cur={Describe(Over1.Fill)};"
+             + $"t2.cur={width:F3};t2.peak={Peak(2)};"
+             + $"t3.cur={Describe(Over3.Fill)};";
+    }
+
+    private string Peak(int index)
+        => double.IsNegativeInfinity(_targetPeaks[index]) ? "0" : _targetPeaks[index].ToString("F3");
+
+    /// <summary>Writes a brush in a form a test can read: #rrggbb for a solid colour, the type name otherwise.</summary>
+    /// <remarks>
+    /// Matches the interface, not SolidColorBrush: a Fill the XAML declares as a literal is an
+    /// ImmutableSolidColorBrush, and matching the concrete class would report that type name instead of its colour.
+    /// </remarks>
+    private static string Describe(IBrush? brush)
+        => brush is ISolidColorBrush solid ? $"#{solid.Color.R:x2}{solid.Color.G:x2}{solid.Color.B:x2}"
+           : brush?.GetType().Name ?? "none";
 
     private void LoadMainThread(object sender, RoutedEventArgs e)
     {
@@ -289,6 +351,9 @@ public partial class MainWindow
     private const double ShiftTarget = 300d;
     private const double WidthTarget = 220d;
     private const double WidthStart = 80d;
+    // 时长同时喂给 effect 与载荷：载荷靠它推出 done，两处若各写一份就会漂移。
+    private const int BackDurationMs = 900;
+    private const int ElasticDurationMs = 1100;
 
     // 颜色场景的起始色：过冲条在 XAML 里声明的那个填充色。起始色只有这一份来源，逐场景重置与整条重置都读它。
     private static readonly Color OverColorStart = Color.FromRgb(0x3A, 0x6E, 0xA5);
@@ -296,19 +361,19 @@ public partial class MainWindow
     private static readonly Transition<Rectangle> OverScalarBack =
         Transition<Rectangle>.Create()
             .Property(r => ((TranslateTransform)r.RenderTransform!).X, ShiftTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(BackDurationMs), Ease = Eases.Back.Out });
 
     private static readonly Transition<Rectangle> OverScalarElastic =
         Transition<Rectangle>.Create()
             .Property(r => ((TranslateTransform)r.RenderTransform!).X, ShiftTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Elastic.Out });
 
     // 目标色每个通道都留有余量：R/G/B 共用一个归一化进度，任何一个通道触边都会把整组拉住，
     // 所以颜色既不会回绕，也不会出现逐通道钳制造成的偏色。
     private static readonly Transition<Rectangle> OverColor =
         Transition<Rectangle>.Create()
             .Property(r => r.Fill, new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0xD0)))
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(BackDurationMs), Ease = Eases.Back.Out });
 
     // Width 是 double，采样器不给它任何边界：这里没有任何东西阻止它变成负数，而 Width 的 setter 会拒绝
     // 负值。所以这个场景只做放大（80 → 220），弹性曲线也不会跌破起点，非法区间不可达。要让宽高拿到边界，
@@ -316,13 +381,13 @@ public partial class MainWindow
     private static readonly Transition<Rectangle> OverSize =
         Transition<Rectangle>.Create()
             .Property(r => r.Width, WidthTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Elastic.Out });
 
     // 非纯色 Fill 走的是混合笔刷路径而不是纯色路径：交叉淡化系数在两端饱和，越界的那段不会写出去。
     private static readonly Transition<Rectangle> OverBrush =
         Transition<Rectangle>.Create()
             .Property(r => r.Fill, CreateShiftedBs1())
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Back.Out });
 
     private static LinearGradientBrush CreateShiftedBs1()
     {
@@ -341,13 +406,14 @@ public partial class MainWindow
     // 每次运行都先把自己那个目标同步地放回起始值，而不是动画回去。Prepare 以目标当前值作为动画起点，
     // 少了这一步，第二次点击——或者共用该元素的兄弟按钮——就会从目标动到目标，看起来什么都没发生。
     // 只重置这一个元素：别的元素上的运行继续跑，过冲条才保持可对比。
-    private void OverShootScalarBack(object sender, RoutedEventArgs e) => RunScalar(OverScalarBack);
-    private void OverShootScalarElastic(object sender, RoutedEventArgs e) => RunScalar(OverScalarElastic);
+    private void OverShootScalarBack(object sender, RoutedEventArgs e) => RunScalar(OverScalarBack, "back", BackDurationMs);
+    private void OverShootScalarElastic(object sender, RoutedEventArgs e) => RunScalar(OverScalarElastic, "elastic", ElasticDurationMs);
 
-    private void RunScalar(Transition<Rectangle> animation)
+    private void RunScalar(Transition<Rectangle> animation, string scenario, int durationMs)
     {
         Transition.Exit(Over0, IncludeMutual: true, IncludeNoMutual: true);
         ((TranslateTransform)Over0.RenderTransform!).X = 0;
+        BeginScenario(scenario, durationMs, targetIndex: 0);
         animation.Execute(Over0);
     }
 
@@ -355,6 +421,7 @@ public partial class MainWindow
     {
         Transition.Exit(Over1, IncludeMutual: true, IncludeNoMutual: true);
         Over1.Fill = new SolidColorBrush(OverColorStart);
+        BeginScenario("color", BackDurationMs, targetIndex: 1);
         OverColor.Execute(Over1);
     }
 
@@ -362,6 +429,7 @@ public partial class MainWindow
     {
         Transition.Exit(Over2, IncludeMutual: true, IncludeNoMutual: true);
         Over2.Width = WidthStart;
+        BeginScenario("size", ElasticDurationMs, targetIndex: 2);
         OverSize.Execute(Over2);
     }
 
@@ -369,6 +437,7 @@ public partial class MainWindow
     {
         Transition.Exit(Over3, IncludeMutual: true, IncludeNoMutual: true);
         Over3.Fill = CreateBs1Brush();
+        BeginScenario("brush", ElasticDurationMs, targetIndex: 3);
         OverBrush.Execute(Over3);
     }
 

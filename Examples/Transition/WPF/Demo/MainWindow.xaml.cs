@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Diagnostics;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
@@ -58,12 +59,70 @@ public partial class MainWindow : Window
             // Readout for the overshoot strip. Sampled on a timer rather than from the effect's events: the pipeline
             // clones the effect once per segment, so the handlers subscribed here are not the ones that fire.
             var readout = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(40) };
-            readout.Tick += (s, e) => Readout.Text =
-                $"位移 X   目标 {ShiftTarget,6:F1}   当前 {((TranslateTransform)Over0.RenderTransform).X,7:F1}"
-                + $"     |     宽度   目标 {WidthTarget,6:F1}   当前 {Over2.Width,7:F1}";
+            readout.Tick += (s, e) =>
+            {
+                Readout.Text =
+                    $"位移 X   目标 {ShiftTarget,6:F1}   当前 {((TranslateTransform)Over0.RenderTransform).X,7:F1}"
+                    + $"     |     宽度   目标 {WidthTarget,6:F1}   当前 {Over2.Width,7:F1}";
+                OverState.Text = BuildState();
+            };
             readout.Start();
         };
     }
+
+    // -----------------------------------------------------------------------------------------------
+    // 验收观测面
+    //
+    // 人类读数之外再写一份机器可读的载荷：同一支定时器、同一批值，但用固定的 key=value 而不是散文，
+    // 测试就不必去解析一份随时可能被重新排版的版式。载荷只报告"每个目标当前/峰值是多少"，至于哪个场景
+    // 动哪个目标、起止与时长，由测试侧的 manifest 声明 —— 观测与语义各自只有一处来源。
+    // -----------------------------------------------------------------------------------------------
+
+    private readonly Stopwatch _scenarioClock = new();
+    private readonly double[] _targetPeaks = new double[4];
+    private string _scenario = "none";
+    private int _scenarioDurationMs;
+    private long _sequence;
+
+    // 记下本次场景，并把该目标此前的峰值清零——每次点击都必须从干净的观测开始。
+    private void BeginScenario(string scenario, int durationMs, int targetIndex)
+    {
+        _scenario = scenario;
+        _scenarioDurationMs = durationMs;
+        _targetPeaks[targetIndex] = double.NegativeInfinity;
+        _scenarioClock.Restart();
+    }
+
+    private string BuildState()
+    {
+        _sequence++;
+
+        // 只有标量目标记录峰值。峰值存在的意义是"刀刃型峰"——采样落在尖峰两侧就会低估它；颜色的过冲是一段
+        // 形状而不是一个尖峰，报当前值就够，测试轮询取最大即可。
+        var x = ((TranslateTransform)Over0.RenderTransform).X;
+        var width = Over2.Width;
+        _targetPeaks[0] = Math.Max(_targetPeaks[0], x);
+        _targetPeaks[2] = Math.Max(_targetPeaks[2], width);
+
+        // done 由时长推出，而不是订阅 effect.Completed：流水线每段克隆 effect，订阅在原件上的处理函数不触发。
+        // 它是必需的，不能靠"值等于目标"判断结束 —— 两条曲线都会中途再次穿过目标（Elastic 在 1.1s 内穿越七次）。
+        var elapsed = _scenarioClock.ElapsedMilliseconds;
+        var done = _scenario != "none" && elapsed >= _scenarioDurationMs + 50 ? 1 : 0;
+
+        return $"v=1;seq={_sequence};scen={_scenario};t={elapsed};done={done};"
+             + $"t0.cur={x:F3};t0.peak={Peak(0)};"
+             + $"t1.cur={Describe(Over1.Fill)};"
+             + $"t2.cur={width:F3};t2.peak={Peak(2)};"
+             + $"t3.cur={Describe(Over3.Fill)};";
+    }
+
+    private string Peak(int index)
+        => double.IsNegativeInfinity(_targetPeaks[index]) ? "0" : _targetPeaks[index].ToString("F3");
+
+    // 把刷子写成测试能读懂的形式：纯色给 #rrggbb，其余给类型名。
+    private static string Describe(Brush? brush)
+        => brush is SolidColorBrush solid ? $"#{solid.Color.R:x2}{solid.Color.G:x2}{solid.Color.B:x2}"
+           : brush?.GetType().Name ?? "none";
 
     private void LoadMainThread(object sender, RoutedEventArgs e)
     {
@@ -246,16 +305,19 @@ public partial class MainWindow
 
     private const double ShiftTarget = 300d;
     private const double WidthTarget = 220d;
+    // 时长同时喂给 effect 与载荷：载荷靠它推出 done，两处若各写一份就会漂移。
+    private const int BackDurationMs = 900;
+    private const int ElasticDurationMs = 1100;
 
     private static readonly Transition<Rectangle> OverScalarBack =
         Transition<Rectangle>.Create()
             .Property(r => ((TranslateTransform)r.RenderTransform).X, ShiftTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(BackDurationMs), Ease = Eases.Back.Out });
 
     private static readonly Transition<Rectangle> OverScalarElastic =
         Transition<Rectangle>.Create()
             .Property(r => ((TranslateTransform)r.RenderTransform).X, ShiftTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Elastic.Out });
 
     // The target is deliberately mid-range on every channel: with headroom left, the shared progress lets the
     // colour overshoot and still stops at the first channel to reach 255, so what moves is the brightness and not
@@ -263,7 +325,7 @@ public partial class MainWindow
     private static readonly Transition<Rectangle> OverColor =
         Transition<Rectangle>.Create()
             .Property(r => r.Fill, new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0xD0)))
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(BackDurationMs), Ease = Eases.Back.Out });
 
     // Width is a double, so it extrapolates without a bound — nothing here stops it going negative, and a Width
     // setter rejects that. This scenario therefore only grows (80 to 220) and the elastic curve never dips below
@@ -273,14 +335,14 @@ public partial class MainWindow
     private static readonly Transition<Rectangle> OverSize =
         Transition<Rectangle>.Create()
             .Property(r => r.Width, WidthTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Elastic.Out });
 
     // A non-solid Fill goes through the blended-brush path rather than the solid one: a cross-fade, whose factor is
     // a fraction and therefore stops at either end instead of overshooting.
     private static readonly Transition<Rectangle> OverBrush =
         Transition<Rectangle>.Create()
             .Property(r => r.Fill, CreateShiftedBs1())
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Back.Out });
 
     private static LinearGradientBrush CreateShiftedBs1()
     {
@@ -300,13 +362,14 @@ public partial class MainWindow
     // Prepare reads the target's live value as the animation's start, so without this a second click — or the
     // sibling button that shares the element — would animate from the target to the target and appear to do
     // nothing. Only this element is reset, so a run on another one keeps going and the strip stays comparable.
-    private void OverShootScalarBack(object sender, RoutedEventArgs e) => RunScalar(OverScalarBack);
-    private void OverShootScalarElastic(object sender, RoutedEventArgs e) => RunScalar(OverScalarElastic);
+    private void OverShootScalarBack(object sender, RoutedEventArgs e) => RunScalar(OverScalarBack, "back", BackDurationMs);
+    private void OverShootScalarElastic(object sender, RoutedEventArgs e) => RunScalar(OverScalarElastic, "elastic", ElasticDurationMs);
 
-    private void RunScalar(Transition<Rectangle> animation)
+    private void RunScalar(Transition<Rectangle> animation, string scenario, int durationMs)
     {
         Transition.Exit(Over0, IncludeMutual: true, IncludeNoMutual: true);
         ((TranslateTransform)Over0.RenderTransform).X = 0;
+        BeginScenario(scenario, durationMs, targetIndex: 0);
         animation.Execute(Over0);
     }
 
@@ -314,6 +377,7 @@ public partial class MainWindow
     {
         Transition.Exit(Over1, IncludeMutual: true, IncludeNoMutual: true);
         Over1.Fill = new SolidColorBrush(OverColorStart);
+        BeginScenario("color", BackDurationMs, targetIndex: 1);
         OverColor.Execute(Over1);
     }
 
@@ -321,6 +385,7 @@ public partial class MainWindow
     {
         Transition.Exit(Over2, IncludeMutual: true, IncludeNoMutual: true);
         Over2.Width = 80;
+        BeginScenario("size", ElasticDurationMs, targetIndex: 2);
         OverSize.Execute(Over2);
     }
 
@@ -328,12 +393,13 @@ public partial class MainWindow
     {
         Transition.Exit(Over3, IncludeMutual: true, IncludeNoMutual: true);
         Over3.Fill = CreateBs1Brush();
+        BeginScenario("brush", ElasticDurationMs, targetIndex: 3);
         OverBrush.Execute(Over3);
     }
 
     private void OverShootReset(object sender, RoutedEventArgs e) => ResetOverShoot();
 
-    /// <summary>The colour the colour scenario starts from — the strip's declared fill.</summary>
+    // 颜色场景的起点，即过冲条在 XAML 里声明的那一支。
     private static readonly Color OverColorStart = Color.FromRgb(0x3A, 0x6E, 0xA5);
 
     private void ResetOverShoot()

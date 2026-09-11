@@ -1,9 +1,11 @@
 using Jalium.UI;
+using Jalium.UI.Automation;
 using Jalium.UI.Controls;
 using Jalium.UI.Controls.Primitives;
 using Jalium.UI.Media;
 using Jalium.UI.Shapes;
 using Jalium.UI.Threading;
+using System.Diagnostics;
 using VeloxDev.TransitionSystem;
 using Path = System.IO.Path;
 
@@ -25,6 +27,9 @@ internal sealed class MainWindow : Window
     private readonly Rectangle _over3;
     private readonly TextBlock _readout;
 
+    // 机器可读读数（载荷）载体，与人类读数并排
+    private readonly TextBlock _overState;
+
     public MainWindow()
     {
         Title = "VeloxDev Transition - Jalium";
@@ -43,6 +48,7 @@ internal sealed class MainWindow : Window
         AddRow(grid, new GridLength(110));
         AddRow(grid, new GridLength(48));
         AddRow(grid, new GridLength(44));
+        AddRow(grid, new GridLength(30));
 
         // 先建矩形：下面的按钮 lambda 捕获 _rec0，字段必须在捕获前完成赋值
         _rec0 = MakeRect(Colors.Cyan);
@@ -83,13 +89,14 @@ internal sealed class MainWindow : Window
         grid.Children.Add(_rec1);
         grid.Children.Add(_rec2);
 
+        // AutomationId 是验收套件抓取这些控件的把手：测试永远不匹配中文标签，token 与语言无关且稳定。
         var overButtons = new WrapPanel();
-        overButtons.Children.Add(MakeButton("位移 Back.Out", (_, _) => OverShootScalarBack()));
-        overButtons.Children.Add(MakeButton("位移 Elastic.Out", (_, _) => OverShootScalarElastic()));
-        overButtons.Children.Add(MakeButton("颜色过冲", (_, _) => OverShootColor()));
-        overButtons.Children.Add(MakeButton("尺寸过冲", (_, _) => OverShootSize()));
-        overButtons.Children.Add(MakeButton("渐变过冲", (_, _) => OverShootGradient()));
-        overButtons.Children.Add(MakeButton("重置过冲", (_, _) => ResetOverShoot()));
+        overButtons.Children.Add(MakeButton("位移 Back.Out", (_, _) => OverShootScalarBack(), "over.btn.back"));
+        overButtons.Children.Add(MakeButton("位移 Elastic.Out", (_, _) => OverShootScalarElastic(), "over.btn.elastic"));
+        overButtons.Children.Add(MakeButton("颜色过冲", (_, _) => OverShootColor(), "over.btn.color"));
+        overButtons.Children.Add(MakeButton("尺寸过冲", (_, _) => OverShootSize(), "over.btn.size"));
+        overButtons.Children.Add(MakeButton("渐变过冲", (_, _) => OverShootGradient(), "over.btn.brush"));
+        overButtons.Children.Add(MakeButton("重置过冲", (_, _) => ResetOverShoot(), "over.btn.reset"));
         Grid.SetRow(overButtons, 8);
         grid.Children.Add(overButtons);
 
@@ -101,17 +108,29 @@ internal sealed class MainWindow : Window
             Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
             Text = "按上面任一按钮；读数显示当前值与目标值",
         };
+        SetAutomationToken(_readout, "Readout", "over.readout");
         Grid.SetRow(_readout, 9);
         grid.Children.Add(_readout);
+
+        // 读数的机器可读孪生体：同一支定时器、同一批值，但用固定的 key=value 载荷而不是散文。
+        _overState = new TextBlock
+        {
+            Margin = new Thickness(8, 0, 8, 2),
+            FontFamily = new FontFamily("Consolas"),
+            FontSize = 10,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+            Text = "v=1;seq=0",
+        };
+        SetAutomationToken(_overState, "OverState", "over.state");
+        Grid.SetRow(_overState, 10);
+        grid.Children.Add(_overState);
 
         Content = grid;
 
         // 读数用定时器采样目标属性，不用 effect 的事件：流水线每段都会 Clone() effect，
         // 订阅在原始 effect 上的处理函数不会触发。
         var readoutTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(40) };
-        readoutTimer.Tick += (_, _) => _readout.Text =
-            $"位移 X   目标 {ShiftTarget,6:F1}   当前 {((TranslateTransform)_over0.RenderTransform!).X,7:F1}"
-            + $"     |     宽度   目标 {WidthTarget,6:F1}   当前 {_over2.Width,7:F1}";
+        readoutTimer.Tick += (_, _) => UpdateReadout();
         readoutTimer.Start();
 
         // Rec0's RenderTransform is a TranslateTransform; Rec1/Rec2 start null and are animated
@@ -170,7 +189,7 @@ internal sealed class MainWindow : Window
         };
     }
 
-    private Button MakeButton(string text, RoutedEventHandler onClick)
+    private Button MakeButton(string text, RoutedEventHandler onClick, string? automationId = null)
     {
         var button = new Button
         {
@@ -178,7 +197,16 @@ internal sealed class MainWindow : Window
             Margin = new Thickness(4),
         };
         button.Click += onClick;
+        if (automationId is not null) SetAutomationToken(button, automationId, automationId);
         return button;
+    }
+
+    // 验收套件的把手：AutomationId 附着属性是语言无关的稳定 token，Name 则走 Jalium 的
+    // WPF 式 Name→AutomationId 回退，两条路都通。两者都不碰人类可见的文字与无障碍 Name。
+    private static void SetAutomationToken(FrameworkElement element, string name, string automationId)
+    {
+        element.Name = name;
+        AutomationProperties.SetAutomationId(element, automationId);
     }
 
     // ── Scenarios (aligned with Avalonia/WPF) ───────────────────────────────
@@ -304,46 +332,51 @@ internal sealed class MainWindow : Window
     private const double OverWidthStart = 80d;
     private static readonly Color OverColorStart = Color.FromRgb(0x3A, 0x6E, 0xA5);
 
+    // 时长同时喂给 effect 与载荷：载荷靠它推出 done，两处若各写一份就会漂移。
+    private const int BackDurationMs = 900;
+    private const int ElasticDurationMs = 1100;
+
     private static readonly Transition<Rectangle> OverScalarBack =
         Transition<Rectangle>.Create()
             .Property(r => ((TranslateTransform)r.RenderTransform!).X, ShiftTarget)
-            .Effect(new TransitionEffect { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(BackDurationMs), Ease = Eases.Back.Out });
 
     private static readonly Transition<Rectangle> OverScalarElastic =
         Transition<Rectangle>.Create()
             .Property(r => ((TranslateTransform)r.RenderTransform!).X, ShiftTarget)
-            .Effect(new TransitionEffect { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+            .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Elastic.Out });
 
     // 目标色每个通道都留有余量：有余量时共享进度允许颜色整体过冲，直到第一个触到 255 的通道才停下，
     // 所以变的是亮度而不是色相。若逐通道各自截断，绿蓝会跑过红，色相就被挪走了。
     private static readonly Transition<Rectangle> OverColor =
         Transition<Rectangle>.Create()
             .Property(r => r.Fill, new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0xD0)))
-            .Effect(new TransitionEffect { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(BackDurationMs), Ease = Eases.Back.Out });
 
     // Width 在 Jalium 上是普通 double，走 DoubleSampler，没有 0 界：直接外推（Elastic 峰值处 80+140*1.37≈272）。
     // 起点 80 < 终点 220，而 EaseOutElastic 的最小值仍 >0，所以不会出现负宽度，也就不会触发布局对负尺寸的拒绝。
     private static readonly Transition<Rectangle> OverSize =
         Transition<Rectangle>.Create()
             .Property(r => r.Width, WidthTarget)
-            .Effect(new TransitionEffect { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+            .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Elastic.Out });
 
     // 非纯色 Fill 走的是混合刷路径而不是纯色路径：交叉淡出的系数是一个比例，因此在两端饱和而不是越界。
     private static readonly Transition<Rectangle> OverBrush =
         Transition<Rectangle>.Create()
             .Property(r => r.Fill, CreateShiftedBs1())
-            .Effect(new TransitionEffect { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Back.Out });
 
     // 每次运行前先把自己的目标同步写回起始值，而不是动画回去：Prepare 会把目标的当前值当作动画起点，
     // 少了这一步，第二次点击——或共用同一元素的兄弟按钮——就会从目标动到目标，看起来什么都没发生。
     // 只重置这条自己拥有的元素：动别的元素会取消那边的运行，并排对比就没了。
-    private void OverShootScalarBack() => RunScalar(OverScalarBack);
-    private void OverShootScalarElastic() => RunScalar(OverScalarElastic);
+    private void OverShootScalarBack() => RunScalar(OverScalarBack, "back", BackDurationMs);
+    private void OverShootScalarElastic() => RunScalar(OverScalarElastic, "elastic", ElasticDurationMs);
 
-    private void RunScalar(Transition<Rectangle> animation)
+    private void RunScalar(Transition<Rectangle> animation, string scenario, int durationMs)
     {
         Transition.Exit(_over0, IncludeMutual: true, IncludeNoMutual: true);
         ((TranslateTransform)_over0.RenderTransform!).X = 0;
+        BeginScenario(scenario, durationMs, targetIndex: 0);
         animation.Execute(_over0);
     }
 
@@ -351,6 +384,7 @@ internal sealed class MainWindow : Window
     {
         Transition.Exit(_over1, IncludeMutual: true, IncludeNoMutual: true);
         _over1.Fill = new SolidColorBrush(OverColorStart);
+        BeginScenario("color", BackDurationMs, targetIndex: 1);
         OverColor.Execute(_over1);
     }
 
@@ -358,6 +392,7 @@ internal sealed class MainWindow : Window
     {
         Transition.Exit(_over2, IncludeMutual: true, IncludeNoMutual: true);
         _over2.Width = OverWidthStart;
+        BeginScenario("size", ElasticDurationMs, targetIndex: 2);
         OverSize.Execute(_over2);
     }
 
@@ -365,7 +400,71 @@ internal sealed class MainWindow : Window
     {
         Transition.Exit(_over3, IncludeMutual: true, IncludeNoMutual: true);
         _over3.Fill = CreateBs1Brush();
+        BeginScenario("brush", ElasticDurationMs, targetIndex: 3);
         OverBrush.Execute(_over3);
+    }
+
+    // ── 验收观测面 ──────────────────────────────────────────────────────────
+    //
+    // 人类读数之外再写一份机器可读的载荷：同一支定时器、同一批值，但用固定的 key=value 而不是散文，
+    // 测试就不必去解析一份随时可能被重新排版的版式。载荷只报告"每个目标当前/峰值是多少"，至于哪个场景
+    // 动哪个目标、起止与时长，由测试侧的 manifest 声明 —— 观测与语义各自只有一处来源。
+    // ───────────────────────────────────────────────────────────────────────
+
+    private readonly Stopwatch _scenarioClock = new();
+    private readonly double[] _targetPeaks = new double[4];
+    private string _scenario = "none";
+    private int _scenarioDurationMs;
+    private long _sequence;
+
+    // 记下本次场景，并把该目标此前的峰值清零——每次点击都必须从干净的观测开始。
+    private void BeginScenario(string scenario, int durationMs, int targetIndex)
+    {
+        _scenario = scenario;
+        _scenarioDurationMs = durationMs;
+        _targetPeaks[targetIndex] = double.NegativeInfinity;
+        _scenarioClock.Restart();
+    }
+
+    private string BuildState()
+    {
+        _sequence++;
+
+        // 只有标量目标记录峰值。峰值存在的意义是"刀刃型峰"——采样落在尖峰两侧就会低估它；颜色的过冲是一段
+        // 形状而不是一个尖峰，报当前值就够，测试轮询取最大即可。
+        var x = (_over0.RenderTransform as TranslateTransform)?.X ?? double.NaN;
+        var width = _over2.Width;
+        _targetPeaks[0] = Math.Max(_targetPeaks[0], x);
+        _targetPeaks[2] = Math.Max(_targetPeaks[2], width);
+
+        // done 由时长推出，而不是订阅 effect.Completed：流水线每段克隆 effect，订阅在原件上的处理函数不触发。
+        // 它是必需的，不能靠"值等于目标"判断结束 —— 两条曲线都会中途再次穿过目标（Elastic 在 1.1s 内穿越七次）。
+        var elapsed = _scenarioClock.ElapsedMilliseconds;
+        var done = _scenario != "none" && elapsed >= _scenarioDurationMs + 50 ? 1 : 0;
+
+        return $"v=1;seq={_sequence};scen={_scenario};t={elapsed};done={done};"
+             + $"t0.cur={x:F3};t0.peak={Peak(0)};"
+             + $"t1.cur={Describe(_over1.Fill)};"
+             + $"t2.cur={width:F3};t2.peak={Peak(2)};"
+             + $"t3.cur={Describe(_over3.Fill)};";
+    }
+
+    private string Peak(int index)
+        => double.IsNegativeInfinity(_targetPeaks[index]) ? "0" : _targetPeaks[index].ToString("F3");
+
+    // 把刷子写成测试能读懂的形式：纯色给 #rrggbb，其余给类型名。
+    private static string Describe(Brush? brush)
+        => brush is SolidColorBrush solid ? $"#{solid.Color.R:X2}{solid.Color.G:X2}{solid.Color.B:X2}"
+           : brush?.GetType().Name ?? "none";
+
+    // 读数只取目标的真实属性，不缓存也不伪造。载荷与读数共用这一次采样，两者不可能互相矛盾。
+    private void UpdateReadout()
+    {
+        var shift = (_over0.RenderTransform as TranslateTransform)?.X ?? double.NaN;
+        _readout.Text =
+            $"位移 X   目标 {ShiftTarget,6:F1}   当前 {shift,7:F1}"
+            + $"     |     宽度   目标 {WidthTarget,6:F1}   当前 {_over2.Width,7:F1}";
+        _overState.Text = BuildState();
     }
 
     private static LinearGradientBrush CreateShiftedBs1()

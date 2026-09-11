@@ -52,16 +52,30 @@
 
         <VerticalStackLayout Grid.Row="8" Margin="4">
             <FlexLayout Direction="Row" Wrap="Wrap">
-                <Button WidthRequest="128" HeightRequest="34" Text="位移 Back.Out" Clicked="OverShootScalarBack"/>
-                <Button WidthRequest="140" HeightRequest="34" Text="位移 Elastic.Out" Clicked="OverShootScalarElastic"/>
-                <Button WidthRequest="110" HeightRequest="34" Text="颜色过冲" Clicked="OverShootColor"/>
-                <Button WidthRequest="110" HeightRequest="34" Text="尺寸过冲" Clicked="OverShootSize"/>
-                <Button WidthRequest="110" HeightRequest="34" Text="渐变过冲" Clicked="OverShootGradient"/>
-                <Button WidthRequest="110" HeightRequest="34" Text="重置过冲" Clicked="OverShootReset"/>
+                <!-- AutomationId 是验收套件抓取这些控件的把手：测试永远不匹配中文标签，
+                     token 与语言无关且稳定，标签则保持读者预期的样子。 -->
+                <Button WidthRequest="128" HeightRequest="34" Text="位移 Back.Out" Clicked="OverShootScalarBack"
+                        AutomationId="over.btn.back"/>
+                <Button WidthRequest="140" HeightRequest="34" Text="位移 Elastic.Out" Clicked="OverShootScalarElastic"
+                        AutomationId="over.btn.elastic"/>
+                <Button WidthRequest="110" HeightRequest="34" Text="颜色过冲" Clicked="OverShootColor"
+                        AutomationId="over.btn.color"/>
+                <Button WidthRequest="110" HeightRequest="34" Text="尺寸过冲" Clicked="OverShootSize"
+                        AutomationId="over.btn.size"/>
+                <Button WidthRequest="110" HeightRequest="34" Text="渐变过冲" Clicked="OverShootGradient"
+                        AutomationId="over.btn.brush"/>
+                <Button WidthRequest="110" HeightRequest="34" Text="重置过冲" Clicked="OverShootReset"
+                        AutomationId="over.btn.reset"/>
             </FlexLayout>
             <!-- 读数才是过冲可见的证据：数字越过目标再回来，肉眼分辨不出它与一条更慢的缓动。 -->
             <Label x:Name="Readout" Margin="4,6,4,2" FontSize="12" TextColor="#CCCCCC"
+                   AutomationId="over.readout"
                    Text="按上面任一按钮；读数显示目标的真实属性值与目标值"/>
+            <!-- 读数的机器可读孪生体：同一支定时器、同一批值，但用固定的 key=value 载荷而不是散文，
+                 测试就不必去解析一份随时可能被重新排版的版式。 -->
+            <Label x:Name="OverState" Margin="4,0,4,2" FontSize="10" TextColor="#808080"
+                   AutomationId="over.state"
+                   Text="v=1;seq=0"/>
         </VerticalStackLayout>
     </Grid>
 

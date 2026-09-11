@@ -47,16 +47,21 @@
 
 		<StackPanel Grid.Row="8" Margin="4">
 			<WrapPanel>
-				<Button Width="128" Height="34" Margin="2" Content="位移 Back.Out" Click="OverShootScalarBack"/>
-				<Button Width="140" Height="34" Margin="2" Content="位移 Elastic.Out" Click="OverShootScalarElastic"/>
-				<Button Width="110" Height="34" Margin="2" Content="颜色过冲" Click="OverShootColor"/>
-				<Button Width="110" Height="34" Margin="2" Content="尺寸过冲" Click="OverShootSize"/>
-				<Button Width="110" Height="34" Margin="2" Content="渐变过冲" Click="OverShootGradient"/>
-				<Button Width="110" Height="34" Margin="2" Content="重置过冲" Click="OverShootReset"/>
+				<Button Width="128" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.back" Content="位移 Back.Out" Click="OverShootScalarBack"/>
+				<Button Width="140" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.elastic" Content="位移 Elastic.Out" Click="OverShootScalarElastic"/>
+				<Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.color" Content="颜色过冲" Click="OverShootColor"/>
+				<Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.size" Content="尺寸过冲" Click="OverShootSize"/>
+				<Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.brush" Content="渐变过冲" Click="OverShootGradient"/>
+				<Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.reset" Content="重置过冲" Click="OverShootReset"/>
 			</WrapPanel>
 			<!-- 读数是过冲可观测的关键：数字越过目标再回落，肉眼无法把它和一条更慢的缓动区分开。 -->
 			<TextBlock x:Name="Readout" Margin="4,6,4,2" FontFamily="Consolas" Foreground="#CCCCCC"
+			           AutomationProperties.AutomationId="over.readout"
 			           Text="按上面任一按钮；读数显示当前值与目标值"></TextBlock>
+			<!-- 读数的机器可读孪生：同一支定时器、同一批值，但用固定的 key=value 载荷而不是散文，
+			     测试就不必去解析一份随时可能被重新排版的版式。 -->
+			<TextBlock x:Name="OverState" Margin="4,0,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+			           AutomationProperties.AutomationId="over.state" Text="v=1;seq=0"></TextBlock>
 		</StackPanel>
     </Grid>
 </Window>

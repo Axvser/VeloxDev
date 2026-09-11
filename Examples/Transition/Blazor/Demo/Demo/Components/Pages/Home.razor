@@ -69,16 +69,22 @@
         </div>
     </div>
 
+    <!-- data-at 是验收套件的把手：Playwright 选 token 而不选中文文案，token 与语言无关且稳定，
+         标签保持读者预期的样子。Blazor 端不加 id，一律走 data-at。 -->
     <div class="over-toolbar">
-        <button class="btn btn-primary" @onclick="OverShootScalarBack">位移 Back.Out</button>
-        <button class="btn btn-primary" @onclick="OverShootScalarElastic">位移 Elastic.Out</button>
-        <button class="btn btn-success" @onclick="OverShootColor">颜色过冲</button>
-        <button class="btn btn-info" @onclick="OverShootSize">尺寸过冲</button>
-        <button class="btn btn-warning" @onclick="OverShootSaturate">颜色饱和</button>
-        <button class="btn btn-secondary" @onclick="OverShootReset">重置过冲</button>
+        <button class="btn btn-primary" data-at="over.btn.back" @onclick="OverShootScalarBack">位移 Back.Out</button>
+        <button class="btn btn-primary" data-at="over.btn.elastic" @onclick="OverShootScalarElastic">位移 Elastic.Out</button>
+        <button class="btn btn-success" data-at="over.btn.color" @onclick="OverShootColor">颜色过冲</button>
+        <button class="btn btn-info" data-at="over.btn.size" @onclick="OverShootSize">尺寸过冲</button>
+        <button class="btn btn-warning" data-at="over.btn.brush" @onclick="OverShootSaturate">颜色饱和</button>
+        <button class="btn btn-secondary" data-at="over.btn.reset" @onclick="OverShootReset">重置过冲</button>
     </div>
 
-    <div class="over-readout">@OvershootReadout</div>
+    <div class="over-readout" data-at="over.readout">@_readoutSnapshot</div>
+
+    <!-- 读数的机器可读孪生体：同一支定时器、同一次采样，但用固定的 key=value 载荷而不是散文，
+         测试就不必去解析一份随时可能被重新排版的版式。 -->
+    <div class="over-state" data-at="over.state">@_stateSnapshot</div>
 
     <div class="demo-tips">
         <p><code>Snapshot()</code> — 记录显式指定的属性路径（初始状态）</p>
@@ -153,6 +159,17 @@
         line-height: 1.8;
         color: #cccccc;
         white-space: pre-wrap;
+    }
+    /* 载荷：同一批值的固定 key=value 版本，字号压小，与人类读数区分 */
+    .over-state {
+        margin-top: .25rem;
+        padding: .5rem .75rem;
+        background: #1e1e1e;
+        border-radius: 8px;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: .72rem;
+        color: #808080;
+        word-break: break-all;
     }
     .demo-tips {
         margin-top: 2rem;

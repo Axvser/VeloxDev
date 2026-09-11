@@ -1,5 +1,6 @@
 using Demo.Models;
 using Microsoft.AspNetCore.Components;
+using System.Diagnostics;
 using VeloxDev.TransitionSystem;
 
 namespace Demo.Components.Pages;
@@ -81,45 +82,107 @@ public partial class Home : ComponentBase, IDisposable
     private BoxModel Over2 { get; } = new() { Width = OverStripWidth, Height = OverStripWidth, Color = OverStartColor };
     private BoxModel Over3 { get; } = new() { Width = OverStripWidth, Height = OverStripWidth, Color = OverStartColor };
 
+    // 时长同时喂给 effect 与载荷：载荷靠它推出 done，两处若各写一份就会漂移。
+    private const int BackDurationMs = 900;
+    private const int ElasticDurationMs = 1100;
+
     // 位移：同一个目标上两条不同缓动，用于对比过冲幅度（峰值 Back 1.100、Elastic 1.373）
     private static readonly Transition<BoxModel> OverScalarBack =
         Transition<BoxModel>.Create()
             .Property(b => b.X, ShiftTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(BackDurationMs), Ease = Eases.Back.Out });
 
     private static readonly Transition<BoxModel> OverScalarElastic =
         Transition<BoxModel>.Create()
             .Property(b => b.X, ShiftTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Elastic.Out });
 
     // 颜色：Razor 适配器把 string 注册成 StringSampler，所以这里走的是 CSS 颜色字符串路径，
     // 中间帧产出的是 rgba(...) 文本，而两端仍然原样写回调用方给的字符串
     private static readonly Transition<BoxModel> OverColor =
         Transition<BoxModel>.Create()
             .Property(b => b.Color, OverColorTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(BackDurationMs), Ease = Eases.Back.Out });
 
     // 尺寸：Blazor 的宽度只是一个 double，没有构造器边界；过冲会实打实越过 220 再回来
     private static readonly Transition<BoxModel> OverSize =
         Transition<BoxModel>.Create()
             .Property(b => b.Width, WidthTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Elastic.Out });
 
     // 饱和：撞上限的通道在边界停住，证明分数是被钳住而不是回绕
     private static readonly Transition<BoxModel> OverSaturate =
         Transition<BoxModel>.Create()
             .Property(b => b.Color, OverSaturateTarget)
-            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromMilliseconds(BackDurationMs), Ease = Eases.Back.Out });
 
     private System.Threading.Timer? _readoutTimer;
     private volatile bool _disposed;
 
-    /// <summary>读数：显示目标的真实当前值与目标值，过冲只有靠数字才看得出来</summary>
-    private string OvershootReadout =>
+    // 定时器每拍采一次样，同时产出人类读数与机器可读载荷两份快照：同一次采样、同一批值，
+    // 两者不可能互相矛盾，渲染只读这两份快照。
+    private string _readoutSnapshot = "按上面任一按钮；读数显示目标的真实属性值与目标值";
+    private string _stateSnapshot = "v=1;seq=0";
+
+    // 读数：显示目标的真实当前值与目标值，过冲只有靠数字才看得出来
+    private string BuildReadout() =>
         $"位移 X    目标 {ShiftTarget,6:F1}    当前 {Over0.X,7:F1}"
         + $"    |    宽度    目标 {WidthTarget,6:F1}    当前 {Over2.Width,7:F1}\n"
         + $"颜色 余量    目标 {OverColorTarget}    当前 {Over1.Color}\n"
         + $"颜色 饱和    目标 {OverSaturateTarget}    当前 {Over3.Color}";
+
+    // -------------------------------------------------------------------
+    // 验收观测面
+    //
+    // 人类读数之外再写一份机器可读的载荷：同一次采样、同一批值，但用固定的 key=value 而不是散文，
+    // 测试就不必去解析一份随时可能被重新排版的版式。载荷只报告"每个目标当前/峰值是多少"，至于哪个场景
+    // 动哪个目标、起止与时长，由测试侧的 manifest 声明 —— 观测与语义各自只有一处来源。
+    // Blazor 的位移目标是 220 而不是参考实现的 300，载荷保留它自己的数字。
+    // -------------------------------------------------------------------
+
+    private readonly Stopwatch _scenarioClock = new();
+    private readonly double[] _targetPeaks = new double[4];
+    private string _scenario = "none";
+    private int _scenarioDurationMs;
+    private long _sequence;
+
+    // 记下本次场景，并把该目标此前的峰值清零——每次点击都必须从干净的观测开始。
+    private void BeginScenario(string scenario, int durationMs, int targetIndex)
+    {
+        _scenario = scenario;
+        _scenarioDurationMs = durationMs;
+        _targetPeaks[targetIndex] = double.NegativeInfinity;
+        _scenarioClock.Restart();
+    }
+
+    private string BuildState()
+    {
+        _sequence++;
+
+        // 只有标量目标记录峰值。峰值存在的意义是"刀刃型峰"——采样落在尖峰两侧就会低估它；颜色的过冲是一段
+        // 形状而不是一个尖峰，报当前值就够，测试轮询取最大即可。
+        var x = Over0.X;
+        var width = Over2.Width;
+        _targetPeaks[0] = Math.Max(_targetPeaks[0], x);
+        _targetPeaks[2] = Math.Max(_targetPeaks[2], width);
+
+        // done 由时长推出，而不是订阅 effect.Completed：流水线每段克隆 effect，订阅在原件上的处理函数不触发。
+        // 它是必需的，不能靠"值等于目标"判断结束 —— 两条曲线都会中途再次穿过目标（Elastic 在 1.1s 内穿越七次）。
+        var elapsed = _scenarioClock.ElapsedMilliseconds;
+        var done = _scenario != "none" && elapsed >= _scenarioDurationMs + 50 ? 1 : 0;
+
+        return $"v=1;seq={_sequence};scen={_scenario};t={elapsed};done={done};"
+             + $"t0.cur={x:F3};t0.peak={Peak(0)};"
+             + $"t1.cur={Describe(Over1.Color)};"
+             + $"t2.cur={width:F3};t2.peak={Peak(2)};"
+             + $"t3.cur={Describe(Over3.Color)};";
+    }
+
+    private string Peak(int index)
+        => double.IsNegativeInfinity(_targetPeaks[index]) ? "0" : _targetPeaks[index].ToString("F3");
+
+    // 把颜色写成测试能读懂的形式：Blazor 的颜色就是 CSS 字符串，原样透传。
+    private static string Describe(string? css) => string.IsNullOrEmpty(css) ? "none" : css;
 
     // Animation2: combined animation — move right first, then recolor + shrink after a 3s wait
     private static readonly Transition<BoxModel> Animation2 =
@@ -170,6 +233,9 @@ public partial class Home : ComponentBase, IDisposable
             _ =>
             {
                 if (_disposed) return;
+                // 先采样再重渲染：载荷的 seq 每拍只前进一次，读数与载荷出自同一次采样。
+                _readoutSnapshot = BuildReadout();
+                _stateSnapshot = BuildState();
                 InvokeAsync(StateHasChanged);
             },
             null,
@@ -250,13 +316,14 @@ public partial class Home : ComponentBase, IDisposable
     // Prepare 读取目标的实时值作为动画起点，所以不先归位的话，同一个按钮点第二次（或共用 Over0 的兄弟按钮）
     // 会从目标动到目标，看起来什么都没发生。只归位本次执行的那个目标：整条条带一起重置会掐掉别的元素上
     // 正在跑的那一段，并排对比就没了。归位直接写值、不走动画，和参考实现一致。
-    private void OverShootScalarBack() => RunScalar(OverScalarBack);
-    private void OverShootScalarElastic() => RunScalar(OverScalarElastic);
+    private void OverShootScalarBack() => RunScalar(OverScalarBack, "back", BackDurationMs);
+    private void OverShootScalarElastic() => RunScalar(OverScalarElastic, "elastic", ElasticDurationMs);
 
-    private void RunScalar(Transition<BoxModel> animation)
+    private void RunScalar(Transition<BoxModel> animation, string scenario, int durationMs)
     {
         Transition.Exit(Over0, IncludeMutual: true, IncludeNoMutual: true);
         Over0.X = 0;
+        BeginScenario(scenario, durationMs, targetIndex: 0);
         animation.Execute(Over0);
     }
 
@@ -264,6 +331,7 @@ public partial class Home : ComponentBase, IDisposable
     {
         Transition.Exit(Over1, IncludeMutual: true, IncludeNoMutual: true);
         Over1.Color = OverStartColor;
+        BeginScenario("color", BackDurationMs, targetIndex: 1);
         OverColor.Execute(Over1);
     }
 
@@ -271,13 +339,17 @@ public partial class Home : ComponentBase, IDisposable
     {
         Transition.Exit(Over2, IncludeMutual: true, IncludeNoMutual: true);
         Over2.Width = OverStripWidth;
+        BeginScenario("size", ElasticDurationMs, targetIndex: 2);
         OverSize.Execute(Over2);
     }
 
+    // Razor 适配器没有刷子对象，非纯色场景由「颜色饱和」顶替（CSS 字符串路径），
+    // 但 token 与场景名沿用参考实现的 brush，保持跨 demo 的观测面一致。
     private void OverShootSaturate()
     {
         Transition.Exit(Over3, IncludeMutual: true, IncludeNoMutual: true);
         Over3.Color = OverStartColor;
+        BeginScenario("brush", BackDurationMs, targetIndex: 3);
         OverSaturate.Execute(Over3);
     }
 

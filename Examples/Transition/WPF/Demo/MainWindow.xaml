@@ -55,18 +55,34 @@
         </UniformGrid>
 
         <StackPanel Grid.Row="8" Margin="4">
+            <!--
+                AutomationProperties.AutomationId is the acceptance suites' handle on these controls, so no test
+                ever matches on the Chinese labels: the tokens are language-independent and stable, and the labels
+                stay exactly as a reader expects them.
+            -->
             <WrapPanel>
-                <Button Width="128" Height="34" Margin="2" Content="位移 Back.Out" Click="OverShootScalarBack"/>
-                <Button Width="140" Height="34" Margin="2" Content="位移 Elastic.Out" Click="OverShootScalarElastic"/>
-                <Button Width="110" Height="34" Margin="2" Content="颜色过冲" Click="OverShootColor"/>
-                <Button Width="110" Height="34" Margin="2" Content="尺寸过冲" Click="OverShootSize"/>
-                <Button Width="110" Height="34" Margin="2" Content="渐变过冲" Click="OverShootGradient"/>
-                <Button Width="110" Height="34" Margin="2" Content="重置过冲" Click="OverShootReset"/>
+                <Button Width="128" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.back"
+                        Content="位移 Back.Out" Click="OverShootScalarBack"/>
+                <Button Width="140" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.elastic"
+                        Content="位移 Elastic.Out" Click="OverShootScalarElastic"/>
+                <Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.color"
+                        Content="颜色过冲" Click="OverShootColor"/>
+                <Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.size"
+                        Content="尺寸过冲" Click="OverShootSize"/>
+                <Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.brush"
+                        Content="渐变过冲" Click="OverShootGradient"/>
+                <Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.reset"
+                        Content="重置过冲" Click="OverShootReset"/>
             </WrapPanel>
             <!-- The readout is what makes an overshoot observable: the number passes the target and comes back,
                  which the eye alone cannot tell apart from a slower ease. -->
             <TextBlock x:Name="Readout" Margin="4,6,4,2" FontFamily="Consolas" Foreground="#CCCCCC"
+                       AutomationProperties.AutomationId="over.readout"
                        Text="按上面任一按钮；读数显示当前值与目标值"></TextBlock>
+            <!-- The machine-readable twin of the readout: same timer, same values, but a fixed key=value payload
+                 instead of prose, so a test never has to parse a layout a designer may reformat. -->
+            <TextBlock x:Name="OverState" Margin="4,0,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+                       AutomationProperties.AutomationId="over.state" Text="v=1;seq=0"></TextBlock>
         </StackPanel>
     </Grid>
 </Window>

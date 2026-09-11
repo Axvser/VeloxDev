@@ -1,0 +1,71 @@
+name: Transition acceptance
+
+# 验收套件不在 VeloxDev.slnx 里，所以根目录的 `dotnet test` 永远看不到它；这里按路径显式调用。
+# 分三个作业，因为它们对运行环境的要求完全不同。
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # 纯数据，不启动任何 demo：理论 oracle（曲线峰值、采样界、反空转守卫）与七份 manifest 的横向一致性。
+  # 不需要桌面，所以在任何 Windows runner 上都能跑，也应该是每次推送都跑的那一个。
+  theory:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      # 不设 VELOXDEV_AT：UI 套件自行跳过，退出码 0。
+      - name: Theory and manifest parity
+        run: dotnet test "Examples/Transition/AUTO TEST/VeloxDev.AT.csproj"
+
+  # 七个平台里唯一能在托管 runner 上真跑的：无头浏览器 + Kestrel，不需要交互式桌面。
+  # 也正因如此，它是唯一把「AT 真的会驱动一个应用」带进 CI 的作业。
+  blazor:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build the demo
+        run: dotnet build "Examples/Transition/Blazor/Demo/Demo/Demo.csproj" -c Debug
+      - name: Acceptance suite
+        run: dotnet test "Examples/Transition/AUTO TEST/VeloxDev.AT.csproj" --filter "TestCategory=AT.Blazor"
+        env:
+          VELOXDEV_AT: '1'
+          VELOXDEV_AT_PLATFORMS: Blazor
+        # BlazorHost 用已安装的 Edge（Channel=msedge），所以这里不需要 playwright install；
+        # 若要换成 Chromium，先跑 pwsh .../playwright.ps1 install chromium 并缓存 ms-playwright 目录。
+
+  # 其余六个平台都要一个交互式桌面会话：UIA 点击需要窗口，Jalium 还要 D3D12。
+  # 锁屏、断开的 RDP 会话都会让它们失败，所以自托管 runner 必须自动登录且不锁屏。
+  # 因此默认不跑，只在手动触发时跑。
+  desktop:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, windows, interactive]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      # MAUI 与 WinUI 需要各自的工作负载/SDK；已装好的 runner 上可以省掉这一步。
+      - name: Workloads
+        run: dotnet workload install maui
+      - name: Build the demos
+        run: |
+          dotnet build Examples/Transition/WPF/Demo/Demo.csproj -c Debug
+          dotnet build Examples/Transition/WinForms/Demo/Demo.csproj -c Debug
+          dotnet build Examples/Transition/Avalonia/Demo/Demo.csproj -c Debug
+          dotnet build Examples/Transition/WinUI/Demo/Demo.csproj -c Debug -p:Platform=x64
+          dotnet build Examples/Transition/Jalium/Demo/Demo.csproj -c Debug
+          dotnet build Examples/Transition/MAUI/Demo/Demo.csproj -c Debug -f net10.0-windows10.0.19041.0
+      - name: Acceptance suites
+        run: dotnet test "Examples/Transition/AUTO TEST/VeloxDev.AT.csproj"
+        env:
+          VELOXDEV_AT: '1'
+          VELOXDEV_AT_PLATFORMS: WPF,WinForms,Avalonia,WinUI,Jalium,MAUI

@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);MSTEST0032;MSTEST0037;CS0067</NoWarn>
+    <!--
+      Deliberately absent from VeloxDev.slnx: the solution is the only thing `dotnet test` at the repository root
+      resolves, so not being in it is what keeps the root command backend-only. Run this project by path.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.2" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <!--
+      The UI drivers reach the demos through UI Automation. FlaUI has not been maintained since 2022, so it is kept
+      behind Drivers/AutomationLocator.cs: every FlaUI type in this project lives there, and swapping to the
+      framework's own System.Windows.Automation is a one-file change.
+    -->
+    <PackageReference Include="FlaUI.Core" Version="4.0.0" />
+    <PackageReference Include="FlaUI.UIA3" Version="4.0.0" />
+    <!--
+      The Blazor driver drives its demo through a browser rather than a desktop window, which is what makes that
+      platform runnable on an agent. Only the base package is referenced, not Microsoft.Playwright.MSTest: that one
+      pins its own MSTest and would fight the 4.0.2 metapackage above. The browser and its context are managed by
+      Engine/BlazorHost.cs instead, and it launches against the installed Edge (Channel "msedge"), so nothing has to be
+      downloaded to run the suite locally. A CI image without Edge runs playwright.ps1 install chromium once and drops
+      the channel.
+    -->
+    <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
+    <!--
+      FlaUI.Core 4.0.0 pins System.Drawing.Common 5.0.2, which carries GHSA-rxg9-xrhp-64gj and would otherwise fail
+      the build on NU1904. A direct reference wins over the transitive one and pulls the patched assembly in; FlaUI
+      only uses it for screenshot capture, so nothing it does depends on the old behaviour.
+    -->
+    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+</Project>
