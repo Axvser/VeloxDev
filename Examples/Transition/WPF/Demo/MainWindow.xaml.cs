@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using VeloxDev.TransitionSystem;
 
 namespace Demo;
@@ -14,6 +15,9 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         Rec0.RenderTransform = new TranslateTransform();
+
+        // The overshoot strip drives RenderTransform.X in place, so its transform is created once here.
+        Over0.RenderTransform = new TranslateTransform();
 
         // Reset snapshots are taken only after the element is Loaded, avoiding information loss from
         // an initial state that has not yet been established.
@@ -47,7 +51,17 @@ public partial class MainWindow : Window
                 ApplyReset(CreateResetRec0(), Rec0);
                 ApplyReset(CreateResetRec1(), Rec1);
                 ApplyReset(CreateResetRec2(), Rec2);
+
+                ResetOverShoot();
             };
+
+            // Readout for the overshoot strip. Sampled on a timer rather than from the effect's events: the pipeline
+            // clones the effect once per segment, so the handlers subscribed here are not the ones that fire.
+            var readout = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(40) };
+            readout.Tick += (s, e) => Readout.Text =
+                $"位移 X   目标 {ShiftTarget,6:F1}   当前 {((TranslateTransform)Over0.RenderTransform).X,7:F1}"
+                + $"     |     宽度   目标 {WidthTarget,6:F1}   当前 {Over2.Width,7:F1}";
+            readout.Start();
         };
     }
 
@@ -218,4 +232,83 @@ public partial class MainWindow
                 Duration = TimeSpan.FromSeconds(2),
                 Ease = Eases.Sine.In
             });
+
+    // -----------------------------------------------------------------------------------------------
+    // Overshoot
+    //
+    // Every ease used above returns a value inside [0,1], so none of them can pass its target and come
+    // back. Back peaks at 1.10 and Elastic at 1.37, and what an overshoot means is decided per sampler:
+    // R/G/B move by one shared progress and stop at the first channel to reach its limit, width and
+    // height do the same at zero, and a channel with a range of its own — alpha, opacity — keeps the
+    // full eased time. The readout is what makes it observable: the number passes the target and
+    // returns, which the eye alone cannot tell apart from a slower ease.
+    // -----------------------------------------------------------------------------------------------
+
+    private const double ShiftTarget = 300d;
+    private const double WidthTarget = 220d;
+
+    private static readonly Transition<Rectangle> OverScalarBack =
+        Transition<Rectangle>.Create()
+            .Property(r => ((TranslateTransform)r.RenderTransform).X, ShiftTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+
+    private static readonly Transition<Rectangle> OverScalarElastic =
+        Transition<Rectangle>.Create()
+            .Property(r => ((TranslateTransform)r.RenderTransform).X, ShiftTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+
+    // The target is deliberately mid-range on every channel: with headroom left, the shared progress lets the
+    // colour overshoot and still stops at the first channel to reach 255, so what moves is the brightness and not
+    // the hue. A per-channel clamp would let green and blue run past red and shift it.
+    private static readonly Transition<Rectangle> OverColor =
+        Transition<Rectangle>.Create()
+            .Property(r => r.Fill, new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0xD0)))
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(0.9), Ease = Eases.Back.Out });
+
+    // Width is bounded at zero, so an overshoot that would drive it negative stops at the limit instead of reaching
+    // a Size constructor, which throws on a negative size.
+    private static readonly Transition<Rectangle> OverSize =
+        Transition<Rectangle>.Create()
+            .Property(r => r.Width, WidthTarget)
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Elastic.Out });
+
+    // A non-solid Fill goes through the blended-brush path rather than the solid one: a cross-fade, whose factor is
+    // a fraction and therefore stops at either end instead of overshooting.
+    private static readonly Transition<Rectangle> OverBrush =
+        Transition<Rectangle>.Create()
+            .Property(r => r.Fill, CreateShiftedBs1())
+            .Effect(new TransitionEffect() { Duration = TimeSpan.FromSeconds(1.1), Ease = Eases.Back.Out });
+
+    private static LinearGradientBrush CreateShiftedBs1()
+    {
+        return new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(1, 1),
+            GradientStops =
+            {
+                new GradientStop(Colors.Cyan, 0.25),
+                new GradientStop(Colors.Orange, 0.75)
+            }
+        };
+    }
+
+    private void OverShootScalarBack(object sender, RoutedEventArgs e) => OverScalarBack.Execute(Over0);
+    private void OverShootScalarElastic(object sender, RoutedEventArgs e) => OverScalarElastic.Execute(Over0);
+    private void OverShootColor(object sender, RoutedEventArgs e) => OverColor.Execute(Over1);
+    private void OverShootSize(object sender, RoutedEventArgs e) => OverSize.Execute(Over2);
+    private void OverShootGradient(object sender, RoutedEventArgs e) => OverBrush.Execute(Over3);
+    private void OverShootReset(object sender, RoutedEventArgs e) => ResetOverShoot();
+
+    private void ResetOverShoot()
+    {
+        foreach (var target in new[] { Over0, Over1, Over2, Over3 })
+            Transition.Exit(target, IncludeMutual: true, IncludeNoMutual: true);
+
+        // Written directly, like the reset above: these are the values the XAML declares.
+        Over0.RenderTransform = new TranslateTransform();
+        Over1.Fill = new SolidColorBrush(Color.FromRgb(0x3A, 0x6E, 0xA5));
+        Over2.Width = 80;
+        Over3.Fill = CreateBs1Brush();
+    }
 }

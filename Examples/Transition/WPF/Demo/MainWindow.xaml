@@ -1,11 +1,11 @@
-﻿<Window x:Class="Demo.MainWindow"
+<Window x:Class="Demo.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Demo"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800"
+        Title="MainWindow" Height="640" Width="1000"
         Background="#1e1e1e">
     <Window.Resources>
         <LinearGradientBrush x:Key="Bs1" StartPoint="0,0" EndPoint="1,1">
@@ -15,13 +15,15 @@
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="Auto"></RowDefinition>
             <RowDefinition Height="100"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="100"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="100"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="110"></RowDefinition>
+            <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
 
         <WrapPanel Grid.Row="0">
@@ -37,5 +39,34 @@
         <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
         <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="100" HorizontalAlignment="Center"></Rectangle>
         <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" Width="100"></Rectangle>
+
+        <!-- Overshoot strip. Four independent targets, laid out side by side so Back and Elastic, colour and size can
+             be compared on the same run instead of one after another. Bs1 flows from Yellow to Violet, so an
+             overshoot on it pushes past Violet rather than wrapping. -->
+        <UniformGrid Grid.Row="7" Rows="1" Columns="4" Margin="6">
+            <Rectangle x:Name="Over0" Width="80" Height="60" Fill="#3A6EA5"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+            <Rectangle x:Name="Over1" Width="80" Height="60" Fill="#3A6EA5"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+            <Rectangle x:Name="Over2" Width="80" Height="60" Fill="#7A5AA5"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+            <Rectangle x:Name="Over3" Width="80" Height="60" Fill="{StaticResource Bs1}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
+        </UniformGrid>
+
+        <StackPanel Grid.Row="8" Margin="4">
+            <WrapPanel>
+                <Button Width="128" Height="34" Margin="2" Content="位移 Back.Out" Click="OverShootScalarBack"/>
+                <Button Width="140" Height="34" Margin="2" Content="位移 Elastic.Out" Click="OverShootScalarElastic"/>
+                <Button Width="110" Height="34" Margin="2" Content="颜色过冲" Click="OverShootColor"/>
+                <Button Width="110" Height="34" Margin="2" Content="尺寸过冲" Click="OverShootSize"/>
+                <Button Width="110" Height="34" Margin="2" Content="渐变过冲" Click="OverShootGradient"/>
+                <Button Width="110" Height="34" Margin="2" Content="重置过冲" Click="OverShootReset"/>
+            </WrapPanel>
+            <!-- The readout is what makes an overshoot observable: the number passes the target and comes back,
+                 which the eye alone cannot tell apart from a slower ease. -->
+            <TextBlock x:Name="Readout" Margin="4,6,4,2" FontFamily="Consolas" Foreground="#CCCCCC"
+                       Text="按上面任一按钮；读数显示当前值与目标值"></TextBlock>
+        </StackPanel>
     </Grid>
 </Window>
