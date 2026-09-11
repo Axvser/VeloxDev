@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
@@ -9,8 +9,6 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             var g1 = (GridLength)(start ?? new GridLength(0));
             var g2 = (GridLength)(end ?? g1);

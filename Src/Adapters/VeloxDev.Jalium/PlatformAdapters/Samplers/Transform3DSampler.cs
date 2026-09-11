@@ -1,4 +1,4 @@
-using Jalium.UI.Media.Media3D;
+﻿using Jalium.UI.Media.Media3D;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
@@ -11,8 +11,6 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             var startT = (Transform3D?)start;
             var endT = (Transform3D?)end;

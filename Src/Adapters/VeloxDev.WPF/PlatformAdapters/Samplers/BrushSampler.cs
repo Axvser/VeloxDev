@@ -13,8 +13,6 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             if (start is SolidColorBrush sb && end is SolidColorBrush eb)
             {
@@ -25,7 +23,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                     working = wb;
                 }
                 wb.Color = InterpolateColor(sb.Color, eb.Color, t);
-                wb.Opacity = sb.Opacity + t * (eb.Opacity - sb.Opacity);
+                wb.Opacity = Math.Max(0, Math.Min(1, sb.Opacity + t * (eb.Opacity - sb.Opacity)));
                 property.SetValue(target, wb);
                 return;
             }

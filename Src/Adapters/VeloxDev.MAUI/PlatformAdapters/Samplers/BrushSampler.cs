@@ -1,4 +1,4 @@
-namespace VeloxDev.Adapters.NativeSamplers
+﻿namespace VeloxDev.Adapters.NativeSamplers
 {
     public class BrushSampler : ISampler
     {
@@ -7,8 +7,6 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             // Normalize the start/end once per animation (a Color/null input must not allocate a brush per frame).
             if (working is not NormalizedState st)

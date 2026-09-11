@@ -1,5 +1,6 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Media;
+using System;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
@@ -10,8 +11,6 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             var endBrush = end as IBrush ?? Brushes.Transparent;
             var startBrush = AdaptStartBrush(start);
@@ -25,7 +24,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                     working = wb;
                 }
                 wb.Color = LerpColor(ss.Color, se.Color, t);
-                wb.Opacity = ss.Opacity + (se.Opacity - ss.Opacity) * t;
+                wb.Opacity = Math.Max(0, Math.Min(1, ss.Opacity + (se.Opacity - ss.Opacity) * t));
                 property.SetValue(target, wb);
                 return;
             }
@@ -98,7 +97,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 working = wb2;
             }
             wb2.Color = LerpColor(c1, c2, t);
-            wb2.Opacity = startBrush.Opacity + (endBrush.Opacity - startBrush.Opacity) * t;
+            wb2.Opacity = Math.Max(0, Math.Min(1, startBrush.Opacity + (endBrush.Opacity - startBrush.Opacity) * t));
             property.SetValue(target, wb2);
         }
 

@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
 using System;
 using Windows.Foundation;
@@ -15,8 +15,6 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             // Normalize the start/end once per animation (a Color/null input must not allocate a brush per frame).
             if (working is not NormalizedState st)
@@ -36,7 +34,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                     st.Scratch = wb;
                 }
                 wb.Color = LerpColorPremultiplied(ss.Color, se.Color, t);
-                wb.Opacity = Lerp(ss.Opacity, se.Opacity, t);
+                wb.Opacity = ClampToUnit(Lerp(ss.Opacity, se.Opacity, t));
                 property.SetValue(target, wb);
                 return;
             }
@@ -107,7 +105,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 st.Scratch = wb2;
             }
             wb2.Color = LerpColorPremultiplied(c1, c2, t);
-            wb2.Opacity = Lerp(s.Opacity, e.Opacity, t);
+            wb2.Opacity = ClampToUnit(Lerp(s.Opacity, e.Opacity, t));
             property.SetValue(target, wb2);
         }
 
@@ -187,6 +185,17 @@ namespace VeloxDev.Adapters.NativeSamplers
             if (value <= 0d) return 0;
             if (value >= 255d) return 255;
             return (byte)value;
+        }
+
+        /// <summary>
+        /// Brush opacity is a fraction, so an overshoot saturates at either end instead of being handed to the
+        /// property outside [0,1].
+        /// </summary>
+        private static double ClampToUnit(double value)
+        {
+            if (value <= 0d) return 0d;
+            if (value >= 1d) return 1d;
+            return value;
         }
     }
 }

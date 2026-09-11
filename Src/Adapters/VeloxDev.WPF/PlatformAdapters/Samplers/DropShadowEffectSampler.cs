@@ -10,8 +10,6 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             if (start is DropShadowEffect e1 && end is DropShadowEffect e2)
             {
@@ -24,7 +22,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 we.Color = InterpolateColor(e1.Color, e2.Color, t);
                 we.Direction = e1.Direction + t * (e2.Direction - e1.Direction);
                 we.ShadowDepth = e1.ShadowDepth + t * (e2.ShadowDepth - e1.ShadowDepth);
-                we.Opacity = e1.Opacity + t * (e2.Opacity - e1.Opacity);
+                we.Opacity = Math.Max(0, Math.Min(1, e1.Opacity + t * (e2.Opacity - e1.Opacity)));
                 we.BlurRadius = e1.BlurRadius + t * (e2.BlurRadius - e1.BlurRadius);
                 property.SetValue(target, we);
                 return;
@@ -38,7 +36,7 @@ namespace VeloxDev.Adapters.NativeSamplers
                 Color = InterpolateColor(eff1.Color, eff2.Color, t),
                 Direction = eff1.Direction + t * (eff2.Direction - eff1.Direction),
                 ShadowDepth = eff1.ShadowDepth + t * (eff2.ShadowDepth - eff1.ShadowDepth),
-                Opacity = eff1.Opacity + t * (eff2.Opacity - eff1.Opacity),
+                Opacity = Math.Max(0, Math.Min(1, eff1.Opacity + t * (eff2.Opacity - eff1.Opacity))),
                 BlurRadius = eff1.BlurRadius + t * (eff2.BlurRadius - eff1.BlurRadius)
             });
         }
