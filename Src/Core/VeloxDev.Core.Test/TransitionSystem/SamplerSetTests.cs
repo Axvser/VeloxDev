@@ -1,4 +1,4 @@
-using VeloxDev.TransitionSystem;
+﻿using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 using VeloxDev.TransitionSystem.NativeSamplers;
 
@@ -18,7 +18,8 @@ public class SamplerSetTests
         public int InvokeCount { get; private set; }
         public bool IsAppAlive() => Alive();
         public bool IsUIThread() => true;
-        public void ProtectedInvoke(object target, Action action, NonPriority priority) { InvokeCount++; action(); }
+        public bool ProtectedInvoke(object target, Action action, NonPriority priority) { InvokeCount++; action(); return true; }
+        public Task<bool> ProtectedInvokeAsync(object target, Action action, NonPriority priority) => Task.FromResult(ProtectedInvoke(target, action, priority));
         public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
     }
 
@@ -89,7 +90,8 @@ public class SamplerSetTests
 
         public bool IsUIThread() => true;
 
-        public void ProtectedInvoke(object target, Action action, NonPriority priority) => _pending.Add(action);
+        public bool ProtectedInvoke(object target, Action action, NonPriority priority) { _pending.Add(action); return true; }
+        public Task<bool> ProtectedInvokeAsync(object target, Action action, NonPriority priority) => Task.FromResult(ProtectedInvoke(target, action, priority));
 
         public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
 
@@ -135,7 +137,8 @@ public class SamplerSetTests
     {
         public bool IsAppAlive() => true;
         public bool IsUIThread() => true;
-        public void ProtectedInvoke(object target, Action action, FakePriority priority) => action();
+        public bool ProtectedInvoke(object target, Action action, FakePriority priority) { action(); return true; }
+        public Task<bool> ProtectedInvokeAsync(object target, Action action, FakePriority priority) => Task.FromResult(ProtectedInvoke(target, action, priority));
         public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
     }
 

@@ -27,12 +27,12 @@ namespace VeloxDev.TransitionSystem
             return tcs.Task.GetAwaiter().GetResult();
         }
 
-        public override void ProtectedInvoke(object target, Action action)
+        public override bool ProtectedInvoke(object target, Action action)
         {
             if (IsUIThread())
             {
                 action.Invoke();
-                return;
+                return true;
             }
 
             var tcs = new TaskCompletionSource<object?>();
@@ -53,6 +53,7 @@ namespace VeloxDev.TransitionSystem
             }
 
             tcs.Task.GetAwaiter().GetResult();
+            return true;
         }
     }
 }

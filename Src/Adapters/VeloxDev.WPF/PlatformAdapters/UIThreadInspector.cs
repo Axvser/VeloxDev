@@ -24,16 +24,19 @@ namespace VeloxDev.TransitionSystem
             return dispatcher.Invoke(() => property.GetValue(target));
         }
 
-        public override void ProtectedInvoke(object target, Action action, DispatcherPriority priority)
+        public override bool ProtectedInvoke(object target, Action action, DispatcherPriority priority)
         {
             var dispatcher = DispatcherFor(target);
             if (dispatcher == null)
             {
-                if (IsUIThread()) action();
-                return;
+                if (!IsUIThread()) return false;
+                action();
+                return true;
             }
-            if (dispatcher.CheckAccess()) { action(); return; }
+            if (dispatcher.CheckAccess()) { action(); return true; }
+            if (dispatcher.HasShutdownStarted) return false;
             dispatcher.InvokeAsync(action, priority);
+            return true;
         }
     }
 }

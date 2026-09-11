@@ -1,4 +1,4 @@
-using VeloxDev.TransitionSystem;
+﻿using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 using VeloxDev.WorkflowSystem;
 
@@ -28,7 +28,7 @@ public class ISampleableAnimationTests
         public override bool IsAppAlive() => true;
         public override bool IsUIThread() => true;
         public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override void ProtectedInvoke(object target, Action action) => action();
+        public override bool ProtectedInvoke(object target, Action action) { action(); return true; }
     }
 
     private static readonly Func<Type, bool> CanAnimate = static type =>

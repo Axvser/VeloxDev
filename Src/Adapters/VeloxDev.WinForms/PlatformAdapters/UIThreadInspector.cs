@@ -76,24 +76,25 @@ namespace VeloxDev.TransitionSystem
             return tcs.Task.GetAwaiter().GetResult();
         }
 
-        public override void ProtectedInvoke(object target, Action action)
+        public override bool ProtectedInvoke(object target, Action action)
         {
             var control = ControlDispatcher(target);
             if (control != null)
             {
-                if (!control.InvokeRequired) { action(); return; }
+                if (!control.InvokeRequired) { action(); return true; }
                 control.BeginInvoke(action);
-                return;
+                return true;
             }
 
-            if (IsUIThread()) { action(); return; }
-            if (_uiSyncContext == null) return;
+            if (IsUIThread()) { action(); return true; }
+            if (_uiSyncContext == null) return false;
 
             _uiSyncContext.Post(_ =>
             {
                 try { action(); }
                 catch { }
             }, null);
+            return true;
         }
     }
 }

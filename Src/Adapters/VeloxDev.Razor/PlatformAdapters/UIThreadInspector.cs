@@ -57,14 +57,14 @@ namespace VeloxDev.TransitionSystem
             return tcs.Task.GetAwaiter().GetResult();
         }
 
-        public override void ProtectedInvoke(object target, Action action)
+        public override bool ProtectedInvoke(object target, Action action)
         {
             if (IsUIThread())
             {
                 action.Invoke();
-                return;
+                return true;
             }
-            if (_uiSyncContext == null) return;
+            if (_uiSyncContext == null) return false;
 
             var tcs = new TaskCompletionSource<object?>();
             _uiSyncContext.Post(_ =>
@@ -80,6 +80,7 @@ namespace VeloxDev.TransitionSystem
                 }
             }, null);
             tcs.Task.GetAwaiter().GetResult();
+            return true;
         }
     }
 }

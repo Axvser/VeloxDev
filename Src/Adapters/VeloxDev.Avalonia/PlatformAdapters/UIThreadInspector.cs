@@ -21,16 +21,18 @@ namespace VeloxDev.TransitionSystem
             }
         }
 
-        public override void ProtectedInvoke(object target, Action action, DispatcherPriority priority)
+        public override bool ProtectedInvoke(object target, Action action, DispatcherPriority priority)
         {
             if (IsUIThread())
             {
                 action.Invoke();
+                return true;
             }
-            else
-            {
-                Dispatcher.UIThread?.InvokeAsync(action, priority);
-            }
+
+            var dispatcher = Dispatcher.UIThread;
+            if (dispatcher is null) return false;
+            dispatcher.InvokeAsync(action, priority);
+            return true;
         }
     }
 }

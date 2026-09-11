@@ -43,16 +43,23 @@ public class TransitionSchedulerCore<
             // Exit() ran while this animation was queued: it was cancelled before it ever started.
             if (generation != Generation) return;
 
-            uIThreadInspector.ProtectedInvoke(target, () =>
+            // Awaited, not fired and forgotten. Awake can veto the animation through Args.Handled and may put the
+            // target into the state the animation is meant to start from, so Prepare must not read the target until
+            // it has run. Waiting is safe because ProtectedInvokeAsync only waits when the action was accepted.
+            var awoken = await uIThreadInspector.ProtectedInvokeAsync(target, () =>
             {
                 // Re-checked inside the action, not only before queueing it: on WPF, Avalonia, Jalium, WinForms and
-                // WinUI ProtectedInvoke is fire-and-forget (InvokeAsync/BeginInvoke/TryEnqueue), so this runs on the
-                // UI thread whenever the message is pumped — which can be after an Exit has already cancelled the
+                // WinUI the dispatch is fire-and-forget (InvokeAsync/BeginInvoke/TryEnqueue), so this runs on the UI
+                // thread whenever the message is pumped — which can be after an Exit has already cancelled the
                 // animation and published its reset. A cancelled animation does not awake; an Awake that
                 // reinitialises state would otherwise undo that reset.
                 if (newCts.IsCancellationRequested) return;
                 effect.InvokeAwake(target, newInterpreter.Args);
             }, effect.Priority);
+
+            // The host's queue is gone: nothing would be dispatched, frames included, so give up rather than start an
+            // animation that cannot draw. Leaving here still releases the gate through the finally below.
+            if (!awoken) return;
 
             var frameSet = producer.Prepare<TPriorityCore>(target, state, effect, uIThreadInspector);
             if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;

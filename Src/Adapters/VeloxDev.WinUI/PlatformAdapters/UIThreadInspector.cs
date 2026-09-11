@@ -87,22 +87,24 @@ namespace VeloxDev.TransitionSystem
             return IsUIThread() ? property.GetValue(target) : default;
         }
 
-        public override void ProtectedInvoke(object target, Action action, DispatcherQueuePriority priority)
+        public override bool ProtectedInvoke(object target, Action action, DispatcherQueuePriority priority)
         {
             var queue = QueueFor(target);
             if (queue != null)
             {
-                if (queue.HasThreadAccess) { action(); return; }
+                if (queue.HasThreadAccess) { action(); return true; }
                 if (queue.TryEnqueue(priority, () =>
                 {
                     try { action(); }
                     catch { }
                 }))
-                    return;
+                    return true;
                 _isAppAlive = false;
-                return;
+                return false;
             }
-            if (IsUIThread()) action();
+            if (!IsUIThread()) return false;
+            action();
+            return true;
         }
     }
 }
