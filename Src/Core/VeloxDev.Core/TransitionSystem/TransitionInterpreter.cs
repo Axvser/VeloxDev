@@ -129,9 +129,10 @@ public abstract class TransitionInterpreterCore : IDisposable
             else
             {
                 var easeIn = forward ? rawT : 1 - rawT;
+                // Deliberately unclamped: Back and Elastic are defined by leaving [0,1], and clamping here flattened
+                // them. The eased value is handed to the samplers as-is; each sampler decides whether it can
+                // extrapolate (numeric ones can) or has to pin to its endpoint.
                 easedT = effect.Ease.Ease(easeIn);
-                if (easedT < 0) easedT = 0;
-                else if (easedT > 1) easedT = 1; // 保留 GetEaseIndex 的 Back/Elastic 越界钳制
             }
 
             effect.InvokeUpdate(target, Args);

@@ -1,4 +1,4 @@
-namespace VeloxDev.TransitionSystem.NativeSamplers
+﻿namespace VeloxDev.TransitionSystem.NativeSamplers
 {
     public class LongSampler : ISampler
     {
@@ -7,8 +7,6 @@ namespace VeloxDev.TransitionSystem.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             var l1 = (long)(start ?? 0L);
             var l2 = (long)(end ?? l1);

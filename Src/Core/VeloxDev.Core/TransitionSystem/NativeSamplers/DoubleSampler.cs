@@ -1,4 +1,4 @@
-namespace VeloxDev.TransitionSystem.NativeSamplers
+﻿namespace VeloxDev.TransitionSystem.NativeSamplers
 {
     public class DoubleSampler : ISampler
     {
@@ -7,8 +7,6 @@ namespace VeloxDev.TransitionSystem.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             var d1 = (double)(start ?? 0d);
             var d2 = (double)(end ?? d1);

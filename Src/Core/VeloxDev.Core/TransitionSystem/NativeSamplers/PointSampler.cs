@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 
 namespace VeloxDev.TransitionSystem.NativeSamplers
 {
@@ -9,8 +9,6 @@ namespace VeloxDev.TransitionSystem.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             var p1 = (Point)(start ?? default(Point));
             var p2 = (Point)(end ?? p1);

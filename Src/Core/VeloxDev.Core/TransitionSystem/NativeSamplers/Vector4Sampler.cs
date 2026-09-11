@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace VeloxDev.TransitionSystem.NativeSamplers
 {
@@ -10,8 +10,6 @@ namespace VeloxDev.TransitionSystem.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             var v1 = (Vector4)(start ?? default(Vector4));
             var v2 = (Vector4)(end ?? v1);
