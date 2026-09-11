@@ -16,9 +16,13 @@ namespace VeloxDev.Adapters.NativeSamplers
             var endT = (Transform3D?)end;
 
             if (startT is RotateTransform3D rs && endT is RotateTransform3D re
-                && rs.Rotation is AxisAngleRotation3D as1 && re.Rotation is AxisAngleRotation3D as2)
+                && rs.Rotation is AxisAngleRotation3D as1 && re.Rotation is AxisAngleRotation3D as2
+                && as1.Axis == as2.Axis)
             {
                 // Zero per-frame allocation: reuse a scratch RotateTransform3D, recomputing its angle from the pristine start/end.
+                // The axis is part of the guard, not just the angle: the scratch keeps the start's axis for the whole
+                // animation, so two different axes would settle on the start's axis at the end's angle — a pose that is
+                // neither end. Differing axes go to the matrix fallback, which interpolates the full transform.
                 if (working is not RotateTransform3D wt || wt.Rotation is not AxisAngleRotation3D)
                 {
                     wt = new RotateTransform3D(new AxisAngleRotation3D(as1.Axis, as1.Angle), rs.CenterX, rs.CenterY, rs.CenterZ);

@@ -1,4 +1,4 @@
-using System.Windows.Media;
+﻿using System.Windows.Media;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
@@ -9,8 +9,12 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
+            // Exact endpoints, not a range. The pipeline drives the last frame of every pass with exactly 1
+            // (or 0 on a reverse pass), and the caller's own instance has to survive to the end: a nested path
+            // such as ((TranslateTransform)x.RenderTransform).X depends on the runtime type it was declared
+            // with, which the interpolated scratch would replace. An overshoot past the endpoint falls through.
+            if (t == 0d) { property.SetValue(target, start); return; }
+            if (t == 1d) { property.SetValue(target, end); return; }
 
             var direction = options is RotationDirection d ? d : RotationDirection.Auto;
 
