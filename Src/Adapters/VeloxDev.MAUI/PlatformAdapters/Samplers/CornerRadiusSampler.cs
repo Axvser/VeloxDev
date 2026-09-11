@@ -15,7 +15,10 @@
             var topRight = radius1.TopRight + t * (radius2.TopRight - radius1.TopRight);
             var bottomLeft = radius1.BottomLeft + t * (radius2.BottomLeft - radius1.BottomLeft);
             var bottomRight = radius1.BottomRight + t * (radius2.BottomRight - radius1.BottomRight);
-            property.SetValue(target, new CornerRadius(topLeft, topRight, bottomRight, bottomLeft));
+            // MAUI 的构造函数参数序是 (topLeft, topRight, bottomLeft, bottomRight)，与属性序一致；WinUI 的
+            // 才是 (topLeft, topRight, bottomRight, bottomLeft)。这里按 MAUI 的来，写成 WinUI 那个顺序会把
+            // 左下与右下两个角对调 —— 连第一帧都是错的。
+            property.SetValue(target, new CornerRadius(topLeft, topRight, bottomLeft, bottomRight));
         }
     }
 }

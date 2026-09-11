@@ -1,4 +1,5 @@
 ﻿using Microsoft.UI.Xaml;
+using System;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
@@ -22,9 +23,11 @@ namespace VeloxDev.Adapters.NativeSamplers
             }
 
             // With the same unit type, interpolate.
+            // 长度在 0 处钳住：GridLength 只收非负值，连构造函数都会 Validate —— 越界是抛异常，不是截断。
+            // 与 Avalonia 的同一个采样器一致（那里也是 Math.Max(0, ...)）。
             var delta = g2.Value - g1.Value;
             var value = g1.Value + delta * t;
-            property.SetValue(target, new GridLength(value, g1.GridUnitType));
+            property.SetValue(target, new GridLength(Math.Max(0d, value), g1.GridUnitType));
         }
     }
 }
