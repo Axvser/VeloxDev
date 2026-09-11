@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
+using System.Threading;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
@@ -26,21 +27,26 @@ public abstract class TransitionCore
     public static void Exit<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
         where T : class
     {
-        // The lock is only held across synchronous cancellation bookkeeping, so waiting for it can never block for
-        // longer than a scheduler lookup.
         var gate = TransitionSchedulerCore.GetTargetLock(target);
+        List<CancellationTokenSource> drained = [];
         gate.Wait();
         try
         {
+            // Only the bookkeeping runs under the target lock: taking the tokens out of the active set is what has
+            // to be atomic against an animation entering. Cancelling them is left until after the release — Cancel
+            // runs the registered callbacks synchronously on this thread, so doing it here would block the
+            // dispatcher on a UI-thread Exit and deadlock on a callback that re-enters Exit for the same target.
             foreach (var scheduler in CollectSchedulers(target, IncludeMutual, IncludeNoMutual))
             {
-                scheduler.Exit();
+                drained.AddRange(((TransitionSchedulerCore)scheduler).DrainActive());
             }
         }
         finally
         {
             gate.Release();
         }
+
+        TransitionSchedulerCore.CancelDrained(drained);
     }
 
     private static List<ITransitionSchedulerCore> CollectSchedulers(object target, bool includeMutual, bool includeNoMutual)
@@ -144,12 +150,20 @@ public class TransitionCore<
         CancellationTokenSource cts;
         TransitionSchedulerCore coreScheduler;
         ITransitionSchedulerCore scheduler;
+        List<CancellationTokenSource> superseded = [];
         var gate = TransitionSchedulerCore.GetTargetLock(target);
         await gate.WaitAsync();
         try
         {
             scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore>.FindOrCreate(target, CanMutualTask);
-            if (CanMutualTask) scheduler.Exit();
+            if (CanMutualTask)
+            {
+                // A mutually-exclusive animation supersedes whatever is running on the target. Drained here, under
+                // the same lock as the registration below — leaving stays atomic against a concurrent entering —
+                // but cancelled after the release (see CancelDrained), and before this animation's own token is
+                // tracked, so it cannot cancel itself.
+                superseded.AddRange(((TransitionSchedulerCore)scheduler).DrainActive());
+            }
 
             cts = new CancellationTokenSource();
 
@@ -167,6 +181,8 @@ public class TransitionCore<
         {
             gate.Release();
         }
+
+        TransitionSchedulerCore.CancelDrained(superseded);
 
         Queue<InterpolatorCore> interpolators = [];
         Queue<TimeSpan> spans = [];
@@ -336,12 +352,20 @@ public class TransitionCore<
         CancellationTokenSource cts;
         TransitionSchedulerCore coreScheduler;
         ITransitionSchedulerCore scheduler;
+        List<CancellationTokenSource> superseded = [];
         var gate = TransitionSchedulerCore.GetTargetLock(target);
         await gate.WaitAsync();
         try
         {
             scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>.FindOrCreate(target, CanMutualTask);
-            if (CanMutualTask) scheduler.Exit();
+            if (CanMutualTask)
+            {
+                // A mutually-exclusive animation supersedes whatever is running on the target. Drained here, under
+                // the same lock as the registration below — leaving stays atomic against a concurrent entering —
+                // but cancelled after the release (see CancelDrained), and before this animation's own token is
+                // tracked, so it cannot cancel itself.
+                superseded.AddRange(((TransitionSchedulerCore)scheduler).DrainActive());
+            }
 
             cts = new CancellationTokenSource();
 
@@ -359,6 +383,8 @@ public class TransitionCore<
         {
             gate.Release();
         }
+
+        TransitionSchedulerCore.CancelDrained(superseded);
 
         Queue<InterpolatorCore> interpolators = [];
         Queue<TimeSpan> spans = [];

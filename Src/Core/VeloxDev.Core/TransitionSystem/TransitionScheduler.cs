@@ -45,6 +45,12 @@ public class TransitionSchedulerCore<
 
             uIThreadInspector.ProtectedInvoke(target, () =>
             {
+                // Re-checked inside the action, not only before queueing it: on WPF, Avalonia, Jalium, WinForms and
+                // WinUI ProtectedInvoke is fire-and-forget (InvokeAsync/BeginInvoke/TryEnqueue), so this runs on the
+                // UI thread whenever the message is pumped — which can be after an Exit has already cancelled the
+                // animation and published its reset. A cancelled animation does not awake; an Awake that
+                // reinitialises state would otherwise undo that reset.
+                if (newCts.IsCancellationRequested) return;
                 effect.InvokeAwake(target, newInterpreter.Args);
             }, effect.Priority);
 
@@ -60,7 +66,7 @@ public class TransitionSchedulerCore<
 
     public override void Exit()
     {
-        CancelCurrent();
+        CancelDrained(DrainActive());
     }
 
     public static ITransitionScheduler<TPriorityCore> FindOrCreate<T>(T source, bool CanMutualTask = true) where T : class
@@ -124,6 +130,12 @@ public class TransitionSchedulerCore<
 
             uIThreadInspector.ProtectedInvoke(target, () =>
             {
+                // Re-checked inside the action, not only before queueing it: on WPF, Avalonia, Jalium, WinForms and
+                // WinUI ProtectedInvoke is fire-and-forget (InvokeAsync/BeginInvoke/TryEnqueue), so this runs on the
+                // UI thread whenever the message is pumped — which can be after an Exit has already cancelled the
+                // animation and published its reset. A cancelled animation does not awake; an Awake that
+                // reinitialises state would otherwise undo that reset.
+                if (newCts.IsCancellationRequested) return;
                 effect.InvokeAwake(target, newInterpreter.Args);
             });
             var frameSet = producer.Prepare(target, state, effect, uIThreadInspector);
@@ -138,7 +150,7 @@ public class TransitionSchedulerCore<
 
     public override void Exit()
     {
-        CancelCurrent();
+        CancelDrained(DrainActive());
     }
 
     public static ITransitionScheduler FindOrCreate<T>(T source, bool CanMutualTask = true) where T : class
@@ -251,20 +263,48 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
 
     internal void Untrack(CancellationTokenSource source) => _activeCts.TryRemove(source, out _);
 
-    protected void CancelCurrent()
+    /// <summary>
+    /// Bumps the generation and takes every registered token out of the active set, returning them to be cancelled
+    /// by <see cref="CancelDrained"/>.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately split from the cancellation itself. The bookkeeping is what has to be atomic against an
+    /// animation entering, so a caller holding the target lock runs this part inside it; the cancellation runs
+    /// after the lock is released, because <c>CancellationTokenSource.Cancel()</c> executes the registered
+    /// callbacks synchronously on the calling thread — holding the lock across them would block the dispatcher on a
+    /// UI-thread <c>Exit</c>, and a callback that re-enters <see cref="TransitionCore.Exit{T}"/> or
+    /// <c>CoreExecute</c> for the same target would deadlock, since <see cref="SemaphoreSlim"/> is not reentrant.
+    /// </remarks>
+    internal List<CancellationTokenSource> DrainActive()
     {
         Interlocked.Increment(ref _generation);
 
+        List<CancellationTokenSource> drained = [];
         foreach (var source in _activeCts.Keys)
         {
-            _activeCts.TryRemove(source, out _);
+            if (_activeCts.TryRemove(source, out _))
+            {
+                drained.Add(source);
+            }
+        }
+        return drained;
+    }
+
+    /// <summary>
+    /// Cancels the tokens taken by <see cref="DrainActive"/>. Call this outside any lock: the callbacks run
+    /// synchronously here.
+    /// </summary>
+    internal static void CancelDrained(List<CancellationTokenSource> drained)
+    {
+        foreach (var source in drained)
+        {
             try
             {
                 source.Cancel();
             }
             catch (ObjectDisposedException)
             {
-                // the animation already finished and released its source — nothing left to cancel
+                // an animation or an adapter's interpreter disposed the token source — nothing left to cancel
             }
         }
     }
