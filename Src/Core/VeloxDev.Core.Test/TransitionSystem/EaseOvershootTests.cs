@@ -119,6 +119,36 @@ public class EaseOvershootTests
         Assert.AreEqual(100d, samples[^1], "the final frame of a pass is the exact endpoint");
     }
 
+    [TestMethod]
+    public void BoundedProgress_WithinTheUnitInterval_IsTheEasedTimeItself()
+    {
+        // Interpolating between two in-range endpoints stays in range, so no channel can exit early and the group
+        // keeps the full eased time. Every overshoot test above depends on this being exact.
+        var progress = new BoundedProgress(0.42, 0d, 255d);
+        progress.Add(200d, 240d);
+        progress.Add(100d, 180d);
+        progress.Add(50d, 120d);
+
+        Assert.AreEqual(0.42, progress.Progress);
+    }
+
+    [TestMethod]
+    public void BoundedProgress_OnlyEverTightens_WhateverOrderTheChannelsComeIn()
+    {
+        // The channels of one value move together until the first of them would leave the range: red exits at 1.375,
+        // so the group stops there no matter which channel was added last.
+        var forward = new BoundedProgress(1.5, 0d, 255d);
+        forward.Add(200d, 240d);   // exits at 1.375
+        forward.Add(100d, 180d);   // would exit at 1.9375
+
+        var reversed = new BoundedProgress(1.5, 0d, 255d);
+        reversed.Add(100d, 180d);
+        reversed.Add(200d, 240d);
+
+        Assert.AreEqual(1.375, forward.Progress);
+        Assert.AreEqual(forward.Progress, reversed.Progress);
+    }
+
     private static ITransitionProperty ColorProperty
         => TransitionProperty.FromProperty(typeof(ColorTarget).GetProperty(nameof(ColorTarget.Color))!);
 

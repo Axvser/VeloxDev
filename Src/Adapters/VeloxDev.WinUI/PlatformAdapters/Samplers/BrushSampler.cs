@@ -54,10 +54,16 @@ namespace VeloxDev.Adapters.NativeSamplers
                 }
                 wl.StartPoint = LerpPoint(sl.StartPoint, el.StartPoint, t);
                 wl.EndPoint = LerpPoint(sl.EndPoint, el.EndPoint, t);
+                // The offsets are one value: they share a progress so the stops keep their spacing instead of
+                // crossing, which would invert the gradient. It stops at [0,1].
+                var offsets = new BoundedProgress(t, 0d, 1d);
+                for (var i = 0; i < sl.GradientStops.Count; i++)
+                    offsets.Add(sl.GradientStops[i].Offset, el.GradientStops[i].Offset);
+
                 for (var i = 0; i < sl.GradientStops.Count; i++)
                 {
                     wl.GradientStops[i].Color = LerpColorPremultiplied(sl.GradientStops[i].Color, el.GradientStops[i].Color, t);
-                    wl.GradientStops[i].Offset = Lerp(sl.GradientStops[i].Offset, el.GradientStops[i].Offset, t);
+                    wl.GradientStops[i].Offset = Lerp(sl.GradientStops[i].Offset, el.GradientStops[i].Offset, offsets.Progress);
                 }
                 property.SetValue(target, wl);
                 return;
@@ -77,10 +83,15 @@ namespace VeloxDev.Adapters.NativeSamplers
                 wr.Center = LerpPoint(sr.Center, er.Center, t);
                 wr.RadiusX = Lerp(sr.RadiusX, er.RadiusX, t);
                 wr.RadiusY = Lerp(sr.RadiusY, er.RadiusY, t);
+                // Same shared offset progress as the linear case above.
+                var offsets = new BoundedProgress(t, 0d, 1d);
+                for (var i = 0; i < sr.GradientStops.Count; i++)
+                    offsets.Add(sr.GradientStops[i].Offset, er.GradientStops[i].Offset);
+
                 for (var i = 0; i < sr.GradientStops.Count; i++)
                 {
                     wr.GradientStops[i].Color = LerpColorPremultiplied(sr.GradientStops[i].Color, er.GradientStops[i].Color, t);
-                    wr.GradientStops[i].Offset = Lerp(sr.GradientStops[i].Offset, er.GradientStops[i].Offset, t);
+                    wr.GradientStops[i].Offset = Lerp(sr.GradientStops[i].Offset, er.GradientStops[i].Offset, offsets.Progress);
                 }
                 property.SetValue(target, wr);
                 return;
@@ -130,6 +141,17 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Color LerpColorPremultiplied(Color a, Color b, double t)
         {
+            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range. The progress
+            // comes from the colours as they are seen, not from the premultiplied channels: each of those carries
+            // alpha inside it, so a hue cannot be bounded there. Alpha is carried through un-premultiplied space
+            // only to blend — which is the reason this helper exists at all — and the final Channel saturates
+            // whatever leaves the range. For fully opaque stops the two paths coincide exactly.
+            var rgb = new BoundedProgress(t, 0d, 255d);
+            rgb.Add(a.R, b.R);
+            rgb.Add(a.G, b.G);
+            rgb.Add(a.B, b.B);
+            var u = rgb.Progress;
+
             var aA = a.A / 255.0;
             var bA = b.A / 255.0;
 
@@ -141,9 +163,9 @@ namespace VeloxDev.Adapters.NativeSamplers
             var bg = b.G * bA;
             var bb = b.B * bA;
 
-            var rr = ar * (1 - t) + br * t;
-            var gg = ag * (1 - t) + bg * t;
-            var bbC = ab * (1 - t) + bb * t;
+            var rr = ar * (1 - u) + br * u;
+            var gg = ag * (1 - u) + bg * u;
+            var bbC = ab * (1 - u) + bb * u;
             var aa = aA * (1 - t) + bA * t;
 
             if (aa > 0)
@@ -151,12 +173,20 @@ namespace VeloxDev.Adapters.NativeSamplers
                 rr /= aa; gg /= aa; bbC /= aa;
             }
 
-            var A = (byte)Math.Clamp(aa * 255.0, 0, 255);
-            var R = (byte)Math.Clamp(rr, 0, 255);
-            var G = (byte)Math.Clamp(gg, 0, 255);
-            var B = (byte)Math.Clamp(bbC, 0, 255);
+            var A = Channel(aa * 255.0);
+            var R = Channel(rr);
+            var G = Channel(gg);
+            var B = Channel(bbC);
 
             return Color.FromArgb(A, R, G, B);
+        }
+
+        /// <summary>Saturates instead of wrapping — a bare byte cast turns 300 into 44.</summary>
+        private static byte Channel(double value)
+        {
+            if (value <= 0d) return 0;
+            if (value >= 255d) return 255;
+            return (byte)value;
         }
     }
 }

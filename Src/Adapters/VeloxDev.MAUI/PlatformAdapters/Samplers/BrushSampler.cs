@@ -45,10 +45,16 @@ namespace VeloxDev.Adapters.NativeSamplers
                 }
                 wl.StartPoint = LerpPoint(sl.StartPoint, el.StartPoint, t);
                 wl.EndPoint = LerpPoint(sl.EndPoint, el.EndPoint, t);
+                // The offsets are one value: they share a progress so the stops keep their spacing instead of
+                // crossing, which would invert the gradient. It stops at [0,1].
+                var offsets = new BoundedProgress(t, 0d, 1d);
+                for (var i = 0; i < sl.GradientStops.Count; i++)
+                    offsets.Add(sl.GradientStops[i].Offset, el.GradientStops[i].Offset);
+
                 for (var i = 0; i < sl.GradientStops.Count; i++)
                 {
                     wl.GradientStops[i].Color = LerpColor(sl.GradientStops[i].Color, el.GradientStops[i].Color, t);
-                    wl.GradientStops[i].Offset = (float)Lerp(sl.GradientStops[i].Offset, el.GradientStops[i].Offset, t);
+                    wl.GradientStops[i].Offset = (float)Lerp(sl.GradientStops[i].Offset, el.GradientStops[i].Offset, offsets.Progress);
                 }
                 property.SetValue(target, wl);
                 return;
@@ -67,10 +73,15 @@ namespace VeloxDev.Adapters.NativeSamplers
                 }
                 wr.Center = LerpPoint(sr.Center, er.Center, t);
                 wr.Radius = (float)Lerp(sr.Radius, er.Radius, t);
+                // Same shared offset progress as the linear case above.
+                var offsets = new BoundedProgress(t, 0d, 1d);
+                for (var i = 0; i < sr.GradientStops.Count; i++)
+                    offsets.Add(sr.GradientStops[i].Offset, er.GradientStops[i].Offset);
+
                 for (var i = 0; i < sr.GradientStops.Count; i++)
                 {
                     wr.GradientStops[i].Color = LerpColor(sr.GradientStops[i].Color, er.GradientStops[i].Color, t);
-                    wr.GradientStops[i].Offset = (float)Lerp(sr.GradientStops[i].Offset, er.GradientStops[i].Offset, t);
+                    wr.GradientStops[i].Offset = (float)Lerp(sr.GradientStops[i].Offset, er.GradientStops[i].Offset, offsets.Progress);
                 }
                 property.SetValue(target, wr);
                 return;
@@ -125,11 +136,18 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         private static Color LerpColor(Color start, Color end, double t)
         {
-            double red = ClampToUnit(Lerp(start.Red, end.Red, t));
-            double green = ClampToUnit(Lerp(start.Green, end.Green, t));
-            double blue = ClampToUnit(Lerp(start.Blue, end.Blue, t));
-            double alpha = ClampToUnit(Lerp(start.Alpha, end.Alpha, t));
-            return Color.FromRgba(red, green, blue, alpha);
+            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range. MAUI's
+            // channels are floats, so the range is [0,1].
+            var rgb = new BoundedProgress(t, 0f, 1f);
+            rgb.Add(start.Red, end.Red);
+            rgb.Add(start.Green, end.Green);
+            rgb.Add(start.Blue, end.Blue);
+
+            return Color.FromRgba(
+                ClampToUnit(rgb.At(start.Red, end.Red)),
+                ClampToUnit(rgb.At(start.Green, end.Green)),
+                ClampToUnit(rgb.At(start.Blue, end.Blue)),
+                ClampToUnit(Lerp(start.Alpha, end.Alpha, t)));
         }
 
         private static Color ExtractRepresentativeColor(Brush brush)

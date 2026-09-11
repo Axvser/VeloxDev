@@ -43,10 +43,17 @@ namespace VeloxDev.Adapters.NativeSamplers
                 }
                 wl.StartPoint = LerpRelativePoint(sl.StartPoint, el.StartPoint, t);
                 wl.EndPoint = LerpRelativePoint(sl.EndPoint, el.EndPoint, t);
+                // The offsets are one value: they share a progress so the stops keep their spacing instead of
+                // crossing, which would invert the gradient. It stops at [0,1] — an offset outside that range is
+                // not a valid gradient stop.
+                var offsets = new BoundedProgress(t, 0d, 1d);
+                for (var i = 0; i < sl.GradientStops.Count; i++)
+                    offsets.Add(sl.GradientStops[i].Offset, el.GradientStops[i].Offset);
+
                 for (var i = 0; i < sl.GradientStops.Count; i++)
                 {
                     wl.GradientStops[i].Color = LerpColor(sl.GradientStops[i].Color, el.GradientStops[i].Color, t);
-                    wl.GradientStops[i].Offset = sl.GradientStops[i].Offset + (el.GradientStops[i].Offset - sl.GradientStops[i].Offset) * t;
+                    wl.GradientStops[i].Offset = sl.GradientStops[i].Offset + (el.GradientStops[i].Offset - sl.GradientStops[i].Offset) * offsets.Progress;
                 }
                 property.SetValue(target, wl);
                 return;
@@ -67,10 +74,15 @@ namespace VeloxDev.Adapters.NativeSamplers
                 // 半径按标量插值，写回时沿用起始笔刷的单位
                 wr.RadiusX = new RelativeScalar(sr.RadiusX.Scalar + (er.RadiusX.Scalar - sr.RadiusX.Scalar) * t, sr.RadiusX.Unit);
                 wr.RadiusY = new RelativeScalar(sr.RadiusY.Scalar + (er.RadiusY.Scalar - sr.RadiusY.Scalar) * t, sr.RadiusY.Unit);
+                // Same shared offset progress as the linear case above.
+                var offsets = new BoundedProgress(t, 0d, 1d);
+                for (var i = 0; i < sr.GradientStops.Count; i++)
+                    offsets.Add(sr.GradientStops[i].Offset, er.GradientStops[i].Offset);
+
                 for (var i = 0; i < sr.GradientStops.Count; i++)
                 {
                     wr.GradientStops[i].Color = LerpColor(sr.GradientStops[i].Color, er.GradientStops[i].Color, t);
-                    wr.GradientStops[i].Offset = sr.GradientStops[i].Offset + (er.GradientStops[i].Offset - sr.GradientStops[i].Offset) * t;
+                    wr.GradientStops[i].Offset = sr.GradientStops[i].Offset + (er.GradientStops[i].Offset - sr.GradientStops[i].Offset) * offsets.Progress;
                 }
                 property.SetValue(target, wr);
                 return;
@@ -109,11 +121,28 @@ namespace VeloxDev.Adapters.NativeSamplers
             return (IBrush)start;
         }
 
-        private static Color LerpColor(Color c1, Color c2, double t) => Color.FromArgb(
-            (byte)(c1.A + (c2.A - c1.A) * t),
-            (byte)(c1.R + (c2.R - c1.R) * t),
-            (byte)(c1.G + (c2.G - c1.G) * t),
-            (byte)(c1.B + (c2.B - c1.B) * t));
+        private static Color LerpColor(Color c1, Color c2, double t)
+        {
+            // R/G/B share one progress so an overshoot cannot shift the hue; alpha is its own range.
+            var rgb = new BoundedProgress(t, 0d, 255d);
+            rgb.Add(c1.R, c2.R);
+            rgb.Add(c1.G, c2.G);
+            rgb.Add(c1.B, c2.B);
+
+            return Color.FromArgb(
+                Channel(c1.A + (c2.A - c1.A) * t),
+                Channel(rgb.At(c1.R, c2.R)),
+                Channel(rgb.At(c1.G, c2.G)),
+                Channel(rgb.At(c1.B, c2.B)));
+        }
+
+        /// <summary>Saturates instead of wrapping — a bare byte cast turns 300 into 44.</summary>
+        private static byte Channel(double value)
+        {
+            if (value <= 0d) return 0;
+            if (value >= 255d) return 255;
+            return (byte)value;
+        }
 
         private static Color ExtractRepresentativeColor(IBrush brush)
         {
