@@ -18,7 +18,6 @@ public class SamplerSetTests
         public int InvokeCount { get; private set; }
         public bool IsAppAlive() => Alive();
         public bool IsUIThread() => true;
-        public void ProtectedInvoke(object target, Action action, object? priority = default) => ProtectedInvoke(target, action, default(NonPriority));
         public void ProtectedInvoke(object target, Action action, NonPriority priority) { InvokeCount++; action(); }
         public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
     }
@@ -90,8 +89,6 @@ public class SamplerSetTests
 
         public bool IsUIThread() => true;
 
-        public void ProtectedInvoke(object target, Action action, object? priority = default) => _pending.Add(action);
-
         public void ProtectedInvoke(object target, Action action, NonPriority priority) => _pending.Add(action);
 
         public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
@@ -138,7 +135,6 @@ public class SamplerSetTests
     {
         public bool IsAppAlive() => true;
         public bool IsUIThread() => true;
-        public void ProtectedInvoke(object target, Action action, object? priority = default) => action();
         public void ProtectedInvoke(object target, Action action, FakePriority priority) => action();
         public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
     }

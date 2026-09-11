@@ -9,7 +9,6 @@ namespace VeloxDev.TransitionSystem
     {
         public bool IsAppAlive();
         public bool IsUIThread();
-        public abstract void ProtectedInvoke(object target, Action action, object? priority = default);
         public object? ProtectedGetValue(object target, ITransitionProperty property);
     }
 }
