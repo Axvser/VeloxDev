@@ -5,9 +5,10 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Test.WorkflowSystem;
 
 /// <summary>
-/// WorkflowSystem composite types (Offset/Anchor/Size) animate via ISampleable metadata member decomposition:
-/// capture expands the property into member paths, and Prepare interpolates each member by its leaf sampler
-/// (generic double/int samplers). Whole-value `Property(x => x.Offset, end)` does not apply — composites are
+/// WorkflowSystem composite types (Offset/Anchor/Size) are animated member by member: each leaf is declared as an
+/// explicit path, and Prepare interpolates it with its own sampler (generic double/int samplers). The composite
+/// classes are reference types and do not implement ISampleable — only the Viewport struct does, and that is
+/// assembled through StructAssembler. Whole-value `Property(x => x.Offset, end)` does not apply — composites are
 /// always animated per member.
 /// </summary>
 [TestClass]

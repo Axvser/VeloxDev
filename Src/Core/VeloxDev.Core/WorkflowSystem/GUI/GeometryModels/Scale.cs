@@ -1,13 +1,11 @@
 using VeloxDev.AI;
 using VeloxDev.MVVM;
-using VeloxDev.TransitionSystem;
-using VeloxDev.TransitionSystem.Abstractions;
 
 namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "表示一个二维缩放因子，默认 1.0 表示不缩放")]
 [AgentContext(AgentLanguages.English, "Represents a two-dimensional scale factor; 1.0 means no scaling")]
-public sealed partial class Scale(double horizontal = 1d, double vertical = 1d) : ICloneable, IEquatable<Scale>, ISampleable
+public sealed partial class Scale(double horizontal = 1d, double vertical = 1d) : ICloneable, IEquatable<Scale>
 {
     [VeloxProperty]
     [AgentContext(AgentLanguages.Chinese, "水平缩放因子，1.0 表示不缩放")]
@@ -31,12 +29,6 @@ public sealed partial class Scale(double horizontal = 1d, double vertical = 1d) 
     public override string ToString() => $"Scale({Horizontal},{Vertical})";
     public object Clone() => new Scale(Horizontal, Vertical);
     public bool Equals(Scale? other) => other is not null && Horizontal == other.Horizontal && Vertical == other.Vertical;
-
-    public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
-        TransitionProperty.Members<Scale>(s => s.Horizontal, s => s.Vertical);
-
-    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) =>
-        new Scale((double?)memberValues[0] ?? 1d, (double?)memberValues[1] ?? 1d);
 
     public static bool operator ==(Scale left, Scale right) => left.Equals(right);
     public static bool operator !=(Scale left, Scale right) => !left.Equals(right);

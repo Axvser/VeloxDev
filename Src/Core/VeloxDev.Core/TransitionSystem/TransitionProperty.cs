@@ -318,7 +318,7 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
     /// <remarks>
     /// A <see cref="PropertyInfo"/> obtained from reflection and the one carried by an expression tree are distinct
     /// instances for the same member, and <c>PropertyInfo.Equals</c> is reference-based. Comparing by name and
-    /// declaring type is what <see cref="GetHashCode"/> already assumes — the two must agree, otherwise a
+    /// declaring type is what <see cref="GetHashCode"/> hashes — the two must stay in step, otherwise a
     /// <see cref="HashSet{T}"/> keeps equal paths as two separate entries and exclusion/subsumption silently
     /// never matches.
     /// </remarks>
@@ -357,9 +357,14 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
     public override int GetHashCode()
     {
         var hash = new HashCode();
-        foreach (var property in _segments)
+        foreach (var segment in _segments)
         {
-            hash.Add(property);
+            // Must stay in step with SameSegment. Hashing the PropertyInfo instance itself looks value-based on
+            // net5.0/netcoreapp3.0, where RuntimePropertyInfo overrides GetHashCode, but on netframework4.6.1 it is
+            // reference-based — so two PropertyInfo instances for the same member would be equal yet land in
+            // different buckets, splitting a path across two dictionary entries.
+            hash.Add(segment.Name);
+            hash.Add(segment.DeclaringType);
         }
 
         return hash.ToHashCode();

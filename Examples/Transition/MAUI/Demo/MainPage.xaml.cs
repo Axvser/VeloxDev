@@ -160,7 +160,9 @@ namespace Demo
                 .Effect(TransitionEffects.Empty);
         }
 
-        // The Bs1 page resource, rebuilt in code: Yellow → Violet, 0,0 → 1,1
+        // The Bs1 resource of MainPage.xaml (Yellow → Violet, 0,0 → 1,1), rebuilt in code because a resource is not
+        // a value a transition path can point at. Keep the two in step: Rec2's reset animates Fill back to this
+        // brush, so editing the XAML alone would leave the reset animating to a stale one.
         private static LinearGradientBrush CreateBs1Brush()
         {
             return new LinearGradientBrush()

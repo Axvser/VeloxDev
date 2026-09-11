@@ -1,14 +1,12 @@
 ﻿using System.Runtime.Serialization;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
-using VeloxDev.TransitionSystem;
-using VeloxDev.TransitionSystem.Abstractions;
 
 namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "用于在工作流系统中描述组件的空间位置")]
 [AgentContext(AgentLanguages.English, "Used to describe the spatial position of components in the workflow system")]
-public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0) : ICloneable, IEquatable<Anchor>, ISampleable
+public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0) : ICloneable, IEquatable<Anchor>
 {
     [VeloxProperty]
     [AgentContext(AgentLanguages.Chinese, "水平坐标，单位为像素")]
@@ -96,12 +94,6 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
         }
         _collapseScale = null;
     }
-
-    public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
-        TransitionProperty.Members<Anchor>(a => a.Horizontal, a => a.Vertical, a => a.Layer);
-
-    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) =>
-        new Anchor((double?)memberValues[0] ?? 0d, (double?)memberValues[1] ?? 0d, (int?)memberValues[2] ?? 0);
 
     public static bool operator ==(Anchor left, Anchor right) => left.Equals(right);
     public static bool operator !=(Anchor left, Anchor right) => !left.Equals(right);

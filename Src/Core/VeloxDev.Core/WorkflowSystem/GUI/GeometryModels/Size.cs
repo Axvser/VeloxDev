@@ -1,14 +1,12 @@
 ﻿using System.Runtime.Serialization;
 using VeloxDev.AI;
 using VeloxDev.MVVM;
-using VeloxDev.TransitionSystem;
-using VeloxDev.TransitionSystem.Abstractions;
 
 namespace VeloxDev.WorkflowSystem;
 
 [AgentContext(AgentLanguages.Chinese, "表示一个二维尺寸")]
 [AgentContext(AgentLanguages.English, "Represents a two-dimensional size")]
-public sealed partial class Size(double width = 0d, double height = 0d) : ICloneable, IEquatable<Size>, ISampleable
+public sealed partial class Size(double width = 0d, double height = 0d) : ICloneable, IEquatable<Size>
 {
     [VeloxProperty]
     [AgentContext(AgentLanguages.Chinese, "宽度，像素单位")]
@@ -89,12 +87,6 @@ public sealed partial class Size(double width = 0d, double height = 0d) : IClone
         }
         _collapseScale = null;
     }
-
-    public IReadOnlyList<ITransitionProperty> GetAnimatableMembers() =>
-        TransitionProperty.Members<Size>(s => s.Width, s => s.Height);
-
-    public object? CreateFrameValue(IReadOnlyList<object?> memberValues) =>
-        new Size((double?)memberValues[0] ?? 0d, (double?)memberValues[1] ?? 0d);
 
     public static bool operator ==(Size a, Size b) => a.Equals(b);
     public static bool operator !=(Size a, Size b) => !a.Equals(b);

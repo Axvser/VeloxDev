@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using VeloxDev.TransitionSystem.Abstractions;
 
@@ -32,6 +33,35 @@ public class TransitionPropertyTests
     private sealed class ShapeContainer
     {
         public BaseShape? Shape { get; set; }
+    }
+
+    /// <summary>
+    /// A PropertyInfo that behaves the way reflection does on netframework4.6.1: Equals and GetHashCode are the
+    /// object defaults, i.e. per-instance, even when two instances describe the same member. RuntimePropertyInfo
+    /// hashes by value on net5.0/netcoreapp3.0, so this case cannot be reproduced with a real PropertyInfo there —
+    /// the fixture is what gives the test teeth.
+    /// </summary>
+    private sealed class ReferenceIdentityPropertyInfo(string name, Type declaringType, Type propertyType) : PropertyInfo
+    {
+        public override string Name { get; } = name;
+        public override Type? DeclaringType { get; } = declaringType;
+        public override Type? ReflectedType { get; } = declaringType;
+        public override Type PropertyType { get; } = propertyType;
+        public override PropertyAttributes Attributes => PropertyAttributes.None;
+        public override bool CanRead => true;
+        public override bool CanWrite => true;
+
+        public override MethodInfo? GetGetMethod(bool nonPublic) => null;
+        public override MethodInfo? GetSetMethod(bool nonPublic) => null;
+        public override MethodInfo[] GetAccessors(bool nonPublic) => [];
+        public override ParameterInfo[] GetIndexParameters() => [];
+        public override object? GetValue(object? obj, object?[]? index) => null;
+        public override object? GetValue(object? obj, BindingFlags invokeAttr, Binder? binder, object?[]? index, CultureInfo? culture) => null;
+        public override void SetValue(object? obj, object? value, object?[]? index) { }
+        public override void SetValue(object? obj, object? value, BindingFlags invokeAttr, Binder? binder, object?[]? index, CultureInfo? culture) { }
+        public override object[] GetCustomAttributes(bool inherit) => [];
+        public override object[] GetCustomAttributes(Type attributeType, bool inherit) => [];
+        public override bool IsDefined(Type attributeType, bool inherit) => false;
     }
 
     [TestMethod]
@@ -119,6 +149,24 @@ public class TransitionPropertyTests
         var b = TransitionProperty.FromProperty(propInfo);
         Assert.IsTrue(a.Equals(b));
         Assert.AreEqual(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [TestMethod]
+    public void Equals_And_GetHashCode_Agree_AcrossDistinctPropertyInfoInstances()
+    {
+        // The same logical path (name + declaring type) built from two distinct PropertyInfo instances, which is
+        // what reflection hands out on netframework4.6.1 — where PropertyInfo.GetHashCode() is reference-based.
+        // Equals already compared by value; GetHashCode has to follow, or a dictionary/HashSet keeps one path as
+        // two entries and exclusion silently never matches (the SnapshotExcept bug, which no test covered).
+        var a = new TransitionProperty(new[] { new ReferenceIdentityPropertyInfo("Value", typeof(TestTarget), typeof(double)) });
+        var b = new TransitionProperty(new[] { new ReferenceIdentityPropertyInfo("Value", typeof(TestTarget), typeof(double)) });
+
+        Assert.AreNotSame(a.Segments[0], b.Segments[0]);
+        Assert.IsTrue(a.Equals(b));
+        Assert.AreEqual(a.GetHashCode(), b.GetHashCode());
+
+        var set = new HashSet<TransitionProperty> { a, b };
+        Assert.AreEqual(1, set.Count);
     }
 
     [TestMethod]

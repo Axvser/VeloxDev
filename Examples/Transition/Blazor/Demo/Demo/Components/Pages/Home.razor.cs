@@ -9,9 +9,15 @@ public partial class Home : ComponentBase, IDisposable
     // ---------------------------------------------------------------
     // ViewModel instances — animations operate directly on their properties
     // ---------------------------------------------------------------
-    private BoxModel Box0 { get; } = new() { Color = "#00bcd4" };
-    private BoxModel Box1 { get; } = new() { Color = "#66bb6a" };
-    private BoxModel Box2 { get; } = new() { Color = "#ab47bc" };
+    // Single source for the three initial colors: the reset below has to restore them, so the literals live here
+    // rather than being repeated.
+    private const string Box0Color = "#00bcd4";
+    private const string Box1Color = "#66bb6a";
+    private const string Box2Color = "#ab47bc";
+
+    private BoxModel Box0 { get; } = new() { Color = Box0Color };
+    private BoxModel Box1 { get; } = new() { Color = Box1Color };
+    private BoxModel Box2 { get; } = new() { Color = Box2Color };
 
     // ---------------------------------------------------------------
     // Animation definitions (mirroring the three animations of the WPF/Avalonia Demo)
@@ -133,14 +139,15 @@ public partial class Home : ComponentBase, IDisposable
         Transition.Exit(Box1, IncludeMutual: true, IncludeNoMutual: true);
         Transition.Exit(Box2, IncludeMutual: true, IncludeNoMutual: true);
 
-        CreateReset().Effect(TransitionEffects.Empty).Execute(Box0);
-        CreateReset().Effect(TransitionEffects.Empty).Execute(Box1);
-        CreateReset().Effect(TransitionEffects.Empty).Execute(Box2);
+        CreateReset(Box0Color).Effect(TransitionEffects.Empty).Execute(Box0);
+        CreateReset(Box1Color).Effect(TransitionEffects.Empty).Execute(Box1);
+        CreateReset(Box2Color).Effect(TransitionEffects.Empty).Execute(Box2);
     }
 
-    // The BoxModel defaults, expressed as explicit paths. All three boxes share the same numeric
-    // defaults — only Color differs, and a string has no sampler, so it is not animatable.
-    private static Transition<BoxModel> CreateReset()
+    // The BoxModel defaults, expressed as explicit paths. Color is animatable here as well — the Razor adapter
+    // registers a sampler for string — and the three boxes start from different colors, so each box needs its own
+    // reset rather than one shared instance.
+    private static Transition<BoxModel> CreateReset(string color)
     {
         return Transition<BoxModel>.Create()
             .Property(b => b.X, 0)
@@ -149,7 +156,8 @@ public partial class Home : ComponentBase, IDisposable
             .Property(b => b.Height, 80)
             .Property(b => b.Opacity, 1)
             .Property(b => b.Rotate, 0)
-            .Property(b => b.Scale, 1);
+            .Property(b => b.Scale, 1)
+            .Property(b => b.Color, color);
     }
 
     private void ExitAnimations()

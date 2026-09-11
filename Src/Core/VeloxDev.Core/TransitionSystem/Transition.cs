@@ -218,7 +218,7 @@ public class TransitionCore<
         var newNode = new T1();
         if (newNode is not TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore> converted)
         {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
         converted.root = root;
         next = converted;
@@ -229,7 +229,7 @@ public class TransitionCore<
         var newNode = new T1();
         if (newNode is not TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore> converted)
         {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
         converted.root = root;
         converted.delay = timeSpan;
@@ -240,7 +240,7 @@ public class TransitionCore<
     {
         if (this is not T1 result)
         {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
         state.SetInterpolator(propertyLambda, interpolator);
         return result;
@@ -249,7 +249,7 @@ public class TransitionCore<
     {
         if (this is not T1 result)
         {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
         if (effect is not TEffectCore convertedEffect)
         {
@@ -262,7 +262,7 @@ public class TransitionCore<
     {
         if (this is not T1 result)
         {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
         var newEffect = new T2();
         effectSetter.Invoke(newEffect);
@@ -410,7 +410,7 @@ public class TransitionCore<
         var newNode = new T1();
         if (newNode is not TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore> converted)
         {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
         converted.root = root;
         next = converted;
@@ -421,7 +421,7 @@ public class TransitionCore<
         var newNode = new T1();
         if (newNode is not TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore> converted)
         {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
         converted.root = root;
         converted.delay = timeSpan;
@@ -432,7 +432,7 @@ public class TransitionCore<
     {
         if (this is not T1 result)
         {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
         state.SetInterpolator(propertyLambda, interpolator);
         return result;
@@ -441,7 +441,7 @@ public class TransitionCore<
     {
         if (this is not T1 result)
         {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
         if (effect is not TEffectCore convertedEffect)
         {
@@ -454,7 +454,7 @@ public class TransitionCore<
     {
         if (this is not T1 result)
         {
-            throw new InvalidOperationException($"The current StateSnapshotCore is not of type {typeof(T1).Name}.");
+            throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
         var newEffect = new T2();
         effectSetter.Invoke(newEffect);

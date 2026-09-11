@@ -265,8 +265,9 @@ namespace Demo
             lblStatus.Text = "已重置到初始状态";
         }
 
-        // The panels' construction-time values, expressed as explicit paths. panel1's parent (the Form)
-        // has BackColor White — see the designer.
+        // The panels' construction-time values as assigned in this file's own design-time code, expressed as
+        // explicit paths. Keep the two in step — the reset has to land on the values the form starts with.
+        // panel1's parent (the Form) has BackColor White — see the designer.
         private static Transition<Control> CreateReset1()
         {
             return Transition<Control>.Create()
