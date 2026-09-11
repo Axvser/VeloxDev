@@ -1,10 +1,5 @@
 namespace VeloxDev.TransitionSystem
 {
-    public interface IUIThreadInspector : IUIThreadInspectorCore
-    {
-        public void ProtectedInvoke(object target, Action action);
-    }
-
     public interface IUIThreadInspector<TPriorityCore> : IUIThreadInspectorCore
     {
         public void ProtectedInvoke(object target, Action action, TPriorityCore priority);

@@ -11,7 +11,7 @@ public abstract class UIThreadInspectorCore<TPriorityCore> : UIThreadInspectorBa
     }
 }
 
-public abstract class UIThreadInspectorCore : UIThreadInspectorBase, IUIThreadInspector, IUIThreadInspector<NonPriority>
+public abstract class UIThreadInspectorCore : UIThreadInspectorBase, IUIThreadInspector<NonPriority>
 {
     public abstract void ProtectedInvoke(object target, Action action);
 

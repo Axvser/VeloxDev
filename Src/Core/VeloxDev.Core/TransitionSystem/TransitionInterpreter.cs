@@ -8,16 +8,6 @@ public abstract class TransitionInterpreterCore<
     TPriorityCore> : TransitionInterpreterCore, ITransitionInterpreter<TPriorityCore>
     where TTransitionEffectCore : ITransitionEffect<TPriorityCore>
 {
-    public override Task Execute(
-        object target,
-        SamplerSet frameSet,
-        ITransitionEffectCore effect,
-        CancellationTokenSource cts)
-    {
-        if (effect is not ITransitionEffect<TPriorityCore> cvt_effect) return Task.CompletedTask;
-        return Execute(target, frameSet, cvt_effect, cts);
-    }
-
     public virtual Task Execute(
         object target,
         SamplerSet frameSet,
@@ -34,7 +24,7 @@ public abstract class TransitionInterpreterCore<
 }
 
 public abstract class TransitionInterpreterCore<
-    TTransitionEffectCore> : TransitionInterpreterCore, ITransitionInterpreter, ITransitionInterpreter<NonPriority>
+    TTransitionEffectCore> : TransitionInterpreterCore, ITransitionInterpreter<NonPriority>
     where TTransitionEffectCore : ITransitionEffectCore
 {
     /// <summary>
@@ -47,15 +37,6 @@ public abstract class TransitionInterpreterCore<
         ITransitionEffect<NonPriority> effect,
         CancellationTokenSource cts)
     {
-        return Execute(target, frameSet, (ITransitionEffectCore)effect, cts);
-    }
-
-    public override Task Execute(
-        object target,
-        SamplerSet frameSet,
-        ITransitionEffectCore effect,
-        CancellationTokenSource cts)
-    {
         return ExecuteSamplingLoopAsync(
             target,
             frameSet,
@@ -65,12 +46,12 @@ public abstract class TransitionInterpreterCore<
     }
 }
 
-public abstract class TransitionInterpreterCore : ITransitionInterpreterCore, IDisposable
+public abstract class TransitionInterpreterCore : IDisposable
 {
     protected CancellationTokenSource? cts = null;
-    public virtual TransitionEventArgs Args { get; set; } = new();
 
-    public abstract Task Execute(object target, SamplerSet frameSet, ITransitionEffectCore effect, CancellationTokenSource cts);
+    /// <summary>The arguments handed to every effect callback of one animation.</summary>
+    public virtual TransitionEventArgs Args { get; set; } = new();
 
     /// <summary>
     /// Stopwatch-driven continuous sampling loop: the normalized time is derived from elapsed wall-clock time each
