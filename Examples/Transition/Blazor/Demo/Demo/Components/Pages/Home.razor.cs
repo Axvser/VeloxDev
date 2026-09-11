@@ -18,7 +18,7 @@ public partial class Home : ComponentBase, IDisposable
     // ---------------------------------------------------------------
 
     // Animation0: simple animation — translate + color + opacity, auto reverse loop
-    private static readonly StateSnapshot<BoxModel> Animation0 =
+    private static readonly Transition<BoxModel> Animation0 =
         Transition<BoxModel>.Create()
             .Property(b => b.X, 500)
             .Property(b => b.Color, "#ff7043")
@@ -32,7 +32,7 @@ public partial class Home : ComponentBase, IDisposable
             });
 
     // Animation1: delayed animation — rotate + scale after a 2 second wait
-    private static readonly StateSnapshot<BoxModel> Animation1 =
+    private static readonly Transition<BoxModel> Animation1 =
         Transition<BoxModel>.Create()
             .Await(TimeSpan.FromSeconds(2))
             .Property(b => b.Rotate, 360)
@@ -47,7 +47,7 @@ public partial class Home : ComponentBase, IDisposable
             });
 
     // Animation2: combined animation — move right first, then recolor + shrink after a 3s wait
-    private static readonly StateSnapshot<BoxModel> Animation2 =
+    private static readonly Transition<BoxModel> Animation2 =
         Transition<BoxModel>.Create()
             .Property(b => b.X, 400)
             .Effect(new TransitionEffect()
@@ -66,13 +66,6 @@ public partial class Home : ComponentBase, IDisposable
                 Ease = Eases.Bounce.Out,
             });
 
-    // ---------------------------------------------------------------
-    // Initial snapshots (used for Reset)
-    // ---------------------------------------------------------------
-    private StateSnapshot<BoxModel> _snapshot0 = default!;
-    private StateSnapshot<BoxModel> _snapshot1 = default!;
-    private StateSnapshot<BoxModel> _snapshot2 = default!;
-
     protected override void OnInitialized()
     {
         // Blazor animation targets POCO ViewModels with no dispatcher affinity, so a background
@@ -84,17 +77,6 @@ public partial class Home : ComponentBase, IDisposable
         Box0.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
         Box1.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
         Box2.PropertyChanged += (_, _) => InvokeAsync(StateHasChanged);
-    }
-
-    protected override void OnAfterRender(bool firstRender)
-    {
-        // Take the reset snapshots only after the first render, so the initial state is complete
-        // and no information is lost
-        if (!firstRender) return;
-
-        _snapshot0 = Box0.SnapshotAll();
-        _snapshot1 = Box1.SnapshotAll();
-        _snapshot2 = Box2.SnapshotAll();
     }
 
     private void LoadMainThread()
@@ -145,15 +127,29 @@ public partial class Home : ComponentBase, IDisposable
 
     private void ResetBox0()
     {
-        // Reset all: restore the three boxes to the snapshot initial state immediately with a
-        // zero-duration transition
+        // Reset all: stop everything, then replay the initial state as a transition — the same kind of thing as any
+        // other animation.
         Transition.Exit(Box0, IncludeMutual: true, IncludeNoMutual: true);
         Transition.Exit(Box1, IncludeMutual: true, IncludeNoMutual: true);
         Transition.Exit(Box2, IncludeMutual: true, IncludeNoMutual: true);
 
-        _snapshot0.Effect(TransitionEffects.Empty).Execute(Box0);
-        _snapshot1.Effect(TransitionEffects.Empty).Execute(Box1);
-        _snapshot2.Effect(TransitionEffects.Empty).Execute(Box2);
+        CreateReset().Effect(TransitionEffects.Empty).Execute(Box0);
+        CreateReset().Effect(TransitionEffects.Empty).Execute(Box1);
+        CreateReset().Effect(TransitionEffects.Empty).Execute(Box2);
+    }
+
+    // The BoxModel defaults, expressed as explicit paths. All three boxes share the same numeric
+    // defaults — only Color differs, and a string has no sampler, so it is not animatable.
+    private static Transition<BoxModel> CreateReset()
+    {
+        return Transition<BoxModel>.Create()
+            .Property(b => b.X, 0)
+            .Property(b => b.Y, 0)
+            .Property(b => b.Width, 120)
+            .Property(b => b.Height, 80)
+            .Property(b => b.Opacity, 1)
+            .Property(b => b.Rotate, 0)
+            .Property(b => b.Scale, 1);
     }
 
     private void ExitAnimations()

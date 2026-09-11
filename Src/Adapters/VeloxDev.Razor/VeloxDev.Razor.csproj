@@ -24,7 +24,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.Core" Version="8.0.0" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="9.0.0" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
@@ -35,10 +36,13 @@ public class TransitionSchedulerCore<
         }
         var newCts = externCts ?? new CancellationTokenSource();
         TTransitionInterpreterCore newInterpreter = new();
+        var generation = Generation;
         await _gate.WaitAsync();
         try
         {
-            cts = newCts;
+            // Exit() ran while this animation was queued: it was cancelled before it ever started.
+            if (generation != Generation) return;
+
             uIThreadInspector.ProtectedInvoke(target, () =>
             {
                 effect.InvokeAwake(target, newInterpreter.Args);
@@ -50,7 +54,6 @@ public class TransitionSchedulerCore<
         }
         finally
         {
-            cts = null; // release the animation's CancellationTokenSource after it ends
             _gate.Release();
         }
     }
@@ -64,25 +67,19 @@ public class TransitionSchedulerCore<
     {
         if (CanMutualTask)
         {
-            if (TryGetMutualScheduler(source, out var item))
+            // GetValue installs atomically. A TryGetValue-then-Add pair races: two concurrent animations can both
+            // miss and the loser's Add throws.
+            var scheduler = MutualSchedulers.GetValue(source, static key => new TransitionSchedulerCore<
+                TUIThreadInspectorCore,
+                TTransitionInterpreterCore,
+                TPriorityCore>()
             {
-                return item as TransitionSchedulerCore<
-                    TUIThreadInspectorCore,
-                    TTransitionInterpreterCore,
-                    TPriorityCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
-            }
-            else
-            {
-                var scheduler = new TransitionSchedulerCore<
-                    TUIThreadInspectorCore,
-                    TTransitionInterpreterCore,
-                    TPriorityCore>()
-                {
-                    TargetRef = new WeakReference<object>(source)
-                };
-                MutualSchedulers.Add(source, scheduler);
-                return scheduler;
-            }
+                TargetRef = new WeakReference<object>(key)
+            });
+            return scheduler as TransitionSchedulerCore<
+                TUIThreadInspectorCore,
+                TTransitionInterpreterCore,
+                TPriorityCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
         }
         else
         {
@@ -118,10 +115,13 @@ public class TransitionSchedulerCore<
         }
         var newCts = externCts ?? new CancellationTokenSource();
         TTransitionInterpreterCore newInterpreter = new();
+        var generation = Generation;
         await _gate.WaitAsync();
         try
         {
-            cts = newCts;
+            // Exit() ran while this animation was queued: it was cancelled before it ever started.
+            if (generation != Generation) return;
+
             uIThreadInspector.ProtectedInvoke(target, () =>
             {
                 effect.InvokeAwake(target, newInterpreter.Args);
@@ -132,7 +132,6 @@ public class TransitionSchedulerCore<
         }
         finally
         {
-            cts = null; // release the animation's CancellationTokenSource after it ends
             _gate.Release();
         }
     }
@@ -146,23 +145,16 @@ public class TransitionSchedulerCore<
     {
         if (CanMutualTask)
         {
-            if (TryGetMutualScheduler(source, out var item))
+            // GetValue installs atomically — see the generic overload above.
+            var scheduler = MutualSchedulers.GetValue(source, static key => new TransitionSchedulerCore<
+                TUIThreadInspectorCore,
+                TTransitionInterpreterCore>()
             {
-                return item as TransitionSchedulerCore<
-                    TUIThreadInspectorCore,
-                    TTransitionInterpreterCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
-            }
-            else
-            {
-                var scheduler = new TransitionSchedulerCore<
-                    TUIThreadInspectorCore,
-                    TTransitionInterpreterCore>()
-                {
-                    TargetRef = new WeakReference<object>(source)
-                };
-                MutualSchedulers.Add(source, scheduler);
-                return scheduler;
-            }
+                TargetRef = new WeakReference<object>(key)
+            });
+            return scheduler as TransitionSchedulerCore<
+                TUIThreadInspectorCore,
+                TTransitionInterpreterCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
         }
         else
         {
@@ -178,8 +170,31 @@ public class TransitionSchedulerCore<
 
 public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
 {
+    private static readonly ConditionalWeakTable<object, SemaphoreSlim> TargetLocks = new();
+
+    /// <summary>
+    /// Serializes the control plane of one animation target: entering (creating the token and registering the
+    /// animation) against leaving (cancelling everything alive on it). Without a shared lock an Exit can land
+    /// between "the token exists" and "the animation is registered" and miss the one that is just starting, which
+    /// then runs unstoppably.
+    /// </summary>
+    /// <remarks>
+    /// Only ever held across synchronous bookkeeping — never across the animation body — so it stays cheap and
+    /// cannot deadlock against the UI thread that the frames are marshalled to, and so non-mutual animations on the
+    /// same target still run concurrently.
+    /// </remarks>
+    internal static SemaphoreSlim GetTargetLock(object target)
+        => TargetLocks.GetValue(target, static _ => new SemaphoreSlim(1, 1));
+
     public static ConditionalWeakTable<object, ITransitionSchedulerCore> MutualSchedulers { get; protected set; } = new();
-    public static ConditionalWeakTable<object, List<ITransitionSchedulerCore>> NoMutualSchedulers { get; internal set; } = new();
+
+    /// <summary>
+    /// Non-mutual schedulers per target. The value is a concurrent set: animations register and unregister
+    /// themselves from several threads at once (a background <c>Task.Run</c>, a UI-thread click), and a plain
+    /// <see cref="List{T}"/> mutated without synchronization loses entries — which makes
+    /// <see cref="TransitionCore.Exit{T}"/> miss schedulers and leave animations running.
+    /// </summary>
+    public static ConditionalWeakTable<object, ConcurrentDictionary<ITransitionSchedulerCore, byte>> NoMutualSchedulers { get; internal set; } = new();
 
     public static bool TryGetMutualScheduler(object source, out ITransitionSchedulerCore? scheduler)
     {
@@ -197,7 +212,7 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     {
         if (NoMutualSchedulers.TryGetValue(source, out var values))
         {
-            schedulers = [.. values];
+            schedulers = [.. values.Keys];
             return true;
         }
         schedulers = [];
@@ -207,7 +222,7 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     {
         if (NoMutualSchedulers.TryGetValue(source, out var values))
         {
-            foreach (var value in values)
+            foreach (var value in values.Keys)
             {
                 value.Exit();
             }
@@ -215,18 +230,43 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
         return NoMutualSchedulers.Remove(source);
     }
 
-    private CancellationTokenSource? _currentCts;
+    private readonly ConcurrentDictionary<CancellationTokenSource, byte> _activeCts = new();
+    private int _generation;
     protected readonly SemaphoreSlim _gate = new(1, 1);
 
-    internal CancellationTokenSource? cts
-    {
-        get => Volatile.Read(ref _currentCts);
-        set => Interlocked.Exchange(ref _currentCts, value);
-    }
+    /// <summary>
+    /// Bumped on every <see cref="Exit"/>. An animation still queued on <see cref="_gate"/> compares the generation
+    /// it captured before waiting against this one and gives up if it changed — otherwise it would start running
+    /// after the Exit and could no longer be stopped by it.
+    /// </summary>
+    internal int Generation => Volatile.Read(ref _generation);
+
+    /// <summary>
+    /// Registers an animation's token source for its whole lifetime. Tracking only the segment currently executing
+    /// is not enough: between segments the animation sits in an <c>Await</c> gap with nothing running, and an
+    /// <see cref="Exit"/> during that gap would cancel nothing at all while the animation went on to its next
+    /// segment.
+    /// </summary>
+    internal void Track(CancellationTokenSource source) => _activeCts.TryAdd(source, 0);
+
+    internal void Untrack(CancellationTokenSource source) => _activeCts.TryRemove(source, out _);
 
     protected void CancelCurrent()
     {
-        Interlocked.Exchange(ref _currentCts, null)?.Cancel();
+        Interlocked.Increment(ref _generation);
+
+        foreach (var source in _activeCts.Keys)
+        {
+            _activeCts.TryRemove(source, out _);
+            try
+            {
+                source.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // the animation already finished and released its source — nothing left to cancel
+            }
+        }
     }
 
     internal WeakReference<object>? targetref = null;

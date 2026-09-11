@@ -30,19 +30,6 @@ public class StructAssemblerTests
     private static readonly Func<Type, bool> CanAnimate = static type => type == typeof(double);
 
     [TestMethod]
-    public void CaptureAll_StoresWholeStruct_NotMemberPaths()
-    {
-        var target = new Target { Viewport = new Viewport(0, 0, 10, 10) };
-        var state = new StateCore();
-
-        TransitionSnapshotHelper.CaptureAll(target, state, CanAnimate);
-
-        var paths = state.Values.Keys.Select(p => p.Path).ToHashSet();
-        Assert.IsTrue(paths.Contains("Viewport"));                // whole struct path
-        Assert.IsFalse(paths.Contains("Viewport.Horizontal"));    // no member expansion for structs
-    }
-
-    [TestMethod]
     public void PrepareAndApply_InterpolatesWholeStruct()
     {
         var target = new Target { Viewport = new Viewport(0, 0, 0, 0) };

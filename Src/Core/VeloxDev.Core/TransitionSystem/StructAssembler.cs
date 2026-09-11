@@ -101,6 +101,6 @@ internal sealed class CaptureProperty : ITransitionProperty
     public IReadOnlyList<PropertyInfo> Segments => [];
     public bool CanRead => true;
     public bool CanWrite => true;
-    public object? GetValue(object target) => Value;
+    public object? GetValue(object? target) => Value;
     public bool SetValue(object target, object? value) { Value = value; return true; }
 }

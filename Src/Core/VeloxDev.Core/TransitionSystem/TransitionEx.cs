@@ -31,15 +31,4 @@ public static class TransitionCoreEx
     {
         return snapshot.CoreInterpolator<TSnapshot, TTarget, TValue>(propertyLambda, interpolator);
     }
-
-    public static void Execute<T>(this T snapshot, object target, bool CanMutualTask = true)
-        where T : StateSnapshotCore
-    {
-        snapshot.CoreExecute(target, CanMutualTask);
-    }
-    public static void Execute<T>(this T snapshot, bool CanMutualTask = true)
-        where T : StateSnapshotCore
-    {
-        snapshot.CoreExecute(CanMutualTask);
-    }
 }

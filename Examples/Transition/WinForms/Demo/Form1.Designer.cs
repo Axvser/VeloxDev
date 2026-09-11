@@ -211,20 +211,8 @@ namespace Demo
 
         private void Form1_Load(object sender, System.EventArgs e)
         {
-
-            // Snapshot(...) records explicitly specified property paths; SnapshotAll() automatically
-            // records all animatable properties of the current object
-            initialSnapshot1 = panel1.Snapshot(x => x.Location, x => x.BackColor, x => x.Parent.BackColor);
-            initialSnapshot2 = panel2.SnapshotAll();
-            initialSnapshot3 = panel3.SnapshotAll();
-
             lblStatus.Text = "系统就绪，可以开始动画演示";
         }
-
-        // Save initial snapshots for reset
-        private StateSnapshot<Panel> initialSnapshot1;
-        private StateSnapshot<Panel> initialSnapshot2;
-        private StateSnapshot<Panel> initialSnapshot3;
 
         private void StartAnimations(object sender, System.EventArgs e)
         {
@@ -261,17 +249,45 @@ namespace Demo
 
         private void ResetAnimations(object sender, System.EventArgs e)
         {
-            // Stop all animations (including non-mutual)
+            // Stop all animations (including non-mutual). Exit only signals the cancellation; each reset below is
+            // mutually exclusive, so it queues on that target's scheduler gate behind the animation being cancelled
+            // and lands a frame later at worst.
             Transition.Exit(panel1, IncludeMutual: true, IncludeNoMutual: true);
             Transition.Exit(panel2, IncludeMutual: true, IncludeNoMutual: true);
             Transition.Exit(panel3, IncludeMutual: true, IncludeNoMutual: true);
 
-            // Reset to the initial state
-            initialSnapshot1.Effect(TransitionEffects.Empty).Execute(panel1);
-            initialSnapshot2.Effect(TransitionEffects.Empty).Execute(panel2);
-            initialSnapshot3.Effect(TransitionEffects.Empty).Execute(panel3);
+            // Reset to the initial state as a transition, so a reset is the same kind of thing as any other
+            // animation and the semantics stay uniform.
+            CreateReset1().Effect(TransitionEffects.Empty).Execute(panel1);
+            CreateReset2().Effect(TransitionEffects.Empty).Execute(panel2);
+            CreateReset3().Effect(TransitionEffects.Empty).Execute(panel3);
 
             lblStatus.Text = "已重置到初始状态";
+        }
+
+        // The panels' construction-time values, expressed as explicit paths. panel1's parent (the Form)
+        // has BackColor White — see the designer.
+        private static Transition<Control> CreateReset1()
+        {
+            return Transition<Control>.Create()
+                .Property(c => c.Location, new Point(100, 100))
+                .Property(c => c.BackColor, Color.Red)
+                .Property(c => c.Parent.BackColor, Color.White);
+        }
+
+        private static Transition<Control> CreateReset2()
+        {
+            return Transition<Control>.Create()
+                .Property(c => c.Size, new Size(100, 100))
+                .Property(c => c.BackColor, Color.Green);
+        }
+
+        private static Transition<Control> CreateReset3()
+        {
+            return Transition<Control>.Create()
+                .Property(c => c.Location, new Point(400, 100))
+                .Property(c => c.Size, new Size(100, 100))
+                .Property(c => c.BackColor, Color.Blue);
         }
 
         private void ExitAnimations(object sender, System.EventArgs e)
@@ -346,7 +362,7 @@ namespace Demo
         }
 
         // Animation definitions
-        private static readonly StateSnapshot<Control> Animation0 =
+        private static readonly Transition<Control> Animation0 =
             Transition<Control>.Create()
                 .Property(c => c.Location, new Point(600, 100))  // move to the right
                 .Property(c => c.Parent.BackColor, Color.Moccasin) // demonstrates nested property animation
@@ -359,7 +375,7 @@ namespace Demo
                     Ease = Eases.Quad.Out
                 });
 
-        private static readonly StateSnapshot<Control> Animation1 =
+        private static readonly Transition<Control> Animation1 =
             Transition<Control>.Create()
                 .Await(TimeSpan.FromSeconds(1))  // starts after a 1 second delay
                 .Property(c => c.Size, new Size(150, 150))  // enlarge
@@ -372,7 +388,7 @@ namespace Demo
                     Ease = Eases.Cubic.InOut
                 });
 
-        private static readonly StateSnapshot<Control> Animation2 =
+        private static readonly Transition<Control> Animation2 =
             Transition<Control>.Create()
                 .Property(c => c.Location, new Point(400, 400))  // move to the bottom right
                 .Effect(new TransitionEffect()

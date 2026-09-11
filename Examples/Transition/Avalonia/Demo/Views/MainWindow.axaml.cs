@@ -19,25 +19,17 @@ public partial class MainWindow : Window
 
         Rec0.RenderTransform = new TranslateTransform();
 
-        // Reset snapshots are taken only after the window is Opened, avoiding information loss from
-        // an initial state that has not yet been established.
-        // Rec0's RenderTransform.X / Fill are modified in place, which would pollute the references
-        // held by the snapshot, so Rec0 is reset with a new object; Rec1/Rec2 Fills are replaced
-        // wholesale (not mutated), so the initial snapshots fully restore them.
+        // The reset is expressed as explicit property paths, built only after the window is Opened so it
+        // describes an established initial state.
         Loaded += (s, e) =>
         {
             if (_resetInitialized) return;
             _resetInitialized = true;
 
-            // Explicitly initialize to a definite state first, then take the snapshot, so it does
-            // not capture non-initial 3D/transform state (which is unreliable).
+            // Explicitly initialize to a definite state first, so the reset paths below describe a known state.
             Rec0.RenderTransform = new TranslateTransform();
             Rec1.RenderTransform = null;
             Rec2.RenderTransform = null;
-
-            // Rec1/Rec2 Fills are replaced wholesale (not mutated), so the initial snapshots are stable and reusable
-            var reset1 = Rec1.SnapshotAll();
-            var reset2 = Rec2.SnapshotAll();
 
             btnReset.Click += (s, e) =>
             {
@@ -45,12 +37,17 @@ public partial class MainWindow : Window
                 Transition.Exit(Rec1, IncludeMutual: true, IncludeNoMutual: true);
                 Transition.Exit(Rec2, IncludeMutual: true, IncludeNoMutual: true);
 
-                // Apply the initial snapshots synchronously: bypasses the async Execute pipeline
+                // RenderTransform is cleared by direct assignment rather than through the builder: the adapter's
+                // Transform overload takes a collection, and an empty one builds an empty TransformGroup, not null.
+                Rec1.RenderTransform = null;
+                Rec2.RenderTransform = null;
+
+                // Apply the reset synchronously: bypasses the async Execute pipeline
                 // (unreliable for Transform reset on some platforms), and Rec0 gets a fresh object
-                // each time so its snapshot references are not polluted by in-place animation edits.
+                // each time so its references are not polluted by in-place animation edits.
                 ApplyReset(CreateResetRec0(), Rec0);
-                ApplyReset(reset1, Rec1);
-                ApplyReset(reset2, Rec2);
+                ApplyReset(CreateResetRec1(), Rec1);
+                ApplyReset(CreateResetRec2(), Rec2);
             };
         };
     }
@@ -118,7 +115,7 @@ public partial class MainWindow
     // resets are deterministic and reliable).
     // Projection and RenderTransform(Scale) are mutually exclusive on some platforms — clear
     // Projection first, then write the rest.
-    private static void ApplyReset(StateSnapshot<Rectangle> snapshot, Rectangle target)
+    private static void ApplyReset(Transition<Rectangle> snapshot, Rectangle target)
     {
         // Two passes: clear Projection first (releasing the mutual exclusion with
         // RenderTransform/Scale), then write everything else.
@@ -132,7 +129,7 @@ public partial class MainWindow
     }
 
     // Rec0's RenderTransform.X / Fill are modified in place, so reset must use a new object
-    private static StateSnapshot<Rectangle> CreateResetRec0()
+    private static Transition<Rectangle> CreateResetRec0()
     {
         return Transition<Rectangle>.Create()
             .Property(r => r.RenderTransform, [new TranslateTransform()])
@@ -140,8 +137,37 @@ public partial class MainWindow
             .Effect(TransitionEffects.Empty);
     }
 
+    private static Transition<Rectangle> CreateResetRec1()
+    {
+        return Transition<Rectangle>.Create()
+            .Property(r => r.Fill, new SolidColorBrush(Colors.Lime))
+            .Effect(TransitionEffects.Empty);
+    }
+
+    private static Transition<Rectangle> CreateResetRec2()
+    {
+        return Transition<Rectangle>.Create()
+            .Property(r => r.Fill, CreateBs1Brush())
+            .Effect(TransitionEffects.Empty);
+    }
+
+    // The Bs1 window resource, rebuilt in code: Yellow → Violet, 0%,0% → 100%,100%
+    private static LinearGradientBrush CreateBs1Brush()
+    {
+        return new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(Colors.Yellow, 0),
+                new GradientStop(Colors.Violet, 1)
+            }
+        };
+    }
+
     // Simple animation: demonstrates a nested property path, directly modifying RenderTransform.X
-    private static readonly StateSnapshot<Rectangle> Animation0 =
+    private static readonly Transition<Rectangle> Animation0 =
         Transition<Rectangle>.Create()
             .Property(r => ((TranslateTransform)r.RenderTransform!).X, 400)
             .Property(r => r.Fill,
@@ -164,7 +190,7 @@ public partial class MainWindow
             });
 
     // Delayed animation: reverse rotation + movement + background gradient
-    private static readonly StateSnapshot<Rectangle> Animation1 =
+    private static readonly Transition<Rectangle> Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(5))
             .Property(r => r.RenderTransform, [new TranslateTransform(-200, 0), new RotateTransform(180)], RotationDirection.ClockWise)
@@ -188,7 +214,7 @@ public partial class MainWindow
             });
 
     // Combined animation: reverse 3D rotation + scaling + switch to a new gradient background
-    private static readonly StateSnapshot<Rectangle> Animation2 =
+    private static readonly Transition<Rectangle> Animation2 =
         Transition<Rectangle>.Create()
             .Property(r => r.RenderTransform,
             [

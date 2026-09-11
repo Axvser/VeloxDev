@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
@@ -83,6 +83,11 @@ public sealed class SamplerSet
 
     private void ApplyCore(object target, double t)
     {
+        // Re-checked here, not only in Apply: the write happens on the UI thread when the queued message is pumped,
+        // and the animation can be cancelled in between. Checking only before queueing lets a frame that was already
+        // stale when it landed run anyway and silently overwrite a reset.
+        if (_cts?.IsCancellationRequested == true) return;
+
         foreach (var entry in _entries)
         {
             if (!CanSetValue()) return;

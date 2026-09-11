@@ -99,7 +99,7 @@ public sealed class WorkflowSurfaceBehavior
             var host = target;
             while (host is not null)
             {
-                if (host is not null && ReferenceEquals(host, _filterHost))
+                if (ReferenceEquals(host, _filterHost))
                 {
                     return host;
                 }

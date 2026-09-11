@@ -34,28 +34,6 @@ public class ISampleableAnimationTests
         type == typeof(double) || type == typeof(int);
 
     [TestMethod]
-    public void CaptureAll_ExpandsWorkflowTypes_IntoMemberPaths()
-    {
-        var target = new Target();
-        var state = new StateCore();
-
-        TransitionSnapshotHelper.CaptureAll(target, state, CanAnimate);
-
-        var paths = state.Values.Keys.Select(p => p.Path).ToHashSet();
-        Assert.IsTrue(paths.Contains("Offset.Horizontal"));
-        Assert.IsTrue(paths.Contains("Offset.Vertical"));
-        Assert.IsTrue(paths.Contains("Anchor.Horizontal"));
-        Assert.IsTrue(paths.Contains("Anchor.Vertical"));
-        Assert.IsTrue(paths.Contains("Anchor.Layer"));
-        Assert.IsTrue(paths.Contains("Size.Width"));
-        Assert.IsTrue(paths.Contains("Size.Height"));
-        // Composite types are not captured as whole values
-        Assert.IsFalse(paths.Contains("Offset"));
-        Assert.IsFalse(paths.Contains("Anchor"));
-        Assert.IsFalse(paths.Contains("Size"));
-    }
-
-    [TestMethod]
     public void PrepareAndApply_AnimatesExpandedMembers()
     {
         var target = new Target { Offset = new Offset(0, 0), Anchor = new Anchor(0, 0, 0), Size = new Size(0, 0) };

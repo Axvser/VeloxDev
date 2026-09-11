@@ -33,6 +33,11 @@ internal sealed class MainWindow : Window
         AddRow(grid, new GridLength(100));
         AddRow(grid, GridLength.Star);
 
+        // 先建矩形：下面的按钮 lambda 捕获 _rec0，字段必须在捕获前完成赋值
+        _rec0 = MakeRect(Colors.Cyan);
+        _rec1 = MakeRect(Colors.Lime);
+        _rec2 = MakeRect(Colors.Orange);
+
         var buttons = new WrapPanel();
         buttons.Children.Add(MakeButton("主线程互斥", (_, _) => LoadMainThread()));
         buttons.Children.Add(MakeButton("后台线程互斥", (_, _) => _ = Task.Run(LoadMainThread)));
@@ -44,9 +49,6 @@ internal sealed class MainWindow : Window
         Grid.SetRow(buttons, 0);
         grid.Children.Add(buttons);
 
-        _rec0 = MakeRect(Colors.Cyan);
-        _rec1 = MakeRect(Colors.Lime);
-        _rec2 = MakeRect(Colors.Orange);
         Grid.SetRow(_rec0, 1);
         Grid.SetRow(_rec1, 3);
         Grid.SetRow(_rec2, 5);
@@ -149,7 +151,7 @@ internal sealed class MainWindow : Window
     // ── Animations (aligned with Avalonia/WPF) ──────────────────────────────
 
     // Simple: nested TranslateTransform.X path + solid fill.
-    private static readonly StateSnapshot<Rectangle> Animation0 =
+    private static readonly Transition<Rectangle> Animation0 =
         Transition<Rectangle>.Create()
             .Property(r => ((TranslateTransform)r.RenderTransform!).X, 300)
             .Property(r => r.Fill, new SolidColorBrush(Colors.OrangeRed))
@@ -162,7 +164,7 @@ internal sealed class MainWindow : Window
             });
 
     // Delayed: transform collection (Translate + Rotate) + fill.
-    private static readonly StateSnapshot<Rectangle> Animation1 =
+    private static readonly Transition<Rectangle> Animation1 =
         Transition<Rectangle>.Create()
             .Await(TimeSpan.FromSeconds(5))
             .Property(r => r.RenderTransform,
@@ -178,7 +180,7 @@ internal sealed class MainWindow : Window
             });
 
     // Combined: transform collection (Translate + Scale) + fill, then AwaitThen + fill.
-    private static readonly StateSnapshot<Rectangle> Animation2 =
+    private static readonly Transition<Rectangle> Animation2 =
         Transition<Rectangle>.Create()
             .Property(r => r.RenderTransform,
                 [new TranslateTransform(200, 0), new ScaleTransform(1.3, 1.3)],

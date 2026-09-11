@@ -47,7 +47,7 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
     /// </summary>
     public static readonly object UnreadablePath = new();
 
-    public object? GetValue(object target)
+    public object? GetValue(object? target)
     {
         if (target is null)
         {
@@ -303,7 +303,47 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
 
         for (int index = 0; index < _segments.Count; index++)
         {
-            if (!Equals(_segments[index], other._segments[index]))
+            if (!SameSegment(_segments[index], other._segments[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Compares two path segments by value: name and declaring type.
+    /// </summary>
+    /// <remarks>
+    /// A <see cref="PropertyInfo"/> obtained from reflection and the one carried by an expression tree are distinct
+    /// instances for the same member, and <c>PropertyInfo.Equals</c> is reference-based. Comparing by name and
+    /// declaring type is what <see cref="GetHashCode"/> already assumes — the two must agree, otherwise a
+    /// <see cref="HashSet{T}"/> keeps equal paths as two separate entries and exclusion/subsumption silently
+    /// never matches.
+    /// </remarks>
+    internal static bool SameSegment(PropertyInfo left, PropertyInfo right)
+        => ReferenceEquals(left, right)
+           || (left.Name == right.Name && left.DeclaringType == right.DeclaringType);
+
+    /// <summary>
+    /// True when this path sits strictly below <paramref name="other"/> (the same path is not a descendant).
+    /// </summary>
+    public bool IsDescendantOf(TransitionProperty other)
+    {
+        if (other is null)
+        {
+            throw new ArgumentNullException(nameof(other));
+        }
+
+        if (_segments.Count <= other._segments.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < other._segments.Count; index++)
+        {
+            if (!SameSegment(_segments[index], other._segments[index]))
             {
                 return false;
             }

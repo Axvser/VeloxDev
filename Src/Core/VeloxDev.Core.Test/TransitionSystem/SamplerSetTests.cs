@@ -76,4 +76,51 @@ public class SamplerSetTests
         Assert.AreEqual(0d, target.Value);
         Assert.AreEqual(0, inspector.InvokeCount);
     }
+
+    /// <summary>
+    /// Models the real marshalling: the write is queued and lands on the UI thread later, so the point where the
+    /// frame is checked and the point where it is written are different moments.
+    /// </summary>
+    private sealed class DeferredInspector : IUIThreadInspectorCore
+    {
+        private readonly List<Action> _pending = [];
+
+        public bool IsAppAlive() => true;
+
+        public bool IsUIThread() => true;
+
+        public void ProtectedInvoke(object target, Action action, object? priority = default) => _pending.Add(action);
+
+        public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
+
+        public void Pump()
+        {
+            var pending = _pending.ToArray();
+            _pending.Clear();
+            foreach (var action in pending)
+            {
+                action();
+            }
+        }
+    }
+
+    [TestMethod]
+    public void Apply_FrameQueuedBeforeCancellation_IsDroppedWhenItFinallyLands()
+    {
+        // A frame queued while the animation was still alive, cancelled before the UI thread pumped it, must be
+        // dropped when it lands — otherwise it executes after a reset has already been applied and overwrites it.
+        var inspector = new DeferredInspector();
+        var set = new SamplerSet(inspector);
+        set.Add(Property, new DoubleSampler(), 10d, 100d, null);
+        var target = new Target { Value = 50d };
+        using var cts = new CancellationTokenSource();
+        set.SetCancellation(cts);
+
+        set.Apply(target, 1.0);   // queued while alive
+        cts.Cancel();             // cancelled before the UI thread gets to it
+        target.Value = 42d;       // the reset lands first
+        inspector.Pump();         // ...then the stale frame runs
+
+        Assert.AreEqual(42d, target.Value);
+    }
 }

@@ -20,16 +20,11 @@ namespace Demo
             if (_resetInitialized) return;
             _resetInitialized = true;
 
-            // Explicitly initialize to a definite state first, then take the snapshot, so it does
-            // not capture non-initial 3D/transform state (which is unreliable).
+            // Explicitly initialize to a definite state first, so the reset paths below describe a known state.
             Rec0.Fill = CreateRec0Brush();
             Rec0.RotationX = 0; Rec0.RotationY = 0; Rec0.Scale = 1; Rec0.TranslationX = 0; Rec0.TranslationY = 0;
             Rec1.RotationX = 0; Rec1.RotationY = 0; Rec1.Scale = 1; Rec1.TranslationX = 0; Rec1.TranslationY = 0;
             Rec2.RotationX = 0; Rec2.RotationY = 0; Rec2.Scale = 1; Rec2.TranslationX = 0; Rec2.TranslationY = 0;
-
-            // Rec1/Rec2 Fills are replaced wholesale (not mutated), so the initial snapshots are stable and reusable.
-            var reset1 = Rec1.SnapshotAll();
-            var reset2 = Rec2.SnapshotAll();
 
             btnReset.Clicked += (s, e) =>
             {
@@ -37,12 +32,12 @@ namespace Demo
                 Transition.Exit(Rec1, IncludeMutual: true, IncludeNoMutual: true);
                 Transition.Exit(Rec2, IncludeMutual: true, IncludeNoMutual: true);
 
-                // Apply the initial snapshots synchronously: bypasses the async Execute pipeline
+                // Apply the reset synchronously: bypasses the async Execute pipeline
                 // (unreliable for Transform reset on some platforms), and Rec0 gets a fresh object
-                // each time so its snapshot references are not polluted by in-place animation edits.
+                // each time so its references are not polluted by in-place animation edits.
                 ApplyReset(CreateRec0Reset(), Rec0);
-                ApplyReset(reset1, Rec1);
-                ApplyReset(reset2, Rec2);
+                ApplyReset(CreateRec1Reset(), Rec1);
+                ApplyReset(CreateRec2Reset(), Rec2);
             };
         }
 
@@ -107,7 +102,7 @@ namespace Demo
     {
         // Simple animation: translate + demonstrates a nested property path, directly modifying
         // Fill.StartPoint / Fill.EndPoint
-        private static readonly StateSnapshot<Rectangle> Animation0 =
+        private static readonly Transition<Rectangle> Animation0 =
             Transition<Rectangle>.Create()
                 .Property(r => r.TranslationX, 240)
                 .Property(r => ((LinearGradientBrush)r.Fill!).StartPoint, new Point(0, 1))
@@ -133,7 +128,7 @@ namespace Demo
             };
         }
 
-        private static StateSnapshot<Rectangle> CreateRec0Reset()
+        private static Transition<Rectangle> CreateRec0Reset()
         {
             return Transition<Rectangle>.Create()
                 .Property(r => r.TranslationX, 0)
@@ -141,11 +136,50 @@ namespace Demo
                 .Effect(TransitionEffects.Empty);
         }
 
+        // Covers every property Animation1 touches — restoring only TranslationX/Fill would leave Rec1
+        // stopped at whatever rotation the animation had reached.
+        private static Transition<Rectangle> CreateRec1Reset()
+        {
+            return Transition<Rectangle>.Create()
+                .Property(r => r.RotationX, 0)
+                .Property(r => r.TranslationX, 0)
+                .Property(r => r.Fill, new SolidColorBrush(Colors.Lime))
+                .Effect(TransitionEffects.Empty);
+        }
+
+        // Covers every property Animation2 touches: RotationX/Y, TranslationX/Y, Scale and Fill.
+        private static Transition<Rectangle> CreateRec2Reset()
+        {
+            return Transition<Rectangle>.Create()
+                .Property(r => r.RotationX, 0)
+                .Property(r => r.RotationY, 0)
+                .Property(r => r.TranslationX, 0)
+                .Property(r => r.TranslationY, 0)
+                .Property(r => r.Scale, 1d)
+                .Property(r => r.Fill, CreateBs1Brush())
+                .Effect(TransitionEffects.Empty);
+        }
+
+        // The Bs1 page resource, rebuilt in code: Yellow → Violet, 0,0 → 1,1
+        private static LinearGradientBrush CreateBs1Brush()
+        {
+            return new LinearGradientBrush()
+            {
+                StartPoint = new Point(0, 0),
+                EndPoint = new Point(1, 1),
+                GradientStops =
+                [
+                    new GradientStop(Colors.Yellow, 0),
+                    new GradientStop(Colors.Violet, 1)
+                ]
+            };
+        }
+
         // Apply snapshot values synchronously (bypassing the async Execute pipeline so Transform/3D
         // resets are deterministic and reliable).
         // Projection and RenderTransform(Scale) are mutually exclusive on some platforms — clear
         // Projection first, then write the rest.
-        private static void ApplyReset(StateSnapshot<Rectangle> snapshot, Rectangle target)
+        private static void ApplyReset(Transition<Rectangle> snapshot, Rectangle target)
         {
             // Two passes: clear Projection first (releasing the mutual exclusion with
             // RenderTransform/Scale), then write everything else.
@@ -159,7 +193,7 @@ namespace Demo
         }
 
         // Delayed animation - rotation
-        private static readonly StateSnapshot<Rectangle> Animation1 =
+        private static readonly Transition<Rectangle> Animation1 =
             Transition<Rectangle>.Create()
                 .Await(TimeSpan.FromSeconds(2))
                 .Property(r => r.RotationX, 180)     // MAUI X rotation
@@ -171,7 +205,7 @@ namespace Demo
                 });
 
         // Combined animation - composite transforms
-        private static readonly StateSnapshot<Rectangle> Animation2 =
+        private static readonly Transition<Rectangle> Animation2 =
             Transition<Rectangle>.Create()
                 // First segment: translate + scale
                 .Property(r => r.RotationX, 180)

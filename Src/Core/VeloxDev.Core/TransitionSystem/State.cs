@@ -94,6 +94,8 @@ public class StateCore : IFrameState
     }
     public virtual void SetValue(ITransitionProperty propertyInfo, object? value)
     {
+        RejectPathConflict(propertyInfo);
+
         if (_values.TryGetValue(propertyInfo, out _))
         {
             _values[propertyInfo] = value;
@@ -101,6 +103,27 @@ public class StateCore : IFrameState
         else
         {
             _values.TryAdd(propertyInfo, value);
+        }
+    }
+
+    /// <summary>
+    /// Rejects a path that sits above or below one already on this transition. Re-adding the very same path is
+    /// allowed — that is a plain overwrite.
+    /// </summary>
+    private void RejectPathConflict(ITransitionProperty incoming)
+    {
+        if (incoming is not TransitionProperty candidate)
+        {
+            return;
+        }
+
+        foreach (var existing in _values.Keys)
+        {
+            if (existing is TransitionProperty applied
+                && (candidate.IsDescendantOf(applied) || applied.IsDescendantOf(candidate)))
+            {
+                throw new TransitionPathConflictException(applied, incoming);
+            }
         }
     }
     public virtual bool TryGetInterpolator(ITransitionProperty propertyInfo, out ISampler? interpolator)

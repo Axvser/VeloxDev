@@ -58,13 +58,15 @@ namespace VeloxDev.Adapters.NativeSamplers
                 // Zero per-frame allocation: reuse a scratch radial gradient, recomputing its stops from the pristine start/end.
                 if (working is not RadialGradientBrush wr || wr.GradientStops.Count != sr.GradientStops.Count)
                 {
-                    wr = new RadialGradientBrush { Center = sr.Center, Radius = sr.Radius };
+                    wr = new RadialGradientBrush { Center = sr.Center, RadiusX = sr.RadiusX, RadiusY = sr.RadiusY };
                     for (var i = 0; i < sr.GradientStops.Count; i++)
                         wr.GradientStops.Add(new GradientStop());
                     working = wr;
                 }
                 wr.Center = LerpRelativePoint(sr.Center, er.Center, t);
-                wr.Radius = sr.Radius + (er.Radius - sr.Radius) * t;
+                // 半径按标量插值，写回时沿用起始笔刷的单位
+                wr.RadiusX = new RelativeScalar(sr.RadiusX.Scalar + (er.RadiusX.Scalar - sr.RadiusX.Scalar) * t, sr.RadiusX.Unit);
+                wr.RadiusY = new RelativeScalar(sr.RadiusY.Scalar + (er.RadiusY.Scalar - sr.RadiusY.Scalar) * t, sr.RadiusY.Unit);
                 for (var i = 0; i < sr.GradientStops.Count; i++)
                 {
                     wr.GradientStops[i].Color = LerpColor(sr.GradientStops[i].Color, er.GradientStops[i].Color, t);

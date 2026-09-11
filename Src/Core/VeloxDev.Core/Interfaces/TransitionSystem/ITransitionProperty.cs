@@ -10,7 +10,7 @@ namespace VeloxDev.TransitionSystem
         public IReadOnlyList<PropertyInfo> Segments { get; }
         public bool CanRead { get; }
         public bool CanWrite { get; }
-        public object? GetValue(object target);
+        public object? GetValue(object? target);
         public bool SetValue(object target, object? value);
     }
 }

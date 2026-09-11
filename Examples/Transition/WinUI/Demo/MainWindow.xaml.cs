@@ -24,23 +24,18 @@ namespace Demo
             // UI thread via its DispatcherQueue, so no capture is needed even when the animation is
             // first started from a background thread (Task.Run) below.
 
-            // The core concept of VeloxDev animations is "everything is state"
-            // Snapshot(...) records the explicitly specified property paths
-            // SnapshotAll() auto-discovers and records all animatable properties of the current object
+            // The core concept of VeloxDev animations is "everything is state": a transition is a set of
+            // explicitly specified property paths, built with Transition<T>.Create().Property(...).
 
-            // Reset snapshots are taken only after the window is Activated, avoiding information loss
-            // from an initial state that has not yet been established.
-            // Rec0's properties (RenderTransform.X, Fill.StartPoint/EndPoint) are modified in place,
-            // which would pollute the references held by the snapshot, so Rec0 is reset with a new
-            // object; Rec1/Rec2 Fills are replaced wholesale (not mutated), so the initial snapshots
-            // fully restore them.
+            // The reset is wired only after the window is Activated, so it describes an established initial state.
+            // Rec0's properties (RenderTransform.X, Fill.StartPoint/EndPoint) are modified in place, so Rec0 is
+            // reset with a new object.
             ((FrameworkElement)Content).Loaded += (s, e) =>
             {
                 if (_resetInitialized) return;
                 _resetInitialized = true;
 
-                // Explicitly initialize to a definite state first, then take the snapshot, so it does
-                // not capture non-initial 3D/transform state (which is unreliable).
+                // Explicitly initialize to a definite state first, so the reset paths below describe a known state.
                 Rec0.RenderTransform = CreateRec0Transform();
                 Rec0.Fill = CreateRec0Brush();
                 Rec0.Projection = null;
@@ -48,10 +43,6 @@ namespace Demo
                 Rec1.Projection = null;
                 Rec2.RenderTransform = null;
                 Rec2.Projection = null;
-
-                // Rec1/Rec2 Fills are replaced wholesale (not mutated), so the initial snapshots are stable and reusable
-                var reset1 = Rec1.SnapshotAll();
-                var reset2 = Rec2.SnapshotAll();
 
                 btnReset.Click += (s, e) =>
                 {
@@ -67,12 +58,12 @@ namespace Demo
                     Rec1.Projection = null; Rec1.RenderTransform = null;
                     Rec2.Projection = null; Rec2.RenderTransform = null;
 
-                    // Apply the initial snapshots synchronously: bypasses the async Execute pipeline
+                    // Apply the reset synchronously: bypasses the async Execute pipeline
                     // (unreliable for Transform reset on some platforms), and Rec0 gets a fresh object
-                    // each time so its snapshot references are not polluted by in-place animation edits.
+                    // each time so its references are not polluted by in-place animation edits.
                     ApplyReset(CreateRec0Reset(), Rec0);
-                    ApplyReset(reset1, Rec1);
-                    ApplyReset(reset2, Rec2);
+                    ApplyReset(CreateRec1Reset(), Rec1);
+                    ApplyReset(CreateRec2Reset(), Rec2);
                 };
             };
         }
@@ -161,7 +152,7 @@ namespace Demo
 
         // Simple animation: demonstrates a nested property path, directly modifying RenderTransform.X,
         // together with gradient changes.
-        private readonly StateSnapshot<Rectangle> Animation0 =
+        private readonly Transition<Rectangle> Animation0 =
             Transition<Rectangle>.Create()
                 .Property(r => ((TranslateTransform)r.RenderTransform).X, 400)
                 .Property(r => ((LinearGradientBrush)r.Fill).StartPoint, new Point(0, 1))
@@ -192,7 +183,7 @@ namespace Demo
             };
         }
 
-        private static StateSnapshot<Rectangle> CreateRec0Reset()
+        private static Transition<Rectangle> CreateRec0Reset()
         {
             return Transition<Rectangle>.Create()
                 .Property(r => r.RenderTransform, [CreateRec0Transform()])
@@ -200,11 +191,40 @@ namespace Demo
                 .Effect(TransitionEffects.Empty);
         }
 
+        private static Transition<Rectangle> CreateRec1Reset()
+        {
+            return Transition<Rectangle>.Create()
+                .Property(r => r.Fill, new SolidColorBrush(Colors.Lime))
+                .Effect(TransitionEffects.Empty);
+        }
+
+        private static Transition<Rectangle> CreateRec2Reset()
+        {
+            return Transition<Rectangle>.Create()
+                .Property(r => r.Fill, CreateBs1Brush())
+                .Effect(TransitionEffects.Empty);
+        }
+
+        // Rec2's inline XAML brush, rebuilt in code: Yellow → Violet, 0,0 → 1,1
+        private static LinearGradientBrush CreateBs1Brush()
+        {
+            return new LinearGradientBrush()
+            {
+                StartPoint = new Point(0, 0),
+                EndPoint = new Point(1, 1),
+                GradientStops =
+                [
+                    new GradientStop() { Color = Colors.Yellow, Offset = 0 },
+                    new GradientStop() { Color = Colors.Violet, Offset = 1 },
+                ]
+            };
+        }
+
         // Apply snapshot values synchronously (bypassing the async Execute pipeline so Transform/3D
         // resets are deterministic and reliable).
         // WinUI constraint: Projection and RenderTransform(Scale) are mutually exclusive — clear
         // Projection first, then write the rest.
-        private static void ApplyReset(StateSnapshot<Rectangle> snapshot, Rectangle target)
+        private static void ApplyReset(Transition<Rectangle> snapshot, Rectangle target)
         {
             // Two passes: clear Projection first (releasing the mutual exclusion with
             // RenderTransform/Scale), then write everything else.
@@ -218,7 +238,7 @@ namespace Demo
         }
 
         // Delayed animation: reverse rotation
-        private readonly StateSnapshot<Rectangle> Animation1 =
+        private readonly Transition<Rectangle> Animation1 =
             Transition<Rectangle>.Create()
                 .Await(TimeSpan.FromSeconds(3))
                 .Property(r => r.RenderTransform, [new RotateTransform() { Angle = 180 }], RotationDirection.CounterClockWise)
@@ -238,7 +258,7 @@ namespace Demo
                 });
 
         // Combined animation: reverse projection rotation + color change
-        private readonly StateSnapshot<Rectangle> Animation2 =
+        private readonly Transition<Rectangle> Animation2 =
             Transition<Rectangle>.Create()
                 .Property(r => r.Projection,
                     new PlaneProjection()
