@@ -74,16 +74,20 @@ namespace VeloxDev.Adapters.NativeSamplers
                 96, 96,
                 PixelFormats.Pbgra32);
 
+            // The cross-fade factor is a fraction, so it cannot express an overshoot: it saturates at either end
+            // instead of being handed a value outside [0,1], which is what the eased time can now be.
+            var blend = t <= 0d ? 0d : (t >= 1d ? 1d : t);
+
             var drawingVisual = new DrawingVisual();
             using (var drawingContext = drawingVisual.RenderOpen())
             {
                 // Draw the start brush with semi-transparency.
-                drawingContext.PushOpacity(1 - t);
+                drawingContext.PushOpacity(1 - blend);
                 drawingContext.DrawRectangle(start, null, new Rect(0, 0, RenderSize, RenderSize));
                 drawingContext.Pop();
 
                 // Draw the end brush with semi-transparency.
-                drawingContext.PushOpacity(t);
+                drawingContext.PushOpacity(blend);
                 drawingContext.DrawRectangle(end, null, new Rect(0, 0, RenderSize, RenderSize));
                 drawingContext.Pop();
             }
