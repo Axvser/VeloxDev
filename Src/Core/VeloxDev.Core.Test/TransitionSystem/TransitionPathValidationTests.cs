@@ -44,7 +44,8 @@ public class TransitionPathValidationTests
         TransitionEffectCore,
         TestInterpolator,
         ImmediateInspector,
-        TestInterpreter>
+        TestInterpreter,
+        NonPriority>
     {
     }
 

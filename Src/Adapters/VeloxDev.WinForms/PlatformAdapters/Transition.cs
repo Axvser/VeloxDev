@@ -13,7 +13,8 @@ namespace VeloxDev.TransitionSystem
         TransitionEffect,
         Interpolator,
         UIThreadInspector,
-        TransitionInterpreter>
+        TransitionInterpreter,
+        NonPriority>
         where T : class
     {
         public static Transition<T> Create() => TransitionCore.Create<Transition<T>>();

@@ -69,7 +69,7 @@ public class TransitionSchedulerExitTests
         int awakeCount = 0;
         effect.Awaked += (_, _) => awakeCount++;
 
-        var scheduler = TransitionSchedulerCore<DeferredInspector, TestInterpreter>.FindOrCreate(target, CanMutualTask: false);
+        var scheduler = TransitionSchedulerCore<DeferredInspector, TestInterpreter, NonPriority>.FindOrCreate(target, CanMutualTask: false);
         using var cts = new CancellationTokenSource();
 
         var running = scheduler.Execute(new TestInterpolator(), state, effect, cts);
@@ -92,7 +92,7 @@ public class TransitionSchedulerExitTests
     public void Exit_RunsCancellationCallbacksOutsideTheTargetLock()
     {
         var target = new Target();
-        var scheduler = (TransitionSchedulerCore)TransitionSchedulerCore<ImmediateInspector, TestInterpreter>
+        var scheduler = (TransitionSchedulerCore)TransitionSchedulerCore<ImmediateInspector, TestInterpreter, NonPriority>
             .FindOrCreate(target, CanMutualTask: false);
         TransitionCore.AddNoMutual(target, [scheduler]);
 

@@ -31,8 +31,13 @@ public class TransitionEffectCore<TPriorityCore> : TransitionEffectCore, ITransi
     }
 }
 
-public class TransitionEffectCore : ITransitionEffectCore
+public class TransitionEffectCore : ITransitionEffectCore, ITransitionEffect<NonPriority>
 {
+    /// <summary>Always <c>default</c>: this effect carries no priority.</summary>
+    NonPriority ITransitionEffect<NonPriority>.Priority { get; set; }
+
+    ITransitionEffect<NonPriority> ITransitionEffect<NonPriority>.Clone() => (ITransitionEffect<NonPriority>)Clone();
+
     protected WeakDelegate<EventHandler<TransitionEventArgs>> _awaked = new();
     protected WeakDelegate<EventHandler<TransitionEventArgs>> _start = new();
     protected WeakDelegate<EventHandler<TransitionEventArgs>> _update = new();

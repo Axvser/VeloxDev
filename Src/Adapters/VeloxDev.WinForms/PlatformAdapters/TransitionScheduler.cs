@@ -2,7 +2,8 @@
 {
     public class TransitionScheduler : TransitionSchedulerCore<
             UIThreadInspector,
-            TransitionInterpreter>
+            TransitionInterpreter,
+            NonPriority>
     {
 
     }

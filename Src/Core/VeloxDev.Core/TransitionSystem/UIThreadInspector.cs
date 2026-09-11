@@ -11,9 +11,12 @@ public abstract class UIThreadInspectorCore<TPriorityCore> : UIThreadInspectorBa
     }
 }
 
-public abstract class UIThreadInspectorCore : UIThreadInspectorBase, IUIThreadInspector
+public abstract class UIThreadInspectorCore : UIThreadInspectorBase, IUIThreadInspector, IUIThreadInspector<NonPriority>
 {
     public abstract void ProtectedInvoke(object target, Action action);
+
+    /// <summary>Runs <paramref name="action"/> on the UI thread, discarding the priority — this inspector has none.</summary>
+    public virtual void ProtectedInvoke(object target, Action action, NonPriority priority) => ProtectedInvoke(target, action);
 
     public override void ProtectedInvoke(object target, Action action, object? priority = default)
     {

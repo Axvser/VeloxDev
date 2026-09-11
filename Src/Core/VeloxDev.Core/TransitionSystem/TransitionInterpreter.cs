@@ -34,9 +34,22 @@ public abstract class TransitionInterpreterCore<
 }
 
 public abstract class TransitionInterpreterCore<
-    TTransitionEffectCore> : TransitionInterpreterCore, ITransitionInterpreter
+    TTransitionEffectCore> : TransitionInterpreterCore, ITransitionInterpreter, ITransitionInterpreter<NonPriority>
     where TTransitionEffectCore : ITransitionEffectCore
 {
+    /// <summary>
+    /// Entry point for a host with no dispatcher priority. Sampling stays on the priority-free path
+    /// (<c>frameSet.Apply(target, easedT)</c>), so <see cref="NonPriority"/> costs nothing per frame.
+    /// </summary>
+    public virtual Task Execute(
+        object target,
+        SamplerSet frameSet,
+        ITransitionEffect<NonPriority> effect,
+        CancellationTokenSource cts)
+    {
+        return Execute(target, frameSet, (ITransitionEffectCore)effect, cts);
+    }
+
     public override Task Execute(
         object target,
         SamplerSet frameSet,
