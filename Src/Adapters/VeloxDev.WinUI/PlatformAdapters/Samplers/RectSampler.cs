@@ -1,4 +1,4 @@
-using Windows.Foundation;
+﻿using Windows.Foundation;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
@@ -9,8 +9,6 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             var r1 = (Rect)(start ?? default(Rect));
             var r2 = (Rect)(end ?? r1);
@@ -20,11 +18,16 @@ namespace VeloxDev.Adapters.NativeSamplers
             var deltaWidth = r2.Width - r1.Width;
             var deltaHeight = r2.Height - r1.Height;
 
+            // Width and height share one progress so an overshoot cannot skew the shape, and stop at
+            // zero: a negative size is not representable. Position stays unbounded.
+            var size = new BoundedProgress(t, 0d, double.PositiveInfinity);
+            size.Add(r1.Width, r2.Width);
+            size.Add(r1.Height, r2.Height);
             property.SetValue(target, new Rect(
                 r1.X + deltaX * t,
                 r1.Y + deltaY * t,
-                r1.Width + deltaWidth * t,
-                r1.Height + deltaHeight * t
+                r1.Width + deltaWidth * size.Progress,
+                r1.Height + deltaHeight * size.Progress
             ));
         }
     }

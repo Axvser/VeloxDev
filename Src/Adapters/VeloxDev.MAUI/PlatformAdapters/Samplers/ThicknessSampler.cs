@@ -1,4 +1,4 @@
-namespace VeloxDev.Adapters.NativeSamplers
+﻿namespace VeloxDev.Adapters.NativeSamplers
 {
     public class ThicknessSampler : ISampler
     {
@@ -7,8 +7,6 @@ namespace VeloxDev.Adapters.NativeSamplers
 
         public void InsertFrame(object target, ITransitionProperty property, ref object? working, object? start, object? end, object? options, double t)
         {
-            if (t <= 0) { property.SetValue(target, start); return; }
-            if (t >= 1) { property.SetValue(target, end); return; }
 
             var thickness1 = (Thickness)(start ?? new Thickness(0));
             var thickness2 = (Thickness)(end ?? thickness1);
