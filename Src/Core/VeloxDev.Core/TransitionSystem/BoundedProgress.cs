@@ -50,16 +50,20 @@ public struct BoundedProgress
     public void Add(double start, double end)
     {
         var delta = end - start;
-        if (delta > 0d)
-        {
-            var exit = (_maximum - start) / delta;
-            if (exit < _progress) _progress = exit;
-        }
-        else if (delta < 0d)
-        {
-            var exit = (_minimum - start) / delta;
-            if (exit < _progress) _progress = exit;
-        }
+        if (delta == 0d) return;
+
+        // Both ends of the range bound the progress, not just the far one: a channel leaves by the maximum on an
+        // overshoot and by the minimum on an anticipation, and the group has to stop at whichever comes first. A
+        // channel whose delta is positive is bounded above by the maximum and below by the minimum; a negative
+        // delta swaps the two. Taking the tighter of the pair, then clamping, keeps the result independent of the
+        // order channels are added in.
+        var byMaximum = (_maximum - start) / delta;
+        var byMinimum = (_minimum - start) / delta;
+        var lower = Math.Min(byMaximum, byMinimum);
+        var upper = Math.Max(byMaximum, byMinimum);
+
+        if (upper < _progress) _progress = upper;
+        if (lower > _progress) _progress = lower;
     }
 
     /// <summary>The progress the whole group moves by.</summary>
