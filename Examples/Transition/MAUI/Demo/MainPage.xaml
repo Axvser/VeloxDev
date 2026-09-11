@@ -19,6 +19,8 @@
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="100"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="120"></RowDefinition>
+            <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
 
         <FlexLayout Grid.Row="0" Direction="Row" Wrap="Wrap">
@@ -34,6 +36,33 @@
         <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" WidthRequest="100" HeightRequest="100"/>
         <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" WidthRequest="100" HeightRequest="100"/>
         <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" WidthRequest="100" HeightRequest="100"/>
+
+        <!-- 过冲演示区。4 个互不干涉的目标并排，Back 与 Elastic、颜色与尺寸可以在同一次运行里对比，
+             而不是一个跑完再看下一个。Bs1 是 Yellow → Violet，把它推过去不会回绕成别的颜色。 -->
+        <Grid Grid.Row="7" ColumnDefinitions="*,*,*,*" Margin="6">
+            <Rectangle Grid.Column="0" x:Name="Over0" WidthRequest="80" HeightRequest="60" Fill="#3A6EA5"
+                       HorizontalOptions="Center" VerticalOptions="Center"/>
+            <Rectangle Grid.Column="1" x:Name="Over1" WidthRequest="80" HeightRequest="60" Fill="#3A6EA5"
+                       HorizontalOptions="Center" VerticalOptions="Center"/>
+            <Rectangle Grid.Column="2" x:Name="Over2" WidthRequest="80" HeightRequest="60" Fill="#7A5AA5"
+                       HorizontalOptions="Center" VerticalOptions="Center"/>
+            <Rectangle Grid.Column="3" x:Name="Over3" WidthRequest="80" HeightRequest="60" Fill="{StaticResource Bs1}"
+                       HorizontalOptions="Center" VerticalOptions="Center"/>
+        </Grid>
+
+        <VerticalStackLayout Grid.Row="8" Margin="4">
+            <FlexLayout Direction="Row" Wrap="Wrap">
+                <Button WidthRequest="128" HeightRequest="34" Text="位移 Back.Out" Clicked="OverShootScalarBack"/>
+                <Button WidthRequest="140" HeightRequest="34" Text="位移 Elastic.Out" Clicked="OverShootScalarElastic"/>
+                <Button WidthRequest="110" HeightRequest="34" Text="颜色过冲" Clicked="OverShootColor"/>
+                <Button WidthRequest="110" HeightRequest="34" Text="尺寸过冲" Clicked="OverShootSize"/>
+                <Button WidthRequest="110" HeightRequest="34" Text="渐变过冲" Clicked="OverShootGradient"/>
+                <Button WidthRequest="110" HeightRequest="34" Text="重置过冲" Clicked="OverShootReset"/>
+            </FlexLayout>
+            <!-- 读数才是过冲可见的证据：数字越过目标再回来，肉眼分辨不出它与一条更慢的缓动。 -->
+            <Label x:Name="Readout" Margin="4,6,4,2" FontSize="12" TextColor="#CCCCCC"
+                   Text="按上面任一按钮；读数显示目标的真实属性值与目标值"/>
+        </VerticalStackLayout>
     </Grid>
 
 </ContentPage>
