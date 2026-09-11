@@ -3,16 +3,16 @@ using VeloxDev.AT.Drivers;
 namespace VeloxDev.AT.Suites;
 
 /// <summary>
-/// Proves the thing the Blazor overshoot suite assumes: that the demo server comes up, that its page is reachable
+/// Proves the thing the Blazor conformance suite assumes: that the demo server comes up, that its page is reachable
 /// through the browser, and that its readout is actually ticking.
 /// </summary>
 /// <remarks>
-/// Kept separate from the overshoot suite because it fails for completely different reasons. When this goes red the
-/// problem is the launch path, the page, or the payload's spelling; when the overshoot suite goes red the animation is
-/// wrong. Sorting a failure into one of those two buckets first is most of the diagnosis.
+/// Kept separate from the conformance suite because it fails for completely different reasons. When this goes red the
+/// problem is the launch path, the page, or the payload's spelling; when a conformance check goes red a sampler is wrong.
 /// <para>
-/// It lives in its own file rather than in <c>LocatorProbeSuite</c> so that adding Blazor touches no file another
-/// platform's author owns; the category filter <c>AT.Blazor</c> selects it just the same.
+/// The sequence handshake carries more weight here than on any other platform: a click — or a read — that lands before
+/// the interactive circuit is live is silently dropped, so two reads whose sequence differs are the only proof the page
+/// is actually running rather than showing its prerendered markup.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -20,8 +20,8 @@ namespace VeloxDev.AT.Suites;
 public class BlazorProbeSuite
 {
     /// <summary>
-    /// Drives the Blazor demo's page: every scenario button present, both readouts present, the payload parseable, and
-    /// its sequence number advancing on its own.
+    /// Drives the Blazor demo's page: the readouts present, the payload parseable, and its sequence number advancing
+    /// on its own.
     /// </summary>
     [TestMethod]
     public void Blazor_ObservationSurface_IsReachableAndTicking()
@@ -29,13 +29,6 @@ public class BlazorProbeSuite
         DemoCatalog.RequireEnabled(BlazorDemoDriver.PlatformName);
         using var driver = DemoCatalog.Create(BlazorDemoDriver.PlatformName);
         driver.Launch();
-
-        // 每个场景按钮都必须能被定位到：套件点的是 data-at 令牌，不是中文文案。
-        foreach (var scenario in driver.Scenarios)
-        {
-            Assert.IsTrue(driver.HasControl(scenario.ButtonAutomationId),
-                $"The control '{scenario.ButtonAutomationId}' is missing, so {scenario} cannot be run.");
-        }
 
         // 给人看的读数也必须还在：它没有被机器载荷取代，缺了说明演示面被动过。
         Assert.IsTrue(driver.HasControl("over.readout"), "The human-readable readout is missing.");
@@ -54,7 +47,5 @@ public class BlazorProbeSuite
         Assert.IsTrue(second.Sequence > first.Sequence,
             $"The readout sequence did not advance past {first.Sequence}; the demo's readout timer is not running, "
             + "which also means the interactive circuit never came up.");
-        Assert.AreEqual("none", first.Scenario, "A freshly launched demo should be idle.");
-        Assert.AreEqual(first.Scenario, second.Scenario, "Merely reading the payload must not start a scenario.");
     }
 }

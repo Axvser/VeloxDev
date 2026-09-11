@@ -109,6 +109,27 @@ internal sealed class AutomationLocator : IDisposable
               + string.Join(", ", ids);
     }
 
+    /// <summary>
+    /// Whether the control lies inside the window — that is, whether a person could actually reach it.
+    /// </summary>
+    /// <remarks>
+    /// This is not pedantry. UI Automation's Invoke pattern activates a control that has been laid out past the
+    /// window's edge or scrolled out of sight exactly as happily as one on screen, so without this check the suite
+    /// would keep passing over a surface nobody can use — which is precisely how a layout regression slips through.
+    /// </remarks>
+    internal bool IsInsideWindow(string automationId)
+    {
+        var element = FindNow(automationId);
+        if (element is null) return false;
+
+        var control = element.Properties.BoundingRectangle.ValueOrDefault;
+        var window = _root.Properties.BoundingRectangle.ValueOrDefault;
+
+        return control.Width > 0 && control.Height > 0
+            && control.Right > window.Left && control.Left < window.Right
+            && control.Bottom > window.Top && control.Top < window.Bottom;
+    }
+
     private AutomationElement? FindNow(string automationId)
     {
         try

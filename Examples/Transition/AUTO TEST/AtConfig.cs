@@ -13,6 +13,25 @@ internal static class AtConfig
     internal static bool Enabled => Environment.GetEnvironmentVariable("VELOXDEV_AT") == "1";
 
     /// <summary>
+    /// How long to linger after each clicked handle lands. Unset means <see cref="DefaultPaceMs"/>; set
+    /// <c>VELOXDEV_AT_PACE</c> to a number of milliseconds, and to <c>0</c> for no pause at all.
+    /// </summary>
+    /// <remarks>
+    /// <b>Slowed down by default, on purpose.</b> Two reasons, and the second is not cosmetic: a demo window is
+    /// otherwise gone before the eye catches it, and — because each click stops the previous one's playback — a run
+    /// with no pause cuts every sampler's animation off a tenth of a second in, so nobody watching ever sees one
+    /// finish. A CI job or an agent that only wants the verdict sets <c>VELOXDEV_AT_PACE=0</c> and gets the whole
+    /// suite in about twenty seconds.
+    /// </remarks>
+    internal static TimeSpan Pace =>
+        int.TryParse(Environment.GetEnvironmentVariable("VELOXDEV_AT_PACE"), out var milliseconds)
+            ? TimeSpan.FromMilliseconds(Math.Max(0, milliseconds))
+            : TimeSpan.FromMilliseconds(DefaultPaceMs);
+
+    /// <summary>Long enough for the bench to finish playing one sampler before the next click interrupts it.</summary>
+    private const int DefaultPaceMs = 800;
+
+    /// <summary>
     /// Comma-separated subset to run, e.g. <c>VELOXDEV_AT_PLATFORMS=WPF,Blazor</c>. Empty or unset means all.
     /// </summary>
     internal static bool RunsOn(string platform)

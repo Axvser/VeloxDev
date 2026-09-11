@@ -78,6 +78,21 @@ internal sealed class BlazorHost : IDemoHost
 
     public bool Exists(string token) => Page.Locator(Selector(token)).CountAsync().GetAwaiter().GetResult() > 0;
 
+    /// <summary>
+    /// Always true: a page scrolls, so "inside the viewport" is the wrong question here.
+    /// </summary>
+    /// <remarks>
+    /// On a desktop surface a control laid out past the window's edge is unreachable, which is why the other host
+    /// checks for it. A page is not a fixed frame — a control below the fold is reached by scrolling, and Playwright
+    /// scrolls it into view before clicking — so the same check would fail on a perfectly usable page.
+    /// </remarks>
+    public bool IsControlInsideView(string token) => Exists(token);
+
+    public string? ComputedStyle(string token, string property)
+        => Page.Locator(Selector(token))
+            .EvaluateAsync<string>($"el => getComputedStyle(el).getPropertyValue('{property}')")
+            .GetAwaiter().GetResult();
+
     public string Text(string token, TimeSpan timeout)
     {
         var locator = Page.Locator(Selector(token));

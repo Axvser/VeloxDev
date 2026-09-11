@@ -54,18 +54,6 @@ internal sealed class StatePayload
     /// </summary>
     internal long Sequence => (long)Number("seq");
 
-    /// <summary>Which scenario is running, or <c>none</c> when the demo is idle.</summary>
-    internal string Scenario => Text("scen");
-
-    /// <summary>
-    /// Whether the running scenario has finished. This — never "the value equals the target" — is what says an
-    /// animation has landed: both overshoot curves cross their target again on the way back.
-    /// </summary>
-    internal bool Done => Number("done") != 0d;
-
-    /// <summary>Milliseconds since the current scenario started, stamped inside the click handler itself.</summary>
-    internal double ElapsedMs => Number("t");
-
     /// <summary>Whether the payload carries a field at all.</summary>
     internal bool Has(string key) => _values.ContainsKey(key);
 

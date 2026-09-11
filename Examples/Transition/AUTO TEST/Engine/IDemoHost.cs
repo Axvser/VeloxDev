@@ -34,6 +34,20 @@ internal interface IDemoHost : IDisposable
     /// <summary>Whether a control with this token is present right now — no waiting, for probes that are themselves the assertion.</summary>
     bool Exists(string token);
 
+    /// <summary>
+    /// Whether the control with this token is somewhere a person could reach it — inside the window for a desktop
+    /// surface. A suite that clicks through the Invoke pattern would otherwise keep passing over a control laid out
+    /// past the window's edge, verifying a UI nobody can use.
+    /// </summary>
+    bool IsControlInsideView(string token);
+
+    /// <summary>
+    /// The **computed** value of a CSS property on the control with this token, or <c>null</c> where that question has
+    /// no meaning. A browser is the one surface whose real appearance is fully described by its computed style, so
+    /// this is how a browser-side suite reads what is actually on screen rather than what the app says it produced.
+    /// </summary>
+    string? ComputedStyle(string token, string property);
+
     /// <summary>The text of the control with this token, waiting for it to appear.</summary>
     /// <exception cref="TimeoutException">No control with that token appeared.</exception>
     string Text(string token, TimeSpan timeout);

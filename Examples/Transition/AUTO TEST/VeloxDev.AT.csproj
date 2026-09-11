@@ -46,4 +46,17 @@
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
   </ItemGroup>
 
+  <!--
+    Samplers/ is a project of its own that lives inside this directory, and the SDK's default globs are recursive:
+    without this, this project compiles its sources too (and its obj/ generated files with them) and stops building
+    altogether. Removing the whole subtree is what keeps "same folder, separate project" true for the build and not
+    just for the layout.
+  -->
+  <ItemGroup>
+    <Compile Remove="Samplers/**" />
+    <None Remove="Samplers/**" />
+    <EmbeddedResource Remove="Samplers/**" />
+    <Content Remove="Samplers/**" />
+  </ItemGroup>
+
 </Project>

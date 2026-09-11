@@ -3,17 +3,15 @@ using VeloxDev.AT.Engine;
 namespace VeloxDev.AT.Drivers;
 
 /// <summary>
-/// The half of driving a demo that does not depend on the platform: the readiness handshake, the click handshake, the
-/// poll to the end of a run, and the collected result.
+/// The half of driving a demo that does not depend on the platform: the readiness handshake, reading the payload, and
+/// the poll that proves a readout is live.
 /// </summary>
 /// <remarks>
-/// The ordering here is the whole value of the class, and each step exists because of a way a UI test usually goes
-/// wrong. A click is only sent after the readout has been seen to advance, so a dropped click cannot be mistaken for a
-/// slow start. A click is only accepted once the payload names the scenario, so a stale payload cannot be read as a
-/// result. And a run is only over when the demo says so, because both curves cross their target again on the way back
-/// and "the value reached the target" would therefore pass while the animation is still flying.
-/// Everything platform-specific is behind <see cref="IDemoHost"/>: a driver supplies an executable, the tokens its
-/// surface names controls by, and a scenario table, and inherits the ordering unchanged.
+/// The readiness handshake is the whole value of the class. A readout is only trusted once its sequence number has been
+/// seen to advance, which is the one proof that the demo's timer is running — and it is not replaceable by a sleep,
+/// because it is also what closes the race a browser demo's circuit-startup introduces.
+/// Everything platform-specific is behind <see cref="IDemoHost"/>: a driver supplies an executable and the tokens its
+/// surface names controls by, and inherits the ordering unchanged.
 /// </remarks>
 internal abstract class DemoDriverBase : IDemoDriver
 {
@@ -26,12 +24,22 @@ internal abstract class DemoDriverBase : IDemoDriver
     /// <summary>How long to wait for a readout tick, which is what proves the demo's timer is running.</summary>
     protected static readonly TimeSpan TickTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// The token every demo publishes its sampler-conformance payload under. It is the one handle this contract fixes
+    /// itself rather than letting a driver choose, because the payload is the same shape on every platform.
+    /// </summary>
+    private const string ConformanceAutomationId = "over.conf";
+
+    /// <summary>
+    /// What every demo names a sampler's handle by, with the sampler's type name appended. The token scheme is fixed
+    /// here rather than left to each driver, because it is the one thing a suite has to agree on across all platforms.
+    /// </summary>
+    private const string SamplerHandlePrefix = "over.sampler.";
+
     private IDemoHost? _host;
     private PollRecorder? _recorder;
 
     public abstract string Platform { get; }
-
-    public abstract IReadOnlyList<ScenarioSpec> Scenarios { get; }
 
     public abstract int PayloadVersion { get; }
 
@@ -60,9 +68,6 @@ internal abstract class DemoDriverBase : IDemoDriver
     protected PollRecorder Recorder => _recorder
         ?? throw new InvalidOperationException($"{Platform} has not been launched; call {nameof(Launch)} first.");
 
-    /// <summary>How long past its duration a run may take before the demo's own <c>done</c> is overdue.</summary>
-    protected virtual TimeSpan SettleSlack => TimeSpan.FromSeconds(3);
-
     public void Launch()
     {
         _host = CreateHost();
@@ -77,7 +82,48 @@ internal abstract class DemoDriverBase : IDemoDriver
 
     public bool HasControl(string automationId) => Host.Exists(automationId);
 
+    public bool IsControlInView(string automationId) => Host.IsControlInsideView(automationId);
+
+    public string? ComputedStyle(string automationId, string property) => Host.ComputedStyle(automationId, property);
+
     public StatePayload Read() => StatePayload.Parse(Host.Text(PayloadAutomationId, ClickTimeout));
+
+    public ConformancePayload ReadConformance()
+        => ConformancePayload.Parse(Host.Text(ConformanceAutomationId, ClickTimeout));
+
+    public ConformancePayload ActivateSampler(string sampler)
+    {
+        var token = $"{SamplerHandlePrefix}{sampler}";
+
+        // 先确认这个把手在人够得着的地方。UIA 的 Invoke 模式对排在窗口外、或滚出视野的控件照样生效，
+        // 少了这一道，一套没人能用的界面会让套件一路绿着过去 —— 布局回归正是这样溜掉的。
+        if (!Host.IsControlInsideView(token))
+        {
+            throw new InvalidOperationException(
+                $"{Platform}: the handle '{token}' is outside the surface, so a person could not reach it.");
+        }
+
+        var before = ReadConformance();
+        Click(token);
+
+        // 点击生效的判据是载荷自己的 seq 越过了点击前那一次 —— 与读数同一套握手，固定 sleep 替代不了它。
+        var deadline = DateTime.UtcNow + ClickTimeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var latest = ReadConformance();
+            if (latest.Sequence > before.Sequence)
+            {
+                // 只为让人看得见：默认是零，开跑就飞快。
+                if (AtConfig.Pace > TimeSpan.Zero) Thread.Sleep(AtConfig.Pace);
+                return latest;
+            }
+
+            Thread.Sleep(20);
+        }
+
+        throw new TimeoutException(
+            $"{Platform}: clicking '{SamplerHandlePrefix}{sampler}' did not move the conformance sequence past {before.Sequence}.");
+    }
 
     /// <summary>
     /// Read until the readout's sequence number moves past <paramref name="after"/>. Two reads that differ are the only
@@ -92,33 +138,10 @@ internal abstract class DemoDriverBase : IDemoDriver
             $"the readout sequence to move past {baseline}");
     }
 
-    /// <summary>
-    /// Run a scenario end to end: click it, wait for the click to land, then poll until the demo reports it is done.
-    /// </summary>
-    /// <returns>Every payload observed during the flight, and the one that reported the end.</returns>
-    public ScenarioRun Run(ScenarioSpec spec)
+    public StatePayload WaitFor(Func<StatePayload, bool> predicate, TimeSpan timeout, string description)
     {
-        // 就绪握手先做：点击必须在读数定时器已经在跑之后才发出，否则点击可能落在启动过程里被静默丢掉。
-        WaitForTick();
-
-        var before = Recorder.Read();
-        Click(spec.ButtonAutomationId);
-
-        // 点击生效的判据是场景令牌变了、且 seq 越过了点击前那一次，这样一次被丢弃的点击不会被当成已开始。
-        Recorder.Until(
-            payload => payload.Scenario == spec.PayloadToken && payload.Sequence > before.Sequence,
-            ClickTimeout,
-            $"the click on '{spec.ButtonAutomationId}' to start '{spec.PayloadToken}'");
-
-        // 从点击落定那一刻重新采样：更早的样本可能带着上一个场景遗留的峰值。
         Recorder.Reset();
-
-        var settled = Recorder.Until(
-            payload => payload.Done,
-            spec.Duration + SettleSlack,
-            $"'{spec.PayloadToken}' to report done=1 after {spec.Duration.TotalMilliseconds:F0}ms");
-
-        return new ScenarioRun(spec, [.. Recorder.Samples], settled);
+        return Recorder.Until(predicate, timeout, description);
     }
 
     /// <summary>Write a screenshot of the demo's surface; returns the path, or <c>null</c> when it could not be taken.</summary>
