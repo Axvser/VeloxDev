@@ -84,10 +84,11 @@ internal sealed class MainWindow : Window
 
         var buttons = new WrapPanel();
         // 令牌与其余六个平台逐字一致 —— 验收套件靠它点这一排。
-        buttons.Children.Add(MakeButton("主线程互斥", (_, _) => LoadMainThread(), "over.btn.load.main"));
-        buttons.Children.Add(MakeButton("后台线程互斥", (_, _) => _ = Task.Run(LoadMainThread), "over.btn.load.background"));
-        buttons.Children.Add(MakeButton("主线程并发", (_, _) => LoadMainThreadNonMutual(), "over.btn.load.main.concurrent"));
-        buttons.Children.Add(MakeButton("后台线程并发", (_, _) => _ = Task.Run(LoadMainThreadNonMutual), "over.btn.load.background.concurrent"));
+        // 四条会跑 Animation2 的按钮都先把 Rec2 的画刷写回渐变起点 —— 见 SeedRec2 的说明。
+        buttons.Children.Add(MakeButton("主线程互斥", (_, _) => { SeedRec2(); LoadMainThread(); }, "over.btn.load.main"));
+        buttons.Children.Add(MakeButton("后台线程互斥", (_, _) => { SeedRec2(); _ = Task.Run(LoadMainThread); }, "over.btn.load.background"));
+        buttons.Children.Add(MakeButton("主线程并发", (_, _) => { SeedRec2(); LoadMainThreadNonMutual(); }, "over.btn.load.main.concurrent"));
+        buttons.Children.Add(MakeButton("后台线程并发", (_, _) => { SeedRec2(); _ = Task.Run(LoadMainThreadNonMutual); }, "over.btn.load.background.concurrent"));
         buttons.Children.Add(MakeButton("连续互斥", (_, _) => _ = Task.Run(() => Animation0.Execute(_rec0)), "over.btn.load.repeat"));
         buttons.Children.Add(MakeButton("重置", (_, _) => Reset(), "over.btn.reset.all"));
         buttons.Children.Add(MakeButton("停止全部", (_, _) => ExitAll(), "over.btn.stop.all"));
@@ -300,6 +301,19 @@ internal sealed class MainWindow : Window
     }
 
     // ── Scenarios (aligned with Avalonia/WPF) ───────────────────────────────
+
+    /// <summary>
+    /// 把 Rec2 的画刷同步写回渐变起点，让 <c>Animation2</c> 无论开始还是终结都拿渐变当端点。
+    /// </summary>
+    /// <remarks>
+    /// <c>Prepare</c> 把目标的**当前值**当作动画起点。上一轮若是被"停止全部"或新动画打断停在半路，
+    /// <c>Rec2.Fill</c> 会停在交叉淡出混出来的**纯色**上，下一次加载就成了"纯色 → 渐变" —— 合成效果的
+    /// 输入端不再确定。这与 <c>OverShootGradient</c> 里对 <c>_over3</c> 做的是同一件事、同一个理由。
+    /// <para>
+    /// 必须在 UI 线程上写：所以后台加载那两个也先在这里写回、再派发，而不是塞进 Task.Run 里面。
+    /// </para>
+    /// </remarks>
+    private void SeedRec2() => _rec2.Fill = CreateBs1Brush();
 
     private void LoadMainThread()
     {
