@@ -150,11 +150,16 @@ public class LoadModeSuite
             var before = Observe(driver.Read(), entry);
 
             driver.Click(button);
-            var after = Observe(
-                driver.WaitFor(payload => Observe(payload, entry) != before, StartWindow, $"{what}后目标仍未变化"),
-                entry);
+            var flying = driver.WaitFor(
+                payload => Observe(payload, entry) != before, StartWindow, $"{what}后目标仍未变化");
 
-            Assert.AreNotEqual(before, after, $"{what}之后目标状态必须改变");
+            Assert.AreNotEqual(before, Observe(flying, entry), $"{what}之后目标状态必须改变");
+
+            // 平台自己声明的、只在飞行中成立的那条更严的断言（见 LoadModeEntry.InFlight）。
+            if (entry.InFlight?.Invoke(flying) is { } violation)
+            {
+                throw new InvalidOperationException(violation);
+            }
         }
 
         Case("主线程加载让目标动起来", () => AssertLoadStarts("over.btn.load.main", "主线程加载"));

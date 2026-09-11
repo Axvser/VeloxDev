@@ -62,7 +62,9 @@ internal sealed class MainWindow : Window
         // 先建矩形：下面的按钮 lambda 捕获 _rec0，字段必须在捕获前完成赋值
         _rec0 = MakeRect(Colors.Cyan);
         _rec1 = MakeRect(Colors.Lime);
-        _rec2 = MakeRect(Colors.Orange);
+        // Rec2 起止两端都是渐变 —— 上侧这一排里特意留一块跑"渐变 → 渐变"，因为那条路走的是画刷
+        // 交叉淡出（非纯色分支），与另外两块的纯色路径不是同一段代码。
+        _rec2 = MakeRect(CreateBs1Brush());
 
         // 过冲条：4 个并排目标，让 Back 与 Elastic、颜色与尺寸能在同一次运行里对比，而不是一次只看一个。
         // Over3 是黄→紫渐变，过冲时越过紫色而不是回绕。Over0 的 RenderTransform 会被就地改写，所以只建一次。
@@ -251,18 +253,18 @@ internal sealed class MainWindow : Window
         grid.RowDefinitions.Add(new RowDefinition { Height = height });
     }
 
-    private Rectangle MakeRect(Color fill)
-    {
-        // 100×100 squares (not stretched into bars), like the reference demos.
-        return new Rectangle
+    // 与过冲条同尺寸的方块（不是被拉长的条），与参考 demo 一致。
+    private static Rectangle MakeRect(Brush fill)
+        => new()
         {
             Width = 80,
             Height = 60,
-            Fill = new SolidColorBrush(fill),
+            Fill = fill,
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center,
         };
-    }
+
+    private static Rectangle MakeRect(Color fill) => MakeRect(new SolidColorBrush(fill));
 
     // 过冲条里的小目标：居中而不是靠左，位移场景才能在格子内看出越界再回弹。
     private static Rectangle MakeOverRect(Brush fill, double width = OverWidthStart)
@@ -323,7 +325,7 @@ internal sealed class MainWindow : Window
         _rec1.RenderTransform = null;
         _rec1.Fill = new SolidColorBrush(Colors.Lime);
         _rec2.RenderTransform = null;
-        _rec2.Fill = new SolidColorBrush(Colors.Orange);
+        _rec2.Fill = CreateBs1Brush();
         ResetOverShoot();
     }
 
@@ -386,7 +388,7 @@ internal sealed class MainWindow : Window
             .Property(r => r.RenderTransform,
                 [new TranslateTransform(200, 0), new ScaleTransform(1.3, 1.3)],
                 RotationDirection.CounterClockWise)
-            .Property(r => r.Fill, new SolidColorBrush(Colors.LightSeaGreen))
+            .Property(r => r.Fill, CreateShiftedBs1())
             .Effect(new TransitionEffect
             {
                 Duration = TimeSpan.FromSeconds(3),
@@ -396,7 +398,7 @@ internal sealed class MainWindow : Window
                 LoopTime = 2,
             })
             .AwaitThen(TimeSpan.FromSeconds(5))
-            .Property(r => r.Fill, new SolidColorBrush(Colors.Lime))
+            .Property(r => r.Fill, CreateBs1Brush())
             .Effect(e =>
             {
                 e.Duration = TimeSpan.FromSeconds(4);
