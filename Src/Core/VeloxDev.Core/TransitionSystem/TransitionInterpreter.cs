@@ -10,7 +10,7 @@ public abstract class TransitionInterpreterCore<
 {
     public virtual Task Execute(
         object target,
-        SamplerSet frameSet,
+        SamplerSet<TPriorityCore> frameSet,
         ITransitionEffect<TPriorityCore> effect,
         CancellationTokenSource cts)
     {
@@ -33,7 +33,7 @@ public abstract class TransitionInterpreterCore<
     /// </summary>
     public virtual Task Execute(
         object target,
-        SamplerSet frameSet,
+        SamplerSet<NonPriority> frameSet,
         ITransitionEffect<NonPriority> effect,
         CancellationTokenSource cts)
     {
@@ -62,9 +62,9 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// ~1000Hz). Each pass samples eased time in [0,1] and applies via the frame set (which marshals the writes to
     /// the UI thread). The final frame of each pass is the exact endpoint.
     /// </summary>
-    protected async Task ExecuteSamplingLoopAsync(
+    protected async Task ExecuteSamplingLoopAsync<TPriorityCore>(
         object target,
-        SamplerSet frameSet,
+        SamplerSet<TPriorityCore> frameSet,
         ITransitionEffectCore effect,
         CancellationTokenSource cts,
         Action<double> apply)

@@ -12,13 +12,14 @@ public class SamplerSetTests
         public double Value { get; set; }
     }
 
-    private sealed class FakeInspector : IUIThreadInspectorCore
+    private sealed class FakeInspector : IUIThreadInspector<NonPriority>
     {
         public Func<bool> Alive { get; set; } = static () => true;
         public int InvokeCount { get; private set; }
         public bool IsAppAlive() => Alive();
         public bool IsUIThread() => true;
-        public void ProtectedInvoke(object target, Action action, object? priority = default) { InvokeCount++; action(); }
+        public void ProtectedInvoke(object target, Action action, object? priority = default) => ProtectedInvoke(target, action, default(NonPriority));
+        public void ProtectedInvoke(object target, Action action, NonPriority priority) { InvokeCount++; action(); }
         public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
     }
 
@@ -28,7 +29,7 @@ public class SamplerSetTests
     public void Apply_AppliesAllSamplers()
     {
         var inspector = new FakeInspector();
-        var set = new SamplerSet(inspector);
+        var set = new SamplerSet<NonPriority>(inspector);
         set.Add(Property, new DoubleSampler(), 10d, 100d, null);
         var target = new Target();
         set.Apply(target, 0.5);
@@ -40,7 +41,7 @@ public class SamplerSetTests
     public void Apply_AtEndpoints_WritesExactValues()
     {
         var inspector = new FakeInspector();
-        var set = new SamplerSet(inspector);
+        var set = new SamplerSet<NonPriority>(inspector);
         set.Add(Property, new DoubleSampler(), 10d, 100d, null);
         var target = new Target();
         set.Apply(target, 0.0);
@@ -53,7 +54,7 @@ public class SamplerSetTests
     public void Apply_AfterCancellation_SkipsWrites()
     {
         var inspector = new FakeInspector();
-        var set = new SamplerSet(inspector);
+        var set = new SamplerSet<NonPriority>(inspector);
         set.Add(Property, new DoubleSampler(), 10d, 100d, null);
         var target = new Target { Value = 50d };
         using var cts = new CancellationTokenSource();
@@ -69,7 +70,7 @@ public class SamplerSetTests
     public void Apply_WhenAppDead_SkipsWrites()
     {
         var inspector = new FakeInspector { Alive = static () => false };
-        var set = new SamplerSet(inspector);
+        var set = new SamplerSet<NonPriority>(inspector);
         set.Add(Property, new DoubleSampler(), 10d, 100d, null);
         var target = new Target();
         set.Apply(target, 0.5);
@@ -81,7 +82,7 @@ public class SamplerSetTests
     /// Models the real marshalling: the write is queued and lands on the UI thread later, so the point where the
     /// frame is checked and the point where it is written are different moments.
     /// </summary>
-    private sealed class DeferredInspector : IUIThreadInspectorCore
+    private sealed class DeferredInspector : IUIThreadInspector<NonPriority>
     {
         private readonly List<Action> _pending = [];
 
@@ -90,6 +91,8 @@ public class SamplerSetTests
         public bool IsUIThread() => true;
 
         public void ProtectedInvoke(object target, Action action, object? priority = default) => _pending.Add(action);
+
+        public void ProtectedInvoke(object target, Action action, NonPriority priority) => _pending.Add(action);
 
         public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
 
@@ -110,7 +113,7 @@ public class SamplerSetTests
         // A frame queued while the animation was still alive, cancelled before the UI thread pumped it, must be
         // dropped when it lands — otherwise it executes after a reset has already been applied and overwrites it.
         var inspector = new DeferredInspector();
-        var set = new SamplerSet(inspector);
+        var set = new SamplerSet<NonPriority>(inspector);
         set.Add(Property, new DoubleSampler(), 10d, 100d, null);
         var target = new Target { Value = 50d };
         using var cts = new CancellationTokenSource();
@@ -122,5 +125,42 @@ public class SamplerSetTests
         inspector.Pump();         // ...then the stale frame runs
 
         Assert.AreEqual(42d, target.Value);
+    }
+
+    /// <summary>A stand-in for a host dispatcher priority, the way DispatcherPriority is one.</summary>
+    private enum FakePriority
+    {
+        Low,
+        High,
+    }
+
+    private sealed class PriorityInspector : IUIThreadInspector<FakePriority>
+    {
+        public bool IsAppAlive() => true;
+        public bool IsUIThread() => true;
+        public void ProtectedInvoke(object target, Action action, object? priority = default) => action();
+        public void ProtectedInvoke(object target, Action action, FakePriority priority) => action();
+        public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
+    }
+
+    [TestMethod]
+    public void Apply_DoesNotAllocate_ForAValueTypePriority()
+    {
+        // The frame path runs once per frame per animation, so the priority must reach the inspector unboxed. It
+        // used to travel as an object? parameter, which boxed a DispatcherPriority every frame; this is the only
+        // thing that can prove the box is gone — reading the signature cannot.
+        var set = new SamplerSet<FakePriority>(new PriorityInspector());
+        var target = new Target();
+
+        set.Apply(target, 0.5, FakePriority.High); // warms up: caches the reusable apply delegate
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+        {
+            set.Apply(target, 0.5, FakePriority.High);
+        }
+        var after = GC.GetAllocatedBytesForCurrentThread();
+
+        Assert.AreEqual(before, after, "Apply must not allocate per frame");
     }
 }

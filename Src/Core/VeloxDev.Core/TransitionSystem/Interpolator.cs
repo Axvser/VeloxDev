@@ -55,13 +55,13 @@ public abstract class InterpolatorCore
     /// Normalizes each animated property: reads the current value (start) and target value (end), resolves the
     /// <see cref="ISampler"/> (custom override → registry), calls <see cref="ISampler.NormalizeStart"/> /
     /// <see cref="ISampler.NormalizeEnd"/> to produce the endpoint values, and stores the stateless sampler with
-    /// the normalized endpoints in the <see cref="SamplerSet"/>. A struct <see cref="ISampleable"/> is assembled
+    /// the normalized endpoints in the <see cref="SamplerSet{TPriorityCore}"/>. A struct <see cref="ISampleable"/> is assembled
     /// member by member here; reference types are never expanded — they are expressed through explicit member paths
     /// or a dedicated <see cref="ISampler"/>.
     /// </summary>
-    public virtual SamplerSet Prepare(object target, IFrameState state, ITransitionEffectCore effect, IUIThreadInspectorCore inspector)
+    public virtual SamplerSet<TPriorityCore> Prepare<TPriorityCore>(object target, IFrameState state, ITransitionEffectCore effect, IUIThreadInspector<TPriorityCore> inspector)
     {
-        var set = new SamplerSet(inspector);
+        var set = new SamplerSet<TPriorityCore>(inspector);
         foreach (var kvp in state.Values)
         {
             var currentValue = inspector.ProtectedGetValue(target, kvp.Key);

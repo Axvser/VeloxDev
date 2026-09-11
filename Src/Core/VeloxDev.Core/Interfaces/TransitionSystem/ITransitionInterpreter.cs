@@ -9,7 +9,7 @@ namespace VeloxDev.TransitionSystem
 
         public Task Execute(
             object target,
-            SamplerSet samplerSet,
+            SamplerSet<TPriorityCore> samplerSet,
             ITransitionEffect<TPriorityCore> effect,
             CancellationTokenSource cts);
 

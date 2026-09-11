@@ -54,7 +54,7 @@ public class TransitionSchedulerCore<
                 effect.InvokeAwake(target, newInterpreter.Args);
             }, effect.Priority);
 
-            var frameSet = producer.Prepare(target, state, effect, uIThreadInspector);
+            var frameSet = producer.Prepare<TPriorityCore>(target, state, effect, uIThreadInspector);
             if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
             await newInterpreter.Execute(target, frameSet, effect, newCts);
         }

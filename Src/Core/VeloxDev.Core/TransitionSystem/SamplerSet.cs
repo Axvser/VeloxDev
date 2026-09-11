@@ -7,9 +7,14 @@ namespace VeloxDev.TransitionSystem.Abstractions;
 /// <see cref="Apply"/> marshals to the UI thread and calls <see cref="ISampler.InsertFrame"/> per property, skipping
 /// when the animation is cancelled (stale-frame guard).
 /// </summary>
-public sealed class SamplerSet
+/// <typeparam name="TPriorityCore">
+/// The host's dispatcher priority type, or <see cref="NonPriority"/> for a host that has none. Carrying it as a type
+/// parameter lets <see cref="Apply"/> hand the priority to the inspector unboxed: the previous <c>object?</c>
+/// parameter boxed a <c>DispatcherPriority</c> on every frame of every animation.
+/// </typeparam>
+public sealed class SamplerSet<TPriorityCore>
 {
-    private readonly IUIThreadInspectorCore _inspector;
+    private readonly IUIThreadInspector<TPriorityCore> _inspector;
     private readonly List<Entry> _entries = [];
     private volatile CancellationTokenSource? _cts;
 
@@ -40,7 +45,7 @@ public sealed class SamplerSet
         public object? Working;
     }
 
-    public SamplerSet(IUIThreadInspectorCore inspector)
+    public SamplerSet(IUIThreadInspector<TPriorityCore> inspector)
     {
         _inspector = inspector ?? throw new ArgumentNullException(nameof(inspector));
     }
@@ -66,7 +71,11 @@ public sealed class SamplerSet
     /// Marshals the per-property updates to the UI thread. Returns immediately when the animation is cancelled or
     /// the app is no longer alive, so stale queued frames never overwrite a reset result.
     /// </summary>
-    public void Apply(object target, double t, object? priority = default)
+    /// <param name="priority">
+    /// Passed straight to the inspector, unboxed. Omitting it passes <c>default(TPriorityCore)</c> — the zero value
+    /// of the host's priority, which for <see cref="NonPriority"/> is the whole story, since it carries nothing.
+    /// </param>
+    public void Apply(object target, double t, TPriorityCore priority = default!)
     {
         if (_cts?.IsCancellationRequested == true) return;
         if (!CanSetValue()) return;
