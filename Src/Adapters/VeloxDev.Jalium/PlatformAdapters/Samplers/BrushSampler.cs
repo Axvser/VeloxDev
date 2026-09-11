@@ -5,9 +5,11 @@ using Jalium.UI.Media.Imaging;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
-    /// <summary>Aligns with the Avalonia adapter's brush sampler: SolidColorBrush lerps Color AND Opacity;
-    /// non-solid or mixed brushes blend to a representative solid colour. Middle frames always allocate a fresh
-    /// brush — start/end are never mutated (shared with the snapshot).</summary>
+    /// <summary>Aligns with the Avalonia adapter's brush sampler, as far as this framework allows:
+    /// SolidColorBrush lerps Color AND Opacity; two alike linear gradients interpolate stop by stop, so every frame
+    /// is still a gradient; anything else falls back to blending one representative colour from each end, because
+    /// this framework has no brush that can composite two layers (see the note on that method). Middle frames always
+    /// allocate a fresh brush — start/end are never mutated (shared with the snapshot).</summary>
     public class BrushSampler : ISampler
     {
         public object? NormalizeStart(object? start, object? end, object? options) => start;
@@ -69,8 +71,44 @@ namespace VeloxDev.Adapters.NativeSamplers
                 return InterpolateSolidColor(startSolid, endSolid, t);
             }
 
+            // 两个渐变之间：逐色标插值，产出的**仍然是一条渐变**。这是唯一能让每一帧都还是渐变的做法 ——
+            // 把两端各压成一个代表色再插值，会让动画从第一帧起就变成一块平的纯色。
+            if (start is LinearGradientBrush startGradient
+                && end is LinearGradientBrush endGradient
+                && InterpolateGradient(startGradient, endGradient, t) is { } gradient)
+            {
+                return gradient;
+            }
+
             return BlendToRepresentativeColor(start, end, t);
         }
+
+        /// <summary>
+        /// 两条形状相同的线性渐变之间逐色标插值；形状不同（色标数不一样、或不是线性渐变）时返回 null，
+        /// 由调用方退回到代表性颜色。
+        /// </summary>
+        private static LinearGradientBrush? InterpolateGradient(LinearGradientBrush start, LinearGradientBrush end, double t)
+        {
+            var count = start.GradientStops.Count;
+            if (count == 0 || count != end.GradientStops.Count) return null;
+
+            var stops = new GradientStopCollection(count);
+            for (var i = 0; i < count; i++)
+            {
+                var from = start.GradientStops[i];
+                var to = end.GradientStops[i];
+                stops.Add(new GradientStop(InterpolateColor(from.Color, to.Color, t), Lerp(from.Offset, to.Offset, t)));
+            }
+
+            return new LinearGradientBrush(
+                stops,
+                LerpPoint(start.StartPoint, end.StartPoint, t),
+                LerpPoint(start.EndPoint, end.EndPoint, t));
+        }
+
+        private static double Lerp(double a, double b, double t) => a + (b - a) * t;
+
+        private static Point LerpPoint(Point a, Point b, double t) => new(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t));
 
         private static SolidColorBrush InterpolateSolidColor(SolidColorBrush start, SolidColorBrush end, double t)
         {
@@ -82,7 +120,7 @@ namespace VeloxDev.Adapters.NativeSamplers
         }
 
         /// <summary>
-        /// 非纯色之间：取两端的代表性颜色，混成一个纯色。
+        /// 两种画刷无法逐色标插值时的退路：取两端的代表性颜色，混成一个纯色。
         /// </summary>
         /// <remarks>
         /// <b>这里试过两条"真正交叉淡出"的路，在本框架上都不成立</b>，所以最终与 Avalonia / WinUI 的同一个采样器

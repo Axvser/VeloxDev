@@ -23,11 +23,15 @@ internal static class JaliumLoadMode
         ["r2.fill"] = "LinearGradientBrush",
     })
     {
-        // Jalium 的画刷交叉淡出**按设计**只能产出纯色（两条"真正两层叠加"的路在这个框架上都渲染不出来，
-        // 见适配器里的说明）。所以飞行中 r2.fill 必须是一个颜色：它一旦是某个画刷类型名，就说明淡出没有发生
-        // —— 那正是这个 demo 之前整块消失的形态。这条比"状态变了"严：退回旧行为时，只有它变红。
-        InFlight = payload => payload.Text("r2.fill").StartsWith('#')
+        // Rec2 是上侧那排里唯一"渐变 → 渐变"的一块，而 Jalium 的交叉淡出是**逐色标插值**：
+        // 飞行中的每一帧都必须还是一条渐变画刷。
+        //
+        // 这条断言同时挡住两种曾经真实发生过的退化：产出一个在这个框架上渲染不出来的合成画刷（整块消失），
+        // 以及把两端各压成一个代表色、于是从首帧起就变成一块平的纯色。两者都只会在飞行中暴露 ——
+        // 静止态与重置后的断言看不出区别。
+        // 字面量取自 demo 的 Describe：纯色写成 #rrggbb，其余写成类型名 —— 本工程不引用 Jalium，拿不到 nameof。
+        InFlight = payload => payload.Text("r2.fill") == "LinearGradientBrush"
             ? null
-            : $"r2.fill 在飞行中是 {payload.Text("r2.fill")}，而交叉淡出必须产出纯色",
+            : $"r2.fill 在飞行中是 {payload.Text("r2.fill")}，而两个渐变之间的交叉淡出每一帧都该仍是渐变",
     };
 }
