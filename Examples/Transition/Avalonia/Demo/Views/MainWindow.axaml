@@ -3,7 +3,7 @@
         xmlns:vm="using:Demo.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" Width="1000" Height="640"
+        mc:Ignorable="d" Width="1000" Height="760"
         x:Class="Demo.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
@@ -16,21 +16,25 @@
         </LinearGradientBrush>
     </Window.Resources>
 	
-    <Grid RowDefinitions="*,100,*,100,*,100,*,110,Auto">
+    <!--
+        加载模式那一排：三块图形各由一条动画驱动，五种方式加载。图形与过冲条的格子同尺寸（80x60），
+        两半演示读起来才像同一张实验台，自动套件也能用驱动采样器条的同一种方式驱动这一排。
+    -->
+    <Grid RowDefinitions="*,60,*,60,*,60,*,110,Auto">
 
 		<WrapPanel Grid.Row="0">
-			<Button Width="118" Height="38" Margin="2" Content="主线程互斥" Click="LoadMainThread"/>
-			<Button Width="118" Height="38" Margin="2" Content="后台线程互斥" Click="LoadBackground"/>
-			<Button Width="118" Height="38" Margin="2" Content="主线程并发" Click="LoadMainThreadNonMutual"/>
-			<Button Width="118" Height="38" Margin="2" Content="后台线程并发" Click="LoadBackgroundNonMutual"/>
-			<Button Width="110" Height="38" Margin="2" Content="连续互斥" Click="RepeatMutual"/>
-			<Button x:Name="btnReset" Width="110" Height="38" Margin="2" Content="重置"/>
-			<Button Width="110" Height="38" Margin="2" Content="停止全部" Click="ExitAll"/>
+			<Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.main" Content="主线程互斥" Click="LoadMainThread"/>
+			<Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.background" Content="后台线程互斥" Click="LoadBackground"/>
+			<Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.main.concurrent" Content="主线程并发" Click="LoadMainThreadNonMutual"/>
+			<Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.background.concurrent" Content="后台线程并发" Click="LoadBackgroundNonMutual"/>
+			<Button Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.repeat" Content="连续互斥" Click="RepeatMutual"/>
+			<Button x:Name="btnReset" Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.reset.all" Content="重置"/>
+			<Button Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.stop.all" Content="停止全部" Click="ExitAll"/>
 		</WrapPanel>
-		
-        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="100" Height="100" HorizontalAlignment="Left" ></Rectangle>
-        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="100" HorizontalAlignment="Center"></Rectangle>
-        <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" Width="100"></Rectangle>
+
+        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="80" Height="60" HorizontalAlignment="Left" ></Rectangle>
+        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="80" Height="60" HorizontalAlignment="Center"></Rectangle>
+        <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" Width="80" Height="60"></Rectangle>
 
 		<!-- 过冲条：4 个互不干扰的目标并排，位移、颜色、尺寸可以在同一次运行里直接对比，
 		     而不是一个接一个地看。位移与尺寸走纯数值采样器，能真正越过目标；Fill 走笔刷采样器。 -->
@@ -62,6 +66,12 @@
 			     测试就不必去解析一份随时可能被重新排版的版式。 -->
 			<TextBlock x:Name="OverState" Margin="4,0,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
 			           AutomationProperties.AutomationId="over.state" Text="v=1;seq=0"></TextBlock>
+			<!-- 采样器一致性把手：该适配器发布的每条采样器一个按钮，在代码后置里从探针表生成 —— 加一条
+			     采样器只需要改 SamplerProbe 一处。点一下只跑那一条，结果写进下面的载荷。 -->
+			<WrapPanel x:Name="SamplerButtons" Margin="0,4,0,0"></WrapPanel>
+			<!-- 最后一次点击的产物：与 over.state 同一套 key=value 形状，外加一个证明这次点击落地的序号。 -->
+			<TextBlock x:Name="OverConf" Margin="4,2,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+			           AutomationProperties.AutomationId="over.conf" Text="v=1;seq=0;n=0;"></TextBlock>
 		</StackPanel>
     </Grid>
 </Window>

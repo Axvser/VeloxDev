@@ -50,6 +50,90 @@ namespace Demo
             readoutTimer.Interval = TimeSpan.FromMilliseconds(40);
             readoutTimer.Tick += (s, e) => UpdateReadout();
             readoutTimer.Start();
+
+            // 采样器一致性把手：一条采样器一个按钮，点一下跑那一条、把结果写进载荷。把手与探针表同源，
+            // 所以加一条采样器只需要改 SamplerProbe 一处。
+            // 扫描落在点击处理函数里、也就是 UI 线程上 —— 它要构造画刷、阴影、变换这类有线程亲和性的对象；
+            // 也正因为不在 Tick 里，那条「Tick 里的异常在 MAUI 上没人接」的陷阱不必碰。
+
+            // 演示台插在把手条上方：把手是"验"，台子是"看"，点一次两件事一起发生。
+            // 台子也从 SamplerProbe.SamplerNames 生成，所以它和把手条不可能各数各的。
+            if (SamplerButtons.Parent is Layout benchHost)
+            {
+                benchHost.Children.Insert(
+                    benchHost.Children.IndexOf(SamplerButtons),
+                    _bench.Build(SamplerProbe.SamplerNames));
+            }
+
+            foreach (var sampler in SamplerProbe.SamplerNames)
+            {
+                var handle = new Button
+                {
+                    Text = sampler,
+                    WidthRequest = 132,
+                    HeightRequest = 30,
+                    FontSize = 11,
+                    Margin = new Thickness(2),
+                    CommandParameter = sampler,
+                };
+                // MAUI 用的是自己的 AutomationId 属性，不是 WPF/WinUI 那个附加属性 AutomationProperties。
+                handle.AutomationId = $"over.sampler.{sampler}";
+                handle.Clicked += RunSamplerProbe;
+                SamplerButtons.Children.Add(handle);
+            }
+        }
+
+        /// <summary>激活次数：载荷靠它证明这一次是新的，而不是上一次点击留下的。</summary>
+        private long _probeSequence;
+
+        private readonly SamplerBench _bench = new();
+
+        // 只留一支演出用的定时器：连点两个把手时，后一次要能叫停前一次，否则两条采样器会同时往各自的格子里写。
+        private IDispatcherTimer? _benchTimer;
+
+        // 每一步都不许抛：MAUI 会把未处理异常直接冒泡出去，而这里的 sender / CommandParameter 都由界面提供，
+        // 不该因为某个把手没带上令牌就让整个 app 倒下。
+        private void RunSamplerProbe(object? sender, EventArgs e)
+        {
+            if ((sender as Button)?.CommandParameter is not string sampler) return;
+
+            // 采样器写在**这一格的在屏控件**上、载荷也从它读回，所以下面两件事是同一件事的两种读法。
+            var subject = _bench.SubjectFor(sampler);
+
+            // 验：五个固定的缓动时间各跑一帧，写进载荷。
+            OverConf.Text = SamplerProbe.Run(subject, sampler, ++_probeSequence);
+
+            // 看：按 Back.Out 把这条采样器跑一遍，它会越过端点再落回来 —— 肉眼看得到的就是这个。
+            PlaySampler(sampler, subject);
+        }
+
+        /// <summary>
+        /// 演出：把缓动进度从 0 走到 1，每一拍把该采样器在当前缓动时间上写出的值写到它那一格上。
+        /// </summary>
+        /// <remarks>
+        /// Tick 里的每一步都不许抛：MAUI 不接 Tick 里的异常，它直接冒泡成未处理异常（dotnet/maui #12245）。
+        /// 这里用到的每一处 —— 时钟、<see cref="SamplerProbe.Frame"/> —— 都不依赖外来的 null：
+        /// 探针表里没有这个名字会抛，但那要等到把手与表不同步，而把手就是从那张表生成的。
+        /// </remarks>
+        private void PlaySampler(string sampler, SamplerSubject subject)
+        {
+            _benchTimer?.Stop();
+
+            var duration = TimeSpan.FromMilliseconds(800);
+            var clock = Stopwatch.StartNew();
+            var timer = Dispatcher.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(16);
+            _benchTimer = timer;
+
+            timer.Tick += (s, e) =>
+            {
+                var progress = Math.Min(1d, clock.Elapsed.TotalMilliseconds / duration.TotalMilliseconds);
+                SamplerProbe.Frame(subject, sampler, Eases.Back.Out.Ease(progress));
+
+                if (progress >= 1d) timer.Stop();
+            };
+
+            timer.Start();
         }
 
         private void LoadMainThread(object sender, EventArgs e)
@@ -409,7 +493,50 @@ namespace Demo
                  + $"t0.cur={x:F3};t0.peak={Peak(0)};"
                  + $"t1.cur={Describe(Over1.Fill)};"
                  + $"t2.cur={width:F3};t2.peak={Peak(2)};"
-                 + $"t3.cur={Describe(Over3.Fill)};";
+                 + $"t3.cur={Describe(Over3.Fill)};"
+                 + RecState("r0", Rec0) + RecState("r1", Rec1) + RecState("r2", Rec2)
+                 + $"nomutual={NoMutualCount()};";
+        }
+
+        /// <summary>
+        /// 加载模式那一排三块目标的状态：动画真正写的那些属性，读出来报给测试。
+        /// </summary>
+        /// <remarks>
+        /// 与过冲条同一支定时器、同一次采样，所以两者不可能不一致。报的是"动的是什么"而不是"应该动到哪" ——
+        /// 那三条动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。
+        /// MAUI 没有 Transform 集合：位置是 TranslationX/TranslationY，旋转是 RotationX/RotationY，缩放是 Scale。
+        /// </remarks>
+        private static string RecState(string prefix, Rectangle target)
+            => $"{prefix}.x={target.TranslationX:F3};"
+             + $"{prefix}.y={target.TranslationY:F3};"
+             + $"{prefix}.rotx={target.RotationX:F3};"
+             + $"{prefix}.roty={target.RotationY:F3};"
+             + $"{prefix}.scale={target.Scale:F3};"
+             + $"{prefix}.fill={Describe(target.Fill)};"
+             + $"{prefix}.opacity={target.Opacity:F3};";
+
+        /// <summary>
+        /// 这三块目标上还有几条**并发**（非互斥）动画在跑。
+        /// </summary>
+        /// <remarks>
+        /// 这是唯一能把"互斥加载"和"并发加载"区分开的可观测量：互斥调度器是按目标缓存的一辈子不释放，
+        /// `TryGetMutualScheduler` 返回 true 只说明"这目标跑过互斥动画"；而非互斥的那张表在每条动画结束时
+        /// 真的会清空。要点是取**数组长度**而不是那个 bool —— 表项本身不随运行结束移除。
+        /// 每一步都不许抛：这是在 IDispatcherTimer.Tick 里跑的。
+        /// </remarks>
+        private int NoMutualCount()
+        {
+            var running = 0;
+
+            foreach (var target in new[] { Rec0, Rec1, Rec2 })
+            {
+                if (TransitionScheduler.TryGetNoMutualScheduler(target, out var schedulers))
+                {
+                    running += schedulers.Length;
+                }
+            }
+
+            return running;
         }
 
         private string Peak(int index)

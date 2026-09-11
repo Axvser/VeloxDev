@@ -41,6 +41,7 @@ namespace Demo
         private Panel over3 = null!;
         private Label readout = null!;
         private Label overState = null!;
+        private Label overConf = null!;
 
         // -----------------------------------------------------------------------------------------------
         // 场景定义。全部走 WinForms 适配器的 NonPriority 路径；
@@ -84,8 +85,9 @@ namespace Demo
 
             // 既有动画最远到 y≈520（panel3 会移到 (400,400)），过冲条另占 y 560 以下一条带，
             // 因此把窗体加高：WinForms 的子控件会被窗体边界裁掉，必须留出真实空间。
-            // 920 而不是 900：载荷行接在读数下方，也要落在客户区内。
-            ClientSize = new Size(ClientSize.Width, 920);
+            // 1000 而不是 900：读数行、采样器演示台、采样器把手行与载荷行依次接在下方，每一行都要完整落在
+            // 客户区内 —— 演示台那一格高 62，所以读数行与状态行各收窄了几像素给它让位，客户区高度不变。
+            ClientSize = new Size(ClientSize.Width, 1040);
 
             var caption = new Label
             {
@@ -123,12 +125,13 @@ namespace Demo
             var btnCeiling = MakeStripButton("over.btn.brush", "端点饱和(⑤)=渐变替代", new Point(cellLeft + 540, buttonTop), 170, OvershootCeiling);
             var btnResetOver = MakeStripButton("over.btn.reset", "重置过冲", new Point(cellLeft + 716, buttonTop), 110, OvershootReset);
 
-            // 读数的字号/等宽与 WPF 版一致；数字用对齐占位保证同屏可比
+            // 读数的字号/等宽与 WPF 版一致；数字用对齐占位保证同屏可比。
+            // 高度按两行的实际行高给（两行 Consolas 9 约 30），余量收窄留给下面演示台那一行。
             readout = new Label
             {
                 Name = "over.readout",
                 Location = new Point(cellLeft, 842),
-                Size = new Size(940, 52),
+                Size = new Size(940, 44),
                 Font = new Font("Consolas", 9),
                 ForeColor = Color.FromArgb(0x33, 0x33, 0x33),
                 Text = "按上方任一按钮；读数显示真实属性值"
@@ -136,17 +139,53 @@ namespace Demo
 
             // 读数的机器可读孪生：同一支定时器、同一批值，但用固定的 key=value 载荷而不是散文，
             // 测试就不必去解析一份随时可能被重新排版的版式。
+            // 两行高：载荷在加载模式那排进场后翻了一倍，而 nomutual 排在最后，单行会把最要紧的那个字段裁掉。
             overState = new Label
             {
                 Name = "over.state",
-                Location = new Point(cellLeft, 896),
-                Size = new Size(940, 18),
+                Location = new Point(cellLeft, 888),
+                Size = new Size(940, 30),
                 Font = new Font("Consolas", 8),
                 ForeColor = Color.FromArgb(0x80, 0x80, 0x80),
                 Text = "v=1;seq=0"
             };
 
-            Controls.AddRange(new Control[]
+            // 采样器一致性载荷：与 over.state 同一套 key=value 形状，外加一个证明这次点击落地的 seq。
+            // 点一次把手跑一条采样器 × 五个缓动时间 = 5 帧。
+            overConf = new Label
+            {
+                Name = "over.conf",
+                Location = new Point(cellLeft, 1016),
+                Size = new Size(940, 18),
+                Font = new Font("Consolas", 8),
+                ForeColor = Color.FromArgb(0x80, 0x80, 0x80),
+                Text = "v=1;seq=0;n=0;"
+            };
+
+            // 采样器一致性把手：一条采样器一个按钮，点一下跑那一条、把结果写进载荷。把手与探针表同源，
+            // 所以加一条采样器只需要改 SamplerProbe 一处。
+            // 把手行在演示台下面一排：把手是"验"，台子是"看"，点一次两件事一起发生。
+            var probeHandles = new List<Control>();
+            var handleLeft = cellLeft;
+            foreach (var sampler in SamplerProbe.SamplerNames)
+            {
+                var handle = new Button
+                {
+                    Name = $"over.sampler.{sampler}",
+                    Text = sampler,
+                    Location = new Point(handleLeft, 988),
+                    Size = new Size(150, 26),
+                    Font = new Font("Consolas", 8),
+                    Tag = sampler,
+                };
+                handle.Click += RunSamplerProbe;
+                probeHandles.Add(handle);
+                handleLeft += 154;
+            }
+
+            var bench = _bench.Build(SamplerProbe.SamplerNames);
+
+            Controls.AddRange([.. new Control[]
             {
                 caption,
                 MakeColumnCaption(captions[0], cellLeft, captionTop),
@@ -155,8 +194,8 @@ namespace Demo
                 MakeColumnCaption(captions[3], cellLeft + 3 * cellWidth, captionTop),
                 over0, over1, over2, over3,
                 btnMoveBack, btnMoveElastic, btnColor, btnSize, btnCeiling, btnResetOver,
-                readout, overState
-            });
+                readout, overState, overConf, bench
+            }, .. probeHandles]);
 
             // 接进既有的「重置」按钮：只追加一个处理器，既有的 ResetAnimations 一行不动
             btnReset.Click += (s, e) => ResetOvershoot();
@@ -174,6 +213,59 @@ namespace Demo
             // 挂到设计器已有的 components 上，随窗体一起释放
             components ??= new System.ComponentModel.Container();
             components.Add(timer);
+        }
+
+        /// <summary>激活次数：载荷靠它证明这一次是新的，而不是上一次点击留下的。</summary>
+        private long _probeSequence;
+
+        private readonly SamplerBench _bench = new();
+
+        // 只留一支演出用的定时器：连点两个把手时，后一次要能叫停前一次。
+        private System.Windows.Forms.Timer? _benchTimer;
+
+        // 采样器扫描必须落在 UI 线程上 —— 它要构造的场景之外没有亲和性要求，但把结果写回 Label 有；
+        // 点击处理函数本来就在 UI 线程，所以这里是它该在的地方。
+        private void RunSamplerProbe(object? sender, EventArgs e)
+        {
+            var sampler = (string?)((Button)sender!).Tag;
+            if (sampler is null) return;
+
+            // 采样器写在**这一格的在屏控件**上、载荷也从它读回，所以下面两件事是同一件事的两种读法。
+            var subject = _bench.SubjectFor(sampler);
+
+            // 验：五个固定的缓动时间各跑一帧，写进载荷。
+            overConf.Text = SamplerProbe.Run(subject, sampler, ++_probeSequence);
+
+            // 看：按 Back.Out 把这条采样器跑一遍，它会越过端点再落回来 —— 肉眼看得到的就是这个。
+            PlaySampler(sampler, subject);
+        }
+
+        /// <summary>
+        /// 演出：把缓动进度从 0 走到 1，每一拍把该采样器在当前缓动时间上写出的值写进它那一格的控件。
+        /// </summary>
+        private void PlaySampler(string sampler, SamplerSubject subject)
+        {
+            _benchTimer?.Stop();
+            _benchTimer?.Dispose();
+
+            var duration = TimeSpan.FromMilliseconds(800);
+            var clock = Stopwatch.StartNew();
+            var timer = new System.Windows.Forms.Timer { Interval = 16 };
+            _benchTimer = timer;
+
+            timer.Tick += (s, e) =>
+            {
+                var progress = Math.Min(1d, clock.Elapsed.TotalMilliseconds / duration.TotalMilliseconds);
+                SamplerProbe.Frame(subject, sampler, Eases.Back.Out.Ease(progress));
+
+                if (progress >= 1d)
+                {
+                    timer.Stop();
+                    timer.Dispose();
+                }
+            };
+
+            timer.Start();
         }
 
         private static Panel MakeStripTarget(string name, Point location, Size size) => new Panel
@@ -310,15 +402,65 @@ namespace Demo
                  + $"t0.cur={shift:F3};t0.peak={Peak(0)};"
                  + $"t1.cur={Describe(over1.BackColor)};"
                  + $"t2.cur={size:F3};t2.peak={Peak(2)};"
-                 + $"t3.cur={Describe(over3.BackColor)};";
+                 + $"t3.cur={Describe(over3.BackColor)};"
+                 + RecState("r0", panel1) + $"r0.parent={Describe(ParentBackColor(panel1))};"
+                 + RecState("r1", panel2)
+                 + RecState("r2", panel3)
+                 + $"nomutual={NoMutualCount()};";
+        }
+
+        /// <summary>
+        /// 加载模式那一排三块目标的状态：动画真正写的那些属性，读出来报给测试。
+        /// </summary>
+        /// <remarks>
+        /// 与过冲条同一支定时器、同一次采样，所以两者不可能不一致。报的是"动的是什么"而不是"应该动到哪" ——
+        /// 那三条动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。
+        /// WinForms 没有 Transform 集合：位置是 Location(Left/Top)，尺寸是 Size(Width/Height)，颜色是 BackColor。
+        /// </remarks>
+        private static string RecState(string prefix, Control target)
+            => $"{prefix}.x={target.Left};"
+             + $"{prefix}.y={target.Top};"
+             + $"{prefix}.w={target.Width};"
+             + $"{prefix}.h={target.Height};"
+             + $"{prefix}.color={Describe(target.BackColor)};";
+
+        /// <summary>
+        /// 目标的父容器的背景色。Animation0 动的是一对颜色 —— 目标自己的 BackColor 和父容器的，
+        /// 后者是这条 demo 里唯一一条嵌套属性路径，所以两色都要报，否则那条路径是观测不到的。
+        /// </summary>
+        private static Color ParentBackColor(Control target)
+            => target.Parent?.BackColor ?? Color.Empty;
+
+        /// <summary>
+        /// 这三块目标上还有几条**并发**（非互斥）动画在跑。
+        /// </summary>
+        /// <remarks>
+        /// 这是唯一能把"互斥加载"和"并发加载"区分开的可观测量：互斥调度器是按目标缓存的一辈子不释放，
+        /// `TryGetMutualScheduler` 返回 true 只说明"这目标跑过互斥动画"；而非互斥的那张表在每条动画结束时
+        /// 真的会清空。要点是取**数组长度**而不是那个 bool —— 表项本身不随运行结束移除。
+        /// 每一步都不许抛：这是在 Timer.Tick 里跑的。
+        /// </remarks>
+        private int NoMutualCount()
+        {
+            var running = 0;
+
+            foreach (var target in new Control[] { panel1, panel2, panel3 })
+            {
+                if (TransitionScheduler.TryGetNoMutualScheduler(target, out var schedulers))
+                {
+                    running += schedulers.Length;
+                }
+            }
+
+            return running;
         }
 
         private string Peak(int index)
             => double.IsNegativeInfinity(_targetPeaks[index]) ? "0" : _targetPeaks[index].ToString("F3");
 
-        /// <summary>Writes a colour in a form a test can read: #rrggbb. WinForms' BackColor is always a solid colour, so the type-name branch the other demos need is unreachable here.</summary>
+        /// <summary>Writes a colour in a form a test can read: #rrggbb. WinForms' BackColor is always a solid colour, so the type-name branch the other demos need is unreachable here; the only other case is the no-colour sentinel, which must not read as black.</summary>
         private static string Describe(Color color)
-            => $"#{color.R:x2}{color.G:x2}{color.B:x2}";
+            => color.IsEmpty ? "none" : $"#{color.R:x2}{color.G:x2}{color.B:x2}";
 
         private void UpdateReadout()
         {

@@ -74,10 +74,13 @@ namespace Demo
         private void CreateControls()
         {
             // Create the three demo panels
+            // Sized like the overshoot strip's targets, and at exactly the size the WPF demo's row uses (80x60), so
+            // the load-mode row and the strip read as one bench on every platform. The row keeps this demo's original
+            // 50px gap; panel2/panel3 merely follow panel1's shrunken width.
             panel1 = new Panel
             {
                 Name = "panel1",
-                Size = new Size(100, 100),
+                Size = new Size(80, 60),
                 Location = new Point(100, 100),
                 BackColor = Color.Red,
                 BorderStyle = BorderStyle.FixedSingle
@@ -86,8 +89,8 @@ namespace Demo
             panel2 = new Panel
             {
                 Name = "panel2",
-                Size = new Size(100, 100),
-                Location = new Point(250, 100),
+                Size = new Size(80, 60),
+                Location = new Point(230, 100),
                 BackColor = Color.Green,
                 BorderStyle = BorderStyle.FixedSingle
             };
@@ -95,15 +98,18 @@ namespace Demo
             panel3 = new Panel
             {
                 Name = "panel3",
-                Size = new Size(100, 100),
-                Location = new Point(400, 100),
+                Size = new Size(80, 60),
+                Location = new Point(360, 100),
                 BackColor = Color.Blue,
                 BorderStyle = BorderStyle.FixedSingle
             };
 
+            // 每个控件的 Control.Name 就是它暴露给 UI Automation 的 AutomationId（AutomationId 取的是 Owner.Name），
+            // 所以验收套件靠这些 token 找控件，永远不用去匹配会变的界面文案。七个平台用同一组 token。
             // Create buttons
             btnStart = new Button
             {
+                Name = "over.btn.load.background",
                 Text = "后台线程互斥",
                 Location = new Point(100, 250),
                 Size = new Size(100, 40),
@@ -113,6 +119,7 @@ namespace Demo
 
             btnReset = new Button
             {
+                Name = "over.btn.reset.all",
                 Text = "重置",
                 Location = new Point(220, 250),
                 Size = new Size(100, 40),
@@ -122,6 +129,7 @@ namespace Demo
 
             btnExit = new Button
             {
+                Name = "over.btn.stop.all",
                 Text = "停止全部",
                 Location = new Point(340, 250),
                 Size = new Size(100, 40),
@@ -131,6 +139,7 @@ namespace Demo
 
             btnStartNonMutual = new Button
             {
+                Name = "over.btn.load.background.concurrent",
                 Text = "后台线程并发",
                 Location = new Point(460, 250),
                 Size = new Size(100, 40),
@@ -140,6 +149,7 @@ namespace Demo
 
             btnStartRepeatedMutual = new Button
             {
+                Name = "over.btn.load.repeat",
                 Text = "连续互斥",
                 Location = new Point(580, 250),
                 Size = new Size(100, 40),
@@ -149,6 +159,7 @@ namespace Demo
 
             btnStartMainThread = new Button
             {
+                Name = "over.btn.load.main",
                 Text = "主线程互斥",
                 Location = new Point(700, 250),
                 Size = new Size(100, 40),
@@ -158,6 +169,7 @@ namespace Demo
 
             btnStartMainThreadNonMutual = new Button
             {
+                Name = "over.btn.load.main.concurrent",
                 Text = "主线程并发",
                 Location = new Point(820, 250),
                 Size = new Size(100, 40),
@@ -279,15 +291,15 @@ namespace Demo
         private static Transition<Control> CreateReset2()
         {
             return Transition<Control>.Create()
-                .Property(c => c.Size, new Size(100, 100))
+                .Property(c => c.Size, new Size(80, 60))
                 .Property(c => c.BackColor, Color.Green);
         }
 
         private static Transition<Control> CreateReset3()
         {
             return Transition<Control>.Create()
-                .Property(c => c.Location, new Point(400, 100))
-                .Property(c => c.Size, new Size(100, 100))
+                .Property(c => c.Location, new Point(360, 100))
+                .Property(c => c.Size, new Size(80, 60))
                 .Property(c => c.BackColor, Color.Blue);
         }
 

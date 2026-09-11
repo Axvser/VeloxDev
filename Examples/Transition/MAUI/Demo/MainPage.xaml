@@ -13,29 +13,41 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="60"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="60"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="60"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="120"></RowDefinition>
             <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
 
+        <!-- 加载模式那一排：三块目标被三条动画以五种方式装载。AutomationId 是验收套件抓取这些按钮的把手 ——
+             MAUI 用的是自己的 AutomationId 属性，不是 WPF/WinUI 那个附加属性 AutomationProperties，
+             所以这里逐条写全，七个平台的令牌才对得上。 -->
         <FlexLayout Grid.Row="0" Direction="Row" Wrap="Wrap">
-            <Button WidthRequest="118" HeightRequest="38" Text="主线程互斥" Clicked="LoadMainThread"/>
-            <Button WidthRequest="118" HeightRequest="38" Text="后台线程互斥" Clicked="LoadBackground"/>
-            <Button WidthRequest="118" HeightRequest="38" Text="主线程并发" Clicked="LoadMainThreadNonMutual"/>
-            <Button WidthRequest="118" HeightRequest="38" Text="后台线程并发" Clicked="LoadBackgroundNonMutual"/>
-            <Button WidthRequest="110" HeightRequest="38" Text="连续互斥" Clicked="RepeatMutual"/>
-            <Button x:Name="btnReset" WidthRequest="110" HeightRequest="38" Text="重置"/>
-            <Button WidthRequest="110" HeightRequest="38" Text="停止全部" Clicked="ExitAll"/>
+            <Button WidthRequest="118" HeightRequest="38" Text="主线程互斥" Clicked="LoadMainThread"
+                    AutomationId="over.btn.load.main"/>
+            <Button WidthRequest="118" HeightRequest="38" Text="后台线程互斥" Clicked="LoadBackground"
+                    AutomationId="over.btn.load.background"/>
+            <Button WidthRequest="118" HeightRequest="38" Text="主线程并发" Clicked="LoadMainThreadNonMutual"
+                    AutomationId="over.btn.load.main.concurrent"/>
+            <Button WidthRequest="118" HeightRequest="38" Text="后台线程并发" Clicked="LoadBackgroundNonMutual"
+                    AutomationId="over.btn.load.background.concurrent"/>
+            <Button WidthRequest="110" HeightRequest="38" Text="连续互斥" Clicked="RepeatMutual"
+                    AutomationId="over.btn.load.repeat"/>
+            <Button x:Name="btnReset" WidthRequest="110" HeightRequest="38" Text="重置"
+                    AutomationId="over.btn.reset.all"/>
+            <Button WidthRequest="110" HeightRequest="38" Text="停止全部" Clicked="ExitAll"
+                    AutomationId="over.btn.stop.all"/>
         </FlexLayout>
 
-        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" WidthRequest="100" HeightRequest="100"/>
-        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" WidthRequest="100" HeightRequest="100"/>
-        <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" WidthRequest="100" HeightRequest="100"/>
+        <!-- 加载模式那一排的三块目标：尺寸取过冲条的格子大小（80×60），两半演示才读成同一张工作台，
+             验收套件也才能用驱动过冲条的同一种方式驱动这一排。 -->
+        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" WidthRequest="80" HeightRequest="60"/>
+        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" WidthRequest="80" HeightRequest="60"/>
+        <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" WidthRequest="80" HeightRequest="60"/>
 
         <!-- 过冲演示区。4 个互不干涉的目标并排，Back 与 Elastic、颜色与尺寸可以在同一次运行里对比，
              而不是一个跑完再看下一个。Bs1 是 Yellow → Violet，把它推过去不会回绕成别的颜色。 -->
@@ -76,6 +88,17 @@
             <Label x:Name="OverState" Margin="4,0,4,2" FontSize="10" TextColor="#808080"
                    AutomationId="over.state"
                    Text="v=1;seq=0"/>
+            <!-- 采样器演示台（SamplerBench）插在这条把手条的正上方，也在 code-behind 里从探针表生成：
+                 把手是"验"——点一下把采样器的五个缓动帧写进载荷；台子是"看"——把同一条采样器按缓动跑一遍，
+                 肉眼看得见它在动。台上画的每个值都取自载荷用的同一个入口，两者不可能各说各话。 -->
+            <!-- 采样器一致性把手条：一条采样器一个按钮，在 code-behind 里从探针表生成，所以加一条采样器
+                 只需要改 SamplerProbe 一处。点一下跑那一条采样器，结果写进下面的 over.conf。 -->
+            <FlexLayout x:Name="SamplerButtons" Direction="Row" Wrap="Wrap" Margin="0,4,0,0"/>
+            <!-- 最后点击的那个把手产出的载荷：与 over.state 同样的 key=value 形状，外加序号 —— 它证明
+                 这一次点击落了地。 -->
+            <Label x:Name="OverConf" Margin="4,2,4,2" FontSize="10" TextColor="#808080"
+                   AutomationId="over.conf"
+                   Text="v=1;seq=0;n=0;"/>
         </VerticalStackLayout>
     </Grid>
 

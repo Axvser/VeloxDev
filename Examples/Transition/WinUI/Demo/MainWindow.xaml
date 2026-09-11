@@ -14,35 +14,55 @@
     </Window.SystemBackdrop>
 
     <Grid>
+        <!-- 窗口的高度是屏幕给的：内容再高它也不会跟着长，实测这一档只给到约 707 逻辑像素。所以下面的固定行都取
+             够用即可，省出来的高度留给演示台和把手条；否则最后几行会落到窗口外 —— 落在窗外的控件 UIA 照样点得到，
+             人却看不见，而那正是这块演示台要消掉的那种错觉。
+
+             加载模式那一排按钮（第 0 行）必须是 Auto 而不是星号：星号拿的是"固定行与 Auto 行分完之后剩下的"，
+             而演示台和把手条那一行就要 ~335 逻辑像素，剩下的分到四个星号行只有 ~27 —— 两排共 84 像素的按钮排在
+             那里，第二排（连续互斥/重置/停止全部）会被整个挤出窗口外，UIA 照样点得到，人却看不见。Auto 让这一行
+             永远拿到它声明的高度，缺口由下面三个纯间隔的星号行吸收（它们本来就是空的）。
+             过冲条那一行同理：格子 80x60 加上 Grid 的 6 边距正好 72，多出来的 24 像素没有内容，让给间隔行。 -->
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"></RowDefinition>
+            <RowDefinition Height="60"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="60"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="60"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="100"></RowDefinition>
-            <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="110"></RowDefinition>
+            <RowDefinition Height="72"></RowDefinition>
             <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
 
+        <!-- AutomationProperties.AutomationId 是验收套件抓取这些控件的把手：测试永远不匹配中文标签，
+             token 与语言无关且稳定，标签则保持读者预期的样子。七个平台用的是同一组 token。 -->
         <StackPanel Grid.Row="0">
             <StackPanel Orientation="Horizontal">
-                <Button Width="118" Height="38" Margin="2" Content="主线程互斥" Click="LoadMainThread"/>
-                <Button Width="118" Height="38" Margin="2" Content="后台线程互斥" Click="LoadAnimations"/>
-                <Button Width="118" Height="38" Margin="2" Content="主线程并发" Click="LoadMainThreadNonMutual"/>
-                <Button Width="118" Height="38" Margin="2" Content="后台线程并发" Click="LoadAnimationsNonMutual"/>
+                <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.main"
+                        Content="主线程互斥" Click="LoadMainThread"/>
+                <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.background"
+                        Content="后台线程互斥" Click="LoadAnimations"/>
+                <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.main.concurrent"
+                        Content="主线程并发" Click="LoadMainThreadNonMutual"/>
+                <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.background.concurrent"
+                        Content="后台线程并发" Click="LoadAnimationsNonMutual"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal">
-                <Button Width="110" Height="38" Margin="2" Content="连续互斥" Click="LoadRepeatedMutual"/>
-                <Button x:Name="btnReset" Width="110" Height="38" Margin="2" Content="重置"/>
-                <Button Width="110" Height="38" Margin="2" Content="停止全部" Click="ExitAnimations"/>
+                <Button Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.repeat"
+                        Content="连续互斥" Click="LoadRepeatedMutual"/>
+                <Button x:Name="btnReset" Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.reset.all"
+                        Content="重置"/>
+                <Button Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.stop.all"
+                        Content="停止全部" Click="ExitAnimations"/>
             </StackPanel>
         </StackPanel>
 
-        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
-        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="100" HorizontalAlignment="Center"></Rectangle>
-        <Rectangle Grid.Row="5" x:Name="Rec2" Width="100">
+        <!-- 三块目标取过冲条的格子尺寸（80x60），两块演示台于是读起来是同一张台子，验收套件也能用同一套
+             方式驱动这一排。高度就是行高，不留任何缝，所以缩小的是宽度 —— 窗口高度是屏幕给死的，内容再多也不长。 -->
+        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="80" Height="60" HorizontalAlignment="Left"></Rectangle>
+        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="80" Height="60" HorizontalAlignment="Center"></Rectangle>
+        <Rectangle Grid.Row="5" x:Name="Rec2" Width="80" Height="60">
             <Rectangle.Fill>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                     <GradientStop Color="Yellow" Offset="0"></GradientStop>
@@ -106,6 +126,20 @@
             <TextBlock x:Name="OverState" Margin="4,0,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
                        AutomationProperties.AutomationId="over.state"
                        Text="v=1;seq=0"></TextBlock>
+            <!-- 采样器演示台：把手条上方那条"看得见"的一半。每条采样器一小格，点它的把手就在格子里把这条
+                 采样器按缓动跑一遍。格子由 SamplerProbe 的表生成，插在这里而不是写死在 XAML 里 ——
+                 和把手一样，加一条采样器只需改 SamplerProbe 一处。 -->
+            <StackPanel x:Name="SamplerBenchHost"></StackPanel>
+            <!-- 采样器一致性把手：本适配器发布的每条采样器一个按钮，在代码里由探针表生成 —— 加一条采样器
+                 只需改 SamplerProbe 一处。点一下只跑那一条，把结果写进下面的载荷。
+                 用会折行的面板而不是横向 StackPanel：把手必须都留在可视范围内，被裁掉的那个点不着，
+                 验收侧看到的就是"控件不在"，而不是"这条采样器坏了"。 -->
+            <VariableSizedWrapGrid x:Name="SamplerButtons" Margin="0,4,0,0"
+                                   Orientation="Horizontal" MaximumRowsOrColumns="5"></VariableSizedWrapGrid>
+            <!-- 最近一次点击产出的载荷：与 over.state 同一套 key=value 形状，另加一个序号证明这次点击落了地。 -->
+            <TextBlock x:Name="OverConf" Margin="4,2,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+                       AutomationProperties.AutomationId="over.conf"
+                       Text="v=1;seq=0;n=0;"></TextBlock>
         </StackPanel>
     </Grid>
 </Window>

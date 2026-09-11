@@ -16,9 +16,15 @@ public partial class Home : ComponentBase, IDisposable
     private const string Box1Color = "#66bb6a";
     private const string Box2Color = "#ab47bc";
 
-    private BoxModel Box0 { get; } = new() { Color = Box0Color };
-    private BoxModel Box1 { get; } = new() { Color = Box1Color };
-    private BoxModel Box2 { get; } = new() { Color = Box2Color };
+    // 加载模式那一排三块目标与过冲条同尺度，而不是 BoxModel 默认的 120x80：两半读起来是一张台子，
+    // 验收也用同一种方式驱动。尺寸只有这一处声明 —— 构造与重置（CreateReset）都从这里取，
+    // 否则重置会把方块放大回默认尺寸，"重置回到静止态"就成了假命题。
+    private const double BoxStripWidth = 60d;
+    private const double BoxStripHeight = 60d;
+
+    private BoxModel Box0 { get; } = new() { Width = BoxStripWidth, Height = BoxStripHeight, Color = Box0Color };
+    private BoxModel Box1 { get; } = new() { Width = BoxStripWidth, Height = BoxStripHeight, Color = Box1Color };
+    private BoxModel Box2 { get; } = new() { Width = BoxStripWidth, Height = BoxStripHeight, Color = Box2Color };
 
     // ---------------------------------------------------------------
     // Animation definitions (mirroring the three animations of the WPF/Avalonia Demo)
@@ -124,6 +130,66 @@ public partial class Home : ComponentBase, IDisposable
     private string _readoutSnapshot = "按上面任一按钮；读数显示目标的真实属性值与目标值";
     private string _stateSnapshot = "v=1;seq=0";
 
+    // 采样器一致性载荷：点一次把手跑一条、写一次，所以不在定时器里更新。
+    private string _confSnapshot = "v=1;seq=0;n=0;";
+
+    /// <summary>激活次数：载荷靠它证明这一次是新的，而不是上一次点击留下的。</summary>
+    private long _confSequence;
+
+    /// <summary>演示台的被写对象当前该是什么颜色 —— 就是 StringSampler 最后写出的那个 CSS 颜色。</summary>
+    private string _benchColor = "#808080";
+
+    // 只留一支演出用的定时器：连点两个把手时，后一次要能叫停前一次。
+    private System.Threading.Timer? _benchTimer;
+
+    /// <summary>跑一条采样器并把结果写进载荷。</summary>
+    private void RunSamplerProbe(string sampler)
+    {
+        // 验：五个固定的缓动时间各跑一帧，写进载荷。
+        _confSnapshot = SamplerProbe.Run(sampler, ++_confSequence);
+
+        // 看：按 Back.Out 把这条采样器跑一遍，它会越过端点再落回来。
+        PlaySampler(sampler);
+    }
+
+    /// <summary>
+    /// 演出：把缓动进度从 0 走到 1，每一拍把该采样器在当前缓动时间上写出的值画到演示台上。
+    /// </summary>
+    /// <remarks>
+    /// Razor 适配器只有 StringSampler，产物就是 CSS 颜色字符串，所以被写对象直接把它当背景色用 ——
+    /// 这里不需要 WPF 那边的标尺：颜色本来就没有"行程"可言。
+    /// </remarks>
+    private void PlaySampler(string sampler)
+    {
+        _benchTimer?.Dispose();
+
+        var duration = TimeSpan.FromMilliseconds(800);
+        var clock = Stopwatch.StartNew();
+
+        _benchTimer = new System.Threading.Timer(
+            _ =>
+            {
+                if (_disposed) return;
+
+                var progress = Math.Min(1d, clock.Elapsed.TotalMilliseconds / duration.TotalMilliseconds);
+                if (SamplerProbe.FrameValue(sampler, Eases.Back.Out.Ease(progress)) is string css)
+                {
+                    _benchColor = css;
+                }
+
+                InvokeAsync(StateHasChanged);
+
+                if (progress >= 1d)
+                {
+                    _benchTimer?.Dispose();
+                    _benchTimer = null;
+                }
+            },
+            null,
+            TimeSpan.Zero,
+            TimeSpan.FromMilliseconds(16));
+    }
+
     // 读数：显示目标的真实当前值与目标值，过冲只有靠数字才看得出来
     private string BuildReadout() =>
         $"位移 X    目标 {ShiftTarget,6:F1}    当前 {Over0.X,7:F1}"
@@ -175,7 +241,47 @@ public partial class Home : ComponentBase, IDisposable
              + $"t0.cur={x:F3};t0.peak={Peak(0)};"
              + $"t1.cur={Describe(Over1.Color)};"
              + $"t2.cur={width:F3};t2.peak={Peak(2)};"
-             + $"t3.cur={Describe(Over3.Color)};";
+             + $"t3.cur={Describe(Over3.Color)};"
+             + RecState("r0", Box0) + RecState("r1", Box1) + RecState("r2", Box2)
+             + $"nomutual={NoMutualCount()};";
+    }
+
+    /// <summary>
+    /// 加载模式那一排三块目标的状态：动画真正写的那几个属性，读出来报给测试。
+    /// </summary>
+    /// <remarks>
+    /// 与过冲条同一支定时器、同一次采样，所以两者不可能不一致。报的是"动的是什么"而不是"应该动到哪" ——
+    /// 那三条动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。字段形状与
+    /// 参考实现的 RecState 对齐，多报一个 rotate 与 scale（Blazor 的旋转与缩放是独立属性，不是变换对象里的一支）。
+    /// </remarks>
+    private static string RecState(string prefix, BoxModel target)
+        => $"{prefix}.x={target.X:F3};"
+         + $"{prefix}.rotate={target.Rotate:F3};"
+         + $"{prefix}.scale={target.Scale:F3};"
+         + $"{prefix}.color={Describe(target.Color)};"
+         + $"{prefix}.opacity={target.Opacity:F3};";
+
+    /// <summary>
+    /// 这三块目标上还有几条**并发**（非互斥）动画在跑。
+    /// </summary>
+    /// <remarks>
+    /// 这是唯一能把"互斥加载"和"并发加载"区分开的可观测量：互斥调度器是按目标缓存的一辈子不释放，
+    /// `TryGetMutualScheduler` 返回 true 只说明"这目标跑过互斥动画"；而非互斥的那张表在每条动画结束时
+    /// 真的会清空。要点是取**数组长度**而不是那个 bool —— 表项本身不随运行结束移除。
+    /// </remarks>
+    private int NoMutualCount()
+    {
+        var running = 0;
+
+        foreach (var target in new[] { Box0, Box1, Box2 })
+        {
+            if (TransitionScheduler.TryGetNoMutualScheduler(target, out var schedulers))
+            {
+                running += schedulers.Length;
+            }
+        }
+
+        return running;
     }
 
     private string Peak(int index)
@@ -368,16 +474,16 @@ public partial class Home : ComponentBase, IDisposable
         Over3.Color = OverStartColor;
     }
 
-    // The BoxModel defaults, expressed as explicit paths. Color is animatable here as well — the Razor adapter
-    // registers a sampler for string — and the three boxes start from different colors, so each box needs its own
-    // reset rather than one shared instance.
+    // The load-mode row's declared rest state, expressed as explicit paths and taken from the same constants the boxes
+    // are built with. Color is animatable here as well — the Razor adapter registers a sampler for string — and the
+    // three boxes start from different colors, so each box needs its own reset rather than one shared instance.
     private static Transition<BoxModel> CreateReset(string color)
     {
         return Transition<BoxModel>.Create()
             .Property(b => b.X, 0)
             .Property(b => b.Y, 0)
-            .Property(b => b.Width, 120)
-            .Property(b => b.Height, 80)
+            .Property(b => b.Width, BoxStripWidth)
+            .Property(b => b.Height, BoxStripHeight)
             .Property(b => b.Opacity, 1)
             .Property(b => b.Rotate, 0)
             .Property(b => b.Scale, 1)
@@ -401,6 +507,9 @@ public partial class Home : ComponentBase, IDisposable
         _disposed = true;
         _readoutTimer?.Dispose();
         _readoutTimer = null;
+
+        _benchTimer?.Dispose();
+        _benchTimer = null;
         foreach (var box in OvershootTargets)
             Transition.Exit(box, IncludeMutual: true, IncludeNoMutual: true);
     }

@@ -12,10 +12,12 @@ using Path = System.IO.Path;
 namespace Demo;
 
 /// <summary>Standalone animation test for the VeloxDev.Jalium PlatformAdapters (TransitionSystem),
-/// layout and scenarios aligned with the Avalonia/WPF Transition demos: a Grid with 10 rows, a
+/// layout and scenarios aligned with the Avalonia/WPF Transition demos: a Grid with 14 rows, a
 /// WrapPanel of 7 scenario buttons, 3 rectangles animated with nested TranslateTransform.X
 /// paths, transform collections (Translate+Rotate+Scale) and brush fills, plus a 4-cell
-/// overshoot strip with its own button row and a sampled readout.</summary>
+/// overshoot strip with its own button row, a sampled readout, a strip of sampler-conformance
+/// handles publishing the payload their clicks produce, and a bench above it that plays the
+/// clicked sampler across an eased sweep so the same value can be watched moving.</summary>
 internal sealed class MainWindow : Window
 {
     private readonly Rectangle _rec0;
@@ -30,24 +32,31 @@ internal sealed class MainWindow : Window
     // 机器可读读数（载荷）载体，与人类读数并排
     private readonly TextBlock _overState;
 
+    // 采样器一致性的载荷载体：由把手点击驱动，每次点击只跑那一条采样器
+    private readonly TextBlock _overConf;
+
     public MainWindow()
     {
         Title = "VeloxDev Transition - Jalium";
         Width = 900;
-        Height = 780;
+        Height = 980;
         Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
 
         var grid = new Grid();
+        // 加载模式那一排：三块目标与过冲格同尺寸（80x60），两半读起来是一块台子。
         AddRow(grid, GridLength.Star);
-        AddRow(grid, new GridLength(100));
+        AddRow(grid, new GridLength(60));
         AddRow(grid, GridLength.Star);
-        AddRow(grid, new GridLength(100));
+        AddRow(grid, new GridLength(60));
         AddRow(grid, GridLength.Star);
-        AddRow(grid, new GridLength(100));
+        AddRow(grid, new GridLength(60));
         AddRow(grid, GridLength.Star);
         AddRow(grid, new GridLength(110));
         AddRow(grid, new GridLength(48));
         AddRow(grid, new GridLength(44));
+        AddRow(grid, new GridLength(30));
+        AddRow(grid, new GridLength(92));
+        AddRow(grid, new GridLength(72));
         AddRow(grid, new GridLength(30));
 
         // 先建矩形：下面的按钮 lambda 捕获 _rec0，字段必须在捕获前完成赋值
@@ -72,13 +81,14 @@ internal sealed class MainWindow : Window
         grid.Children.Add(strip);
 
         var buttons = new WrapPanel();
-        buttons.Children.Add(MakeButton("主线程互斥", (_, _) => LoadMainThread()));
-        buttons.Children.Add(MakeButton("后台线程互斥", (_, _) => _ = Task.Run(LoadMainThread)));
-        buttons.Children.Add(MakeButton("主线程并发", (_, _) => LoadMainThreadNonMutual()));
-        buttons.Children.Add(MakeButton("后台线程并发", (_, _) => _ = Task.Run(LoadMainThreadNonMutual)));
-        buttons.Children.Add(MakeButton("连续互斥", (_, _) => _ = Task.Run(() => Animation0.Execute(_rec0))));
-        buttons.Children.Add(MakeButton("重置", (_, _) => Reset()));
-        buttons.Children.Add(MakeButton("停止全部", (_, _) => ExitAll()));
+        // 令牌与其余六个平台逐字一致 —— 验收套件靠它点这一排。
+        buttons.Children.Add(MakeButton("主线程互斥", (_, _) => LoadMainThread(), "over.btn.load.main"));
+        buttons.Children.Add(MakeButton("后台线程互斥", (_, _) => _ = Task.Run(LoadMainThread), "over.btn.load.background"));
+        buttons.Children.Add(MakeButton("主线程并发", (_, _) => LoadMainThreadNonMutual(), "over.btn.load.main.concurrent"));
+        buttons.Children.Add(MakeButton("后台线程并发", (_, _) => _ = Task.Run(LoadMainThreadNonMutual), "over.btn.load.background.concurrent"));
+        buttons.Children.Add(MakeButton("连续互斥", (_, _) => _ = Task.Run(() => Animation0.Execute(_rec0)), "over.btn.load.repeat"));
+        buttons.Children.Add(MakeButton("重置", (_, _) => Reset(), "over.btn.reset.all"));
+        buttons.Children.Add(MakeButton("停止全部", (_, _) => ExitAll(), "over.btn.stop.all"));
         Grid.SetRow(buttons, 0);
         grid.Children.Add(buttons);
 
@@ -125,6 +135,41 @@ internal sealed class MainWindow : Window
         Grid.SetRow(_overState, 10);
         grid.Children.Add(_overState);
 
+        // 演示台插在把手条上方：把手是"验"，台子是"看"，点一次两件事一起发生。
+        var bench = _bench.Build(SamplerProbe.SamplerNames);
+        Grid.SetRow(bench, 11);
+        grid.Children.Add(bench);
+
+        // 采样器一致性把手：一条采样器一个按钮，点一下跑那一条、把结果写进载荷。把手与探针表同源，
+        // 所以加一条采样器只需要改 SamplerProbe 一处。
+        // 扫描必须落在 UI 线程上 —— 它要构造画刷、变换这类有线程亲和性的对象，而点击处理函数就在 UI 线程。
+        var samplerButtons = new WrapPanel();
+        foreach (var sampler in SamplerProbe.SamplerNames)
+        {
+            var handle = MakeButton(sampler, (_, _) => RunSamplerProbe(sampler), $"over.sampler.{sampler}");
+            handle.Tag = sampler;
+            handle.Width = 132;
+            handle.Height = 30;
+            handle.FontSize = 11;
+            samplerButtons.Children.Add(handle);
+        }
+        Grid.SetRow(samplerButtons, 12);
+        grid.Children.Add(samplerButtons);
+
+        // 采样器把手的载荷：最后一次点击跑出来的那一帧序列，外加证明点击落地的序列号。载荷格式与 over.state 相同，
+        // 验收侧不必再多认一种。
+        _overConf = new TextBlock
+        {
+            Margin = new Thickness(8, 0, 8, 2),
+            FontFamily = new FontFamily("Consolas"),
+            FontSize = 10,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+            Text = "v=1;seq=0;n=0;",
+        };
+        SetAutomationToken(_overConf, "OverConf", "over.conf");
+        Grid.SetRow(_overConf, 13);
+        grid.Children.Add(_overConf);
+
         Content = grid;
 
         // 读数用定时器采样目标属性，不用 effect 的事件：流水线每段都会 Clone() effect，
@@ -158,6 +203,49 @@ internal sealed class MainWindow : Window
         };
     }
 
+    /// <summary>激活次数：载荷靠它证明这一次是新的，而不是上一次点击留下的。</summary>
+    private long _probeSequence;
+
+    private readonly SamplerBench _bench = new();
+
+    // 只留一支演出用的定时器：连点两个把手时，后一次要能叫停前一次，否则两条采样器会同时往各自的格子里写。
+    private DispatcherTimer? _benchTimer;
+
+    private void RunSamplerProbe(string samplerName)
+    {
+        // 采样器写在**这一格的在屏控件**上、载荷也从它读回，所以下面两件事是同一件事的两种读法。
+        var subject = _bench.SubjectFor(samplerName);
+
+        // 验：五个固定的缓动时间各跑一帧，写进载荷。
+        _overConf.Text = SamplerProbe.Run(subject, samplerName, ++_probeSequence);
+
+        // 看：按 Back.Out 把这条采样器跑一遍，它会越过端点再落回来 —— 肉眼看得到的就是这个。
+        PlaySampler(samplerName, subject);
+    }
+
+    /// <summary>
+    /// 演出：把缓动进度从 0 走到 1，每一拍把该采样器在当前缓动时间上写出的值画到它那一格上。
+    /// </summary>
+    private void PlaySampler(string sampler, SamplerSubject subject)
+    {
+        _benchTimer?.Stop();
+
+        var duration = TimeSpan.FromMilliseconds(800);
+        var clock = Stopwatch.StartNew();
+        var timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
+        _benchTimer = timer;
+
+        timer.Tick += (_, _) =>
+        {
+            var progress = Math.Min(1d, clock.Elapsed.TotalMilliseconds / duration.TotalMilliseconds);
+            SamplerProbe.Frame(subject, sampler, Eases.Back.Out.Ease(progress));
+
+            if (progress >= 1d) timer.Stop();
+        };
+
+        timer.Start();
+    }
+
     private static void AddRow(Grid grid, GridLength height)
     {
         grid.RowDefinitions.Add(new RowDefinition { Height = height });
@@ -168,8 +256,8 @@ internal sealed class MainWindow : Window
         // 100×100 squares (not stretched into bars), like the reference demos.
         return new Rectangle
         {
-            Width = 100,
-            Height = 100,
+            Width = 80,
+            Height = 60,
             Fill = new SolidColorBrush(fill),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center,
@@ -446,7 +534,51 @@ internal sealed class MainWindow : Window
              + $"t0.cur={x:F3};t0.peak={Peak(0)};"
              + $"t1.cur={Describe(_over1.Fill)};"
              + $"t2.cur={width:F3};t2.peak={Peak(2)};"
-             + $"t3.cur={Describe(_over3.Fill)};";
+             + $"t3.cur={Describe(_over3.Fill)};"
+             + RecState("r0", _rec0) + RecState("r1", _rec1) + RecState("r2", _rec2)
+             + $"nomutual={NoMutualCount()};";
+    }
+
+    /// <summary>
+    /// 加载模式那一排三块目标的状态：动画真正写的那几个属性，读出来报给测试。
+    /// </summary>
+    /// <remarks>
+    /// 与过冲条同一支定时器、同一次采样，所以两者不可能不一致。报的是"动的是什么"而不是"应该动到哪" ——
+    /// 那三个动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。
+    /// </remarks>
+    private static string RecState(string prefix, Rectangle target)
+        => $"{prefix}.x={TranslateX(target):F3};"
+         + $"{prefix}.fill={Describe(target.Fill)};";
+
+    /// <summary>动画真正写的那个位移，无论它被写成单个 TranslateTransform 还是组合进 TransformGroup。</summary>
+    private static double TranslateX(Rectangle target) => target.RenderTransform switch
+    {
+        TranslateTransform translate => translate.X,
+        TransformGroup group => group.Children.OfType<TranslateTransform>().FirstOrDefault()?.X ?? 0d,
+        _ => 0d,
+    };
+
+    /// <summary>
+    /// 这个目标上还有几条**并发**（非互斥）动画在跑。
+    /// </summary>
+    /// <remarks>
+    /// 这是唯一能把"互斥加载"和"并发加载"区分开的可观测量：互斥调度器按目标缓存、一辈子不释放，
+    /// `TryGetMutualScheduler` 返回 true 只说明"这目标跑过互斥动画"；而非互斥那张表在每条动画结束时真的会清空。
+    /// 要点是取**数组长度**而不是那个 bool —— 表项本身不随运行结束移除。
+    /// </remarks>
+    private int NoMutualCount()
+    {
+        var running = 0;
+
+        foreach (var target in new Rectangle[] { _rec0, _rec1, _rec2 })
+        {
+            if (TransitionScheduler.TryGetNoMutualScheduler(target, out var schedulers))
+            {
+                running += schedulers.Length;
+            }
+        }
+
+        return running;
     }
 
     private string Peak(int index)

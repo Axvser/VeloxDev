@@ -10,14 +10,15 @@
         动画直接作用于 C# 对象的属性，Blazor 通过 PropertyChanged 驱动 UI 重渲染。
     </p>
 
+    <!-- data-at 是验收套件的把手：七个加载模式按钮与过冲区用同一套 token 命名，跨平台一致。 -->
     <div class="demo-toolbar">
-        <button class="btn btn-primary" @onclick="LoadMainThread">主线程互斥</button>
-        <button class="btn btn-dark" @onclick="LoadAnimations">后台线程互斥</button>
-        <button class="btn btn-success" @onclick="LoadMainThreadNonMutual">主线程并发</button>
-        <button class="btn btn-info" @onclick="LoadAnimationsNonMutual">后台线程并发</button>
-        <button class="btn btn-warning" @onclick="LoadRepeatedMutual">连续互斥</button>
-        <button class="btn btn-secondary" @onclick="ResetBox0">重置</button>
-        <button class="btn btn-danger" @onclick="ExitAnimations">停止全部</button>
+        <button class="btn btn-primary" data-at="over.btn.load.main" @onclick="LoadMainThread">主线程互斥</button>
+        <button class="btn btn-dark" data-at="over.btn.load.background" @onclick="LoadAnimations">后台线程互斥</button>
+        <button class="btn btn-success" data-at="over.btn.load.main.concurrent" @onclick="LoadMainThreadNonMutual">主线程并发</button>
+        <button class="btn btn-info" data-at="over.btn.load.background.concurrent" @onclick="LoadAnimationsNonMutual">后台线程并发</button>
+        <button class="btn btn-warning" data-at="over.btn.load.repeat" @onclick="LoadRepeatedMutual">连续互斥</button>
+        <button class="btn btn-secondary" data-at="over.btn.reset.all" @onclick="ResetBox0">重置</button>
+        <button class="btn btn-danger" data-at="over.btn.stop.all" @onclick="ExitAnimations">停止全部</button>
     </div>
 
     <div class="demo-stage">
@@ -86,6 +87,27 @@
          测试就不必去解析一份随时可能被重新排版的版式。 -->
     <div class="over-state" data-at="over.state">@_stateSnapshot</div>
 
+    <!-- 采样器演示台：被写对象就是 StringSampler 写出的那个 CSS 颜色，直接当背景色用。 -->
+    <!-- 令牌挂在**真正着色的那个 div** 上而不是外层容器：浏览器里"真实 UI 表现"就是计算样式，
+         验收要读的是这个元素的 background-color，挂在容器上会读到全透明。 -->
+    <div class="over-buttons">
+        <div data-at="over.bench"
+             style="width:64px;height:40px;border-radius:4px;border:1px solid #444;background-color:@_benchColor"></div>
+    </div>
+
+    <!-- 采样器一致性把手：一条采样器一个按钮，点一下跑那一条、把结果写进下面的载荷。
+         把手与探针表同源，所以加一条采样器只需要改 SamplerProbe 一处。 -->
+    <div class="over-buttons">
+        @foreach (var sampler in Demo.Models.SamplerProbe.SamplerNames)
+        {
+            var name = sampler;
+            <button class="btn btn-secondary" data-at="over.sampler.@name" @onclick="() => RunSamplerProbe(name)">@name</button>
+        }
+    </div>
+
+    <!-- 采样器一致性载荷：与 over.state 同一套 key=value 形状，外加一个证明这次点击落地的 seq。 -->
+    <div class="over-state" data-at="over.conf">@_confSnapshot</div>
+
     <div class="demo-tips">
         <p><code>Snapshot()</code> — 记录显式指定的属性路径（初始状态）</p>
         <p><code>SnapshotAll()</code> — 自动发现并记录当前对象中所有可动画的属性</p>
@@ -113,9 +135,10 @@
     .demo-stage { display: flex; flex-direction: column; gap: 1.5rem; }
     .box-row { display: flex; flex-direction: column; gap: .4rem; }
     .box-label { font-size: .8rem; color: #757575; letter-spacing: .04em; }
+    /* 与过冲区同尺度：方块 60x60（见 Home.razor.cs 的 BoxStripWidth/Height），轨道留 10px 上下边距。 */
     .box-track {
         position: relative;
-        height: 100px;
+        height: 80px;
         background: #1e1e1e;
         border-radius: 8px;
         overflow: hidden;

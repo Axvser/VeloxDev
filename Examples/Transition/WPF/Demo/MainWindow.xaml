@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Demo"
         mc:Ignorable="d"
-        Title="MainWindow" Height="640" Width="1000"
+        Title="MainWindow" Height="800" Width="1000"
         Background="#1e1e1e">
     <Window.Resources>
         <LinearGradientBrush x:Key="Bs1" StartPoint="0,0" EndPoint="1,1">
@@ -16,29 +16,39 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"></RowDefinition>
-            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="60"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="60"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="100"></RowDefinition>
+            <RowDefinition Height="60"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="110"></RowDefinition>
             <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
 
+        <!-- The load-mode row: three shapes driven by three animations, loaded in five different ways.
+             The shapes are overshoot-cell sized (80x60) so the two halves of the demo read as one bench and
+             so the automated suite can drive this row the same way it drives the sampler strips. -->
         <WrapPanel Grid.Row="0">
-            <Button Width="118" Height="38" Margin="2" Content="主线程互斥" Click="LoadMainThread"/>
-            <Button Width="118" Height="38" Margin="2" Content="后台线程互斥" Click="LoadBackground"/>
-            <Button Width="118" Height="38" Margin="2" Content="主线程并发" Click="LoadMainThreadNonMutual"/>
-            <Button Width="118" Height="38" Margin="2" Content="后台线程并发" Click="LoadBackgroundNonMutual"/>
-            <Button Width="110" Height="38" Margin="2" Content="连续互斥" Click="RepeatMutual"/>
-            <Button x:Name="btnReset" Width="110" Height="38" Margin="2" Content="重置"/>
-            <Button Width="110" Height="38" Margin="2" Content="停止全部" Click="ExitAll"/>
+            <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.main"
+                    Content="主线程互斥" Click="LoadMainThread"/>
+            <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.background"
+                    Content="后台线程互斥" Click="LoadBackground"/>
+            <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.main.concurrent"
+                    Content="主线程并发" Click="LoadMainThreadNonMutual"/>
+            <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.background.concurrent"
+                    Content="后台线程并发" Click="LoadBackgroundNonMutual"/>
+            <Button Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.repeat"
+                    Content="连续互斥" Click="RepeatMutual"/>
+            <Button x:Name="btnReset" Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.reset.all"
+                    Content="重置"/>
+            <Button Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.stop.all"
+                    Content="停止全部" Click="ExitAll"/>
         </WrapPanel>
 
-        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="100" HorizontalAlignment="Left"></Rectangle>
-        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="100" HorizontalAlignment="Center"></Rectangle>
-        <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" Width="100"></Rectangle>
+        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="80" Height="60" HorizontalAlignment="Left"></Rectangle>
+        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="80" Height="60" HorizontalAlignment="Center"></Rectangle>
+        <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" Width="80" Height="60"></Rectangle>
 
         <!-- Overshoot strip. Four independent targets, laid out side by side so Back and Elastic, colour and size can
              be compared on the same run instead of one after another. Bs1 flows from Yellow to Violet, so an
@@ -83,6 +93,14 @@
                  instead of prose, so a test never has to parse a layout a designer may reformat. -->
             <TextBlock x:Name="OverState" Margin="4,0,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
                        AutomationProperties.AutomationId="over.state" Text="v=1;seq=0"></TextBlock>
+            <!-- The sampler-conformance strip: one handle per sampler this adapter ships, built in code-behind from
+                 the probe table so a sampler is added in exactly one place. Clicking one drives that sampler at the
+                 shared eased times and publishes the result below. -->
+            <WrapPanel x:Name="SamplerButtons" Margin="0,4,0,0"></WrapPanel>
+            <!-- What the last clicked handle produced: same key=value shape as over.state, plus the sequence number
+                 that proves a click landed. -->
+            <TextBlock x:Name="OverConf" Margin="4,2,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+                       AutomationProperties.AutomationId="over.conf" Text="v=1;seq=0;n=0;"></TextBlock>
         </StackPanel>
     </Grid>
 </Window>

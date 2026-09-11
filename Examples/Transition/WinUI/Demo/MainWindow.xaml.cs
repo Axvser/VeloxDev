@@ -1,11 +1,14 @@
 ﻿using Microsoft.UI;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using VeloxDev.TransitionSystem;
+using VeloxDev.TransitionSystem.Abstractions;
 using Windows.Foundation;
 
 namespace Demo
@@ -82,7 +85,77 @@ namespace Demo
                 _readoutTimer.Interval = TimeSpan.FromMilliseconds(40);
                 _readoutTimer.Tick += (s, e) => UpdateReadout();
                 _readoutTimer.Start();
+
+                // 采样器一致性把手：一条采样器一个按钮，点一下只跑那一条、把结果写进载荷。把手与探针表同源，
+                // 所以加一条采样器只需要改 SamplerProbe 一处。
+                // 按钮在 UI 线程上建，它的处理函数也在 UI 线程上跑 —— 扫描要构造画刷、投影、变换这类有线程
+                // 亲和性的对象，正是这一点要求。
+                foreach (var sampler in SamplerProbe.SamplerNames)
+                {
+                    var handle = new Button
+                    {
+                        Content = sampler,
+                        Width = 132,
+                        Height = 30,
+                        Margin = new Thickness(2),
+                        FontSize = 11,
+                        Tag = sampler,
+                    };
+                    AutomationProperties.SetAutomationId(handle, $"over.sampler.{sampler}");
+                    handle.Click += RunSamplerProbe;
+                    SamplerButtons.Children.Add(handle);
+                }
+
+                // 演示台插在把手条上方：把手是"验"，台子是"看"，点一次两件事一起发生。
+                SamplerBenchHost.Children.Add(_bench.Build(SamplerProbe.SamplerNames));
             };
+        }
+
+        /// <summary>激活次数：载荷靠它证明这一次是新的，而不是上一次点击留下的。</summary>
+        private long _probeSequence;
+
+        private readonly SamplerBench _bench = new();
+
+        // 只留一支演出用的定时器：连点两个把手时，后一次要能叫停前一次，否则两条采样器会同时往各自的格子里写。
+        // 定时器还必须存进字段：只放在局部变量里，C#/WinRT 的 CCW 会被 GC 回收，Tick 随之停掉，演出半途而废。
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _benchTimer;
+
+        private void RunSamplerProbe(object sender, RoutedEventArgs e)
+        {
+            var sampler = (string)((Button)sender).Tag;
+
+            // 采样器写在**这一格的在屏控件**上、载荷也从它读回，所以下面两件事是同一件事的两种读法。
+            var subject = _bench.SubjectFor(sampler);
+
+            // 验：五个固定的缓动时间各跑一帧，写进载荷。
+            OverConf.Text = SamplerProbe.Run(subject, sampler, ++_probeSequence);
+
+            // 看：按 Back.Out 把这条采样器跑一遍，它会越过端点再落回来 —— 肉眼看得到的就是这个。
+            PlaySampler(sampler, subject);
+        }
+
+        /// <summary>
+        /// 演出：把缓动进度从 0 走到 1，每一拍把该采样器在当前缓动时间上写出的值画到它那一格上。
+        /// </summary>
+        private void PlaySampler(string sampler, SamplerSubject subject)
+        {
+            _benchTimer?.Stop();
+
+            var duration = TimeSpan.FromMilliseconds(800);
+            var clock = Stopwatch.StartNew();
+            var timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()!.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(16);
+            _benchTimer = timer;
+
+            timer.Tick += (s, e) =>
+            {
+                var progress = Math.Min(1d, clock.Elapsed.TotalMilliseconds / duration.TotalMilliseconds);
+                SamplerProbe.Frame(subject, sampler, Eases.Back.Out.Ease(progress));
+
+                if (progress >= 1d) timer.Stop();
+            };
+
+            timer.Start();
         }
 
         private void LoadMainThread(object sender, RoutedEventArgs e)
@@ -468,7 +541,70 @@ namespace Demo
                  + $"t0.cur={x:F3};t0.peak={Peak(0)};"
                  + $"t1.cur={Describe(Over1.Fill)};"
                  + $"t2.cur={width:F3};t2.peak={Peak(2)};"
-                 + $"t3.cur={Describe(Over3.Fill)};";
+                 + $"t3.cur={Describe(Over3.Fill)};"
+                 + RecState("r0", Rec0) + RecState("r1", Rec1) + RecState("r2", Rec2)
+                 + $"nomutual={NoMutualCount()};";
+        }
+
+        /// <summary>
+        /// 加载模式那一排三块目标的状态：动画真正写的那几个属性，读出来报给测试。
+        /// </summary>
+        /// <remarks>
+        /// 与过冲条同一支定时器、同一次采样，所以两者不可能不一致。报的是"动的是什么"而不是"应该动到哪" ——
+        /// 那三个动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。
+        /// 三个字段与 WPF 侧同名同形，七个平台读起来是同一件事。
+        /// </remarks>
+        private static string RecState(string prefix, Rectangle target)
+            => $"{prefix}.x={TranslateX(target):F3};"
+             + $"{prefix}.fill={Describe(target.Fill)};"
+             + $"{prefix}.opacity={target.Opacity:F3};";
+
+        /// <summary>
+        /// 动画真正写的那个位移，无论它被写成单个 TranslateTransform 还是组合进 TransformGroup。
+        /// </summary>
+        /// <remarks>
+        /// 这里和 WPF 侧同名同义：动画写的是旋转（Rec1 的 RotateTransform）或投影（Rec2 的 PlaneProjection）
+        /// 时它读作 0 —— 那个 0 是"这块目标上没有位移"，不是"测不到"。
+        /// </remarks>
+        private static double TranslateX(Rectangle target)
+        {
+            switch (target.RenderTransform)
+            {
+                case TranslateTransform translate:
+                    return translate.X;
+                case TransformGroup group:
+                    foreach (var child in group.Children)
+                    {
+                        if (child is TranslateTransform nested) return nested.X;
+                    }
+                    return 0d;
+                default:
+                    return 0d;
+            }
+        }
+
+        /// <summary>
+        /// 这个目标上还有几条**并发**（非互斥）动画在跑。
+        /// </summary>
+        /// <remarks>
+        /// 这是唯一能把"互斥加载"和"并发加载"区分开的可观测量：互斥调度器是按目标缓存的一辈子不释放，
+        /// `TryGetMutualScheduler` 返回 true 只说明"这目标跑过互斥动画"；而非互斥的那张表在每条动画结束时
+        /// 真的会清空。要点是取**数组长度**而不是那个 bool —— 表项本身不随运行结束移除。
+        /// </remarks>
+        private int NoMutualCount()
+        {
+            var running = 0;
+
+            foreach (var target in new Rectangle[] { Rec0, Rec1, Rec2 })
+            {
+                // WinUI 的 TransitionScheduler 是泛型的（TransitionScheduler<TTarget>），非泛型的静态入口在基类上。
+                if (TransitionSchedulerCore.TryGetNoMutualScheduler(target, out var schedulers))
+                {
+                    running += schedulers.Length;
+                }
+            }
+
+            return running;
         }
 
         private string Peak(int index)
