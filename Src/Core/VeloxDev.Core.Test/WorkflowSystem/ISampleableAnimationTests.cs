@@ -62,9 +62,12 @@ public class ISampleableAnimationTests
     [TestMethod]
     public void WholeValue_SetValue_IsNotAnimated()
     {
+        // Pins the low-level Prepare behavior: a whole reference-type value resolves to no sampler and is skipped.
+        // The public contract is stricter — Execute rejects such a path outright rather than animating nothing, see
+        // TransitionPathValidationTests.
         var target = new Target { Offset = new Offset(0, 0) };
         var state = new StateCore();
-        state.SetValue<Target, Offset>(t => t.Offset, new Offset(10, 20)); // Whole value → not expanded, should be skipped
+        state.SetValue<Target, Offset>(t => t.Offset, new Offset(10, 20));
 
         var frameSet = new TestInterpolator().Prepare(target, state, new TransitionEffectCore(), new ImmediateInspector());
         frameSet.Apply(target, 0.5);

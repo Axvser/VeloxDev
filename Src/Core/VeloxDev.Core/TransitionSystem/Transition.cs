@@ -49,6 +49,27 @@ public abstract class TransitionCore
         TransitionSchedulerCore.CancelDrained(drained);
     }
 
+    /// <summary>
+    /// Rejects declared paths that can never animate: a path whose leaf holds a reference type with neither a
+    /// custom interpolator nor a registered sampler.
+    /// </summary>
+    /// <remarks>
+    /// A value type is exempt — one can still be assembled member by member, and the assembler reports "cannot" by
+    /// returning null, which stays a skip. This is unrelated to <see cref="TransitionProperty.UnreadablePath"/>,
+    /// where a path is valid but does not match the current target's runtime type: that stays a per-frame skip.
+    /// </remarks>
+    internal static void RejectUnsampleablePaths(IFrameState state)
+    {
+        foreach (var property in state.Values.Keys)
+        {
+            if (state.TryGetInterpolator(property, out var custom) && custom is not null) continue;
+            if (InterpolatorCore.TryGetInterpolator(property.PropertyType, out var registered) && registered is not null) continue;
+            if (property.PropertyType.IsValueType) continue;
+
+            throw new TransitionPathUnsampleableException(property);
+        }
+    }
+
     private static List<ITransitionSchedulerCore> CollectSchedulers(object target, bool includeMutual, bool includeNoMutual)
     {
         List<ITransitionSchedulerCore> schedulers = [];
@@ -123,6 +144,7 @@ public class TransitionCore<
     {
         foreach (var snapshot in values)
         {
+            snapshot.CoreValidate();
             snapshot.CoreExecute(target, CanMutualTask);
         }
     }
@@ -130,6 +152,15 @@ public class TransitionCore<
     internal override void AsRoot()
     {
         root = this;
+    }
+
+    internal override void CoreValidate()
+    {
+        // Walks the chain the way CoreExecute does, so every segment's paths are checked and not only the root's.
+        for (var node = root ?? this; node is not null; node = node.next)
+        {
+            TransitionCore.RejectUnsampleablePaths(node.state);
+        }
     }
 
     internal override IFrameState CoreRecordState()
@@ -325,6 +356,7 @@ public class TransitionCore<
     {
         foreach (var snapshot in values)
         {
+            snapshot.CoreValidate();
             snapshot.CoreExecute(target, CanMutualTask);
         }
     }
@@ -332,6 +364,15 @@ public class TransitionCore<
     internal override void AsRoot()
     {
         root = this;
+    }
+
+    internal override void CoreValidate()
+    {
+        // Walks the chain the way CoreExecute does, so every segment's paths are checked and not only the root's.
+        for (var node = root ?? this; node is not null; node = node.next)
+        {
+            TransitionCore.RejectUnsampleablePaths(node.state);
+        }
     }
 
     internal override IFrameState CoreRecordState()

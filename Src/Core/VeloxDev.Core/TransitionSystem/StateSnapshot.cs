@@ -10,8 +10,14 @@ public abstract class StateSnapshotCore<T> : StateSnapshotCore where T : class
     /// Starts this snapshot on <paramref name="target"/>.
     /// The target type is fixed by <typeparamref name="T"/>, so it is checked at compile time.
     /// </summary>
+    /// <exception cref="TransitionPathUnsampleableException">
+    /// A declared path can never animate — see <see cref="TransitionCore.RejectUnsampleablePaths"/>.
+    /// </exception>
     public void Execute(T target, bool CanMutualTask = true)
     {
+        // Validated here rather than inside CoreExecute: that one is async void, so a throw from it would escape to
+        // the synchronization context instead of reaching the caller.
+        CoreValidate();
         CoreExecute(target, CanMutualTask);
     }
 
@@ -47,4 +53,5 @@ public abstract class StateSnapshotCore
     internal abstract T CoreAwaitThen<T>(TimeSpan timeSpan)
         where T : StateSnapshotCore, new();
     internal abstract void CoreExecute(object target, bool CanMutualTask = true);
+    internal abstract void CoreValidate();
 }
