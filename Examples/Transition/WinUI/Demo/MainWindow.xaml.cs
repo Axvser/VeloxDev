@@ -492,7 +492,7 @@ namespace Demo
         /// </remarks>
         private static void StartSamplerAnimation(string sampler, SamplerSubject subject)
         {
-            var property = SamplerProbe.Property(sampler);
+            var property = SamplerProbe.Path(sampler);
             property.SetValue(subject, SamplerProbe.Start(sampler));
 
             // Effect 的其余默认值正是这里要的：FPS 60、不自动反向、只跑一趟 —— 于是末帧精确落在终点。
@@ -620,7 +620,7 @@ namespace Demo
 
                 var subject = _bench.SubjectFor(sampler);
                 Transition.Exit(subject, IncludeMutual: true, IncludeNoMutual: true);
-                SamplerProbe.Property(sampler).SetValue(subject, SamplerProbe.Start(sampler));
+                SamplerProbe.Path(sampler).SetValue(subject, SamplerProbe.Start(sampler));
             }
         }
 
@@ -751,18 +751,8 @@ namespace Demo
             _scenarioClock.Restart();
         }
 
-        // 读数只取目标的真实属性，不缓存也不伪造。载荷与读数共用这一次采样，两者不可能互相矛盾。
-        private void UpdateReadout()
-        {
-            var back = (Over0.RenderTransform as TranslateTransform)?.X ?? 0d;
-            var elastic = (Over4.RenderTransform as TranslateTransform)?.X ?? 0d;
-
-            Readout.Text =
-                $"位移 Back   当前 {back,7:F1}"
-                + $"   |   Elastic   当前 {elastic,7:F1}"
-                + $"   |   目标 {ShiftTarget,6:F1}     宽度 目标 {WidthTarget,6:F1}   当前 {Over2.Width,7:F1}";
-            OverState.Text = BuildState();
-        }
+        // 载荷只取目标的真实属性，不缓存也不伪造。
+        private void UpdateReadout() => OverState.Text = BuildState();
 
         private string BuildState()
         {

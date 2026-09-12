@@ -70,26 +70,28 @@
                         AutomationId="over.btn.seek.next"/>
             </FlexLayout>
 
-            <!-- 读数是过冲可见的证据：数字越过目标再回来，肉眼分辨不出它与一条更慢的缓动。 -->
-            <Label x:Name="Readout" Margin="4,6,4,2" FontSize="12" TextColor="#CCCCCC"
-                   AutomationId="over.readout"
-                   Text="按下面任一行；读数显示目标的真实属性值与目标值"/>
-            <!-- 读数的机器可读孪生体：同一支定时器、同一批值，但用固定的 key=value 载荷而不是散文，
+            <!--
+                四份机器载荷：驱动的读取面，但**不占版面** —— HeightRequest=0，元素仍在自动化树里，套件照读
+                控件属性。不能用 IsVisible=False：那会连同它的自动化对等体一起摘掉，而 over.state 正是每个
+                驱动的就绪握手（ReadyAutomationId），摘掉它 DesktopHost.Start 会一直等下去。
+                给人看的那份读数删掉了：它只是这几份载荷的散文版，信息重复，还占着按钮和用例列表之间的位置。
+            -->
+            <!-- 机器可读载荷：同一支定时器、同一批值，但用固定的 key=value 形状而不是散文，
                  测试就不必去解析一份随时可能被重新排版的版式。
                  换行不是可有可无：这行载荷现在多出 rows/away/moving，而 nomutual 必须仍然看得见 —— 它排在最后，
                  所以标签得为这一份更长的载荷留出折行的位置。 -->
-            <Label x:Name="OverState" Margin="4,0,4,2" FontSize="10" TextColor="#808080"
+            <Label x:Name="OverState" HeightRequest="0" FontSize="10" TextColor="#808080"
                    LineBreakMode="WordWrap"
                    AutomationId="over.state"
                    Text="v=1;seq=0"/>
             <!-- 最后点击的那个行产出的载荷：与 over.state 同样的 key=value 形状，外加序号 —— 它证明
                  这一次点击落了地。 -->
-            <Label x:Name="OverConf" Margin="4,2,4,2" FontSize="10" TextColor="#808080"
+            <Label x:Name="OverConf" HeightRequest="0" FontSize="10" TextColor="#808080"
                    AutomationId="over.conf"
                    Text="v=1;seq=0;n=0;"/>
             <!-- 那次点击把控件属性写成了什么：观察到的包络、有没有非有限值、最后停在哪。点击先写一份 done=0，
                  验收侧靠它把"新的还没跑完"与"上一次剩下的"分开。 -->
-            <Label x:Name="OverLive" Margin="4,2,4,2" FontSize="10" TextColor="#808080"
+            <Label x:Name="OverLive" HeightRequest="0" FontSize="10" TextColor="#808080"
                    AutomationId="over.live"
                    Text="v=1;seq=0;done=1;"/>
             <!-- 批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。
@@ -97,8 +99,8 @@
                  MaximumHeightRequest 不是排版偏好：一份批量载荷有几千字符，让它按自然高度折行会长到把下面的
                  列表整个挤出窗口。控件**持有**的仍是完整载荷（套件读的是控件属性，不是像素），截的只是它画出来
                  的那几行，所以这个上限不改变套件读到的东西。 -->
-            <Label x:Name="OverBatch" Margin="4,2,4,2" FontSize="10" TextColor="#808080"
-                   LineBreakMode="WordWrap" MaximumHeightRequest="44"
+            <Label x:Name="OverBatch" HeightRequest="0" FontSize="10" TextColor="#808080"
+                   LineBreakMode="WordWrap"
                    AutomationId="over.batch"
                    Text="v=1;seq=0;done=1;rows=0;"/>
         </VerticalStackLayout>

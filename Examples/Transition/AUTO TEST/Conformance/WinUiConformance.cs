@@ -73,6 +73,16 @@ internal static class WinUiConformance
         // 颜色：R/G/B 共用一个 [0,255] 的进度、在边界停住；Alpha 自成一界，按 t 直走并在 0/255 饱和。
         new("ColorSampler", "Color", t => ClosedForm.ColorAt(t, TintStart, TintEnd)),
 
+        // 索引器路径的两条。它们验的不是采样器 —— 两条都用 ColorSampler、闭式解与 ColorSampler 一模一样 ——
+        // 而是路径落到了哪个槽上：同一个画刷的第 0 与第 1 个停靠点。
+        //
+        // 这两条必须同时在批量的帧报告里出现。索引器的 PropertyInfo 对每个下标都是同一个 "Item"，
+        // 下标不并入路径身份的话两条会合成一个状态条目，后声明的那条只会静默盖掉前一条 —— 而缺席是
+        // 批量那一路直接就报的。
+        new("GradientStop0Color", "Color", t => ClosedForm.ColorAt(t, BrushStart, BrushEnd)),
+
+        new("GradientStop1Color", "Color", t => ClosedForm.ColorAt(t, TintStart, TintEnd)),
+
         // 圆角：四个分量各自外推、各自在 0 处钳住 —— 不共用进度，因为四个角本就互不相干。顺序是构造函数序
         // (TopLeft, TopRight, BottomRight, BottomLeft)。钳制不是装饰：WinUI 的 CornerRadius 只收非负值，
         // 端点取 (1,2,3,4) → (11,22,33,44)，t = -0.5 上四个分量全被打到负数，正是钳制那一支。

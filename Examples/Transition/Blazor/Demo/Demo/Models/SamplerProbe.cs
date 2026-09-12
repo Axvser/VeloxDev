@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using VeloxDev.Adapters.NativeSamplers;
@@ -35,13 +36,20 @@ internal static class SamplerProbe
     }
 
     /// <summary>一条采样器：把手令牌、它要写的属性、采样器本身，以及一对端点工厂。</summary>
+    /// <param name="Property">
+    /// 被写的属性名；带索引器的路径用它表达不了，那些条目的这一项是 null、改由 <paramref name="Path"/> 给出路径。
+    /// </param>
+    /// <param name="Path">
+    /// 一条完整路径，用于"属性名"说不清的那些条目 —— 尤其是带索引器的：<c>Slots[0]</c>。
+    /// </param>
     private sealed record ProbeSpec(
         string Name,
         string Description,
-        string Property,
+        string? Property,
         Func<ISampler> Create,
         Func<object> Start,
-        Func<object> End);
+        Func<object> End,
+        Func<TransitionProperty>? Path = null);
 
     /// <summary>一个产物读出来的样子：类型名 + 固定顺序的分量。</summary>
     /// <param name="TypeTag">产物的运行时类型名。认不出来的类型也照报，由测试侧去说"类型不对"。</param>
@@ -89,8 +97,19 @@ internal static class SamplerProbe
             ?? throw new InvalidOperationException($"没有名为 {samplerName} 的采样器；把手与探针表不同步了。");
 
     /// <summary>这一条采样器写在目标对象的哪个属性上。</summary>
-    internal static PropertyInfo Property(string samplerName)
-        => typeof(Target).GetProperty(Spec(samplerName).Property)!;
+    /// <summary>这一条采样器写的路径 —— 单属性，或者一条带索引器的路径。</summary>
+    /// <remarks>
+    /// 每条只建一个实例。路径是状态字典的键，每次新建一个虽然按值相等，但索引实参来自闭包时未必相等；
+    /// 缓存下来就没有这层疑问。
+    /// </remarks>
+    internal static TransitionProperty Path(string samplerName) => Paths[samplerName];
+
+    private static readonly Dictionary<string, TransitionProperty> Paths =
+        Probes.ToDictionary(
+            static probe => probe.Name,
+            static probe => probe.Path is null
+                ? TransitionProperty.FromProperty(typeof(Target).GetProperty(probe.Property!)!)
+                : probe.Path());
 
     /// <summary>
     /// 这一条案例在界面上那句"这条在验什么"。
@@ -116,7 +135,7 @@ internal static class SamplerProbe
     /// 真动画那一段时间靠它采样：采样当刻就把分量取成数字，绝不把值对象留到后面。
     /// </remarks>
     internal static Measurement Read(Target target, string samplerName)
-        => Measure(Property(samplerName).GetValue(target));
+        => Measure(Path(samplerName).GetValue(target));
 
     /// <summary>
     /// 这一行此刻的值是否**就是**它声明的起点。
@@ -176,7 +195,7 @@ internal static class SamplerProbe
     internal static object? FrameValue(string samplerName, double t)
     {
         var probe = Spec(samplerName);
-        var property = TransitionProperty.FromProperty(Property(samplerName));
+        var property = Path(samplerName);
 
         // 每帧全新目标、全新端点：端点实例跨帧复用会被采样器原地改动污染。
         var target = new Target();

@@ -45,10 +45,12 @@
         <button class="btn btn-secondary" data-at="over.btn.seek.next" @onclick="SeekNextPass">下一程</button>
     </div>
 
-    <!-- 读数是过冲可观测的关键：数字越过目标再回来，肉眼无法把它和一条更慢的缓动区分开。 -->
-    <div class="over-readout" data-at="over.readout">@_readoutSnapshot</div>
-
-    <!-- 读数的机器可读孪生体：同一支定时器、同一次采样，但用固定的 key=value 载荷而不是散文，
+    <!--
+        四份机器载荷：套件的读取面，所以必须留在 DOM 里 —— 用的是 display:none 而不是把节点删掉
+        （Playwright 读的是 DOM 文本，节点在就行）。
+        给人看的那份读数删掉了：它只是这几份载荷的散文版，信息重复，还占着按钮和案例列表之间的位置。
+    -->
+    <!-- 机器可读载荷：同一支定时器、同一次采样，但用固定的 key=value 形状而不是散文，
          测试就不必去解析一份随时可能被重新排版的版式。 -->
     <div class="over-state" data-at="over.state">@_stateSnapshot</div>
 
@@ -85,8 +87,10 @@
                         @if (row.Kind == RowKind.Sampler)
                         {
                             <!-- 令牌挂在**真正着色的那个 div** 上而不是外层容器：浏览器里"真实 UI 表现"就是
-                                 计算样式，验收要读的就是这个元素的 background-color，挂在容器上会读到全透明。 -->
-                            <div class="bench-swatch" data-at="over.bench" style="background-color:@_benchColor"></div>
+                                 计算样式，验收要读的就是这个元素的 background-color，挂在容器上会读到全透明。
+                                 令牌带行名，和其余逐行令牌同一个形状 —— 采样器行不止一条，共用一个令牌会让
+                                 按令牌取元素的那一侧解析到多个元素（Playwright 严格模式直接报错）。 -->
+                            <div class="bench-swatch" data-at="@($"over.bench.{row.Title}")" style="background-color:@_benchColor"></div>
                         }
                         else
                         {
@@ -132,33 +136,8 @@
     .demo-title { color: #80cbc4; margin-bottom: .4rem; }
     .demo-desc  { color: #9e9e9e; margin-bottom: 1.2rem; font-size: .95rem; }
     .demo-toolbar { display: flex; gap: .6rem; margin-bottom: .75rem; flex-wrap: wrap; }
-    .over-readout {
-        margin-top: .5rem;
-        padding: .75rem 1rem;
-        background: #1e1e1e;
-        border-radius: 8px;
-        font-family: Consolas, "Courier New", monospace;
-        font-size: .85rem;
-        line-height: 1.8;
-        color: #cccccc;
-        white-space: pre-wrap;
-    }
-    /* 载荷：同一批值的固定 key=value 版本，字号压小，与人类读数区分 */
-    .over-state {
-        margin-top: .25rem;
-        padding: .5rem .75rem;
-        background: #1e1e1e;
-        border-radius: 8px;
-        font-family: Consolas, "Courier New", monospace;
-        font-size: .72rem;
-        color: #808080;
-        word-break: break-all;
-    }
-    /* 批量载荷按固定高度收住：它**持有**的是完整文本，收住的只是它在版面上占的那几行。 */
-    .over-batch {
-        max-height: 3.6rem;
-        overflow: hidden;
-    }
+    /* 载荷：套件读的 key=value 文本，不进版面。display:none 而不是移除节点 —— 节点在，Playwright 才读得到。 */
+    .over-state { display: none; }
 
     /* ── 案例列表 ─────────────────────────────────────────────────────────────
        行高由 SamplerBench.RowHeight 内联给出（只有那一处来源）：元素框、文字与按钮都在这一条带子里

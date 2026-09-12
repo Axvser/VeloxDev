@@ -53,14 +53,7 @@ public partial class MainWindow : Window
             // Sampled on a timer rather than from the effect's events: the pipeline clones the effect once per
             // segment, so the handlers subscribed on the builder's effect are not the ones that fire.
             var readout = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(40) };
-            readout.Tick += (s, e) =>
-            {
-                Readout.Text =
-                    $"位移 Back   当前 {((TranslateTransform)Over0.RenderTransform).X,7:F1}"
-                    + $"   |   Elastic   当前 {((TranslateTransform)Over4.RenderTransform).X,7:F1}"
-                    + $"   |   目标 {ShiftTarget,6:F1}     宽度 目标 {WidthTarget,6:F1}   当前 {Over2.Width,7:F1}";
-                OverState.Text = BuildState();
-            };
+            readout.Tick += (s, e) => OverState.Text = BuildState();
             readout.Start();
 
             // 每一行先写成它自己声明的起点。不这么做的话，静息时每行持有的是控件的默认值（null 画刷、灰底色、
@@ -349,7 +342,7 @@ public partial class MainWindow : Window
     /// </remarks>
     private static void StartSamplerAnimation(string sampler, SamplerSubject subject)
     {
-        var property = SamplerProbe.Property(sampler);
+        var property = SamplerProbe.Path(sampler);
         property.SetValue(subject, SamplerProbe.Start(sampler));
 
         // Effect 的其余默认值正是这里要的：FPS 60、不自动反向、只跑一趟 —— 于是末帧精确落在终点。
@@ -485,7 +478,7 @@ public partial class MainWindow : Window
 
             var subject = _bench.SubjectFor(sampler);
             Transition.Exit(subject, IncludeMutual: true, IncludeNoMutual: true);
-            SamplerProbe.Property(sampler).SetValue(subject, SamplerProbe.Start(sampler));
+            SamplerProbe.Path(sampler).SetValue(subject, SamplerProbe.Start(sampler));
         }
     }
 

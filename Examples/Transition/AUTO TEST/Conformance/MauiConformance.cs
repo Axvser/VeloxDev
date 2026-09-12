@@ -49,6 +49,16 @@ internal static class MauiConformance
 
         new("ColorSampler", "Color", t => ColorAt(t, TintStart, TintEnd)),
 
+        // 索引器路径的两条。它们验的不是采样器 —— 两条都用 ColorSampler、闭式解与 ColorSampler 一模一样 ——
+        // 而是路径落到了哪个槽上：同一个画刷的第 0 与第 1 个停靠点。
+        //
+        // 这两条必须同时在批量的帧报告里出现。索引器的 PropertyInfo 对每个下标都是同一个 "Item"，
+        // 下标不并入路径身份的话两条会合成一个状态条目，后声明的那条只会静默盖掉前一条 —— 而缺席是
+        // 批量那一路直接就报的。
+        new("GradientStop0Color", "Color", t => ColorAt(t, BrushStart, BrushEnd)),
+
+        new("GradientStop1Color", "Color", t => ColorAt(t, TintStart, TintEnd)),
+
         // 圆角：四个分量各自线性外推，没有任何界。分量序是本类型自己的序 —— MAUI 的构造函数与属性都是
         // (TopLeft, TopRight, BottomLeft, BottomRight)，与 WPF 的 (…, BottomRight, BottomLeft) 不同。
         new("CornerRadiusSampler", "CornerRadius", t =>

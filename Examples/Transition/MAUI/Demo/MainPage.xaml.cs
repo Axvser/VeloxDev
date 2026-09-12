@@ -491,7 +491,7 @@ namespace Demo
         /// </remarks>
         private static void StartSamplerAnimation(string sampler, SamplerSubject subject)
         {
-            var property = SamplerProbe.Property(sampler);
+            var property = SamplerProbe.Path(sampler);
             property.SetValue(subject, SamplerProbe.Start(sampler));
 
             // Effect 的其余默认值正是这里要的：FPS 60、不自动反向、只跑一趟 —— 于是末帧精确落在终点。
@@ -625,7 +625,7 @@ namespace Demo
 
                 var subject = _bench.SubjectFor(sampler);
                 Transition.Exit(subject, IncludeMutual: true, IncludeNoMutual: true);
-                SamplerProbe.Property(sampler).SetValue(subject, SamplerProbe.Start(sampler));
+                SamplerProbe.Path(sampler).SetValue(subject, SamplerProbe.Start(sampler));
             }
         }
 
@@ -760,23 +760,10 @@ namespace Demo
             _scenarioClock.Restart();
         }
 
-        // 读数只取目标的真实属性，不缓存也不伪造。载荷与读数共用这一次采样，两者不可能互相矛盾。
+        // 载荷只取目标的真实属性，不缓存也不伪造。
         // 每一步都不许抛：IDispatcherTimer.Tick 里的异常在 MAUI 上不会被框架接住，会直接冒泡成未处理异常
-        // （dotnet/maui #12245）。MAUI 没有 DispatcherPriority，这条读数同时是 NonPriority 采样路径的真机覆盖。
-        private void UpdateReadout()
-        {
-            var color = Over1.Fill is SolidColorBrush solid ? solid.Color : Colors.Transparent;
-            var stops = Over3.Fill is LinearGradientBrush gradient ? gradient.GradientStops : null;
-            var offset = stops is { Count: > 0 } ? stops[0].Offset : float.NaN;
-
-            Readout.Text =
-                $"位移 Back   当前 {Over0.TranslationX,7:F1}"
-                + $"   |   Elastic   当前 {Over4.TranslationX,7:F1}"
-                + $"   |   宽度 目标 {WidthTarget,5:F1}   当前 {Over2.WidthRequest,7:F1}\n"
-                + $"颜色 R/G/B 当前 {255 * color.Red,4:F0}/{255 * color.Green,4:F0}/{255 * color.Blue,4:F0}"
-                + $"   |   渐变 stop0 目标 {GradientStopTarget,4:F2}  当前 {offset,5:F3}";
-            OverState.Text = BuildState();
-        }
+        // （dotnet/maui #12245）。MAUI 没有 DispatcherPriority，这条载荷同时是 NonPriority 采样路径的真机覆盖。
+        private void UpdateReadout() => OverState.Text = BuildState();
 
         private string BuildState()
         {

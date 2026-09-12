@@ -4,12 +4,17 @@ namespace VeloxDev.AT.Suites;
 
 /// <summary>
 /// Proves the thing every other check assumes: that a demo starts, that its observation surface is reachable, and
-/// that its readout is actually ticking.
+/// that its payload is actually ticking.
 /// </summary>
 /// <remarks>
 /// Kept separate from the conformance checks because it fails for completely different reasons. When this goes red the
 /// problem is the launch path, the automation tree, or the payload's spelling; when a conformance check goes red a
 /// sampler is wrong. Sorting a failure into one of those two buckets first is most of the diagnosis.
+/// <para>
+/// The demos no longer carry a human-readable readout beside the payloads — it only restated them in prose and sat
+/// between the toolbar and the case list. Nothing here depended on it beyond its existence; the payload's advancing
+/// sequence number is what proves the demo's timer is alive, and that is asserted below.
+/// </para>
 /// </remarks>
 internal static class ProbeChecks
 {
@@ -24,9 +29,6 @@ internal static class ProbeChecks
     internal static void Run(IDemoDriver driver, bool expectKillOnCloseJob)
     {
         driver.Settle();
-
-        // 给人看的读数必须还在：它没有被机器载荷取代，缺了说明演示面被动过。
-        Assert.IsTrue(driver.HasControl("over.readout"), "The human-readable readout is missing.");
 
         // 拆解保证按平台不同，如实断言而不是照抄。
         if (expectKillOnCloseJob)

@@ -9,7 +9,9 @@ using AvBoxShadows = Avalonia.Media.BoxShadows;
 using AvColor = Avalonia.Media.Color;
 using AvCornerRadius = Avalonia.CornerRadius;
 using AvGridLength = Avalonia.Controls.GridLength;
+using AvGradientStop = Avalonia.Media.GradientStop;
 using AvIBrush = Avalonia.Media.IBrush;
+using AvLinearGradientBrush = Avalonia.Media.LinearGradientBrush;
 using AvPixelPoint = Avalonia.PixelPoint;
 using AvPixelRect = Avalonia.PixelRect;
 using AvPixelSize = Avalonia.PixelSize;
@@ -61,6 +63,16 @@ internal sealed class SamplerSubject : Control
 
     public static readonly StyledProperty<AvIBrush?> FillProperty =
         AvaloniaProperty.Register<SamplerSubject, AvIBrush?>(nameof(Fill));
+
+    /// <summary>
+    /// 一段两停的渐变，只给索引器那两行当被写的集合用：路径写的是 <c>Ramp.GradientStops[i].Color</c>。
+    /// </summary>
+    /// <remarks>
+    /// 单独一条属性而不是复用 <see cref="Fill"/>：那一位是 null 开头、由每一行自己的起点值装填的，
+    /// 而索引器路径要写的元素必须在写它之前就先存在。
+    /// </remarks>
+    public static readonly StyledProperty<AvIBrush?> RampProperty =
+        AvaloniaProperty.Register<SamplerSubject, AvIBrush?>(nameof(Ramp));
 
     public static readonly StyledProperty<AvColor> TintProperty =
         AvaloniaProperty.Register<SamplerSubject, AvColor>(nameof(Tint), Avalonia.Media.Colors.Gray);
@@ -114,7 +126,7 @@ internal sealed class SamplerSubject : Control
     /// </remarks>
     private static readonly AvaloniaProperty[] Tracked =
     [
-        ShadowsProperty, FillProperty, TintProperty, RadiusProperty, ColumnProperty, PixelSpotProperty,
+        ShadowsProperty, FillProperty, RampProperty, TintProperty, RadiusProperty, ColumnProperty, PixelSpotProperty,
         PixelBoxProperty, PixelExtentProperty, SpotProperty, RelSpotProperty, RelBoxProperty, ExtentProperty,
         InsetProperty, MotionProperty,
     ];
@@ -134,6 +146,8 @@ internal sealed class SamplerSubject : Control
     public AvBoxShadows Shadows { get => GetValue(ShadowsProperty); set => SetValue(ShadowsProperty, value); }
 
     public AvIBrush? Fill { get => GetValue(FillProperty); set => SetValue(FillProperty, value); }
+
+    public AvIBrush? Ramp { get => GetValue(RampProperty); set => SetValue(RampProperty, value); }
 
     public AvColor Tint { get => GetValue(TintProperty); set => SetValue(TintProperty, value); }
 
@@ -165,6 +179,16 @@ internal sealed class SamplerSubject : Control
         Height = BaseHeight;
         Canvas.SetLeft(this, BaseLeft);
         Canvas.SetTop(this, BaseTop);
+
+        // 索引器那两行要写的是一个集合里的元素，所以它们得有集合可写。每条实例各建一段。
+        Ramp = new AvLinearGradientBrush
+        {
+            GradientStops =
+            {
+                new AvGradientStop(Avalonia.Media.Colors.OrangeRed, 0d),
+                new AvGradientStop(Avalonia.Media.Colors.SteelBlue, 1d),
+            },
+        };
     }
 
     /// <summary>
@@ -263,6 +287,12 @@ internal sealed class SamplerSubject : Control
         // 阴影与填充一笔画完：DrawRectangle 的 BoxShadows 重载就是 Avalonia 里画影子的入口（Border 自己也走它）。
         // 阴影按原值画，与 WPF 那边"效果按原值"同一条规则：它是一圈光晕，被格子裁掉远侧一半也仍然看得见；
         // 反过来乘 0.14 的话偏移与模糊都只剩一两像素，这一格就什么都看不出来了。
-        context.DrawRectangle(Fill ?? new AvSolidColorBrush(Tint), null, bounds, radius, radius, Shadows);
+        // 索引器那两行画它们真正在写的那段渐变：停靠点的颜色一动，条带就跟着动 —— 写在集合元素上的值
+        // 照样是看得见的。其余各行照旧画 Fill，没装填时退回 Tint。
+        var fill = Kind is SamplerProbe.Kinds.GradientStop0Color or SamplerProbe.Kinds.GradientStop1Color
+            ? Ramp ?? new AvSolidColorBrush(Tint)
+            : Fill ?? new AvSolidColorBrush(Tint);
+
+        context.DrawRectangle(fill, null, bounds, radius, radius, Shadows);
     }
 }

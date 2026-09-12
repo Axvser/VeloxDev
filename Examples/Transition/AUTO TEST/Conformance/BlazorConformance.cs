@@ -22,7 +22,9 @@ internal static class BlazorConformance
     [
         // 字符串：t == 0 与 t == 1 原样写回调用方给的字符串 —— 字符串是有损的，端点不可能被重新格式化成
         // "值相等"的另一种写法，所以这里直接返回两个端点常量。其余 t 才走颜色插值。
-        new("StringSampler", "String", t => ClosedForm.CodePoints(CssAt(t))),
+        new("StringSampler", "String", t => ClosedForm.CodePoints(
+            CssAt(t, StartHex, EndHex, (200d, 100d, 0d), (240d, 180d, 50d), 128d, 64d))),
+
     ];
 
     /// <summary>
@@ -34,16 +36,32 @@ internal static class BlazorConformance
     /// 255 停住；alpha 自成一界、不做组内钳制。随后每个通道先四舍五入再饱和到 0..255，alpha 除以 255 后以
     /// <c>0.###</c> 写成 0..1 —— 小数位数是这条闭式解的一部分，不能省。
     /// </remarks>
-    private static string CssAt(double t)
+    /// <param name="startHex">起始端点原样写回的那串十六进制。</param>
+    /// <param name="endHex">结束端点原样写回的那串十六进制。</param>
+    /// <param name="start">起始端点的 R/G/B（0..255）。</param>
+    /// <param name="end">结束端点的 R/G/B（0..255）。</param>
+    /// <param name="startAlpha">起始端点的 alpha（0..255）。</param>
+    /// <param name="endAlpha">结束端点的 alpha（0..255）。</param>
+    private static string CssAt(
+        double t,
+        string startHex,
+        string endHex,
+        (double R, double G, double B) start,
+        (double R, double G, double B) end,
+        double startAlpha,
+        double endAlpha)
     {
-        if (t == 0d) return StartHex;
-        if (t == 1d) return EndHex;
+        if (t == 0d) return startHex;
+        if (t == 1d) return endHex;
 
-        var progress = ClosedForm.SharedProgress(t, 255d, (200d, 240d), (100d, 180d), (0d, 50d));
-        var alpha = (128d + (64d - 128d) * t) / 255d;
+        var progress = ClosedForm.SharedProgress(t, 255d, (start.R, end.R), (start.G, end.G), (start.B, end.B));
+
+        // alpha 自成一界：它不跟 R/G/B 共用那条有界进度，而是自己钳在 [0,1] —— 端点跨度大时它会先出界，
+        // 少了这一钳闭式解与实际写出的文本就对不上（实测过）。
+        var alpha = Math.Clamp((startAlpha + (endAlpha - startAlpha) * t) / 255d, 0d, 1d);
 
         return string.Create(CultureInfo.InvariantCulture,
-            $"rgba({Rounded(200d + 40d * progress)}, {Rounded(100d + 80d * progress)}, {Rounded(0d + 50d * progress)}, {alpha:0.###})");
+            $"rgba({Rounded(start.R + (end.R - start.R) * progress)}, {Rounded(start.G + (end.G - start.G) * progress)}, {Rounded(start.B + (end.B - start.B) * progress)}, {alpha:0.###})");
     }
 
     /// <summary>四舍五入再饱和到 0..255 —— 直接转 byte 会把 300 折成 44。</summary>

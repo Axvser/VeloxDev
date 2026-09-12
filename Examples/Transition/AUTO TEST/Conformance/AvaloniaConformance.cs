@@ -16,6 +16,12 @@ internal static class AvaloniaConformance
     private static readonly (int A, int R, int G, int B) ColorStart = (200, 200, 100, 50);
     private static readonly (int A, int R, int G, int B) ColorEnd = (250, 240, 180, 120);
 
+    // 索引器那两条的端点：同一个画刷的两个停靠点，两对颜色必须不同，否则两条路径的闭式解无从区分。
+    private static readonly (int A, int R, int G, int B) Stop0Start = (200, 200, 100, 50);
+    private static readonly (int A, int R, int G, int B) Stop0End = (250, 240, 180, 120);
+    private static readonly (int A, int R, int G, int B) Stop1Start = (120, 30, 200, 250);
+    private static readonly (int A, int R, int G, int B) Stop1End = (200, 210, 40, 10);
+
     internal static IReadOnlyList<ConformanceEntry> All { get; } =
     [
         // 单个影子：颜色按颜色的规则走（R/G/B 共用一个 0..255 的进度，Alpha 自成一界）；
@@ -43,6 +49,16 @@ internal static class AvaloniaConformance
         // 颜色：R/G/B 共用一个 0..255 的进度；Alpha 单独按 t 走并在 0/255 饱和。
         // 分量序：A, R, G, B。
         new("ColorSampler", "Color", t => ClosedForm.ColorAt(t, ColorStart, ColorEnd)),
+
+        // 索引器路径的两条。它们验的不是采样器 —— 两条都用 ColorSampler、闭式解与 ColorSampler 一模一样 ——
+        // 而是路径落到了哪个槽上：同一个画刷的第 0 与第 1 个停靠点。
+        //
+        // 这两条必须同时在批量的帧报告里出现。索引器的 PropertyInfo 对每个下标都是同一个 "Item"，
+        // 下标不并入路径身份的话两条会合成一个状态条目，后声明的那条只会静默盖掉前一条 —— 而缺席是
+        // 批量那一路直接就报的。
+        new("GradientStop0Color", "Color", t => ClosedForm.ColorAt(t, Stop0Start, Stop0End)),
+
+        new("GradientStop1Color", "Color", t => ClosedForm.ColorAt(t, Stop1Start, Stop1End)),
 
         // 圆角：四个角各自线性外推，没有任何界。分量序是 Avalonia 的构造序 (TopLeft, TopRight, BottomRight, BottomLeft)。
         new("CornerRadiusSampler", "CornerRadius", t =>

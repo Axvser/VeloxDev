@@ -75,31 +75,33 @@
                         Content="下一程" Click="SeekNextPass"/>
             </WrapPanel>
 
-            <!-- 读数是过冲可观测的关键：数字越过目标再回来，肉眼无法把它和一条更慢的缓动区分开。 -->
-            <TextBlock x:Name="Readout" Margin="4,6,4,2" FontFamily="Consolas" Foreground="#CCCCCC"
-                       AutomationProperties.AutomationId="over.readout"
-                       Text="按下面任一行；读数显示当前值与目标值"></TextBlock>
-            <!-- 读数的机器可读孪生：同一支定时器、同一批值，但用固定的 key=value 载荷而不是散文，
+            <!--
+                四份机器载荷：驱动的读取面，但**不占版面** —— Height=0，元素仍在自动化树里，套件照读控件属性。
+                不能用 IsVisible=False：那会同时把它从视觉树和自动化树里摘掉，而 over.state 正是每个驱动的
+                就绪握手（ReadyAutomationId），摘掉它 DesktopHost.Start 会一直等下去。
+                给人看的那份读数删掉了：它只是这几份载荷的散文版，信息重复，还占着按钮和用例列表之间的位置。
+            -->
+            <!-- 机器可读载荷：同一支定时器、同一批值，但用固定的 key=value 形状而不是散文，
                  测试就不必去解析一份随时可能被重新排版的版式。 -->
             <!-- 折行不是可有可无：这行载荷现在多出 rows/away/moving，而 nomutual 必须仍然看得见 —— 它排在最后，
                  所以标签得为这一份更长的载荷留出折行的位置。 -->
-            <TextBlock x:Name="OverState" Margin="4,0,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+            <TextBlock x:Name="OverState" Height="0" FontFamily="Consolas" FontSize="10" Foreground="#808080"
                        TextWrapping="Wrap"
                        AutomationProperties.AutomationId="over.state" Text="v=1;seq=0"></TextBlock>
             <!-- 最后一次点击的产物：与 over.state 同一套 key=value 形状，外加一个证明这次点击落地的序号。 -->
-            <TextBlock x:Name="OverConf" Margin="4,2,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+            <TextBlock x:Name="OverConf" Height="0" FontFamily="Consolas" FontSize="10" Foreground="#808080"
                        AutomationProperties.AutomationId="over.conf" Text="v=1;seq=0;n=0;"></TextBlock>
             <!-- 那次点击把控件属性写成了什么、以及跑完才写全的观察结果：点击先写一份 done=0，
                  验收侧靠它把"新的还没跑完"与"上一次剩下的"分开。 -->
-            <TextBlock x:Name="OverLive" Margin="4,2,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+            <TextBlock x:Name="OverLive" Height="0" FontFamily="Consolas" FontSize="10" Foreground="#808080"
                        AutomationProperties.AutomationId="over.live" Text="v=1;seq=0;done=1;"></TextBlock>
             <!-- 批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。
                  逐行载荷是"点哪一行写哪一行"的形状，十几行一起跑只会互相覆盖，所以并发这一路另开一份。
                  MaxHeight 不是排版偏好：一份批量载荷有七八千字符，让它按自然高度折行会长到把下面的列表
                  整个挤出窗口（Avalonia 这个窗口是桌面平台里最矮的）。所以它像 WinForms 那侧一样被钉在
                  一个固定高度上 —— 控件**持有**的仍是完整载荷，套件读的是控件属性，不是像素。 -->
-            <TextBlock x:Name="OverBatch" Margin="4,2,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
-                       TextWrapping="Wrap" MaxHeight="44"
+            <TextBlock x:Name="OverBatch" Height="0" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+                       TextWrapping="Wrap"
                        AutomationProperties.AutomationId="over.batch" Text="v=1;seq=0;done=1;rows=0;"></TextBlock>
         </StackPanel>
 

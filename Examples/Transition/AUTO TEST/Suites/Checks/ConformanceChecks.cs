@@ -55,8 +55,10 @@ internal static class ConformanceChecks
         // 等演出跑完（800ms），浏览器把最后一帧画上去 —— 那一帧对应 t=1，也就是端点色。
         Thread.Sleep(1200);
 
-        var painted = driver.ComputedStyle("over.bench", "background-color");
-        Assert.IsNotNull(painted, "浏览器应当能给出 over.bench 的计算样式");
+        const string Token = "over.bench.StringSampler";
+
+        var painted = driver.ComputedStyle(Token, "background-color");
+        Assert.IsNotNull(painted, $"浏览器应当能给出 {Token} 的计算样式");
 
         // 期望值取自 StringSampler 声明的端点色 #F0B43240（R240 G180 B50），不是取自载荷。
         var declared = RgbColor.Parse("#F0B432");

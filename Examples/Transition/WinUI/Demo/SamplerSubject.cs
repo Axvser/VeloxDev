@@ -109,6 +109,16 @@ namespace Demo
         public static readonly DependencyProperty RenderProperty =
             Register(nameof(Render), typeof(Transform), null);
 
+        /// <summary>
+        /// 一段两停的渐变，只给索引器那两行当被写的集合用：路径写的是 <c>Ramp.GradientStops[i].Color</c>。
+        /// </summary>
+        /// <remarks>
+        /// 单独一条属性而不是复用 <see cref="Fill"/>：那一位是 null 开头、由每一行自己的起点值装填的，
+        /// 而索引器路径要写的元素必须在写它之前就先存在。
+        /// </remarks>
+        public static readonly DependencyProperty RampProperty =
+            Register(nameof(Ramp), typeof(Brush), null);
+
         public Brush? Fill { get => (Brush?)GetValue(FillProperty); set => SetValue(FillProperty, value); }
 
         public Color Tint { get => (Color)GetValue(TintProperty); set => SetValue(TintProperty, value); }
@@ -129,6 +139,8 @@ namespace Demo
 
         public Transform? Render { get => (Transform?)GetValue(RenderProperty); set => SetValue(RenderProperty, value); }
 
+        public Brush? Ramp { get => (Brush?)GetValue(RampProperty); set => SetValue(RampProperty, value); }
+
         /// <summary>被画的那个子元素：底色、圆角、变换、投影都落在它身上。</summary>
         private readonly Border _shape;
 
@@ -141,6 +153,16 @@ namespace Demo
             Canvas.SetTop(this, BaseTop);
             Width = BaseWidth;
             Height = BaseHeight;
+
+            // 索引器那两行要写的是一个集合里的元素，所以它们得有集合可写。每条实例各建一段。
+            Ramp = new LinearGradientBrush
+            {
+                GradientStops =
+                {
+                    new GradientStop { Color = Color.FromArgb(255, 255, 69, 0), Offset = 0d },
+                    new GradientStop { Color = Color.FromArgb(255, 70, 130, 180), Offset = 1d },
+                },
+            };
 
             // 栅格长度那一列：左边这一列就是采样器写出来的 GridLength，右边把余下宽度吃掉。
             _bar = new ColumnDefinition { Width = new GridLength(0, GridUnitType.Pixel) };
@@ -205,7 +227,11 @@ namespace Demo
             // 同样按标尺画：边距的端点也跑到了 330/440，原值会把被写对象整个推出格子。
             Margin = new Thickness(Inset.Left * DrawScale, Inset.Top * DrawScale, Inset.Right * DrawScale, Inset.Bottom * DrawScale);
 
-            _shape.Background = Fill ?? new SolidColorBrush(Tint);
+            // 索引器那两行画它们真正在写的那段渐变：停靠点的颜色一动，条带就跟着动 —— 写在集合元素上的值
+            // 照样是看得见的。其余各行照旧画 Fill，没装填时退回 Tint。
+            _shape.Background = Kind is SamplerProbe.Kinds.GradientStop0Color or SamplerProbe.Kinds.GradientStop1Color
+                ? Ramp ?? new SolidColorBrush(Tint)
+                : Fill ?? new SolidColorBrush(Tint);
             _shape.CornerRadius = Corners;
 
             _bar.Width = Length.IsAbsolute

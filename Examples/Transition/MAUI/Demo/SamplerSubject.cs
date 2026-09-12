@@ -3,6 +3,8 @@ using Microsoft.Maui.Controls.Shapes;
 // 同名类型一律显式取 MAUI 的那一侧：System.Drawing 里也有一份 PointF/RectF/SizeF，量纲不同、不能混。
 using MauiBrush = Microsoft.Maui.Controls.Brush;
 using MauiColor = Microsoft.Maui.Graphics.Color;
+using MauiGradientStop = Microsoft.Maui.Controls.GradientStop;
+using MauiLinearGradientBrush = Microsoft.Maui.Controls.LinearGradientBrush;
 using MauiCornerRadius = Microsoft.Maui.CornerRadius;
 using MauiPoint = Microsoft.Maui.Graphics.Point;
 using MauiPointF = Microsoft.Maui.Graphics.PointF;
@@ -75,6 +77,16 @@ internal sealed class SamplerSubject : GraphicsView, IDrawable
     public static readonly BindableProperty FillProperty =
         Register(nameof(Fill), typeof(MauiBrush), null);
 
+    /// <summary>
+    /// 一段两停的渐变，只给索引器那两行当被写的集合用：路径写的是 <c>Ramp.GradientStops[i].Color</c>。
+    /// </summary>
+    /// <remarks>
+    /// 单独一条属性而不是复用 <see cref="Fill"/>：那一位是 null 开头、由每一行自己的起点值装填的，
+    /// 而索引器路径要写的元素必须在写它之前就先存在。
+    /// </remarks>
+    public static readonly BindableProperty RampProperty =
+        Register(nameof(Ramp), typeof(MauiBrush), null);
+
     public static readonly BindableProperty TintProperty =
         Register(nameof(Tint), typeof(MauiColor), Colors.Gray);
 
@@ -109,6 +121,8 @@ internal sealed class SamplerSubject : GraphicsView, IDrawable
         Register(nameof(Render), typeof(MauiTransform), null);
 
     public MauiBrush? Fill { get => (MauiBrush?)GetValue(FillProperty); set => SetValue(FillProperty, value); }
+
+    public MauiBrush? Ramp { get => (MauiBrush?)GetValue(RampProperty); set => SetValue(RampProperty, value); }
 
     public MauiColor Tint { get => (MauiColor)GetValue(TintProperty); set => SetValue(TintProperty, value); }
 
@@ -148,6 +162,16 @@ internal sealed class SamplerSubject : GraphicsView, IDrawable
         // 靠左上角摆，不跟着格子拉伸：一拉伸，尺寸类产物就没法从这个被写对象的宽高上看出来了。
         HorizontalOptions = LayoutOptions.Start;
         VerticalOptions = LayoutOptions.Start;
+
+        // 索引器那两行要写的是一个集合里的元素，所以它们得有集合可写。每条实例各建一段。
+        Ramp = new MauiLinearGradientBrush
+        {
+            GradientStops =
+            {
+                new MauiGradientStop { Color = MauiColor.FromRgba(1d, 255d / 255d, 69d / 255d, 0d), Offset = 0f },
+                new MauiGradientStop { Color = MauiColor.FromRgba(1d, 70d / 255d, 130d / 255d, 180d / 255d), Offset = 1f },
+            },
+        };
     }
 
     /// <summary>
@@ -250,7 +274,18 @@ internal sealed class SamplerSubject : GraphicsView, IDrawable
         }
 
         MauiColor? tint = Tint;
-        canvas.FillColor = Fill is SolidColorBrush solid ? solid.Color : tint ?? Colors.Gray;
+
+        // 索引器那两行画它们真正在写的那段渐变：停靠点的颜色一动，条带就跟着动 —— 写在集合元素上的值
+        // 照样是看得见的。其余各行照旧按 Fill 的实心色画。
+        if (Kind is SamplerProbe.Kinds.GradientStop0Color or SamplerProbe.Kinds.GradientStop1Color && Ramp is { } ramp)
+        {
+            canvas.SetFillPaint(ramp, new RectF(0f, 0f, boxWidth, boxHeight));
+        }
+        else
+        {
+            canvas.FillColor = Fill is SolidColorBrush solid ? solid.Color : tint ?? Colors.Gray;
+        }
+
         canvas.FillRoundedRectangle(0f, 0f, boxWidth, boxHeight, (float)radius);
     }
 

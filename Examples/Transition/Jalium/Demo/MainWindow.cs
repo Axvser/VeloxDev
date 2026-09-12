@@ -44,7 +44,6 @@ internal sealed class MainWindow : Window
     // ── 载荷载体 ────────────────────────────────────────────────────────────
 
     /// <summary>人类读数：过冲只有从数字上才看得出来（眼睛分不出"越过再回来"与"一条更慢的缓动"）。</summary>
-    private readonly TextBlock _readout;
 
     /// <summary>读数的机器可读孪生体：同一批值、固定的 key=value 载荷，测试不必解析版式。</summary>
     private readonly TextBlock _overState;
@@ -87,8 +86,6 @@ internal sealed class MainWindow : Window
         // 这正是每一行都要装得下自己那段行程的意思。
         _rec1.RenderTransformOrigin = new Point(0.5d, 0.5d);
         _rec2.RenderTransformOrigin = new Point(0.5d, 0.5d);
-
-        _readout = MakeReadout("over.readout", "按下面任一行；读数显示当前值与目标值", wrap: false, fontSize: 9);
 
         // 折行不是可有可无：这份载荷现在多出 rows/away/moving，而 nomutual 必须仍然看得见 —— 它排在最后，
         // 所以标签要留出折行的位置，否则那个最要紧的字段会被裁掉。
@@ -169,7 +166,6 @@ internal sealed class MainWindow : Window
         timeline.Children.Add(MakeToolbarButton("下一程", "over.btn.seek.next", SeekNextPass, 86, 34));
         toolbar.Children.Add(timeline);
 
-        toolbar.Children.Add(_readout);
         toolbar.Children.Add(_overState);
         toolbar.Children.Add(_overConf);
         toolbar.Children.Add(_overLive);
@@ -198,12 +194,15 @@ internal sealed class MainWindow : Window
     {
         var readout = new TextBlock
         {
-            Margin = new Thickness(8, 2, 8, 2),
             FontFamily = new FontFamily("Consolas"),
             FontSize = fontSize,
             Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
             Text = initial,
             TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
+
+            // 驱动的读取面，但不占版面：Height=0 而元素仍在自动化树里，套件照读控件属性。不能用不可见 ——
+            // 那会连同自动化对等体一起摘掉，而 over.state 正是每个驱动的就绪握手。
+            Height = 0d,
         };
 
         SamplerBench.SetToken(readout, token);
@@ -734,7 +733,7 @@ internal sealed class MainWindow : Window
     /// </remarks>
     private static void StartSamplerAnimation(string sampler, SamplerSubject subject)
     {
-        var property = SamplerProbe.Property(sampler);
+        var property = SamplerProbe.Path(sampler);
         property.SetValue(subject, SamplerProbe.Start(sampler));
 
         // Effect 的其余默认值正是这里要的：FPS 60、不自动反向、只跑一趟 —— 于是末帧精确落在终点。
@@ -862,7 +861,7 @@ internal sealed class MainWindow : Window
 
             var subject = _bench.SubjectFor(sampler);
             Transition.Exit(subject, IncludeMutual: true, IncludeNoMutual: true);
-            SamplerProbe.Property(sampler).SetValue(subject, SamplerProbe.Start(sampler));
+            SamplerProbe.Path(sampler).SetValue(subject, SamplerProbe.Start(sampler));
         }
     }
 
@@ -1097,17 +1096,8 @@ internal sealed class MainWindow : Window
         => brush is SolidColorBrush solid ? $"#{solid.Color.R:X2}{solid.Color.G:X2}{solid.Color.B:X2}"
            : brush?.GetType().Name ?? "none";
 
-    // 读数只取目标的真实属性，不缓存也不伪造。载荷与读数共用这一次采样，两者不可能互相矛盾。
-    private void UpdateReadout()
-    {
-        var shift = (_over0.RenderTransform as TranslateTransform)?.X ?? double.NaN;
-        var elastic = (_over4.RenderTransform as TranslateTransform)?.X ?? double.NaN;
-        _readout.Text =
-            $"位移 Back   当前 {shift,7:F1}"
-            + $"   |   Elastic   当前 {elastic,7:F1}"
-            + $"   |   目标 {ShiftTarget,6:F1}     宽度 目标 {WidthTarget,6:F1}   当前 {_over2.Width,7:F1}";
-        _overState.Text = BuildState();
-    }
+    // 载荷只取目标的真实属性，不缓存也不伪造。
+    private void UpdateReadout() => _overState.Text = BuildState();
 
 
     private static LinearGradientBrush CreateShiftedBs1()

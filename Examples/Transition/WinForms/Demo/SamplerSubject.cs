@@ -44,6 +44,8 @@ namespace Demo
         /// <summary>填满这一格的色块；边距改变的就是它的摆放。</summary>
         private readonly Panel _block;
 
+
+
         private Padding _inset;
 
         public SamplerSubject()
@@ -56,6 +58,35 @@ namespace Demo
 
             _block = new Panel { Dock = DockStyle.Fill, BackColor = BlockColor };
             Controls.Add(_block);
+
+        }
+
+        /// <summary>
+        /// 索引器那两条写的那个集合：一段两停的渐变，按 <c>this[i]</c> 取放。
+        /// </summary>
+        /// <remarks>
+        /// 自有索引器而不是去索引 <c>Controls</c>：子块是 <c>Dock = Fill</c> 的，布局会把写进去的 Size
+        /// 立刻改回去 —— 那条路上采样器写的值根本留不住（实测过，载荷读回来一直是格子自己的尺寸）。
+        /// 索引器路径要验的是"下标进了身份"，被索引的集合是框架的还是自有的无关紧要。
+        /// </remarks>
+        private readonly Color[] _ramp = [Color.OrangeRed, Color.SteelBlue];
+
+        /// <summary>索引器被写过没有 —— 也就是"这一格是不是索引器那两行之一"。</summary>
+        private bool _rampWritten;
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Color this[int index]
+        {
+            get => _ramp[index];
+            set
+            {
+                _ramp[index] = value;
+                _rampWritten = true;
+
+                // WinForms 没有 AffectsRender 那样的属性钩子：重绘得自己叫。
+                Invalidate();
+            }
         }
 
         /// <summary>
@@ -103,6 +134,23 @@ namespace Demo
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.Clear(StageColor);
+
+            // 索引器那两行画它们真正在写的那段渐变：停靠点的颜色一动，条带就跟着动 —— 写在集合元素上的
+            // 值照样是看得见的。子块是不透明的、又铺满整格，所以那两行要把它让开；其余各行照旧交给它画。
+            //
+            // 判据是"索引器被写过"而不是采样器种类：这一格是一行一个对象，它身上没有 Kind 那种标记，
+            // 而只有索引器那两行会写 this[i] —— 这个信号足够精确，也省得为它去动 bench。
+            if (_block.Visible == _rampWritten) _block.Visible = !_rampWritten;
+
+            if (_rampWritten)
+            {
+                var area = new Rectangle(0, 0, Math.Max(1, Width), Math.Max(1, Height));
+                using var ramp = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    area, _ramp[0], _ramp[1], System.Drawing.Drawing2D.LinearGradientMode.Horizontal);
+                e.Graphics.FillRectangle(ramp, area);
+                return;
+            }
+
             base.OnPaint(e);
         }
     }

@@ -111,5 +111,15 @@ internal static class WpfConformance
             ClosedForm.Lerp(10d, 110d, t),
             ClosedForm.Lerp(20d, 220d, t),
         ]),
+
+        // 索引器路径的两条。它们验的不是采样器 —— 两条都用 ColorSampler、闭式解与 ColorSampler 一模一样 ——
+        // 而是路径落到了哪个槽上：同一个画刷的第 0 与第 1 个停靠点。
+        //
+        // 这两条必须**同时**在批量的帧报告里出现。索引器的 PropertyInfo 对每个下标都是同一个 "Item"，
+        // 下标不并入路径身份的话两条会合成一个状态条目，后声明的那条只会静默盖掉前一条 —— 而缺席是
+        // 批量那一路直接就报的。
+        new("GradientStop0Color", "Color", t => ClosedForm.ColorAt(t, BrushStart, BrushEnd)),
+
+        new("GradientStop1Color", "Color", t => ClosedForm.ColorAt(t, TintStart, TintEnd)),
     ];
 }

@@ -20,7 +20,7 @@ internal enum RowKind
     /// <summary>过冲：元素就是那条案例的目标本身。</summary>
     Overshoot,
 
-    /// <summary>采样器：元素是真正着色的那个 div（令牌 <c>over.bench</c> 挂在它上面）。</summary>
+    /// <summary>采样器：元素是真正着色的那个 div（令牌 <c>over.bench.&lt;采样器名&gt;</c> 挂在它上面）。</summary>
     Sampler,
 }
 

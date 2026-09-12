@@ -680,7 +680,7 @@ public partial class Home : ComponentBase, IDisposable
     /// </remarks>
     private void StartSamplerAnimation(string sampler)
     {
-        var property = SamplerProbe.Property(sampler);
+        var property = SamplerProbe.Path(sampler);
         property.SetValue(_benchTarget, SamplerProbe.Start(sampler));
 
         // Effect 的其余默认值正是这里要的：FPS 60、不自动反向、只跑一趟 —— 于是末帧精确落在终点。
@@ -779,24 +779,16 @@ public partial class Home : ComponentBase, IDisposable
         foreach (var sampler in SamplerProbe.SamplerNames)
         {
             Transition.Exit(_benchTarget, IncludeMutual: true, IncludeNoMutual: true);
-            SamplerProbe.Property(sampler).SetValue(_benchTarget, SamplerProbe.Start(sampler));
+            SamplerProbe.Path(sampler).SetValue(_benchTarget, SamplerProbe.Start(sampler));
         }
 
         _benchColor = _benchTarget.Value;
     }
 
-    // 读数：显示目标的真实当前值与目标值，过冲只有靠数字才看得出来
-    private string BuildReadout() =>
-        $"位移 Back   当前 {Over0.X,7:F1}"
-        + $"   |   Elastic   当前 {Over4.X,7:F1}"
-        + $"   |   目标 {ShiftTarget,6:F1}     宽度 目标 {WidthTarget,6:F1}   当前 {Over2.Width,7:F1}\n"
-        + $"颜色 余量    目标 {OverColorTarget}    当前 {Over1.Color}\n"
-        + $"颜色 饱和    目标 {OverSaturateTarget}    当前 {Over3.Color}";
-
     // -----------------------------------------------------------------------------------------------
     // 验收观测面
     //
-    // 人类读数之外再写一份机器可读的载荷：同一次采样、同一批值，但用固定的 key=value 而不是散文，
+    // 写一份机器可读的载荷：同一次采样、同一批值，用固定的 key=value 而不是散文，
     // 测试就不必去解析一份随时可能被重新排版的版式。载荷只报告"每个目标当前/峰值是多少"，至于哪个场景
     // 动哪个目标、起止与时长，由测试侧的 manifest 声明 —— 观测与语义各自只有一处来源。
     // Blazor 的位移目标是 220 而不是参考实现的 300，载荷保留它自己的数字。
@@ -814,9 +806,7 @@ public partial class Home : ComponentBase, IDisposable
     private System.Threading.Timer? _readoutTimer;
     private volatile bool _disposed;
 
-    // 定时器每拍采一次样，同时产出人类读数与机器可读载荷两份快照：同一次采样、同一批值，
-    // 两者不可能互相矛盾，渲染只读这两份快照。
-    private string _readoutSnapshot = "按上面任一按钮；读数显示目标的真实属性值与目标值";
+    // 定时器每拍采一次样，产出机器可读载荷快照，渲染只读这份快照。
     private string _stateSnapshot = "v=1;seq=0";
 
     // 采样器一致性载荷：点一次把手跑一条、写一次，所以不在定时器里更新。
@@ -1013,8 +1003,7 @@ public partial class Home : ComponentBase, IDisposable
             _ =>
             {
                 if (_disposed) return;
-                // 先采样再重渲染：载荷的 seq 每拍只前进一次，读数与载荷出自同一次采样。
-                _readoutSnapshot = BuildReadout();
+                // 先采样再重渲染：载荷的 seq 每拍只前进一次。
                 _stateSnapshot = BuildState();
                 InvokeAsync(StateHasChanged);
             },

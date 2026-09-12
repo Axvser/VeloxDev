@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using VeloxDev.Adapters.NativeSamplers;
@@ -7,6 +8,7 @@ using VeloxDev.TransitionSystem.Abstractions;
 
 // 同名类型一律显式取 MAUI 的那一侧：System.Drawing 里也有一份 PointF/RectF/SizeF，量纲不同、不能混。
 using MauiColor = Microsoft.Maui.Graphics.Color;
+using MauiLinearGradientBrush = Microsoft.Maui.Controls.LinearGradientBrush;
 using MauiCornerRadius = Microsoft.Maui.CornerRadius;
 using MauiMatrix = Microsoft.Maui.Controls.Shapes.Matrix;
 using MauiPoint = Microsoft.Maui.Graphics.Point;
@@ -69,16 +71,36 @@ internal static class SamplerProbe
         internal const string SizeSampler = nameof(SizeSampler);
         internal const string ThicknessSampler = nameof(ThicknessSampler);
         internal const string TransformSampler = nameof(TransformSampler);
+
+        /// <summary>
+        /// 索引器路径的两条：它们验的不是某个采样器，而是**路径能落到具体的槽上**。
+        /// </summary>
+        /// <remarks>
+        /// 名字不再取自采样器类型名 —— 两条用的是同一个 ColorSampler，区分它们的是路径里那个下标。
+        /// 相邻下标必须是两条不同的路径：索引器的 PropertyInfo 对每个下标都是同一个 "Item"，
+        /// 下标不并入身份的话这两行会合成一个状态条目，一条动画静默盖掉另一条 —— 而批量那一路
+        /// 会立刻报出来（表里的条目在帧报告里缺席）。
+        /// </remarks>
+        internal const string GradientStop0Color = "GradientStop0Color";
+
+        internal const string GradientStop1Color = "GradientStop1Color";
     }
 
     /// <summary>一条采样器：把手令牌、它在被写控件上的属性，以及一对端点工厂。</summary>
+    /// <param name="Property">
+    /// 被写的属性名；带索引器的路径用它表达不了，那些条目的这一项是 null、改由 <paramref name="Path"/> 给出路径。
+    /// </param>
+    /// <param name="Path">
+    /// 一条完整路径，用于"属性名"说不清的那些条目 —— 尤其是带索引器的：<c>Ramp.GradientStops[0].Color</c>。
+    /// </param>
     private sealed record ProbeSpec(
         string Name,
         string Description,
-        string Property,
+        string? Property,
         Func<ISampler> Create,
         Func<object> Start,
-        Func<object> End);
+        Func<object> End,
+        Func<TransitionProperty>? Path = null);
 
     /// <summary>一个产物读出来的样子：类型名 + 固定顺序的分量。</summary>
     /// <param name="TypeTag">产物的运行时类型名。认不出来的类型也照报，由测试侧去说"类型不对"。</param>
@@ -129,6 +151,13 @@ internal static class SamplerProbe
     private static readonly ProbeSpec[] Probes =
     [
         new(Kinds.BrushSampler, "实心刷：R/G/B 共用一个进度，不透明度自成一界并在 [0,1] 饱和 —— 共用进度是为了过冲时不偏色。", nameof(SamplerSubject.Fill), () => new BrushSampler(), BrushStart, BrushEnd),
+        new(Kinds.GradientStop0Color,
+            "索引器路径：写渐变第 0 个停靠点的颜色（Ramp.GradientStops[0].Color）—— 索引真的落到槽上，而不是被当成整条集合。",
+            null, () => new ColorSampler(), () => BrushStartColor, () => BrushEndColor, Path: () => GradientStopPath(0)),
+        new(Kinds.GradientStop1Color,
+            "索引器路径：相邻下标必须互不覆盖（Ramp.GradientStops[1].Color）—— 与上一行同一个采样器、同一刻并行跑。",
+            null, () => new ColorSampler(), TintStart, TintEnd, Path: () => GradientStopPath(1)),
+
         new(Kinds.ColorSampler, "颜色：A 与 R/G/B 各自成界，越界饱和而不是回绕（回绕会变成完全不同的颜色）。", nameof(SamplerSubject.Tint), () => new ColorSampler(), TintStart, TintEnd),
         new(Kinds.CornerRadiusSampler, "圆角：四角各自插值、互不耦合，没有共用进度，过冲照常穿过端点。", nameof(SamplerSubject.Corners), () => new CornerRadiusSampler(),
             () => new MauiCornerRadius(1, 2, 3, 4), () => new MauiCornerRadius(11, 22, 33, 44)),
@@ -179,8 +208,28 @@ internal static class SamplerProbe
     internal static string Description(string samplerName) => Spec(samplerName).Description;
 
     /// <summary>这一条采样器写在被写控件的哪个属性上。</summary>
-    internal static PropertyInfo Property(string samplerName)
-        => typeof(SamplerSubject).GetProperty(Spec(samplerName).Property)!;
+    /// <summary>这一条采样器写的路径 —— 单属性，或者一条带索引器的路径。</summary>
+    /// <remarks>
+    /// 每条只建一个实例。路径是状态字典的键，每次新建一个虽然按值相等，但索引实参来自闭包时未必相等；
+    /// 缓存下来就没有这层疑问。
+    /// </remarks>
+    internal static TransitionProperty Path(string samplerName) => Paths[samplerName];
+
+    private static readonly Dictionary<string, TransitionProperty> Paths =
+        Probes.ToDictionary(
+            static probe => probe.Name,
+            static probe => probe.Path is null
+                ? TransitionProperty.FromProperty(typeof(SamplerSubject).GetProperty(probe.Property!)!)
+                : probe.Path());
+
+    /// <summary>建一条 <c>Ramp.GradientStops[i].Color</c>。下标是常量，所以这条路径的身份只由下标决定。</summary>
+    private static TransitionProperty GradientStopPath(int index)
+        => TransitionProperty.TryCreate(
+            (Expression<Func<SamplerSubject, MauiColor>>)(subject =>
+                ((MauiLinearGradientBrush)subject.Ramp!).GradientStops[index].Color),
+            out var property)
+            ? property!
+            : throw new InvalidOperationException($"索引器路径 GradientStops[{index}].Color 建不出来。");
 
     /// <summary>这一条采样器的实例。每次都要新的：采样器本身可能带状态。</summary>
     internal static ISampler Create(string samplerName) => Spec(samplerName).Create();
@@ -199,7 +248,7 @@ internal static class SamplerProbe
     /// 画刷、阴影、变换都是引用类型，采样器中间帧交出的是自己那块就地改写的草稿，存下实例等于读到"后来"的状态。
     /// </remarks>
     internal static Measurement Read(SamplerSubject subject, string samplerName)
-        => Measure(Property(samplerName).GetValue(subject));
+        => Measure(Path(samplerName).GetValue(subject));
 
     /// <summary>
     /// 这一行此刻的值是否**就是**它声明的起点。
@@ -265,7 +314,7 @@ internal static class SamplerProbe
     internal static object? Frame(SamplerSubject subject, string samplerName, double t)
     {
         var probe = Spec(samplerName);
-        var property = TransitionProperty.FromProperty(Property(samplerName));
+        var property = Path(samplerName);
 
         // 每帧一对全新端点：端点实例跨帧复用会被采样器原地改动污染。
         object? working = null;

@@ -92,8 +92,10 @@ The third form silently green-lights a run over zero tests.
   can reach it. The tokens, by family: `over.btn.*` (toolbar — `start.all` / `stop.all` / `reset.all`, the five
   `load.*` modes, and the six timeline controls `pause` / `resume` / `rate.slow` / `rate.fast` / `rate.normal` /
   `seek.next`), `over.sampler.<SamplerTypeName>` (a case row's start, which is what AT clicks),
-  `over.row.{stop,reset}.<id>` (that row's other two), and `over.{state,conf,live,batch,readout,bench}` for the
-  payloads.
+  `over.row.{stop,reset}.<id>` (that row's other two), and `over.{state,conf,live,batch,bench}` for the
+  payloads. **The payloads are in the tree but not drawn** — every demo keeps them invisible rather than hidden,
+  because a hidden element leaves the automation tree and `over.state` is what every driver's readiness handshake
+  reads. `over.readout`, a human-readable restatement of the same values, is gone.
 - `over.state` is a flat `k=v;` payload and **`nomutual=` must stay the last field** (there are comments at each
   builder saying so). Insert new fields *before* it.
 - `rate=` must be formatted with `CultureInfo.InvariantCulture`. The current-culture default turns `0.25` into `0,25`

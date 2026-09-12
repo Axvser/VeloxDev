@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Windows;
@@ -52,6 +53,19 @@ internal static class SamplerProbe
         internal const string TransformSampler = nameof(TransformSampler);
         internal const string Vector3DSampler = nameof(Vector3DSampler);
         internal const string VectorSampler = nameof(VectorSampler);
+
+        /// <summary>
+        /// 索引器路径的两条：它们验的不是某个采样器，而是**路径能落到具体的槽上**。
+        /// </summary>
+        /// <remarks>
+        /// 名字不再取自采样器类型名 —— 两条用的是同一个 <c>ColorSampler</c>，区分它们的是路径里那个下标。
+        /// 相邻下标必须是两条不同的路径：索引器的 <c>PropertyInfo</c> 对每个下标都是同一个 "Item"，
+        /// 下标不并入身份的话这两行会合成一个状态条目，一条动画静默盖掉另一条 —— 而批量那一路
+        /// 会立刻报出来（表里的条目在帧报告里缺席）。
+        /// </remarks>
+        internal const string GradientStop0Color = "GradientStop0Color";
+
+        internal const string GradientStop1Color = "GradientStop1Color";
     }
 
     /// <summary>一条采样器：把手令牌、它在被写控件上的属性，以及一对端点工厂。</summary>
@@ -59,13 +73,20 @@ internal static class SamplerProbe
     /// 这一行在验什么，给读列表的人看。与把手、载荷同源：加一条采样器只改这张表一处，
     /// 描述、把手、行三处不可能各自漂移。写规则，不重复类型名。
     /// </param>
+    /// <param name="Property">
+    /// 被写的属性名；带索引器的路径用它表达不了，那些条目的这一项是 null、改由 <paramref name="Path"/> 给出路径。
+    /// </param>
+    /// <param name="Path">
+    /// 一条完整路径，用于"属性名"说不清的那些条目 —— 尤其是带索引器的：<c>Ramp.GradientStops[0].Color</c>。
+    /// </param>
     private sealed record ProbeSpec(
         string Name,
         string Description,
-        string Property,
+        string? Property,
         Func<ISampler> Create,
         Func<object> Start,
-        Func<object> End);
+        Func<object> End,
+        Func<TransitionProperty>? Path = null);
 
     /// <summary>一个产物读出来的样子：类型名 + 固定顺序的分量。</summary>
     /// <param name="TypeTag">产物的运行时类型名。认不出来的类型也照报，由测试侧去说"类型不对"。</param>
@@ -136,7 +157,35 @@ internal static class SamplerProbe
             "二维向量：两个分量纯外推，产物是 Vector 而不是 Point。",
             nameof(SamplerSubject.Slope), () => new VectorSampler(),
             () => new Vector(10, 20), () => new Vector(110, 220)),
+
+        // 两条索引器路径。验的是「路径落到哪个槽上」：同一个画刷的第 0 与第 1 个停靠点，用同一个采样器、
+        // 不同的端点，并行跑一次批量就该各落各的。下标是编译期常量，所以这条路径的身份是与值解耦的。
+        new(Kinds.GradientStop0Color,
+            "索引器路径：写渐变第 0 个停靠点的颜色（Ramp.GradientStops[0].Color）—— 索引真的落到槽上，而不是被当成整条集合。",
+            null, () => new ColorSampler(),
+            () => BrushStartColor, () => BrushEndColor,
+            Path: () => GradientStopPath(0)),
+        new(Kinds.GradientStop1Color,
+            "索引器路径：相邻下标必须互不覆盖（Ramp.GradientStops[1].Color）—— 与上一行同一个采样器、同一刻并行跑。",
+            null, () => new ColorSampler(),
+            () => TintStart, () => TintEnd,
+            Path: () => GradientStopPath(1)),
     ];
+
+    /// <summary>
+    /// 建一条 <c>Ramp.GradientStops[i].Color</c>。下标是常量，所以这条路径的身份只由下标决定。
+    /// </summary>
+    /// <remarks>
+    /// 用的是 <see cref="SamplerSubject.Ramp"/> 而不是 Fill：那一位是 null 开头、由每一行自己的起点值装填的，
+    /// 而要写的元素必须在写它之前就先存在。Ramp 在构造时建好，所以这条路径一上来就能解析。
+    /// </remarks>
+    private static TransitionProperty GradientStopPath(int index)
+        => TransitionProperty.TryCreate(
+            (Expression<Func<SamplerSubject, Color>>)(subject =>
+                ((LinearGradientBrush)subject.Ramp!).GradientStops[index].Color),
+            out var property)
+            ? property!
+            : throw new InvalidOperationException($"索引器路径 GradientStops[{index}].Color 建不出来。");
 
     /// <summary>某一条的文字描述，给列表那一行用。</summary>
     internal static string Description(string samplerName) => Spec(samplerName).Description;
@@ -166,9 +215,19 @@ internal static class SamplerProbe
         => Probes.FirstOrDefault(candidate => candidate.Name == samplerName)
             ?? throw new InvalidOperationException($"没有名为 {samplerName} 的采样器；把手与探针表不同步了。");
 
-    /// <summary>这一条采样器写在被写控件的哪个属性上。</summary>
-    internal static PropertyInfo Property(string samplerName)
-        => typeof(SamplerSubject).GetProperty(Spec(samplerName).Property)!;
+    /// <summary>这一条采样器写的路径 —— 单属性，或者一条带索引器的路径。</summary>
+    /// <remarks>
+    /// 每条只建<b>一个</b>实例。路径是状态字典的键，每次新建一个虽然按值相等，但索引实参来自闭包时
+    /// 未必相等；缓存下来就没有这层疑问。
+    /// </remarks>
+    internal static TransitionProperty Path(string samplerName) => Paths[samplerName];
+
+    private static readonly Dictionary<string, TransitionProperty> Paths =
+        Probes.ToDictionary(
+            static probe => probe.Name,
+            static probe => probe.Path is null
+                ? TransitionProperty.FromProperty(typeof(SamplerSubject).GetProperty(probe.Property!)!)
+                : probe.Path());
 
     /// <summary>这一条采样器的实例。每次都要新的：采样器本身可能带状态。</summary>
     internal static ISampler Create(string samplerName) => Spec(samplerName).Create();
@@ -187,7 +246,7 @@ internal static class SamplerProbe
     /// 画刷、变换这类产物每帧写的是同一个 scratch 实例、就地改，存下实例等于读到"后来"的状态。
     /// </remarks>
     internal static Measurement Read(SamplerSubject subject, string samplerName)
-        => Measure(Property(samplerName).GetValue(subject));
+        => Measure(Path(samplerName).GetValue(subject));
 
     /// <summary>
     /// 这一行此刻的值是否**就是**它声明的起点。
@@ -252,7 +311,7 @@ internal static class SamplerProbe
     internal static object? Frame(SamplerSubject subject, string samplerName, double t)
     {
         var probe = Spec(samplerName);
-        var property = TransitionProperty.FromProperty(Property(samplerName));
+        var property = Path(samplerName);
 
         // 每帧一对全新端点：端点实例跨帧复用会被采样器原地改动污染。
         object? working = null;

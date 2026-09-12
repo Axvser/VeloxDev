@@ -16,6 +16,10 @@ internal static class JaliumConformance
     private static readonly (int A, int R, int G, int B) RgbStart = (200, 200, 100, 50);
     private static readonly (int A, int R, int G, int B) RgbEnd = (250, 240, 180, 120);
 
+    // 索引器那两条的端点：同一个画刷的两个停靠点，两对颜色必须不同，否则两条路径的闭式解无从区分。
+    private static readonly (int A, int R, int G, int B) Rgb2Start = (120, 30, 200, 250);
+    private static readonly (int A, int R, int G, int B) Rgb2End = (200, 210, 40, 10);
+
     // 两个实心刷的不透明度：0.25 → 1，两个方向都能验到 [0,1] 的钳制。
     private const double BrushStartOpacity = 0.25d;
     private const double BrushEndOpacity = 1d;
@@ -31,6 +35,16 @@ internal static class JaliumConformance
         ]),
 
         new("ColorSampler", "Color", t => ClosedForm.ColorAt(t, RgbStart, RgbEnd)),
+
+        // 索引器路径的两条。它们验的不是采样器 —— 两条都用 ColorSampler、闭式解与 ColorSampler 一模一样 ——
+        // 而是路径落到了哪个槽上：同一个画刷的第 0 与第 1 个停靠点。
+        //
+        // 这两条必须同时在批量的帧报告里出现。索引器的 PropertyInfo 对每个下标都是同一个 "Item"，
+        // 下标不并入路径身份的话两条会合成一个状态条目，后声明的那条只会静默盖掉前一条 —— 而缺席是
+        // 批量那一路直接就报的。
+        new("GradientStop0Color", "Color", t => ClosedForm.ColorAt(t, RgbStart, RgbEnd)),
+
+        new("GradientStop1Color", "Color", t => ClosedForm.ColorAt(t, Rgb2Start, Rgb2End)),
 
         // 圆角：四个分量各自线性外推，没有任何界。顺序是构造函数序 (TopLeft, TopRight, BottomRight, BottomLeft)。
         new("CornerRadiusSampler", "CornerRadius", t =>

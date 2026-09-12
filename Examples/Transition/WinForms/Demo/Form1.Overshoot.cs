@@ -77,7 +77,6 @@ namespace Demo
         private readonly Panel over3 = MakeTarget(3);
         private readonly Panel over4 = MakeTarget(4);
 
-        private Label readout = null!;
         private Label overState = null!;
         private Label overConf = null!;
         private Label overLive = null!;
@@ -131,8 +130,12 @@ namespace Demo
         /// <summary>时间轴控制那一排的顶边：紧跟在加载模式那排（下沿 86）之后。</summary>
         private const int TimelineRowTop = 92;
 
-        /// <summary>顶栏（全局三件 + 加载模式五件 + 时间轴六件 + 读数）的总高。列表从它下面开始。</summary>
-        private const int TopAreaHeight = 348;
+        /// <summary>顶栏（全局三件 + 加载模式五件 + 时间轴六件）的总高。列表从它下面开始。</summary>
+        /// <remarks>
+        /// 载荷标签全部贴在它的下沿、高度为零 —— 它们是套件的读取面，不占版面。这里必须跟着一起收，
+        /// WinForms 的位置是绝对的：留着一个常量不改，收回来的就只是标签本身，那条空带还在。
+        /// </remarks>
+        private const int TopAreaHeight = 132;
 
         /// <summary>案例列表内容区的宽度。</summary>
         private const int RowWidth = SamplerBench.RowWidth;
@@ -182,11 +185,7 @@ namespace Demo
             // 读数必须走定时器而不是 effect 的事件：流水线每段都会 Clone() effect，
             // 订阅在原始 effect 实例上的处理函数根本不会触发。
             var timer = new System.Windows.Forms.Timer { Interval = 40 };
-            timer.Tick += (sender, args) =>
-            {
-                UpdateReadout();
-                overState.Text = BuildState();
-            };
+            timer.Tick += (sender, args) => overState.Text = BuildState();
             timer.Start();
 
             // 挂到设计器已有的 components 上，随窗体一起释放
@@ -243,21 +242,21 @@ namespace Demo
             MakeToolbarButton("over.btn.rate.normal", "正常 ×1", 396, timelineBack, top: TimelineRowTop, width: 96).Click += RateNormal;
             MakeToolbarButton("over.btn.seek.next", "下一程", 498, timelineBack, top: TimelineRowTop, width: 86).Click += SeekNextPass;
 
-            // 读数：人看的那一行，与四份机器可读的载荷。载荷只报告"每个目标当前/峰值是多少"、
-            // "这一行跑了什么"，至于哪个场景动哪个目标、起止与时长，由测试侧的 manifest 声明 ——
-            // 观测与语义各自只有一处来源。
-            readout = MakeLabel("over.readout", 132, 44, 9, Color.FromArgb(0x33, 0x33, 0x33),
-                "按下面任一行；读数显示当前值与目标值");
-
-            // 载荷比原先又多一截：时间轴那四个字段（paused/rate/pos/cycle）也进场了，而 nomutual 仍然排在最后，
-            // 所以标签再高一行，留出折行的位置 —— 否则那个最要紧的字段会被裁掉。
-            overState = MakeLabel("over.state", 178, 80, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0");
-            overConf = MakeLabel("over.conf", 260, 16, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0;n=0;");
-            overLive = MakeLabel("over.live", 278, 16, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0;done=1;");
+            // 四份机器可读的载荷。载荷只报告"每个目标当前/峰值是多少"、"这一行跑了什么"，
+            // 至于哪个场景动哪个目标、起止与时长，由测试侧的 manifest 声明 —— 观测与语义各自只有一处来源。
+            // 给人看的那份读数删掉了：它只是这几份载荷的散文版，信息重复，还占着按钮和用例列表之间的位置。
+            //
+            // 四份都贴在顶栏下沿、高度为零：留着它们的文本（套件读的是控件属性，不是像素），但不占版面。
+            // 父面板的高度跟着收到 132，所以列表往上挪 —— 位置是绝对的，不一起收就只收回了标签本身。
+            // 高度是 1 而不是 0：WinForms 走 MSAA→UIA 那条桥，零尺寸的控件不进那棵树 —— 实测过，
+            // 0 高度时驱动会一直等到超时都找不到 over.state。1 像素在屏幕上和没有一样，但它是非空矩形。
+            overState = MakeLabel("over.state", 126, 1, 8, "v=1;seq=0");
+            overConf = MakeLabel("over.conf", 126, 1, 8, "v=1;seq=0;n=0;");
+            overLive = MakeLabel("over.live", 126, 1, 8, "v=1;seq=0;done=1;");
 
             // 批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。
             // 逐行载荷是"点哪一行写哪一行"的形状，十几行一起跑只会互相覆盖，所以并发这一路另开一份。
-            overBatch = MakeLabel("over.batch", 296, 44, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0;done=1;rows=0;");
+            overBatch = MakeLabel("over.batch", 126, 1, 8, "v=1;seq=0;done=1;rows=0;");
         }
 
         private Button MakeToolbarButton(string name, string text, int left, Color back,
@@ -287,7 +286,15 @@ namespace Demo
             _top.Controls.Add(button);
         }
 
-        private Label MakeLabel(string name, int top, int height, float size, Color fore, string text)
+        /// <summary>
+        /// 建一个只给套件读的标签：留在控件树里（UIA 读得到 <c>Text</c>），但文字与背景同色，人看不见。
+        /// </summary>
+        /// <remarks>
+        /// 不能用 <c>Visible = false</c> —— WinForms 会把不可见控件连同它的自动化对等体一起摘掉，
+        /// 而 <c>over.state</c> 正是每个驱动的就绪握手（<c>ReadyAutomationId</c>），摘掉它
+        /// <c>DesktopHost.Start</c> 会一直等下去。除文字颜色外，这个标签与一个普通标签没有任何区别。
+        /// </remarks>
+        private Label MakeLabel(string name, int top, int height, float size, string text)
         {
             var label = new Label
             {
@@ -295,12 +302,14 @@ namespace Demo
                 Location = new Point(8, top),
                 Size = new Size(RowWidth, height),
                 Font = new Font("Consolas", size),
-                ForeColor = fore,
                 AutoSize = false,
                 Text = text,
             };
 
             _top.Controls.Add(label);
+
+            // 加进父容器之后 BackColor 才是环境色（未显式设置时取父容器的）。
+            label.ForeColor = label.BackColor;
             return label;
         }
 
@@ -535,7 +544,7 @@ namespace Demo
         /// </remarks>
         private static void StartSamplerAnimation(string sampler, SamplerSubject subject)
         {
-            var property = SamplerProbe.Property(sampler);
+            var property = SamplerProbe.Path(sampler);
             property.SetValue(subject, SamplerProbe.Start(sampler));
 
             // Effect 的其余默认值正是这里要的：FPS 60、不自动反向、只跑一趟 —— 于是末帧精确落在终点。
@@ -663,7 +672,7 @@ namespace Demo
 
                 var subject = _bench.SubjectFor(sampler);
                 Transition.Exit(subject, IncludeMutual: true, IncludeNoMutual: true);
-                SamplerProbe.Property(sampler).SetValue(subject, SamplerProbe.Start(sampler));
+                SamplerProbe.Path(sampler).SetValue(subject, SamplerProbe.Start(sampler));
             }
         }
 
@@ -916,20 +925,6 @@ namespace Demo
         /// <summary>Writes a colour in a form a test can read: #rrggbb. WinForms' BackColor is always a solid colour, so the type-name branch the other demos need is unreachable here; the only other case is the no-colour sentinel, which must not read as black.</summary>
         private static string Describe(Color color)
             => color.IsEmpty ? "none" : $"#{color.R:x2}{color.G:x2}{color.B:x2}";
-
-        private void UpdateReadout()
-        {
-            var mid = over1.BackColor;
-            var ceiling = over3.BackColor;
-
-            // 四个可读点：两条位移曲线同屏比、尺寸峰值（宽高应始终相等）、颜色通道是否越界或回绕
-            readout.Text =
-                $"位移 Back  目标 {MoveDistance,4}   当前 {over0.Left,4}"
-                + $"        Elastic 当前 {over4.Left,4}"
-                + $"        尺寸  目标 {SizeTarget,3}x{SizeTarget,3}   当前 {over2.Width,3}x{over2.Height,3}\r\n"
-                + $"中段色③ 目标 {ColorMidTarget.R,3},{ColorMidTarget.G,3},{ColorMidTarget.B,3}   当前 {mid.R,3},{mid.G,3},{mid.B,3}"
-                + $"        上限色⑤ 目标 {ColorCeilTarget.R,3},{ColorCeilTarget.G,3},{ColorCeilTarget.B,3}   当前 {ceiling.R,3},{ceiling.G,3},{ceiling.B,3}";
-        }
 
         // -----------------------------------------------------------------------------------------------
         // 顶栏那两件（停止全部 / 重置）在案例列表这一侧的落点
