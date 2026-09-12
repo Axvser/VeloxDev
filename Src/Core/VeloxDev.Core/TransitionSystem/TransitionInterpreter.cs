@@ -48,9 +48,53 @@ public abstract class TransitionInterpreterCore<
 public abstract class TransitionInterpreterCore : IDisposable
 {
     protected CancellationTokenSource? cts = null;
+    private ReusableTimerWait? _wait;
 
     /// <summary>The arguments handed to every effect callback of one animation.</summary>
     public virtual TransitionEventArgs Args { get; set; } = new();
+
+    /// <summary>
+    /// Arranges for <paramref name="continuation"/> to run once, no earlier than <paramref name="interval"/> from
+    /// now, or as soon as <paramref name="cancellationToken"/> is cancelled.
+    /// </summary>
+    /// <remarks>
+    /// The default reuses one timer for the whole loop. A host whose framework can say when the next frame is — a
+    /// render tick on WPF, Avalonia or WinUI — overrides this to wake on that instead: the timeline is what makes a
+    /// frame correct, so this only decides how often the loop looks, and waking late is merely a frame drawn further
+    /// along.
+    /// <para>
+    /// Must not block the calling thread, and must invoke <paramref name="continuation"/> exactly once — including
+    /// when cancelled. An implementation that simply stopped calling back would park the loop for good; nothing else
+    /// would wake it.
+    /// </para>
+    /// </remarks>
+    protected virtual void ArmNextFrame(Action continuation, TimeSpan interval, CancellationToken cancellationToken)
+        => (_wait ??= new ReusableTimerWait()).Schedule(continuation, interval, cancellationToken);
+
+    /// <summary>
+    /// The awaitable the sampling loop waits through. Routed through <see cref="ArmNextFrame"/> so an override is
+    /// what actually decides the wait.
+    /// </summary>
+    /// <remarks>
+    /// Implements <see cref="System.Runtime.CompilerServices.INotifyCompletion"/> and deliberately <b>not</b>
+    /// <c>ICriticalNotifyCompletion</c>: the compiler picks its await path by which of the two the awaiter offers,
+    /// and only the <c>INotifyCompletion</c> path makes the builder capture the caller's
+    /// <see cref="SynchronizationContext"/>. That is what keeps a loop started on the UI thread on the UI thread —
+    /// a default pacer resumes wherever its timer fired, so without this the effect's callbacks would move threads.
+    /// </remarks>
+    internal readonly struct FrameWait(TransitionInterpreterCore interpreter, TimeSpan interval, CancellationToken token)
+        : System.Runtime.CompilerServices.INotifyCompletion
+    {
+        public FrameWait GetAwaiter() => this;
+
+        /// <summary>Always false: arming is what completes the wait, so there is nothing to short-circuit.</summary>
+        public bool IsCompleted => false;
+
+        /// <summary>Throws when the wait was ended by cancellation rather than by the interval elapsing.</summary>
+        public void GetResult() => token.ThrowIfCancellationRequested();
+
+        public void OnCompleted(Action continuation) => interpreter.ArmNextFrame(continuation, interval, token);
+    }
 
     /// <summary>
     /// Timeline-driven continuous sampling loop: the normalized time is the distance from the running pass's anchor
@@ -145,7 +189,7 @@ public abstract class TransitionInterpreterCore : IDisposable
             // FPS is a *maximum* sample rate, not a frame grid: an animation slows down when it is lowered and
             // never runs faster than it, whatever the system timer resolution happens to be.
             var sampleIntervalMs = 1000.0 / Math.Max(1, effect.FPS);
-            await Task.Delay(TimeSpan.FromMilliseconds(sampleIntervalMs), cts.Token); // yield; the timeline is the timing authority
+            await new FrameWait(this, TimeSpan.FromMilliseconds(sampleIntervalMs), cts.Token); // yield; the timeline is the timing authority
         }
     }
 
@@ -195,11 +239,17 @@ public abstract class TransitionInterpreterCore : IDisposable
 
     public virtual void Dispose()
     {
+        // 先取消：唤醒循环是它停下来的方式。pacer 后释放——即使顺序反过来也不会卡住（已释放的 pacer 会立刻唤醒
+        // 续体），但先取消能让循环走的是正常的取消路径，而不是异常路径。
         var oldCts = Interlocked.Exchange(ref cts, null);
         if (oldCts != null && !oldCts.IsCancellationRequested)
         {
             oldCts.Cancel();
         }
+
+        _wait?.Dispose();
+        _wait = null;
+
         GC.SuppressFinalize(this);
     }
 }

@@ -418,6 +418,10 @@ public class TransitionCore<
     {
         if (delay <= TimeSpan.Zero) return;
 
+        // 同一个等待对象贯穿整个段间等待。这里不是热路径（一个动画的段数很少），复用只是为了不让同一个子系统里
+        // 留两种等待方式。
+        using var wait = new ReusableTimerWait();
+
         var remaining = delay;
         while (remaining > TimeSpan.Zero)
         {
@@ -432,7 +436,7 @@ public class TransitionCore<
             }
 
             var before = TransitionTime.Now;
-            await Task.Delay(remaining, ct);
+            await wait.Await(remaining, ct);
             var elapsedMs = Math.Max(TransitionTime.TicksToMs(TransitionTime.Now - before), 0.5d);
             remaining -= TimeSpan.FromMilliseconds(elapsedMs);
         }
