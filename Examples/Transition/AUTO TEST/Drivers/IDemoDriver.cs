@@ -31,6 +31,27 @@ internal interface IDemoDriver : IDisposable
     void Launch();
 
     /// <summary>
+    /// Name the case about to run, then hold the surface still for <c>VELOXDEV_AT_OBSERVE</c>.
+    /// </summary>
+    /// <remarks>
+    /// Called at the top of every case so a person watching knows what is being checked before it happens, and has a
+    /// moment to see the state the previous case left behind. See <c>AtConfig.Observe</c> for why this is separate
+    /// from the per-click pace.
+    /// </remarks>
+    void Show(string what);
+
+    /// <summary>
+    /// Bring the demo back to its rest state: stop everything running, then reset the targets.
+    /// </summary>
+    /// <remarks>
+    /// A suite no longer gets a process of its own — one demo per platform is started and shared for the whole run
+    /// (see <c>DemoCatalog.For</c>) — so this is what replaces a fresh process as the known starting state. Stopping
+    /// before resetting keeps the reset from being overwritten by an animation that was still running, which is the
+    /// order the suites already used by hand.
+    /// </remarks>
+    void Settle();
+
+    /// <summary>
     /// Click the control with this automation id, then linger for <c>VELOXDEV_AT_PACE</c> so the click can be watched.
     /// </summary>
     /// <remarks>

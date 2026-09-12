@@ -50,19 +50,53 @@ Without `VELOXDEV_AT=1` every test is reported as skipped and the run still exit
 | `VELOXDEV_AT_PLATFORMS` | Comma-separated subset, e.g. `WPF,Blazor`. Unset means all. |
 | `VELOXDEV_AT_DEMO_ROOT` | Directory to resolve demo executables under, instead of the repository root. Point it at a publish output. |
 | `VELOXDEV_AT_PACE` | Milliseconds to linger after **every** click a suite makes — sampler handles and load-mode buttons alike. **Defaults to 800** so a run can be watched; `2500` is a comfortable pace for watching the whole thing, `0` goes straight on to reading the payloads. |
+| `VELOXDEV_AT_OBSERVE` | Milliseconds to hold at the start of **each case**, after the banner naming it is printed. **Defaults to 1200**; `0` moves straight on. Separate from the pace because the two answer different questions — see below. |
 | `VELOXDEV_BENCH_MS` | How long the demo plays each case through a real transition. **Defaults to 800.** A bulk run is only finished once its slowest row has settled, so this sets the floor for the sampler suites — `200` is the fast run, and the demos still visibly animate at that length. |
 
 The pause lives in `DemoDriverBase.Click`, not in the suites — every click goes through that one method, so a case
 added later cannot quietly leave it out. It was inside `ActivateSampler` alone until it turned out that left the
 load-mode row (a dozen clicks a platform, each starting real animations) flashing past unobservably.
 
+The other two pauses are one level up. `DemoDriverBase.Show` names the case about to run and holds the surface for
+`VELOXDEV_AT_OBSERVE`, so a viewer can read what is being checked and see what the last case left behind; it is called
+from each suite's case loop. And the demo itself is started **once per platform for the whole run** rather than once
+per suite — the window no longer vanishes and reappears between cases, which was the most disruptive thing to watch
+and also the largest single cost in the run.
+
+### One demo per platform, not one per suite
+
+`DemoCatalog.For(platform)` launches on first use and keeps the process until the assembly teardown. Seventeen
+launches across the four suites became seven, one per platform.
+
+The contract that comes with it: **a suite no longer starts from a fresh process**, so it has to bring the demo to a
+known state itself. That is what `IDemoDriver.Settle()` is — stop everything, then reset — called at the top of each
+case. This is not a new obligation so much as a stated one: every suite already reset before it measured, so a case
+can be checked by asking whether it still does.
+
+Two consequences worth knowing:
+
+- **Suite order no longer matters, but state does.** `DemoCatalog.For` is a plain dictionary, which is only safe
+  because `AssemblyInfo` already marks the whole assembly `DoNotParallelize` — one case runs at a time, so a shared
+  driver never has two users.
+- **Blazor gets the most out of this.** Its host binds a fixed port and refuses to start while anything answers on it,
+  so four sequential servers were also four chances to trip over a stale one. There is now one.
+
 ### How long it takes, measured
+
+> The first and third rows describe the state **before** demos were shared per platform and before the timeline-control
+> row and suite existed. The launch count went from seventeen to seven, an eighth test method per platform was added,
+> and there is now a second pause (`VELOXDEV_AT_OBSERVE`). Re-measure them before quoting; only the fast row below has
+> been measured since.
 
 | Invocation | Wall clock | What dominates it |
 |---|---|---|
 | `VELOXDEV_AT=1 dotnet test …` (defaults — watchable) | 2m48s | the load-mode suites: ~98 clicks × the 800 ms pace |
-| `VELOXDEV_BENCH_MS=200 VELOXDEV_AT_PACE=0 VELOXDEV_AT=1 dotnet test …` | 1m22s | demo launches (~4 s × 19 tests) |
+| `VELOXDEV_BENCH_MS=200 VELOXDEV_AT_PACE=0 VELOXDEV_AT_OBSERVE=0 VELOXDEV_AT=1 dotnet test …` | **1m32s, 27 tests** | the seven remaining demo launches, plus Blazor's server |
 | `VELOXDEV_BENCH_MS=1600 VELOXDEV_AT_PACE=2500 VELOXDEV_AT=1 dotnet test …` (watch everything) | 5m54s | the pace, plus 59 × 1.6 s of animation |
+
+Measured for the fast row: seven processes for 27 tests, against seventeen processes for 19 before — so the launch
+count is no longer what the fast run is made of, and adding the timeline suite cost about ten seconds rather than the
+four launches it would have cost.
 
 Two things worth knowing about those numbers:
 
@@ -74,16 +108,24 @@ Two things worth knowing about those numbers:
   went through the driver without a pause until it turned out that left a row of real animations flashing past
   unobservably. `VELOXDEV_AT_PACE=0` removes all of it.
 
-The floor is the demo launches (~4 s each, and each platform's suites each start their own), not the animations.
-Lowering `VELOXDEV_BENCH_MS` further buys very little.
+The floor was the demo launches — one per suite per platform — not the animations. Lowering `VELOXDEV_BENCH_MS`
+further buys very little; sharing the process is what buys the most.
 
 ## What is checked
 
 Each demo presents its cases as a **list of rows**: one row per sampler the adapter ships, plus rows for the load-mode
 and overshoot scenarios. A row carries the element that case really animates, a sentence saying what it verifies, and
-its own `启动 / 关闭 / 重置`. Above the list sits the toolbar: the global trio (`全部启动 / 停止全部 / 重置`) and the five
-loading modes — they stay there because they are *how* to load, not *what* to load, which is what lets every row have
-the same three controls. All of it is generated from one table per demo, so a case is added in exactly one place.
+its own `启动 / 关闭 / 重置`. Above the list sits the toolbar: the global trio (`全部启动 / 停止全部 / 重置`), the five
+loading modes, and the six timeline controls (`暂停 / 恢复 / 慢速 / 快速 / 正常 / 下一程`) — they stay there because they
+are *how* to load or steer, not *what* to load, which is what lets every row have the same three controls. All of it is
+generated from one table per demo, so a case is added in exactly one place.
+
+The timeline row acts on the three long animations the loading modes drive, not on the overshoot rows: pausing one of
+those is indistinguishable on screen from it simply being quick. Its state comes back in `over.state` as
+`paused` / `rate` / `pos` / `cycle`, read from the first of the three, so `TimelineControlSuite` asserts that a run
+really froze, really resumed, and really moved to the pass it was told to. What it does *not* assert is the arithmetic
+— the pass-local seek, the rewind-to-start rule and the exclusion of paused time are pinned by the unit tests, which
+can measure them precisely; this suite exists to prove the whole path works on a real surface.
 
 A sampler row's 启动 carries the token `over.sampler.<SamplerTypeName>` and does what a click has always done. It is
 now clicked **once per platform** as a spot check, because driving every row that way costs one click and one whole

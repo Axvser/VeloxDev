@@ -36,6 +36,29 @@ internal static class AtConfig
     private const int DefaultPaceMs = 800;
 
     /// <summary>
+    /// How long to hold at the start of **each case**, after the banner naming it. Unset means
+    /// <see cref="DefaultObserveMs"/>; set <c>VELOXDEV_AT_OBSERVE</c> to a number of milliseconds, and to <c>0</c>
+    /// to move straight on.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately separate from <see cref="Pace"/>, because the two answer different questions. The pace is the gap
+    /// between two clicks <em>inside</em> one case, so it has to stay short or a case that clicks a dozen times takes
+    /// a minute apiece. This is the gap <em>between</em> cases: long enough to read which one is about to run and to
+    /// see what the last one left on screen, which is what turns a run from a blur with a verdict into something
+    /// followable.
+    /// <para>
+    /// The demos themselves are started once per platform for the whole run rather than per suite, which removes the
+    /// other thing that made a run hard to watch: the window vanishing and a new one appearing between cases.
+    /// </para>
+    /// </remarks>
+    internal static TimeSpan Observe =>
+        int.TryParse(Environment.GetEnvironmentVariable("VELOXDEV_AT_OBSERVE"), out var milliseconds)
+            ? TimeSpan.FromMilliseconds(Math.Max(0, milliseconds))
+            : TimeSpan.FromMilliseconds(DefaultObserveMs);
+
+    private const int DefaultObserveMs = 1200;
+
+    /// <summary>
     /// Comma-separated subset to run, e.g. <c>VELOXDEV_AT_PLATFORMS=WPF,Blazor</c>. Empty or unset means all.
     /// </summary>
     internal static bool RunsOn(string platform)

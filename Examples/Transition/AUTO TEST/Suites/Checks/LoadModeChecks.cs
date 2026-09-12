@@ -1,5 +1,4 @@
-using System.Globalization;
-using System.Reflection;
+﻿using System.Globalization;
 using VeloxDev.AT.Drivers;
 using VeloxDev.AT.Engine;
 using VeloxDev.AT.LoadMode;
@@ -29,8 +28,7 @@ namespace VeloxDev.AT.Suites;
 /// so a single run still names every behaviour that went wrong.
 /// </para>
 /// </remarks>
-[TestClass]
-public class LoadModeSuite
+internal static class LoadModeChecks
 {
     /// <summary>How long a load may take to show up in the three targets.</summary>
     private static readonly TimeSpan StartWindow = TimeSpan.FromSeconds(3);
@@ -40,63 +38,16 @@ public class LoadModeSuite
 
     private const double Tolerance = 1e-6;
 
-    [TestMethod]
-    [TestCategory("AT.WPF")]
-    public void Wpf_LoadModes_MatchTheLibrarySemantics() => AssertLoadModes(WpfLoadMode.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.Jalium")]
-    public void Jalium_LoadModes_MatchTheLibrarySemantics() => AssertLoadModes(JaliumLoadMode.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.Blazor")]
-    public void Blazor_LoadModes_MatchTheLibrarySemantics() => AssertLoadModes(BlazorLoadMode.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.MAUI")]
-    public void Maui_LoadModes_MatchTheLibrarySemantics() => AssertLoadModes(MauiLoadMode.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.WinForms")]
-    public void WinForms_LoadModes_MatchTheLibrarySemantics() => AssertLoadModes(WinFormsLoadMode.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.WinUI")]
-    public void WinUI_LoadModes_MatchTheLibrarySemantics() => AssertLoadModes(WinUiLoadMode.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.Avalonia")]
-    public void Avalonia_LoadModes_MatchTheLibrarySemantics() => AssertLoadModes(AvaloniaLoadMode.Platform);
-
     /// <summary>
-    /// Every platform with a load-mode table must have a case that runs it — see the same guard in
-    /// <c>SamplerConformanceSuite</c> for why this is not belt-and-braces.
+    /// Drives the load-mode row and checks what the pipeline did, through a demo the caller already owns.
     /// </summary>
-    [TestMethod]
-    public void EveryLoadModePlatform_HasARunningCase()
+    /// <remarks>
+    /// Takes the driver rather than opening one: a platform's whole acceptance run goes through a single demo, and
+    /// who opens and closes it is the platform suite's business, not this check's.
+    /// </remarks>
+    internal static void Run(IDemoDriver driver, string platform)
     {
-        var covered = typeof(LoadModeSuite)
-            .GetMethods()
-            .SelectMany(method => method.GetCustomAttributes<TestCategoryAttribute>())
-            .SelectMany(attribute => attribute.TestCategories)
-            .Where(category => category.StartsWith("AT.", StringComparison.Ordinal))
-            .Select(category => category[3..])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var missing = LoadModeCatalog.Platforms
-            .Where(platform => !covered.Contains(platform))
-            .OrderBy(platform => platform, StringComparer.Ordinal)
-            .ToList();
-
-        CollectionAssert.AreEqual(Array.Empty<string>(), missing.ToArray(),
-            $"这些平台有加载模式表，却没有任何一条用例在跑它：{string.Join(", ", missing)}");
-    }
-
-    private static void AssertLoadModes(string platform)
-    {
-        DemoCatalog.RequireEnabled(platform);
-        using var driver = DemoCatalog.Create(platform);
-        driver.Launch();
+        driver.Settle();
 
         var entry = LoadModeCatalog.For(platform);
         var failures = new List<string>();
@@ -125,6 +76,10 @@ public class LoadModeSuite
 
         void Case(string name, Action body)
         {
+            // 先报用例名并让界面停一下。用例之间不留缝的话，一次运行就是一团带着结论的模糊 —— 这一条与 Click 里
+            // 那个 Pace 是同一个理由，只是高一层：那个管一次点击，这个管一条用例。
+            driver.Show(name);
+
             try
             {
                 body();

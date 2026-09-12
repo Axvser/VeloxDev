@@ -1,5 +1,4 @@
-using System.Globalization;
-using System.Reflection;
+﻿using System.Globalization;
 using VeloxDev.AT.Conformance;
 using VeloxDev.AT.Drivers;
 using VeloxDev.AT.Engine;
@@ -32,8 +31,7 @@ namespace VeloxDev.AT.Suites;
 /// </item>
 /// </list>
 /// </remarks>
-[TestClass]
-public class SamplerConformanceSuite
+internal static class ConformanceChecks
 {
     /// <summary>
     /// How far a produced component may be from the expected one. Both sides run the same arithmetic, but as two
@@ -41,63 +39,16 @@ public class SamplerConformanceSuite
     /// </summary>
     private const double Tolerance = 1e-6;
 
-    [TestMethod]
-    [TestCategory("AT.WPF")]
-    public void Wpf_EverySamplerMatchesItsClosedForm() => AssertConforms(WpfConformance.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.WinForms")]
-    public void WinForms_EverySamplerMatchesItsClosedForm() => AssertConforms(WinFormsConformance.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.Blazor")]
-    public void Blazor_EverySamplerMatchesItsClosedForm() => AssertConforms(BlazorConformance.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.MAUI")]
-    public void Maui_EverySamplerMatchesItsClosedForm() => AssertConforms(MauiConformance.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.WinUI")]
-    public void WinUI_EverySamplerMatchesItsClosedForm() => AssertConforms(WinUiConformance.Platform);
-
     /// <summary>
-    /// Every platform with a closed-form table must have a case that runs it.
+    /// Blazor only: the sampler's product checked through the browser's own computed style.
     /// </summary>
     /// <remarks>
-    /// This is not belt-and-braces: a case was once lost by an edit that used the case above it as the anchor and did
-    /// not put it back, and nothing went red — the platform simply stopped being verified while the suite stayed green.
-    /// The registry is the assertion; this checks that each entry in it is actually reachable.
+    /// 这条是 Blazor 独有的形态，也是"从真实 UI 表现验证"最字面的一种：浏览器里没有一个"控件属性"可读，
+    /// 真实表现就是**计算样式**。所以这里不读 app 报的载荷，而是读浏览器算出来的背景色，与采样器端点色比。
     /// </remarks>
-    [TestMethod]
-    public void EveryConformancePlatform_HasARunningCase()
+    internal static void RunBlazorBench(IDemoDriver driver)
     {
-        var covered = typeof(SamplerConformanceSuite)
-            .GetMethods()
-            .SelectMany(method => method.GetCustomAttributes<TestCategoryAttribute>())
-            .SelectMany(attribute => attribute.TestCategories)
-            .Where(category => category.StartsWith("AT.", StringComparison.Ordinal))
-            .Select(category => category[3..])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var missing = ConformanceCatalog.Platforms
-            .Where(platform => !covered.Contains(platform))
-            .OrderBy(platform => platform, StringComparer.Ordinal)
-            .ToList();
-
-        CollectionAssert.AreEqual(Array.Empty<string>(), missing.ToArray(),
-            $"这些平台有闭式解表，却没有任何一条用例在跑它：{string.Join(", ", missing)}");
-    }
-
-    [TestMethod]
-    [TestCategory("AT.Blazor")]
-    public void Blazor_SamplerBench_PaintsTheColourTheSamplerProduced()
-    {
-        // 这条是 Blazor 独有的形态，也是"从真实 UI 表现验证"最字面的一种：浏览器里没有一个"控件属性"可读，
-        // 真实表现就是**计算样式**。所以这里不读 app 报的载荷，而是读浏览器算出来的背景色，与采样器端点色比。
-        DemoCatalog.RequireEnabled(BlazorDemoDriver.PlatformName);
-        using var driver = DemoCatalog.Create(BlazorDemoDriver.PlatformName);
-        driver.Launch();
+        driver.Settle();
 
         driver.ActivateSampler("StringSampler");
 
@@ -115,19 +66,12 @@ public class SamplerConformanceSuite
             $"浏览器算出的背景色是 {painted}，而采样器的端点色是 #F0B432");
     }
 
-    [TestMethod]
-    [TestCategory("AT.Jalium")]
-    public void Jalium_EverySamplerMatchesItsClosedForm() => AssertConforms(JaliumConformance.Platform);
-
-    [TestMethod]
-    [TestCategory("AT.Avalonia")]
-    public void Avalonia_EverySamplerMatchesItsClosedForm() => AssertConforms(AvaloniaConformance.Platform);
-
-    private static void AssertConforms(string platform)
+    /// <summary>
+    /// Checks every sampler of one platform against its closed form, through a demo the caller already owns.
+    /// </summary>
+    internal static void Run(IDemoDriver driver, string platform)
     {
-        DemoCatalog.RequireEnabled(platform);
-        using var driver = DemoCatalog.Create(platform);
-        driver.Launch();
+        driver.Settle();
 
         var table = ConformanceCatalog.For(platform);
 

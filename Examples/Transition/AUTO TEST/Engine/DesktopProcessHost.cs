@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using VeloxDev.AT.Drivers;
 
 namespace VeloxDev.AT.Engine;
 
@@ -197,7 +198,18 @@ internal sealed class DesktopProcessHost : IDisposable
 [TestClass]
 public sealed class DemoProcessJanitor
 {
-    /// <summary>Kill any demo the suites started that is still running.</summary>
+    /// <summary>
+    /// Close the demos the run kept alive, then kill anything of ours still standing.
+    /// </summary>
+    /// <remarks>
+    /// The two steps are not redundant. The first is the orderly close of the processes the run shared across
+    /// suites — each of which now outlives the test that started it. The second is the backstop for a demo that
+    /// ignored its close, or that was started by something the cache never got to hold.
+    /// </remarks>
     [AssemblyCleanup]
-    public static void KillLeakedDemos() => DesktopProcessHost.KillEverythingWeLaunched();
+    public static void KillLeakedDemos()
+    {
+        DemoCatalog.Shutdown();
+        DesktopProcessHost.KillEverythingWeLaunched();
+    }
 }

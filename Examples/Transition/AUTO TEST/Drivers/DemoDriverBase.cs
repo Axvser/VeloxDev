@@ -83,6 +83,23 @@ internal abstract class DemoDriverBase : IDemoDriver
     /// </remarks>
     private const string BatchAutomationId = "over.batch";
 
+    /// <summary>
+    /// The toolbar handles that put the demo back to its rest state. Named here, like the payload tokens above,
+    /// because every suite needs them and no driver gets to spell them differently.
+    /// </summary>
+    private const string StopAllAutomationId = "over.btn.stop.all";
+
+    private const string ResetAllAutomationId = "over.btn.reset.all";
+
+    /// <summary>
+    /// How many 20 ms polls of <see cref="BringIntoView"/> go by before the scroll request is issued again.
+    /// </summary>
+    /// <remarks>
+    /// Long enough not to fight a scroll animation that is already running, short enough that a request which simply
+    /// did nothing is retried well inside <see cref="BringIntoViewTimeout"/>.
+    /// </remarks>
+    private const int BringIntoViewRepollEvery = 6;
+
     private IDemoHost? _host;
     private PollRecorder? _recorder;
 
@@ -126,6 +143,35 @@ internal abstract class DemoDriverBase : IDemoDriver
     }
 
     /// <summary>
+    /// Name the case about to run, then hold the surface still for <see cref="AtConfig.Observe"/>.
+    /// </summary>
+    /// <remarks>
+    /// A run is watched by people as well as read by machines, and a case that begins the instant the previous one
+    /// ends is a blur with a verdict attached. Naming the case first, and letting the surface sit for a moment, is
+    /// what makes the middle of a run followable — the same argument the pace makes for clicks, one level up.
+    /// </remarks>
+    public void Show(string what)
+    {
+        Console.WriteLine($"[AT] {Platform} · {what}");
+
+        if (AtConfig.Observe > TimeSpan.Zero) Thread.Sleep(AtConfig.Observe);
+    }
+
+    /// <summary>
+    /// Bring the demo back to its rest state: stop everything running, then reset the targets.
+    /// </summary>
+    /// <remarks>
+    /// A suite no longer gets a process of its own — one demo per platform is started and shared for the whole run —
+    /// so this is what replaces a fresh process as the known starting state. Stopping before resetting keeps the
+    /// reset from being overwritten by an animation that was still running.
+    /// </remarks>
+    public void Settle()
+    {
+        Click(StopAllAutomationId);
+        Click(ResetAllAutomationId);
+    }
+
+    /// <summary>
     /// Click one control, then linger for <see cref="AtConfig.Pace"/> so a person can see what that click did.
     /// </summary>
     /// <remarks>
@@ -160,13 +206,20 @@ internal abstract class DemoDriverBase : IDemoDriver
     /// </remarks>
     public void BringIntoView(string automationId)
     {
-        Host.BringIntoView(automationId);
-
         var deadline = DateTime.UtcNow + BringIntoViewTimeout;
-        while (DateTime.UtcNow < deadline)
+        var attempt = 0;
+
+        while (true)
         {
+            // 每过一会儿就**重新请求**一次，而不是请求一次之后干等：轮询一个没人会改变的状态，等不出结果来。
+            // 这曾经在 WinUI 上间歇失败 —— 滚出视野的行会被剔除，剔除状态下报出的矩形是 0x0，而落空的那一次
+            // Focus() 之后，再怎么等都不会自己好。轮询本身保持 20ms 不变，所以成功时该多快还是多快。
+            if (attempt++ % BringIntoViewRepollEvery == 0) Host.BringIntoView(automationId);
+
             // 控件压根不存在时由调用方去报，不在这里空等。
-            if (!Host.Exists(automationId) || Host.IsControlInsideView(automationId)) return;
+            if (!Host.Exists(automationId)) return;
+            if (Host.IsControlInsideView(automationId)) return;
+            if (DateTime.UtcNow >= deadline) return;
 
             Thread.Sleep(20);
         }
