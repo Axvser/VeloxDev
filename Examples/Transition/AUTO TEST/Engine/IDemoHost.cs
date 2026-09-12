@@ -1,4 +1,4 @@
-namespace VeloxDev.AT.Engine;
+﻿namespace VeloxDev.AT.Engine;
 
 /// <summary>
 /// Owns one demo — the process it runs in and the surface it is observed through — and is the only part of driving a
@@ -49,7 +49,25 @@ internal interface IDemoHost : IDisposable
     /// What the surface says about where a control is, for a failure message: its rectangle, and whether it is
     /// flagged as scrolled out of sight.
     /// </summary>
-    string DescribeReachability(string token);
+    string DescribeReachability(string token, string? siblingPrefix = null);
+
+    /// <summary>Bring the demo's own surface to the front, as clicking on it would.</summary>
+    void Activate();
+
+    /// <summary>
+    /// Whether the control currently holds the keyboard focus.
+    /// </summary>
+    /// <remarks>
+    /// A driver needs this to tell "the scroll request did nothing" apart from "there was no request to make": a
+    /// control that already holds focus cannot be brought into view by focusing it again.
+    /// </remarks>
+    bool HasFocus(string token);
+
+    /// <summary>
+    /// Scroll the control's container so the control is inside the window, without going through focus.
+    /// </summary>
+    /// <returns><c>true</c> when a scrollable container was found.</returns>
+    bool ScrollIntoView(string token);
 
     /// <summary>
     /// Whether the control with this token is somewhere a person could reach it — inside the window for a desktop

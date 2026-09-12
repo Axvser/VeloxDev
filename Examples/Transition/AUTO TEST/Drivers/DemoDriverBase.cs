@@ -91,6 +91,10 @@ internal abstract class DemoDriverBase : IDemoDriver
 
     private const string ResetAllAutomationId = "over.btn.reset.all";
 
+    /// <summary>Passed to the reachability report so a failure can say whether one handle is out of reach or all of
+    /// them are — the two point at completely different faults.</summary>
+    private const string SampleHandlePrefixForDiagnostics = SamplerHandlePrefix;
+
     /// <summary>
     /// How many 20 ms polls of <see cref="BringIntoView"/> go by before the scroll request is issued again.
     /// </summary>
@@ -99,6 +103,9 @@ internal abstract class DemoDriverBase : IDemoDriver
     /// did nothing is retried well inside <see cref="BringIntoViewTimeout"/>.
     /// </remarks>
     private const int BringIntoViewRepollEvery = 6;
+
+    /// <summary>How long to keep watching for a scroll that was asked for and may still be arriving.</summary>
+    private static readonly TimeSpan BringIntoViewGrace = TimeSpan.FromMilliseconds(400);
 
     private IDemoHost? _host;
     private PollRecorder? _recorder;
@@ -204,22 +211,72 @@ internal abstract class DemoDriverBase : IDemoDriver
     /// decides. A row that never arrives still fails — it just fails for the right reason.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Make the control reachable, by the three ways there are to do it, in the order a person would try them.
+    /// </summary>
+    /// <remarks>
+    /// The three steps exist because focusing is the only portable way to ask seven frameworks to scroll something into
+    /// view, and focusing is a <em>change</em> trigger rather than a command. A control that already holds focus cannot
+    /// be brought into view by focusing it again — the request is silently a no-op, and repeating it forever changes
+    /// nothing. That is what an intermittent WinUI failure turned out to be: the row had been focused at some earlier
+    /// step and then scrolled away, so every later attempt to bring it back did nothing at all.
+    /// <list type="number">
+    /// <item>Ask the way all seven platforms understand: focus it, and keep re-asking while polling.</item>
+    /// <item>If it is <em>already</em> focused, that request can never work. Move focus off it first — activating the
+    /// window is what a person supplies by clicking on it — so the next request is a real change.</item>
+    /// <item>If focus cannot do it at all, drive the scrolling container directly. That path does not involve focus
+    /// and does what it is told either way.</item>
+    /// </list>
+    /// </remarks>
     public void BringIntoView(string automationId)
+    {
+        FocusUntilVisible(automationId);
+        if (IsInView(automationId)) return;
+
+        if (Host.HasFocus(automationId))
+        {
+            // 它已经持有焦点，所以上一步那次"聚焦"什么都没做，而且再做多少次都一样。先把焦点移开。
+            Host.Activate();
+            FocusUntilVisible(automationId);
+            if (IsInView(automationId)) return;
+        }
+
+        if (Host.ScrollIntoView(automationId))
+        {
+            WaitForInView(automationId);
+        }
+    }
+
+    private bool IsInView(string automationId)
+        => Host.Exists(automationId) && Host.IsControlInsideView(automationId);
+
+    /// <summary>Focus the control and keep re-asking while polling, rather than asking once and then only waiting.</summary>
+    private void FocusUntilVisible(string automationId)
     {
         var deadline = DateTime.UtcNow + BringIntoViewTimeout;
         var attempt = 0;
 
         while (true)
         {
-            // 每过一会儿就**重新请求**一次，而不是请求一次之后干等：轮询一个没人会改变的状态，等不出结果来。
-            // 这曾经在 WinUI 上间歇失败 —— 滚出视野的行会被剔除，剔除状态下报出的矩形是 0x0，而落空的那一次
-            // Focus() 之后，再怎么等都不会自己好。轮询本身保持 20ms 不变，所以成功时该多快还是多快。
             if (attempt++ % BringIntoViewRepollEvery == 0) Host.BringIntoView(automationId);
 
             // 控件压根不存在时由调用方去报，不在这里空等。
             if (!Host.Exists(automationId)) return;
             if (Host.IsControlInsideView(automationId)) return;
             if (DateTime.UtcNow >= deadline) return;
+
+            Thread.Sleep(20);
+        }
+    }
+
+    /// <summary>Poll for the control to be in view without issuing any request — for a step that has already made one.</summary>
+    private void WaitForInView(string automationId)
+    {
+        var deadline = DateTime.UtcNow + BringIntoViewTimeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!Host.Exists(automationId)) return;
+            if (Host.IsControlInsideView(automationId)) return;
 
             Thread.Sleep(20);
         }
@@ -292,11 +349,19 @@ internal abstract class DemoDriverBase : IDemoDriver
                 $"{Platform}: no control with AutomationId '{token}' exists, so the demo does not offer this case at all.");
         }
 
+        // 再给一小段宽限，而不是拿一次瞬时读当结论。滚动可能是异步动画，"放弃的那一刻它正在滚进来"和"它根本
+        // 滚不动"在单次读取上长得一模一样 —— 诊断抓到过一次失败，消息里的矩形其实已经回到窗口内了。
+        var graceDeadline = DateTime.UtcNow + BringIntoViewGrace;
+        while (!Host.IsControlInsideView(token) && DateTime.UtcNow < graceDeadline)
+        {
+            Thread.Sleep(20);
+        }
+
         if (!Host.IsControlInsideView(token))
         {
             throw new InvalidOperationException(
                 $"{Platform}: the handle '{token}' is still outside the surface after being brought into view "
-                + $"({Host.DescribeReachability(token)}), so a person could not reach it.");
+                + $"({Host.DescribeReachability(token, SampleHandlePrefixForDiagnostics)}), so a person could not reach it.");
         }
 
         var before = ReadConformance();

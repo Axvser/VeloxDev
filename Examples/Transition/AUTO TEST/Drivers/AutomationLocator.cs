@@ -1,5 +1,6 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.UIA3;
@@ -19,6 +20,16 @@ namespace VeloxDev.AT.Drivers;
 internal sealed class AutomationLocator : IDisposable
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>
+    /// Leave the horizontal axis alone when setting a scroll position.
+    /// </summary>
+    /// <remarks>
+    /// Spelled out rather than taken from <c>ScrollPattern.NoScroll</c>: the pattern type is reachable through
+    /// <c>PatternOrDefault</c> but is not part of the assembly's public surface, so naming it does not compile.
+    /// The value is <c>-1</c>, meaning "this axis is not being set".
+    /// </remarks>
+    private const double NoScrollPercent = -1d;
 
     private readonly UIA3Automation _automation;
     private readonly AutomationElement _root;
@@ -122,12 +133,9 @@ internal sealed class AutomationLocator : IDisposable
         var element = FindNow(automationId);
         if (element is null) return false;
 
-        var control = element.Properties.BoundingRectangle.ValueOrDefault;
-        var window = _root.Properties.BoundingRectangle.ValueOrDefault;
-
-        return control.Width > 0 && control.Height > 0
-            && control.Right > window.Left && control.Left < window.Right
-            && control.Bottom > window.Top && control.Top < window.Bottom;
+        return IsInsideWindow(
+            element.Properties.BoundingRectangle.ValueOrDefault,
+            _root.Properties.BoundingRectangle.ValueOrDefault);
     }
 
     /// <summary>
@@ -142,6 +150,90 @@ internal sealed class AutomationLocator : IDisposable
     internal void BringIntoView(string automationId) => FindNow(automationId)?.Focus();
 
     /// <summary>
+    /// Bring the demo's own window to the front and give it the keyboard focus.
+    /// </summary>
+    /// <remarks>
+    /// The other half of reaching a control, and the half that scrolling cannot do. A person reaching for a row scrolled
+    /// out of sight clicks the window first, which is what a background window needs before it will accept a focus
+    /// change at all — a window that is not foreground may simply refuse one, and then the focused element never
+    /// scrolls into view no matter how often it is asked.
+    /// </remarks>
+    internal void Activate() => _root.Focus();
+
+    /// <summary>Whether the control currently holds the keyboard focus.</summary>
+    internal bool HasFocus(string automationId)
+        => FindNow(automationId)?.Properties.HasKeyboardFocus.ValueOrDefault == true;
+
+    /// <summary>
+    /// Scroll the control's container until the control lies inside the window.
+    /// </summary>
+    /// <remarks>
+    /// The path that does not go through focus, and the reason it has to exist: focusing is a <em>change</em> trigger
+    /// rather than a command, so focusing an element that already holds focus does nothing at all. A row that was
+    /// focused and then scrolled away is therefore unreachable through the focus path no matter how often the request
+    /// is repeated — which is exactly what an intermittent WinUI failure turned out to be. This asks the container
+    /// instead, which does what it is told whether or not anything is focused.
+    /// </remarks>
+    /// <returns><c>true</c> when a scrollable container was found; <c>false</c> when there is none to ask.</returns>
+    internal bool ScrollContainerIntoView(string automationId)
+    {
+        var element = FindNow(automationId);
+        if (element is null) return false;
+
+        var window = _root.Properties.BoundingRectangle.ValueOrDefault;
+        if (IsInsideWindow(element.Properties.BoundingRectangle.ValueOrDefault, window)) return true;
+
+        var container = FindScrollableAncestor(element);
+        var scroll = container?.Patterns.Scroll.PatternOrDefault;
+        if (container is null || scroll is null) return false;
+
+        try
+        {
+            for (var attempt = 0; attempt < 4; attempt++)
+            {
+                var control = element.Properties.BoundingRectangle.ValueOrDefault;
+                var viewport = container.Properties.BoundingRectangle.ValueOrDefault;
+                if (viewport.Height <= 0 || viewport.Width <= 0) return false;
+
+                // 控制点比视口上沿低多少，内容就要往上走多少。
+                var deltaPixels = control.Top - viewport.Top;
+
+                // 滚动百分比是相对**内容**的，不是相对视口的：可见比例把两者换算起来。
+                var visible = Math.Max(scroll.VerticalViewSize.ValueOrDefault / 100d, 0.01d);
+                var contentHeight = viewport.Height / visible;
+                var deltaPercent = deltaPixels / contentHeight * 100d;
+
+                var current = scroll.VerticalScrollPercent.ValueOrDefault;
+                var target = Math.Clamp(current + deltaPercent, 0d, 100d);
+                if (Math.Abs(target - current) < 0.5d) return true; // 已经到头了，剩下的靠别的路
+
+                scroll.SetScrollPercent(NoScrollPercent, target);
+                Thread.Sleep(60);
+
+                if (IsInsideWindow(element.Properties.BoundingRectangle.ValueOrDefault, window)) return true;
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (exception is COMException or NotSupportedException or InvalidOperationException)
+        {
+            // 容器不支持程序化滚动，或者滚不了 —— 调用方还有聚焦那一条路。
+            return false;
+        }
+    }
+
+    private static AutomationElement? FindScrollableAncestor(AutomationElement element)
+    {
+        var ancestor = element.Parent;
+        for (var depth = 0; ancestor is not null && depth < 8; depth++, ancestor = ancestor.Parent)
+        {
+            if (ancestor.Patterns.Scroll.PatternOrDefault is not null) return ancestor;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// What UI Automation reports about a control's reachability, for a failure message.
     /// </summary>
     /// <remarks>
@@ -149,7 +241,7 @@ internal sealed class AutomationLocator : IDisposable
     /// fold reports <c>IsOffscreen=False</c> while its rectangle sits outside the window — so it cannot be the
     /// condition, and the rectangle check is what actually catches the case this guard exists for.
     /// </remarks>
-    internal string DescribeReachability(string automationId)
+    internal string DescribeReachability(string automationId, string? siblingPrefix = null)
     {
         var element = FindNow(automationId);
         if (element is null) return "the control is not in the automation tree at all";
@@ -157,10 +249,64 @@ internal sealed class AutomationLocator : IDisposable
         var control = element.Properties.BoundingRectangle.ValueOrDefault;
         var window = _root.Properties.BoundingRectangle.ValueOrDefault;
 
-        return $"control {control.Left:F0},{control.Top:F0} {control.Width:F0}x{control.Height:F0}, "
-             + $"window {window.Left:F0},{window.Top:F0} {window.Width:F0}x{window.Height:F0}, "
-             + $"IsOffscreen={element.Properties.IsOffscreen.ValueOrDefault}";
+        var report = new StringBuilder();
+        report.Append($"control {control.Left:F0},{control.Top:F0} {control.Width:F0}x{control.Height:F0}, ");
+        report.Append($"window {window.Left:F0},{window.Top:F0} {window.Width:F0}x{window.Height:F0}, ");
+        report.Append($"IsOffscreen={element.Properties.IsOffscreen.ValueOrDefault}");
+        report.Append($", HasFocus={element.Properties.HasKeyboardFocus.ValueOrDefault}");
+
+        // 键盘焦点在哪，是这一条诊断里最要紧的一项。BringIntoView 靠 Focus() 触发滚动，而在 UI Automation 里
+        // 对一个**已经聚焦**的元素再 Focus 一次是空操作 —— 如果轮询期间焦点始终没离开过它，那么重试再多次也
+        // 不会重新触发一次滚动，症状就正好是"元素在树里、矩形是空的、等多久都不好"。
+        try
+        {
+            var focused = _automation.FocusedElement();
+            report.Append($", focused='{focused?.Properties.AutomationId.ValueOrDefault}'");
+        }
+        catch (COMException)
+        {
+            report.Append(", focused=<unavailable>");
+        }
+
+        // 一个 0×0 的矩形有两种成因，而它们要分开处置：控件根本没被布局出来，或者它在一个滚动容器里被滚出了
+        // 视野 —— 后者 UI Automation 可能报空矩形。祖先链连同滚动容器的状态把这两种分开；少了这一段，读消息
+        // 的人只能靠猜，而"猜"和"查"在这里差着一整天。
+        report.Append("; ancestors:");
+        var ancestor = element.Parent;
+        for (var depth = 0; ancestor is not null && depth < 6; depth++, ancestor = ancestor.Parent)
+        {
+            var rect = ancestor.Properties.BoundingRectangle.ValueOrDefault;
+            report.Append($" [{ancestor.Properties.ControlType.ValueOrDefault} {rect.Left:F0},{rect.Top:F0} {rect.Width:F0}x{rect.Height:F0}");
+
+            var scroll = ancestor.Patterns.Scroll.PatternOrDefault;
+            if (scroll is not null)
+            {
+                report.Append($" scroll V={scroll.VerticallyScrollable}/{scroll.VerticalScrollPercent:F0}%"
+                    + $" H={scroll.HorizontallyScrollable}/{scroll.HorizontalScrollPercent:F0}%");
+            }
+
+            report.Append(']');
+        }
+
+        // 同族把手坏了一个、还是整排都够不着，是两种完全不同的故障：前者是这一行的问题，后者是列表或窗口的问题。
+        if (siblingPrefix is not null)
+        {
+            var handles = _root
+                .FindAllDescendants()
+                .Where(candidate => candidate.Properties.AutomationId.ValueOrDefault?.StartsWith(siblingPrefix, StringComparison.Ordinal) == true)
+                .ToList();
+
+            var reachable = handles.Count(candidate => IsInsideWindow(candidate.Properties.BoundingRectangle.ValueOrDefault, window));
+            report.Append($"; {reachable} of {handles.Count} '{siblingPrefix}*' handles are inside the window");
+        }
+
+        return report.ToString();
     }
+
+    private static bool IsInsideWindow(System.Drawing.Rectangle control, System.Drawing.Rectangle window)
+        => control.Width > 0 && control.Height > 0
+           && control.Right > window.Left && control.Left < window.Right
+           && control.Bottom > window.Top && control.Top < window.Bottom;
 
     private AutomationElement? FindNow(string automationId)
     {

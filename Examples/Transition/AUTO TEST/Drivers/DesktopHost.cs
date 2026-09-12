@@ -1,4 +1,4 @@
-using VeloxDev.AT.Engine;
+﻿using VeloxDev.AT.Engine;
 
 namespace VeloxDev.AT.Drivers;
 
@@ -33,7 +33,14 @@ internal sealed class DesktopHost : IDemoHost
 
     public void BringIntoView(string token) => Locator.BringIntoView(token);
 
-    public string DescribeReachability(string token) => Locator.DescribeReachability(token);
+    public void Activate() => Locator.Activate();
+
+    public bool HasFocus(string token) => Locator.HasFocus(token);
+
+    public bool ScrollIntoView(string token) => Locator.ScrollContainerIntoView(token);
+
+    public string DescribeReachability(string token, string? siblingPrefix = null)
+        => Locator.DescribeReachability(token, siblingPrefix);
 
     public bool IsControlInsideView(string token) => Locator.IsInsideWindow(token);
 

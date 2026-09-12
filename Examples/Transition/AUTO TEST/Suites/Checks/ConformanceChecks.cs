@@ -67,6 +67,32 @@ internal static class ConformanceChecks
     }
 
     /// <summary>
+    /// Capture the surface as it is right now and return a phrase to append to a failure message.
+    /// </summary>
+    /// <remarks>
+    /// A reachability failure needs a photograph of the moment. What UI Automation reports says the handle is out of
+    /// reach; what it cannot say is what the screen looked like — a window that never came forward, a list scrolled
+    /// somewhere unexpected, and a control that was never laid out all report the same way, and they are three
+    /// different faults.
+    /// </remarks>
+    private static string ScreenshotNote(IDemoDriver driver, string what)
+    {
+        try
+        {
+            var path = Path.Combine(
+                Path.GetTempPath(),
+                $"veloxdev-at-{driver.Platform}-{what}-{DateTime.Now:HHmmss}.png");
+
+            var written = driver.CaptureScreenshot(path);
+            return written is null ? string.Empty : $" [screenshot: {written}]";
+        }
+        catch (Exception exception)
+        {
+            return $" [screenshot failed: {exception.Message}]";
+        }
+    }
+
+    /// <summary>
     /// Checks every sampler of one platform against its closed form, through a demo the caller already owns.
     /// </summary>
     internal static void Run(IDemoDriver driver, string platform)
@@ -234,7 +260,7 @@ internal static class ConformanceChecks
         }
         catch (Exception exception)
         {
-            anomalies.Add($"抽样点 {entry.Sampler} 失败：{exception.Message}");
+            anomalies.Add($"抽样点 {entry.Sampler} 失败：{exception.Message}{ScreenshotNote(driver, entry.Sampler)}");
             return;
         }
 

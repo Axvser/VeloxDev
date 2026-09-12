@@ -88,6 +88,17 @@ internal interface IDemoDriver : IDisposable
     /// </summary>
     string? ComputedStyle(string automationId, string property);
 
+    /// <summary>
+    /// Write a screenshot of the demo's surface to <paramref name="path"/>; returns the path it actually wrote, or
+    /// <c>null</c> when none could be taken.
+    /// </summary>
+    /// <remarks>
+    /// For failure diagnostics. A reachability failure reports what UI Automation saw, and that cannot say what the
+    /// screen looked like — a window that never came forward, a list scrolled somewhere unexpected, and a control
+    /// that was never laid out all report identically and are three different faults.
+    /// </remarks>
+    string? CaptureScreenshot(string path);
+
     /// <summary>Read the demo's observation payload as it stands.</summary>
     StatePayload Read();
 

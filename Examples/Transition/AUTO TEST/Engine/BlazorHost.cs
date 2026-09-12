@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Net.Http;
@@ -101,7 +101,24 @@ internal sealed class BlazorHost : IDemoHost
             .EvaluateAsync("el => el.scrollIntoView({ block: 'center' })")
             .GetAwaiter().GetResult();
 
-    public string DescribeReachability(string token)
+    public bool HasFocus(string token)
+    {
+        // 页面里没有"键盘焦点在某一行上"这回事，滚动由浏览器在点击时自己做。
+        return false;
+    }
+
+    public bool ScrollIntoView(string token)
+    {
+        // 同上：没有可请求的滚动容器，Playwright 点击时会自己滚。
+        return false;
+    }
+
+    public void Activate()
+    {
+        // 浏览器页面没有窗口可以激活：页面在受控浏览器里本来就是可见的。
+    }
+
+    public string DescribeReachability(string token, string? siblingPrefix = null)
         => Exists(token) ? "a page scrolls, so reachability is not a fixed-frame question" : "the element is not on the page";
 
     public string? ComputedStyle(string token, string property)
