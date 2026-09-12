@@ -214,7 +214,11 @@
 
     public class EaseInBounce : IEaseCalculator
     {
-        public double Ease(double t) => 1 - Eases.Bounce.Out.Ease(1 - t);
+        // Held rather than reached through Eases.Bounce.Out: that property constructs a calculator, so going
+        // through it would allocate one object per frame on the sampling loop's hot path.
+        private static readonly EaseOutBounce Out = new();
+
+        public double Ease(double t) => 1 - Out.Ease(1 - t);
     }
     public class EaseOutBounce : IEaseCalculator
     {
@@ -231,6 +235,9 @@
     }
     public class EaseInOutBounce : IEaseCalculator
     {
-        public double Ease(double t) => t < 0.5 ? (1 - Eases.Bounce.Out.Ease(1 - 2 * t)) / 2 : (1 + Eases.Bounce.Out.Ease(2 * t - 1)) / 2;
+        // Same reason as EaseInBounce: the property allocates, and this runs once per frame.
+        private static readonly EaseOutBounce Out = new();
+
+        public double Ease(double t) => t < 0.5 ? (1 - Out.Ease(1 - 2 * t)) / 2 : (1 + Out.Ease(2 * t - 1)) / 2;
     }
 }
