@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Windows;
 using System.Windows.Automation;
@@ -644,10 +645,26 @@ public partial class MainWindow : Window
              + $"t3.cur={Describe(Over3.Fill)};"
              + $"t4.cur={elasticX:F3};t4.peak={Peak(4)};"
              + RecState("r0", Rec0) + RecState("r1", Rec1) + RecState("r2", Rec2)
+             // 时间轴那四个字段同样排在 nomutual 之前。pos 按毫秒取整报出：读的是当前这一程内的偏移，
+             // 而不是整条动画的位置 —— 程是独立的，跨程的位置没有意义。
+             + TimelineState(Rec0)
              // rows/away/moving 排在 nomutual **之前**：后者是加载模式那半必须读到的最后一个字段，
              // 而它在标签里本来就顶到了高度上限（WinForms 那侧为它把标签加高到两行过）。
              + $"rows={row.Rows};away={row.Away};moving={row.Moving};"
              + $"nomutual={NoMutualCount()};";
+    }
+
+    /// <summary>
+    /// 时间轴控制那排的回读：暂停与否、速率、当前程内位置、第几程。速率用不变文化格式化，免得小数点跟着
+    /// 机器区域设置变，验收侧读到 "0,25" 就解析不了。
+    /// </summary>
+    private static string TimelineState(Rectangle target)
+    {
+        const bool mutual = true, noMutual = true;
+        return $"paused={(Transition.IsPaused(target, mutual, noMutual) ? 1 : 0)};"
+             + $"rate={Transition.Rate(target, mutual, noMutual).ToString("0.###", CultureInfo.InvariantCulture)};"
+             + $"pos={(int)Transition.Position(target, mutual, noMutual).TotalMilliseconds};"
+             + $"cycle={Transition.Cycle(target, mutual, noMutual)};";
     }
 
     /// <summary>
@@ -748,6 +765,61 @@ public partial class MainWindow : Window
         // Each click starts a mutually-exclusive animation on Rec0, and the new animation cancels
         // the previous one (tests scheduler gating and cancellation).
         _ = Task.Run(() => Animation0.Execute(Rec0));
+    }
+
+    // -----------------------------------------------------------------------------------------------
+    // 时间轴控制
+    //
+    // 这一排作用在加载模式那三块长动画（Rec0/1/2）上，而不是下面 900ms 的一次性过冲：暂停一个 900ms 的过冲
+    // 在屏幕上和"它就是这么快"分不开，而这里同时也要给人看。三块各自是一条真 Transition，暂停/变速/定位都按
+    // target 寻址，所以是逐个调用 —— 这本身就是"控制面挂在 target 上、不挂在快照上"的一次演示。
+    // -----------------------------------------------------------------------------------------------
+
+    private Rectangle[] ControlTargets() => [Rec0, Rec1, Rec2];
+
+    private void PauseAll(object sender, RoutedEventArgs e)
+    {
+        foreach (var target in ControlTargets())
+        {
+            Transition.Pause(target, IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    private void ResumeAll(object sender, RoutedEventArgs e)
+    {
+        foreach (var target in ControlTargets())
+        {
+            Transition.Resume(target, IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    private void RateSlow(object sender, RoutedEventArgs e) => SetRate(0.25d);
+
+    private void RateFast(object sender, RoutedEventArgs e) => SetRate(4d);
+
+    /// <summary>
+    /// 正常速。把速率调回 1。时间轴只有正速率 —— 减速之后要回到原速就靠这一个，而不是再去点一次重置。
+    /// </summary>
+    private void RateNormal(object sender, RoutedEventArgs e) => SetRate(1d);
+
+    private void SetRate(double rate)
+    {
+        foreach (var target in ControlTargets())
+        {
+            Transition.SetRate(target, rate, IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    /// <summary>
+    /// 跳到下一程的起点。程计数器是整数，所以"第几程"可以被指名 —— 这正是绝对时间轴需要它的原因。
+    /// </summary>
+    private void SeekNextPass(object sender, RoutedEventArgs e)
+    {
+        foreach (var target in ControlTargets())
+        {
+            Transition.Seek(target, Transition.Cycle(target, IncludeMutual: true, IncludeNoMutual: true) + 1,
+                TimeSpan.Zero, IncludeMutual: true, IncludeNoMutual: true);
+        }
     }
 
     private void ExitAll(object sender, RoutedEventArgs e)

@@ -52,6 +52,25 @@
                         Content="连续互斥" Click="RepeatMutual"/>
             </WrapPanel>
 
+            <!--
+                时间轴控制。作用对象是上面那排加载模式驱动的三块长动画（十来秒的循环），不是下面 900ms 的一次性
+                过冲 —— 后者暂停与不暂停在屏幕上分不出来，而这一排既要给验收套件当把手，也要给人看。
+            -->
+            <WrapPanel Margin="0,4,0,0">
+                <Button Width="86" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.pause"
+                        Content="暂停" Click="PauseAll"/>
+                <Button Width="86" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.resume"
+                        Content="恢复" Click="ResumeAll"/>
+                <Button Width="96" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.rate.slow"
+                        Content="慢速 ×0.25" Click="RateSlow"/>
+                <Button Width="96" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.rate.fast"
+                        Content="快速 ×4" Click="RateFast"/>
+                <Button Width="96" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.rate.normal"
+                        Content="正常 ×1" Click="RateNormal"/>
+                <Button Width="86" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.seek.next"
+                        Content="下一程" Click="SeekNextPass"/>
+            </WrapPanel>
+
             <!-- The readout is what makes an overshoot observable: the number passes the target and comes back,
                  which the eye alone cannot tell apart from a slower ease. -->
             <TextBlock x:Name="Readout" Margin="4,6,4,2" FontFamily="Consolas" Foreground="#CCCCCC"

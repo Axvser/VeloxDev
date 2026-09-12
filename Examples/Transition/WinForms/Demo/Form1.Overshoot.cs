@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.Windows.Forms;
 using VeloxDev.TransitionSystem;
 
@@ -127,8 +128,11 @@ namespace Demo
         // 顶栏与列表
         // -----------------------------------------------------------------------------------------------
 
-        /// <summary>顶栏（全局三件 + 加载模式五件 + 读数）的总高。列表从它下面开始。</summary>
-        private const int TopAreaHeight = 288;
+        /// <summary>时间轴控制那一排的顶边：紧跟在加载模式那排（下沿 86）之后。</summary>
+        private const int TimelineRowTop = 92;
+
+        /// <summary>顶栏（全局三件 + 加载模式五件 + 时间轴六件 + 读数）的总高。列表从它下面开始。</summary>
+        private const int TopAreaHeight = 348;
 
         /// <summary>案例列表内容区的宽度。</summary>
         private const int RowWidth = SamplerBench.RowWidth;
@@ -227,31 +231,44 @@ namespace Demo
                 PlaceToolbar(button, left, back, top: 48, width: 118, height: 38);
             }
 
+            // 时间轴控制。作用对象是上面那排加载模式驱动的三块长动画（十来秒的循环），不是过冲那五行 ——
+            // 后者是 900ms 的一次性过冲，暂停与不暂停在屏幕上分不出来，而这一排既要给验收套件当把手，也要给人看。
+            // 三块各是一条真 Transition，暂停/变速/定位都按 target 寻址，所以逐块调用 —— 这本身就是
+            // "控制面挂在 target 上、不挂在快照上"的一次演示。整排同一个底色：它是一个控制面，不是六条案例。
+            var timelineBack = Color.LightSteelBlue;
+            MakeToolbarButton("over.btn.pause", "暂停", 8, timelineBack, top: TimelineRowTop, width: 86).Click += PauseAll;
+            MakeToolbarButton("over.btn.resume", "恢复", 100, timelineBack, top: TimelineRowTop, width: 86).Click += ResumeAll;
+            MakeToolbarButton("over.btn.rate.slow", "慢速 ×0.25", 192, timelineBack, top: TimelineRowTop, width: 96).Click += RateSlow;
+            MakeToolbarButton("over.btn.rate.fast", "快速 ×4", 294, timelineBack, top: TimelineRowTop, width: 96).Click += RateFast;
+            MakeToolbarButton("over.btn.rate.normal", "正常 ×1", 396, timelineBack, top: TimelineRowTop, width: 96).Click += RateNormal;
+            MakeToolbarButton("over.btn.seek.next", "下一程", 498, timelineBack, top: TimelineRowTop, width: 86).Click += SeekNextPass;
+
             // 读数：人看的那一行，与四份机器可读的载荷。载荷只报告"每个目标当前/峰值是多少"、
             // "这一行跑了什么"，至于哪个场景动哪个目标、起止与时长，由测试侧的 manifest 声明 ——
             // 观测与语义各自只有一处来源。
-            readout = MakeLabel("over.readout", 92, 44, 9, Color.FromArgb(0x33, 0x33, 0x33),
+            readout = MakeLabel("over.readout", 132, 44, 9, Color.FromArgb(0x33, 0x33, 0x33),
                 "按下面任一行；读数显示当前值与目标值");
 
-            // 载荷比原先多半行：rows/away/moving 进场，nomutual 仍然排在最后，所以标签得留出折行的位置，
-            // 否则那个最要紧的字段会被裁掉。
-            overState = MakeLabel("over.state", 138, 64, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0");
-            overConf = MakeLabel("over.conf", 204, 16, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0;n=0;");
-            overLive = MakeLabel("over.live", 222, 16, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0;done=1;");
+            // 载荷比原先又多一截：时间轴那四个字段（paused/rate/pos/cycle）也进场了，而 nomutual 仍然排在最后，
+            // 所以标签再高一行，留出折行的位置 —— 否则那个最要紧的字段会被裁掉。
+            overState = MakeLabel("over.state", 178, 80, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0");
+            overConf = MakeLabel("over.conf", 260, 16, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0;n=0;");
+            overLive = MakeLabel("over.live", 278, 16, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0;done=1;");
 
             // 批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。
             // 逐行载荷是"点哪一行写哪一行"的形状，十几行一起跑只会互相覆盖，所以并发这一路另开一份。
-            overBatch = MakeLabel("over.batch", 240, 44, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0;done=1;rows=0;");
+            overBatch = MakeLabel("over.batch", 296, 44, 8, Color.FromArgb(0x80, 0x80, 0x80), "v=1;seq=0;done=1;rows=0;");
         }
 
-        private Button MakeToolbarButton(string name, string text, int left, Color back)
+        private Button MakeToolbarButton(string name, string text, int left, Color back,
+            int top = 8, int width = 110, int height = 34)
         {
             var button = new Button
             {
                 Name = name,
                 Text = text,
-                Location = new Point(left, 8),
-                Size = new Size(110, 34),
+                Location = new Point(left, top),
+                Size = new Size(width, height),
                 BackColor = back,
                 Font = new Font("微软雅黑", 9),
             };
@@ -782,10 +799,29 @@ namespace Demo
                  + RecState("r0", panel1) + $"r0.parent={Describe(ParentBackColor(panel1))};"
                  + RecState("r1", panel2)
                  + RecState("r2", panel3)
+                 // 时间轴那四个字段同样排在 nomutual 之前。pos 按毫秒取整报出：读的是当前这一程内的偏移，
+                 // 而不是整条动画的位置 —— 程是独立的，跨程的位置没有意义。
+                 + TimelineState(panel1)
                  // rows/away/moving 排在 nomutual **之前**：后者是加载模式那半必须读到的最后一个字段，
                  // 所以它排在最后，标签也得为这一份更长载荷留出折行的位置。
                  + $"rows={row.Rows};away={row.Away};moving={row.Moving};"
                  + $"nomutual={NoMutualCount()};";
+        }
+
+        /// <summary>
+        /// 时间轴控制那排的回读：暂停与否、速率、当前程内位置、第几程。读的是 panel1 —— 它既是加载模式那排
+        /// 每一条路径都动的第一块，也是"连续互斥"唯一点的那块，拿它当代表不会读到一块静息的目标。
+        /// </summary>
+        /// <remarks>
+        /// 速率用不变文化格式化，免得小数点跟着机器区域设置变，验收侧读到 "0,25" 就解析不了。
+        /// </remarks>
+        private static string TimelineState(Control target)
+        {
+            const bool mutual = true, noMutual = true;
+            return $"paused={(Transition.IsPaused(target, mutual, noMutual) ? 1 : 0)};"
+                 + $"rate={Transition.Rate(target, mutual, noMutual).ToString("0.###", CultureInfo.InvariantCulture)};"
+                 + $"pos={(int)Transition.Position(target, mutual, noMutual).TotalMilliseconds};"
+                 + $"cycle={Transition.Cycle(target, mutual, noMutual)};";
         }
 
         /// <summary>
@@ -943,5 +979,61 @@ namespace Demo
         /// <summary>三类场景共用的八块目标：加载三块 + 过冲五块。采样器行自成一套，不在这里。</summary>
         private Control[] ScenarioTargets()
             => [panel1, panel2, panel3, over0, over1, over2, over3, over4];
+
+        // -----------------------------------------------------------------------------------------------
+        // 时间轴控制
+        //
+        // 这一排作用在加载模式那三块长动画（panel1/2/3）上，而不是过冲那五行：暂停一个 900ms 的一次性过冲
+        // 在屏幕上和"它就是这么快"分不开，而这里同时也要给人看。三块各自是一条真 Transition，暂停/变速/定位
+        // 都按 target 寻址，所以是逐个调用 —— 这本身就是"控制面挂在 target 上、不挂在快照上"的一次演示。
+        // -----------------------------------------------------------------------------------------------
+
+        /// <summary>时间轴控制的那三块目标：加载模式驱动的三条长动画的作用对象。</summary>
+        private Control[] ControlTargets() => [panel1, panel2, panel3];
+
+        private void PauseAll(object? sender, EventArgs e)
+        {
+            foreach (var target in ControlTargets())
+            {
+                Transition.Pause(target, IncludeMutual: true, IncludeNoMutual: true);
+            }
+        }
+
+        private void ResumeAll(object? sender, EventArgs e)
+        {
+            foreach (var target in ControlTargets())
+            {
+                Transition.Resume(target, IncludeMutual: true, IncludeNoMutual: true);
+            }
+        }
+
+        private void RateSlow(object? sender, EventArgs e) => SetRate(0.25d);
+
+        private void RateFast(object? sender, EventArgs e) => SetRate(4d);
+
+        /// <summary>
+        /// 正常速。把速率调回 1。时间轴只有正速率 —— 减速之后要回到原速就靠这一个，而不是再去点一次重置。
+        /// </summary>
+        private void RateNormal(object? sender, EventArgs e) => SetRate(1d);
+
+        private void SetRate(double rate)
+        {
+            foreach (var target in ControlTargets())
+            {
+                Transition.SetRate(target, rate, IncludeMutual: true, IncludeNoMutual: true);
+            }
+        }
+
+        /// <summary>
+        /// 跳到下一程的起点。程计数器是整数，所以"第几程"可以被指名 —— 这正是绝对时间轴需要它的原因。
+        /// </summary>
+        private void SeekNextPass(object? sender, EventArgs e)
+        {
+            foreach (var target in ControlTargets())
+            {
+                Transition.Seek(target, Transition.Cycle(target, IncludeMutual: true, IncludeNoMutual: true) + 1,
+                    TimeSpan.Zero, IncludeMutual: true, IncludeNoMutual: true);
+            }
+        }
     }
 }

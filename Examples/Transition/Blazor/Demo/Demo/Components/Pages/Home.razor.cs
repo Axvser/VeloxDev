@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Demo.Models;
 using Microsoft.AspNetCore.Components;
 using VeloxDev.TransitionSystem;
@@ -566,6 +567,59 @@ public partial class Home : ComponentBase, IDisposable
     }
 
     // -----------------------------------------------------------------------------------------------
+    // 时间轴控制
+    //
+    // 这一排作用在加载模式那三块长动画（Box0/1/2）上，而不是过冲那五行：暂停一个 900ms 的一次性过冲在屏幕上
+    // 和"它就是这么快"分不开，而这里同时也要给人看。三块各自是一条真 Transition，暂停/变速/定位都按 target
+    // 寻址，所以是逐个调用 —— 这本身就是"控制面挂在 target 上、不挂在快照上"的一次演示。
+    // -----------------------------------------------------------------------------------------------
+
+    private void PauseAll()
+    {
+        foreach (var target in LoadTargets)
+        {
+            Transition.Pause(target, IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    private void ResumeAll()
+    {
+        foreach (var target in LoadTargets)
+        {
+            Transition.Resume(target, IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    private void RateSlow() => SetRate(0.25d);
+
+    private void RateFast() => SetRate(4d);
+
+    /// <summary>
+    /// 正常速。把速率调回 1。时间轴只有正速率 —— 减速之后要回到原速就靠这一个，而不是再去点一次重置。
+    /// </summary>
+    private void RateNormal() => SetRate(1d);
+
+    private void SetRate(double rate)
+    {
+        foreach (var target in LoadTargets)
+        {
+            Transition.SetRate(target, rate, IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    /// <summary>
+    /// 跳到下一程的起点。程计数器是整数，所以"第几程"可以被指名 —— 这正是绝对时间轴需要它的原因。
+    /// </summary>
+    private void SeekNextPass()
+    {
+        foreach (var target in LoadTargets)
+        {
+            Transition.Seek(target, Transition.Cycle(target, IncludeMutual: true, IncludeNoMutual: true) + 1,
+                TimeSpan.Zero, IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------------
     // 采样器：演出与批量
     // -----------------------------------------------------------------------------------------------
 
@@ -816,10 +870,29 @@ public partial class Home : ComponentBase, IDisposable
              + $"t3.cur={Describe(Over3.Color)};"
              + $"t4.cur={elasticX:F3};t4.peak={Peak(4)};"
              + RecState("r0", Box0) + RecState("r1", Box1) + RecState("r2", Box2)
+             // 时间轴那四个字段同样排在 nomutual 之前。pos 按毫秒取整报出：读的是当前这一程内的偏移，
+             // 而不是整条动画的位置 —— 程是独立的，跨程的位置没有意义。
+             + TimelineState(Box0)
              // rows/away/moving 排在 nomutual **之前**：后者是加载模式那半必须读到的最后一个字段，
              // 所以它排在最后，载荷再长也不会被它挡住。
              + $"rows={row.Rows};away={row.Away};moving={row.Moving};"
              + $"nomutual={NoMutualCount()};";
+    }
+
+    /// <summary>
+    /// 时间轴控制那排的回读：暂停与否、速率、当前程内位置、第几程。读的是 Box0 —— 它既是加载模式那排每一条
+    /// 路径都动的第一块，也是"连续互斥"唯一点的那块，拿它当代表不会读到一块静息的目标。
+    /// </summary>
+    /// <remarks>
+    /// 速率用不变文化格式化，免得小数点跟着机器区域设置变，验收侧读到 "0,25" 就解析不了。
+    /// </remarks>
+    private static string TimelineState(BoxModel target)
+    {
+        const bool mutual = true, noMutual = true;
+        return $"paused={(Transition.IsPaused(target, mutual, noMutual) ? 1 : 0)};"
+             + $"rate={Transition.Rate(target, mutual, noMutual).ToString("0.###", CultureInfo.InvariantCulture)};"
+             + $"pos={(int)Transition.Position(target, mutual, noMutual).TotalMilliseconds};"
+             + $"cycle={Transition.Cycle(target, mutual, noMutual)};";
     }
 
     /// <summary>

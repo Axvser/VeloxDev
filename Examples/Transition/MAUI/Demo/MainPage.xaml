@@ -51,6 +51,25 @@
                         AutomationId="over.btn.load.repeat"/>
             </FlexLayout>
 
+            <!--
+                时间轴控制。作用对象是上面那排加载模式驱动的三块长动画（十来秒的循环），不是下面 900ms 的一次性
+                过冲 —— 后者暂停与不暂停在屏幕上分不出来，而这一排既要给验收套件当把手，也要给人看。
+            -->
+            <FlexLayout Direction="Row" Wrap="Wrap" Margin="0,4,0,0">
+                <Button WidthRequest="86" HeightRequest="34" Text="暂停" Clicked="PauseAll"
+                        AutomationId="over.btn.pause"/>
+                <Button WidthRequest="86" HeightRequest="34" Text="恢复" Clicked="ResumeAll"
+                        AutomationId="over.btn.resume"/>
+                <Button WidthRequest="96" HeightRequest="34" Text="慢速 ×0.25" Clicked="RateSlow"
+                        AutomationId="over.btn.rate.slow"/>
+                <Button WidthRequest="96" HeightRequest="34" Text="快速 ×4" Clicked="RateFast"
+                        AutomationId="over.btn.rate.fast"/>
+                <Button WidthRequest="96" HeightRequest="34" Text="正常 ×1" Clicked="RateNormal"
+                        AutomationId="over.btn.rate.normal"/>
+                <Button WidthRequest="86" HeightRequest="34" Text="下一程" Clicked="SeekNextPass"
+                        AutomationId="over.btn.seek.next"/>
+            </FlexLayout>
+
             <!-- 读数是过冲可见的证据：数字越过目标再回来，肉眼分辨不出它与一条更慢的缓动。 -->
             <Label x:Name="Readout" Margin="4,6,4,2" FontSize="12" TextColor="#CCCCCC"
                    AutomationId="over.readout"

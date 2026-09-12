@@ -32,6 +32,19 @@
         <button class="btn btn-warning" data-at="over.btn.load.repeat" @onclick="LoadRepeatedMutual">连续互斥</button>
     </div>
 
+    <!-- 时间轴控制。作用对象是上一排加载模式驱动的那三块长动画（十来秒的循环），不是过冲那五行 ——
+         后者是 900ms 的一次性过冲，暂停与不暂停在屏幕上分不出来，而这一排既要给验收套件当把手，也要给人看。
+         三块各是一条真 Transition，暂停/变速/定位都按 target 寻址，所以逐块调用 —— 这本身就是
+         "控制面挂在 target 上、不挂在快照上"的一次演示。 -->
+    <div class="demo-toolbar">
+        <button class="btn btn-primary" data-at="over.btn.pause" @onclick="PauseAll">暂停</button>
+        <button class="btn btn-dark" data-at="over.btn.resume" @onclick="ResumeAll">恢复</button>
+        <button class="btn btn-success" data-at="over.btn.rate.slow" @onclick="RateSlow">慢速 ×0.25</button>
+        <button class="btn btn-info" data-at="over.btn.rate.fast" @onclick="RateFast">快速 ×4</button>
+        <button class="btn btn-warning" data-at="over.btn.rate.normal" @onclick="RateNormal">正常 ×1</button>
+        <button class="btn btn-secondary" data-at="over.btn.seek.next" @onclick="SeekNextPass">下一程</button>
+    </div>
+
     <!-- 读数是过冲可观测的关键：数字越过目标再回来，肉眼无法把它和一条更慢的缓动区分开。 -->
     <div class="over-readout" data-at="over.readout">@_readoutSnapshot</div>
 

@@ -4,6 +4,7 @@ using Jalium.UI.Media;
 using Jalium.UI.Shapes;
 using Jalium.UI.Threading;
 using System.Diagnostics;
+using System.Globalization;
 using VeloxDev.TransitionSystem;
 
 namespace Demo;
@@ -154,6 +155,19 @@ internal sealed class MainWindow : Window
         modes.Children.Add(MakeToolbarButton("后台线程并发", "over.btn.load.background.concurrent", () => { SeedRec2(); _ = Task.Run(LoadMainThreadNonMutual); }, 118, 38));
         modes.Children.Add(MakeToolbarButton("连续互斥", "over.btn.load.repeat", () => _ = Task.Run(() => Animation0.Execute(_rec0)), 110, 38));
         toolbar.Children.Add(modes);
+
+        // 时间轴控制。作用对象是上面那排加载模式驱动的三块长动画（十来秒的循环），不是下面 900ms 的一次性
+        // 过冲 —— 后者暂停与不暂停在屏幕上分不出来，而这一排既要给验收套件当把手，也要给人看。
+        var timeline = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
+
+        // 令牌与其余六个平台逐字一致 —— 验收套件靠它点这一排。
+        timeline.Children.Add(MakeToolbarButton("暂停", "over.btn.pause", PauseAll, 86, 34));
+        timeline.Children.Add(MakeToolbarButton("恢复", "over.btn.resume", ResumeAll, 86, 34));
+        timeline.Children.Add(MakeToolbarButton("慢速 ×0.25", "over.btn.rate.slow", RateSlow, 96, 34));
+        timeline.Children.Add(MakeToolbarButton("快速 ×4", "over.btn.rate.fast", RateFast, 96, 34));
+        timeline.Children.Add(MakeToolbarButton("正常 ×1", "over.btn.rate.normal", RateNormal, 96, 34));
+        timeline.Children.Add(MakeToolbarButton("下一程", "over.btn.seek.next", SeekNextPass, 86, 34));
+        toolbar.Children.Add(timeline);
 
         toolbar.Children.Add(_readout);
         toolbar.Children.Add(_overState);
@@ -529,6 +543,61 @@ internal sealed class MainWindow : Window
         Animation0.Execute(_rec0, CanMutualTask: false);
         Animation1.Execute(_rec1, CanMutualTask: false);
         Animation2.Execute(_rec2, CanMutualTask: false);
+    }
+
+    // -----------------------------------------------------------------------------------------------
+    // 时间轴控制
+    //
+    // 这一排作用在加载模式那三块长动画（Rec0/1/2）上，而不是下面 900ms 的一次性过冲：暂停一个 900ms 的过冲
+    // 在屏幕上和"它就是这么快"分不开，而这里同时也要给人看。三块各自是一条真 Transition，暂停/变速/定位都按
+    // target 寻址，所以是逐个调用 —— 这本身就是"控制面挂在 target 上、不挂在快照上"的一次演示。
+    // -----------------------------------------------------------------------------------------------
+
+    private Rectangle[] ControlTargets() => [_rec0, _rec1, _rec2];
+
+    private void PauseAll()
+    {
+        foreach (var target in ControlTargets())
+        {
+            Transition.Pause(target, IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    private void ResumeAll()
+    {
+        foreach (var target in ControlTargets())
+        {
+            Transition.Resume(target, IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    private void RateSlow() => SetRate(0.25d);
+
+    private void RateFast() => SetRate(4d);
+
+    /// <summary>
+    /// 正常速。把速率调回 1。时间轴只有正速率 —— 减速之后要回到原速就靠这一个，而不是再去点一次重置。
+    /// </summary>
+    private void RateNormal() => SetRate(1d);
+
+    private void SetRate(double rate)
+    {
+        foreach (var target in ControlTargets())
+        {
+            Transition.SetRate(target, rate, IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    /// <summary>
+    /// 跳到下一程的起点。程计数器是整数，所以"第几程"可以被指名 —— 这正是绝对时间轴需要它的原因。
+    /// </summary>
+    private void SeekNextPass()
+    {
+        foreach (var target in ControlTargets())
+        {
+            Transition.Seek(target, Transition.Cycle(target, IncludeMutual: true, IncludeNoMutual: true) + 1,
+                TimeSpan.Zero, IncludeMutual: true, IncludeNoMutual: true);
+        }
     }
 
     /// <summary>顶栏"停止全部"：整块界面一起停下，否则这个按钮的名字就是假的。原地冻结，不回起点。</summary>
@@ -910,10 +979,26 @@ internal sealed class MainWindow : Window
              + $"t3.cur={Describe(_over3.Fill)};"
              + $"t4.cur={elasticX:F3};t4.peak={Peak(4)};"
              + RecState("r0", _rec0) + RecState("r1", _rec1) + RecState("r2", _rec2)
+             // 时间轴那四个字段同样排在 nomutual 之前。pos 按毫秒取整报出：读的是当前这一程内的偏移，
+             // 而不是整条动画的位置 —— 程是独立的，跨程的位置没有意义。
+             + TimelineState(_rec0)
              // rows/away/moving 排在 nomutual **之前**：后者是加载模式那半必须读到的最后一个字段，
              // 所以它排在最后，标签也得为这一份更长载荷留出折行的位置。
              + $"rows={row.Rows};away={row.Away};moving={row.Moving};"
              + $"nomutual={NoMutualCount()};";
+    }
+
+    /// <summary>
+    /// 时间轴控制那排的回读：暂停与否、速率、当前程内位置、第几程。速率用不变文化格式化，免得小数点跟着
+    /// 机器区域设置变，验收侧读到 "0,25" 就解析不了。
+    /// </summary>
+    private static string TimelineState(Rectangle target)
+    {
+        const bool mutual = true, noMutual = true;
+        return $"paused={(Transition.IsPaused(target, mutual, noMutual) ? 1 : 0)};"
+             + $"rate={Transition.Rate(target, mutual, noMutual).ToString("0.###", CultureInfo.InvariantCulture)};"
+             + $"pos={(int)Transition.Position(target, mutual, noMutual).TotalMilliseconds};"
+             + $"cycle={Transition.Cycle(target, mutual, noMutual)};";
     }
 
     /// <summary>
