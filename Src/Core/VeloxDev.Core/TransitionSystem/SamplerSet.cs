@@ -17,6 +17,7 @@ public sealed class SamplerSet<TPriorityCore>
     private readonly IUIThreadInspector<TPriorityCore> _inspector;
     private readonly List<Entry> _entries = [];
     private volatile CancellationTokenSource? _cts;
+    private TransitionRun? _run;
 
     // Reusable UI-thread apply delegate: one closure per target (fixed per animation), with the time passed via a
     // field instead of a capture — avoids a closure allocation per sample.
@@ -64,6 +65,16 @@ public sealed class SamplerSet<TPriorityCore>
     {
         _cts = cts;
     }
+
+    /// <summary>
+    /// The animation being sampled, carried the same way the token source is: it holds the timeline the frames are
+    /// positioned against and the pass they belong to. The scheduler installs it before the interpreter starts; a
+    /// set built outside the scheduler — a test driving the interpreter directly — keeps a private run on its own
+    /// timeline, which nothing controls, so the sampling loop never has to handle a null one.
+    /// </summary>
+    internal TransitionRun Run => _run ??= new TransitionRun(new TransitionTimeline());
+
+    internal void SetRun(TransitionRun run) => _run = run;
 
     public bool CanSetValue() => _inspector.IsAppAlive();
 

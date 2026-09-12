@@ -28,7 +28,7 @@ public abstract class TransitionCore
         where T : class
     {
         var gate = TransitionSchedulerCore.GetTargetLock(target);
-        List<CancellationTokenSource> drained = [];
+        List<TransitionRun> drained = [];
         gate.Wait();
         try
         {
@@ -47,6 +47,145 @@ public abstract class TransitionCore
         }
 
         TransitionSchedulerCore.CancelDrained(drained);
+    }
+
+    /// <summary>
+    /// Freezes the timeline of every animation running on <paramref name="target"/>, without ending any of them.
+    /// </summary>
+    /// <remarks>
+    /// The time spent paused is excluded from the animation rather than merely skipped: the clock stops accruing, so
+    /// a pause of any length leaves the remaining duration unchanged. A paused animation also costs no timer
+    /// wake-ups — its sampling loop is parked on a signal.
+    /// </remarks>
+    public static void Pause<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
+        where T : class
+        => ApplyToRuns(target, IncludeMutual, IncludeNoMutual, static run => run.Timeline.Pause());
+
+    /// <summary>
+    /// Lets a paused animation on <paramref name="target"/> run again, at the rate it was last set to.
+    /// </summary>
+    public static void Resume<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
+        where T : class
+        => ApplyToRuns(target, IncludeMutual, IncludeNoMutual, static run => run.Timeline.Resume());
+
+    /// <summary>
+    /// Changes how fast <paramref name="target"/>'s animations run, without moving their position. Zero pauses.
+    /// </summary>
+    /// <remarks>
+    /// The rate multiplies elapsed time, so it cannot be changed mid-pass without the position jumping — the
+    /// timeline rebases first, which is why a change during playback is seamless. A rate given while paused is
+    /// remembered and takes effect on <see cref="Resume{T}"/>.
+    /// <para>
+    /// Time only ever moves forwards: there is no reverse playback, and a negative rate is rejected rather than
+    /// clamped. To go back to a point, <see cref="Seek{T}(T, TimeSpan, bool, bool)"/> there.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is negative.</exception>
+    public static void SetRate<T>(T target, double rate, bool IncludeMutual = true, bool IncludeNoMutual = false)
+        where T : class
+        => ApplyToRuns(target, IncludeMutual, IncludeNoMutual, run => run.Timeline.SetRate(rate));
+
+    /// <summary>
+    /// Moves <paramref name="target"/>'s animations to <paramref name="position"/> within the pass that is running,
+    /// keeping the rate.
+    /// </summary>
+    /// <remarks>
+    /// A position past the end of the pass simply finishes it, and a negative one is pinned to its start. Seeking
+    /// while paused draws the new position without resuming.
+    /// </remarks>
+    public static void Seek<T>(T target, TimeSpan position, bool IncludeMutual = true, bool IncludeNoMutual = false)
+        where T : class
+        => ApplyToRuns(target, IncludeMutual, IncludeNoMutual, run => SeekRun(run, position));
+
+    /// <summary>
+    /// Moves <paramref name="target"/>'s animations to <paramref name="position"/> within the pass numbered
+    /// <paramref name="cycle"/>, keeping the rate.
+    /// </summary>
+    /// <remarks>
+    /// The pass counter is what an absolute timeline needs to name a pass at all, since passes are not always
+    /// separable by time — a zero-duration one consumes none. Jumping past the last pass the effect allows finishes
+    /// the animation, exactly as running off the end would.
+    /// </remarks>
+    public static void Seek<T>(T target, int cycle, TimeSpan position, bool IncludeMutual = true, bool IncludeNoMutual = false)
+        where T : class
+        => ApplyToRuns(target, IncludeMutual, IncludeNoMutual, run =>
+        {
+            run.Cycle = cycle;
+            SeekRun(run, position);
+        });
+
+    /// <summary>
+    /// Which pass the animation on <paramref name="target"/> is playing, or zero when nothing is running.
+    /// </summary>
+    public static int Cycle<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
+        where T : class
+    {
+        var runs = TransitionSchedulerCore.CollectRuns(target, IncludeMutual, IncludeNoMutual);
+        return runs.Count == 0 ? 0 : (int)runs[0].Cycle;
+    }
+
+    /// <summary>
+    /// True when every animation running on <paramref name="target"/> is paused, and there is at least one.
+    /// </summary>
+    public static bool IsPaused<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
+        where T : class
+    {
+        var runs = TransitionSchedulerCore.CollectRuns(target, IncludeMutual, IncludeNoMutual);
+        if (runs.Count == 0) return false;
+
+        foreach (var run in runs)
+        {
+            if (!run.Timeline.IsPaused) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// How far into its current pass the animation on <paramref name="target"/> is, or <see cref="TimeSpan.Zero"/>
+    /// when nothing is running.
+    /// </summary>
+    public static TimeSpan Position<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
+        where T : class
+    {
+        var runs = TransitionSchedulerCore.CollectRuns(target, IncludeMutual, IncludeNoMutual);
+        return runs.Count == 0 ? TimeSpan.Zero : PositionOf(runs[0]);
+    }
+
+    /// <summary>
+    /// The rate the animation on <paramref name="target"/> is set to, or zero when nothing is running. Never negative.
+    /// Remembered across a pause, so this is what playback resumes at rather than what it is doing right now.
+    /// </summary>
+    public static double Rate<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
+        where T : class
+    {
+        var runs = TransitionSchedulerCore.CollectRuns(target, IncludeMutual, IncludeNoMutual);
+        return runs.Count == 0 ? 0d : runs[0].Timeline.Rate;
+    }
+
+    private static void SeekRun(TransitionRun run, TimeSpan position)
+        => run.PassAnchor = run.Timeline.Now - TransitionTime.MsToTicks(position.TotalMilliseconds);
+
+    private static TimeSpan PositionOf(TransitionRun run)
+    {
+        var elapsedMs = TransitionTime.TicksToMs(run.Timeline.Now - run.PassAnchor);
+        return elapsedMs > 0d ? TimeSpan.FromMilliseconds(elapsedMs) : TimeSpan.Zero;
+    }
+
+    /// <summary>
+    /// Hands one control operation to every run on the target.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately without the target lock that <see cref="Exit{T}"/> takes. That lock exists to serialize leaving
+    /// against entering — removing a registration atomically with respect to an animation starting. This neither
+    /// adds nor removes one, so there is nothing to serialize, and a run that starts in the middle of the sweep is
+    /// exactly as controllable as one that started before it.
+    /// </remarks>
+    private static void ApplyToRuns(object target, bool includeMutual, bool includeNoMutual, Action<TransitionRun> operation)
+    {
+        foreach (var run in TransitionSchedulerCore.CollectRuns(target, includeMutual, includeNoMutual))
+        {
+            operation(run);
+        }
     }
 
     /// <summary>
@@ -169,7 +308,7 @@ public class TransitionCore<
         return state.Clone();
     }
 
-    internal override async void CoreExecute(object target, bool CanMutualTask = true)
+    internal override async void CoreExecute(object target, bool CanMutualTask = true, TransitionTimeline? timeline = null)
     {
         if (target is not T)
             throw new InvalidDataException($"The target is not a {typeof(T).Name} !");
@@ -180,9 +319,10 @@ public class TransitionCore<
         // either cancels this animation or happens entirely before it — never in between, where it would leave the
         // animation running but untracked, and therefore unstoppable.
         CancellationTokenSource cts;
+        TransitionRun run;
         TransitionSchedulerCore coreScheduler;
         ITransitionSchedulerCore scheduler;
-        List<CancellationTokenSource> superseded = [];
+        List<TransitionRun> superseded = [];
         var gate = TransitionSchedulerCore.GetTargetLock(target);
         await gate.WaitAsync();
         try
@@ -197,12 +337,17 @@ public class TransitionCore<
                 superseded.AddRange(((TransitionSchedulerCore)scheduler).DrainActive());
             }
 
-            cts = new CancellationTokenSource();
+            // The run carries the token source and the timeline together, and is what makes this animation reachable
+            // by a later Exit or a control call. A timeline handed in is shared with whatever else was given the
+            // same one; the default is this animation's own.
+            run = new TransitionRun(timeline ?? new TransitionTimeline());
+            cts = run.Cts;
 
             // Registered for the whole animation, not just the segment currently executing: between segments the
-            // animation sits idle in an Await gap, and an Exit() during that gap has to find and cancel it too.
+            // animation sits idle in an Await gap, and an Exit() during that gap has to find and cancel it too —
+            // and, for the same reason, a Pause() has to find it there.
             coreScheduler = (TransitionSchedulerCore)scheduler;
-            coreScheduler.Track(cts);
+            coreScheduler.Track(run);
 
             if (!CanMutualTask)
             {
@@ -241,7 +386,7 @@ public class TransitionCore<
             {
                 try
                 {
-                    await Task.Delay(spans.Dequeue(), cts.Token);
+                    await DelayWhilePausedAsync(run.Timeline, spans.Dequeue(), cts.Token);
                 }
                 catch (OperationCanceledException) { return; }
                 await scheduler.Execute(interpolators.Dequeue(), states.Dequeue(), effects.Dequeue(), cts);
@@ -253,11 +398,43 @@ public class TransitionCore<
             // Unregister only when the whole animation ends (completed or cancelled). Doing it per segment — off
             // each segment's effect Finally — drops the scheduler while the animation is still alive in an Await
             // gap, so Exit() can no longer find it and the remaining segments run anyway.
-            coreScheduler.Untrack(cts);
+            coreScheduler.Untrack(run);
             if (!CanMutualTask)
             {
                 TransitionCore.RemoveNoMutual(target, [coreScheduler]);
             }
+        }
+    }
+
+    /// <summary>
+    /// Waits out the delay between two segments without letting a pause consume it.
+    /// </summary>
+    /// <remarks>
+    /// The remaining time is recomputed against the real clock after every wake, so the animation does not lose the
+    /// part of its delay that passed while it was paused. The floor on the subtraction keeps a timer that returns a
+    /// hair early from leaving the loop repeating the same sub-millisecond remainder.
+    /// </remarks>
+    private static async Task DelayWhilePausedAsync(TransitionTimeline timeline, TimeSpan delay, CancellationToken ct)
+    {
+        if (delay <= TimeSpan.Zero) return;
+
+        var remaining = delay;
+        while (remaining > TimeSpan.Zero)
+        {
+            // Parked for as long as the animation is paused: a paused animation must not spend its delay either.
+            // Every wake re-checks, so a nudge — which only exists to redraw a seeked frame — costs one pass and
+            // then parks again.
+            while (timeline.IsPaused && !ct.IsCancellationRequested)
+            {
+                var gate = timeline.PauseGate;
+                if (gate is null) break;
+                await gate.Task.ConfigureAwait(false);
+            }
+
+            var before = TransitionTime.Now;
+            await Task.Delay(remaining, ct);
+            var elapsedMs = Math.Max(TransitionTime.TicksToMs(TransitionTime.Now - before), 0.5d);
+            remaining -= TimeSpan.FromMilliseconds(elapsedMs);
         }
     }
 

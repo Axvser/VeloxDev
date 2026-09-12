@@ -96,11 +96,11 @@ public class TransitionSchedulerExitTests
             .FindOrCreate(target, CanMutualTask: false);
         TransitionCore.AddNoMutual(target, [scheduler]);
 
-        using var cts = new CancellationTokenSource();
-        scheduler.Track(cts);
+        var run = new TransitionRun(new TransitionTimeline());
+        scheduler.Track(run);
 
         bool? lockWasFree = null;
-        cts.Token.Register(() =>
+        run.Cts.Token.Register(() =>
         {
             // Cancellation callbacks run synchronously on the thread that calls Exit. If Exit still held the target
             // lock here, a callback that re-enters Exit — or CoreExecute — for the same target would deadlock,

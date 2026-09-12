@@ -62,6 +62,16 @@ public class TransitionSchedulerCore<
             if (!awoken) return;
 
             var frameSet = producer.Prepare<TPriorityCore>(target, state, effect, uIThreadInspector);
+
+            // The run reaches the interpreter through the sampler set, the same way the token source does. It is
+            // registered under the very token source this call was handed, so a caller that registered none — a
+            // test driving the scheduler directly — keeps the frame set's own run, which nothing controls, rather
+            // than getting a null one.
+            if (_activeRuns.TryGetValue(newCts, out var run))
+            {
+                frameSet.SetRun(run);
+            }
+
             if (newCts.IsCancellationRequested || newInterpreter.Args.Handled) return;
             await newInterpreter.Execute(target, frameSet, effect, newCts);
         }
@@ -169,7 +179,16 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
         return NoMutualSchedulers.Remove(source);
     }
 
-    private readonly ConcurrentDictionary<CancellationTokenSource, byte> _activeCts = new();
+    /// <summary>
+    /// The animations running on this scheduler, keyed by their own token source.
+    /// </summary>
+    /// <remarks>
+    /// The key is the token source rather than the run because that is what the caller already hands down to
+    /// <see cref="Execute"/>: the clock is then reachable from there without widening any signature, and a caller
+    /// that never registered a run — a test driving the interpreter or the scheduler directly — simply gets an
+    /// uncontrollable clock instead of a null one.
+    /// </remarks>
+    internal readonly ConcurrentDictionary<CancellationTokenSource, TransitionRun> _activeRuns = new();
     private int _generation;
     protected readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -186,9 +205,12 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     /// <see cref="Exit"/> during that gap would cancel nothing at all while the animation went on to its next
     /// segment.
     /// </summary>
-    internal void Track(CancellationTokenSource source) => _activeCts.TryAdd(source, 0);
+    internal void Track(TransitionRun run) => _activeRuns.TryAdd(run.Cts, run);
 
-    internal void Untrack(CancellationTokenSource source) => _activeCts.TryRemove(source, out _);
+    internal void Untrack(TransitionRun run) => _activeRuns.TryRemove(run.Cts, out _);
+
+    /// <summary>The runs registered right now, for a control call that acts on all of them.</summary>
+    internal List<TransitionRun> SnapshotActive() => [.. _activeRuns.Values];
 
     /// <summary>
     /// Bumps the generation and takes every registered token out of the active set, returning them to be cancelled
@@ -202,16 +224,16 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     /// UI-thread <c>Exit</c>, and a callback that re-enters <see cref="TransitionCore.Exit{T}"/> or
     /// <c>CoreExecute</c> for the same target would deadlock, since <see cref="SemaphoreSlim"/> is not reentrant.
     /// </remarks>
-    internal List<CancellationTokenSource> DrainActive()
+    internal List<TransitionRun> DrainActive()
     {
         Interlocked.Increment(ref _generation);
 
-        List<CancellationTokenSource> drained = [];
-        foreach (var source in _activeCts.Keys)
+        List<TransitionRun> drained = [];
+        foreach (var source in _activeRuns.Keys)
         {
-            if (_activeCts.TryRemove(source, out _))
+            if (_activeRuns.TryRemove(source, out var run))
             {
-                drained.Add(source);
+                drained.Add(run);
             }
         }
         return drained;
@@ -221,19 +243,46 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     /// Cancels the tokens taken by <see cref="DrainActive"/>. Call this outside any lock: the callbacks run
     /// synchronously here.
     /// </summary>
-    internal static void CancelDrained(List<CancellationTokenSource> drained)
+    internal static void CancelDrained(List<TransitionRun> drained)
     {
-        foreach (var source in drained)
+        foreach (var run in drained)
         {
             try
             {
-                source.Cancel();
+                run.Cts.Cancel();
             }
             catch (ObjectDisposedException)
             {
                 // an animation or an adapter's interpreter disposed the token source — nothing left to cancel
             }
+
+            // A paused animation is parked on its timeline's gate, which knows nothing about the token. Without this
+            // it would sit there until something else resumed it, and Exit would return while the loop it was meant
+            // to stop was still waiting. Waking it lets the loop see the token and stop; a run sharing the timeline
+            // with a live animation simply wakes, re-checks, and parks again.
+            run.Timeline.Wake();
         }
+    }
+
+    /// <summary>
+    /// The runs currently registered on <paramref name="target"/>, selected the way <c>Exit</c> selects what to
+    /// stop.
+    /// </summary>
+    internal static List<TransitionRun> CollectRuns(object target, bool includeMutual, bool includeNoMutual)
+    {
+        List<TransitionRun> runs = [];
+        if (includeMutual && MutualSchedulers.TryGetValue(target, out var mutual))
+        {
+            runs.AddRange(((TransitionSchedulerCore)mutual).SnapshotActive());
+        }
+        if (includeNoMutual && NoMutualSchedulers.TryGetValue(target, out var nomutual))
+        {
+            foreach (var scheduler in nomutual.Keys)
+            {
+                runs.AddRange(((TransitionSchedulerCore)scheduler).SnapshotActive());
+            }
+        }
+        return runs;
     }
 
     internal WeakReference<object>? targetref = null;
