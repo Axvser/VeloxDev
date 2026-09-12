@@ -30,6 +30,17 @@ internal static class DemoCatalog
     internal static IReadOnlyList<string> Platforms =>
         [.. Registry.Select(entry => entry.Platform).Where(AtConfig.RunsOn)];
 
+    /// <summary>
+    /// Every registered platform, ignoring <c>VELOXDEV_AT_PLATFORMS</c>.
+    /// </summary>
+    /// <remarks>
+    /// For the coverage guards, which ask what the project *can* drive rather than what this run was narrowed to.
+    /// Comparing a full catalog against the narrowed list makes every excluded platform look like a table nobody
+    /// runs — which is exactly what happened the first time the suites were run for a subset of platforms.
+    /// </remarks>
+    internal static IReadOnlyList<string> Registered =>
+        [.. Registry.Select(entry => entry.Platform)];
+
     /// <summary>Create the driver for a platform.</summary>
     /// <exception cref="InvalidOperationException">No driver is registered for that platform.</exception>
     internal static IDemoDriver Create(string platform)

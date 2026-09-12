@@ -39,19 +39,22 @@ public class CoverageSuite
     /// adding a table for a platform whose driver was never registered leaves it silently unrun.
     /// </summary>
     [TestMethod]
-    public void EveryTable_IsForADrivenPlatform()
+    public void EveryTable_IsForARegisteredPlatform()
     {
-        var driven = DemoCatalog.Platforms;
+        // 比对的是**注册表**而不是本次运行的平台清单：这个门禁问的是"这个项目能驱动哪些平台"，而
+        // VELOXDEV_AT_PLATFORMS 收窄的只是这一次跑哪些。拿收窄后的清单来比，被排除的平台会一个个看起来像
+        // "有表却没人跑" —— 第一次按子集运行时就是这么红的。
+        var registered = DemoCatalog.Registered;
 
         var orphans = LoadModeCatalog.Platforms
             .Concat(ConformanceCatalog.Platforms)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Where(platform => !driven.Contains(platform, StringComparer.OrdinalIgnoreCase))
+            .Where(platform => !registered.Contains(platform, StringComparer.OrdinalIgnoreCase))
             .OrderBy(platform => platform, StringComparer.Ordinal)
             .ToList();
 
         CollectionAssert.AreEqual(Array.Empty<string>(), orphans.ToArray(),
-            $"这些平台有表，却不在 DemoCatalog 里，没有任何用例会跑它们：{string.Join(", ", orphans)}");
+            $"这些平台有表，却没有在 DemoCatalog 里注册，没有任何用例会跑它们：{string.Join(", ", orphans)}");
     }
 
     /// <summary>
