@@ -158,10 +158,15 @@ public class TransitionPropertyTests
         // what reflection hands out on netframework4.6.1 — where PropertyInfo.GetHashCode() is reference-based.
         // Equals already compared by value; GetHashCode has to follow, or a dictionary/HashSet keeps one path as
         // two entries and exclusion silently never matches (the SnapshotExcept bug, which no test covered).
-        var a = new TransitionProperty(new[] { new ReferenceIdentityPropertyInfo("Value", typeof(TestTarget), typeof(double)) });
-        var b = new TransitionProperty(new[] { new ReferenceIdentityPropertyInfo("Value", typeof(TestTarget), typeof(double)) });
+        var left = new ReferenceIdentityPropertyInfo("Value", typeof(TestTarget), typeof(double));
+        var right = new ReferenceIdentityPropertyInfo("Value", typeof(TestTarget), typeof(double));
 
-        Assert.AreNotSame(a.Segments[0], b.Segments[0]);
+        // The premise of this test: two distinct PropertyInfo objects describing the same member.
+        Assert.AreNotSame(left, right);
+
+        var a = new TransitionProperty(new[] { left });
+        var b = new TransitionProperty(new[] { right });
+
         Assert.IsTrue(a.Equals(b));
         Assert.AreEqual(a.GetHashCode(), b.GetHashCode());
 
@@ -322,7 +327,7 @@ public class TransitionPropertyTests
         var combined = TransitionProperty.Combine(outer, inner);
 
         Assert.AreEqual("Nested.Inner", combined.Path);
-        Assert.AreEqual(2, combined.Segments.Count);
+        Assert.IsTrue(combined.IsDescendantOf(outer), "the suffix must extend the prefix, not replace it");
         Assert.AreEqual(typeof(int), combined.PropertyType);
     }
 }

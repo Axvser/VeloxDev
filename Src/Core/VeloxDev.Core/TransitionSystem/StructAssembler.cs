@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace VeloxDev.TransitionSystem.Abstractions;
 
 /// <summary>
@@ -97,8 +95,6 @@ internal sealed class CaptureProperty : ITransitionProperty
 
     public string Path => "$capture";
     public Type PropertyType { get; set; } = typeof(object);
-    public PropertyInfo PropertyInfo => throw new NotSupportedException("CaptureProperty has no backing PropertyInfo.");
-    public IReadOnlyList<PropertyInfo> Segments => [];
     public bool CanRead => true;
     public bool CanWrite => true;
     public object? GetValue(object? target) => Value;

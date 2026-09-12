@@ -59,12 +59,25 @@ public abstract class InterpolatorCore
     /// member by member here; reference types are never expanded — they are expressed through explicit member paths
     /// or a dedicated <see cref="ISampler"/>.
     /// </summary>
+    /// <remarks>
+    /// Frozen index arguments are resolved here, once, against <paramref name="target"/> — this is the first moment
+    /// a target exists. Everything else on the entry (the interpolator override, the options, the sampler lookup)
+    /// stays keyed by the <em>unbound</em> path, because that is how the declaration registered them; only the
+    /// property handed to the sampler is bound.
+    /// <para>
+    /// An override of this method that does not call the base loses the freeze silently: the unbound property
+    /// resolves its arguments too, so the two behave identically until a <see cref="PathIndex.Frozen{T}"/> argument
+    /// is involved.
+    /// </para>
+    /// </remarks>
     public virtual SamplerSet<TPriorityCore> Prepare<TPriorityCore>(object target, IFrameState state, ITransitionEffectCore effect, IUIThreadInspector<TPriorityCore> inspector)
     {
         var set = new SamplerSet<TPriorityCore>(inspector);
         foreach (var kvp in state.Values)
         {
-            var currentValue = inspector.ProtectedGetValue(target, kvp.Key);
+            // 冻结档在这一刻把索引钉死；没有冻结实参时 BindTo 返回自身，不产生任何额外对象。
+            var bound = kvp.Key is TransitionProperty property ? property.BindTo(target) : kvp.Key;
+            var currentValue = inspector.ProtectedGetValue(target, bound);
             // The path is invalid for the current target (intermediate type mismatch) → skip this property to avoid distorting interpolation by treating it as a null value.
             if (ReferenceEquals(currentValue, TransitionProperty.UnreadablePath)) continue;
             var newValue = kvp.Value;
@@ -90,7 +103,7 @@ public abstract class InterpolatorCore
 
             var normStart = sampler.NormalizeStart(currentValue, newValue, options);
             var normEnd = sampler.NormalizeEnd(currentValue, newValue, options);
-            set.Add(kvp.Key, sampler, normStart, normEnd, options);
+            set.Add(bound, sampler, normStart, normEnd, options);
         }
         return set;
     }
