@@ -1,10 +1,14 @@
-# Running the acceptance suite — a working guide
+﻿# Running the acceptance suite — a working guide
 
 For an agent asked to "run the AT" / "跑一次验收" / "check the transition demos". Everything here was learned by running
 it; the numbers are measured, not estimated.
 
 **Audience:** an agent or engineer who has to get a verdict out of this project with as few wasted runs as possible.
-For what the suite *checks*, read [README.md](README.md); this file is about operating it.
+This file is the only one for this project: how to operate it, what it checks, and how to extend it.
+
+It is **not in `VeloxDev.slnx`**, deliberately. The solution is everything `dotnet test` at the repository root
+resolves, so being absent from it is what keeps that command backend-only — a guarantee rather than a filter. Run this
+project **by path**, as every command below does.
 
 ---
 
@@ -85,7 +89,11 @@ The third form silently green-lights a run over zero tests.
 ### 4.3 Naming and payload ordering
 
 - The suites locate controls **by automation id only** — never by label. Adding a button without a token means no test
-  can reach it. The tokens for each family are listed in README.md.
+  can reach it. The tokens, by family: `over.btn.*` (toolbar — `start.all` / `stop.all` / `reset.all`, the five
+  `load.*` modes, and the six timeline controls `pause` / `resume` / `rate.slow` / `rate.fast` / `rate.normal` /
+  `seek.next`), `over.sampler.<SamplerTypeName>` (a case row's start, which is what AT clicks),
+  `over.row.{stop,reset}.<id>` (that row's other two), and `over.{state,conf,live,batch,readout,bench}` for the
+  payloads.
 - `over.state` is a flat `k=v;` payload and **`nomutual=` must stay the last field** (there are comments at each
   builder saying so). Insert new fields *before* it.
 - `rate=` must be formatted with `CultureInfo.InvariantCulture`. The current-culture default turns `0.25` into `0,25`
@@ -108,6 +116,24 @@ Do not "fix" a slow run by putting several platforms back into one class: that i
 unwatchable, and it is what the per-platform structure replaced.
 
 ---
+
+## 5b. What each aspect actually checks
+
+Per platform, four test methods in the platform's suite class, in this order:
+
+| Method | What it proves |
+|---|---|
+| `ObservationSurface_IsReachableAndTicking` | The launch path, the automation tree and the payload's spelling are all sound, and the readout's sequence number advances on its own. **When this fails, everything below it on that platform is downstream — fix it first.** |
+| `LoadModes_MatchTheLibrarySemantics` | How a load is started: mutual vs concurrent, UI thread vs background. The load-bearing observable is `nomutual=` in `over.state`. |
+| `EverySamplerMatchesItsClosedForm` | Two halves, from one click: the arithmetic (one frame per sampler per eased time, on `over.conf`, against a closed form written independently) and the junction (a real transition run on the live control, published on `over.live`). The second half exists because the sampling loop swallows whatever a sampler throws, so a sampler producing a value the framework rejects leaves no other trace than an element frozen short of its target. |
+| `TimelineControl_SteersTheRunningAnimation` | Pause freezes the position and keeps it frozen, resume advances it, a quarter speed covers visibly less of the same wall clock, and a jump to another pass moves `cycle`. It deliberately does **not** assert the arithmetic — the pass-local seek and the exclusion of paused time are pinned by the unit tests, which can measure them precisely. |
+
+Blazor has a fifth, `SamplerBench_PaintsTheColourTheSamplerProduced`, which reads the browser's own computed style
+rather than the app's payload — the most literal form of "verified through the real UI" available anywhere here.
+
+A sampler whose product is a framework object needs a live runtime even to build its endpoints, so the only place it
+can be driven is an app that already has one. That is the whole reason this project exists as well as the pure-data
+suite next to it under `Samplers/`, which needs no desktop and runs anywhere.
 
 ## 6. Tuning the pace
 
@@ -136,26 +162,51 @@ Roughly 15 seconds. Only widen to all seven once the one is green — and note t
 nothing about the other six**: the demos are separate applications with separate automation surfaces, and platform-only
 failures (a row off-screen, a token spelled differently) are exactly what this suite exists to catch.
 
-### Known intermittent: `... is still outside the surface after being brought into view`
+### Solved: `... is still outside the surface after being brought into view`
 
-**This one is not a product defect, and it is the failure most likely to be misread as one.** It looks like this:
+Worth reading even though it is fixed, because the mechanism is the kind of thing that comes back the moment someone
+adds a step that focuses a control and then scrolls the list.
+
+**Focus is a change trigger, not a command.** All seven frameworks agree on "focus it and I will scroll it into view",
+which is why the harness asks that way. But focusing an element that *already holds focus* is a silent no-op — so a
+control that was focused at some earlier step and then scrolled away cannot be brought back by focusing it again, no
+matter how many times the request is repeated. The failure looked like this:
 
 ```
 …the handle 'over.sampler.BrushSampler' is still outside the surface after being brought into view
-   (control 0,0 0x0, window 228,228 1280x745, IsOffscreen=True), so a person could not reach it.
+   (control 0,0 0x0, …, HasFocus=True, focused='over.sampler.BrushSampler'; ancestors: [Pane … scroll V=True/95.3%]…
+   4 of 10 'over.sampler.*' handles are inside the window), so a person could not reach it.
 ```
 
-`0x0` at `0,0` means the element exists but reports no rectangle — on WinUI a row scrolled out of the viewport does
-that. The reachability check is right to flag it; what it cannot distinguish is "the demo really has an unreachable
-row" from "the scroll request did not take effect this time".
+`HasFocus=True` on a control that is `0x0` and out of view is the whole diagnosis: the element was reachable by focus
+and unreachable *because* of it. The scenario's last step had left the list scrolled to the bottom with the row still
+holding focus.
 
-Measured: in 8 full runs after the check was made to re-issue its scroll request while polling, 1 failed this way; the
-same platform (`WinUI`) passes 4/4 when run on its own. It has never been seen on any other platform, and it is load
-sensitive — it has only ever appeared in a full seven-platform run.
+`BringIntoView` now tries three things in the order a person would, and the three exist because the first one cannot
+always work:
 
-What to do: **re-run once before investigating.** If it recurs on the same platform and the same row, treat it as real
-and look at that demo's layout — the check earned its place by catching a WinUI row that was genuinely laid out
-off-window. If it moves around or does not recur, it is the flake.
+1. **Focus it**, re-asking while polling rather than asking once and then only waiting — a request that did nothing is
+   otherwise never retried.
+2. **If it already holds focus**, that request can never work: activate the window first, to move focus off it, so the
+   next request is a real change.
+3. **If focus cannot do it at all**, drive the ancestor's `ScrollPattern` directly. That path does not involve focus.
+
+There is also a short grace period before the guard declares failure, because a scroll can be an animation in flight —
+treating one instantaneous read as final is how you report a failure that is not there. (One captured failure showed a
+rectangle that had already come back inside the window by the time the message was built.)
+
+Measured: the pair reproducer below failed twice in eight runs before the change and passed ten of ten after it; four
+full seven-platform runs passed as well.
+
+**Reproducing it cheaply.** Do not run all seven to chase this. It appears in a two-platform run, which costs about
+25 seconds instead of 90:
+
+```bash
+VELOXDEV_AT=1 VELOXDEV_AT_PLATFORMS=Avalonia,WinUI VELOXDEV_AT_PACE=0 VELOXDEV_AT_OBSERVE=0   VELOXDEV_BENCH_MS=200 dotnet test "Examples/Transition/AUTO TEST/VeloxDev.AT.csproj" --nologo
+```
+
+And `Suites/ReachabilityStress.cs` (ignored by default) repeats the suspect sequence about fifty times in ten seconds;
+remove its `[Ignore]` and run it by name when chasing something in this area.
 
 ### When a run fails
 
@@ -173,4 +224,6 @@ off-window. If it moves around or does not recur, it is the flake.
   Playwright; they need an interactive desktop. Without `VELOXDEV_AT=1` they skip.
 - **The run is not parallel and cannot be.** `[assembly: DoNotParallelize]` is deliberate: one demo, one user at a
   time. Making it parallel would put several windows on screen and break the property in §2.
-- **The wall-clock table in README.md is partly stale.** Only the fast row has been measured since the restructure.
+- **Timings are quoted where they were measured, and only there.** The fast full run is 32 tests across seven
+  processes in about 1m30s (measured); the default-pace and watch-everything runs have not been re-measured since the
+  restructure, and nothing in this file will pretend otherwise.
