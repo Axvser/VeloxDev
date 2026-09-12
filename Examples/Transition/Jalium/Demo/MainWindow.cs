@@ -1,25 +1,36 @@
 using Jalium.UI;
-using Jalium.UI.Automation;
 using Jalium.UI.Controls;
-using Jalium.UI.Controls.Primitives;
 using Jalium.UI.Media;
 using Jalium.UI.Shapes;
 using Jalium.UI.Threading;
 using System.Diagnostics;
 using VeloxDev.TransitionSystem;
-using Path = System.IO.Path;
 
 namespace Demo;
 
-/// <summary>Standalone animation test for the VeloxDev.Jalium PlatformAdapters (TransitionSystem),
-/// layout and scenarios aligned with the Avalonia/WPF Transition demos: a Grid with 14 rows, a
-/// WrapPanel of 7 scenario buttons, 3 rectangles animated with nested TranslateTransform.X
-/// paths, transform collections (Translate+Rotate+Scale) and brush fills, plus a 4-cell
-/// overshoot strip with its own button row, a sampled readout, a strip of sampler-conformance
-/// handles publishing the payload their clicks produce, and a bench above it that plays the
-/// clicked sampler across an eased sweep so the same value can be watched moving.</summary>
+/// <summary>
+/// Standalone animation test for the VeloxDev.Jalium PlatformAdapters (TransitionSystem).
+/// </summary>
+/// <remarks>
+/// 版面与其余几个平台的 Transition demo 对齐：顶栏（全局三件 + 五种加载方式 + 载荷读数）压在上面，
+/// 下面是一张**可滚动的案例列表** —— 一条案例一行，行里是那条案例真正在动的元素、一句"这条在验什么"，
+/// 以及这一行自己的 启动 / 关闭 / 重置。
+/// <para>
+/// 三种行（加载 3 条、过冲 5 条、每条采样器 1 条）长得一样，区别只在各自的令牌、描述与动作里，
+/// 三条合成一处的定义在 <see cref="RebuildCaseList"/>。
+/// </para>
+/// <para>
+/// 界面全部在代码里造（Jalium 这侧没有 XAML）：AutomationId 是验收套件抓这些控件的把手，
+/// 所以测试永远不匹配中文标签，token 与语言无关且稳定。
+/// </para>
+/// </remarks>
 internal sealed class MainWindow : Window
 {
+    // ── 在屏元素 ────────────────────────────────────────────────────────────
+    //
+    // 三块加载目标与五块过冲目标以前摊在窗口的格子上；现在每一块是列表里的一行，所以由代码造、由行带进列表。
+    // 位移那两条各有一块自己的目标：一个元素只能有一个父级，而每一行各自是一个父级。
+
     private readonly Rectangle _rec0;
     private readonly Rectangle _rec1;
     private readonly Rectangle _rec2;
@@ -27,153 +38,83 @@ internal sealed class MainWindow : Window
     private readonly Rectangle _over1;
     private readonly Rectangle _over2;
     private readonly Rectangle _over3;
+    private readonly Rectangle _over4;
+
+    // ── 载荷载体 ────────────────────────────────────────────────────────────
+
+    /// <summary>人类读数：过冲只有从数字上才看得出来（眼睛分不出"越过再回来"与"一条更慢的缓动"）。</summary>
     private readonly TextBlock _readout;
 
-    // 机器可读读数（载荷）载体，与人类读数并排
+    /// <summary>读数的机器可读孪生体：同一批值、固定的 key=value 载荷，测试不必解析版式。</summary>
     private readonly TextBlock _overState;
 
-    // 采样器一致性的载荷载体：由把手点击驱动，每次点击只跑那一条采样器
+    /// <summary>最后一次点某一行跑出来的那一帧序列。</summary>
     private readonly TextBlock _overConf;
+
+    /// <summary>那次点击把控件属性写成了什么、跑完才写全。</summary>
+    private readonly TextBlock _overLive;
+
+    /// <summary>批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。</summary>
+    private readonly TextBlock _overBatch;
 
     public MainWindow()
     {
         Title = "VeloxDev Transition - Jalium";
-        Width = 900;
-        Height = 980;
+        Width = 1240;
+        Height = 900;
         Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
 
-        var grid = new Grid();
-        // 加载模式那一排：三块目标与过冲格同尺寸（80x60），两半读起来是一块台子。
-        AddRow(grid, GridLength.Star);
-        AddRow(grid, new GridLength(60));
-        AddRow(grid, GridLength.Star);
-        AddRow(grid, new GridLength(60));
-        AddRow(grid, GridLength.Star);
-        AddRow(grid, new GridLength(60));
-        AddRow(grid, GridLength.Star);
-        AddRow(grid, new GridLength(110));
-        AddRow(grid, new GridLength(48));
-        AddRow(grid, new GridLength(44));
-        AddRow(grid, new GridLength(30));
-        AddRow(grid, new GridLength(92));
-        AddRow(grid, new GridLength(72));
-        AddRow(grid, new GridLength(30));
-
-        // 先建矩形：下面的按钮 lambda 捕获 _rec0，字段必须在捕获前完成赋值
-        _rec0 = MakeRect(Colors.Cyan);
-        _rec1 = MakeRect(Colors.Lime);
+        // 先建元素：下面的按钮 lambda 会捕获它们，字段必须在捕获前完成赋值。
+        _rec0 = MakeRect(new SolidColorBrush(Colors.Cyan));
+        _rec1 = MakeRect(new SolidColorBrush(Colors.Lime));
         // Rec2 起止两端都是渐变 —— 上侧这一排里特意留一块跑"渐变 → 渐变"，因为那条路走的是画刷
         // 交叉淡出（非纯色分支），与另外两块的纯色路径不是同一段代码。
         _rec2 = MakeRect(CreateBs1Brush());
 
-        // 过冲条：4 个并排目标，让 Back 与 Elastic、颜色与尺寸能在同一次运行里对比，而不是一次只看一个。
-        // Over3 是黄→紫渐变，过冲时越过紫色而不是回绕。Over0 的 RenderTransform 会被就地改写，所以只建一次。
-        _over0 = MakeOverRect(new SolidColorBrush(OverColorStart));
-        _over1 = MakeOverRect(new SolidColorBrush(OverColorStart));
-        _over2 = MakeOverRect(new SolidColorBrush(Color.FromRgb(0x7A, 0x5A, 0xA5)));
-        _over3 = MakeOverRect(CreateBs1Brush());
+        // 位移那两条就地驱动 RenderTransform.X，所以变换在这里造一次。
+        _over0 = MakeRect(new SolidColorBrush(OverColorStart));
+        _over4 = MakeRect(new SolidColorBrush(OverColorStart));
+        _over1 = MakeRect(new SolidColorBrush(OverColorStart));
+        _over2 = MakeRect(new SolidColorBrush(Color.FromRgb(0x7A, 0x5A, 0xA5)));
+        _over3 = MakeRect(CreateBs1Brush());
+
         _over0.RenderTransform = new TranslateTransform();
+        _over4.RenderTransform = new TranslateTransform();
 
-        var strip = new UniformGrid { Rows = 1, Columns = 4, Margin = new Thickness(6) };
-        strip.Children.Add(_over0);
-        strip.Children.Add(_over1);
-        strip.Children.Add(_over2);
-        strip.Children.Add(_over3);
-        Grid.SetRow(strip, 7);
-        grid.Children.Add(strip);
+        // 旋转与放大都是**绕元素自己**转的（RenderTransformOrigin 默认在左上角）。绕左上角转 180° 会把方块整个
+        // 甩到台子的左上方去 —— 而台子是裁边的，那一瞬看上去就和"没在跑"分不开。绕自己转则全程留在台子里，
+        // 这正是每一行都要装得下自己那段行程的意思。
+        _rec1.RenderTransformOrigin = new Point(0.5d, 0.5d);
+        _rec2.RenderTransformOrigin = new Point(0.5d, 0.5d);
 
-        var buttons = new WrapPanel();
-        // 令牌与其余六个平台逐字一致 —— 验收套件靠它点这一排。
-        // 四条会跑 Animation2 的按钮都先把 Rec2 的画刷写回渐变起点 —— 见 SeedRec2 的说明。
-        buttons.Children.Add(MakeButton("主线程互斥", (_, _) => { SeedRec2(); LoadMainThread(); }, "over.btn.load.main"));
-        buttons.Children.Add(MakeButton("后台线程互斥", (_, _) => { SeedRec2(); _ = Task.Run(LoadMainThread); }, "over.btn.load.background"));
-        buttons.Children.Add(MakeButton("主线程并发", (_, _) => { SeedRec2(); LoadMainThreadNonMutual(); }, "over.btn.load.main.concurrent"));
-        buttons.Children.Add(MakeButton("后台线程并发", (_, _) => { SeedRec2(); _ = Task.Run(LoadMainThreadNonMutual); }, "over.btn.load.background.concurrent"));
-        buttons.Children.Add(MakeButton("连续互斥", (_, _) => _ = Task.Run(() => Animation0.Execute(_rec0)), "over.btn.load.repeat"));
-        buttons.Children.Add(MakeButton("重置", (_, _) => Reset(), "over.btn.reset.all"));
-        buttons.Children.Add(MakeButton("停止全部", (_, _) => ExitAll(), "over.btn.stop.all"));
-        Grid.SetRow(buttons, 0);
-        grid.Children.Add(buttons);
+        _readout = MakeReadout("over.readout", "按下面任一行；读数显示当前值与目标值", wrap: false, fontSize: 9);
 
-        Grid.SetRow(_rec0, 1);
-        Grid.SetRow(_rec1, 3);
-        Grid.SetRow(_rec2, 5);
-        grid.Children.Add(_rec0);
-        grid.Children.Add(_rec1);
-        grid.Children.Add(_rec2);
+        // 折行不是可有可无：这份载荷现在多出 rows/away/moving，而 nomutual 必须仍然看得见 —— 它排在最后，
+        // 所以标签要留出折行的位置，否则那个最要紧的字段会被裁掉。
+        _overState = MakeReadout("over.state", "v=1;seq=0", wrap: true, fontSize: 10);
+        _overConf = MakeReadout("over.conf", "v=1;seq=0;n=0;", wrap: false, fontSize: 10);
+        _overLive = MakeReadout("over.live", "v=1;seq=0;done=1;", wrap: false, fontSize: 10);
+        _overBatch = MakeReadout("over.batch", "v=1;seq=0;done=1;rows=0;", wrap: true, fontSize: 10);
 
-        // AutomationId 是验收套件抓取这些控件的把手：测试永远不匹配中文标签，token 与语言无关且稳定。
-        var overButtons = new WrapPanel();
-        overButtons.Children.Add(MakeButton("位移 Back.Out", (_, _) => OverShootScalarBack(), "over.btn.back"));
-        overButtons.Children.Add(MakeButton("位移 Elastic.Out", (_, _) => OverShootScalarElastic(), "over.btn.elastic"));
-        overButtons.Children.Add(MakeButton("颜色过冲", (_, _) => OverShootColor(), "over.btn.color"));
-        overButtons.Children.Add(MakeButton("尺寸过冲", (_, _) => OverShootSize(), "over.btn.size"));
-        overButtons.Children.Add(MakeButton("渐变过冲", (_, _) => OverShootGradient(), "over.btn.brush"));
-        overButtons.Children.Add(MakeButton("重置过冲", (_, _) => ResetOverShoot(), "over.btn.reset"));
-        Grid.SetRow(overButtons, 8);
-        grid.Children.Add(overButtons);
-
-        // 读数才是让过冲可观测的东西：数字越过目标再回来，光靠眼睛和一条更慢的缓动分不开。
-        _readout = new TextBlock
+        var toolbar = BuildToolbar();
+        var list = new ScrollViewer
         {
-            Margin = new Thickness(8, 6, 8, 2),
-            FontFamily = new FontFamily("Consolas"),
-            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
-            Text = "按上面任一按钮；读数显示当前值与目标值",
+            Margin = new Thickness(4, 2, 4, 4),
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
-        SetAutomationToken(_readout, "Readout", "over.readout");
-        Grid.SetRow(_readout, 9);
-        grid.Children.Add(_readout);
 
-        // 读数的机器可读孪生体：同一支定时器、同一批值，但用固定的 key=value 载荷而不是散文。
-        _overState = new TextBlock
-        {
-            Margin = new Thickness(8, 0, 8, 2),
-            FontFamily = new FontFamily("Consolas"),
-            FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
-            Text = "v=1;seq=0",
-        };
-        SetAutomationToken(_overState, "OverState", "over.state");
-        Grid.SetRow(_overState, 10);
-        grid.Children.Add(_overState);
+        RebuildCaseList();
+        list.Content = SamplerBench.Build(_caseRows);
 
-        // 演示台插在把手条上方：把手是"验"，台子是"看"，点一次两件事一起发生。
-        var bench = _bench.Build(SamplerProbe.SamplerNames);
-        Grid.SetRow(bench, 11);
-        grid.Children.Add(bench);
-
-        // 采样器一致性把手：一条采样器一个按钮，点一下跑那一条、把结果写进载荷。把手与探针表同源，
-        // 所以加一条采样器只需要改 SamplerProbe 一处。
-        // 扫描必须落在 UI 线程上 —— 它要构造画刷、变换这类有线程亲和性的对象，而点击处理函数就在 UI 线程。
-        var samplerButtons = new WrapPanel();
-        foreach (var sampler in SamplerProbe.SamplerNames)
-        {
-            var handle = MakeButton(sampler, (_, _) => RunSamplerProbe(sampler), $"over.sampler.{sampler}");
-            handle.Tag = sampler;
-            handle.Width = 132;
-            handle.Height = 30;
-            handle.FontSize = 11;
-            samplerButtons.Children.Add(handle);
-        }
-        Grid.SetRow(samplerButtons, 12);
-        grid.Children.Add(samplerButtons);
-
-        // 采样器把手的载荷：最后一次点击跑出来的那一帧序列，外加证明点击落地的序列号。载荷格式与 over.state 相同，
-        // 验收侧不必再多认一种。
-        _overConf = new TextBlock
-        {
-            Margin = new Thickness(8, 0, 8, 2),
-            FontFamily = new FontFamily("Consolas"),
-            FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
-            Text = "v=1;seq=0;n=0;",
-        };
-        SetAutomationToken(_overConf, "OverConf", "over.conf");
-        Grid.SetRow(_overConf, 13);
-        grid.Children.Add(_overConf);
-
-        Content = grid;
+        var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Star });
+        Grid.SetRow(toolbar, 0);
+        Grid.SetRow(list, 1);
+        root.Children.Add(toolbar);
+        root.Children.Add(list);
+        Content = root;
 
         // 读数用定时器采样目标属性，不用 effect 的事件：流水线每段都会 Clone() effect，
         // 订阅在原始 effect 上的处理函数不会触发。
@@ -181,258 +122,277 @@ internal sealed class MainWindow : Window
         readoutTimer.Tick += (_, _) => UpdateReadout();
         readoutTimer.Start();
 
-        // Rec0's RenderTransform is a TranslateTransform; Rec1/Rec2 start null and are animated
-        // to a TransformGroup. Auto-run one animation on load and record the result so a headless
-        // run can assert interpolation + UI-thread marshalling worked end to end.
-        _rec0.RenderTransform = new TranslateTransform();
-        Loaded += (_, _) =>
-        {
-            var effect = new TransitionEffect { Duration = TimeSpan.FromMilliseconds(800), FPS = 60 };
-            effect.Completed += (_, _) =>
-            {
-                try
-                {
-                    var x = (_rec0.RenderTransform as TranslateTransform)?.X ?? double.NaN;
-                    File.WriteAllText(
-                        Path.Combine(Path.GetTempPath(), "jalium-transition-demo-ok.txt"),
-                        $"transition ran; rec0 X={x:F0}");
-                }
-                catch (IOException) { }
-            };
-            Transition<Rectangle>.Create()
-                .Property(r => ((TranslateTransform)r.RenderTransform!).X, 300d)
-                .Effect(effect)
-                .Execute(_rec0);
-        };
+        // 每一行先写成它自己声明的起点。不这么做的话，静息时每行持有的是控件的默认值（null 画刷、默认圆角），
+        // 于是"偏离起点"的行数在什么都没跑的时候就是满的 —— 顶栏那个数会变成一句假命题。
+        Loaded += (_, _) => ResetSamplerRows();
     }
 
-    /// <summary>激活次数：载荷靠它证明这一次是新的，而不是上一次点击留下的。</summary>
-    private long _probeSequence;
+    // -----------------------------------------------------------------------------------------------
+    // 顶栏
+    //
+    // 全局面板一次动到下面每一行；加载模式那五件是"怎么加载"，不是"加载什么" —— 它们驱动的三个形状在下面
+    // 各占一行、各自有自己的启动。把模式留在顶栏，列表才可能只有一种行：每行恰好 启动 / 关闭 / 重置。
+    // -----------------------------------------------------------------------------------------------
 
-    private readonly SamplerBench _bench = new();
-
-    // 只留一支演出用的定时器：连点两个把手时，后一次要能叫停前一次，否则两条采样器会同时往各自的格子里写。
-    private DispatcherTimer? _benchTimer;
-
-    private void RunSamplerProbe(string samplerName)
+    private StackPanel BuildToolbar()
     {
-        // 采样器写在**这一格的在屏控件**上、载荷也从它读回，所以下面两件事是同一件事的两种读法。
-        var subject = _bench.SubjectFor(samplerName);
+        var toolbar = new StackPanel { Margin = new Thickness(4) };
 
-        // 验：五个固定的缓动时间各跑一帧，写进载荷。
-        _overConf.Text = SamplerProbe.Run(subject, samplerName, ++_probeSequence);
+        var global = new WrapPanel();
+        global.Children.Add(MakeToolbarButton("全部启动", "over.btn.start.all", StartAllCases));
+        global.Children.Add(MakeToolbarButton("停止全部", "over.btn.stop.all", ExitAll));
+        global.Children.Add(MakeToolbarButton("重置", "over.btn.reset.all", ResetAllCases));
+        toolbar.Children.Add(global);
 
-        // 看：按 Back.Out 把这条采样器跑一遍，它会越过端点再落回来 —— 肉眼看得到的就是这个。
-        PlaySampler(samplerName, subject);
+        var modes = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
+
+        // 令牌与其余六个平台逐字一致 —— 验收套件靠它点这一排。
+        // 四条会跑 Animation2 的按钮都先把 Rec2 的画刷写回渐变起点 —— 见 SeedRec2 的说明。
+        modes.Children.Add(MakeToolbarButton("主线程互斥", "over.btn.load.main", () => { SeedRec2(); LoadMainThread(); }, 118, 38));
+        modes.Children.Add(MakeToolbarButton("后台线程互斥", "over.btn.load.background", () => { SeedRec2(); _ = Task.Run(LoadMainThread); }, 118, 38));
+        modes.Children.Add(MakeToolbarButton("主线程并发", "over.btn.load.main.concurrent", () => { SeedRec2(); LoadMainThreadNonMutual(); }, 118, 38));
+        modes.Children.Add(MakeToolbarButton("后台线程并发", "over.btn.load.background.concurrent", () => { SeedRec2(); _ = Task.Run(LoadMainThreadNonMutual); }, 118, 38));
+        modes.Children.Add(MakeToolbarButton("连续互斥", "over.btn.load.repeat", () => _ = Task.Run(() => Animation0.Execute(_rec0)), 110, 38));
+        toolbar.Children.Add(modes);
+
+        toolbar.Children.Add(_readout);
+        toolbar.Children.Add(_overState);
+        toolbar.Children.Add(_overConf);
+        toolbar.Children.Add(_overLive);
+        toolbar.Children.Add(_overBatch);
+
+        return toolbar;
     }
 
-    /// <summary>
-    /// 演出：把缓动进度从 0 走到 1，每一拍把该采样器在当前缓动时间上写出的值画到它那一格上。
-    /// </summary>
-    private void PlaySampler(string sampler, SamplerSubject subject)
-    {
-        _benchTimer?.Stop();
-
-        var duration = TimeSpan.FromMilliseconds(800);
-        var clock = Stopwatch.StartNew();
-        var timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
-        _benchTimer = timer;
-
-        timer.Tick += (_, _) =>
-        {
-            var progress = Math.Min(1d, clock.Elapsed.TotalMilliseconds / duration.TotalMilliseconds);
-            SamplerProbe.Frame(subject, sampler, Eases.Back.Out.Ease(progress));
-
-            if (progress >= 1d) timer.Stop();
-        };
-
-        timer.Start();
-    }
-
-    private static void AddRow(Grid grid, GridLength height)
-    {
-        grid.RowDefinitions.Add(new RowDefinition { Height = height });
-    }
-
-    // 与过冲条同尺寸的方块（不是被拉长的条），与参考 demo 一致。
-    private static Rectangle MakeRect(Brush fill)
-        => new()
-        {
-            Width = 80,
-            Height = 60,
-            Fill = fill,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-    private static Rectangle MakeRect(Color fill) => MakeRect(new SolidColorBrush(fill));
-
-    // 过冲条里的小目标：居中而不是靠左，位移场景才能在格子内看出越界再回弹。
-    private static Rectangle MakeOverRect(Brush fill, double width = OverWidthStart)
-    {
-        return new Rectangle
-        {
-            Width = width,
-            Height = 60,
-            Fill = fill,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-    }
-
-    private Button MakeButton(string text, RoutedEventHandler onClick, string? automationId = null)
+    private Button MakeToolbarButton(string text, string token, Action action, double width = 110, double height = 34)
     {
         var button = new Button
         {
             Content = new TextBlock { Text = text, Foreground = new SolidColorBrush(Colors.White) },
-            Margin = new Thickness(4),
+            Margin = new Thickness(2),
+            FontSize = 12,
+            Width = width,
+            Height = height,
         };
-        button.Click += onClick;
-        if (automationId is not null) SetAutomationToken(button, automationId, automationId);
+
+        SamplerBench.SetToken(button, token);
+        button.Click += (_, _) => action();
         return button;
     }
 
-    // 验收套件的把手：AutomationId 附着属性是语言无关的稳定 token，Name 则走 Jalium 的
-    // WPF 式 Name→AutomationId 回退，两条路都通。两者都不碰人类可见的文字与无障碍 Name。
-    private static void SetAutomationToken(FrameworkElement element, string name, string automationId)
+    private static TextBlock MakeReadout(string token, string initial, bool wrap, double fontSize)
     {
-        element.Name = name;
-        AutomationProperties.SetAutomationId(element, automationId);
+        var readout = new TextBlock
+        {
+            Margin = new Thickness(8, 2, 8, 2),
+            FontFamily = new FontFamily("Consolas"),
+            FontSize = fontSize,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+            Text = initial,
+            TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
+        };
+
+        SamplerBench.SetToken(readout, token);
+        return readout;
     }
 
-    // ── Scenarios (aligned with Avalonia/WPF) ───────────────────────────────
+    // -----------------------------------------------------------------------------------------------
+    // 案例列表
+    //
+    // 一张统一的表：一条案例一行，行里有元素、有一句"这条在验什么"、有这一行自己的三个动作。行的种类只有
+    // 三种 —— 加载、过冲、采样器 —— 但对读表的人来说它们长得一样，区别只在各自的令牌、描述与动作里。
+    // -----------------------------------------------------------------------------------------------
+
+    /// <summary>列表里的每一行，按顺序 —— 顶栏那个"全部启动"走的就是这里的动作。</summary>
+    private readonly List<CaseRow> _caseRows = [];
 
     /// <summary>
-    /// 把 Rec2 的画刷同步写回渐变起点，让 <c>Animation2</c> 无论开始还是终结都拿渐变当端点。
+    /// 把三种案例行拼成一张表：先加载那三行，再过冲那五行，最后每个采样器一行。
     /// </summary>
     /// <remarks>
-    /// <c>Prepare</c> 把目标的**当前值**当作动画起点。上一轮若是被"停止全部"或新动画打断停在半路，
-    /// <c>Rec2.Fill</c> 会停在交叉淡出混出来的**纯色**上，下一次加载就成了"纯色 → 渐变" —— 合成效果的
-    /// 输入端不再确定。这与 <c>OverShootGradient</c> 里对 <c>_over3</c> 做的是同一件事、同一个理由。
-    /// <para>
-    /// 必须在 UI 线程上写：所以后台加载那两个也先在这里写回、再派发，而不是塞进 Task.Run 里面。
-    /// </para>
+    /// 采样器排在最后是有意的：它们是套件逐条驱动的对象，也是最需要滚动的部分，而滚动这一步本身要被真的走到。
     /// </remarks>
-    private void SeedRec2() => _rec2.Fill = CreateBs1Brush();
-
-    private void LoadMainThread()
+    private void RebuildCaseList()
     {
-        // Mutual (default): a new animation interrupts the old one.
-        Animation0.Execute(_rec0);
-        Animation1.Execute(_rec1);
-        Animation2.Execute(_rec2);
+        _caseRows.Clear();
+
+        _caseRows.Add(LoadRow("translate", "平移",
+            "嵌套属性路径：动画写的是 RenderTransform.X —— 子对象上的成员，而且是被就地改的那一个。",
+            _rec0, () => Animation0.Execute(_rec0), RestoreTranslateRow));
+
+        _caseRows.Add(LoadRow("rotate", "旋转",
+            "整个变换对象被换掉：端点是另一个同类型的 RotateTransform，逐字段外推而不是逐分量改。",
+            _rec1, () => Animation1.Execute(_rec1), RestoreRotateRow));
+
+        _caseRows.Add(LoadRow("combine", "平移 + 缩放",
+            "两个变换合成一个 TransformGroup，按类型配对插值；第二段还会转去动颜色。",
+            _rec2, () => Animation2.Execute(_rec2), RestoreCombineRow));
+
+        _caseRows.Add(OvershootRow("shift-back", "位移 Back.Out",
+            "共享进度的标量过冲：Back 越过目标 10% 再落回来，数字看得出来、眼睛看不出来。",
+            _over0, ShiftStageWidth, () => RunOvershoot(_over0, OverScalarBack, "back", BackDurationMs, 0, RestoreShiftStart), RestoreShiftStart));
+
+        _caseRows.Add(OvershootRow("shift-elastic", "位移 Elastic.Out",
+            "上面那一行的另一条曲线：Elastic 峰值更高、回弹次数更多，两行同时跑就是同一次对比。",
+            _over4, ShiftStageWidth, () => RunOvershoot(_over4, OverScalarElastic, "elastic", ElasticDurationMs, 4, RestoreElasticStart), RestoreElasticStart));
+
+        _caseRows.Add(OvershootRow("color", "颜色过冲",
+            "四通道按颜色的规则走：共用进度撞到 255 就整组停住，所以动的是亮度而不是色相。",
+            _over1, BodyStageWidth, () => RunOvershoot(_over1, OverColor, "color", BackDurationMs, 1, RestoreColorStart), RestoreColorStart));
+
+        _caseRows.Add(OvershootRow("size", "尺寸过冲",
+            "宽度是 double，没有上下限：外推照走，只是这一条只会变大，碰不到负的那一端。",
+            _over2, SizeStageWidth, () => RunOvershoot(_over2, OverSize, "size", ElasticDurationMs, 2, RestoreSizeStart), RestoreSizeStart));
+
+        _caseRows.Add(OvershootRow("brush", "渐变过冲",
+            "非纯色画刷走交叉淡出：混合系数是个分数，两端各自饱和，不跟着缓动越过端点。",
+            _over3, BodyStageWidth, () => RunOvershoot(_over3, OverBrush, "brush", ElasticDurationMs, 3, RestoreGradientStart), RestoreGradientStart));
+
+        // 采样器行由探针表生成。行里的"启动"就是验收套件点的那个把手令牌，点它写闭式解载荷并起那条真动画 ——
+        // 所以加一条采样器仍然只需要改 SamplerProbe 一处。
+        foreach (var sampler in SamplerProbe.SamplerNames)
+        {
+            var name = sampler;
+            _watches[name] = new SamplerProbe.LiveWatch();
+            _batchFrames[name] = string.Empty;
+
+            _caseRows.Add(_bench.SamplerRow(
+                name,
+                () => RunSamplerProbe(name),
+                () => StopSamplerRows(name),
+                () => ResetSamplerRows(name),
+                // 批量路径：只起这一条自己的动画，不碰别的行，也不写逐行载荷 ——
+                // 十几条各自写 over.live 只会互相覆盖，并发那一路走的是 over.batch。
+                () =>
+                {
+                    var subject = _bench.SubjectFor(name);
+                    Transition.Exit(subject, IncludeMutual: true, IncludeNoMutual: true);
+
+                    try
+                    {
+                        StartSamplerAnimation(name, subject);
+                    }
+                    catch (Exception exception)
+                    {
+                        // 记在**这一行自己的**观察里，所以十几条并发时认得出是谁起不来。
+                        _watches[name].Fail($"{exception.GetType().Name}: {exception.Message}");
+                    }
+                }));
+        }
     }
 
-    private void LoadMainThreadNonMutual()
+    /// <summary>一条加载案例：元素就是那块被三个动画之一驱动的方块。</summary>
+    private static CaseRow LoadRow(
+        string id, string title, string description, Rectangle element, Action start, Action restore)
     {
-        Animation0.Execute(_rec0, CanMutualTask: false);
-        Animation1.Execute(_rec1, CanMutualTask: false);
-        Animation2.Execute(_rec2, CanMutualTask: false);
+        var stage = PlayStage(element, LoadStageWidth);
+
+        return new CaseRow(
+            title,
+            description,
+            stage,
+            LoadStageWidth,
+            $"over.row.start.{id}",
+            $"over.row.stop.{id}",
+            $"over.row.reset.{id}",
+            start,
+            () => Transition.Exit(element, IncludeMutual: true, IncludeNoMutual: true),
+            () => ResetCase(element, restore));
     }
 
-    private void Reset()
+    /// <summary>
+    /// 一条过冲案例：元素是那块目标自己，台子只负责给它一个走得出的格子。
+    /// </summary>
+    /// <param name="stageWidth">
+    /// 元素区的宽度。位移那两条要放得下整段行程（端点是 230，方块本身 80），不按原值留出位置的话，
+    /// 它一跑就整块滑出格子 —— 看上去和"没动"一模一样，正是这个演示要消除的错觉。
+    /// </param>
+    private static CaseRow OvershootRow(
+        string id, string title, string description, Rectangle target, double stageWidth,
+        Action start, Action restore)
     {
-        ExitAll();
-        _rec0.RenderTransform = new TranslateTransform();
-        _rec0.Fill = new SolidColorBrush(Colors.Cyan);
-        _rec0.Opacity = 1d;
-        _rec1.RenderTransform = null;
-        _rec1.Fill = new SolidColorBrush(Colors.Lime);
-        _rec2.RenderTransform = null;
-        _rec2.Fill = CreateBs1Brush();
-        ResetOverShoot();
+        var stage = PlayStage(target, stageWidth);
+
+        return new CaseRow(
+            title,
+            description,
+            stage,
+            stageWidth,
+            $"over.row.start.{id}",
+            $"over.row.stop.{id}",
+            $"over.row.reset.{id}",
+            start,
+            () => Transition.Exit(target, IncludeMutual: true, IncludeNoMutual: true),
+            () => ResetCase(target, restore));
     }
 
-    private void ExitAll()
+    /// <summary>
+    /// 把元素放进一块定宽、裁边的台子里 —— 它的行程跑到端点也不会压到旁边的字上。
+    /// </summary>
+    /// <remarks>
+    /// 台子的宽由那一条案例的行程决定（见各条案例的 <c>*StageWidth</c>）：这是"这一段动哪儿"的唯一来源，
+    /// 窄一点就会让元素在最该被看见的那一瞬跑出边界 —— 而"跑出去看不见"和"没在跑"在屏幕上分不开。
+    /// </remarks>
+    private static Canvas PlayStage(FrameworkElement element, double width)
     {
-        Transition.Exit(_rec0, IncludeMutual: true, IncludeNoMutual: true);
-        Transition.Exit(_rec1, IncludeMutual: true, IncludeNoMutual: true);
-        Transition.Exit(_rec2, IncludeMutual: true, IncludeNoMutual: true);
+        var stage = SamplerBench.Stage(width);
+        Canvas.SetLeft(element, SamplerBench.ElementInset);
+        Canvas.SetTop(element, SamplerBench.ElementTop);
+        stage.Children.Add(element);
+        return stage;
     }
 
-    private void ResetOverShoot()
+    /// <summary>停掉并把它放回声明的静止态。</summary>
+    private static void ResetCase(Rectangle element, Action restore)
     {
-        Transition.Exit(_over0, IncludeMutual: true, IncludeNoMutual: true);
-        Transition.Exit(_over1, IncludeMutual: true, IncludeNoMutual: true);
-        Transition.Exit(_over2, IncludeMutual: true, IncludeNoMutual: true);
-        Transition.Exit(_over3, IncludeMutual: true, IncludeNoMutual: true);
-
-        // 直接写初值：Over0 的 RenderTransform 被就地改写，每次换新对象；
-        // Fill 是整体替换而非就地修改，所以初值能完整恢复。
-        _over0.RenderTransform = new TranslateTransform();
-        _over1.Fill = new SolidColorBrush(OverColorStart);
-        _over2.Width = OverWidthStart;
-        _over3.Fill = CreateBs1Brush();
+        Transition.Exit(element, IncludeMutual: true, IncludeNoMutual: true);
+        restore();
     }
 
-    // ── Animations (aligned with Avalonia/WPF) ──────────────────────────────
+    // -----------------------------------------------------------------------------------------------
+    // 每一行元素的场地
+    //
+    // 行高是统一的（SamplerBench.RowHeight），所以每一行都装得下自己那段行程 —— 装不下就等于元素跑没了。
+    // -----------------------------------------------------------------------------------------------
 
-    // Simple: nested TranslateTransform.X path + solid fill.
-    private static readonly Transition<Rectangle> Animation0 =
-        Transition<Rectangle>.Create()
-            .Property(r => ((TranslateTransform)r.RenderTransform!).X, 300)
-            .Property(r => r.Fill, new SolidColorBrush(Colors.OrangeRed))
-            .Effect(new TransitionEffect
-            {
-                Duration = TimeSpan.FromSeconds(2),
-                IsAutoReverse = true,
-                LoopTime = 2,
-                Ease = Eases.Sine.InOut,
-            });
+    /// <summary>
+    /// 加载那三行的元素区宽度，以及那三条动画的行程。
+    /// </summary>
+    /// <remarks>
+    /// 行程不是按窗口宽度定的：三块目标现在各在列表的一行里，台子就是它的边界，跑出去会被裁掉 ——
+    /// 而"跑出去看不见"和"没在跑"在屏幕上是一样的。所以行程缩到台子里放得下（80 宽的方块 + 200 的行程）。
+    /// 验收侧只钉静止态，行程是观感，不是契约。
+    /// </remarks>
+    private const double LoadStageWidth = 300d;
 
-    // Delayed: transform collection (Translate + Rotate) + fill.
-    private static readonly Transition<Rectangle> Animation1 =
-        Transition<Rectangle>.Create()
-            .Await(TimeSpan.FromSeconds(5))
-            .Property(r => r.RenderTransform,
-                [new TranslateTransform(-200, 0), new RotateTransform(180)],
-                RotationDirection.ClockWise)
-            .Property(r => r.Fill, new SolidColorBrush(Colors.Yellow))
-            .Effect(new TransitionEffect
-            {
-                Duration = TimeSpan.FromSeconds(4),
-                IsAutoReverse = true,
-                FPS = 144,
-                LoopTime = 4,
-            });
+    private const double LoadTravel = 200d;
 
-    // Combined: transform collection (Translate + Scale) + fill, then AwaitThen + fill.
-    private static readonly Transition<Rectangle> Animation2 =
-        Transition<Rectangle>.Create()
-            .Property(r => r.RenderTransform,
-                [new TranslateTransform(200, 0), new ScaleTransform(1.3, 1.3)],
-                RotationDirection.CounterClockWise)
-            .Property(r => r.Fill, CreateShiftedBs1())
-            .Effect(new TransitionEffect
-            {
-                Duration = TimeSpan.FromSeconds(3),
-                IsAutoReverse = true,
-                FPS = 144,
-                Ease = Eases.Circ.InOut,
-                LoopTime = 2,
-            })
-            .AwaitThen(TimeSpan.FromSeconds(5))
-            .Property(r => r.Fill, CreateBs1Brush())
-            .Effect(e =>
-            {
-                e.Duration = TimeSpan.FromSeconds(4);
-                e.FPS = 144;
-                e.Ease = Eases.Sine.In;
-            });
+    /// <summary>位移那两条的元素区宽度：端点 230 外加上方块自己的 80，不留出来它一跑就整块滑出格子。</summary>
+    private const double ShiftStageWidth = 420d;
 
-    // ── 过冲（overshoot）────────────────────────────────────────────────────
+    /// <summary>尺寸那一条的元素区宽度：宽度从 80 长到 220，Elastic 峰值处（约 272）也还留在台子里。</summary>
+    private const double SizeStageWidth = 288d;
+
+    /// <summary>颜色与渐变那两条不改变尺寸，元素区就是方块本身加一点边。</summary>
+    private const double BodyStageWidth = 96d;
+
+    // 与过冲目标同尺寸的方块（不是被拉长的条），与参考 demo 一致。
+    private static Rectangle MakeRect(Brush fill) => new() { Width = 80, Height = 60, Fill = fill };
+
+    // -----------------------------------------------------------------------------------------------
+    // 过冲：把目标放回起点，再起动画
     //
     // 上面那些缓动全都落在 [0,1] 内，没有一个能越过目标再回来。Back 峰值 1.10、Elastic 峰值 1.37，
-    // 过冲具体意味着什么由采样器决定：R/G/B 共用一个进度、在第一个触边的通道处停下；Size/Rect 这类
-    // 结构体尺寸同理在 0 处停下；而自带区间的通道（alpha/opacity）与普通 double 保留完整的缓动时间。
-    // 读数才让过冲可观测：数字越过目标再回来，光靠眼睛和一条更慢的缓动分不开。
-    // ───────────────────────────────────────────────────────────────────────
+    // 过冲具体意味着什么由采样器决定：R/G/B 共用一个进度、在第一个触边的通道处停下；尺寸在 0 处停下；
+    // 而自带区间的通道与普通 double 保留完整的缓动时间。读数才让过冲可观测。
+    // -----------------------------------------------------------------------------------------------
 
-    // 目标值与动画共用同一个常量，避免读数与动画各写一份字面量后漂移。
-    private const double ShiftTarget = 300d;
+    // 位移的目标：定 240 时 Elastic 的峰值（1.37 倍）刚好顶到台子边缘，只差两三个像素 —— 看上去像被裁掉。
+    // 收到 230 之后，峰值处（约 316）连方块一共 404，离台子的 420 还有一截。
+    private const double ShiftTarget = 230d;
     private const double WidthTarget = 220d;
 
-    // 过冲条各目标的起始值：构造函数、每次运行前的归位、重置三处共用同一份定义。
+    // 过冲目标的起始值：构造函数、每次运行前的归位、重置三处共用同一份定义。
     private const double OverWidthStart = 80d;
     private static readonly Color OverColorStart = Color.FromRgb(0x3A, 0x6E, 0xA5);
 
@@ -470,58 +430,451 @@ internal sealed class MainWindow : Window
             .Property(r => r.Fill, CreateShiftedBs1())
             .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(ElasticDurationMs), Ease = Eases.Back.Out });
 
-    // 每次运行前先把自己的目标同步写回起始值，而不是动画回去：Prepare 会把目标的当前值当作动画起点，
-    // 少了这一步，第二次点击——或共用同一元素的兄弟按钮——就会从目标动到目标，看起来什么都没发生。
-    // 只重置这条自己拥有的元素：动别的元素会取消那边的运行，并排对比就没了。
-    private void OverShootScalarBack() => RunScalar(OverScalarBack, "back", BackDurationMs);
-    private void OverShootScalarElastic() => RunScalar(OverScalarElastic, "elastic", ElasticDurationMs);
-
-    private void RunScalar(Transition<Rectangle> animation, string scenario, int durationMs)
+    /// <summary>
+    /// 跑一条过冲案例：先把目标放回起点，再起动画。
+    /// </summary>
+    /// <remarks>
+    /// 先放回起点是必须的：<c>Prepare</c> 读的是**目标此刻的值**当起点，不放回去就变成"从终点动到终点"，
+    /// 看上去什么都没发生。
+    /// </remarks>
+    private void RunOvershoot(
+        Rectangle target, Transition<Rectangle> animation, string scenario, int durationMs, int targetIndex, Action restoreStart)
     {
-        Transition.Exit(_over0, IncludeMutual: true, IncludeNoMutual: true);
-        ((TranslateTransform)_over0.RenderTransform!).X = 0;
-        BeginScenario(scenario, durationMs, targetIndex: 0);
-        animation.Execute(_over0);
+        Transition.Exit(target, IncludeMutual: true, IncludeNoMutual: true);
+        restoreStart();
+        BeginScenario(scenario, durationMs, targetIndex);
+        animation.Execute(target);
     }
 
-    private void OverShootColor()
+    // ── Animations (aligned with the other platforms) ───────────────────────
+
+    // 简单：嵌套 TranslateTransform.X 路径 + 纯色填充。
+    private static readonly Transition<Rectangle> Animation0 =
+        Transition<Rectangle>.Create()
+            .Property(r => ((TranslateTransform)r.RenderTransform!).X, LoadTravel)
+            .Property(r => r.Fill, new SolidColorBrush(Colors.OrangeRed))
+            .Effect(new TransitionEffect
+            {
+                Duration = TimeSpan.FromSeconds(2),
+                IsAutoReverse = true,
+                LoopTime = 2,
+                Ease = Eases.Sine.InOut,
+            });
+
+    // 延迟：整个变换对象被换掉（端点是另一个同类型的 RotateTransform）+ 填充。
+    // 旋转是绕元素自己的中心转的（见构造里那句 RenderTransformOrigin）：端点是同一个 RotateTransform，
+    // 只是从 0° 外推到 180°。行里的台子是裁边的，绕左上角转会把它整块甩出格子。
+    private static readonly Transition<Rectangle> Animation1 =
+        Transition<Rectangle>.Create()
+            .Await(TimeSpan.FromSeconds(5))
+            .Property(r => r.RenderTransform, [new RotateTransform(180)], RotationDirection.ClockWise)
+            .Property(r => r.Fill, new SolidColorBrush(Colors.Yellow))
+            .Effect(new TransitionEffect
+            {
+                Duration = TimeSpan.FromSeconds(4),
+                IsAutoReverse = true,
+                FPS = 144,
+                LoopTime = 4,
+            });
+
+    // 合成：变换集合（平移 + 缩放）+ 填充，然后 AwaitThen + 填充。
+    // 平移收到 130、缩放绕元素自己的中心（见构造里那句 RenderTransformOrigin）：1.3 倍是 104×78，台子只有
+    // 300×84，不这么收着，方块在放大那半段就会被裁掉两个边。
+    private static readonly Transition<Rectangle> Animation2 =
+        Transition<Rectangle>.Create()
+            .Property(r => r.RenderTransform,
+                [new TranslateTransform(130, 0), new ScaleTransform(1.3, 1.3)],
+                RotationDirection.CounterClockWise)
+            .Property(r => r.Fill, CreateShiftedBs1())
+            .Effect(new TransitionEffect
+            {
+                Duration = TimeSpan.FromSeconds(3),
+                IsAutoReverse = true,
+                FPS = 144,
+                Ease = Eases.Circ.InOut,
+                LoopTime = 2,
+            })
+            .AwaitThen(TimeSpan.FromSeconds(5))
+            .Property(r => r.Fill, CreateBs1Brush())
+            .Effect(e =>
+            {
+                e.Duration = TimeSpan.FromSeconds(4);
+                e.FPS = 144;
+                e.Ease = Eases.Sine.In;
+            });
+
+    /// <summary>
+    /// 把 Rec2 的画刷同步写回渐变起点，让 <c>Animation2</c> 无论开始还是终结都拿渐变当端点。
+    /// </summary>
+    /// <remarks>
+    /// <c>Prepare</c> 把目标的**当前值**当作动画起点。上一轮若是被"停止全部"或新动画打断停在半路，
+    /// <c>Rec2.Fill</c> 会停在交叉淡出混出来的**纯色**上，下一次加载就成了"纯色 → 渐变" —— 合成效果的
+    /// 输入端不再确定。这与渐变过冲那一行的起点（<c>RestoreGradientStart</c>）是同一件事、同一个理由。
+    /// <para>
+    /// 必须在 UI 线程上写：所以后台加载那两个也先在这里写回、再派发，而不是塞进 Task.Run 里面。
+    /// </para>
+    /// </remarks>
+    private void SeedRec2() => _rec2.Fill = CreateBs1Brush();
+
+    private void LoadMainThread()
     {
-        Transition.Exit(_over1, IncludeMutual: true, IncludeNoMutual: true);
-        _over1.Fill = new SolidColorBrush(OverColorStart);
-        BeginScenario("color", BackDurationMs, targetIndex: 1);
-        OverColor.Execute(_over1);
+        // Mutual (default): a new animation interrupts the old one.
+        Animation0.Execute(_rec0);
+        Animation1.Execute(_rec1);
+        Animation2.Execute(_rec2);
     }
 
-    private void OverShootSize()
+    private void LoadMainThreadNonMutual()
     {
-        Transition.Exit(_over2, IncludeMutual: true, IncludeNoMutual: true);
-        _over2.Width = OverWidthStart;
-        BeginScenario("size", ElasticDurationMs, targetIndex: 2);
-        OverSize.Execute(_over2);
+        Animation0.Execute(_rec0, CanMutualTask: false);
+        Animation1.Execute(_rec1, CanMutualTask: false);
+        Animation2.Execute(_rec2, CanMutualTask: false);
     }
 
-    private void OverShootGradient()
+    /// <summary>顶栏"停止全部"：整块界面一起停下，否则这个按钮的名字就是假的。原地冻结，不回起点。</summary>
+    private void ExitAll()
     {
-        Transition.Exit(_over3, IncludeMutual: true, IncludeNoMutual: true);
-        _over3.Fill = CreateBs1Brush();
-        BeginScenario("brush", ElasticDurationMs, targetIndex: 3);
-        OverBrush.Execute(_over3);
+        foreach (var target in ScenarioTargets())
+        {
+            Transition.Exit(target, IncludeMutual: true, IncludeNoMutual: true);
+        }
+
+        _benchTimer?.Stop();
+        _batchTimer?.Stop();
+        _liveSubject = null;
+        StopSamplerRows();
     }
 
-    // ── 验收观测面 ──────────────────────────────────────────────────────────
+    /// <summary>
+    /// 顶栏"重置"：整个界面回到各自的起点。
+    /// </summary>
+    /// <remarks>
+    /// 加载、过冲、采样器三类各自走自己那行的重置动作 —— 少一类，"重置"这个名字就与它做的事对不上。
+    /// </remarks>
+    private void ResetAllCases()
+    {
+        _benchTimer?.Stop();
+        _batchTimer?.Stop();
+        _liveSubject = null;
+
+        ResetCase(_rec0, RestoreTranslateRow);
+        ResetCase(_rec1, RestoreRotateRow);
+        ResetCase(_rec2, RestoreCombineRow);
+        ResetOverShoot();
+        ResetSamplerRows();
+    }
+
+    private void ResetOverShoot()
+    {
+        foreach (var target in new[] { _over0, _over1, _over2, _over3, _over4 })
+        {
+            Transition.Exit(target, IncludeMutual: true, IncludeNoMutual: true);
+        }
+
+        RestoreShiftStart();
+        RestoreElasticStart();
+        RestoreColorStart();
+        RestoreSizeStart();
+        RestoreGradientStart();
+    }
+
+    // ---- 每一行"重置"的目标状态：就是这些元素声明时的那份值 ----
+
+    private void RestoreTranslateRow()
+    {
+        _rec0.RenderTransform = new TranslateTransform();
+        _rec0.Fill = new SolidColorBrush(Colors.Cyan);
+    }
+
+    // Rec1/Rec2 的 RenderTransform 得**直接赋 null**，不走构建器：适配器的 Transform 重载收的是集合，
+    // 传空集合建出来的是一个空的 TransformGroup，不是 null —— 而声明的静止态就是"没有变换"。
+    private void RestoreRotateRow()
+    {
+        _rec1.RenderTransform = null;
+        _rec1.Fill = new SolidColorBrush(Colors.Lime);
+    }
+
+    private void RestoreCombineRow()
+    {
+        _rec2.RenderTransform = null;
+        _rec2.Fill = CreateBs1Brush();
+    }
+
+    private void RestoreShiftStart() => ((TranslateTransform)_over0.RenderTransform!).X = 0;
+
+    private void RestoreElasticStart() => ((TranslateTransform)_over4.RenderTransform!).X = 0;
+
+    private void RestoreColorStart() => _over1.Fill = new SolidColorBrush(OverColorStart);
+
+    private void RestoreSizeStart() => _over2.Width = OverWidthStart;
+
+    private void RestoreGradientStart() => _over3.Fill = CreateBs1Brush();
+
+    /// <summary>三类场景共用的八块目标：加载三块 + 过冲五块。采样器行自成一套，不在这里。</summary>
+    private Rectangle[] ScenarioTargets()
+        => [_rec0, _rec1, _rec2, _over0, _over1, _over2, _over3, _over4];
+
+    // -----------------------------------------------------------------------------------------------
+    // 采样器：演出与批量
+    // -----------------------------------------------------------------------------------------------
+
+    /// <summary>激活次数：载荷靠它证明这一次是新的，而不是上一次点击留下的。</summary>
+    private long _probeSequence;
+
+    private readonly SamplerBench _bench = new();
+
+    // 只留一支演出用的定时器：连点两个把手时，后一次要能叫停前一次，否则两条采样器会同时往各自的格子里写。
+    private DispatcherTimer? _benchTimer;
+
+    // 上一次演出写的那一格：换一格时要把它那条真动画停掉，不然它会在没人看的时候继续往旧格子上写。
+    private SamplerSubject? _liveSubject;
+
+    // 每一条采样器**各有一份**采样累积：逐行路径只用被点的那一份，批量路径十几份同时喂。
+    // 异常也记在各自那一份里，所以十几条并发时谁的错是认得出的。
+    private readonly Dictionary<string, SamplerProbe.LiveWatch> _watches = new(StringComparer.Ordinal);
+
+    // 批量运行时每一行的闭式解帧（点那一刻算一次，不随动画走）与那支采样定时器。
+    private readonly Dictionary<string, string> _batchFrames = new(StringComparer.Ordinal);
+    private DispatcherTimer? _batchTimer;
+
+    /// <summary>
+    /// 这一行的"启动"：验五个固定缓动时间，再起一条真动画把这一条跑一遍。
+    /// </summary>
+    /// <remarks>
+    /// 采样器写在**这一格的在屏控件**上、载荷也从它读回，所以下面两件事是同一件事的两种读法。
+    /// 这一条同时是套件点的那个把手令牌走的路径，也是行里"启动"按钮走的路径 —— 两者不可能各说各话。
+    /// </remarks>
+    private void RunSamplerProbe(string sampler)
+    {
+        var subject = _bench.SubjectFor(sampler);
+
+        // 验：五个固定的缓动时间各跑一帧，写进载荷。
+        _overConf.Text = SamplerProbe.Run(subject, sampler, ++_probeSequence);
+
+        // 跑：用真的 Transition 流水线把这条采样器跑一遍 —— 屏幕上看到的就是它 —— 全程从控件属性采样，
+        // 结果写进 over.live。验收要看的正是这条路径：控件在一段真动画里每一刻持有的数据是否合法。
+        PlaySampler(sampler, subject, _probeSequence);
+    }
+
+    /// <summary>
+    /// 起一条真动画把某个案例从起点跑到终点。
+    /// </summary>
+    /// <remarks>
+    /// 起点必须先同步写回目标：<c>Prepare</c> 读的是**目标此刻的值**当起点，不写回去就变成"从终点动到终点"，
+    /// 屏幕上什么都不会发生。属性路径与采样器都取自同一张探针表。
+    /// </remarks>
+    private static void StartSamplerAnimation(string sampler, SamplerSubject subject)
+    {
+        var property = SamplerProbe.Property(sampler);
+        property.SetValue(subject, SamplerProbe.Start(sampler));
+
+        // Effect 的其余默认值正是这里要的：FPS 60、不自动反向、只跑一趟 —— 于是末帧精确落在终点。
+        var animation = Transition<SamplerSubject>.Create()
+            .Effect(new TransitionEffect { Duration = SamplerProbe.BenchDuration, Ease = Eases.Back.Out });
+
+        animation.GetState().SetValue(property, SamplerProbe.End(sampler));
+        animation.GetState().SetInterpolator(property, SamplerProbe.Create(sampler));
+
+        animation.Execute(subject);
+    }
+
+    /// <summary>
+    /// 顶栏的"全部启动"：每一行同时起一条真动画。
+    /// </summary>
+    /// <remarks>
+    /// 十几条真 <c>Transition</c> 并发跑，是这个库要经得住的一种真实用法；逐行载荷（over.conf / over.live）
+    /// 在这一路里刻意不写 —— 十几条各自写只会互相覆盖，而那些载荷的归属是"点了哪一行"，由行里的"启动"负责。
+    /// 要每一行的结果，读 over.batch。
+    /// </remarks>
+    private void StartAllCases()
+    {
+        // 正在被观察的那一行先停掉观察：它的载荷已经发过了，别让它在"全部启动"之后又补发一份属于别人的。
+        _benchTimer?.Stop();
+        _batchTimer?.Stop();
+        _liveSubject = null;
+
+        var sequence = ++_probeSequence;
+
+        // 闭式解那半是一次性算出来的，不需要动画 —— 十几行一起算完，拼进同一份载荷。
+        foreach (var sampler in SamplerProbe.SamplerNames)
+        {
+            _batchFrames[sampler] = SamplerProbe.RunFrames(_bench.SubjectFor(sampler), sampler);
+            _watches[sampler].Reset();
+        }
+
+        WriteBatch(sequence, done: false);
+
+        // 三种行一起发起 —— 加载三行、过冲五行、采样器若干行，十几条真 Transition 并发跑。
+        //
+        // 走过行自己的动作而不是另写一套：行里那个动作就是这条案例的定义，两处各写一份必然漂移。
+        // 采样器那一类走的是 BulkStart —— 行里那个"启动"会掐掉上一次被观察的行，批量这一路谁都不能动别人。
+        foreach (var row in _caseRows)
+        {
+            (row.BulkStart ?? row.Start)();
+        }
+
+        StartBatchWatch(sequence);
+    }
+
+    /// <summary>
+    /// 批量运行期间每一拍喂一次每一行，全部落定之后把这一份载荷收尾。
+    /// </summary>
+    /// <remarks>
+    /// "跑完了"是**每一行都落定**，不是某一拍过去 —— 十几条并发，先跑完的等后跑完的。落定判据仍是那个
+    /// 逐行用的稳定窗口（见 <see cref="SamplerProbe.LiveWatch"/>），兜底上限也一样。
+    /// </remarks>
+    private void StartBatchWatch(long sequence)
+    {
+        var clock = Stopwatch.StartNew();
+        var timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
+        _batchTimer = timer;
+
+        timer.Tick += (_, _) =>
+        {
+            var allSettled = true;
+
+            foreach (var sampler in SamplerProbe.SamplerNames)
+            {
+                var watch = _watches[sampler];
+                var measurement = SamplerProbe.Read(_bench.SubjectFor(sampler), sampler);
+                watch.Observe(measurement.TypeTag, measurement.Components);
+
+                if (!watch.Settled) allSettled = false;
+            }
+
+            if (clock.Elapsed < SamplerProbe.BenchDuration) return;
+            if (!allSettled && clock.Elapsed < SamplerProbe.BenchDuration + SamplerProbe.BenchSettleCap) return;
+
+            timer.Stop();
+            WriteBatch(sequence, done: true);
+        };
+
+        timer.Start();
+    }
+
+    /// <summary>
+    /// 写批量载荷：每一行的五帧闭式解，加上每一行的观察摘要。
+    /// </summary>
+    /// <remarks>
+    /// 点那一刻先落一份 <c>done=0</c>（帧已经齐了，观察还没跑完），每一行都落定之后再落 <c>done=1</c>。
+    /// 与逐行载荷同一套握手：对方靠序号越过基线、且 done 为真，才认这一份是新的、且是跑完了的。
+    /// </remarks>
+    private void WriteBatch(long sequence, bool done)
+    {
+        var payload = new System.Text.StringBuilder(
+            $"v=1;seq={sequence};done={(done ? 1 : 0)};rows={SamplerProbe.SamplerNames.Count};");
+
+        foreach (var sampler in SamplerProbe.SamplerNames)
+        {
+            payload.Append(_batchFrames[sampler]);
+
+            if (done) payload.Append(_watches[sampler].BatchFields(sampler));
+        }
+
+        _overBatch.Text = payload.ToString();
+    }
+
+    /// <summary>停下每一行（或指定的一行）。原地冻结，与库的退出语义一致。</summary>
+    private void StopSamplerRows(string? only = null)
+    {
+        foreach (var sampler in SamplerProbe.SamplerNames)
+        {
+            if (only is not null && sampler != only) continue;
+            Transition.Exit(_bench.SubjectFor(sampler), IncludeMutual: true, IncludeNoMutual: true);
+        }
+    }
+
+    /// <summary>把每一行（或指定的一行）停回它声明的起点。</summary>
+    private void ResetSamplerRows(string? only = null)
+    {
+        foreach (var sampler in SamplerProbe.SamplerNames)
+        {
+            if (only is not null && sampler != only) continue;
+
+            var subject = _bench.SubjectFor(sampler);
+            Transition.Exit(subject, IncludeMutual: true, IncludeNoMutual: true);
+            SamplerProbe.Property(sampler).SetValue(subject, SamplerProbe.Start(sampler));
+        }
+    }
+
+    /// <summary>
+    /// 演出：用真的 <c>Transition</c> 把一条采样器从起点跑到终点，全程对控件属性采样，最后写进 <c>over.live</c>。
+    /// </summary>
+    /// <remarks>
+    /// 这不是原先那个手写循环 —— scheduler、effect、端点归一化、按属性类型解析采样器、每帧往 UI 线程投递，
+    /// 走的全是库自己那条路径。
+    /// <para>
+    /// 起点必须先同步写回目标：<c>Prepare</c> 读的是**目标此刻的值**当起点，不写回去就变成"从终点动到终点"，
+    /// 屏幕上什么都不会发生。
+    /// </para>
+    /// <para>
+    /// 末帧是排队投递的，所以落定判据是"值连续几拍不再变"而不是一个固定的余量 —— 负载重的机器上固定余量会读早，
+    /// 把一次正常的动画报成"没跑到终点"。
+    /// </para>
+    /// </remarks>
+    private void PlaySampler(string sampler, SamplerSubject subject, long sequence)
+    {
+        _benchTimer?.Stop();
+        if (_liveSubject is not null) Transition.Exit(_liveSubject, IncludeMutual: true, IncludeNoMutual: true);
+        _liveSubject = subject;
+
+        // 这一行自己的观察。共享一份认不出是谁的错，所以每行一份。
+        var watch = _watches[sampler];
+        watch.Reset();
+
+        try
+        {
+            StartSamplerAnimation(sampler, subject);
+        }
+        catch (Exception exception)
+        {
+            // 这里同步抛出的都是"这条路径根本起不来"（例如声明的路径不可采样）。照实报给验收，
+            // 而不是让一次点击把 demo 打挂。
+            watch.Fail($"{exception.GetType().Name}: {exception.Message}");
+        }
+
+        // 点击那一刻先落一份 seq，验收侧靠它把"新的"与"上一次剩下的"分开。
+        _overLive.Text = SamplerProbe.LiveWatch.Pending(sampler, sequence);
+
+        var clock = Stopwatch.StartNew();
+        var timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
+        _benchTimer = timer;
+
+        timer.Tick += (_, _) =>
+        {
+            var measurement = SamplerProbe.Read(subject, sampler);
+            watch.Observe(measurement.TypeTag, measurement.Components);
+
+            if (clock.Elapsed < SamplerProbe.BenchDuration) return;
+            if (!watch.Settled && clock.Elapsed < SamplerProbe.BenchDuration + SamplerProbe.BenchSettleCap) return;
+
+            // 落定了，或者等够了：报出去。等够还没落定本身就是一条要被看见的异常。
+            timer.Stop();
+            _overLive.Text = watch.Digest(sampler, sequence);
+        };
+
+        timer.Start();
+    }
+
+    // -----------------------------------------------------------------------------------------------
+    // 验收观测面
     //
     // 人类读数之外再写一份机器可读的载荷：同一支定时器、同一批值，但用固定的 key=value 而不是散文，
     // 测试就不必去解析一份随时可能被重新排版的版式。载荷只报告"每个目标当前/峰值是多少"，至于哪个场景
     // 动哪个目标、起止与时长，由测试侧的 manifest 声明 —— 观测与语义各自只有一处来源。
-    // ───────────────────────────────────────────────────────────────────────
+    // 目标编号与列表同序：t0=位移 Back、t1=颜色、t2=尺寸、t3=渐变、t4=位移 Elastic 的第二块目标。
+    // -----------------------------------------------------------------------------------------------
 
     private readonly Stopwatch _scenarioClock = new();
-    private readonly double[] _targetPeaks = new double[4];
+
+    /// <summary>每个过冲目标各自的峰值。第五条是位移那第二条曲线（Elastic）自己的目标。</summary>
+    private readonly double[] _targetPeaks = new double[5];
+
     private string _scenario = "none";
     private int _scenarioDurationMs;
     private long _sequence;
 
-    // 记下本次场景，并把该目标此前的峰值清零——每次点击都必须从干净的观测开始。
+    /// <summary>Records the scenario that is starting and clears that target's previous peak — every click has to begin from a clean observation.</summary>
     private void BeginScenario(string scenario, int durationMs, int targetIndex)
     {
         _scenario = scenario;
@@ -537,21 +890,29 @@ internal sealed class MainWindow : Window
         // 只有标量目标记录峰值。峰值存在的意义是"刀刃型峰"——采样落在尖峰两侧就会低估它；颜色的过冲是一段
         // 形状而不是一个尖峰，报当前值就够，测试轮询取最大即可。
         var x = (_over0.RenderTransform as TranslateTransform)?.X ?? double.NaN;
+        var elasticX = (_over4.RenderTransform as TranslateTransform)?.X ?? double.NaN;
         var width = _over2.Width;
         _targetPeaks[0] = Math.Max(_targetPeaks[0], x);
         _targetPeaks[2] = Math.Max(_targetPeaks[2], width);
+        _targetPeaks[4] = Math.Max(_targetPeaks[4], elasticX);
 
         // done 由时长推出，而不是订阅 effect.Completed：流水线每段克隆 effect，订阅在原件上的处理函数不触发。
         // 它是必需的，不能靠"值等于目标"判断结束 —— 两条曲线都会中途再次穿过目标（Elastic 在 1.1s 内穿越七次）。
         var elapsed = _scenarioClock.ElapsedMilliseconds;
         var done = _scenario != "none" && elapsed >= _scenarioDurationMs + 50 ? 1 : 0;
 
+        var row = RowState();
+
         return $"v=1;seq={_sequence};scen={_scenario};t={elapsed};done={done};"
              + $"t0.cur={x:F3};t0.peak={Peak(0)};"
              + $"t1.cur={Describe(_over1.Fill)};"
              + $"t2.cur={width:F3};t2.peak={Peak(2)};"
              + $"t3.cur={Describe(_over3.Fill)};"
+             + $"t4.cur={elasticX:F3};t4.peak={Peak(4)};"
              + RecState("r0", _rec0) + RecState("r1", _rec1) + RecState("r2", _rec2)
+             // rows/away/moving 排在 nomutual **之前**：后者是加载模式那半必须读到的最后一个字段，
+             // 所以它排在最后，标签也得为这一份更长载荷留出折行的位置。
+             + $"rows={row.Rows};away={row.Away};moving={row.Moving};"
              + $"nomutual={NoMutualCount()};";
     }
 
@@ -560,7 +921,7 @@ internal sealed class MainWindow : Window
     /// </summary>
     /// <remarks>
     /// 与过冲条同一支定时器、同一次采样，所以两者不可能不一致。报的是"动的是什么"而不是"应该动到哪" ——
-    /// 那三个动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。
+    /// 那三条动画各自带 auto-reverse 与 loop，终点要靠复算库的语义才知道，测试不去复算它。
     /// </remarks>
     private static string RecState(string prefix, Rectangle target)
         => $"{prefix}.x={TranslateX(target):F3};"
@@ -597,6 +958,52 @@ internal sealed class MainWindow : Window
         return running;
     }
 
+    /// <summary>上一拍每一行的值，用来判断"这一拍还在不在变"。按键是采样器名。</summary>
+    private readonly Dictionary<string, double[]> _rowPrevious = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 行数 / 偏离声明起点的行数 / 相对上一拍仍在变的行数。
+    /// </summary>
+    /// <remarks>
+    /// 顶栏那三个按钮唯一的可观测量，与加载模式那边的 <c>nomutual</c> 同一个思路：它不解释动画该到哪，
+    /// 只说明有没有在动、有没有回到起点。只数采样器行 —— 别的行的"起点"由各自的台子宣布，不在这里说话。
+    /// <para>
+    /// <b>两个数得分开，缺一个就有假命题。</b> 只看"偏离起点"，静息时也是满的 —— 每行初始持有的是控件的默认值
+    /// （null 画刷、默认圆角），不是采样器声明的起点，于是"全部启动后 &gt; 0"在什么都没跑时也成立。所以进界面时
+    /// 先把每一行写成它声明的起点（见 Loaded），并另记一个"这一拍还在变"：
+    /// 静息 0 / 启动后满 / 停止后 0 / 重置后 0 且回到起点。
+    /// </para>
+    /// <para>
+    /// <b>两个数都是"这一拍"的快照，不是"这一批跑起来了"的判据。</b> 一行刚起动画的头几帧里，它的分量可能与
+    /// 声明的起点**逐位相同**：这一侧动画的第一帧是在点击处理里同步写下的，而按定义它就是起点；颜色那一条更久
+    /// 一点 —— <c>ColorSampler</c> 的通道是 <c>byte</c>（截断），于是连续几帧都还停在起点的字节上。所以要问
+    /// "这一批起来了没有"，得**等** <c>away</c> 追上该有的行数，不能拿某一拍去断言（见验收侧的 ScanToolbar）。
+    /// </para>
+    /// </remarks>
+    private (int Rows, int Away, int Moving) RowState()
+    {
+        var away = 0;
+        var moving = 0;
+
+        foreach (var sampler in SamplerProbe.SamplerNames)
+        {
+            var subject = _bench.SubjectFor(sampler);
+            var now = SamplerProbe.Read(subject, sampler);
+
+            if (!SamplerProbe.MatchesStart(subject, sampler)) away++;
+
+            if (_rowPrevious.TryGetValue(sampler, out var before)
+                && !SamplerProbe.SameComponents(before, now.Components))
+            {
+                moving++;
+            }
+
+            _rowPrevious[sampler] = now.Components;
+        }
+
+        return (SamplerProbe.SamplerNames.Count, away, moving);
+    }
+
     private string Peak(int index)
         => double.IsNegativeInfinity(_targetPeaks[index]) ? "0" : _targetPeaks[index].ToString("F3");
 
@@ -609,11 +1016,14 @@ internal sealed class MainWindow : Window
     private void UpdateReadout()
     {
         var shift = (_over0.RenderTransform as TranslateTransform)?.X ?? double.NaN;
+        var elastic = (_over4.RenderTransform as TranslateTransform)?.X ?? double.NaN;
         _readout.Text =
-            $"位移 X   目标 {ShiftTarget,6:F1}   当前 {shift,7:F1}"
-            + $"     |     宽度   目标 {WidthTarget,6:F1}   当前 {_over2.Width,7:F1}";
+            $"位移 Back   当前 {shift,7:F1}"
+            + $"   |   Elastic   当前 {elastic,7:F1}"
+            + $"   |   目标 {ShiftTarget,6:F1}     宽度 目标 {WidthTarget,6:F1}   当前 {_over2.Width,7:F1}";
         _overState.Text = BuildState();
     }
+
 
     private static LinearGradientBrush CreateShiftedBs1()
     {

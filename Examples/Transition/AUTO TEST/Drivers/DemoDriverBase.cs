@@ -1,4 +1,4 @@
-using VeloxDev.AT.Engine;
+﻿using VeloxDev.AT.Engine;
 
 namespace VeloxDev.AT.Drivers;
 
@@ -25,6 +25,38 @@ internal abstract class DemoDriverBase : IDemoDriver
     protected static readonly TimeSpan TickTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
+    /// How long a live run may take before the suite gives up on it and reports that it never finished.
+    /// </summary>
+    /// <remarks>
+    /// Generous on purpose: the run is a real animation, and <c>VELOXDEV_BENCH_MS</c> can stretch it. Giving up here is
+    /// an anomaly to report rather than an exception to throw — a demo that never says <c>done</c> is one of the things
+    /// this suite exists to notice.
+    /// </remarks>
+    internal static readonly TimeSpan LiveTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// How long a bulk run may take before the suite gives up on it.
+    /// </summary>
+    /// <remarks>
+    /// Longer than <see cref="LiveTimeout"/> on purpose: a bulk run is every row at once, and it is only finished when
+    /// the last of them has settled — so it is bounded by the slowest row, not by one row, and the rows contend for
+    /// the same UI thread while they run.
+    /// </remarks>
+    internal static readonly TimeSpan BatchTimeout = TimeSpan.FromSeconds(45);
+
+    /// <summary>How often to re-read the live payload while waiting for a run to finish.</summary>
+    private static readonly TimeSpan LivePollInterval = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>
+    /// How long to give a surface to scroll a control into view asynchronously.
+    /// </summary>
+    /// <remarks>
+    /// Generous next to an instantaneous scroll (WPF, Avalonia, Jalium) because it is only ever waited out when the
+    /// scroll is genuinely slow or never happens — and the latter has to end in a failure, not in a hang.
+    /// </remarks>
+    private static readonly TimeSpan BringIntoViewTimeout = TimeSpan.FromSeconds(3);
+
+    /// <summary>
     /// The token every demo publishes its sampler-conformance payload under. It is the one handle this contract fixes
     /// itself rather than letting a driver choose, because the payload is the same shape on every platform.
     /// </summary>
@@ -35,6 +67,21 @@ internal abstract class DemoDriverBase : IDemoDriver
     /// here rather than left to each driver, because it is the one thing a suite has to agree on across all platforms.
     /// </summary>
     private const string SamplerHandlePrefix = "over.sampler.";
+
+    /// <summary>
+    /// The token every demo publishes what a real transition left on the control under. Fixed here for the same reason
+    /// the payload above is: the shape is the same on every platform, so no driver gets to choose it.
+    /// </summary>
+    private const string LiveAutomationId = "over.live";
+
+    /// <summary>
+    /// The token the bulk payload is published under — one run of every case row at once.
+    /// </summary>
+    /// <remarks>
+    /// The per-row payloads above are shaped around "click one row, read what it wrote", so driving every row that
+    /// way costs one click and one whole animation apiece. This is the channel that does all of them in one go.
+    /// </remarks>
+    private const string BatchAutomationId = "over.batch";
 
     private IDemoHost? _host;
     private PollRecorder? _recorder;
@@ -78,7 +125,52 @@ internal abstract class DemoDriverBase : IDemoDriver
         WaitForTick();
     }
 
-    public void Click(string automationId) => Host.Click(automationId, ClickTimeout);
+    /// <summary>
+    /// Click one control, then linger for <see cref="AtConfig.Pace"/> so a person can see what that click did.
+    /// </summary>
+    /// <remarks>
+    /// The pause lives here rather than in each suite, and that placement is the point: every click a suite makes goes
+    /// through this method, so no case can be added that quietly forgets to slow down. It previously sat inside
+    /// <see cref="ActivateSampler"/> alone, which is exactly why the load-mode suite — a dozen clicks a platform, each
+    /// one starting real animations — used to flash past too fast for anyone to follow.
+    /// </remarks>
+    public void Click(string automationId)
+    {
+        // 先把控件弄到看得见的地方再点。工具栏那排本来就在视野里，这一步对它们是空操作；但它让"点击一个
+        // 滚出视野的行"不至于变成"点了但没人看得见"。走驱动自己那个"滚完等它到位"的版本。
+        BringIntoView(automationId);
+        Host.Click(automationId, ClickTimeout);
+
+        if (AtConfig.Pace > TimeSpan.Zero) Thread.Sleep(AtConfig.Pace);
+    }
+
+    /// <summary>
+    /// Ask the surface to bring a control into view, then give it a moment to actually get there.
+    /// </summary>
+    /// <remarks>
+    /// Several platforms scroll **asynchronously** — MAUI's <c>ScrollToAsync</c>, WinUI's
+    /// <c>StartBringIntoView</c> — so "the request was made" is not "it is in view". Asserting right after the
+    /// request judges one that has not been serviced yet, which is the same mistake as reading "how many rows have
+    /// left their start" on a single frame: a race dressed up as a check. Waiting costs a few milliseconds when the
+    /// scroll is immediate (WPF, Avalonia and Jalium all are) and nothing when it is not.
+    /// <para>
+    /// This deliberately does not report failure: it returns either way, and the caller's own assertion is what
+    /// decides. A row that never arrives still fails — it just fails for the right reason.
+    /// </para>
+    /// </remarks>
+    public void BringIntoView(string automationId)
+    {
+        Host.BringIntoView(automationId);
+
+        var deadline = DateTime.UtcNow + BringIntoViewTimeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            // 控件压根不存在时由调用方去报，不在这里空等。
+            if (!Host.Exists(automationId) || Host.IsControlInsideView(automationId)) return;
+
+            Thread.Sleep(20);
+        }
+    }
 
     public bool HasControl(string automationId) => Host.Exists(automationId);
 
@@ -91,19 +183,72 @@ internal abstract class DemoDriverBase : IDemoDriver
     public ConformancePayload ReadConformance()
         => ConformancePayload.Parse(Host.Text(ConformanceAutomationId, ClickTimeout));
 
+    public LivePayload ReadLive() => LivePayload.Parse(Host.Text(LiveAutomationId, ClickTimeout));
+
+    /// <summary>
+    /// Read until the live payload reports a run that both started after <paramref name="after"/> and has finished.
+    /// </summary>
+    /// <remarks>
+    /// Both halves of that are needed. The sequence alone cannot tell "not finished yet" from "the previous run's
+    /// payload, still sitting there"; the done flag alone cannot tell a finished run from one that finished before the
+    /// click. Together they are the same handshake the conformance payload uses, extended over the run's duration.
+    /// </remarks>
+    /// <returns>The finished payload, or <c>null</c> when nothing finished in time.</returns>
+    public LivePayload? WaitForLive(long after)
+    {
+        var deadline = DateTime.UtcNow + LiveTimeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var latest = ReadLive();
+            if (latest.Sequence > after && latest.Done) return latest;
+
+            Thread.Sleep(LivePollInterval);
+        }
+
+        return null;
+    }
+
+    public BatchPayload ReadBatch() => BatchPayload.Parse(Host.Text(BatchAutomationId, ClickTimeout));
+
+    public BatchPayload? WaitForBatch(long after)
+    {
+        var deadline = DateTime.UtcNow + BatchTimeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var latest = ReadBatch();
+            if (latest.Sequence > after && latest.Done) return latest;
+
+            Thread.Sleep(LivePollInterval);
+        }
+
+        return null;
+    }
+
     public ConformancePayload ActivateSampler(string sampler)
     {
         var token = $"{SamplerHandlePrefix}{sampler}";
 
-        // 先确认这个把手在人够得着的地方。UIA 的 Invoke 模式对排在窗口外、或滚出视野的控件照样生效，
-        // 少了这一道，一套没人能用的界面会让套件一路绿着过去 —— 布局回归正是这样溜掉的。
+        // 案例列在界面上是一张可滚动的列表，所以先把这一行弄到人看得见的地方 —— 然后**仍然**断言它真的在窗口里。
+        // UIA 的 Invoke 模式对排在窗口外、或滚出视野的控件照样生效，少了这一道，一套没人能用的界面会让套件
+        // 一路绿着过去 —— 布局回归正是这样溜掉的。滚动之后才断言是关键：滚不动会当场红，而不是被当成"够得着"。
+        Host.BringIntoView(token);
+
+        if (!Host.Exists(token))
+        {
+            throw new InvalidOperationException(
+                $"{Platform}: no control with AutomationId '{token}' exists, so the demo does not offer this case at all.");
+        }
+
         if (!Host.IsControlInsideView(token))
         {
             throw new InvalidOperationException(
-                $"{Platform}: the handle '{token}' is outside the surface, so a person could not reach it.");
+                $"{Platform}: the handle '{token}' is still outside the surface after being brought into view "
+                + $"({Host.DescribeReachability(token)}), so a person could not reach it.");
         }
 
         var before = ReadConformance();
+
+        // 点击本身已经带上"让人看得见"的那一口气（见 Click），这里只管等它生效。
         Click(token);
 
         // 点击生效的判据是载荷自己的 seq 越过了点击前那一次 —— 与读数同一套握手，固定 sleep 替代不了它。
@@ -111,12 +256,7 @@ internal abstract class DemoDriverBase : IDemoDriver
         while (DateTime.UtcNow < deadline)
         {
             var latest = ReadConformance();
-            if (latest.Sequence > before.Sequence)
-            {
-                // 只为让人看得见：默认是零，开跑就飞快。
-                if (AtConfig.Pace > TimeSpan.Zero) Thread.Sleep(AtConfig.Pace);
-                return latest;
-            }
+            if (latest.Sequence > before.Sequence) return latest;
 
             Thread.Sleep(20);
         }

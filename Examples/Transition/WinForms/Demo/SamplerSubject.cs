@@ -35,8 +35,8 @@ namespace Demo
         /// <remarks>名字带 <c>Draw</c> 前缀：<see cref="Control"/> 已经有一个 <c>Scale</c> 了。</remarks>
         internal const double DrawScale = 0.6d;
 
-        /// <summary>舞台底色 —— 边距带里看得见的就是它。</summary>
-        private static readonly Color StageColor = Color.FromArgb(0x1E, 0x1E, 0x1E);
+        /// <summary>舞台底色 —— 边距带里看得见的就是它。案例列表里那一格的底色也用它，两者才连成一片。</summary>
+        internal static readonly Color StageColor = Color.FromArgb(0x1E, 0x1E, 0x1E);
 
         /// <summary>子块的颜色。它整块由边距决定摆在哪儿、有多大。</summary>
         private static readonly Color BlockColor = Color.FromArgb(0xC0, 0xC0, 0xC0);

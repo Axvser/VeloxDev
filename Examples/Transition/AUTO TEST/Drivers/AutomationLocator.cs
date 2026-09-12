@@ -130,6 +130,38 @@ internal sealed class AutomationLocator : IDisposable
             && control.Bottom > window.Top && control.Top < window.Bottom;
     }
 
+    /// <summary>
+    /// Ask the surface to bring a control into view, by focusing it.
+    /// </summary>
+    /// <remarks>
+    /// Focusing is the portable way to ask: WPF, Avalonia, WinUI and Jalium scroll a focused element into view
+    /// through <c>BringIntoView</c>, and WinForms scrolls its <c>AutoScroll</c> container to the focused child.
+    /// Deliberately not <c>ScrollItemPattern</c>: the rows are ordinary controls inside a scroller rather than items
+    /// of a virtualising list, so the pattern is not offered.
+    /// </remarks>
+    internal void BringIntoView(string automationId) => FindNow(automationId)?.Focus();
+
+    /// <summary>
+    /// What UI Automation reports about a control's reachability, for a failure message.
+    /// </summary>
+    /// <remarks>
+    /// <c>IsOffscreen</c> is included as evidence rather than as a verdict. Measured on WPF: a row scrolled below the
+    /// fold reports <c>IsOffscreen=False</c> while its rectangle sits outside the window — so it cannot be the
+    /// condition, and the rectangle check is what actually catches the case this guard exists for.
+    /// </remarks>
+    internal string DescribeReachability(string automationId)
+    {
+        var element = FindNow(automationId);
+        if (element is null) return "the control is not in the automation tree at all";
+
+        var control = element.Properties.BoundingRectangle.ValueOrDefault;
+        var window = _root.Properties.BoundingRectangle.ValueOrDefault;
+
+        return $"control {control.Left:F0},{control.Top:F0} {control.Width:F0}x{control.Height:F0}, "
+             + $"window {window.Left:F0},{window.Top:F0} {window.Width:F0}x{window.Height:F0}, "
+             + $"IsOffscreen={element.Properties.IsOffscreen.ValueOrDefault}";
+    }
+
     private AutomationElement? FindNow(string automationId)
     {
         try

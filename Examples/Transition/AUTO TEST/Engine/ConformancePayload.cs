@@ -52,16 +52,15 @@ internal sealed class ConformancePayload
         if (string.IsNullOrWhiteSpace(text))
             throw new FormatException("The conformance payload was empty; a demo writes it once the window is loaded.");
 
-        var values = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var field in text.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var separator = field.IndexOf('=');
-            if (separator <= 0)
-                throw new FormatException($"The conformance payload has a field with no key/value separator: '{field}' in '{text}'.");
+        return From(Fields(text, "conformance"), text);
+    }
 
-            values[field[..separator].Trim()] = field[(separator + 1)..].Trim();
-        }
-
+    /// <summary>
+    /// Build from fields that have already been split out. The batch payload carries the same <c>s.*</c> fields for
+    /// every row at once, so it hands them here instead of formatting them back into text for <see cref="Parse"/>.
+    /// </summary>
+    internal static ConformancePayload From(IReadOnlyDictionary<string, string> values, string raw)
+    {
         var frames = new List<Frame>();
         foreach (var (key, value) in values)
         {
@@ -85,14 +84,30 @@ internal sealed class ConformancePayload
         }
 
         if (!values.TryGetValue("v", out var versionText) || !int.TryParse(versionText, out var version))
-            throw new FormatException($"The conformance payload has no readable version: '{text}'.");
+            throw new FormatException($"The conformance payload has no readable version: '{raw}'.");
 
         var parsedSequence = values.TryGetValue("seq", out var sequenceText) && long.TryParse(sequenceText, out var sequence)
             ? sequence
-            : throw new FormatException($"The conformance payload has no readable sequence number: '{text}'.");
+            : throw new FormatException($"The conformance payload has no readable sequence number: '{raw}'.");
 
         var declared = values.TryGetValue("n", out var countText) && int.TryParse(countText, out var count) ? count : -1;
 
-        return new ConformancePayload(version, parsedSequence, declared, frames, text);
+        return new ConformancePayload(version, parsedSequence, declared, frames, raw);
+    }
+
+    /// <summary>把 <c>k=v;</c> 载荷拆成字段。<paramref name="what"/> 只用于失败信息。</summary>
+    internal static Dictionary<string, string> Fields(string text, string what)
+    {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var field in text.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var separator = field.IndexOf('=');
+            if (separator <= 0)
+                throw new FormatException($"The {what} payload has a field with no key/value separator: '{field}' in '{text}'.");
+
+            values[field[..separator].Trim()] = field[(separator + 1)..].Trim();
+        }
+
+        return values;
     }
 }

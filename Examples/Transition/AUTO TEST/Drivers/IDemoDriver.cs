@@ -30,8 +30,26 @@ internal interface IDemoDriver : IDisposable
     /// <summary>Start the demo and wait until its observation surface is both present and ticking.</summary>
     void Launch();
 
-    /// <summary>Click the control with this automation id.</summary>
+    /// <summary>
+    /// Click the control with this automation id, then linger for <c>VELOXDEV_AT_PACE</c> so the click can be watched.
+    /// </summary>
+    /// <remarks>
+    /// Every click a suite makes goes through here, deliberately: the pause is what makes a run observable, and
+    /// putting it in one place means a new case cannot leave it out. It is not a timing source — nothing is asserted
+    /// against it, and the payloads are still waited for by their own sequence numbers. It brings the control into
+    /// view first, so a case that scrolls out of a list is still clicked where a person could see it.
+    /// </remarks>
     void Click(string automationId);
+
+    /// <summary>
+    /// Ask the surface to bring a control into view, the way focusing it would for a person.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="Click"/> because a suite sometimes has to look before it leaps: the reachability
+    /// guard runs between the scroll and the click, so a scroll that silently did nothing is a failure rather than a
+    /// licence to drive something nobody can see.
+    /// </remarks>
+    void BringIntoView(string automationId);
 
     /// <summary>Whether a control with this automation id is present right now.</summary>
     bool HasControl(string automationId);
@@ -64,6 +82,24 @@ internal interface IDemoDriver : IDisposable
     /// </summary>
     /// <exception cref="TimeoutException">The click did not reach the demo's payload.</exception>
     ConformancePayload ActivateSampler(string sampler);
+
+    /// <summary>Read the live payload as it stands: what the control held during the last run a click started.</summary>
+    LivePayload ReadLive();
+
+    /// <summary>
+    /// Wait for the run that started after <paramref name="after"/> to report that it has finished, and return what
+    /// the control then held. <c>null</c> when nothing finished within the timeout, which is itself an anomaly.
+    /// </summary>
+    LivePayload? WaitForLive(long after);
+
+    /// <summary>Read the bulk payload as it stands: every case row's frames and live digest from one run.</summary>
+    BatchPayload ReadBatch();
+
+    /// <summary>
+    /// Wait for the bulk run that started after <paramref name="after"/> to finish. <c>null</c> when nothing finished
+    /// within the timeout, which is itself an anomaly.
+    /// </summary>
+    BatchPayload? WaitForBatch(long after);
 
     /// <summary>
     /// Read until the readout's sequence number moves past <paramref name="after"/>, which is the only sound proof

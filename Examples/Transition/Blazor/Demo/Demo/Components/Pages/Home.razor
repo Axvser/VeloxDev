@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @rendermode InteractiveServer
 
 <PageTitle>VeloxDev Transition — Blazor Demo</PageTitle>
@@ -10,114 +10,101 @@
         动画直接作用于 C# 对象的属性，Blazor 通过 PropertyChanged 驱动 UI 重渲染。
     </p>
 
-    <!-- data-at 是验收套件的把手：七个加载模式按钮与过冲区用同一套 token 命名，跨平台一致。 -->
+    <!-- data-at 是验收套件的把手：全部令牌都用同一套命名，跨平台一致。Playwright 选 token 而不选中文文案，
+         token 与语言无关且稳定，标签保持读者预期的样子。Blazor 端不加 id，一律走 data-at。 -->
+
+    <!-- 全局面板：一次动到下面每一行。列表里那几条各自是一条真 Transition，这里是同时发起它们，
+         顺带就是一个并发压力场景。 -->
+    <div class="demo-toolbar">
+        <button class="btn btn-primary" data-at="over.btn.start.all" @onclick="StartAllCases">全部启动</button>
+        <button class="btn btn-danger" data-at="over.btn.stop.all" @onclick="ExitAll">停止全部</button>
+        <button class="btn btn-secondary" data-at="over.btn.reset.all" @onclick="ResetAllCases">重置</button>
+    </div>
+
+    <!-- 加载模式那一排：它们是"怎么加载"，不是"加载什么" —— 它们驱动的三个形状在下面各占一行、各自有自己
+         的启动。把模式留在顶栏，列表才可能只有一种行：每行恰好 启动 / 关闭 / 重置，而互斥与并发两条路仍然
+         各自够得着，那正是加载模式套件要验的全部。 -->
     <div class="demo-toolbar">
         <button class="btn btn-primary" data-at="over.btn.load.main" @onclick="LoadMainThread">主线程互斥</button>
         <button class="btn btn-dark" data-at="over.btn.load.background" @onclick="LoadAnimations">后台线程互斥</button>
         <button class="btn btn-success" data-at="over.btn.load.main.concurrent" @onclick="LoadMainThreadNonMutual">主线程并发</button>
         <button class="btn btn-info" data-at="over.btn.load.background.concurrent" @onclick="LoadAnimationsNonMutual">后台线程并发</button>
         <button class="btn btn-warning" data-at="over.btn.load.repeat" @onclick="LoadRepeatedMutual">连续互斥</button>
-        <button class="btn btn-secondary" data-at="over.btn.reset.all" @onclick="ResetBox0">重置</button>
-        <button class="btn btn-danger" data-at="over.btn.stop.all" @onclick="ExitAnimations">停止全部</button>
     </div>
 
-    <div class="demo-stage">
-        <!-- Box0: simple animation — translate + color + opacity -->
-        <div class="box-row">
-            <span class="box-label">Box0 · 位移 + 颜色 + 透明度</span>
-            <div class="box-track">
-                <div class="box" style="@Box0.Style"></div>
-            </div>
-        </div>
-
-        <!-- Box1: delayed animation — rotate + scale after a 2s wait -->
-        <div class="box-row">
-            <span class="box-label">Box1 · 延迟 2s · 旋转 + 缩放</span>
-            <div class="box-track">
-                <div class="box" style="@Box1.Style"></div>
-            </div>
-        </div>
-
-        <!-- Box2: combined animation — move first, wait, then recolor + shrink -->
-        <div class="box-row">
-            <span class="box-label">Box2 · 拼接 · 移动 → 等待 → 变色 + 缩小</span>
-            <div class="box-track">
-                <div class="box" style="@Box2.Style"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 过冲演示区：四个并排目标互不干扰，Back 与 Elastic、颜色与尺寸可在同一次运行里对比。
-         缓动曲线越过 1 时数值会冲过目标再回弹，这只有读数才看得出来。 -->
-    <div class="over-strip-wrap">
-        <div class="over-strip">
-            <div class="over-cell">
-                <span class="over-cell-label">Over0 · 位移 X（Back / Elastic）</span>
-                <div class="box over-box" style="@Over0.Style"></div>
-            </div>
-            <div class="over-cell">
-                <span class="over-cell-label">Over1 · 颜色（余量）</span>
-                <div class="box over-box" style="@Over1.Style"></div>
-            </div>
-            <div class="over-cell">
-                <span class="over-cell-label">Over2 · 宽度</span>
-                <div class="box over-box" style="@Over2.Style"></div>
-            </div>
-            <div class="over-cell">
-                <span class="over-cell-label">Over3 · 颜色（饱和）</span>
-                <div class="box over-box" style="@Over3.Style"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- data-at 是验收套件的把手：Playwright 选 token 而不选中文文案，token 与语言无关且稳定，
-         标签保持读者预期的样子。Blazor 端不加 id，一律走 data-at。 -->
-    <div class="over-toolbar">
-        <button class="btn btn-primary" data-at="over.btn.back" @onclick="OverShootScalarBack">位移 Back.Out</button>
-        <button class="btn btn-primary" data-at="over.btn.elastic" @onclick="OverShootScalarElastic">位移 Elastic.Out</button>
-        <button class="btn btn-success" data-at="over.btn.color" @onclick="OverShootColor">颜色过冲</button>
-        <button class="btn btn-info" data-at="over.btn.size" @onclick="OverShootSize">尺寸过冲</button>
-        <button class="btn btn-warning" data-at="over.btn.brush" @onclick="OverShootSaturate">颜色饱和</button>
-        <button class="btn btn-secondary" data-at="over.btn.reset" @onclick="OverShootReset">重置过冲</button>
-    </div>
-
+    <!-- 读数是过冲可观测的关键：数字越过目标再回来，肉眼无法把它和一条更慢的缓动区分开。 -->
     <div class="over-readout" data-at="over.readout">@_readoutSnapshot</div>
 
     <!-- 读数的机器可读孪生体：同一支定时器、同一次采样，但用固定的 key=value 载荷而不是散文，
          测试就不必去解析一份随时可能被重新排版的版式。 -->
     <div class="over-state" data-at="over.state">@_stateSnapshot</div>
 
-    <!-- 采样器演示台：被写对象就是 StringSampler 写出的那个 CSS 颜色，直接当背景色用。 -->
-    <!-- 令牌挂在**真正着色的那个 div** 上而不是外层容器：浏览器里"真实 UI 表现"就是计算样式，
-         验收要读的是这个元素的 background-color，挂在容器上会读到全透明。 -->
-    <div class="over-buttons">
-        <div data-at="over.bench"
-             style="width:64px;height:40px;border-radius:4px;border:1px solid #444;background-color:@_benchColor"></div>
-    </div>
-
-    <!-- 采样器一致性把手：一条采样器一个按钮，点一下跑那一条、把结果写进下面的载荷。
-         把手与探针表同源，所以加一条采样器只需要改 SamplerProbe 一处。 -->
-    <div class="over-buttons">
-        @foreach (var sampler in Demo.Models.SamplerProbe.SamplerNames)
-        {
-            var name = sampler;
-            <button class="btn btn-secondary" data-at="over.sampler.@name" @onclick="() => RunSamplerProbe(name)">@name</button>
-        }
-    </div>
-
     <!-- 采样器一致性载荷：与 over.state 同一套 key=value 形状，外加一个证明这次点击落地的 seq。 -->
     <div class="over-state" data-at="over.conf">@_confSnapshot</div>
 
+    <!-- 真动画载荷：那次点击把目标属性写成了什么、有没有非有限值、最后停在哪。点击先写一份 done=0，
+         验收侧靠它把"新的还没跑完"与"上一次剩下的"分开。 -->
+    <div class="over-state" data-at="over.live">@_liveSnapshot</div>
+
+    <!-- 批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。
+         逐行载荷是"点哪一行写哪一行"的形状，几行一起跑只会互相覆盖，所以并发这一路另开一份。
+         max-height 不是排版偏好：一份批量载荷有几千字符，让它按自然高度折行会长到把下面的案例列表整个
+         推下去。元素**持有**的仍是完整载荷 —— 套件读的是文本内容，不是像素。 -->
+    <div class="over-state over-batch" data-at="over.batch">@_batchSnapshot</div>
+
+    <!--
+        案例列表：一条案例一行 —— 左边是这条案例真正在动的元素，中间是加粗的名字加一句"这条在验什么"，
+        右边固定宽度是这一行自己的 启动 / 关闭 / 重置。三种行（加载 3 条、过冲 5 条、每条采样器 1 条）
+        长得一样，区别只在各自的令牌、描述与动作里；行由 RebuildCaseList 拼成，顺序就是它给的顺序。
+
+        每一行一样高（SamplerBench.RowHeight）：台子按**最高的那条行程**留白，装不下的那一瞬就等于
+        "元素不见了"，而这个演示要消掉的正是"看不见"与"没动过"分不开这件事。
+
+        页面自己滚：BlazorHost.BringIntoView 走的是 el.scrollIntoView({block:'center'})，所以排在折叠线
+        以下的行不需要演示面做任何事就能被弄进视野 —— 采样器行排在最后，也正是最需要滚动的那一条。
+    -->
+    <div class="case-list">
+        @foreach (var row in _caseRows)
+        {
+            <div class="case-row" style="@SamplerBench.RowStyle">
+                <div class="case-frame">
+                    <div class="case-stage" style="@SamplerBench.StageStyle(row.StageWidth)">
+                        @if (row.Kind == RowKind.Sampler)
+                        {
+                            <!-- 令牌挂在**真正着色的那个 div** 上而不是外层容器：浏览器里"真实 UI 表现"就是
+                                 计算样式，验收要读的就是这个元素的 background-color，挂在容器上会读到全透明。 -->
+                            <div class="bench-swatch" data-at="over.bench" style="background-color:@_benchColor"></div>
+                        }
+                        else
+                        {
+                            <div class="case-box" style="@SamplerBench.ElementStyle(row)"></div>
+                        }
+                    </div>
+                </div>
+                <div class="case-caption"><b>@row.Title</b> @row.Description</div>
+                <div class="case-actions">
+                    <button class="btn btn-primary" data-at="@row.StartToken" @onclick="() => row.Start()">启动</button>
+                    <button class="btn btn-dark" data-at="@row.StopToken" @onclick="() => row.Stop()">关闭</button>
+                    <button class="btn btn-secondary" data-at="@row.ResetToken" @onclick="() => row.Reset()">重置</button>
+                </div>
+            </div>
+        }
+    </div>
+
     <div class="demo-tips">
-        <p><code>Snapshot()</code> — 记录显式指定的属性路径（初始状态）</p>
-        <p><code>SnapshotAll()</code> — 自动发现并记录当前对象中所有可动画的属性</p>
-        <p><code>Transition.Exit()</code> — 终止对象持有的动画</p>
+        <p>一条案例一行：左边是那条案例真正在动的元素，右边是这一行自己的 启动 / 关闭 / 重置 —— 顶栏的"全部启动"和行里那个"启动"是同一个动作。</p>
+        <p><code>Transition.Exit()</code> — 终止目标持有的动画：原地冻结，不是跳到终点；每一行的"重置"才是把声明的起点写回去。</p>
         <p>
             <code>Eases.Back.Out</code> / <code>Eases.Elastic.Out</code> — 实测峰值 1.100 / 1.373，会越过目标再回弹；
-            读数显示的是目标的真实属性（由 50ms 定时器采样，不是 effect 事件——流水线每段都会 Clone effect）。<br />
+            读数显示的是目标的真实属性（由 50ms 定时器采样，不是 effect 事件 —— 流水线每段都会 Clone effect）。<br />
             Razor 适配器只注册了 <code>string</code> 采样器（CSS 颜色），没有刷子对象，因此「非纯色刷」场景
             以「颜色饱和」替代：让红通道撞上 255，验证共享进度在边界停住而不是回绕
             （无钳位时 58+188×1.088≈263 会被裸转成 7）。
+        </p>
+        <p>
+            <code>over.state</code> 报每一拍的行数与"偏离起点 / 还在动"的行数；<code>over.batch</code> 是
+            一次"全部启动"收全部行的渠道 —— 逐行载荷（<code>over.conf</code> / <code>over.live</code>）
+            的归属是"点了哪一行"，几行并发只会互相覆盖。
         </p>
     </div>
 </div>
@@ -131,49 +118,9 @@
     }
     .demo-title { color: #80cbc4; margin-bottom: .4rem; }
     .demo-desc  { color: #9e9e9e; margin-bottom: 1.2rem; font-size: .95rem; }
-    .demo-toolbar { display: flex; gap: .75rem; margin-bottom: 2rem; flex-wrap: wrap; }
-    .demo-stage { display: flex; flex-direction: column; gap: 1.5rem; }
-    .box-row { display: flex; flex-direction: column; gap: .4rem; }
-    .box-label { font-size: .8rem; color: #757575; letter-spacing: .04em; }
-    /* 与过冲区同尺度：方块 60x60（见 Home.razor.cs 的 BoxStripWidth/Height），轨道留 10px 上下边距。 */
-    .box-track {
-        position: relative;
-        height: 80px;
-        background: #1e1e1e;
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    .box {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        border-radius: 6px;
-        transition: none; /* Fully controlled by VeloxDev; CSS transition disabled */
-    }
-    /* 过冲区：窄窗口横向滚动，避免四格被挤变形 */
-    .over-strip-wrap { margin-top: 2rem; overflow-x: auto; }
-    .over-strip { display: flex; gap: 1rem; }
-    .over-cell {
-        position: relative;
-        flex: 1 1 0;
-        min-width: 400px; /* 容得下 60px 的方块平移 220px（Elastic 峰值约 302px）后仍留在本格内 */
-        height: 120px;
-        background: #1e1e1e;
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    .over-cell-label {
-        position: absolute;
-        top: .45rem;
-        left: .7rem;
-        font-size: .72rem;
-        color: #757575;
-        letter-spacing: .04em;
-    }
-    .over-box { top: 2.6rem; left: .5rem; }
-    .over-toolbar { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
+    .demo-toolbar { display: flex; gap: .6rem; margin-bottom: .75rem; flex-wrap: wrap; }
     .over-readout {
-        margin-top: .75rem;
+        margin-top: .5rem;
         padding: .75rem 1rem;
         background: #1e1e1e;
         border-radius: 8px;
@@ -194,6 +141,65 @@
         color: #808080;
         word-break: break-all;
     }
+    /* 批量载荷按固定高度收住：它**持有**的是完整文本，收住的只是它在版面上占的那几行。 */
+    .over-batch {
+        max-height: 3.6rem;
+        overflow: hidden;
+    }
+
+    /* ── 案例列表 ─────────────────────────────────────────────────────────────
+       行高由 SamplerBench.RowHeight 内联给出（只有那一处来源）：元素框、文字与按钮都在这一条带子里
+       垂直居中，所以整个列表读起来是一张表。 */
+    .case-list { margin-top: .75rem; border-top: 1px solid #333; }
+    .case-row { display: flex; align-items: center; border-bottom: 1px solid #333; }
+    .case-frame {
+        flex: 0 0 auto;
+        margin: 4px 10px 4px 2px;
+        border: 1px solid #404040;
+    }
+    /* 台子必须裁边：不裁的话，跑出台子的元素会滑到邻行的文字上，而"跑到别处"和"没动过"一样糟。
+       宽与高由 SamplerBench.StageStyle 内联给出。 */
+    .case-stage {
+        position: relative;
+        background: #1e1e1e;
+        overflow: hidden;
+    }
+    /* 方块自己的样式（尺寸、颜色、变换）由 BoxModel.Style 接着写；这里只管它怎么落进台子。 */
+    .case-box {
+        position: absolute;
+        border-radius: 6px;
+    }
+    .case-caption {
+        flex: 1 1 auto;
+        padding: 0 .75rem;
+        font-size: .8rem;
+        color: #9e9e9e;
+        line-height: 1.5;
+    }
+    .case-caption b { color: #e0e0e0; }
+    /* 控制区固定宽度：三列按钮在任何一行里都落在同一竖线上（与其余几个平台的 ControlWidth 同一个数）。 */
+    .case-actions {
+        flex: 0 0 186px;
+        display: flex;
+        gap: .3rem;
+        padding: 0 .5rem;
+    }
+    .case-actions .btn {
+        flex: 1 1 0;
+        font-size: .72rem;
+        padding: .2rem 0;
+    }
+    /* 采样器那一格真正着色的元素就是它：令牌 over.bench 挂在它身上，验收读的是它的计算样式。 */
+    .bench-swatch {
+        position: absolute;
+        left: 16px;
+        top: 46px;
+        width: 64px;
+        height: 40px;
+        border-radius: 4px;
+        border: 1px solid #444;
+    }
+
     .demo-tips {
         margin-top: 2rem;
         padding: 1rem 1.25rem;
@@ -202,6 +208,6 @@
         font-size: .88rem;
         line-height: 1.8;
     }
-    .demo-tips p { margin: 0; }
+    .demo-tips p { margin: 0 0 .6rem 0; }
     .demo-tips code { color: #80cbc4; }
 </style>

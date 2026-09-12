@@ -5,102 +5,87 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Demo"
         mc:Ignorable="d"
-        Title="MainWindow" Height="800" Width="1000"
+        Title="MainWindow" Height="820" Width="1220"
         Background="#1e1e1e">
-    <Window.Resources>
-        <LinearGradientBrush x:Key="Bs1" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="Yellow" Offset="0"></GradientStop>
-            <GradientStop Color="Violet" Offset="1"></GradientStop>
-        </LinearGradientBrush>
-    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
+            <!-- 顶栏 + 读数：全部案例之外的东西都收在这一段里 -->
             <RowDefinition Height="Auto"></RowDefinition>
-            <RowDefinition Height="60"></RowDefinition>
+            <!-- 案例列表：一条案例一行，行多了就滚 -->
             <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="60"></RowDefinition>
-            <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="60"></RowDefinition>
-            <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="110"></RowDefinition>
-            <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
 
-        <!-- The load-mode row: three shapes driven by three animations, loaded in five different ways.
-             The shapes are overshoot-cell sized (80x60) so the two halves of the demo read as one bench and
-             so the automated suite can drive this row the same way it drives the sampler strips. -->
-        <WrapPanel Grid.Row="0">
-            <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.main"
-                    Content="主线程互斥" Click="LoadMainThread"/>
-            <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.background"
-                    Content="后台线程互斥" Click="LoadBackground"/>
-            <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.main.concurrent"
-                    Content="主线程并发" Click="LoadMainThreadNonMutual"/>
-            <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.background.concurrent"
-                    Content="后台线程并发" Click="LoadBackgroundNonMutual"/>
-            <Button Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.repeat"
-                    Content="连续互斥" Click="RepeatMutual"/>
-            <Button x:Name="btnReset" Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.reset.all"
-                    Content="重置"/>
-            <Button Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.stop.all"
-                    Content="停止全部" Click="ExitAll"/>
-        </WrapPanel>
-
-        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" Width="80" Height="60" HorizontalAlignment="Left"></Rectangle>
-        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" Width="80" Height="60" HorizontalAlignment="Center"></Rectangle>
-        <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" Width="80" Height="60"></Rectangle>
-
-        <!-- Overshoot strip. Four independent targets, laid out side by side so Back and Elastic, colour and size can
-             be compared on the same run instead of one after another. Bs1 flows from Yellow to Violet, so an
-             overshoot on it pushes past Violet rather than wrapping. -->
-        <UniformGrid Grid.Row="7" Rows="1" Columns="4" Margin="6">
-            <Rectangle x:Name="Over0" Width="80" Height="60" Fill="#3A6EA5"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
-            <Rectangle x:Name="Over1" Width="80" Height="60" Fill="#3A6EA5"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
-            <Rectangle x:Name="Over2" Width="80" Height="60" Fill="#7A5AA5"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
-            <Rectangle x:Name="Over3" Width="80" Height="60" Fill="{StaticResource Bs1}"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"></Rectangle>
-        </UniformGrid>
-
-        <StackPanel Grid.Row="8" Margin="4">
+        <StackPanel Grid.Row="0" Margin="4">
             <!--
                 AutomationProperties.AutomationId is the acceptance suites' handle on these controls, so no test
                 ever matches on the Chinese labels: the tokens are language-independent and stable, and the labels
                 stay exactly as a reader expects them.
             -->
+
+            <!-- 全局面板：一次动到下面每一行。列表里那十几条各自是一条真 Transition，这里是同时发起它们，
+                 顺带就是一个并发压力场景。 -->
             <WrapPanel>
-                <Button Width="128" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.back"
-                        Content="位移 Back.Out" Click="OverShootScalarBack"/>
-                <Button Width="140" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.elastic"
-                        Content="位移 Elastic.Out" Click="OverShootScalarElastic"/>
-                <Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.color"
-                        Content="颜色过冲" Click="OverShootColor"/>
-                <Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.size"
-                        Content="尺寸过冲" Click="OverShootSize"/>
-                <Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.brush"
-                        Content="渐变过冲" Click="OverShootGradient"/>
-                <Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.reset"
-                        Content="重置过冲" Click="OverShootReset"/>
+                <Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.start.all"
+                        Content="全部启动" Click="StartAllCases"/>
+                <Button Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.stop.all"
+                        Content="停止全部" Click="ExitAll"/>
+                <Button x:Name="btnReset" Width="110" Height="34" Margin="2" AutomationProperties.AutomationId="over.btn.reset.all"
+                        Content="重置"/>
             </WrapPanel>
+
+            <!--
+                The loading modes. These are "how to load", not "what to load": the three shapes they drive are rows
+                in the list below, each with its own start. Keeping the modes up here is what leaves the list uniform —
+                every row has exactly 启动 / 关闭 / 重置 — while the mutually-exclusive and concurrent paths stay
+                individually reachable, which is the whole of what the load-mode suite verifies.
+            -->
+            <WrapPanel Margin="0,4,0,0">
+                <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.main"
+                        Content="主线程互斥" Click="LoadMainThread"/>
+                <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.background"
+                        Content="后台线程互斥" Click="LoadBackground"/>
+                <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.main.concurrent"
+                        Content="主线程并发" Click="LoadMainThreadNonMutual"/>
+                <Button Width="118" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.background.concurrent"
+                        Content="后台线程并发" Click="LoadBackgroundNonMutual"/>
+                <Button Width="110" Height="38" Margin="2" AutomationProperties.AutomationId="over.btn.load.repeat"
+                        Content="连续互斥" Click="RepeatMutual"/>
+            </WrapPanel>
+
             <!-- The readout is what makes an overshoot observable: the number passes the target and comes back,
                  which the eye alone cannot tell apart from a slower ease. -->
             <TextBlock x:Name="Readout" Margin="4,6,4,2" FontFamily="Consolas" Foreground="#CCCCCC"
                        AutomationProperties.AutomationId="over.readout"
-                       Text="按上面任一按钮；读数显示当前值与目标值"></TextBlock>
+                       Text="按下面任一行；读数显示当前值与目标值"></TextBlock>
             <!-- The machine-readable twin of the readout: same timer, same values, but a fixed key=value payload
                  instead of prose, so a test never has to parse a layout a designer may reformat. -->
+            <!-- 折行不是可有可无：这行载荷现在多出 rows/away/moving，而 nomutual 必须仍然看得见 —— 它排在最后。 -->
             <TextBlock x:Name="OverState" Margin="4,0,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+                       TextWrapping="Wrap"
                        AutomationProperties.AutomationId="over.state" Text="v=1;seq=0"></TextBlock>
-            <!-- The sampler-conformance strip: one handle per sampler this adapter ships, built in code-behind from
-                 the probe table so a sampler is added in exactly one place. Clicking one drives that sampler at the
-                 shared eased times and publishes the result below. -->
-            <WrapPanel x:Name="SamplerButtons" Margin="0,4,0,0"></WrapPanel>
-            <!-- What the last clicked handle produced: same key=value shape as over.state, plus the sequence number
+            <!-- What the last clicked row produced: same key=value shape as over.state, plus the sequence number
                  that proves a click landed. -->
             <TextBlock x:Name="OverConf" Margin="4,2,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
                        AutomationProperties.AutomationId="over.conf" Text="v=1;seq=0;n=0;"></TextBlock>
+            <!-- What that row left on its element while a real Transition ran it to the end: the observed
+                 envelope, whether any frame was non-finite, and the settled value. Clicking writes done=0 here
+                 first, so a suite can tell the new run apart from the previous one before it has finished. -->
+            <TextBlock x:Name="OverLive" Margin="4,2,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+                       AutomationProperties.AutomationId="over.live" Text="v=1;seq=0;done=1;"></TextBlock>
+            <!-- 批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。
+                 逐行载荷是"点哪一行写哪一行"的形状，十几行一起跑只会互相覆盖，所以并发这一路另开一份。 -->
+            <TextBlock x:Name="OverBatch" Margin="4,2,4,2" FontFamily="Consolas" FontSize="10" Foreground="#808080"
+                       TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="over.batch" Text="v=1;seq=0;done=1;rows=0;"></TextBlock>
         </StackPanel>
+
+        <!-- The case list: one row per case, built in code-behind from the probe table and the scenario table so a
+             case is added in exactly one place. A row is its element, a sentence saying what it verifies, and the
+             three controls that drive just that row. It scrolls, so the suite brings a row into view before clicking
+             it — and still asserts afterwards that a person could have reached it. -->
+        <ScrollViewer Grid.Row="1" Margin="4,2,4,4" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="CaseRows"></StackPanel>
+        </ScrollViewer>
     </Grid>
 </Window>

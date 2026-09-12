@@ -31,6 +31,10 @@ internal sealed class DesktopHost : IDemoHost
 
     public bool Exists(string token) => Locator.Exists(token);
 
+    public void BringIntoView(string token) => Locator.BringIntoView(token);
+
+    public string DescribeReachability(string token) => Locator.DescribeReachability(token);
+
     public bool IsControlInsideView(string token) => Locator.IsInsideWindow(token);
 
     /// <summary>A desktop control has no computed style — that question belongs to the browser host.</summary>

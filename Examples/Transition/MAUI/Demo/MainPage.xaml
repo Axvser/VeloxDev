@@ -1,105 +1,95 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="Demo.MainPage">
 
-    <ContentPage.Resources>
-        <LinearGradientBrush x:Key="Bs1" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="Yellow" Offset="0"></GradientStop>
-            <GradientStop Color="Violet" Offset="1"></GradientStop>
-        </LinearGradientBrush>
-    </ContentPage.Resources>
-    
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="60"></RowDefinition>
-            <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="60"></RowDefinition>
-            <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="60"></RowDefinition>
-            <RowDefinition Height="*"></RowDefinition>
-            <RowDefinition Height="120"></RowDefinition>
-            <RowDefinition Height="Auto"></RowDefinition>
-        </Grid.RowDefinitions>
+    <!--
+        版面与其余几个平台的 Transition demo 对齐：顶栏（全局三件 + 五种加载方式 + 载荷读数）压在上面，
+        下面是一张**可滚动的案例列表** —— 一条案例一行，行里是那条案例真正在动的元素、一句"这条在验什么"，
+        以及这一行自己的 启动 / 关闭 / 重置。
 
-        <!-- 加载模式那一排：三块目标被三条动画以五种方式装载。AutomationId 是验收套件抓取这些按钮的把手 ——
-             MAUI 用的是自己的 AutomationId 属性，不是 WPF/WinUI 那个附加属性 AutomationProperties，
-             所以这里逐条写全，七个平台的令牌才对得上。 -->
-        <FlexLayout Grid.Row="0" Direction="Row" Wrap="Wrap">
-            <Button WidthRequest="118" HeightRequest="38" Text="主线程互斥" Clicked="LoadMainThread"
-                    AutomationId="over.btn.load.main"/>
-            <Button WidthRequest="118" HeightRequest="38" Text="后台线程互斥" Clicked="LoadBackground"
-                    AutomationId="over.btn.load.background"/>
-            <Button WidthRequest="118" HeightRequest="38" Text="主线程并发" Clicked="LoadMainThreadNonMutual"
-                    AutomationId="over.btn.load.main.concurrent"/>
-            <Button WidthRequest="118" HeightRequest="38" Text="后台线程并发" Clicked="LoadBackgroundNonMutual"
-                    AutomationId="over.btn.load.background.concurrent"/>
-            <Button WidthRequest="110" HeightRequest="38" Text="连续互斥" Clicked="RepeatMutual"
-                    AutomationId="over.btn.load.repeat"/>
-            <Button x:Name="btnReset" WidthRequest="110" HeightRequest="38" Text="重置"
-                    AutomationId="over.btn.reset.all"/>
-            <Button WidthRequest="110" HeightRequest="38" Text="停止全部" Clicked="ExitAll"
-                    AutomationId="over.btn.stop.all"/>
-        </FlexLayout>
+        三种行（加载 3 条、过冲 5 条、每条采样器 1 条）长得一样，区别只在各自的令牌、描述与动作里，三条合成
+        一处的定义在代码后置的 RebuildCaseList。行本身（连元素）都在代码里造：元素属于行，而行的顺序与数量由表
+        决定 —— 所以这一份 XAML 只剩顶栏与那个滚动的容器，三块加载目标与五块过冲目标不再声明在这里
+        （位移那两条曲线各有一块自己的目标：一个元素只能有一个父级，而每一行各自是一个父级）。
 
-        <!-- 加载模式那一排的三块目标：尺寸取过冲条的格子大小（80×60），两半演示才读成同一张工作台，
-             验收套件也才能用驱动过冲条的同一种方式驱动这一排。 -->
-        <Rectangle Grid.Row="1" x:Name="Rec0" Fill="Cyan" WidthRequest="80" HeightRequest="60"/>
-        <Rectangle Grid.Row="3" x:Name="Rec1" Fill="Lime" WidthRequest="80" HeightRequest="60"/>
-        <Rectangle Grid.Row="5" x:Name="Rec2" Fill="{StaticResource Bs1}" WidthRequest="80" HeightRequest="60"/>
+        两行的高度写法是承重的：
+          - 第 0 行 Auto：顶栏声明多少就拿多少。写成星号的话，星号拿到的是"固定行与 Auto 行分完之后剩下的"，
+            两排按钮会被整个挤出窗口 —— UIA 照样点得到，人却看不见，而那正是这块演示台要消掉的那种错觉。
+          - 第 1 行 星号：列表自己滚，行数再多也不会把顶栏顶出去。
+    -->
+    <Grid RowDefinitions="Auto,*">
+        <VerticalStackLayout Grid.Row="0" Margin="4">
+            <!-- AutomationId 是验收套件抓取这些控件的把手：测试永远不匹配中文标签，token 与语言无关且稳定，
+                 标签则保持读者预期的样子。MAUI 用的是自己的 AutomationId 属性，不是 WPF/WinUI 那个附加属性
+                 AutomationProperties。 -->
 
-        <!-- 过冲演示区。4 个互不干涉的目标并排，Back 与 Elastic、颜色与尺寸可以在同一次运行里对比，
-             而不是一个跑完再看下一个。Bs1 是 Yellow → Violet，把它推过去不会回绕成别的颜色。 -->
-        <Grid Grid.Row="7" ColumnDefinitions="*,*,*,*" Margin="6">
-            <Rectangle Grid.Column="0" x:Name="Over0" WidthRequest="80" HeightRequest="60" Fill="#3A6EA5"
-                       HorizontalOptions="Center" VerticalOptions="Center"/>
-            <Rectangle Grid.Column="1" x:Name="Over1" WidthRequest="80" HeightRequest="60" Fill="#3A6EA5"
-                       HorizontalOptions="Center" VerticalOptions="Center"/>
-            <Rectangle Grid.Column="2" x:Name="Over2" WidthRequest="80" HeightRequest="60" Fill="#7A5AA5"
-                       HorizontalOptions="Center" VerticalOptions="Center"/>
-            <Rectangle Grid.Column="3" x:Name="Over3" WidthRequest="80" HeightRequest="60" Fill="{StaticResource Bs1}"
-                       HorizontalOptions="Center" VerticalOptions="Center"/>
-        </Grid>
-
-        <VerticalStackLayout Grid.Row="8" Margin="4">
+            <!-- 全局面板：一次动到下面每一行。列表里那十几条各自是一条真 Transition，这里是同时发起它们，
+                 顺带就是一个并发压力场景。 -->
             <FlexLayout Direction="Row" Wrap="Wrap">
-                <!-- AutomationId 是验收套件抓取这些控件的把手：测试永远不匹配中文标签，
-                     token 与语言无关且稳定，标签则保持读者预期的样子。 -->
-                <Button WidthRequest="128" HeightRequest="34" Text="位移 Back.Out" Clicked="OverShootScalarBack"
-                        AutomationId="over.btn.back"/>
-                <Button WidthRequest="140" HeightRequest="34" Text="位移 Elastic.Out" Clicked="OverShootScalarElastic"
-                        AutomationId="over.btn.elastic"/>
-                <Button WidthRequest="110" HeightRequest="34" Text="颜色过冲" Clicked="OverShootColor"
-                        AutomationId="over.btn.color"/>
-                <Button WidthRequest="110" HeightRequest="34" Text="尺寸过冲" Clicked="OverShootSize"
-                        AutomationId="over.btn.size"/>
-                <Button WidthRequest="110" HeightRequest="34" Text="渐变过冲" Clicked="OverShootGradient"
-                        AutomationId="over.btn.brush"/>
-                <Button WidthRequest="110" HeightRequest="34" Text="重置过冲" Clicked="OverShootReset"
-                        AutomationId="over.btn.reset"/>
+                <Button WidthRequest="110" HeightRequest="34" Text="全部启动" Clicked="StartAllCases"
+                        AutomationId="over.btn.start.all"/>
+                <Button WidthRequest="110" HeightRequest="34" Text="停止全部" Clicked="ExitAll"
+                        AutomationId="over.btn.stop.all"/>
+                <Button x:Name="btnReset" WidthRequest="110" HeightRequest="34" Text="重置"
+                        AutomationId="over.btn.reset.all"/>
             </FlexLayout>
-            <!-- 读数才是过冲可见的证据：数字越过目标再回来，肉眼分辨不出它与一条更慢的缓动。 -->
+
+            <!-- 加载模式那一排：它们是"怎么加载"，不是"加载什么" —— 它们驱动的三个形状在下面各占一行、各自有
+                 自己的启动。把模式留在顶栏，列表才可能只有一种行：每行恰好 启动 / 关闭 / 重置，
+                 而互斥与并发两条路仍然各自够得着，那正是加载模式套件要验的全部。 -->
+            <FlexLayout Direction="Row" Wrap="Wrap" Margin="0,4,0,0">
+                <Button WidthRequest="118" HeightRequest="38" Text="主线程互斥" Clicked="LoadMainThread"
+                        AutomationId="over.btn.load.main"/>
+                <Button WidthRequest="118" HeightRequest="38" Text="后台线程互斥" Clicked="LoadBackground"
+                        AutomationId="over.btn.load.background"/>
+                <Button WidthRequest="118" HeightRequest="38" Text="主线程并发" Clicked="LoadMainThreadNonMutual"
+                        AutomationId="over.btn.load.main.concurrent"/>
+                <Button WidthRequest="118" HeightRequest="38" Text="后台线程并发" Clicked="LoadBackgroundNonMutual"
+                        AutomationId="over.btn.load.background.concurrent"/>
+                <Button WidthRequest="110" HeightRequest="38" Text="连续互斥" Clicked="RepeatMutual"
+                        AutomationId="over.btn.load.repeat"/>
+            </FlexLayout>
+
+            <!-- 读数是过冲可见的证据：数字越过目标再回来，肉眼分辨不出它与一条更慢的缓动。 -->
             <Label x:Name="Readout" Margin="4,6,4,2" FontSize="12" TextColor="#CCCCCC"
                    AutomationId="over.readout"
-                   Text="按上面任一按钮；读数显示目标的真实属性值与目标值"/>
+                   Text="按下面任一行；读数显示目标的真实属性值与目标值"/>
             <!-- 读数的机器可读孪生体：同一支定时器、同一批值，但用固定的 key=value 载荷而不是散文，
-                 测试就不必去解析一份随时可能被重新排版的版式。 -->
+                 测试就不必去解析一份随时可能被重新排版的版式。
+                 换行不是可有可无：这行载荷现在多出 rows/away/moving，而 nomutual 必须仍然看得见 —— 它排在最后，
+                 所以标签得为这一份更长的载荷留出折行的位置。 -->
             <Label x:Name="OverState" Margin="4,0,4,2" FontSize="10" TextColor="#808080"
+                   LineBreakMode="WordWrap"
                    AutomationId="over.state"
                    Text="v=1;seq=0"/>
-            <!-- 采样器演示台（SamplerBench）插在这条把手条的正上方，也在 code-behind 里从探针表生成：
-                 把手是"验"——点一下把采样器的五个缓动帧写进载荷；台子是"看"——把同一条采样器按缓动跑一遍，
-                 肉眼看得见它在动。台上画的每个值都取自载荷用的同一个入口，两者不可能各说各话。 -->
-            <!-- 采样器一致性把手条：一条采样器一个按钮，在 code-behind 里从探针表生成，所以加一条采样器
-                 只需要改 SamplerProbe 一处。点一下跑那一条采样器，结果写进下面的 over.conf。 -->
-            <FlexLayout x:Name="SamplerButtons" Direction="Row" Wrap="Wrap" Margin="0,4,0,0"/>
-            <!-- 最后点击的那个把手产出的载荷：与 over.state 同样的 key=value 形状，外加序号 —— 它证明
+            <!-- 最后点击的那个行产出的载荷：与 over.state 同样的 key=value 形状，外加序号 —— 它证明
                  这一次点击落了地。 -->
             <Label x:Name="OverConf" Margin="4,2,4,2" FontSize="10" TextColor="#808080"
                    AutomationId="over.conf"
                    Text="v=1;seq=0;n=0;"/>
+            <!-- 那次点击把控件属性写成了什么：观察到的包络、有没有非有限值、最后停在哪。点击先写一份 done=0，
+                 验收侧靠它把"新的还没跑完"与"上一次剩下的"分开。 -->
+            <Label x:Name="OverLive" Margin="4,2,4,2" FontSize="10" TextColor="#808080"
+                   AutomationId="over.live"
+                   Text="v=1;seq=0;done=1;"/>
+            <!-- 批量载荷：点一次"全部启动"，每一行的五帧闭式解与这一行的观察摘要都在这一份里。
+                 逐行载荷是"点哪一行写哪一行"的形状，十几行一起跑只会互相覆盖，所以并发这一路另开一份。
+                 MaximumHeightRequest 不是排版偏好：一份批量载荷有几千字符，让它按自然高度折行会长到把下面的
+                 列表整个挤出窗口。控件**持有**的仍是完整载荷（套件读的是控件属性，不是像素），截的只是它画出来
+                 的那几行，所以这个上限不改变套件读到的东西。 -->
+            <Label x:Name="OverBatch" Margin="4,2,4,2" FontSize="10" TextColor="#808080"
+                   LineBreakMode="WordWrap" MaximumHeightRequest="44"
+                   AutomationId="over.batch"
+                   Text="v=1;seq=0;done=1;rows=0;"/>
         </VerticalStackLayout>
+
+        <!-- 案例列表：一条案例一行，建在代码后置里，与探针表、场景表同源。行是可滚的，所以套件点之前先把这一行
+             弄进视野（行里的按钮在焦点落到自己身上时自己滚，见 SamplerBench.ScrollIntoView）—— 点完还**仍然**
+             断言人够得着（滚之后才断言是关键）。 -->
+        <ScrollView Grid.Row="1" Margin="4,2,4,4">
+            <VerticalStackLayout x:Name="CaseRows"/>
+        </ScrollView>
     </Grid>
 
 </ContentPage>

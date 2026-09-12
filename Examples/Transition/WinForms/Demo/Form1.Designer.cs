@@ -74,14 +74,16 @@ namespace Demo
         private void CreateControls()
         {
             // Create the three demo panels
-            // Sized like the overshoot strip's targets, and at exactly the size the WPF demo's row uses (80x60), so
-            // the load-mode row and the strip read as one bench on every platform. The row keeps this demo's original
-            // 50px gap; panel2/panel3 merely follow panel1's shrunken width.
+            // Sized like the overshoot targets, and at exactly the size the WPF demo's row uses (80x60), so the
+            // load-mode row and the overshoot rows read as one bench on every platform.
+            // The Location is a **stage-local** rest position now: each panel is moved into its own row's stage, and
+            // the rest offset has to sit near that stage's origin (6,6) or the panel would start outside it and be
+            // clipped away. Keep it in step with CreateReset1/2/3 below — those are this demo's declaration of rest.
             panel1 = new Panel
             {
                 Name = "panel1",
                 Size = new Size(80, 60),
-                Location = new Point(100, 100),
+                Location = new Point(6, 6),
                 BackColor = Color.Red,
                 BorderStyle = BorderStyle.FixedSingle
             };
@@ -90,7 +92,7 @@ namespace Demo
             {
                 Name = "panel2",
                 Size = new Size(80, 60),
-                Location = new Point(230, 100),
+                Location = new Point(6, 6),
                 BackColor = Color.Green,
                 BorderStyle = BorderStyle.FixedSingle
             };
@@ -99,7 +101,7 @@ namespace Demo
             {
                 Name = "panel3",
                 Size = new Size(80, 60),
-                Location = new Point(360, 100),
+                Location = new Point(6, 6),
                 BackColor = Color.Blue,
                 BorderStyle = BorderStyle.FixedSingle
             };
@@ -187,23 +189,18 @@ namespace Demo
                 ForeColor = Color.DarkBlue
             };
 
-            // Description label
-            var lblDescription = new Label
-            {
-                Text = "VeloxDev动画演示 - 红色面板：移动 + 父容器背景色(嵌套属性)，绿色面板：缩放动画，蓝色面板：组合动画",
-                Location = new Point(100, 50),
-                Size = new Size(600, 30),
-                Font = new Font("微软雅黑", 9),
-                ForeColor = Color.Gray
-            };
+            // 那行"红面板做什么、绿面板做什么"的说明没了：现在它按行存在案例列表里，一条案例一句 ——
+            // 两处各写一份必然漂移，而这里那份连形状都对不上了（三块目标不再并排，各自是一行）。
 
             // Add controls to the form
+            // 三块目标与七个按钮都只当**零件**：目标会被搬进各自那一行，按钮会被挪到顶栏（见 Form1.Overshoot.cs），
+            // 所以这里的位置与尺寸只是它们被搬走之前的暂态。
             this.Controls.AddRange(new Control[] {
                 panel1, panel2, panel3,
                 btnStart, btnReset, btnExit,
                 btnStartNonMutual, btnStartRepeatedMutual,
                 btnStartMainThread, btnStartMainThreadNonMutual,
-                lblStatus, lblDescription
+                lblStatus
             });
 
             // Register events
@@ -279,11 +276,11 @@ namespace Demo
 
         // The panels' construction-time values as assigned in this file's own design-time code, expressed as
         // explicit paths. Keep the two in step — the reset has to land on the values the form starts with.
-        // panel1's parent (the Form) has BackColor White — see the designer.
+        // panel1's parent is its row's stage, whose BackColor is White — see Form1.Overshoot.cs.
         private static Transition<Control> CreateReset1()
         {
             return Transition<Control>.Create()
-                .Property(c => c.Location, new Point(100, 100))
+                .Property(c => c.Location, new Point(6, 6))
                 .Property(c => c.BackColor, Color.Red)
                 .Property(c => c.Parent.BackColor, Color.White);
         }
@@ -298,7 +295,7 @@ namespace Demo
         private static Transition<Control> CreateReset3()
         {
             return Transition<Control>.Create()
-                .Property(c => c.Location, new Point(360, 100))
+                .Property(c => c.Location, new Point(6, 6))
                 .Property(c => c.Size, new Size(80, 60))
                 .Property(c => c.BackColor, Color.Blue);
         }
@@ -375,9 +372,12 @@ namespace Demo
         }
 
         // Animation definitions
+        // Every endpoint is a coordinate inside the case's own row stage (see Form1.Overshoot.cs): the travel is
+        // capped so the whole journey stays inside that stage. A panel that runs out of its stage is clipped away by
+        // WinForms, and "clipped away" looks exactly like "not moving" — the illusion this demo exists to remove.
         private static readonly Transition<Control> Animation0 =
             Transition<Control>.Create()
-                .Property(c => c.Location, new Point(600, 100))  // move to the right
+                .Property(c => c.Location, new Point(206, 6))  // move 200 to the right, from (6,6)
                 .Property(c => c.Parent.BackColor, Color.Moccasin) // demonstrates nested property animation
                 .Property(c => c.BackColor, Color.Orange)         // turns orange
                 .Effect(new TransitionEffect()
@@ -391,7 +391,7 @@ namespace Demo
         private static readonly Transition<Control> Animation1 =
             Transition<Control>.Create()
                 .Await(TimeSpan.FromSeconds(1))  // starts after a 1 second delay
-                .Property(c => c.Size, new Size(150, 150))  // enlarge
+                .Property(c => c.Size, new Size(150, 96))  // enlarge, within the stage's height
                 .Property(c => c.BackColor, Color.LightGreen)  // turns light green
                 .Effect(new TransitionEffect()
                 {
@@ -403,14 +403,14 @@ namespace Demo
 
         private static readonly Transition<Control> Animation2 =
             Transition<Control>.Create()
-                .Property(c => c.Location, new Point(400, 400))  // move to the bottom right
+                .Property(c => c.Location, new Point(170, 6))  // move to the right
                 .Effect(new TransitionEffect()
                 {
                     Duration = TimeSpan.FromSeconds(2),
                     Ease = Eases.Circ.InOut
                 })
                 .AwaitThen(TimeSpan.FromSeconds(1))  // wait 1 second
-                .Property(c => c.Size, new Size(120, 120))  // shrink slightly
+                .Property(c => c.Size, new Size(120, 96))  // grow, still inside the stage
                 .Property(c => c.BackColor, Color.Purple)   // turns purple
                 .Effect(new TransitionEffect()
                 {
@@ -418,7 +418,7 @@ namespace Demo
                     Ease = Eases.Sine.In
                 })
                 .AwaitThen(TimeSpan.FromSeconds(0.5))  // wait another 0.5 seconds
-                .Property(c => c.Location, new Point(100, 400))  // move to the bottom left
+                .Property(c => c.Location, new Point(6, 6))  // move back to the start
                 .Property(c => c.BackColor, Color.Teal)  // turns teal
                 .Effect(new TransitionEffect()
                 {

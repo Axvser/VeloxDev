@@ -88,6 +88,22 @@ internal sealed class BlazorHost : IDemoHost
     /// </remarks>
     public bool IsControlInsideView(string token) => Exists(token);
 
+    /// <summary>
+    /// Scroll the control to the middle of the viewport.
+    /// </summary>
+    /// <remarks>
+    /// Only for a person's benefit — Playwright scrolls before clicking on its own, and
+    /// <see cref="IsControlInsideView"/> is a no-op here because a page's "in view" is whatever is scrolled to.
+    /// Doing it explicitly keeps the driver's step list the same on every platform.
+    /// </remarks>
+    public void BringIntoView(string token)
+        => Page.Locator(Selector(token))
+            .EvaluateAsync("el => el.scrollIntoView({ block: 'center' })")
+            .GetAwaiter().GetResult();
+
+    public string DescribeReachability(string token)
+        => Exists(token) ? "a page scrolls, so reachability is not a fixed-frame question" : "the element is not on the page";
+
     public string? ComputedStyle(string token, string property)
         => Page.Locator(Selector(token))
             .EvaluateAsync<string>($"el => getComputedStyle(el).getPropertyValue('{property}')")

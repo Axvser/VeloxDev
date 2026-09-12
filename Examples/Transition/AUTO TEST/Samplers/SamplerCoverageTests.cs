@@ -68,6 +68,12 @@ public class SamplerCoverageTests
         var unreachable = UnreachableSamplers.All.Select(entry => entry.SamplerType).ToHashSet();
         var shipped = ShippedSamplers();
 
+        // 无论成败都留一行：两个套件安静通过时，这一行是"产品发布的每一个采样器都有人验"的唯一证据。
+        Console.WriteLine(
+            $"采样器覆盖：产品发布 {shipped.Count} 个 —— 本套件按闭式解验 {registered.Count} 个，"
+            + $"UnreachableSamplers {unreachable.Count} 个（由 VeloxDev.AT 在真 app 里验）；"
+            + $"合计 {registered.Count + unreachable.Count} 个。");
+
         var missing = shipped
             .Except(registered)
             .Except(unreachable)
@@ -159,9 +165,21 @@ public class SamplerCoverageTests
         // 任何适配器，这个工程也不该反过来引用 AT 的测试工程），所以按名字对一次：AT 侧删掉一条，这里就红。
         // 少了这道对账，"75 个采样器全覆盖"会随着一次删除悄悄变成假话，而两个套件都还是绿的。
         var directory = ConformanceDirectory();
-        var tables = string.Join(
-            Environment.NewLine,
-            directory.EnumerateFiles("*.cs").Select(file => File.ReadAllText(file.FullName)));
+
+        // 只读**表**文件，不读目录里的其它文件。以前是 *.cs，于是 ClosedForm.cs / ConformanceCatalog.cs /
+        // ConformanceEntry.cs / LiveContract.cs 也一起拼进来做子串查找 —— 那意味着任何一份提到过
+        // `"ProjectionSampler"` 字样的文件都能让这条对账静默成立，哪怕表里那一条早被删了。
+        // 收紧之后，漏读一张表只会让对账**变红**（名字找不到），不会让它变绿 —— 失败方向是对的。
+        // 顺带把读到的文件名打出来：这条对账的承重面就是这个集合，它得看得见。
+        var files = directory
+            .EnumerateFiles("*Conformance.cs")
+            .OrderBy(file => file.Name, StringComparer.Ordinal)
+            .ToArray();
+
+        var tables = string.Join(Environment.NewLine, files.Select(file => File.ReadAllText(file.FullName)));
+
+        Console.WriteLine(
+            $"按名字对账：读了 {files.Length} 张表 —— {string.Join(", ", files.Select(file => file.Name))}");
 
         var missing = UnreachableSamplers.All
             .Where(entry => !tables.Contains($"\"{entry.SamplerType.Name}\"", StringComparison.Ordinal))

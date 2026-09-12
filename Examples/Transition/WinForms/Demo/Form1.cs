@@ -8,8 +8,8 @@ namespace Demo
         {
             InitializeComponent();
 
-            // 过冲演示区在运行时构建（见 Form1.Overshoot.cs），设计器文件保持原样
-            InitializeOvershootStrip();
+            // 顶栏、读数与案例列表在运行时构建（见 Form1.Overshoot.cs），设计器文件只当零件库用
+            BuildBench();
         }
     }
 }

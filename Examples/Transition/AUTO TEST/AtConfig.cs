@@ -13,15 +13,19 @@ internal static class AtConfig
     internal static bool Enabled => Environment.GetEnvironmentVariable("VELOXDEV_AT") == "1";
 
     /// <summary>
-    /// How long to linger after each clicked handle lands. Unset means <see cref="DefaultPaceMs"/>; set
-    /// <c>VELOXDEV_AT_PACE</c> to a number of milliseconds, and to <c>0</c> for no pause at all.
+    /// How long to linger after **every** click a suite makes — sampler handles and load-mode buttons alike. Unset
+    /// means <see cref="DefaultPaceMs"/>; set <c>VELOXDEV_AT_PACE</c> to a number of milliseconds, and to <c>0</c>
+    /// for no pause at all.
     /// </summary>
     /// <remarks>
     /// <b>Slowed down by default, on purpose.</b> Two reasons, and the second is not cosmetic: a demo window is
-    /// otherwise gone before the eye catches it, and — because each click stops the previous one's playback — a run
-    /// with no pause cuts every sampler's animation off a tenth of a second in, so nobody watching ever sees one
-    /// finish. A CI job or an agent that only wants the verdict sets <c>VELOXDEV_AT_PACE=0</c> and gets the whole
-    /// suite in about twenty seconds.
+    /// otherwise gone before the eye catches it, and — because each click stops the previous one's animation — a run
+    /// with no pause cuts every sampler's run off a tenth of a second in, so nobody watching ever sees one finish.
+    /// <para>
+    /// It applies to <see cref="Drivers.DemoDriverBase.Click"/>, so it covers the load-mode row's buttons as well as
+    /// the sampler handles; raising it is what turns a run into something a person can follow end to end. A CI job or
+    /// an agent that only wants the verdict sets <c>VELOXDEV_AT_PACE=0</c>.
+    /// </para>
     /// </remarks>
     internal static TimeSpan Pace =>
         int.TryParse(Environment.GetEnvironmentVariable("VELOXDEV_AT_PACE"), out var milliseconds)

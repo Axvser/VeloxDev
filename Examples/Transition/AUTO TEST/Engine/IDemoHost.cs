@@ -35,6 +35,23 @@ internal interface IDemoHost : IDisposable
     bool Exists(string token);
 
     /// <summary>
+    /// Ask the surface to bring a control into view — what focusing it does for a person.
+    /// </summary>
+    /// <remarks>
+    /// The demos present their cases as a scrollable list, so a handle can be present, clickable through UI
+    /// Automation, and still below the fold. This is the step that puts it in front of a person; whether it worked is
+    /// not taken on trust — <see cref="IsControlInsideView"/> is checked straight afterwards, so a scroll that
+    /// silently does nothing is a failure rather than a licence to click something nobody can see.
+    /// </remarks>
+    void BringIntoView(string token);
+
+    /// <summary>
+    /// What the surface says about where a control is, for a failure message: its rectangle, and whether it is
+    /// flagged as scrolled out of sight.
+    /// </summary>
+    string DescribeReachability(string token);
+
+    /// <summary>
     /// Whether the control with this token is somewhere a person could reach it — inside the window for a desktop
     /// surface. A suite that clicks through the Invoke pattern would otherwise keep passing over a control laid out
     /// past the window's edge, verifying a UI nobody can use.
