@@ -102,6 +102,36 @@ public class TimelineControlTests
     }
 
     [TestMethod]
+    public void Timeline_Advance_DoesNotWrap_WhereMultiplyingFirstWould()
+    {
+        // 10^15 个 tick：Windows 上约 3.2 年，Linux 上约 11.6 天 —— 后者正是这条修复要挡住的那一档。
+        long elapsed = 1_000_000_000_000_000L;
+        long speed = 10_000L; // 速率 1 的定点表示
+
+        // 先乘后除的老写法在这里就给出错误答案了。这是这条测试存在的理由，不是假设；C# 不检查溢出，
+        // 所以那个错误答案是一个负数位置，而不是一个异常。
+        Assert.AreNotEqual(elapsed, elapsed * speed / speed,
+            "前提不成立：这个 elapsed 上先乘后除仍是正确值，测试就失去意义了");
+
+        Assert.AreEqual(elapsed, TransitionTimeline.Advance(0L, elapsed, speed),
+            "先除后乘必须把整个间隔算对，而不是回绕");
+    }
+
+    [TestMethod]
+    public void Timeline_Advance_SplitsTheWholePartFromTheRemainder()
+    {
+        // 整部分直接乘，余数部分参与定点乘除：两者相加必须等于精确值。
+        Assert.AreEqual(1_000_000_000_000_123L, TransitionTimeline.Advance(0L, 1_000_000_000_000_123L, 10_000L));
+
+        // 半速：1001 个 tick 走一半是 500.5，定点截断到 500。
+        Assert.AreEqual(500L, TransitionTimeline.Advance(0L, 1_001L, 5_000L));
+
+        // 单调时钟不会倒走：零或负的间隔保持原位，也好过把位置交给采样循环往回跳。
+        Assert.AreEqual(42L, TransitionTimeline.Advance(42L, 0L, 10_000L));
+        Assert.AreEqual(42L, TransitionTimeline.Advance(42L, -5L, 10_000L));
+    }
+
+    [TestMethod]
     public async Task Timeline_SeekLandsOnThePosition_AndKeepsTheRate()
     {
         var timeline = new TransitionTimeline();
