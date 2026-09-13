@@ -1,10 +1,10 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
-using Demo.ViewModels;
 using Demo.Views;
-using System.Linq;
+using VeloxDev.DynamicTheme;
+using VeloxDev.TransitionSystem;
 
 namespace Demo;
 
@@ -19,28 +19,28 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Avoid duplicate validations from both Avalonia and the CommunityToolkit. 
-            // More info: https://docs.avaloniaui.net/docs/guides/development-guides/data-validation#manage-validationplugins
-            DisableAvaloniaDataAnnotationValidation();
-            desktop.MainWindow = new MainWindow
+            // Both of these are global and must be in place before any element registers itself or any switch runs:
+            // the interpolator is what lets an animated switch run on the platform's scheduler at all, and StartModel
+            // decides whether a switch animates from the cached theme value or from the live property.
+            ThemeManager.SetPlatformInterpolator(new Interpolator());
+            ThemeManager.StartModel = StartModel.Cache;
+
+            // Set before any element registers itself, so the values each one applies as it initialises are the
+            // ones for this theme.
+            ThemeManager.SetCurrent<Dark>();
+
+            if (desktop.Args?.Any(static arg => string.Equals(arg, "bench", StringComparison.OrdinalIgnoreCase)) == true)
             {
-                DataContext = new MainWindowViewModel(),
-            };
+                // No window to close, so the run itself decides when the process ends.
+                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                _ = BenchRunner.RunAsync(() => desktop.Shutdown());
+            }
+            else
+            {
+                desktop.MainWindow = new MainWindow();
+            }
         }
 
         base.OnFrameworkInitializationCompleted();
-    }
-
-    private void DisableAvaloniaDataAnnotationValidation()
-    {
-        // Get an array of plugins to remove
-        var dataValidationPluginsToRemove =
-            BindingPlugins.DataValidators.OfType<DataAnnotationsValidationPlugin>().ToArray();
-
-        // remove each entry found
-        foreach (var plugin in dataValidationPluginsToRemove)
-        {
-            BindingPlugins.DataValidators.Remove(plugin);
-        }
     }
 }

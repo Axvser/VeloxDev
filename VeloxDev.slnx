@@ -43,8 +43,14 @@
   <Folder Name="/Examples/Theme/Avalonia/">
     <Project Path="Examples/Theme/Avalonia/Demo/Demo.csproj" />
   </Folder>
+  <Folder Name="/Examples/Theme/Avalonia Trimmed/">
+    <Project Path="Examples/Theme/Avalonia Trimmed/Demo/Demo.csproj" />
+  </Folder>
   <Folder Name="/Examples/Theme/WPF/">
     <Project Path="Examples/Theme/WPF/Demo/Demo.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Theme/WPF Trimmed/">
+    <Project Path="Examples/Theme/WPF Trimmed/Demo/Demo.csproj" />
   </Folder>
   <Folder Name="/Examples/Transition/" />
   <Folder Name="/Examples/Transition/Avalonia/">

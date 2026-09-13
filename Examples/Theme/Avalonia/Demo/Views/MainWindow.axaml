@@ -1,27 +1,39 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:Demo.ViewModels"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:views="clr-namespace:Demo.Views"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="Demo.Views.MainWindow"
-        x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/avalonia-logo.ico"
-        Title="Demo"
-        Background="White">
+        Title="VeloxDev 主题 — 规模与时间轴"
+        Height="960" Width="1240">
 
-    <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainWindowViewModel />
-    </Design.DataContext>
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top">
+            <WrapPanel Margin="8,8,8,0">
+                <Button Content="动画切换" Click="OnAnimate" Padding="10,4" Margin="0,0,6,0" />
+                <Button Content="瞬切" Click="OnJump" Padding="10,4" Margin="0,0,6,0" />
+                <Button Content="暂停 / 继续" Click="OnTogglePause" Padding="10,4" Margin="0,0,6,0" />
+                <Button Content="慢放 0.25×" Click="OnSlow" Padding="10,4" Margin="0,0,6,0" />
+                <Button Content="常速" Click="OnNormalRate" Padding="10,4" Margin="0,0,6,0" />
+                <Button Content="拖到 50%" Click="OnSeekHalf" Padding="10,4" Margin="0,0,6,0" />
+                <Button Content="停止" Click="OnStop" Padding="10,4" Margin="0,0,6,0" />
+                <CheckBox Content="自动循环" x:Name="AutoLoop" VerticalAlignment="Center" Margin="12,0,0,0"
+                          Checked="OnAutoLoopChanged" Unchecked="OnAutoLoopChanged" />
+            </WrapPanel>
 
-    <Grid Background="{Binding Background,RelativeSource={RelativeSource AncestorType=views:MainWindow}}">
-        <Button Click="ChangeTheme"
-                Content="CLick me to changed the theme"
-                Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=views:MainWindow}}" 
-				Background="{Binding Background,RelativeSource={RelativeSource AncestorType=views:MainWindow}}"/>
-    </Grid>
+            <WrapPanel Margin="8,6,8,0">
+                <TextBlock Text="元素数：" VerticalAlignment="Center" />
+                <Button Content="200" x:Name="Size200" Click="OnSizeClick" Padding="10,4" Margin="0,0,6,0" />
+                <Button Content="1000" x:Name="Size1000" Click="OnSizeClick" Padding="10,4" Margin="0,0,6,0" />
+                <Button Content="2000" x:Name="Size2000" Click="OnSizeClick" Padding="10,4" Margin="0,0,6,0" />
+                <Button Content="改 Light 的背景" Click="OnEditThemeValue" Padding="10,4" Margin="16,0,6,0" />
+                <Button Content="还原" Click="OnRestoreThemeValue" Padding="10,4" Margin="0,0,6,0" />
+            </WrapPanel>
 
+            <TextBlock x:Name="Status" Margin="8,6,8,0" FontFamily="Consolas" TextWrapping="Wrap" />
+            <TextBlock x:Name="Live" Margin="8,2,8,0" FontFamily="Consolas" TextWrapping="Wrap" />
+            <TextBlock x:Name="Hooks" Margin="8,2,8,6" FontFamily="Consolas" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <WrapPanel x:Name="Host" />
+        </ScrollViewer>
+    </DockPanel>
 </Window>

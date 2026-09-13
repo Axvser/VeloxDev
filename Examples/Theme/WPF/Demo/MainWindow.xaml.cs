@@ -1,128 +1,219 @@
-﻿using System.Windows;
+using System.Diagnostics;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
 using VeloxDev.DynamicTheme;
 using VeloxDev.TransitionSystem;
+using VeloxDev.TimeLine;
 
-namespace Demo
+namespace Demo;
+
+/// <summary>
+/// The same theme system the minimal demo shows, at a scale where the interesting properties become visible:
+/// every element of one switch moves on <b>one</b> shared timeline, so the existing timeline control reaches a
+/// theme switch unchanged, and one <see cref="Transition.Pause"/> call on any single element freezes all of them.
+/// </summary>
+/// <remarks>
+/// The UI is built in code because it is generated — a thousand identical tiles plus a toolbar — and because the
+/// thing worth reading here is the measurement, not the markup. <c>dotnet run -- bench</c> runs the same scenario
+/// headlessly and writes a table.
+/// </remarks>
+public partial class MainWindow : Window
 {
-    /* We recommend defining theme-related operations in a separate partial class, so interaction logic
-       is not cluttered by unrelated code */
-    /* Note: when using Rider, this may cause generated content to be unrecognized. It does not affect
-       compilation, but Rider may need to be restarted to recover recognition. */
+    private readonly List<ThemeTile> _tiles = [];
+    private readonly DispatcherTimer _ticker = new() { Interval = TimeSpan.FromMilliseconds(100) };
+    private readonly Process _self = Process.GetCurrentProcess();
 
-    //------------------------------------------------------------------------------------------------------------------
-    // User Part ↓
+    // Long enough that pause and seek have something to interrupt.
+    private readonly TransitionEffect _effect = new() { Duration = TimeSpan.FromSeconds(3), FPS = 60 };
 
-    public partial class MainWindow : Window
+    private readonly EventHandler<TransitionEventArgs> _frameCounter;
+    private long _frames;
+    private int _size = 1000;
+    private bool _autoLoop;
+
+    public MainWindow()
     {
-        public MainWindow()
-        {
-            InitializeComponent();
-            LoadTheme();
-        }
+        // Counts one call per target per frame, which is how the frame deficit at high target counts shows up.
+        _frameCounter = (_, _) => Interlocked.Increment(ref _frames);
+        _effect.Update += _frameCounter;
 
-        private void ChangeTheme(object sender, RoutedEventArgs e)
+        InitializeComponent();
+
+        // The window is a themed element too, on top of the thousands of tiles, so one switch covers both. Like
+        // every other one, this call must follow InitializeComponent.
+        InitializeTheme();
+
+        _ticker.Tick += (_, _) => UpdateLive();
+        _ticker.Start();
+
+        Loaded += (_, _) =>
         {
-            ReverseThemeWithAnimation();
-        }
+            Build(_size);
+            Status.Text = "就绪。点「动画切换」看所有元素一起渐变，动画途中试「暂停」「拖到 50%」。";
+        };
     }
 
-    //------------------------------------------------------------------------------------------------------------------
-    // Theme Part ↓
-
-    /* BrushConverter and other Converters are provided by the platform adapter layer (e.g.
-       VeloxDev.WPF) and convert character or other forms of constructor arguments into concrete values */
-    /* ThemeConfig requires at least one Converter and two Themes (e.g. Dark/Light), and supports at
-       most one Converter plus seven Themes */
-    [ThemeConfig<BrushConverter, Light, Dark>(nameof(Background), ["#ffffff"], ["#1e1e1e"])]
-    [ThemeConfig<BrushConverter, Light, Dark>(nameof(Foreground), ["#1e1e1e"], ["#ffffff"])]
-    public partial class MainWindow
+    private void Build(int count)
     {
-        private void LoadTheme()
+        Host.Children.Clear();
+        _tiles.Clear();
+
+        for (var i = 0; i < count; i++) _tiles.Add(new ThemeTile());
+        foreach (var tile in _tiles) Host.Children.Add(tile);
+
+        _size = count;
+
+        // The previous batch is only weakly referenced by the theme manager and is pruned on the next switch, so
+        // one collection makes the active set exactly this batch.
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+    }
+
+    /// <summary>
+    /// Hands one control call to the switch. Addressing <b>any single</b> target is enough: they all share one
+    /// timeline, so there is only one transport for a pause, a seek or a rate change to move.
+    /// </summary>
+    private void Act(Action<ThemeTile> operation)
+    {
+        if (_tiles.Count == 0) return;
+
+        operation(_tiles[0]);
+        UpdateLive();
+    }
+
+    private async Task SwitchAsync(bool animate)
+    {
+        var toLight = ThemeManager.Current != typeof(Light);
+        var target = toLight ? typeof(Light) : typeof(Dark);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        Interlocked.Exchange(ref _frames, 0);
+        var allocatedBefore = GC.GetTotalAllocatedBytes(true);
+        var cpuBefore = _self.TotalProcessorTime;
+        var watch = Stopwatch.StartNew();
+
+        // Transition returns only after every target has been prepared, written and scheduled — its first await is
+        // the Task.WhenAll — so this call's own duration is the preparation cost, measured apart from the animation.
+        if (animate)
         {
-            InitializeTheme(); // this call is required and must come after InitializeComponent()
-
-            // [ Applies globally ]
-            // If you do not use themed transitions, the interpolator does not need to be configured;
-            // otherwise this call is mandatory.
-            ThemeManager.SetPlatformInterpolator(new Interpolator());
-
-            // [ Applies globally ]
-            // When the theme changes, should the animation's starting state come from the cache, or
-            // should reflection read the current state as the starting point?
-            ThemeManager.StartModel = StartModel.Cache;
+            if (toLight) ThemeManager.Transition<Light>(_effect);
+            else ThemeManager.Transition<Dark>(_effect);
+        }
+        else
+        {
+            if (toLight) ThemeManager.Jump<Light>();
+            else ThemeManager.Jump<Dark>();
         }
 
-        /// <summary>
-        /// Theme switching has a callback
-        /// </summary>
-        /// <param name="oldValue">The value before switching</param>
-        /// <param name="newValue">The value after switching</param>
-        partial void OnThemeChanged(Type? oldValue, Type? newValue)
+        var preparation = watch.Elapsed.TotalMilliseconds;
+        var deadline = Environment.TickCount64 + 30_000;
+        while (ThemeManager.Current != target && Environment.TickCount64 < deadline) await Task.Delay(5);
+        watch.Stop();
+
+        var landed = ThemeManager.Current == target;
+        var frames = Interlocked.Read(ref _frames);
+
+        Status.Text = string.Format(
+            "{0} 个元素 · {1} · 准备 {2:F1} ms · 总计 {3:F1} ms · 帧 {4}（每目标 {5}）· 分配 {6:F1} MB · CPU {7:F0} ms",
+            _size,
+            landed ? $"→ {target.Name} 完成" : "→ 被中断",
+            preparation,
+            watch.Elapsed.TotalMilliseconds,
+            frames,
+            frames / Math.Max(1, _size),
+            (GC.GetTotalAllocatedBytes(true) - allocatedBefore) / 1048576.0,
+            (_self.TotalProcessorTime - cpuBefore).TotalMilliseconds);
+    }
+
+    private void UpdateLive()
+    {
+        if (_tiles.Count == 0)
         {
-            MessageBox.Show($"Theme changed from {oldValue?.Name} to {newValue?.Name}");
+            Live.Text = string.Empty;
+            return;
         }
 
-        /// <summary>
-        /// This kind of theme switch loads a gradient animation
-        /// </summary>
-        private static void ReverseThemeWithAnimation()
+        var tile = _tiles[0];
+        Live.Text = string.Format(
+            "pos {0:F0} ms · cycle {1} · paused {2} · rate {3:F2} · Current {4}",
+            Transition.Position(tile).TotalMilliseconds,
+            Transition.Cycle(tile),
+            Transition.IsPaused(tile),
+            Transition.Rate(tile),
+            ThemeManager.Current.Name);
+    }
+
+    private void OnAnimate(object sender, RoutedEventArgs e) => _ = SwitchAsync(animate: true);
+
+    private void OnJump(object sender, RoutedEventArgs e) => _ = SwitchAsync(animate: false);
+
+    private void OnTogglePause(object sender, RoutedEventArgs e) => Act(tile =>
+    {
+        if (Transition.IsPaused(tile)) Transition.Resume(tile);
+        else Transition.Pause(tile);
+    });
+
+    private void OnSlow(object sender, RoutedEventArgs e) => Act(tile => Transition.SetRate(tile, 0.25));
+
+    private void OnNormalRate(object sender, RoutedEventArgs e) => Act(tile => Transition.SetRate(tile, 1.0));
+
+    private void OnSeekHalf(object sender, RoutedEventArgs e)
+        => Act(tile => Transition.Seek(tile, TimeSpan.FromMilliseconds(_effect.Duration.TotalMilliseconds / 2)));
+
+    private void OnStop(object sender, RoutedEventArgs e)
+        => Act(tile => Transition.Exit(tile, IncludeMutual: true, IncludeNoMutual: true));
+
+    private void OnSizeClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string tag } && int.TryParse(tag, out var count)) Build(count);
+    }
+
+    private void OnAutoLoopChanged(object sender, RoutedEventArgs e)
+    {
+        _autoLoop = AutoLoop.IsChecked == true;
+        if (_autoLoop) _ = AutoLoopAsync();
+    }
+
+    private async Task AutoLoopAsync()
+    {
+        while (_autoLoop)
         {
-            var condition = ThemeManager.Current == typeof(Dark);
-            if (condition)
-            {
-                ThemeManager.Transition<Light>(TransitionEffects.Theme);
-            }
-            else
-            {
-                ThemeManager.Transition<Dark>(TransitionEffects.Theme);
-            }
-        }
-
-        /// <summary>
-        /// This kind of theme switch has no gradient animation
-        /// </summary>
-        private static void ReverseThemeWithOutAnimation()
-        {
-            var condition = ThemeManager.Current == typeof(Dark);
-            if (condition)
-            {
-                ThemeManager.Jump<Light>();
-            }
-            else
-            {
-                ThemeManager.Jump<Dark>();
-            }
-        }
-
-        /// <summary>
-        /// Provides a set of extensions for getting and editing theme resource packages. These methods
-        /// are auto-generated; here, for example, they all belong to MainWindow.
-        /// </summary>
-        private void ThemeValueEx()
-        {
-            // Dynamically edit theme resource values
-            SetThemeValue<Light>(nameof(Background), new object?[] { "#ffffff" });
-            // Can be restored to the initial state
-            RestoreThemeValue<Light>(nameof(Foreground));
-
-            // Get the static resources
-            var staticCache = GetStaticThemeCache();
-            // Get the dynamic resources
-            var dynamicCache = GetActiveThemeCache();
-
-            /* The "resource" here is a complex auto-generated structure.
-               Only modified properties are stored in the dynamic resources; otherwise nothing is stored.
-               When the theme switches, dynamic content overrides static content.
-               Dictionary<string,Dictionary<PropertyInfo,Dictionary<Type,object?>>>
-
-               From left to right
-               string       -> name of property
-               PropertyInfo -> target to use theme change
-               Type         -> theme
-               object?      -> value of property at the theme
-
-               It provides full access to the theme resources.
-             */
+            await SwitchAsync(animate: true);
+            await Task.Delay(500);
         }
     }
+}
+
+//------------------------------------------------------------------------------------------------------------------
+// Theme Part ↓
+
+/* The theme declarations live in their own partial block: they are configuration, not interaction logic. */
+[ThemeConfig<BrushConverter, Light, Dark>(nameof(Background), ["#ffffff"], ["#1e1e1e"])]
+[ThemeConfig<BrushConverter, Light, Dark>(nameof(Foreground), ["#1e1e1e"], ["#ffffff"])]
+public partial class MainWindow
+{
+    /// <summary>
+    /// The generated hooks. Implementing them is the whole subscription mechanism — there is no event to add a
+    /// handler to, and a switch that is superseded before it lands calls neither.
+    /// </summary>
+    partial void OnThemeChanging(Type? oldValue, Type? newValue)
+        => Hooks.Text = $"OnThemeChanging: {oldValue?.Name} -> {newValue?.Name}";
+
+    partial void OnThemeChanged(Type? oldValue, Type? newValue)
+        => Hooks.Text = $"OnThemeChanged: {oldValue?.Name} -> {newValue?.Name}";
+
+    /// <summary>
+    /// Overrides one value for one theme on this instance, and puts it back. An override beats the declared value
+    /// for that theme, and only the properties actually changed appear in the active cache.
+    /// </summary>
+    private void OnEditThemeValue(object sender, RoutedEventArgs e)
+        => SetThemeValue<Light>(nameof(Background), new object?[] { "#fff4d6" });
+
+    private void OnRestoreThemeValue(object sender, RoutedEventArgs e)
+        => RestoreThemeValue<Light>(nameof(Background));
 }
