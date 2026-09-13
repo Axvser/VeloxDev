@@ -1,10 +1,12 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 namespace VeloxDev.Generators.Base
 {
@@ -12,14 +14,198 @@ namespace VeloxDev.Generators.Base
     {
         public static class Filters
         {
-            public static IncrementalValueProvider<(Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes)> FilterContext(IncrementalGeneratorInitializationContext context)
+            /// <summary>
+            /// One class a generator has to write code for, together with the partial declaration to
+            /// write it against.
+            /// </summary>
+            /// <remarks>
+            /// <para>
+            /// Deliberately free of <see cref="ISymbol"/>: a transform's output is cached per syntax
+            /// node and is not recomputed while that tree is unchanged, so a symbol captured here
+            /// would keep pointing at an older <see cref="Compilation"/>. Every writer reads semantics
+            /// that live outside the target's own file — base-type chains, referenced assemblies — so a
+            /// stale symbol produces silently wrong code after an edit to some other file. The symbol is
+            /// re-resolved against the current compilation in <see cref="Resolve"/> instead.
+            /// </para>
+            /// <para>
+            /// A hand-written struct rather than a <c>record struct</c>: the generator targets
+            /// netstandard2.0, which has no <c>IsExternalInit</c> for the compiler to synthesise.
+            /// </para>
+            /// </remarks>
+            public readonly struct GeneratorTarget : IEquatable<GeneratorTarget>
             {
-                IncrementalValuesProvider<ClassDeclarationSyntax> classDeclarations =
-                    context.SyntaxProvider.CreateSyntaxProvider(
-                        predicate: static (node, cancellationToken) => IsPartialClass(node),
-                        transform: static (context, cancellationToken) => GetClassDeclaration(context))
-                    .Where(static m => m != null)!;
-                return GetFilteredValue(context, classDeclarations);
+                public GeneratorTarget(ClassDeclarationSyntax syntax, string typeKey, bool isClassLevelAttribute)
+                {
+                    Syntax = syntax;
+                    TypeKey = typeKey;
+                    IsClassLevelAttribute = isClassLevelAttribute;
+                }
+
+                /// <summary>The partial declaration a writer is handed.</summary>
+                public ClassDeclarationSyntax Syntax { get; }
+
+                /// <summary>
+                /// Fully qualified name of the target type, used to recognise the several partial
+                /// declarations of one type and to compare targets without touching symbols.
+                /// </summary>
+                public string TypeKey { get; }
+
+                /// <summary>
+                /// True when the attribute that produced this target sits on the class declaration
+                /// itself rather than on one of its members. Used only to pick a representative
+                /// declaration when a type is split over several partial files.
+                /// </summary>
+                public bool IsClassLevelAttribute { get; }
+
+                public bool Equals(GeneratorTarget other)
+                    => ReferenceEquals(Syntax, other.Syntax)
+                       && IsClassLevelAttribute == other.IsClassLevelAttribute
+                       && string.Equals(TypeKey, other.TypeKey, StringComparison.Ordinal);
+
+                public override bool Equals(object? obj) => obj is GeneratorTarget other && Equals(other);
+
+                public override int GetHashCode()
+                    => TypeKey.GetHashCode() ^ (IsClassLevelAttribute ? 1 : 0);
+
+                public static bool operator ==(GeneratorTarget left, GeneratorTarget right) => left.Equals(right);
+
+                public static bool operator !=(GeneratorTarget left, GeneratorTarget right) => !left.Equals(right);
+            }
+
+            /// <summary>
+            /// Metadata names of every attribute that makes a class a codegen target. Class-level
+            /// attributes are listed first so that, for a type split over several partial files, the
+            /// declaration carrying the class-level attribute becomes the representative one: the
+            /// syntax-scoped writers (<c>MonoWriter</c>, <c>AopWriter</c>, <c>AopInterface</c>) read
+            /// their attribute off the declaration they are handed.
+            /// </summary>
+            private static readonly string[] TriggerAttributes =
+            [
+                "VeloxDev.WorkflowSystem.WorkflowBuilder+TreeAttribute`1",
+                "VeloxDev.WorkflowSystem.WorkflowBuilder+NodeAttribute`1",
+                "VeloxDev.WorkflowSystem.WorkflowBuilder+SlotAttribute`1",
+                "VeloxDev.WorkflowSystem.WorkflowBuilder+LinkAttribute`1",
+                "VeloxDev.WorkflowSystem.DefaultAnchorAttribute",
+                "VeloxDev.WorkflowSystem.DefaultSizeAttribute",
+                "VeloxDev.TimeLine.MonoBehaviourAttribute",
+                "VeloxDev.MVVM.VeloxPropertyAttribute",
+                "VeloxDev.MVVM.VeloxCommandAttribute",
+                "VeloxDev.AspectOriented.AspectOrientedAttribute",
+            ];
+
+            /// <summary>
+            /// Streams every class carrying one of <see cref="TriggerAttributes"/> on itself or on one
+            /// of its members, exactly once per type.
+            /// </summary>
+            /// <remarks>
+            /// Attributes are resolved as symbols rather than matched by name, so fully qualified and
+            /// aliased forms are recognised too, and a class carrying none of them never reaches a
+            /// writer. The previous pipeline selected every partial class in the compilation and ran
+            /// every writer over all of them on every keystroke; here only attributed classes reach a
+            /// writer, and the per-node transform is cached by Roslyn.
+            /// </remarks>
+            public static IncrementalValueProvider<ImmutableArray<GeneratorTarget>> Targets(
+                IncrementalGeneratorInitializationContext context)
+            {
+                var perAttribute = new IncrementalValueProvider<ImmutableArray<GeneratorTarget>>[TriggerAttributes.Length];
+                for (var i = 0; i < TriggerAttributes.Length; i++)
+                {
+                    perAttribute[i] = context.SyntaxProvider
+                        .ForAttributeWithMetadataName(TriggerAttributes[i], IsCandidateClass, ToGeneratorTarget)
+                        .Where(static target => target.HasValue)
+                        .Select(static (target, _) => target!.Value)
+                        .Collect();
+                }
+
+                // Fold the per-attribute streams into one flat array.
+                var merged = perAttribute[0];
+                for (var i = 1; i < perAttribute.Length; i++)
+                {
+                    var next = perAttribute[i];
+                    merged = merged.Combine(next)
+                                   .Select(static (pair, _) => pair.Left.AddRange(pair.Right));
+                }
+
+                return merged.Select(static (targets, _) => Deduplicate(targets));
+            }
+
+            /// <summary>
+            /// Re-resolves each target's symbol against <paramref name="compilation"/> and yields the
+            /// pairs a writer needs.
+            /// </summary>
+            /// <remarks>
+            /// This is the step that keeps the pipeline honest: <see cref="Targets"/> has no notion of
+            /// the current <see cref="Compilation"/>, so the symbol must be looked up here against the
+            /// compilation being compiled right now. Targets whose tree has already left the compilation
+            /// are skipped.
+            /// </remarks>
+            public static IEnumerable<(ClassDeclarationSyntax Syntax, INamedTypeSymbol Symbol)> Resolve(
+                ImmutableArray<GeneratorTarget> targets,
+                Compilation compilation)
+            {
+                foreach (var target in targets)
+                {
+                    if (!compilation.ContainsSyntaxTree(target.Syntax.SyntaxTree))
+                        continue;
+
+                    var model = compilation.GetSemanticModel(target.Syntax.SyntaxTree);
+                    if (model.GetDeclaredSymbol(target.Syntax) is INamedTypeSymbol symbol)
+                        yield return (target.Syntax, symbol);
+                }
+            }
+
+            private static bool IsCandidateClass(SyntaxNode node, CancellationToken cancellationToken)
+            {
+                var declaration = node as ClassDeclarationSyntax ?? node.FirstAncestorOrSelf<ClassDeclarationSyntax>();
+                return declaration != null && IsPartialClass(declaration);
+            }
+
+            private static GeneratorTarget? ToGeneratorTarget(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
+            {
+                var declaration = context.TargetNode as ClassDeclarationSyntax
+                    ?? context.TargetNode.FirstAncestorOrSelf<ClassDeclarationSyntax>();
+                if (declaration == null)
+                    return null;
+
+                return context.SemanticModel.GetDeclaredSymbol(declaration, cancellationToken) is INamedTypeSymbol symbol
+                    ? new GeneratorTarget(
+                        declaration,
+                        symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                        context.TargetNode is ClassDeclarationSyntax)
+                    : null;
+            }
+
+            /// <summary>
+            /// Collapses the per-attribute streams into one entry per type.
+            /// </summary>
+            /// <remarks>
+            /// Deduplication is by <see cref="GeneratorTarget.TypeKey"/> rather than by symbol: keying
+            /// on symbols would let the same type in twice whenever two cached entries hold symbols
+            /// from different compilations, and the second <c>AddSource</c> would then be rejected for
+            /// a duplicate hint name.
+            /// </remarks>
+            private static ImmutableArray<GeneratorTarget> Deduplicate(ImmutableArray<GeneratorTarget> targets)
+            {
+                var indexByType = new Dictionary<string, int>(StringComparer.Ordinal);
+                var result = new List<GeneratorTarget>(targets.Length);
+
+                foreach (var target in targets)
+                {
+                    if (indexByType.TryGetValue(target.TypeKey, out var index))
+                    {
+                        // A type split over several partial files arrives once per declaration. Keep
+                        // the one carrying a class-level attribute, since that is the declaration the
+                        // syntax-scoped writers need; otherwise the first one seen wins.
+                        if (!result[index].IsClassLevelAttribute && target.IsClassLevelAttribute)
+                            result[index] = target;
+                        continue;
+                    }
+
+                    indexByType.Add(target.TypeKey, result.Count);
+                    result.Add(target);
+                }
+
+                return ImmutableArray.CreateRange(result);
             }
         }
 
@@ -777,18 +963,6 @@ namespace VeloxDev.Generators.Base
             return typeSymbol.ToDisplayString(displayFormat);
         }
 
-        private static IncrementalValueProvider<(Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes)> GetFilteredValue(IncrementalGeneratorInitializationContext context, IncrementalValuesProvider<ClassDeclarationSyntax> classDeclarations)
-        {
-            IncrementalValueProvider<(Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes)> compilationAndClasses =
-                context.CompilationProvider.Combine(classDeclarations.Collect());
-            return compilationAndClasses;
-        }
-
-        private static ClassDeclarationSyntax GetClassDeclaration(GeneratorSyntaxContext context)
-        {
-            var classDeclaration = (ClassDeclarationSyntax)context.Node;
-            return classDeclaration;
-        }
     }
 
     /// <summary>

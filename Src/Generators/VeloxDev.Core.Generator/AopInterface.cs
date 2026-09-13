@@ -16,16 +16,21 @@ namespace VeloxDev.Generators
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            context.RegisterSourceOutput(Analizer.Filters.FilterContext(context), GenerateSource);
+            context.RegisterSourceOutput(
+                Analizer.Filters.Targets(context).Combine(context.CompilationProvider),
+                GenerateSource);
         }
 
-        private void GenerateSource(SourceProductionContext context, (Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes) input)
+        private void GenerateSource(SourceProductionContext context, (ImmutableArray<Analizer.Filters.GeneratorTarget> Targets, Compilation Compilation) input)
         {
-            foreach (var classDeclaration in input.Classes)
+            foreach (var (classDeclaration, classSymbol) in Analizer.Filters.Resolve(input.Targets, input.Compilation))
             {
-                SemanticModel model = input.Compilation.GetSemanticModel(classDeclaration.SyntaxTree);
-                var classSymbol = model.GetDeclaredSymbol(classDeclaration);
-                if (!AnalizeHelper.IsAopClass(classDeclaration) || classSymbol is null) continue;
+                if (!AnalizeHelper.IsAopClass(classSymbol)) continue;
+
+                // Mirror every attributed member of the type, not just the ones on the declaration
+                // this generator was handed: the interface has to match the proxy contract that
+                // AopWriter builds, and both now ignore which partial file a member came from.
+                var members = AnalizeHelper.Members(classSymbol).ToList();
 
                 string interfaceName = $"{classDeclaration.Identifier.Text}_{classSymbol.ContainingNamespace.ToDisplayString().Replace('.', '_')}_Aop";
                 var baseList = SyntaxFactory.BaseList(
@@ -38,7 +43,7 @@ namespace VeloxDev.Generators
                     .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
                     .WithBaseList(baseList);
 
-                foreach (var field in classDeclaration.Members.OfType<FieldDeclarationSyntax>()
+                foreach (var field in members.OfType<FieldDeclarationSyntax>()
                     .Where(fd => fd.AttributeLists.Any(atts => atts.Attributes.Any(att => att.ToString().Contains("Observable") || att.ToString().Contains("Property")))
                               && fd.AttributeLists.Any(atts => atts.Attributes.Any(att => att.ToString() == "AspectOriented"))))
                 {
@@ -65,7 +70,7 @@ namespace VeloxDev.Generators
                     }
                 }
 
-                foreach (var property in classDeclaration.Members.OfType<PropertyDeclarationSyntax>()
+                foreach (var property in members.OfType<PropertyDeclarationSyntax>()
                     .Where(p => p.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword))
                              && p.AttributeLists.Any(atts => atts.Attributes.Any(att => att.ToString() == "AspectOriented"))))
                 {
@@ -97,7 +102,7 @@ namespace VeloxDev.Generators
                     interfaceDeclaration = interfaceDeclaration.AddMembers(prop);
                 }
 
-                foreach (var method in classDeclaration.Members.OfType<MethodDeclarationSyntax>()
+                foreach (var method in members.OfType<MethodDeclarationSyntax>()
                     .Where(m => m.Modifiers.Any(mod => mod.IsKind(SyntaxKind.PublicKeyword))
                              && m.AttributeLists.Any(atts => atts.Attributes.Any(att => att.ToString() == "AspectOriented"))))
                 {

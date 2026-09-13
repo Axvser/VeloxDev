@@ -2,6 +2,7 @@
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
 using System.Text;
+using VeloxDev.Generators.Base;
 
 namespace VeloxDev.Generators.Writers
 {
@@ -12,16 +13,15 @@ namespace VeloxDev.Generators.Writers
         public override void Initialize(ClassDeclarationSyntax classDeclaration, INamedTypeSymbol namedTypeSymbol)
         {
             base.Initialize(classDeclaration, namedTypeSymbol);
-            ReadAopConfig(classDeclaration);
+            ReadAopConfig(namedTypeSymbol);
         }
 
-        private void ReadAopConfig(ClassDeclarationSyntax classDeclaration)
+        // Symbol-based: the [AspectOriented] members may live on a different partial declaration than
+        // the one this writer was handed, and detecting them from one declaration would silently emit
+        // nothing for the whole type.
+        private void ReadAopConfig(INamedTypeSymbol symbol)
         {
-            IsAop = classDeclaration.Members
-                .OfType<MemberDeclarationSyntax>()
-                .Any(member => member.AttributeLists
-                    .SelectMany(al => al.Attributes)
-                    .Any(attr => attr.Name.ToString() == "AspectOriented"));
+            IsAop = AnalizeHelper.IsAopClass(symbol);
         }
 
         public override bool CanWrite() => IsAop;

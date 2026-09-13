@@ -14,16 +14,17 @@ namespace VeloxDev.Generators
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            context.RegisterSourceOutput(Analizer.Filters.FilterContext(context), GenerateSource);
+            context.RegisterSourceOutput(
+                Analizer.Filters.Targets(context).Combine(context.CompilationProvider),
+                GenerateSource);
         }
 
-        public void GenerateSource(SourceProductionContext context, (Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes) input)
+        public void GenerateSource(SourceProductionContext context, (ImmutableArray<Analizer.Filters.GeneratorTarget> Targets, Compilation Compilation) input)
         {
-            var values = GetFilteredContext(input);
-            foreach (var kvp in values)
+            foreach (var (syntax, symbol) in Analizer.Filters.Resolve(input.Targets, input.Compilation))
             {
                 var writer = new CommandWriter();
-                writer.Initialize(kvp.Value, kvp.Key);
+                writer.Initialize(syntax, symbol);
                 if (writer.CanWrite())
                 {
                     context.AddSource(
@@ -33,21 +34,5 @@ namespace VeloxDev.Generators
             }
         }
 
-        private Dictionary<INamedTypeSymbol, ClassDeclarationSyntax> GetFilteredContext((Compilation Compilation, ImmutableArray<ClassDeclarationSyntax> Classes) input)
-        {
-            Dictionary<INamedTypeSymbol, ClassDeclarationSyntax> uniqueTargets = [];
-            foreach (var classDeclaration in input.Classes)
-            {
-                SemanticModel model = input.Compilation.GetSemanticModel(classDeclaration.SyntaxTree);
-                if (model.GetDeclaredSymbol(classDeclaration) is not INamedTypeSymbol classSymbol)
-                    continue;
-
-                if (!uniqueTargets.TryGetValue(classSymbol, out _))
-                {
-                    uniqueTargets.Add(classSymbol, classDeclaration);
-                }
-            }
-            return uniqueTargets;
-        }
     }
 }
