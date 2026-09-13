@@ -25,7 +25,14 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="8.0.0" />
+		<!-- Resolved from nuget.org in a normal build. A local generator change cannot be wired in
+		     here: an analyzer passed by ProjectReference never reaches WPF's generated
+		     *_wpftmp.csproj (it takes analyzers from the NuGet asset graph), so every WPF consumer
+		     fails with CS9248. Verify generator changes in a throwaway project that references the
+		     built DLLs and attaches bin\...\VeloxDev.Core.Generator.dll as <Analyzer>.
+		     This pins Generator 9.0.0, so VeloxDev.Core stops restoring until that package exists:
+		     publish VeloxDev.Core.Generator 9.0.0 BEFORE packing VeloxDev.Core 9.0.0. -->
+		<PackageReference Include="VeloxDev.Core.Generator" Version="9.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>
