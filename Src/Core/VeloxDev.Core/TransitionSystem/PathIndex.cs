@@ -4,24 +4,14 @@ namespace VeloxDev.TransitionSystem;
 /// Marks an index argument in a transition path, e.g. <c>Property(x =&gt; x.Items[PathIndex.Frozen(i)].Width, end)</c>.
 /// </summary>
 /// <remarks>
-/// An index argument that reads something able to change while the animation runs — a captured local, a property of
-/// the target such as <c>x.SelectedIndex</c> — is re-evaluated on <b>every frame</b> by default, so the path follows
-/// it: change the index and the remaining frames are written to the newly selected slot.
+/// An index argument that can change while the animation runs — a captured local, or a property of the target such
+/// as <c>x.SelectedIndex</c> — is re-evaluated on <b>every frame</b> by default, so the path follows it. The end
+/// value, though, was read once when the animation started, so a path that moves mid-flight writes an end value
+/// computed against the slot it started on. <see cref="Frozen{T}"/> pins the index to one slot instead, which is what
+/// you want whenever the end value must land where it was read from.
 /// <para>
-/// That default has one consequence worth knowing before relying on it. The end value is read once, when the
-/// animation starts, so a path that moves mid-flight writes an end value computed against the slot it started on.
-/// Wrapping the argument in <see cref="Frozen{T}"/> pins it instead: the index is evaluated once at start-up and the
-/// whole animation is anchored to that slot, which is what you want whenever the end value must land where it was
-/// read from.
-/// </para>
-/// <para>
-/// The call itself never executes — the parser recognises it structurally and unwraps its argument, so it is a
-/// marker rather than a value transform. Because the marker is part of the path's identity —
-/// <c>Items[i]</c> and <c>Items[Frozen(i)]</c> are two different paths, not one.
-/// </para>
-/// <para>
-/// A constant argument needs no marker: <c>Items[0]</c> cannot drift, and is treated as frozen whatever it is
-/// written as.
+/// The call never executes — the parser recognises it structurally and unwraps its argument — and it is part of the
+/// path's identity, so <c>Items[i]</c> and <c>Items[Frozen(i)]</c> are two different paths.
 /// </para>
 /// </remarks>
 public static class PathIndex

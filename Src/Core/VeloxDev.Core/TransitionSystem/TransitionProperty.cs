@@ -10,25 +10,14 @@ namespace VeloxDev.TransitionSystem.Abstractions;
 /// </summary>
 /// <remarks>
 /// The path is both the accessor (compiled once into a getter/setter delegate) and the <b>identity</b> of the value
-/// inside a <c>StateCore</c> — it is the key of a <c>ConcurrentDictionary</c>, and the same user lambda is parsed
-/// several times over (once by <c>SetValue</c>, again by <c>SetOptions</c>, again by <c>TryGetValue</c>). Equality is
-/// therefore load-bearing in production, not a nicety, and every part of it — the property segments and the index
-/// arguments alike — has to compare by value and hash in step with it.
+/// inside a <c>StateCore</c>: it is a dictionary key, and the same lambda is parsed several times over — once by
+/// <c>SetValue</c>, again by <c>SetOptions</c>, again by <c>TryGetValue</c>. Equality is therefore load-bearing, and
+/// the property segments and the index arguments alike have to compare by value and hash in step with it.
 /// <para>
-/// The same lambda may also be parsed by different targets: nothing in the identity may depend on a target.
-/// </para>
-/// <para>
-/// <b>Accessibility.</b> A path is judged by whether the member at its end can be read and written — never by how
-/// accessible that member is. Nothing here consults <c>BindingFlags</c>, and the compiled accessor reaches private
-/// and internal members just as well as public ones, so <c>private set</c>, <c>internal</c> and (for a lambda
-/// written inside the declaring type) <c>private</c> members all animate. What actually keeps a path out is the C#
-/// compiler, at the place the lambda is written: a member it will not let you name can never appear in the tree.
-/// The one entry that bypasses that is <see cref="FromProperty"/>, which takes any <c>PropertyInfo</c> you can
-/// obtain — including a non-public one.
-/// </para>
-/// <para>
-/// This is deliberate, not an oversight: reach is the point. A member the caller could already name is a member the
-/// caller may already animate, and narrowing this to public members would silently stop animations that work today.
+/// Nothing in the identity may depend on a target, and <b>accessibility is not consulted</b>: a path is judged by
+/// whether the member at its end can be read and written, never by how accessible it is. <c>private set</c> and
+/// <c>internal</c> members animate, and <see cref="FromProperty"/> takes any <c>PropertyInfo</c> you can obtain —
+/// deliberately, since narrowing that would silently stop animations that work today.
 /// </para>
 /// </remarks>
 public sealed class TransitionProperty : ITransitionProperty, IEquatable<TransitionProperty>

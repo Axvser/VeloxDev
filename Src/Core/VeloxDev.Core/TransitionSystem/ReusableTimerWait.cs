@@ -7,17 +7,13 @@ namespace VeloxDev.TransitionSystem.Abstractions;
 /// loop rather than one per wait.
 /// </summary>
 /// <remarks>
-/// The point is what is <em>not</em> allocated. Waiting with <c>await Task.Delay(interval, token)</c> builds a fresh
-/// <c>DelayPromise</c> every time and registers a fresh cancellation callback every time; measured against this
-/// class over 200 waits that is 65.7 bytes per wait against 0. The sampling loop waits once per animation per
-/// frame, so that is the one allocation left on a path this system has otherwise kept allocation-free.
+/// The point is what is <em>not</em> allocated: <c>await Task.Delay(interval, token)</c> builds a fresh
+/// <c>DelayPromise</c> and registers a fresh cancellation callback on every wait, while this reuses one timer and one
+/// registration for the whole loop. The sampling loop waits once per animation per frame, so that was the last
+/// allocation left on an otherwise allocation-free path — <c>ReusableTimerWaitTests</c> measures the difference.
 /// <para>
-/// It is the same <see cref="Timer"/> <c>Task.Delay</c> ends up in, so this changes what a wait costs and not when
-/// it lands — a timer cannot be more precise than the operating system's, and the timeline, not the timer, decides
-/// where a frame is drawn.
-/// </para>
-/// <para>
-/// <b>One loop per instance.</b> A single pending continuation is held, so it cannot serve two loops at once.
+/// It is the same <see cref="Timer"/> <c>Task.Delay</c> ends up in, so this changes what a wait costs and not when it
+/// lands. <b>One loop per instance</b>: a single pending continuation is held.
 /// </para>
 /// </remarks>
 internal sealed class ReusableTimerWait : IDisposable
