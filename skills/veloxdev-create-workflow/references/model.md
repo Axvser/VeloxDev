@@ -1,0 +1,241 @@
+# The model side — Tree, Node, Slot, Link
+
+Everything here is in `VeloxDev.Core`, namespace `VeloxDev.WorkflowSystem` (plus `VeloxDev.Core.WorkflowSystem.CompilerEx` for the engine contracts). No UI framework is involved.
+
+## The four components
+
+| Component | Attribute | Owns | Helper base |
+|---|---|---|---|
+| Tree | `[WorkflowBuilder.Tree<THelper>]` | `Layout`, `Nodes`, `Links`, `LinksMap`, `VirtualLink` | `TreeHelper<T>` |
+| Node | `[WorkflowBuilder.Node<THelper>]` | `Anchor`, `Size`, `Parent`, `Slots` | `NodeHelper<T>` |
+| Slot | `[WorkflowBuilder.Slot<THelper>]` | `Anchor`, `Channel`, `State`, `Parent`, `Targets`, `Sources` | `SlotHelper<T>` |
+| Link | `[WorkflowBuilder.Link<THelper>]` | `Sender`, `Receiver`, `IsVisible` | `LinkHelper<T>` |
+
+```csharp
+[WorkflowBuilder.Node<TickerHelper>(workSemaphore: 1)]
+public partial class TickerNode
+{
+    public TickerNode() => InitializeWorkflow();
+
+    [VeloxProperty] public partial QuickSlot OutputSlot { get; set; }
+}
+
+public class TickerHelper : NodeHelper<TickerNode>
+{
+    public override Task<object?> ReceiveAsync(ITaskContext context, CancellationToken ct)
+        => Task.FromResult<object?>("tick");
+}
+```
+
+`workSemaphore` is the concurrency capacity of the node's receive command; `1` matches the demo nodes.
+
+⚙ **Every generic parameter is the Helper type, and it is constrained `where T : IWorkflowXxxHelper, new()`.** There is no non-generic form of any of the four attributes.
+
+⚙ **The class must be `partial`, must call `InitializeWorkflow()` from its own constructor, and must be annotated.** The generator emits no constructor; a class that never calls `InitializeWorkflow()` compiles and then does nothing.
+
+Optional attribute arguments: `Tree(…, virtualLinkType, virtualSlotType)` overrides the transient drag link and its slots — both default to Core's `LinkDefaultViewModel` / `SlotDefaultViewModel`. `Link(slotType)` overrides the type of the `Sender`/`Receiver` the link creates.
+
+Geometry defaults for a node come from `[DefaultAnchor(h, v, layer)]` / `[DefaultSize(w, h)]` on the class.
+
+## What the generator emits
+
+Into `{ClassName}.g.cs`, for any of the four kinds:
+
+```csharp
+private IWorkflowXxxHelper workflowHelper = new <T>();
+public virtual IWorkflowXxxHelper Helper { get; protected set; }
+public string RuntimeId { get; protected set; } = Guid.NewGuid().ToString("N");
+
+protected virtual void EnsureWorkflowHelper() { … }     // swap in a different helper type
+protected virtual void InitializeWorkflowCore() { … }   // per-kind state
+public virtual IWorkflowXxxHelper GetHelper() => Helper;
+public virtual void InitializeWorkflow() { … }          // idempotent; three guard flags
+public virtual void SetHelper(IWorkflowXxxHelper helper) { … }  // uninstalls the old helper
+```
+
+⚙ The generated class implements `IWorkflowNodeViewModel` (or the Tree/Slot/Link interface) and `IWorkflowIdentifiable`. You never write those members.
+
+⚙ **`InitializeWorkflow()` is idempotent** — calling it from both a base and a derived constructor is safe.
+
+⚙ **`RuntimeId` has a `protected` setter on purpose.** Serialization keeps only writable properties, so a protected setter makes it a computed member that never reaches JSON; it is regenerated on load.
+
+Commands are generated lazily, one cached field per command:
+
+| Kind | Commands |
+|---|---|
+| Tree | `CreateNodeCommand`, `SetPointerCommand`, `ResetVirtualLinkCommand`, `SendConnectionCommand`, `ReceiveConnectionCommand`, `SubmitCommand`, `UndoCommand`, `RedoCommand` |
+| Node | `MoveCommand`, `SetAnchorCommand`, `SetSizeCommand`, `CreateSlotCommand`, `DeleteCommand`, `ReceiveCommand`, `BroadcastCommand`, `ReverseBroadcastCommand` |
+| Slot | `SetChannelCommand`, `SendConnectionCommand`, `ReceiveConnectionCommand`, `DeleteCommand` |
+| Link | `DeleteCommand` |
+
+Each forwards to a `protected virtual Task Xxx(object?, CancellationToken)` handler you may override; the default forwards to the helper.
+
+⚙ **The generated handlers are `virtual`, not `partial`.** You override them; there is no separate declaration to fill in.
+
+### Declaring slots on a node
+
+Two shapes, and the compiler tells you which is which:
+
+```csharp
+[VeloxProperty] public partial SlotViewModel InputSlot { get; set; }              // one slot
+[VeloxProperty] public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }  // a fan-out set
+```
+
+⚙ **Slot properties must be written as `[VeloxProperty] public partial T X { get; set; }`.** The generator synthesises the backing field as `_camelCase` and `InitializeWorkflowCore` references that exact name; a hand-written field with a different name breaks the generated init code.
+
+⚙ The setter carries the lifecycle: assigning a slot runs `OnWorkflowSlotRemoved(old)` / `OnWorkflowSlotAdded(value)`, and assigning a `SlotEnumerator` uninstalls the old one and installs the new one against the node.
+
+`InitializeWorkflowCore` registers each slot property against the node by its **backing field**, deliberately bypassing `CreateSlotCommand`, because the node is not in a tree yet.
+
+## The ViewModel / Helper split
+
+⚙ **The ViewModel holds state; the Helper holds behaviour.** A node's ViewModel is generated; its Helper is the class you write, and `ReceiveAsync` is where the node computes.
+
+⚙ `Helper.Component` is the back-reference (`protected set`). `NodeHelper<T>.ReceiveAsync` returns `null` and `AccessAsync` returns `true` by default — **an un-overridden node silently forwards nothing downstream.**
+
+`Install` / `Uninstall` bind the helper to its component; `GetStandardCommands()` gives a helper the command set it locks, clears and unlocks on `Closing` / `CloseAsync` / `Closed`.
+
+## Slots
+
+```csharp
+[Flags] public enum SlotChannel
+{
+    None = 0,
+    OneTarget = 1, OneSource = 2, OneBoth = OneTarget | OneSource,
+    MultipleTargets = 4, MultipleSources = 8, MultipleBoth = MultipleTargets | MultipleSources
+}
+```
+
+*Target* counts outgoing connections from this slot, *Source* incoming ones. Per direction the rule is `Multiple > One > None`.
+
+⚙ **The two default slot implementations disagree.** A generator-created slot body defaults to `SlotChannel.MultipleBoth`; the shipped `SlotDefaultViewModel` defaults to `SlotChannel.OneBoth`. If a node behaves differently from the demo, check which one it inherits.
+
+⚙ **Only `One*` channels ever auto-clean.** Connecting to a slot whose channel is `OneTarget`/`OneSource`/`OneBoth` removes the conflicting existing links first; `Multiple*` never removes anything. And the "clean the opposite direction too" case is gated on `HasFlag(OneBoth)` — literally both one-bits — so `MultipleBoth` does not trigger it.
+
+`SlotState` (`StandBy` / `Sender` / `Receiver` / both) is **derived from `Targets` and `Sources`**, never assigned by hand.
+
+### Connecting two slots
+
+```csharp
+tree.GetHelper().SendConnection(senderSlot);
+tree.GetHelper().ReceiveConnection(receiverSlot);
+```
+
+Two phases, and the whole connection is submitted as one undoable action.
+
+⚙ **All validation is on the receiver.** `SendConnection` only checks that the slot may send and cleans up its own capacity. `ReceiveConnection` runs, in order: can this slot receive → `tree.GetHelper().ValidateConnection(sender, receiver)` → reject same-node → clean up same-direction duplicates → clean up receiver capacity → create the link.
+
+⚙ **`TreeHelper.ValidateConnection` is virtual and returns `true`.** It is the single user-supplied connection predicate — override it for connection rules.
+
+⚙ **A slot must be attached to a tree**, and same-node connections are always refused.
+
+### Conditional slot sets
+
+For a node with a variable number of ports (a python worker whose ports depend on the script):
+
+```csharp
+[VeloxProperty]
+[SlotSelectors(typeof(PythonPortProvider))]
+public partial SlotEnumerator<SlotViewModel> InputSlots { get; set; }
+```
+
+`SlotEnumerator<TSlot>` holds `Items` (`ConditionalSlot<TSlot>` — a name, a value and a slot), a `SelectorType` and a `CurrentValue`. `SetSelector` accepts three shapes: an `enum` or `bool` `Type`, a fully-qualified type-name `string`, or an `ISlotProvider` returning named `SlotDefinition`s.
+
+⚙ **One undo entry per `SetSelector`; changing the value inside a selector type is live state, not a timeline point.**
+
+⚙ **`[SlotSelectors]` properties cannot be patched** — `PatchNodeProperties` refuses them and points at the dedicated tool. Slot-anchor notifications for these are posted one frame late on purpose, so container generation has finished first.
+
+## Links
+
+```csharp
+// The factory you override to use your own Link ViewModel:
+public virtual IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    => new LinkDefaultViewModel() { Sender = sender, Receiver = receiver };
+```
+
+⚙ There is **no public "connect these two nodes" API**. The canonical path is the two-phase `SendConnection` / `ReceiveConnection` protocol, which is also what the GUI drag uses.
+
+⚙ **Override `CreateLink` on your `TreeHelper`** to get your own link type into every connection the user makes.
+
+⚙ `Link.DeleteCommand` submits a symmetric pair; the link is removed from `Links`, `LinksMap` and both slots' `Targets`/`Sources` in one undo step.
+
+## The tree
+
+```csharp
+public TreeHelper()                { useVirtualization = false; }   // virtualization OFF
+public TreeHelper(double cellSize) { useVirtualization = true; … }  // ON, and starts the 10 fps tick
+```
+
+⚙ **The parameterless `TreeHelper` disables virtualization.** Only the `cellSize` overload turns it on, and only that one calls `EnableMap` and starts the `"TreeHelper"` loop. A graph that "renders everything always" is usually this.
+
+`TreeHelper<T>` owns:
+
+| Member | Meaning |
+|---|---|
+| `Viewport` | the visible region, **canvas-local**; writing it virtualizes synchronously |
+| `MarkDirty()` | request a deferred `Virtualize(Viewport)` + `BroadcastVisibleItemLayout()` at the next tick |
+| `VisibleItems` | the realized set |
+| `NodeAdded` / `NodeRemoved` / `LinkAdded` / `LinkRemoved` | structural events |
+| `Submit` / `Undo` / `Redo` / `ClearHistory` | thin forwards to the `StandardEx` layer |
+
+⚙ The deferred loop runs at **10 fps** (`[MonoBehaviour(channel: nameof(TreeHelper), fps: 10)]`) and only when dirty. `MarkDirty` is called for you by `SetAnchor`/`SetSize`/`Move`, by the scale tracker and by node/link collection changes.
+
+⚙ `BroadcastVisibleItemLayout()` re-raises `Anchor` and `Size` on every visible node. It exists because those getters are computed — after a re-virtualization the views have to be told to re-read them.
+
+## Undo and redo
+
+```csharp
+public readonly struct WorkflowActionPair(Action redo, Action undo)
+```
+
+⚠ **Redo comes first.** This is the field order, and getting it backwards produces an undo stack that does the opposite of what it says.
+
+```csharp
+tree.SubmitCommand.Execute(pair);       // from a GUI or an agent
+tree.GetHelper().Submit(pair);
+tree.UndoCommand.Execute(null);
+tree.RedoCommand.Execute(null);
+tree.GetHelper().ClearHistory();
+```
+
+`Submit` runs `Redo` **immediately** and pushes the pair onto the undo stack.
+
+⚙ **Each tree has its own history**, kept in a static `ConditionalWeakTable` keyed by the tree object. It is runtime state: **never serialized**, so a tree restored from JSON starts with an empty timeline, and `SetHelper` does not transfer it.
+
+⚙ **Exceptions inside a pair body are swallowed** to `Debug.WriteLine`. A pair whose `Undo` throws looks like a no-op, not a crash.
+
+Undoable: create node, create/delete slot, connect, delete node, delete link, `SetSelector`.
+**Not** undoable, by design: `SetChannel`, `SetAnchor`/`SetSize`/`Move` (the GUI drag writes these continuously), `SetPointer`, `ResetVirtualLink`, `Submit`/`Undo`/`Redo` themselves.
+
+## Serialization
+
+It lives in `VeloxDev.Core.Extension`, namespace `VeloxDev.MVVM.Serialization`, and is Newtonsoft-based.
+
+```csharp
+var json = tree.Serialize();
+await writer.WriteAsync(json);
+
+var restored = json.Deserialize<TreeViewModel>();          // or TryDeserialize, which never throws
+restored.Layout.UpdateCommand.Execute(null);               // recompute ActualSize / ActualOffset
+WorkflowSurfaceBehavior.Refresh(view);                     // re-bind the views
+```
+
+⚙ **Add `VeloxDev.Core.Extension` to save or load a graph.** `VeloxDev.Core` alone has no serializer.
+
+⚙ Settings are `TypeNameHandling.Auto` + `PreserveReferencesHandling.Objects` + `WritablePropertiesOnlyResolver` + a `DictionaryKeyConverter`. The last two are load-bearing: the resolver drops every read-only member, and the converter is what lets `LinksMap` — a dictionary keyed by *slot interfaces* — round-trip by `$ref` id instead of by string.
+
+⚙ **The JSON stores world coordinates**, not collapsed ones. `Anchor`/`Size` expand themselves back to world in `[OnSerializing]` and collapse again in `[OnSerialized]`, and push the deserialized values back through the owning node in `[OnDeserialized]` (because Newtonsoft writes the transient copy in place and skips the node's setter).
+
+⚙ `SlotEnumerator` has its own `[OnDeserializing]` (clear `Items`/`ConditionMap` — JSON.NET *appends* to an existing collection) and `[OnDeserialized]` (re-resolve `SelectorType` by name over the loaded assemblies, rebuild `ConditionMap`, re-register each slot with its parent node).
+
+⚙ The tree's default constructor runs `InitializeWorkflow()` during Newtonsoft construction, so the helper is already installed before properties are populated — do not fight it.
+
+## Pitfalls
+
+⚙ **`WorkflowGuard.Fail` throws only in DEBUG.** It is `[Conditional("DEBUG")]`, so in Release the entire guarded call site is erased and the guarded operation is a **silent no-op**. Guards cover: operating on a slot/node/link that is not attached to a tree, and `SetSelector` on an uninstalled enumerator.
+
+⚙ **The `Anchor`/`Size` getter is not the stored value.** See the SKILL's rule; the failure is either a lost write (at `Scale != 1`) or a write that notifies nothing (at `Scale == 1`). `WorkflowNodeEx.StandardMove` is the reference for converting a view-space delta into a world write.
+
+⚙ **Reference identity matters.** `StandardCreateSlot` uses `ReferenceEquals`, the generated `InitializeWorkflowCore` uses `Slots.Contains` — a slot ViewModel that overrides `Equals` can make the two paths disagree.
+
+⚙ **A detached component is a silent no-op in most helpers.** Operating on it with a guard in a Release build does nothing at all.
