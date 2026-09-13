@@ -33,6 +33,15 @@ internal static class SamplerProbe
     internal sealed class Target
     {
         public string Value { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 索引器那两条写的集合：两个 CSS 颜色字符串的槽。
+        /// </summary>
+        /// <remarks>
+        /// 浏览器里没有控件属性可写，目标就是这个对象 —— 所以"可索引的集合"也只能长在它身上。
+        /// 定长数组而不是 List：路径里的元素必须在写它之前就先存在。
+        /// </remarks>
+        public string[] Slots { get; } = [string.Empty, string.Empty];
     }
 
     /// <summary>一条采样器：把手令牌、它要写的属性、采样器本身，以及一对端点工厂。</summary>
@@ -69,7 +78,21 @@ internal static class SamplerProbe
         new(nameof(StringSampler),
             "CSS 颜色字符串：字符串没有分量可言，载荷取的是字符码点；t=0/1 直接给端点十六进制。",
             nameof(Target.Value), () => new StringSampler(), () => StartHex, () => EndHex),
+
+        // 两条索引器路径。验的是「路径落到哪个槽上」：Slots 的第 0 与第 1 个元素，用同一个采样器、
+        // 不同的端点，并行跑一次批量就该各落各的。下标是编译期常量，所以这条路径的身份是与值解耦的。
+        new("GradientStop0Color",
+            "索引器路径：写 Slots[0] —— 索引真的落到槽上，而不是被当成整条集合。",
+            null, () => new StringSampler(), () => StartHex, () => EndHex, Path: () => SlotsPath(0)),
+        new("GradientStop1Color",
+            "索引器路径：相邻下标必须互不覆盖（Slots[1]）—— 与上一行同一个采样器、同一刻并行跑。",
+            null, () => new StringSampler(), () => Slot1StartHex, () => Slot1EndHex, Path: () => SlotsPath(1)),
     ];
+
+    /// <summary>索引器那两条的第二个端点对：同一个集合的两个槽，两对颜色必须不同。</summary>
+    private const string Slot1StartHex = "#3C14C8FA";
+
+    private const string Slot1EndHex = "#D2D2280A";
 
     /// <summary>每条采样器的名字，也是它把手的令牌后缀。界面由它生成。</summary>
     internal static IReadOnlyList<string> SamplerNames { get; } = [.. Probes.Select(probe => probe.Name)];
@@ -103,6 +126,14 @@ internal static class SamplerProbe
     /// 缓存下来就没有这层疑问。
     /// </remarks>
     internal static TransitionProperty Path(string samplerName) => Paths[samplerName];
+
+    /// <summary>建一条 <c>Slots[i]</c>。下标是常量，所以这条路径的身份只由下标决定。</summary>
+    private static TransitionProperty SlotsPath(int index)
+        => TransitionProperty.TryCreate(
+            (Expression<Func<Target, string>>)(target => target.Slots[index]),
+            out var property)
+            ? property!
+            : throw new InvalidOperationException($"索引器路径 Slots[{index}] 建不出来。");
 
     private static readonly Dictionary<string, TransitionProperty> Paths =
         Probes.ToDictionary(

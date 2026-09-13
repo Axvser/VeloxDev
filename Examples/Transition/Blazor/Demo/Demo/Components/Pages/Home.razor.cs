@@ -275,6 +275,7 @@ public partial class Home : ComponentBase, IDisposable
             var name = sampler;
             _watches[name] = new SamplerProbe.LiveWatch();
             _batchFrames[name] = string.Empty;
+            _benchTargets[name] = new SamplerProbe.Target();
 
             _caseRows.Add(SamplerBench.SamplerRow(
                 name,
@@ -285,7 +286,7 @@ public partial class Home : ComponentBase, IDisposable
                 // 十几条各自写 over.live 只会互相覆盖，并发那一路走的是 over.batch。
                 () =>
                 {
-                    Transition.Exit(_benchTarget, IncludeMutual: true, IncludeNoMutual: true);
+                    Transition.Exit(Bench(name), IncludeMutual: true, IncludeNoMutual: true);
 
                     try
                     {
@@ -429,14 +430,14 @@ public partial class Home : ComponentBase, IDisposable
                 foreach (var sampler in SamplerProbe.SamplerNames)
                 {
                     var watch = _watches[sampler];
-                    var measurement = SamplerProbe.Read(_benchTarget, sampler);
+                    var measurement = SamplerProbe.Read(Bench(sampler), sampler);
                     watch.Observe(measurement.TypeTag, measurement.Components);
 
                     if (!watch.Settled) allSettled = false;
-                }
 
-                // 采样器那一行的元素就是屏幕上那块 swatch：它跟着目标走，批量这一路也照走。
-                _benchColor = _benchTarget.Value;
+                    // 这一行的元素就是屏幕上那块 swatch：它跟着自己那一份目标走，批量这一路也照走。
+                    _benchColors[sampler] = Bench(sampler).Value;
+                }
 
                 if (clock.Elapsed < SamplerProbe.BenchDuration
                     || (!allSettled && clock.Elapsed < SamplerProbe.BenchDuration + SamplerProbe.BenchSettleCap))
@@ -627,7 +628,12 @@ public partial class Home : ComponentBase, IDisposable
     private long _probeSequence;
 
     /// <summary>演示台的被写对象当前该是什么颜色 —— 就是 StringSampler 最后写出的那个 CSS 颜色。</summary>
-    private string _benchColor = "#808080";
+    /// <summary>每一行那块 swatch 的颜色：与目标一样，一行一个。</summary>
+    private readonly Dictionary<string, string> _benchColors = new(StringComparer.Ordinal);
+
+    /// <summary>这一行此刻该画成什么颜色。还没写过就退回中性灰。</summary>
+    private string BenchColor(string sampler)
+        => _benchColors.TryGetValue(sampler, out var color) ? color : "#808080";
 
     /// <summary>
     /// 演示台常驻的被写目标：真动画写它，那一行的 swatch 每帧读它。
@@ -636,7 +642,21 @@ public partial class Home : ComponentBase, IDisposable
     /// 桌面那几侧的目标是在屏控件，浏览器里没有"控件属性"可写，这个对象就是那个位置 ——
     /// 它和 <c>over.bench</c> 上真正生效的计算样式之间只隔一个 <c>_benchColor</c> 赋值。
     /// </remarks>
-    private readonly SamplerProbe.Target _benchTarget = new();
+    /// <summary>
+    /// 每一行演出用的目标：<b>一行一个</b>。
+    /// </summary>
+    /// <remarks>
+    /// 与桌面那六个平台"每行一个在屏元素"同构 —— 而且这不是风格问题。共用一个目标时，"全部启动"会逐行
+    /// 调用每一行的启动动作，后一条 Execute 立刻顶掉前一条（互斥语义）：前几行只画出一帧就被取消，
+    /// 观察窗口读到的就是那个冻结的起点值。
+    /// <para>
+    /// 实测：共用目标时批量那一路除最后一行外全部报"末值不等于 t=1 端点"，而只有一行时看不出来 ——
+    /// 那正是它一直没被发现的原因。每行一个之后全绿。
+    /// </para>
+    /// </remarks>
+    private readonly Dictionary<string, SamplerProbe.Target> _benchTargets = new(StringComparer.Ordinal);
+
+    private SamplerProbe.Target Bench(string sampler) => _benchTargets[sampler];
 
     // 只留一支演出用的定时器：连点两个把手时，后一次要能叫停前一次，否则两条采样器会同时往各自的格子里写。
     private System.Threading.Timer? _benchTimer;
@@ -680,8 +700,9 @@ public partial class Home : ComponentBase, IDisposable
     /// </remarks>
     private void StartSamplerAnimation(string sampler)
     {
+        var target = Bench(sampler);
         var property = SamplerProbe.Path(sampler);
-        property.SetValue(_benchTarget, SamplerProbe.Start(sampler));
+        property.SetValue(target, SamplerProbe.Start(sampler));
 
         // Effect 的其余默认值正是这里要的：FPS 60、不自动反向、只跑一趟 —— 于是末帧精确落在终点。
         var animation = Transition<SamplerProbe.Target>.Create()
@@ -690,7 +711,7 @@ public partial class Home : ComponentBase, IDisposable
         animation.GetState().SetValue(property, SamplerProbe.End(sampler));
         animation.GetState().SetInterpolator(property, SamplerProbe.Create(sampler));
 
-        animation.Execute(_benchTarget);
+        animation.Execute(target);
     }
 
     /// <summary>
@@ -708,7 +729,7 @@ public partial class Home : ComponentBase, IDisposable
     {
         _benchTimer?.Dispose();
         _benchTimer = null;
-        Transition.Exit(_benchTarget, IncludeMutual: true, IncludeNoMutual: true);
+        Transition.Exit(Bench(sampler), IncludeMutual: true, IncludeNoMutual: true);
 
         var watch = _watches[sampler];
         watch.Reset();
@@ -725,7 +746,7 @@ public partial class Home : ComponentBase, IDisposable
         }
 
         // 屏幕上那块 swatch 从起点色开始跟着走：点击那一刻先写一次，动画期间每一拍再跟着目标走。
-        _benchColor = _benchTarget.Value;
+        _benchColors[sampler] = Bench(sampler).Value;
 
         // 点击那一刻先落一份 seq，验收侧靠它把"新的"与"上一次剩下的"分开。
         _liveSnapshot = SamplerProbe.LiveWatch.Pending(sampler, sequence);
@@ -738,8 +759,8 @@ public partial class Home : ComponentBase, IDisposable
                 if (_disposed) return;
 
                 // 背景色永远跟着目标走：屏幕上看到的就是采样器最后写进目标的那一支。
-                _benchColor = _benchTarget.Value;
-                var measurement = SamplerProbe.Read(_benchTarget, sampler);
+                _benchColors[sampler] = Bench(sampler).Value;
+                var measurement = SamplerProbe.Read(Bench(sampler), sampler);
                 watch.Observe(measurement.TypeTag, measurement.Components);
 
                 if (clock.Elapsed >= SamplerProbe.BenchDuration
@@ -763,7 +784,7 @@ public partial class Home : ComponentBase, IDisposable
     {
         foreach (var sampler in SamplerProbe.SamplerNames)
         {
-            Transition.Exit(_benchTarget, IncludeMutual: true, IncludeNoMutual: true);
+            Transition.Exit(Bench(sampler), IncludeMutual: true, IncludeNoMutual: true);
         }
     }
 
@@ -778,11 +799,10 @@ public partial class Home : ComponentBase, IDisposable
     {
         foreach (var sampler in SamplerProbe.SamplerNames)
         {
-            Transition.Exit(_benchTarget, IncludeMutual: true, IncludeNoMutual: true);
-            SamplerProbe.Path(sampler).SetValue(_benchTarget, SamplerProbe.Start(sampler));
+            Transition.Exit(Bench(sampler), IncludeMutual: true, IncludeNoMutual: true);
+            SamplerProbe.Path(sampler).SetValue(Bench(sampler), SamplerProbe.Start(sampler));
+            _benchColors[sampler] = Bench(sampler).Value;
         }
-
-        _benchColor = _benchTarget.Value;
     }
 
     // -----------------------------------------------------------------------------------------------
@@ -925,9 +945,9 @@ public partial class Home : ComponentBase, IDisposable
 
         foreach (var sampler in SamplerProbe.SamplerNames)
         {
-            var now = SamplerProbe.Read(_benchTarget, sampler);
+            var now = SamplerProbe.Read(Bench(sampler), sampler);
 
-            if (!SamplerProbe.MatchesStart(_benchTarget, sampler)) away++;
+            if (!SamplerProbe.MatchesStart(Bench(sampler), sampler)) away++;
 
             if (_rowPrevious.TryGetValue(sampler, out var before)
                 && !SamplerProbe.SameComponents(before, now.Components))

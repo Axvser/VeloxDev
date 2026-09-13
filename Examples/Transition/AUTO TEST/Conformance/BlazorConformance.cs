@@ -18,12 +18,28 @@ internal static class BlazorConformance
     private const string StartHex = "#C8640080";
     private const string EndHex = "#F0B43240";
 
+    // 索引器那条占的第二个槽：另一对端点，否则两条路径的闭式解无从区分。
+    private const string Slot1StartHex = "#3C14C8FA";
+    private const string Slot1EndHex = "#D2D2280A";
+
     internal static IReadOnlyList<ConformanceEntry> All { get; } =
     [
         // 字符串：t == 0 与 t == 1 原样写回调用方给的字符串 —— 字符串是有损的，端点不可能被重新格式化成
         // "值相等"的另一种写法，所以这里直接返回两个端点常量。其余 t 才走颜色插值。
         new("StringSampler", "String", t => ClosedForm.CodePoints(
             CssAt(t, StartHex, EndHex, (200d, 100d, 0d), (240d, 180d, 50d), 128d, 64d))),
+
+        // 索引器路径的两条。它们验的不是采样器 —— 两条都用 StringSampler、闭式解与 StringSampler 一模一样 ——
+        // 而是路径落到了哪个槽上：Slots 的第 0 与第 1 个元素。
+        //
+        // 这两条必须同时在批量的帧报告里出现。索引器的 PropertyInfo 对每个下标都是同一个 "Item"，
+        // 下标不并入路径身份的话两条会合成一个状态条目，后声明的那条只会静默盖掉前一条 —— 而缺席是
+        // 批量那一路直接就报的。
+        new("GradientStop0Color", "String", t => ClosedForm.CodePoints(
+            CssAt(t, StartHex, EndHex, (200d, 100d, 0d), (240d, 180d, 50d), 128d, 64d))),
+
+        new("GradientStop1Color", "String", t => ClosedForm.CodePoints(
+            CssAt(t, Slot1StartHex, Slot1EndHex, (60d, 20d, 200d), (210d, 210d, 40d), 250d, 10d))),
 
     ];
 

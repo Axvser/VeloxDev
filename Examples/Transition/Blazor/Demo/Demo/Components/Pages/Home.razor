@@ -90,7 +90,7 @@
                                  计算样式，验收要读的就是这个元素的 background-color，挂在容器上会读到全透明。
                                  令牌带行名，和其余逐行令牌同一个形状 —— 采样器行不止一条，共用一个令牌会让
                                  按令牌取元素的那一侧解析到多个元素（Playwright 严格模式直接报错）。 -->
-                            <div class="bench-swatch" data-at="@($"over.bench.{row.Title}")" style="background-color:@_benchColor"></div>
+                            <div class="bench-swatch" data-at="@($"over.bench.{row.Title}")" style="background-color:@BenchColor(row.Title)"></div>
                         }
                         else
                         {
