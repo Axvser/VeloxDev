@@ -380,7 +380,7 @@ namespace VeloxDev.TimeLine
             /// <remarks>
             /// The bus is the one source of truth for the paused state, so this is what an animation anchored to the
             /// same transport observes too. Nothing polls: both loops park on the bus's signal, so a paused channel
-            /// costs no wake-ups at all rather than waking every <c>DEFAULT_PAUSE_DELAY_MS</c> of the way it used to.
+            /// costs no wake-ups at all — where it used to wake every 10 ms to re-read a flag.
             /// </remarks>
             public void Pause()
             {
@@ -463,7 +463,7 @@ namespace VeloxDev.TimeLine
                             _fixedSampler.Step = TimeSpan.FromMilliseconds(pendingInterval);
                         }
 
-                        // 停摆时 park 在总线上，而不是每 DEFAULT_PAUSE_DELAY_MS 醒来轮询一次。专用线程不能 await，
+                        // 停摆时 park 在总线上，而不是像以前那样每 10 ms 醒来轮询一次。专用线程不能 await，
                         // 所以这里同步阻塞：拿一条自有线程的阻塞换零唤醒是划算的，而取消会立刻穿透这个等待
                         // （总线会观察令牌），所以 StopAsync 不需要额外唤醒它。
                         if (!_bus.IsAdvancing)
