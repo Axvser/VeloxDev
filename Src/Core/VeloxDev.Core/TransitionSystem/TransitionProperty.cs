@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
@@ -581,6 +582,22 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
             GuardIndexExceptions(body, false), target, arguments, value).Compile();
     }
 
+    /// <summary>
+    /// Wraps one <see cref="PropertyInfo"/> as a path. Instances are memoized per property, so the same
+    /// <see cref="PropertyInfo"/> always yields the same path.
+    /// </summary>
+    /// <remarks>
+    /// Memoized because this is the reflection-driven entry point: the theme system rebuilds a path for every themed
+    /// property of every registered target on <em>every</em> switch, where a declaration-based path is built once and
+    /// held in a field. A fresh instance compiles its own getter and setter on first use, so without this a switch
+    /// over N elements pays N × properties expression compilations each time — measured at roughly two seconds of
+    /// UI-thread stall for a thousand two-property elements, before the first frame.
+    /// <para>
+    /// Sharing is safe: a property path is immutable, and <see cref="BindTo"/> returns the instance itself when there
+    /// are no index arguments to freeze, which is always the case here. The lazy compile is idempotent, so the worst
+    /// a concurrent first use can do is compile twice and discard one.
+    /// </para>
+    /// </remarks>
     public static TransitionProperty FromProperty(PropertyInfo propertyInfo)
     {
         if (propertyInfo is null)
@@ -588,8 +605,10 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
             throw new ArgumentNullException(nameof(propertyInfo));
         }
 
-        return new TransitionProperty([propertyInfo]);
+        return FromPropertyCache.GetOrAdd(propertyInfo, static info => new TransitionProperty([info]));
     }
+
+    private static readonly ConcurrentDictionary<PropertyInfo, TransitionProperty> FromPropertyCache = new();
 
     /// <summary>
     /// Declares a set of animatable member paths from expressions (for <see cref="ISampleable.GetAnimatableMembers"/>).
