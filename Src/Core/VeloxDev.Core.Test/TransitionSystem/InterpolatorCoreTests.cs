@@ -94,4 +94,118 @@ public class InterpolatorCoreTests
             InterpolatorCore.UnregisterInterpolator(typeof(CustomKey), out _);
         }
     }
+
+    // A small hierarchy to exercise the fallback: a framework property is very often declared as a subclass of the
+    // type an adapter registered, and matching the exact type alone leaves those paths silently unanimated.
+
+    private class Shape { }
+
+    private class Circle : Shape { }
+
+    private sealed class Dot : Circle { }
+
+    private interface ITinted { }
+
+    private interface ITagged { }
+
+    private class TintedCircle : Shape, ITinted { }
+
+    private sealed class TintedAndTagged : TintedCircle, ITagged { }
+
+    [TestMethod]
+    public void TryGetInterpolator_FallsBackToABaseClass()
+    {
+        var registered = new DoubleSampler();
+        InterpolatorCore.RegisterInterpolator(typeof(Shape), registered);
+        try
+        {
+            Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(Circle), out var result));
+            Assert.AreSame(registered, result);
+        }
+        finally
+        {
+            InterpolatorCore.UnregisterInterpolator(typeof(Shape), out _);
+        }
+    }
+
+    [TestMethod]
+    public void TryGetInterpolator_PrefersTheNearestBaseClass()
+    {
+        var near = new DoubleSampler();
+        var far = new FloatSampler();
+        InterpolatorCore.RegisterInterpolator(typeof(Shape), far);
+        InterpolatorCore.RegisterInterpolator(typeof(Circle), near);
+        try
+        {
+            Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(Dot), out var result));
+            Assert.AreSame(near, result);
+        }
+        finally
+        {
+            InterpolatorCore.UnregisterInterpolator(typeof(Circle), out _);
+            InterpolatorCore.UnregisterInterpolator(typeof(Shape), out _);
+        }
+    }
+
+    [TestMethod]
+    public void TryGetInterpolator_FallsBackToAnInterface()
+    {
+        var registered = new DoubleSampler();
+        InterpolatorCore.RegisterInterpolator(typeof(ITinted), registered);
+        try
+        {
+            // Avalonia registers IBrush and ITransform, so a property declared as the concrete brush has to reach the
+            // interface's sampler — a base-class walk alone would never find it.
+            Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(TintedCircle), out var result));
+            Assert.AreSame(registered, result);
+        }
+        finally
+        {
+            InterpolatorCore.UnregisterInterpolator(typeof(ITinted), out _);
+        }
+    }
+
+    [TestMethod]
+    public void TryGetInterpolator_PrefersABaseClassOverAnInterface()
+    {
+        var fromClass = new DoubleSampler();
+        var fromContract = new FloatSampler();
+        InterpolatorCore.RegisterInterpolator(typeof(Shape), fromClass);
+        InterpolatorCore.RegisterInterpolator(typeof(ITinted), fromContract);
+        try
+        {
+            Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(TintedCircle), out var result));
+            Assert.AreSame(fromClass, result);
+        }
+        finally
+        {
+            InterpolatorCore.UnregisterInterpolator(typeof(ITinted), out _);
+            InterpolatorCore.UnregisterInterpolator(typeof(Shape), out _);
+        }
+    }
+
+    [TestMethod]
+    public void TryGetInterpolator_WithTwoMatchingInterfaces_IsDeterministic()
+    {
+        var tagged = new DoubleSampler();
+        var tinted = new FloatSampler();
+        InterpolatorCore.RegisterInterpolator(typeof(ITagged), tagged);
+        InterpolatorCore.RegisterInterpolator(typeof(ITinted), tinted);
+        try
+        {
+            // Which one wins is arbitrary; that the same one wins every time is not. Reflection's own order is not
+            // specified, so the tie-break has to be explicit.
+            Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(TintedAndTagged), out var first));
+            Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(TintedAndTagged), out var second));
+            Assert.AreSame(first, second);
+
+            // The rule is name order, so ITagged < ITinted.
+            Assert.AreSame(tagged, first);
+        }
+        finally
+        {
+            InterpolatorCore.UnregisterInterpolator(typeof(ITinted), out _);
+            InterpolatorCore.UnregisterInterpolator(typeof(ITagged), out _);
+        }
+    }
 }

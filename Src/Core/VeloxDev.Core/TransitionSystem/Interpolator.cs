@@ -30,15 +30,54 @@ public abstract class InterpolatorCore
 
     public static ConcurrentDictionary<Type, ISampler> NativeInterpolators { get; protected set; } = [];
 
+    /// <summary>
+    /// Resolves the sampler for a type: the exact type first, then base classes nearest-first, then interfaces.
+    /// </summary>
+    /// <remarks>
+    /// A framework property is often declared as a subclass of what the adapter registered — a
+    /// <c>LinearGradientBrush</c> property against WPF's registered <c>Brush</c> — so an exact match would leave it
+    /// unanimated and report it unsampleable. Interfaces come last and are ordered by name, because reflection's own
+    /// order is not specified. The walk runs once per property per animation, never per frame.
+    /// </remarks>
     public static bool TryGetInterpolator(Type type, out ISampler? sampler)
     {
         if (NativeInterpolators.TryGetValue(type, out sampler))
         {
             return true;
         }
-        sampler = null;
-        return false;
+
+        for (var baseType = type.BaseType; baseType is not null; baseType = baseType.BaseType)
+        {
+            if (NativeInterpolators.TryGetValue(baseType, out sampler))
+            {
+                return true;
+            }
+        }
+
+        ISampler? matched = null;
+        string? matchedName = null;
+
+        foreach (var contract in type.GetInterfaces())
+        {
+            if (!NativeInterpolators.TryGetValue(contract, out var candidate) || candidate is null)
+            {
+                continue;
+            }
+
+            var name = contract.FullName ?? contract.Name;
+            if (matchedName is not null && string.CompareOrdinal(name, matchedName) >= 0)
+            {
+                continue;
+            }
+
+            matched = candidate;
+            matchedName = name;
+        }
+
+        sampler = matched;
+        return matched is not null;
     }
+
     public static bool RegisterInterpolator(Type type, ISampler sampler)
     {
         // Atomic last-writer-wins install. AddOrUpdate makes the update unconditional and atomic, so the
@@ -52,23 +91,14 @@ public abstract class InterpolatorCore
     }
 
     /// <summary>
-    /// Normalizes each animated property: reads the current value (start) and target value (end), resolves the
-    /// <see cref="ISampler"/> (custom override → registry), calls <see cref="ISampler.NormalizeStart"/> /
-    /// <see cref="ISampler.NormalizeEnd"/> to produce the endpoint values, and stores the stateless sampler with
-    /// the normalized endpoints in the <see cref="SamplerSet{TPriorityCore}"/>. A struct <see cref="ISampleable"/> is assembled
-    /// member by member here; reference types are never expanded — they are expressed through explicit member paths
-    /// or a dedicated <see cref="ISampler"/>.
+    /// Reads each animated property's current and target values, resolves its <see cref="ISampler"/> (override →
+    /// registry), and stores the normalized endpoints in the <see cref="SamplerSet{TPriorityCore}"/>. A struct
+    /// <see cref="ISampleable"/> is assembled member by member; reference types are never expanded.
     /// </summary>
     /// <remarks>
-    /// Frozen index arguments are resolved here, once, against <paramref name="target"/> — this is the first moment
-    /// a target exists. Everything else on the entry (the interpolator override, the options, the sampler lookup)
-    /// stays keyed by the <em>unbound</em> path, because that is how the declaration registered them; only the
-    /// property handed to the sampler is bound.
-    /// <para>
-    /// An override of this method that does not call the base loses the freeze silently: the unbound property
-    /// resolves its arguments too, so the two behave identically until a <see cref="PathIndex.Frozen{T}"/> argument
-    /// is involved.
-    /// </para>
+    /// Frozen index arguments are resolved here, once, against <paramref name="target"/> — the first moment a target
+    /// exists. Everything else stays keyed by the <em>unbound</em> path; only the property handed to the sampler is
+    /// bound. An override that does not call the base loses the freeze silently.
     /// </remarks>
     public virtual SamplerSet<TPriorityCore> Prepare<TPriorityCore>(object target, IFrameState state, ITransitionEffectCore effect, IUIThreadInspector<TPriorityCore> inspector)
     {
