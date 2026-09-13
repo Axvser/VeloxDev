@@ -147,7 +147,9 @@ Gives a POCO a Unity-style lifecycle — `Awake` / `Start` / `Update` / `LateUpd
 
 ⚙ Setting `e.Handled = true` stops the remaining behaviours for that frame.
 
-`MonoBehaviourManager` also offers `StopAsync`, `Pause`/`Resume`/`TogglePause`, `RestartAsync`, `SetTargetFPS`, `SetFixedUpdateInterval`, `SetTimeScale`, `ExecuteOnMainThread`, and the queries `IsRunning`, `IsPaused`, `ActiveBehaviorCount`, `SystemStatus`.
+`MonoBehaviourManager` also offers `StopAsync`, `Pause`/`Resume`/`TogglePause`, `RestartAsync`, `SetTargetFPS`, `SetFixedUpdateInterval`, `SetTimeScale`, `ExecuteOnMainThread`, `Bus` (the channel's time source — hand it to `Transition.Execute` to put an animation on the loop's clock), and the queries `IsRunning`, `IsPaused`, `ActiveBehaviorCount`, `SystemStatus`.
+
+⚙ `SetTimeScale` is the channel's playback **rate**, verbatim: it moves `DeltaTime` and `TotalTime` together, a negative value throws, and `0` freezes the clock — no frames arrive at all rather than frames carrying a zero delta.
 
 ⚙ **`IMonoBehaviour` and `InitializeMonoBehaviour` contain a zero-width space (U+200B) in their names.** C# ignores formatting characters when comparing identifiers, so typing them normally binds correctly — but the names do not survive a copy-paste, a rename tool or a highlight-search. If you implement the interface by hand, retype it rather than pasting it.
 
