@@ -103,11 +103,16 @@ internal static class BenchRunner
             // Both operations have to actually switch: a Jump or Transition to the theme already current is
             // rejected by the guard at the top of each, which would measure nothing.
             Collect();
-            var jumpAllocated = GC.GetTotalAllocatedBytes(true);
+            var beforeJump = GC.GetTotalAllocatedBytes(true);
             var jumpWatch = Stopwatch.StartNew();
             if (ThemeManager.Current != typeof(Light)) ThemeManager.Jump<Light>();
             else ThemeManager.Jump<Dark>();
             jumpWatch.Stop();
+
+            // Sampled here, not when the row is written: Jump is synchronous, and the row is assembled only after
+            // the animated switch below has also run — differencing against the pre-Jump snapshot there would
+            // attribute the whole animated switch to the jump.
+            var jumpAllocated = GC.GetTotalAllocatedBytes(true) - beforeJump;
 
             var toLight = ThemeManager.Current != typeof(Light);
 
@@ -136,7 +141,7 @@ internal static class BenchRunner
                 rep,
                 toLight ? "->Light" : "->Dark",
                 jumpWatch.Elapsed.TotalMilliseconds.ToString("F1"),
-                ((GC.GetTotalAllocatedBytes(true) - jumpAllocated) / 1024.0).ToString("F0"),
+                (jumpAllocated / 1024.0).ToString("F0"),
                 preparation.ToString("F1"),
                 total.ToString("F1"),
                 (total - preparation).ToString("F1"),
