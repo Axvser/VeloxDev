@@ -1,4 +1,5 @@
 using VeloxDev.TimeLine;
+using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
@@ -49,19 +50,30 @@ public abstract class TransitionInterpreterCore : IDisposable
 {
     protected CancellationTokenSource? cts = null;
     private ReusableTimerWait? _wait;
+    private FramePacerCore? _pacer;
+    private bool _pacerResolved;
 
     /// <summary>The arguments handed to every effect callback of one animation.</summary>
     public virtual TransitionEventArgs Args { get; set; } = new();
+
+    /// <summary>
+    /// The host's own frame pacer, or null to wait on the default thread-pool timer.
+    /// </summary>
+    /// <remarks>
+    /// Called at most once per interpreter, on its first frame, so an implementation may capture the current
+    /// thread's dispatcher — which is the thread the loop was started on. A host that owns a UI thread returns a
+    /// pacer that waits on that thread, so the loop stays there and its effect callbacks run there; see
+    /// <see cref="FramePacerCore"/> for why waiting is the only allocation-free way to achieve that.
+    /// </remarks>
+    protected virtual FramePacerCore? CreateFramePacer() => null;
 
     /// <summary>
     /// Arranges for <paramref name="continuation"/> to run once, no earlier than <paramref name="interval"/> from
     /// now, or as soon as <paramref name="cancellationToken"/> is cancelled.
     /// </summary>
     /// <remarks>
-    /// The default reuses one timer for the whole loop. A host whose framework can say when the next frame is — a
-    /// render tick on WPF, Avalonia or WinUI — overrides this to wake on that instead: the timeline is what makes a
-    /// frame correct, so this only decides how often the loop looks, and waking late is merely a frame drawn further
-    /// along.
+    /// The default reuses one timer for the whole loop. The timeline is what makes a frame correct, so this only
+    /// decides how often the loop looks: waking late is merely a frame drawn further along.
     /// <para>
     /// Must not block the calling thread, and must invoke <paramref name="continuation"/> exactly once — including
     /// when cancelled. An implementation that simply stopped calling back would park the loop for good; nothing else
@@ -69,7 +81,28 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// </para>
     /// </remarks>
     protected virtual void ArmNextFrame(Action continuation, TimeSpan interval, CancellationToken cancellationToken)
-        => (_wait ??= new ReusableTimerWait()).Schedule(continuation, interval, cancellationToken);
+    {
+        // 已经取消就立刻放行，不等一个间隔：否则一次 Stop 要等到下一帧才生效，而这里不必花任何代价。
+        if (cancellationToken.IsCancellationRequested)
+        {
+            continuation();
+            return;
+        }
+
+        if (!_pacerResolved)
+        {
+            _pacerResolved = true;
+            _pacer = CreateFramePacer();
+        }
+
+        if (_pacer is not null)
+        {
+            _pacer.Schedule(continuation, interval, cancellationToken);
+            return;
+        }
+
+        (_wait ??= new ReusableTimerWait()).Schedule(continuation, interval, cancellationToken);
+    }
 
     /// <summary>
     /// The awaitable the sampling loop waits through. Routed through <see cref="ArmNextFrame"/> so an override is
@@ -77,10 +110,17 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// </summary>
     /// <remarks>
     /// Implements <see cref="System.Runtime.CompilerServices.INotifyCompletion"/> and deliberately <b>not</b>
-    /// <c>ICriticalNotifyCompletion</c>: the compiler picks its await path by which of the two the awaiter offers,
-    /// and only the <c>INotifyCompletion</c> path makes the builder capture the caller's
-    /// <see cref="SynchronizationContext"/>. That is what keeps a loop started on the UI thread on the UI thread —
-    /// a default pacer resumes wherever its timer fired, so without this the effect's callbacks would move threads.
+    /// <c>ICriticalNotifyCompletion</c>, so the builder flows the caller's <see cref="ExecutionContext"/> into the
+    /// continuation instead of suppressing it.
+    /// <para>
+    /// That does <b>not</b> keep the loop on the UI thread, which is what this remark used to claim. Restoring the
+    /// <see cref="SynchronizationContext"/> is <c>Task</c>'s doing — it lives in <c>TaskAwaiter</c>, not in the
+    /// builder — so a custom awaiter's continuation resumes on whatever thread completed the wait. Measured
+    /// directly: an <c>INotifyCompletion</c>-only awaiter completed from the thread pool resumed on the pool, not on
+    /// the context it was awaited under. A loop started on a UI thread therefore drifts to a pool thread after its
+    /// first frame, and the effect's <c>Update</c>/<c>LateUpdate</c> callbacks run there; only the property writes
+    /// are marshalled, because <see cref="SamplerSet{TPriorityCore}.Apply"/> goes through the inspector.
+    /// </para>
     /// </remarks>
     internal readonly struct FrameWait(TransitionInterpreterCore interpreter, TimeSpan interval, CancellationToken token)
         : System.Runtime.CompilerServices.INotifyCompletion
@@ -98,7 +138,7 @@ public abstract class TransitionInterpreterCore : IDisposable
 
     /// <summary>
     /// Timeline-driven continuous sampling loop: the normalized time is the distance from the running pass's anchor
-    /// into the animation's <see cref="TransitionTimeline"/>, so <see cref="Task.Delay(TimeSpan)"/> is never a
+    /// into the animation's <see cref="ITimeSource"/>, so <see cref="Task.Delay(TimeSpan)"/> is never a
     /// timing source — its imprecision does not affect correctness. The yield interval is capped at
     /// <c>1000 / FPS</c> ms (<c>FPS</c> is a maximum sample rate, not a frame grid): this bounds the allocation rate
     /// and prevents the loop from flooding the UI render thread when the system timer resolution is fine (e.g.
@@ -163,27 +203,33 @@ public abstract class TransitionInterpreterCore : IDisposable
         // The pass starts at the timeline's present. This is an anchor rather than a reset, which is what lets
         // several animations share one timeline: starting a pass here cannot move any other animation, and a seek
         // is simply a different anchor.
-        run.PassAnchor = timeline.Now;
+        run.PassAnchor = timeline.Ticks;
 
         while (true)
         {
             if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
 
-            var gate = timeline.PauseGate;
-            if (gate is not null)
+            if (!timeline.IsAdvancing)
             {
                 // Draw the frozen position first, then park. Drawing first is what makes a seek while paused visible
-                // without resuming: the gate is replaced by a nudge, so the loop wakes, draws the new position and
+                // without resuming: the wait is replaced by a nudge, so the loop wakes, draws the new position and
                 // parks again. A plain pause therefore costs one frame and then no timer wake-ups at all.
-                EmitFrame(target, effect, durationMs, forward, timeline.Now - run.PassAnchor, apply);
-                await gate.Task.ConfigureAwait(false);
+                // IsAdvancing rather than IsPaused: a rate of zero freezes the timeline without pausing it, and this
+                // loop has to park for that too.
+                EmitFrame(target, effect, durationMs, forward, ToMilliseconds(timeline, timeline.Ticks - run.PassAnchor), apply);
+
+                // 不是 ConfigureAwait(false)：这里等的是一个 Task，所以把它投回捕获的上下文是有意义的。
+                // 注意这修不了整条循环的线程归属——见 FrameWait 的说明，自定义 awaiter 的续体不恢复
+                // SynchronizationContext，循环本来就已经不在启动它的上下文上了。这一处只保证暂停等待本身
+                // 不再额外把循环推向池线程。
+                await timeline.WaitWhileStalledAsync(cts.Token);
                 continue;
             }
 
             // A pass ends in exactly one place: at its far end. The timeline only ever moves forwards, so there is no
             // second bound to check.
-            var elapsedTicks = timeline.Now - run.PassAnchor;
-            if (EmitFrame(target, effect, durationMs, forward, elapsedTicks, apply)) return;
+            var elapsedTicks = timeline.Ticks - run.PassAnchor;
+            if (EmitFrame(target, effect, durationMs, forward, ToMilliseconds(timeline, elapsedTicks), apply)) return;
 
             // Read per frame rather than once up front, so a rate cap can be tightened on a running animation.
             // FPS is a *maximum* sample rate, not a frame grid: an animation slows down when it is lowered and
@@ -194,7 +240,14 @@ public abstract class TransitionInterpreterCore : IDisposable
     }
 
     /// <summary>
-    /// Draws one frame at <paramref name="elapsedTicks"/> into the pass. Returns true when the pass has reached its
+    /// Converts a tick distance into the milliseconds the pass position is expressed in, using the source's own
+    /// unit rather than a framework clock's.
+    /// </summary>
+    private static double ToMilliseconds(ITimeSource source, long ticks)
+        => TimeConversion.TicksToMilliseconds(ticks, source.TicksPerSecond);
+
+    /// <summary>
+    /// Draws one frame at <paramref name="elapsedMs"/> into the pass. Returns true when the pass has reached its
     /// far end.
     /// </summary>
     private bool EmitFrame(
@@ -202,10 +255,9 @@ public abstract class TransitionInterpreterCore : IDisposable
         ITransitionEffectCore effect,
         double durationMs,
         bool forward,
-        long elapsedTicks,
+        double elapsedMs,
         Action<double> apply)
     {
-        var elapsedMs = TransitionTime.TicksToMs(elapsedTicks);
         if (elapsedMs < 0d) elapsedMs = 0d;
 
         var rawT = durationMs <= 0d ? 1d : elapsedMs / durationMs;
@@ -247,6 +299,8 @@ public abstract class TransitionInterpreterCore : IDisposable
             oldCts.Cancel();
         }
 
+        _pacer?.Dispose();
+        _pacer = null;
         _wait?.Dispose();
         _wait = null;
 

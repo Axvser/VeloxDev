@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using VeloxDev.MonoBehaviour;
+using VeloxDev.Timing;
 
 namespace VeloxDev.TimeLine
 {
@@ -10,7 +11,6 @@ namespace VeloxDev.TimeLine
         #region Constants
 
         private const int MIN_SLEEP_MS = 1;
-        private const int DEFAULT_PAUSE_DELAY_MS = 10;
         private const int DEFAULT_RESTART_CHECK_INTERVAL_MS = 5;
         private const int RESTART_SHUTDOWN_TIMEOUT_MS = 1000;
         private const int RESTART_QUEUE_CLEAR_TIMEOUT_MS = 500;
@@ -24,14 +24,12 @@ namespace VeloxDev.TimeLine
         private const int DEFAULT_OBJECT_POOL_SIZE = 50;
         private const int MAX_CONFIG_CACHE_DURATION_MS = 1000;
 
-        private const float MIN_TIME_SCALE = 0f;
-        private const float MAX_TIME_SCALE = 10f;
         private const float DEFAULT_TIME_SCALE = 1.0f;
         private const int MIN_UPDATE_INTERVAL_MS = 1;
         private const int MAX_UPDATE_INTERVAL_MS = 1000;
 
-        // Spin threshold: below this millisecond count use pure spinning; above use Thread.Sleep(1) + tail spin
-        private const int SPIN_ONLY_THRESHOLD_MS = 2;
+        // 睡多久就查一次令牌：既不忙等，也不让一次停止等上一整个间隔（最低目标帧率下预算有一秒长）。
+        private const int MAX_SLEEP_CHUNK_MS = 50;
 
         public const string DEFAULT_CHANNEL = "default";
 
@@ -62,16 +60,10 @@ namespace VeloxDev.TimeLine
         private sealed class ConfigChangeRequest
         {
             public int? TargetFPS;
-            public int? FixedUpdateInterval;
-            public float? TimeScale;
-            public bool? PauseState;
 
             public void Reset()
             {
                 TargetFPS = null;
-                FixedUpdateInterval = null;
-                TimeScale = null;
-                PauseState = null;
             }
         }
 
@@ -105,24 +97,39 @@ namespace VeloxDev.TimeLine
 
         #region LoopChannel
 
-        private sealed class LoopChannel(string name)
+        private sealed class LoopChannel
         {
-            public readonly string Name = name;
+            public readonly string Name;
 
             private readonly ConcurrentDictionary<int, BehaviorWrapper> _behaviors = new();
             private readonly ConcurrentQueue<IMonoBehaviour> _addQueue = new();
             private readonly ConcurrentQueue<IMonoBehaviour> _removeQueue = new();
             private readonly ConcurrentQueue<ConfigChangeRequest> _configQueue = new();
             private readonly ConcurrentQueue<Action> _mainThreadQueue = new();
-            private readonly ConcurrentQueue<FrameEventArgs> _fixedUpdateEvents = new();
 
             private volatile bool _isRunning;
-            private volatile bool _isPaused;
-            private long _timeScaleBits = BitConverter.DoubleToInt64Bits(DEFAULT_TIME_SCALE);
+
+            /// <summary>
+            /// The channel's transport. Pause, resume and rate all live here rather than in channel fields, and
+            /// exposing it is what lets an animation share this channel's clock: one <c>Pause()</c> then stops the
+            /// frame callbacks and the animations together, and the rate multiplies both.
+            /// </summary>
+            private readonly ITimeSourceControl _bus = TimerCore.CreateTimeSource<ITimeSourceControl>();
+
+            /// <summary>Best-effort interval sampling: what each frame is told has elapsed.</summary>
+            private readonly IUncompensatedTimeSampler _updateSampler;
+
+            /// <summary>Fixed-step sampling for FixedUpdate, whose push count has to come out exact.</summary>
+            private readonly ICompensatingTimeSampler _fixedSampler;
+
+            /// <summary>
+            /// A step handed in from another thread, consumed by the fixed loop on its own thread. Zero means nothing
+            /// is pending — a step of zero is not a legal value, so it is free to mean "empty".
+            /// </summary>
+            private int _pendingFixedIntervalMs;
+
             private int _targetFPS = DEFAULT_TARGET_FPS;
-            private int _fixedUpdateInterval = DEFAULT_FIXED_UPDATE_INTERVAL_MS;
             private long _totalTimeTicks;
-            private long _lastFrameTimestamp;
             private int _currentFPS;
             private int _fpsCounter;
             private long _fpsLastUpdateTimestamp;
@@ -151,7 +158,14 @@ namespace VeloxDev.TimeLine
             private volatile BehaviorWrapper[] _cachedWrappers = [];
             private volatile bool _wrappersNeedSort;
 
-            private readonly Stopwatch _frameTimer = new();
+            public LoopChannel(string name)
+            {
+                Name = name;
+                _updateSampler = TimerCore.CreateTimeSampler<IUncompensatedTimeSampler>(_bus);
+                _fixedSampler = TimerCore.CreateTimeSampler<ICompensatingTimeSampler>(_bus);
+                // 步长显式取自渠道自己的默认值，而不是依赖注册表恰好配了一样的数字。
+                _fixedSampler.Step = TimeSpan.FromMilliseconds(DEFAULT_FIXED_UPDATE_INTERVAL_MS);
+            }
 
             public event EventHandler? Started;
             public event EventHandler? Paused;
@@ -161,21 +175,27 @@ namespace VeloxDev.TimeLine
             #region Public properties
 
             public bool IsRunning => _isRunning;
-            public bool IsPaused => _isPaused;
+            public bool IsPaused => _bus.IsPaused;
             public int CurrentFPS => _currentFPS;
             public int TargetFPS => Volatile.Read(ref _targetFPS);
             public TimeSpan TotalTime => TimeSpan.FromTicks(Interlocked.Read(ref _totalTimeTicks));
             public long TotalTimeMs => (long)TotalTime.TotalMilliseconds;
             public long TotalFrames => Interlocked.Read(ref _totalFrames);
             public int ActiveBehaviorCount => _behaviors.Count;
-            public float TimeScale => (float)BitConverter.Int64BitsToDouble(Interlocked.Read(ref _timeScaleBits));
-            public string SystemStatus => !_isRunning ? "Stopped" : _isPaused ? "Paused" : "Running";
+            public float TimeScale => (float)_bus.Rate;
+            public string SystemStatus => !_isRunning ? "Stopped" : _bus.IsPaused ? "Paused" : "Running";
 
+            /// <summary>This channel's transport, so a consumer can anchor to the same clock the frames advance on.</summary>
+            public ITimeSourceControl Bus => _bus;
+
+            // 停摆中的循环仍然活着：它 park 在总线上等唤醒而不是空转，于是「最近有没有活动」这个判据在暂停时
+            // 必然为假。不改的话，暂停超过 THREAD_INACTIVITY_TIMEOUT_MS 就会把一条好线程报成已死，
+            // RestartAsync 也会因此等不到关闭确认而走 ForceCleanup。
             public bool IsUpdateThreadAlive => _isRunning && _isUpdateThreadActive &&
-                IsRecentActivity(Interlocked.Read(ref _updateThreadLastActivityTimestamp));
+                (!_bus.IsAdvancing || IsRecentActivity(Interlocked.Read(ref _updateThreadLastActivityTimestamp)));
 
             public bool IsFixedUpdateThreadAlive => _isRunning && _isFixedUpdateThreadActive &&
-                IsRecentActivity(Interlocked.Read(ref _fixedUpdateThreadLastActivityTimestamp));
+                (!_bus.IsAdvancing || IsRecentActivity(Interlocked.Read(ref _fixedUpdateThreadLastActivityTimestamp)));
 
             #endregion
 
@@ -190,24 +210,33 @@ namespace VeloxDev.TimeLine
                 _configQueue.Enqueue(req);
             }
 
+            /// <summary>
+            /// Sets the interval between FixedUpdate pushes.
+            /// </summary>
+            /// <remarks>
+            /// Handed to the fixed loop rather than applied here, and deliberately not through the config queue: that
+            /// queue is drained by the <em>update</em> loop, and the sampler is owned by the fixed one. Writing
+            /// <c>Step</c> from the update thread would race <c>Advance</c> over the accumulator it resets, which is
+            /// worse than the single field this used to be. The fixed loop picks the value up on its own thread.
+            /// </remarks>
             public void SetFixedUpdateInterval(int intervalMs)
             {
                 if (intervalMs < MIN_UPDATE_INTERVAL_MS || intervalMs > MAX_UPDATE_INTERVAL_MS) return;
-                var req = _configRequestPool.Get();
-                req.Reset();
-                req.FixedUpdateInterval = intervalMs;
-                _configQueue.Enqueue(req);
+                Volatile.Write(ref _pendingFixedIntervalMs, intervalMs);
             }
 
-            public void SetTimeScale(float timeScale)
-            {
-                if (timeScale < MIN_TIME_SCALE) timeScale = MIN_TIME_SCALE;
-                if (timeScale > MAX_TIME_SCALE) timeScale = MAX_TIME_SCALE;
-                var req = _configRequestPool.Get();
-                req.Reset();
-                req.TimeScale = timeScale;
-                _configQueue.Enqueue(req);
-            }
+            /// <summary>
+            /// Sets the channel's rate, which is the bus's rate verbatim.
+            /// </summary>
+            /// <remarks>
+            /// Applied straight to the bus instead of through the config queue: the bus serialises its own writers,
+            /// and the queue existed only because the rate used to be a channel field the loop had to own. It also
+            /// follows the bus's rule rather than a channel-local one — no clamping, and a negative rate is rejected
+            /// rather than silently ignored. A rate of zero freezes the clock, which parks both loops rather than
+            /// leaving them running against a clock that never moves.
+            /// </remarks>
+            /// <exception cref="ArgumentOutOfRangeException"><paramref name="timeScale"/> is negative.</exception>
+            public void SetTimeScale(float timeScale) => _bus.SetRate(timeScale);
 
             public void ExecuteOnMainThread(Action action) => _mainThreadQueue.Enqueue(action);
 
@@ -248,16 +277,23 @@ namespace VeloxDev.TimeLine
                 if (_isRunning) return;
 
                 _isRunning = true;
-                _isPaused = false;
                 _isUpdateThreadActive = false;
                 _isFixedUpdateThreadActive = false;
                 Interlocked.Exchange(ref _updateThreadLastActivityTimestamp, 0);
                 Interlocked.Exchange(ref _fixedUpdateThreadLastActivityTimestamp, 0);
 
                 _cts = new CancellationTokenSource();
-                _lastFrameTimestamp = GetTimestamp();
-                _fpsLastUpdateTimestamp = _lastFrameTimestamp;
-                _frameTimer.Restart();
+
+                // 采样器重新锚定到「现在」：这就是原来那句 _lastFrameTimestamp = GetTimestamp()，只是累计量
+                // 现在归采样器所有。不清的话，重启后的第一帧会带上整个停机时间。
+                _updateSampler.Reset();
+                _fixedSampler.Reset();
+
+                // 启动要清掉上一个生命周期留下的暂停，与旧实现的 _isPaused = false 对齐。不清的话，
+                // 一个「暂停中被停掉」的渠道重启后会立刻 park，再也跑不起来。
+                _bus.Resume();
+
+                _fpsLastUpdateTimestamp = GetTimestamp();
 
                 RebuildCachedWrappers();
 
@@ -296,12 +332,14 @@ namespace VeloxDev.TimeLine
                 if (!_isRunning) return;
 
                 _isRunning = false;
-                _isPaused = false;
                 _isUpdateThreadActive = false;
                 _isFixedUpdateThreadActive = false;
 
+                // 与旧实现的 _isPaused = false 对齐：停下的渠道不留一个暂停状态给下一个生命周期。
+                // 注意这不会解除 rate 为 0 造成的冻结——那不是一个暂停，只有把 rate 调回非零才行。
+                _bus.Resume();
+
                 _cts.Cancel();
-                _frameTimer.Stop();
 
                 try
                 {
@@ -336,17 +374,31 @@ namespace VeloxDev.TimeLine
                 Stopped?.Invoke(this, EventArgs.Empty);
             }
 
+            /// <summary>
+            /// Freezes the channel: no frame callbacks, no fixed pushes, and no time accrued, for as long as it lasts.
+            /// </summary>
+            /// <remarks>
+            /// The bus is the one source of truth for the paused state, so this is what an animation anchored to the
+            /// same transport observes too. Nothing polls: both loops park on the bus's signal, so a paused channel
+            /// costs no wake-ups at all rather than waking every <c>DEFAULT_PAUSE_DELAY_MS</c> of the way it used to.
+            /// </remarks>
             public void Pause()
             {
-                if (!_isRunning || _isPaused) return;
-                _isPaused = true;
+                if (!_isRunning || _bus.IsPaused) return;
+                _bus.Pause();
                 Paused?.Invoke(this, EventArgs.Empty);
             }
 
+            /// <summary>Lets a paused channel run again, at the rate it was last set to.</summary>
+            /// <remarks>
+            /// After a rate of zero this lifts the pause without making the clock advance, so the channel stays
+            /// parked; only a non-zero rate starts it. That is the bus's rule, and it is deliberately not papered
+            /// over here.
+            /// </remarks>
             public void Resume()
             {
-                if (!_isRunning || !_isPaused) return;
-                _isPaused = false;
+                if (!_isRunning || !_bus.IsPaused) return;
+                _bus.Resume();
                 Resumed?.Invoke(this, EventArgs.Empty);
             }
 
@@ -386,7 +438,7 @@ namespace VeloxDev.TimeLine
                 if (behavior != null) _removeQueue.Enqueue(behavior);
             }
 
-            public void TogglePause() { if (_isPaused) Resume(); else Pause(); }
+            public void TogglePause() { if (_bus.IsPaused) Resume(); else Pause(); }
 
             #endregion
 
@@ -397,41 +449,55 @@ namespace VeloxDev.TimeLine
                 _isFixedUpdateThreadActive = true;
                 Interlocked.Exchange(ref _fixedUpdateThreadLastActivityTimestamp, GetTimestamp());
 
-                long lastFixedUpdateTime = GetTimestamp();
-
                 try
                 {
                     while (_isRunning && !token.IsCancellationRequested)
                     {
                         Interlocked.Exchange(ref _fixedUpdateThreadLastActivityTimestamp, GetTimestamp());
 
-                        if (_isPaused)
+                        // 步长只能在这条线程上落：采样器归它所有（理由见 SetFixedUpdateInterval）。
+                        var pendingInterval = Volatile.Read(ref _pendingFixedIntervalMs);
+                        if (pendingInterval != 0)
                         {
-                            PrecisionSleep(TimeSpan.FromMilliseconds(DEFAULT_PAUSE_DELAY_MS), token);
+                            Volatile.Write(ref _pendingFixedIntervalMs, 0);
+                            _fixedSampler.Step = TimeSpan.FromMilliseconds(pendingInterval);
+                        }
+
+                        // 停摆时 park 在总线上，而不是每 DEFAULT_PAUSE_DELAY_MS 醒来轮询一次。专用线程不能 await，
+                        // 所以这里同步阻塞：拿一条自有线程的阻塞换零唤醒是划算的，而取消会立刻穿透这个等待
+                        // （总线会观察令牌），所以 StopAsync 不需要额外唤醒它。
+                        if (!_bus.IsAdvancing)
+                        {
+                            _bus.WaitWhileStalledAsync(token).GetAwaiter().GetResult();
                             continue;
                         }
 
-                        var currentTime = GetTimestamp();
-                        var interval = Volatile.Read(ref _fixedUpdateInterval);
-                        var elapsed = currentTime - lastFixedUpdateTime;
-
-                        if (elapsed >= MillisecondsToStopwatchTicks(interval))
+                        // 一次调用可能欠好几步（一段停顿之后欠的），要全部推完。旧实现推完一次就把基准设成
+                        // 当前时间，超出的余数直接消失——推送总数于是永久少于墙钟，相位也跟着漂。
+                        var count = _fixedSampler.Advance(out var sample);
+                        if (count > 0)
                         {
-                            var fixedFrameArgs = CreateFrameEventArgs((int)elapsed);
-                            ExecuteBehaviorsFixedUpdateSync(fixedFrameArgs, token);
+                            // 每一步的 Total 是自己的步序号乘步长，而不是把最后一次的读数重复 N 遍。
+                            var stepTicks = _fixedSampler.Step.Ticks;
+                            var firstStep = sample.Step - count + 1;
 
-                            if (!fixedFrameArgs.Handled)
-                                _fixedUpdateEvents.Enqueue(fixedFrameArgs);
-                            else
+                            for (var i = 0; i < count; i++)
+                            {
+                                var fixedFrameArgs = CreateFrameEventArgs(
+                                    sample.Delta,
+                                    TimeSpan.FromTicks((firstStep + i) * stepTicks));
+                                ExecuteBehaviorsFixedUpdateSync(fixedFrameArgs, token);
+
+                                // 直接还池。这里原来把它塞进一个跨线程队列，由 update 循环取出再还池——
+                                // 一次往返，而那条队列从不把参数交给任何人，纯粹是浪费。
                                 _frameEventArgsPool.Return(fixedFrameArgs);
-
-                            lastFixedUpdateTime = currentTime;
+                            }
                         }
 
-                        var nextUpdateTime = lastFixedUpdateTime + MillisecondsToStopwatchTicks(interval);
-                        var waitTime = nextUpdateTime - GetTimestamp();
-                        if (waitTime > 0)
-                            PrecisionSleep(ConvertStopwatchTicksToTimeSpan(waitTime), token);
+                        // 睡到下一个步边界。采样器欠着步时这个值是零，于是立刻再推一批——限速的追赶就是这么展开的。
+                        var wait = _fixedSampler.TimeToNextStep;
+                        if (wait > TimeSpan.Zero)
+                            Sleep(wait, token);
                     }
                 }
                 catch (OperationCanceledException) { }
@@ -452,31 +518,31 @@ namespace VeloxDev.TimeLine
                     {
                         Interlocked.Exchange(ref _updateThreadLastActivityTimestamp, GetTimestamp());
 
-                        if (_isPaused)
+                        if (!_bus.IsAdvancing)
                         {
-                            PrecisionSleep(TimeSpan.FromMilliseconds(DEFAULT_PAUSE_DELAY_MS), token);
+                            _bus.WaitWhileStalledAsync(token).GetAwaiter().GetResult();
                             continue;
                         }
 
                         var frameStartTime = GetTimestamp();
                         ProcessMainThreadOperations();
 
-                        var deltaTime = CalculateDeltaTime(frameStartTime);
-                        if (deltaTime <= 0)
+                        // 无偿采样：总线没前进就没有帧可推。暂停期不累计，所以恢复后的第一帧也不会带上整段暂停。
+                        var sample = _updateSampler.Sample();
+                        if (sample.Delta == TimeSpan.Zero)
                         {
-                            PrecisionSleep(TimeSpan.FromMilliseconds(MIN_SLEEP_MS), token);
+                            Sleep(TimeSpan.FromMilliseconds(MIN_SLEEP_MS), token);
                             continue;
                         }
 
-                        var frameArgs = CreateFrameEventArgs(deltaTime);
-                        DrainFixedUpdateEvents();
+                        var frameArgs = CreateFrameEventArgs(sample.Delta, sample.Total);
 
                         ExecuteBehaviorsUpdateSync(frameArgs, token);
                         ExecuteBehaviorsLateUpdateSync(frameArgs, token);
 
                         _frameEventArgsPool.Return(frameArgs);
 
-                        UpdatePerformanceStats(frameStartTime, deltaTime);
+                        UpdatePerformanceStats(frameStartTime, sample.Total);
                         FrameRateControlSync(frameStartTime, token);
                         Interlocked.Increment(ref _totalFrames);
                     }
@@ -494,43 +560,52 @@ namespace VeloxDev.TimeLine
                 _isFixedUpdateThreadActive = true;
                 Interlocked.Exchange(ref _fixedUpdateThreadLastActivityTimestamp, GetTimestamp());
 
-                long lastFixedUpdateTime = GetTimestamp();
-
                 try
                 {
                     while (_isRunning && !token.IsCancellationRequested)
                     {
                         Interlocked.Exchange(ref _fixedUpdateThreadLastActivityTimestamp, GetTimestamp());
 
-                        if (_isPaused)
+                        // 步长只能在这条线程上落：采样器归它所有（理由见 SetFixedUpdateInterval）。
+                        var pendingInterval = Volatile.Read(ref _pendingFixedIntervalMs);
+                        if (pendingInterval != 0)
                         {
-                            await Task.Delay(DEFAULT_PAUSE_DELAY_MS, token).ConfigureAwait(false);
+                            Volatile.Write(ref _pendingFixedIntervalMs, 0);
+                            _fixedSampler.Step = TimeSpan.FromMilliseconds(pendingInterval);
+                        }
+
+                        // 停摆时的等待是异步的，所以这条路径连线程都不占。
+                        if (!_bus.IsAdvancing)
+                        {
+                            await _bus.WaitWhileStalledAsync(token).ConfigureAwait(false);
                             continue;
                         }
 
-                        var currentTime = GetTimestamp();
-                        var interval = Volatile.Read(ref _fixedUpdateInterval);
-                        var elapsed = currentTime - lastFixedUpdateTime;
-
-                        if (elapsed >= MillisecondsToStopwatchTicks(interval))
+                        var count = _fixedSampler.Advance(out var sample);
+                        if (count > 0)
                         {
-                            var fixedFrameArgs = CreateFrameEventArgs((int)elapsed);
-                            ExecuteBehaviorsFixedUpdateSync(fixedFrameArgs, token);
+                            var stepTicks = _fixedSampler.Step.Ticks;
+                            var firstStep = sample.Step - count + 1;
 
-                            if (!fixedFrameArgs.Handled)
-                                _fixedUpdateEvents.Enqueue(fixedFrameArgs);
-                            else
+                            for (var i = 0; i < count; i++)
+                            {
+                                var fixedFrameArgs = CreateFrameEventArgs(
+                                    sample.Delta,
+                                    TimeSpan.FromTicks((firstStep + i) * stepTicks));
+                                ExecuteBehaviorsFixedUpdateSync(fixedFrameArgs, token);
+
+                                // 直接还池。这里原来把它塞进一个跨线程队列，由 update 循环取出再还池——
+                                // 一次往返，而那条队列从不把参数交给任何人，纯粹是浪费。
                                 _frameEventArgsPool.Return(fixedFrameArgs);
-
-                            lastFixedUpdateTime = currentTime;
+                            }
                         }
 
-                        var nextUpdateTime = lastFixedUpdateTime + MillisecondsToStopwatchTicks(interval);
-                        var waitTicks = nextUpdateTime - GetTimestamp();
-                        if (waitTicks > 0)
+                        var wait = _fixedSampler.TimeToNextStep;
+                        if (wait > TimeSpan.Zero)
                         {
-                            var waitMs = (int)Math.Max(1, StopwatchTicksToMilliseconds(waitTicks));
-                            await Task.Delay(waitMs, token).ConfigureAwait(false);
+                            await Task.Delay(
+                                (int)Math.Max(1, wait.TotalMilliseconds),
+                                token).ConfigureAwait(false);
                         }
                         else
                         {
@@ -556,37 +631,40 @@ namespace VeloxDev.TimeLine
                     {
                         Interlocked.Exchange(ref _updateThreadLastActivityTimestamp, GetTimestamp());
 
-                        if (_isPaused)
+                        if (!_bus.IsAdvancing)
                         {
-                            await Task.Delay(DEFAULT_PAUSE_DELAY_MS, token).ConfigureAwait(false);
+                            await _bus.WaitWhileStalledAsync(token).ConfigureAwait(false);
                             continue;
                         }
 
                         var frameStartTime = GetTimestamp();
                         ProcessMainThreadOperations();
 
-                        var deltaTime = CalculateDeltaTime(frameStartTime);
-                        if (deltaTime <= 0)
+                        var sample = _updateSampler.Sample();
+                        if (sample.Delta == TimeSpan.Zero)
                         {
                             await Task.Delay(MIN_SLEEP_MS, token).ConfigureAwait(false);
                             continue;
                         }
 
-                        var frameArgs = CreateFrameEventArgs(deltaTime);
-                        DrainFixedUpdateEvents();
+                        var frameArgs = CreateFrameEventArgs(sample.Delta, sample.Total);
 
                         ExecuteBehaviorsUpdateSync(frameArgs, token);
                         ExecuteBehaviorsLateUpdateSync(frameArgs, token);
 
                         _frameEventArgsPool.Return(frameArgs);
 
-                        UpdatePerformanceStats(frameStartTime, deltaTime);
+                        UpdatePerformanceStats(frameStartTime, sample.Total);
 
                         var frameElapsed = GetTimestamp() - frameStartTime;
                         var frameTarget = _cachedTargetFrameDurationTicks;
                         if (frameElapsed < frameTarget)
                         {
-                            var waitMs = (int)Math.Max(1, StopwatchTicksToMilliseconds((long)(frameTarget - frameElapsed)));
+                            var waitMs = (int)Math.Max(
+                                1,
+                                TimeConversion.TicksToMilliseconds(
+                                    (long)(frameTarget - frameElapsed),
+                                    TimeConversion.DefaultTicksPerSecond));
                             await Task.Delay(waitMs, token).ConfigureAwait(false);
                         }
                         else
@@ -664,7 +742,8 @@ namespace VeloxDev.TimeLine
             private BehaviorWrapper[] GetCachedWrappers()
             {
                 var currentTime = GetTimestamp();
-                if (_wrappersNeedSort || currentTime - Interlocked.Read(ref _lastConfigCheckTimestamp) > MillisecondsToStopwatchTicks(MAX_CONFIG_CACHE_DURATION_MS))
+                if (_wrappersNeedSort || currentTime - Interlocked.Read(ref _lastConfigCheckTimestamp) >
+                    TimeConversion.MillisecondsToTicks(MAX_CONFIG_CACHE_DURATION_MS, TimeConversion.DefaultTicksPerSecond))
                 {
                     RebuildCachedWrappers();
                     Interlocked.Exchange(ref _lastConfigCheckTimestamp, currentTime);
@@ -691,17 +770,13 @@ namespace VeloxDev.TimeLine
             {
                 while (_configQueue.TryDequeue(out var config))
                 {
+                    // 目标帧率走队列是为了让这个字段和下面那个缓存一起改：它们必须同时生效，
+                    // 而两者都只有 update 循环会读。
                     if (config.TargetFPS.HasValue)
                     {
                         Volatile.Write(ref _targetFPS, config.TargetFPS.Value);
                         _cachedTargetFrameDurationTicks = (double)Stopwatch.Frequency / config.TargetFPS.Value;
                     }
-                    if (config.FixedUpdateInterval.HasValue)
-                        Volatile.Write(ref _fixedUpdateInterval, config.FixedUpdateInterval.Value);
-                    if (config.TimeScale.HasValue)
-                        Interlocked.Exchange(ref _timeScaleBits, BitConverter.DoubleToInt64Bits(config.TimeScale.Value));
-                    if (config.PauseState.HasValue)
-                        _isPaused = config.PauseState.Value;
 
                     config.Reset();
                     _configRequestPool.Return(config);
@@ -741,64 +816,57 @@ namespace VeloxDev.TimeLine
                 if (removed) _wrappersNeedSort = true;
             }
 
+            /// <summary>
+            /// Builds the arguments for one frame. Both times come from a <see cref="TimeSample"/>, so the rate has
+            /// already been applied by the clock rather than scaled here afterwards — which is also why
+            /// <c>DeltaTime</c> is the virtual interval and <c>TotalTime</c> excludes everything spent stalled.
+            /// </summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private FrameEventArgs CreateFrameEventArgs(long deltaTime)
+            private FrameEventArgs CreateFrameEventArgs(TimeSpan delta, TimeSpan total)
             {
-                var ts = (float)BitConverter.Int64BitsToDouble(Interlocked.Read(ref _timeScaleBits));
                 var frameArgs = _frameEventArgsPool.Get();
-                frameArgs.DeltaTime = ScaleDuration(ConvertStopwatchTicksToTimeSpan(deltaTime), ts);
-                frameArgs.TotalTime = TimeSpan.FromTicks(Interlocked.Read(ref _totalTimeTicks));
+                frameArgs.DeltaTime = delta;
+                frameArgs.TotalTime = total;
                 frameArgs.CurrentFPS = _currentFPS;
                 frameArgs.TargetFPS = Volatile.Read(ref _targetFPS);
                 frameArgs.Handled = false;
                 return frameArgs;
             }
 
-            private void DrainFixedUpdateEvents()
-            {
-                while (_fixedUpdateEvents.TryDequeue(out var fixedEvent))
-                    _frameEventArgsPool.Return(fixedEvent);
-            }
-
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private void FrameRateControlSync(long frameStartTime, CancellationToken token)
             {
+                // 目标帧率约束的是采样节奏，不是虚拟时钟，所以这里量的是墙钟——rate 减半不应该让帧率也减半。
                 var elapsed = GetTimestamp() - frameStartTime;
                 var target = _cachedTargetFrameDurationTicks;
                 if (elapsed < target)
                 {
                     var sleepTime = (long)(target - elapsed);
-                    if (sleepTime > 0) PrecisionSleep(ConvertStopwatchTicksToTimeSpan(sleepTime), token);
+                    if (sleepTime > 0)
+                        Sleep(TimeConversion.TicksToTimeSpan(sleepTime, TimeConversion.DefaultTicksPerSecond), token);
                 }
             }
 
             /// <summary>
-            /// High-precision sleep: uses Thread.Sleep(1) for long waits to save CPU, with a tail spin for precision.
+            /// Waits out <paramref name="duration"/> without spinning.
             /// </summary>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private void PrecisionSleep(TimeSpan duration, CancellationToken token)
+            /// <remarks>
+            /// Nothing here needs sub-millisecond promptness. Correctness belongs to the samplers: FixedUpdate repays every
+            /// step it owes however late it is asked, and Update is not compensated at all, so a late wake means a frame or
+            /// a step arriving late — never one lost, and never a wrong interval. What the tail spin this replaced bought
+            /// was cadence precision, and it paid for it with a busy-wait on both loops on every frame.
+            /// <para>
+            /// Slept in chunks so a stop is noticed within <see cref="MAX_SLEEP_CHUNK_MS"/> instead of after a whole
+            /// interval: at the lowest target FPS a frame budget is a second long, and a stop would otherwise wait it out.
+            /// </para>
+            /// </remarks>
+            private static void Sleep(TimeSpan duration, CancellationToken token)
             {
-                if (duration <= TimeSpan.Zero) return;
-
-                var targetTicks = _frameTimer.ElapsedTicks + ConvertTimeSpanToStopwatchTicks(duration);
-
-                // Long-wait phase: Thread.Sleep(1) has about 1-2ms real precision, saving CPU
-                if (duration > TimeSpan.FromMilliseconds(SPIN_ONLY_THRESHOLD_MS))
-                {
-                    var sleepUntilTicks = targetTicks - MillisecondsToStopwatchTicks(SPIN_ONLY_THRESHOLD_MS);
-                    while (_frameTimer.ElapsedTicks < sleepUntilTicks)
-                    {
-                        if (token.IsCancellationRequested) return;
-                        Thread.Sleep(1);
-                    }
-                }
-
-                // Tail spin: high-precision wait for the last ~2ms
-                var sw = new SpinWait();
-                while (_frameTimer.ElapsedTicks < targetTicks)
+                var chunk = TimeSpan.FromMilliseconds(MAX_SLEEP_CHUNK_MS);
+                for (var remaining = duration; remaining > TimeSpan.Zero; remaining -= chunk)
                 {
                     if (token.IsCancellationRequested) return;
-                    sw.SpinOnce();
+                    Thread.Sleep(remaining < chunk ? remaining : chunk);
                 }
             }
 
@@ -836,20 +904,20 @@ namespace VeloxDev.TimeLine
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static long GetTimestamp() => Stopwatch.GetTimestamp();
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private long CalculateDeltaTime(long currentTime)
+            /// <summary>
+            /// Publishes the total the sampler just reported, rather than accumulating deltas here.
+            /// </summary>
+            /// <remarks>
+            /// The total is the clock's, so it excludes everything spent stalled and never inherits a lump of it —
+            /// which is what the old accumulate-deltas form did on the first frame after a resume. The rate is
+            /// already in it too, since the bus applies it before anything is sampled.
+            /// </remarks>
+            private void UpdatePerformanceStats(long frameStartTime, TimeSpan total)
             {
-                var last = Volatile.Read(ref _lastFrameTimestamp);
-                if (last <= 0) return MillisecondsToStopwatchTicks(1);
-                return Math.Max(1L, currentTime - last);
-            }
-
-            private void UpdatePerformanceStats(long frameStartTime, long deltaTime)
-            {
-                Interlocked.Add(ref _totalTimeTicks, ConvertStopwatchTicksToTimeSpanTicks(deltaTime));
-                Volatile.Write(ref _lastFrameTimestamp, frameStartTime);
+                Interlocked.Exchange(ref _totalTimeTicks, total.Ticks);
                 _fpsCounter++;
 
+                // FPS 量的是墙钟，所以这里用泵的开始时刻而不是虚拟时间。
                 if (frameStartTime - _fpsLastUpdateTimestamp >= Stopwatch.Frequency)
                 {
                     _currentFPS = _fpsCounter;
@@ -859,42 +927,15 @@ namespace VeloxDev.TimeLine
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static TimeSpan ScaleDuration(TimeSpan duration, float scale)
-            {
-                if (scale <= 0f || duration <= TimeSpan.Zero)
-                    return TimeSpan.Zero;
-
-                return TimeSpan.FromTicks((long)(duration.Ticks * scale));
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static bool IsRecentActivity(long lastActivityTimestamp)
             {
                 if (lastActivityTimestamp <= 0)
                     return false;
 
-                return StopwatchTicksToMilliseconds(GetTimestamp() - lastActivityTimestamp) < THREAD_INACTIVITY_TIMEOUT_MS;
+                return TimeConversion.TicksToMilliseconds(
+                    GetTimestamp() - lastActivityTimestamp,
+                    TimeConversion.DefaultTicksPerSecond) < THREAD_INACTIVITY_TIMEOUT_MS;
             }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static long MillisecondsToStopwatchTicks(int milliseconds)
-                => (long)(milliseconds * (double)Stopwatch.Frequency / 1000d);
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static long ConvertTimeSpanToStopwatchTicks(TimeSpan duration)
-                => (long)(duration.Ticks * (double)Stopwatch.Frequency / TimeSpan.TicksPerSecond);
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static TimeSpan ConvertStopwatchTicksToTimeSpan(long stopwatchTicks)
-                => TimeSpan.FromTicks(ConvertStopwatchTicksToTimeSpanTicks(stopwatchTicks));
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static long ConvertStopwatchTicksToTimeSpanTicks(long stopwatchTicks)
-                => (long)(stopwatchTicks * (double)TimeSpan.TicksPerSecond / Stopwatch.Frequency);
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static double StopwatchTicksToMilliseconds(long stopwatchTicks)
-                => stopwatchTicks * 1000d / Stopwatch.Frequency;
 
             private static void SafeExecute(Action action)
             {
@@ -908,15 +949,11 @@ namespace VeloxDev.TimeLine
                 _fpsCounter = 0;
                 _fpsLastUpdateTimestamp = 0;
                 Interlocked.Exchange(ref _totalFrames, 0);
-                Volatile.Write(ref _lastFrameTimestamp, 0);
                 Interlocked.Exchange(ref _lastConfigCheckTimestamp, 0);
             }
 
             private void ClearQueues()
             {
-                while (_fixedUpdateEvents.TryDequeue(out var args))
-                    _frameEventArgsPool.Return(args);
-
                 while (_configQueue.TryDequeue(out var config))
                 {
                     config.Reset();
@@ -1094,6 +1131,19 @@ namespace VeloxDev.TimeLine
 
         public static float TimeScale(string channel = DEFAULT_CHANNEL)
             => _channels.TryGetValue(channel, out var c) ? c.TimeScale : DEFAULT_TIME_SCALE;
+
+        /// <summary>
+        /// The time source a channel's frames advance on, or null when that channel does not exist yet.
+        /// </summary>
+        /// <remarks>
+        /// This is what lets an animation share a channel's transport: passing it to
+        /// <c>Transition.Execute(target, bus, ...)</c> anchors the animation to the same clock, so one
+        /// <c>Pause()</c> on the channel stops the frame callbacks and the animation together and the channel's rate
+        /// multiplies both. Null is the honest answer for a channel that was never started — a query must not create
+        /// one as a side effect.
+        /// </remarks>
+        public static ITimeSourceControl? Bus(string channel = DEFAULT_CHANNEL)
+            => _channels.TryGetValue(channel, out var c) ? c.Bus : null;
 
         public static string SystemStatus(string channel = DEFAULT_CHANNEL)
             => _channels.TryGetValue(channel, out var c) ? c.SystemStatus : "Stopped";

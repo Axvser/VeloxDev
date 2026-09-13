@@ -33,6 +33,12 @@ namespace VeloxDev.TransitionSystem
         }
 
         /// <summary>
+        /// The queue captured from the UI thread, if it has been captured yet — for a consumer that has to schedule
+        /// on it but was not itself called from the UI thread.
+        /// </summary>
+        internal static DispatcherQueue? CapturedQueue => Volatile.Read(ref _dispatcherQueue);
+
+        /// <summary>
         /// Lazily gets the global DispatcherQueue: captures it automatically the first time it is called on the UI thread.
         /// Calling GetForCurrentThread() from a background thread only returns null, with no side effects.
         /// </summary>

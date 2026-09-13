@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
@@ -30,7 +31,7 @@ public abstract class StateSnapshotCore<T> : StateSnapshotCore where T : class
     /// several animations staying in lockstep without any of them knowing about the others.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="timeline"/> is null.</exception>
-    public void Execute(T target, TransitionTimeline timeline, bool CanMutualTask = true)
+    public void Execute(T target, ITimeSourceControl timeline, bool CanMutualTask = true)
     {
         if (timeline is null)
         {
@@ -108,6 +109,6 @@ public abstract class StateSnapshotCore
         where T : StateSnapshotCore, new();
     internal abstract T CoreAwaitThen<T>(TimeSpan timeSpan)
         where T : StateSnapshotCore, new();
-    internal abstract void CoreExecute(object target, bool CanMutualTask = true, TransitionTimeline? timeline = null);
+    internal abstract void CoreExecute(object target, bool CanMutualTask = true, ITimeSourceControl? timeline = null);
     internal abstract void CoreValidate();
 }

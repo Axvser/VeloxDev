@@ -1,4 +1,5 @@
 ﻿using System.Threading;
+using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
@@ -72,7 +73,7 @@ public sealed class SamplerSet<TPriorityCore>
     /// set built outside the scheduler — a test driving the interpreter directly — keeps a private run on its own
     /// timeline, which nothing controls, so the sampling loop never has to handle a null one.
     /// </summary>
-    internal TransitionRun Run => _run ??= new TransitionRun(new TransitionTimeline());
+    internal TransitionRun Run => _run ??= new TransitionRun(TimerCore.CreateTimeSource<ITimeSourceControl>());
 
     internal void SetRun(TransitionRun run) => _run = run;
 

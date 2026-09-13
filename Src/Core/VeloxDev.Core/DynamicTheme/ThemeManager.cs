@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using VeloxDev.Timing;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 
@@ -97,7 +98,7 @@ namespace VeloxDev.DynamicTheme
         /// <param name="themeType">target theme</param>
         /// <param name="effect">transition effect</param>
         /// <remarks>
-        /// Every target of one switch is anchored to a single shared <see cref="TransitionTimeline"/>, so the
+        /// Every target of one switch is anchored to a single shared <see cref="ITimeSourceControl"/>, so the
         /// timeline control the transition system already exposes works on it unchanged: pausing, seeking or
         /// re-rating any one target moves the whole switch, because there is only one transport to move.
         /// <para>
@@ -232,7 +233,7 @@ namespace VeloxDev.DynamicTheme
 
             // 整场共用一条时间轴：所有目标锚在同一个 transport 上，于是对任一目标 Pause / Seek / SetRate 都会同时
             // 移动全部目标。这就是「不新增控制面、直接用既有 Transition.*」能够成立的全部原因。
-            var timeline = new TransitionTimeline();
+            var timeline = TimerCore.CreateTimeSource<ITimeSourceControl>();
             var runs = new List<SwitchTarget>(planned.Count);
             var faulted = false;
 

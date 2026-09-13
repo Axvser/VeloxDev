@@ -1,6 +1,8 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Threading;
+using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
@@ -69,12 +71,17 @@ public abstract class TransitionCore
         => ApplyToRuns(target, IncludeMutual, IncludeNoMutual, static run => run.Timeline.Resume());
 
     /// <summary>
-    /// Changes how fast <paramref name="target"/>'s animations run, without moving their position. Zero pauses.
+    /// Changes how fast <paramref name="target"/>'s animations run, without moving their position. Zero freezes
+    /// them without pausing them; a non-zero rate starts them again.
     /// </summary>
     /// <remarks>
     /// The rate multiplies elapsed time, so it cannot be changed mid-pass without the position jumping — the
     /// timeline rebases first, which is why a change during playback is seamless. A rate given while paused is
     /// remembered and takes effect on <see cref="Resume{T}"/>.
+    /// <para>
+    /// A zero rate is not a pause: <see cref="IsPaused{T}"/> stays false, and <see cref="Resume{T}"/> lifts the
+    /// pause without making the clock advance, so a consumer stays parked until the rate is non-zero again.
+    /// </para>
     /// <para>
     /// Time only ever moves forwards: there is no reverse playback, and a negative rate is rejected rather than
     /// clamped. To go back to a point, <see cref="Seek{T}(T, TimeSpan, bool, bool)"/> there.
@@ -163,12 +170,12 @@ public abstract class TransitionCore
     }
 
     private static void SeekRun(TransitionRun run, TimeSpan position)
-        => run.PassAnchor = run.Timeline.Now - TransitionTime.MsToTicks(position.TotalMilliseconds);
+        => run.PassAnchor = run.Timeline.Ticks - TimeConversion.SpanToTicks(position, run.Timeline.TicksPerSecond);
 
     private static TimeSpan PositionOf(TransitionRun run)
     {
-        var elapsedMs = TransitionTime.TicksToMs(run.Timeline.Now - run.PassAnchor);
-        return elapsedMs > 0d ? TimeSpan.FromMilliseconds(elapsedMs) : TimeSpan.Zero;
+        var elapsed = run.Timeline.Ticks - run.PassAnchor;
+        return elapsed > 0L ? TimeConversion.TicksToTimeSpan(elapsed, run.Timeline.TicksPerSecond) : TimeSpan.Zero;
     }
 
     /// <summary>
@@ -308,7 +315,7 @@ public class TransitionCore<
         return state.Clone();
     }
 
-    internal override async void CoreExecute(object target, bool CanMutualTask = true, TransitionTimeline? timeline = null)
+    internal override async void CoreExecute(object target, bool CanMutualTask = true, ITimeSourceControl? timeline = null)
     {
         if (target is not T)
             throw new InvalidDataException($"The target is not a {typeof(T).Name} !");
@@ -340,7 +347,7 @@ public class TransitionCore<
             // The run carries the token source and the timeline together, and is what makes this animation reachable
             // by a later Exit or a control call. A timeline handed in is shared with whatever else was given the
             // same one; the default is this animation's own.
-            run = new TransitionRun(timeline ?? new TransitionTimeline());
+            run = new TransitionRun(timeline ?? TimerCore.CreateTimeSource<ITimeSourceControl>());
             cts = run.Cts;
 
             // Registered for the whole animation, not just the segment currently executing: between segments the
@@ -414,7 +421,7 @@ public class TransitionCore<
     /// part of its delay that passed while it was paused. The floor on the subtraction keeps a timer that returns a
     /// hair early from leaving the loop repeating the same sub-millisecond remainder.
     /// </remarks>
-    private static async Task DelayWhilePausedAsync(TransitionTimeline timeline, TimeSpan delay, CancellationToken ct)
+    private static async Task DelayWhilePausedAsync(ITimeSourceControl timeline, TimeSpan delay, CancellationToken ct)
     {
         if (delay <= TimeSpan.Zero) return;
 
@@ -430,14 +437,18 @@ public class TransitionCore<
             // then parks again.
             while (timeline.IsPaused && !ct.IsCancellationRequested)
             {
-                var gate = timeline.PauseGate;
-                if (gate is null) break;
-                await gate.Task.ConfigureAwait(false);
+                await timeline.WaitWhileStalledAsync(ct).ConfigureAwait(false);
             }
 
-            var before = TransitionTime.Now;
+            // 量延迟必须用墙钟，不能用总线：总线可能因为 rate 为 0 冻住而 IsPaused 仍为 false（于是上面不 park），
+            // 那时总线时间不前进，用总线量的话 remaining 永远减不下去，这个循环就死不退出。
+            // 采样循环那边相反，用的是 ConfigureAwait(true)——那里停在哪个线程上会决定用户回调的线程，
+            // 这里只是段间等待，醒来后立刻经 ProtectedInvoke 编组，落回哪个线程都不影响正确性。
+            var before = Stopwatch.GetTimestamp();
             await wait.Await(remaining, ct);
-            var elapsedMs = Math.Max(TransitionTime.TicksToMs(TransitionTime.Now - before), 0.5d);
+            var elapsedMs = Math.Max(
+                TimeConversion.TicksToMilliseconds(Stopwatch.GetTimestamp() - before, TimeConversion.DefaultTicksPerSecond),
+                0.5d);
             remaining -= TimeSpan.FromMilliseconds(elapsedMs);
         }
     }

@@ -1,4 +1,5 @@
 ﻿using System.Linq.Expressions;
+using VeloxDev.Timing;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 
@@ -73,7 +74,7 @@ public class TimelineControlTests
     [TestMethod]
     public async Task Timeline_PauseThenResume_ExcludesThePausedInterval()
     {
-        var timeline = new TransitionTimeline();
+        var timeline = new TimeSourceCore();
 
         await Task.Delay(150);
         var beforePause = timeline.Position;
@@ -113,7 +114,7 @@ public class TimelineControlTests
         Assert.AreNotEqual(elapsed, elapsed * speed / speed,
             "前提不成立：这个 elapsed 上先乘后除仍是正确值，测试就失去意义了");
 
-        Assert.AreEqual(elapsed, TransitionTimeline.Advance(0L, elapsed, speed),
+        Assert.AreEqual(elapsed, TimeSourceCore.Advance(0L, elapsed, speed),
             "先除后乘必须把整个间隔算对，而不是回绕");
     }
 
@@ -121,20 +122,20 @@ public class TimelineControlTests
     public void Timeline_Advance_SplitsTheWholePartFromTheRemainder()
     {
         // 整部分直接乘，余数部分参与定点乘除：两者相加必须等于精确值。
-        Assert.AreEqual(1_000_000_000_000_123L, TransitionTimeline.Advance(0L, 1_000_000_000_000_123L, 10_000L));
+        Assert.AreEqual(1_000_000_000_000_123L, TimeSourceCore.Advance(0L, 1_000_000_000_000_123L, 10_000L));
 
         // 半速：1001 个 tick 走一半是 500.5，定点截断到 500。
-        Assert.AreEqual(500L, TransitionTimeline.Advance(0L, 1_001L, 5_000L));
+        Assert.AreEqual(500L, TimeSourceCore.Advance(0L, 1_001L, 5_000L));
 
         // 单调时钟不会倒走：零或负的间隔保持原位，也好过把位置交给采样循环往回跳。
-        Assert.AreEqual(42L, TransitionTimeline.Advance(42L, 0L, 10_000L));
-        Assert.AreEqual(42L, TransitionTimeline.Advance(42L, -5L, 10_000L));
+        Assert.AreEqual(42L, TimeSourceCore.Advance(42L, 0L, 10_000L));
+        Assert.AreEqual(42L, TimeSourceCore.Advance(42L, -5L, 10_000L));
     }
 
     [TestMethod]
     public async Task Timeline_SeekLandsOnThePosition_AndKeepsTheRate()
     {
-        var timeline = new TransitionTimeline();
+        var timeline = new TimeSourceCore();
         timeline.SetRate(2d);
         Assert.AreEqual(2d, timeline.Rate, 0.001d);
 
@@ -163,7 +164,7 @@ public class TimelineControlTests
     [TestMethod]
     public void Timeline_NegativeRate_IsRejected()
     {
-        var timeline = new TransitionTimeline();
+        var timeline = new TimeSourceCore();
         timeline.Seek(TimeSpan.FromSeconds(2));
 
         // Time only moves forwards. A negative rate is refused rather than clamped: clamping to zero would leave the
@@ -351,7 +352,7 @@ public class TimelineControlTests
     {
         var first = new Target();
         var second = new Target();
-        var timeline = new TransitionTimeline();
+        var timeline = new TimeSourceCore();
 
         TestTransition.Create().Property(t => t.Value, 100d)
             .Effect(new TransitionEffectCore { Duration = TimeSpan.FromSeconds(4), FPS = 60 })

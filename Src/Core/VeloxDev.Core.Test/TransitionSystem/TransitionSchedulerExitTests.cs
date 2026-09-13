@@ -1,4 +1,5 @@
 ﻿using VeloxDev.TransitionSystem;
+using VeloxDev.Timing;
 using VeloxDev.TransitionSystem.Abstractions;
 
 namespace VeloxDev.Core.Test.TransitionSystem;
@@ -96,7 +97,7 @@ public class TransitionSchedulerExitTests
             .FindOrCreate(target, CanMutualTask: false);
         TransitionCore.AddNoMutual(target, [scheduler]);
 
-        var run = new TransitionRun(new TransitionTimeline());
+        var run = new TransitionRun(new TimeSourceCore());
         scheduler.Track(run);
 
         bool? lockWasFree = null;

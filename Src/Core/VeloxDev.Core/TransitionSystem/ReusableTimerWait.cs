@@ -73,11 +73,9 @@ internal sealed class ReusableTimerWait : IDisposable
     internal Wait Await(TimeSpan interval, CancellationToken token) => new(this, interval, token);
 
     /// <remarks>
-    /// Implements <see cref="INotifyCompletion"/> and deliberately <b>not</b> <c>ICriticalNotifyCompletion</c>: the
-    /// compiler picks its await path by which of the two the awaiter offers, and only the <c>INotifyCompletion</c>
-    /// path makes the builder capture the caller's <see cref="SynchronizationContext"/>. That is what keeps a loop
-    /// started on the UI thread on the UI thread — without it the effect's <c>Start</c>, <c>Update</c> and
-    /// <c>Completed</c> callbacks would move to whatever thread the timer fired on.
+    /// Implements <see cref="INotifyCompletion"/> and deliberately <b>not</b> <c>ICriticalNotifyCompletion</c>, so
+    /// the builder flows the caller's <see cref="ExecutionContext"/> into the continuation. It does not restore a
+    /// <see cref="SynchronizationContext"/> — see <c>TransitionInterpreterCore.FrameWait</c>, which measures that.
     /// </remarks>
     internal readonly struct Wait(ReusableTimerWait wait, TimeSpan interval, CancellationToken token) : INotifyCompletion
     {
