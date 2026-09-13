@@ -8,5 +8,10 @@ namespace VeloxDev.TransitionSystem
         {
             RegisterInterpolator(typeof(string), new StringSampler());
         }
+
+        public override TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect)
+            => effect is ITransitionEffect<NonPriority>
+                ? (TransitionSchedulerCore)TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, NonPriority>.FindOrCreate(target)
+                : null;
     }
 }

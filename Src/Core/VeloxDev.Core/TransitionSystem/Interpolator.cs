@@ -78,6 +78,27 @@ public abstract class InterpolatorCore
         return matched is not null;
     }
 
+    /// <summary>
+    /// The scheduler this platform animates <paramref name="target"/> with, for a caller that knows the target only
+    /// as an <see cref="object"/>, or null when it cannot carry <paramref name="effect"/>.
+    /// </summary>
+    /// <remarks>
+    /// The theme system runs one switch across targets of many runtime types, so it cannot name the type argument of
+    /// <c>Transition&lt;T&gt;</c>. Which inspector, interpreter and dispatcher priority to build a scheduler from is
+    /// the one thing the platform knows and Core does not.
+    /// <para>
+    /// Null is the honest answer both for "this platform has not opted in" and for "this effect does not belong to
+    /// this platform" — the second mirroring the cast the scheduler itself performs before running. The caller then
+    /// switches without animating rather than starting a run that draws nothing.
+    /// </para>
+    /// <para>
+    /// An implementation must go through <c>TransitionSchedulerCore&lt;...&gt;.FindOrCreate</c>, not construct a
+    /// scheduler directly: only that path files it under the target, which is what makes a later
+    /// <c>Transition.Pause</c>, <c>Seek</c> or <c>Exit</c> able to find the animation.
+    /// </para>
+    /// </remarks>
+    public virtual TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect) => null;
+
     public static bool RegisterInterpolator(Type type, ISampler sampler)
     {
         // Atomic last-writer-wins install. AddOrUpdate makes the update unconditional and atomic, so the

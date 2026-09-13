@@ -20,5 +20,10 @@ namespace VeloxDev.TransitionSystem
             RegisterInterpolator(typeof(RectF), new RectFSampler());
             RegisterInterpolator(typeof(Shadow), new ShadowSampler());
         }
+
+        public override TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect)
+            => effect is ITransitionEffect<NonPriority>
+                ? (TransitionSchedulerCore)TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, NonPriority>.FindOrCreate(target)
+                : null;
     }
 }

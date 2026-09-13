@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Media3D;
+using System.Windows.Threading;
 using VeloxDev.Adapters.NativeSamplers;
 
 namespace VeloxDev.TransitionSystem
@@ -23,5 +24,10 @@ namespace VeloxDev.TransitionSystem
             RegisterInterpolator(typeof(Point3D), new Point3DSampler());
             RegisterInterpolator(typeof(Vector3D), new Vector3DSampler());
         }
+
+        public override TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect)
+            => effect is ITransitionEffect<DispatcherPriority>
+                ? (TransitionSchedulerCore)TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherPriority>.FindOrCreate(target)
+                : null;
     }
 }

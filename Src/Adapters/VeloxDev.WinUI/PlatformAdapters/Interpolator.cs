@@ -1,3 +1,4 @@
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using VeloxDev.Adapters.NativeSamplers;
@@ -21,5 +22,10 @@ namespace VeloxDev.TransitionSystem
             RegisterInterpolator(typeof(GridLength), new GridLengthSampler());
             RegisterInterpolator(typeof(Color), new ColorSampler());
         }
+
+        public override TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect)
+            => effect is ITransitionEffect<DispatcherQueuePriority>
+                ? (TransitionSchedulerCore)TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherQueuePriority>.FindOrCreate(target)
+                : null;
     }
 }

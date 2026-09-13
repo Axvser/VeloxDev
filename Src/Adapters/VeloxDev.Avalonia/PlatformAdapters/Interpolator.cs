@@ -1,6 +1,7 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Threading;
 using VeloxDev.Adapters.NativeSamplers;
 
 namespace VeloxDev.TransitionSystem
@@ -24,5 +25,10 @@ namespace VeloxDev.TransitionSystem
             RegisterInterpolator(typeof(BoxShadows), new BoxShadowsSampler());
             RegisterInterpolator(typeof(GridLength), new GridLengthSampler());
         }
+
+        public override TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect)
+            => effect is ITransitionEffect<DispatcherPriority>
+                ? (TransitionSchedulerCore)TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherPriority>.FindOrCreate(target)
+                : null;
     }
 }

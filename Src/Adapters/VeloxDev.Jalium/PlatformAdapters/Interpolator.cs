@@ -22,5 +22,10 @@ namespace VeloxDev.TransitionSystem
             RegisterInterpolator(typeof(Transform), new TransformSampler());
             RegisterInterpolator(typeof(Jalium.UI.Media.Media3D.Transform3D), new Transform3DSampler());
         }
+
+        public override TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect)
+            => effect is ITransitionEffect<DispatcherPriority>
+                ? (TransitionSchedulerCore)TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherPriority>.FindOrCreate(target)
+                : null;
     }
 }
