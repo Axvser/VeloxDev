@@ -1,3 +1,8 @@
+---
+name: compiler-usage
+description: Drive the workflow compiler — CompileWorkflow (Root plan) vs CompileNodeResult (Terminal cone), RunCompiledWorkflow vs GetNodeResult vs ExecuteNode, read Order = -1 pruned nodes with GetCompileStatus, flip RouterCompileMode Static/Dynamic, recover when the target was NOT reached
+---
+
 ## 🧭 Skill: Compiler & Compile-Time Routing
 
 The WorkflowSystem has a compiler that decomposes a sub-graph into a compiled plan — `ExecuteEntry` linear segments, `BranchEntry` routing points, `ParallelEntry` fan-out groups — and assigns every compile-aware node a fixed **compile identity**. The compile tools give you the same view the compiler UI shows.

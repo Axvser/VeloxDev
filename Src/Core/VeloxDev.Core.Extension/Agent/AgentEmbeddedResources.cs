@@ -38,6 +38,13 @@ public static class AgentEmbeddedResources
     private static string ToLangCode(AgentLanguages language)
         => language == AgentLanguages.Chinese ? "zh" : "en";
 
+    /// <summary>
+    /// The folder code an <see cref="AgentLanguages"/> maps to inside <c>Resources/{System}/</c>:
+    /// <c>"zh"</c> or <c>"en"</c>. Only these two directories are embedded, so every other language
+    /// resolves to <c>"en"</c>.
+    /// </summary>
+    public static string ToLanguageCode(AgentLanguages language) => ToLangCode(language);
+
     // ── Skills ───────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -53,6 +60,15 @@ public static class AgentEmbeddedResources
     /// </summary>
     public static IEnumerable<string> ListSkills(string system, AgentLanguages language = AgentLanguages.English)
         => ListCategory(system, "Skills", language);
+
+    /// <summary>
+    /// Returns the base names of the skill files that exist in <b>exactly</b> the given language, with no
+    /// English fallback. Use this to attribute a skill to the language it is actually written in —
+    /// <see cref="ListSkills"/> merges the requested language with English, so it cannot tell a
+    /// translated file from a fallback one.
+    /// </summary>
+    public static IEnumerable<string> ListSkillsExact(string system, AgentLanguages language)
+        => ListCategoryExact(system, "Skills", language);
 
     /// <summary>
     /// Concatenates all skill files for the given system and language, separated by blank lines.
@@ -207,6 +223,24 @@ public static class AgentEmbeddedResources
                 if (seen.Add(baseName))
                     yield return baseName;
             }
+        }
+    }
+
+    /// <summary>
+    /// Lists base names (without .md) for <c>Resources/{system}/{lang}/{category}/</c> for one language
+    /// only, applying no fallback.
+    /// </summary>
+    private static IEnumerable<string> ListCategoryExact(string system, string category, AgentLanguages language)
+    {
+        var langCode = ToLangCode(language);
+        var scanPrefix = $"{Prefix}Resources.{system}.{langCode}.{category}.";
+        foreach (var name in _assembly.GetManifestResourceNames())
+        {
+            if (!name.StartsWith(scanPrefix, StringComparison.Ordinal)) continue;
+            var relative = name.Substring(scanPrefix.Length);
+            yield return relative.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                ? relative.Substring(0, relative.Length - 3)
+                : relative;
         }
     }
 

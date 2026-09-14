@@ -1,3 +1,8 @@
+---
+name: connection-validation
+description: Recover from a rejected ConnectSlots, ConnectByProperty or ConnectEnumSlot, not a retry — read the status rejected reasons array to tell apart channel incompatibility (SetSlotChannel), same-node endpoints, ValidateConnection rules, full capacity (DisconnectSlotsById) and same-direction dedup
+---
+
 ## ⚠️ Connection Validation (CRITICAL — prevents infinite retry loops)
 
 The framework may **silently reject** a connection attempt. All Connect tools verify and report rejection. When you receive `status: "rejected"`, **do NOT retry the same connection** — rejection is deterministic.

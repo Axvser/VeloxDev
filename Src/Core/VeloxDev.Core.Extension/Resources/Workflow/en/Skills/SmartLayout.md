@@ -1,3 +1,8 @@
+---
+name: smart-layout
+description: Tidy, arrange or quadrant-shift a graph by hand — read topology with ListNodes, layer by longest path with barycenter crossing minimization, size positions from Size.Width/Size.Height with 80 px / 40 px gaps, check bounding-box overlap, and apply one SetNodePosition or MoveNode per node
+---
+
 ## 🗺️ Skill: Smart Layout
 
 Use this skill whenever you need to arrange multiple nodes intelligently — whether creating them fresh, reorganizing an existing graph, or responding to user requests like "tidy up", "auto-arrange", or "fix the layout".

@@ -1,3 +1,8 @@
+---
+name: node-creation
+description: 按协议创建节点——从预加载清单选类型而非 ListCreatableTypes，从 [AgentContext] 而非 GetComponentContext 读默认值，开发者说明优先于 GetTypeSchema 的 defaultJson 零值，留出 30px 间距，再 CreateNode 并确认 repositioned=true
+---
+
 ## Skill: 节点创建协议
 
 当用户要求创建节点时，按以下步骤**依序**执行：

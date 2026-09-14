@@ -1,3 +1,8 @@
+---
+name: node-creation
+description: Create a node per the shipped protocol — pick the type from the pre-loaded list not ListCreatableTypes, read defaults from [AgentContext] not GetComponentContext, prefer developer instructions over GetTypeSchema defaultJson zero values, keep a 30 px gap, then CreateNode and check repositioned=true
+---
+
 ## 🔧 Node Creation Protocol
 
 When the user asks to create a node, follow these steps **in order**:

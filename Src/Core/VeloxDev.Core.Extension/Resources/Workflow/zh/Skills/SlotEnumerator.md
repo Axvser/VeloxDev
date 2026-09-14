@@ -1,3 +1,8 @@
+---
+name: slot-enumerator
+description: 配置 SlotEnumerator（IConditionalSlotProvider）属性——先 CreateNode 再用 SetEnumSlotCollection 设置枚举/bool 选择器，ISlotProvider 类型走 GetTypeSchema 加 JSON，用 GetEnumSlotByValue、SetEnumSlotChannel、ConnectEnumSlot 按条件值访问分支，且不得用 PatchNodeProperties 设置选择器
+---
+
 ## Skill: SlotEnumerator（枚举插槽集合）
 
 节点类型可声明 **SlotEnumerator 属性**——任何实现了 `IConditionalSlotProvider<TSlot>` 接口的属性（如 `SlotEnumerator<SlotViewModel> OutputSlots`）均可被识别。若属性类型直接使用 `IConditionalSlotProvider<TSlot>` 接口本身，生成器将自动以 `SlotEnumerator<TSlot>` 作为默认实现。这类属性根据配置的选择器类型（枚举或 bool）自动为每个值生成一个输出插槽。

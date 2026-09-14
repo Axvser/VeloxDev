@@ -1,3 +1,8 @@
+---
+name: operation-ordering
+description: Follow the mutation lifecycle CreateNode, PatchNodeProperties/SetEnumSlotCollection, CreateSlotOnNode/AddSlotToCollection, ConnectSlots/ConnectByProperty, ExecuteNode/BroadcastNode — why each inversion breaks slots, and the silent trap where Parent == null makes a call return status ok
+---
+
 ## ⚡ Operation Ordering Protocol (CRITICAL)
 
 You MUST follow this lifecycle ordering — the same order a human developer uses. Violating it causes silent data loss, unregistered slots, or broken connections.

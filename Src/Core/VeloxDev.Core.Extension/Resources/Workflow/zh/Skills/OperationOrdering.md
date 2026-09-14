@@ -1,3 +1,8 @@
+---
+name: operation-ordering
+description: 遵守变更生命周期 CreateNode、PatchNodeProperties/SetEnumSlotCollection、CreateSlotOnNode/AddSlotToCollection、ConnectSlots/ConnectByProperty、ExecuteNode/BroadcastNode——倒序为何破坏插槽，以及 Parent == null 时调用返回 status ok 却无效果的静默陷阱
+---
+
 ## Skill: 操作顺序协议（关键）
 
 必须遵守以下生命周期顺序——与人类开发者的操作顺序一致。违反此顺序会导致数据静默丢失、插槽未注册或连接断裂。

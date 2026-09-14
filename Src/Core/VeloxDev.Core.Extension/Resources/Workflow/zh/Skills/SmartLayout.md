@@ -1,3 +1,8 @@
+---
+name: smart-layout
+description: 手动整理、排列或换象限工作流图形——用 ListNodes 读拓扑，按最长路径分层加重心启发式减少交叉，按 Size.Width/Size.Height 以 80px / 40px 间距计算坐标并做包围盒重叠检测，逐个调用 SetNodePosition 或 MoveNode 应用结果
+---
+
 ## 🗺️ Skill: 智能布局
 
 当你需要批量排布节点时——无论是从零创建、重新整理已有图形，还是响应"整理一下"、"自动排列"、"修正布局"等用户请求——请使用本技能。

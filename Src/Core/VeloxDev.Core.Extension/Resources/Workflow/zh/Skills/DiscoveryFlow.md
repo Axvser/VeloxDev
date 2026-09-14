@@ -1,3 +1,8 @@
+---
+name: discovery-flow
+description: 变更工作流前选择状态刷新策略——策略 A 安全优先（用 GetWorkflowSummary、ListNodes/FindNodes、GetNodeDetail、ListSlotProperties 刷新）与策略 B 速度优先（复用缓存句柄），以及结构变更后的强制刷新点
+---
+
 ## Skill: 发现流程
 
 > **跳过条件**：组件类型及其 `[AgentContext]` 描述已**预加载在上下文中**。若你已知道类型名称及其默认值，可直接从最符合当前信息缺口的步骤开始。仅当需要当前树的实时节点/连接数量、需要确认当前实际存在的类型，或怀疑缓存拓扑已过期时，才调用 `GetWorkflowSummary`。

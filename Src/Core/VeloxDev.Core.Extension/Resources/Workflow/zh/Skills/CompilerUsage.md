@@ -1,3 +1,8 @@
+---
+name: compiler-usage
+description: 驱动工作流编译器——CompileWorkflow（Root 计划）与 CompileNodeResult（Terminal 祖先锥）、RunCompiledWorkflow 与 GetNodeResult 及 ExecuteNode 的取舍，用 GetCompileStatus 读 Order = -1 被剪除节点，切换 RouterCompileMode Static/Dynamic，并在目标 NOT reached 时恢复
+---
+
 ## 🧭 技能：编译器与编译期路由
 
 WorkflowSystem 内置编译器：把一张子图分解为编译计划——`ExecuteEntry` 线性段、`BranchEntry` 分支点、`ParallelEntry` 扇出组——并给每个编译感知节点分配固定的**编译身份**。编译工具能给你编译器 UI 看到的同一视图。

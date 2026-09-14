@@ -1,3 +1,8 @@
+---
+name: connection-validation
+description: 在被拒绝的 ConnectSlots、ConnectByProperty 或 ConnectEnumSlot 上恢复而非重试——读 status rejected 的 reasons 数组区分通道不兼容（SetSlotChannel）、同节点端点、ValidateConnection 规则、容量已满（DisconnectSlotsById）与同向去重
+---
+
 ## Skill: 连接验证（关键——防止无限重试）
 
 框架可能**静默拒绝**连接尝试。所有 Connect 工具现在会验证并报告拒绝情况。  

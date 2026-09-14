@@ -1,3 +1,8 @@
+---
+name: slot-enumerator
+description: Wire SlotEnumerator (IConditionalSlotProvider) — CreateNode then SetEnumSlotCollection for enum/bool selectors, GetTypeSchema plus JSON for ISlotProvider types, reach branches by value with GetEnumSlotByValue, SetEnumSlotChannel and ConnectEnumSlot; never set the selector with PatchNodeProperties
+---
+
 ## Skill: SlotEnumerator
 
 Node types may declare **SlotEnumerator properties** — any property whose type implements `IConditionalSlotProvider<TSlot>` (e.g. `SlotEnumerator<SlotViewModel> OutputSlots`). When the property type is the raw `IConditionalSlotProvider<TSlot>` interface, the generator automatically uses `SlotEnumerator<TSlot>` as the concrete default. These properties auto-generate one output slot per value of the configured selector type (enum or bool).

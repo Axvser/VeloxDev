@@ -1,3 +1,8 @@
+---
+name: discovery-flow
+description: Choose a state-refresh strategy before mutating a workflow — Strategy A (safety-first, refresh with GetWorkflowSummary, ListNodes/FindNodes, GetNodeDetail, ListSlotProperties) vs Strategy B (speed-first, reuse cached handles) — and the mandatory refresh points after structure changes
+---
+
 ## 🔍 Discovery Flow
 
 > **Skip Condition**: Component types and their `[AgentContext]` descriptions are **pre-loaded in your context**. If you already know the type names and their defaults, start at the step that matches the information you are missing. Only call `GetWorkflowSummary` when you need live node/link counts, need to confirm which types are currently present, or your cached topology may be stale.
