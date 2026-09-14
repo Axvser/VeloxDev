@@ -318,6 +318,15 @@ public partial class Workflow : ComponentBase, IDisposable
         sel.Completion.TrySetResult(true);
     }
 
+    /// <summary>Answers a single-select request with the typed text, leaving no option chosen.</summary>
+    private void SubmitFreeTextSelection()
+    {
+        if (_selection is not { } sel || sel.AllowMultiSelect) return;
+        if (string.IsNullOrWhiteSpace(sel.FreeText)) return;
+        sel.SelectedOption = null;
+        sel.Completion.TrySetResult(true);
+    }
+
     private void CancelSelection()
     {
         if (_selection is not { } sel) return;

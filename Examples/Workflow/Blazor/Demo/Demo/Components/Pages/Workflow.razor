@@ -293,6 +293,7 @@
                         }
                         else
                         {
+                            <button class="wf-btn-confirm" @onclick="SubmitFreeTextSelection" disabled="@string.IsNullOrWhiteSpace(sel.FreeText)">使用输入</button>
                             <button class="wf-btn-cancel" @onclick="CancelSelection">取消（不选择）</button>
                         }
                     </div>

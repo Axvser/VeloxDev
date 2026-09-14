@@ -143,6 +143,19 @@ internal static class AgentDialogs
         }
         else
         {
+            var submitBtn = MakeActionButton("使用输入", OptionBg, AccentBlue, AccentBlue);
+            submitBtn.IsEnabled = false;
+            submitBtn.HorizontalAlignment = HorizontalAlignment.Stretch;
+            submitBtn.HorizontalContentAlignment = HorizontalAlignment.Center;
+            freeTextBox.TextChanged += (_, _) => submitBtn.IsEnabled = !string.IsNullOrWhiteSpace(freeTextBox.Text);
+            submitBtn.Click += (_, _) =>
+            {
+                args.SelectedOption = null;
+                CollectFreeText(args, freeTextBox);
+                win.Close();
+            };
+            optionsPanel.Children.Add(submitBtn);
+
             var cancelBtn = MakeActionButton("取消（不选择）", FieldBg, SubFg, new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)));
             cancelBtn.HorizontalAlignment = HorizontalAlignment.Stretch;
             cancelBtn.Click += (_, _) => { CollectFreeText(args, freeTextBox); win.Close(); };

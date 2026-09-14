@@ -224,6 +224,17 @@ internal sealed class AgentSelectionDialog : Form
         }
         else
         {
+            var submitBtn = MakeOptionButton("使用输入", BtnBg, AccentBlue, AccentBlue);
+            submitBtn.Enabled = false;
+            submitBtn.Click += (_, _) =>
+            {
+                ReadFreeText(freeTextBox);
+                DialogResult = DialogResult.OK;
+                Close();
+            };
+            freeTextBox.TextChanged += (_, _) => submitBtn.Enabled = !string.IsNullOrWhiteSpace(freeTextBox.Text);
+            optionsFlow.Controls.Add(submitBtn);
+
             var cancelBtn = MakeOptionButton("取消（不选择）", CancelBg, TextDim, CancelBorder);
             cancelBtn.Click += (_, _) => { ReadFreeText(freeTextBox); DialogResult = DialogResult.Cancel; Close(); };
             optionsFlow.Controls.Add(cancelBtn);

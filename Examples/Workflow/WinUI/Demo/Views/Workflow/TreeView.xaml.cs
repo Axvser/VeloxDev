@@ -385,20 +385,25 @@ namespace Demo.Views
                 else
                 {
                     // Single-select mode: option buttons (built above) set the result and dismiss
-                    // the dialog. If it is dismissed via ESC/backdrop/close (Primary = "取消"),
-                    // only the free-text response survives.
-                    dialog = new ContentDialog
+                    // the dialog. Otherwise the free text is the answer — the submit button carries
+                    // it, and so does dismissing, so a typed response is never lost.
+                    var inputDialog = new ContentDialog
                     {
                         Title = "Agent · 请选择",
-                        PrimaryButtonText = "取消",
+                        PrimaryButtonText = "使用输入",
+                        CloseButtonText = "取消",
+                        IsPrimaryButtonEnabled = !string.IsNullOrWhiteSpace(freeTextBox.Text),
                         XamlRoot = this.XamlRoot,
                         DefaultButton = ContentDialogButton.None,
                         Content = scroller,
                     };
+                    dialog = inputDialog;
+                    freeTextBox.TextChanged += (_, _) =>
+                        inputDialog.IsPrimaryButtonEnabled = !string.IsNullOrWhiteSpace(freeTextBox.Text);
 
-                    await dialog.ShowAsync();
+                    await inputDialog.ShowAsync();
 
-                    // If not set yet (dismissed via ESC/backdrop/close btn)
+                    // If not set yet (dismissed via ESC/backdrop/close btn, or answered with 使用输入)
                     tcs.TrySetResult(new SelectionDialogResult
                     {
                         FreeTextResponse = freeTextBox?.Text?.Trim(),

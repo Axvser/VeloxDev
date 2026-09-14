@@ -338,6 +338,25 @@ public partial class WorkflowView : UserControl
             }
             else
             {
+                var submitBtn = new System.Windows.Controls.Button
+                {
+                    Content = "使用输入",
+                    IsEnabled = false,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Padding = new Thickness(14, 8, 14, 8),
+                    FontSize = 11,
+                    Margin = new Thickness(0, 0, 0, 6),
+                    Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0f3460")),
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
+                    BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7ec8ff")),
+                    BorderThickness = new Thickness(1),
+                    Cursor = Cursors.Hand,
+                };
+                freeTextBox.TextChanged += (_, _) => submitBtn.IsEnabled = !string.IsNullOrWhiteSpace(freeTextBox.Text);
+                submitBtn.Click += (_, _) => { singleChoice = null; win.Close(); };
+                optionStack.Children.Add(submitBtn);
+
                 var cancelBtn = new System.Windows.Controls.Button
                 {
                     Content = "取消（不选择）",

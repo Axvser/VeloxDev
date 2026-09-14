@@ -349,6 +349,16 @@ public partial class WorkflowView : ContentView
             }
             else
             {
+                var submitBtn = new Button { Text = "使用输入", IsEnabled = false, BackgroundColor = Color.FromArgb("#0f3460"), TextColor = Color.FromArgb("#7ec8ff"), BorderColor = Color.FromArgb("#7ec8ff"), BorderWidth = 1, CornerRadius = 6, HeightRequest = 36, Margin = new Thickness(0, 8, 0, 0) };
+                freeTextEntry.TextChanged += (_, _) => submitBtn.IsEnabled = !string.IsNullOrWhiteSpace(freeTextEntry.Text);
+                submitBtn.Clicked += (_, _) =>
+                {
+                    args.SelectedOption = null;
+                    args.FreeTextResponse = string.IsNullOrWhiteSpace(freeTextEntry.Text?.Trim()) ? null : freeTextEntry.Text.Trim();
+                    _ = MainPage.Navigation.PopModalAsync(true);
+                };
+                stack.Children.Add(submitBtn);
+
                 var cancelBtn = new Button { Text = "取消（不选择）", BackgroundColor = Color.FromArgb("#2a2a3e"), TextColor = Color.FromArgb("#888888"), BorderColor = Color.FromArgb("#444444"), BorderWidth = 1, CornerRadius = 6, HeightRequest = 36, Margin = new Thickness(0, 8, 0, 0) };
                 cancelBtn.Clicked += (_, _) =>
                 {
