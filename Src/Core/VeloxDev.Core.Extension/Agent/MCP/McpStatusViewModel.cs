@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -54,6 +55,21 @@ public partial class McpServerStatusViewModel
 }
 
 /// <summary>
+/// An immutable copy of one server's state, safe to read from any thread.
+/// </summary>
+public sealed class McpServerSummary
+{
+    /// <summary>Server name.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Localized state text (see <see cref="McpServerStatusViewModel.StateText"/>).</summary>
+    public string StateText { get; set; } = string.Empty;
+
+    /// <summary>Number of tools the server currently exposes.</summary>
+    public int ToolCount { get; set; }
+}
+
+/// <summary>
 /// Globally bindable MCP server status view-model: the host UI binds <see cref="Servers"/> to show
 /// each server's alive/installing/connecting/error status, and reads the aggregate counts
 /// (<see cref="ConnectedCount"/>/<see cref="ErrorCount"/>). Held by <see cref="McpScope.Status"/>
@@ -65,6 +81,19 @@ public partial class McpStatusViewModel
     // (do not manually declare same-named properties).
     [VeloxProperty] private ObservableCollection<McpServerStatusViewModel> servers = [];
     [VeloxProperty] private bool isLoading = false;
+
+    private volatile McpServerSummary[] _snapshot = [];
+
+    /// <summary>
+    /// Immutable copy of <see cref="Servers"/>, republished on the thread the collection is bound to
+    /// whenever a tracked server changes.
+    /// <para>
+    /// Read this — not <see cref="Servers"/> — from anywhere that is not the bound thread. An agent
+    /// invocation renders its prompt on a thread of the framework's choosing, and enumerating an
+    /// <see cref="ObservableCollection{T}"/> there races the host's UI.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<McpServerSummary> Snapshot => _snapshot;
 
     /// <summary>Number of connected (alive) servers.</summary>
     public int ConnectedCount => Count(McpServerStatus.Connected);
@@ -114,12 +143,25 @@ public partial class McpStatusViewModel
 
     private void OnServerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(McpServerStatusViewModel.State))
+        // ToolCount and Name are part of the snapshot even though they are not part of the counts.
+        if (e.PropertyName is nameof(McpServerStatusViewModel.State)
+            or nameof(McpServerStatusViewModel.ToolCount)
+            or nameof(McpServerStatusViewModel.Name))
             NotifyAggregates();
     }
 
     private void NotifyAggregates()
     {
+        // Republish the snapshot here: every mutation of Servers and of a tracked server's observable
+        // fields funnels through this method, and it always runs on the bound thread.
+        _snapshot = [.. Servers.Select(s => new McpServerSummary
+        {
+            Name = s.Name,
+            StateText = s.StateText,
+            ToolCount = s.ToolCount,
+        })];
+
+        OnPropertyChanged(nameof(Snapshot));
         OnPropertyChanged(nameof(ConnectedCount));
         OnPropertyChanged(nameof(ErrorCount));
         OnPropertyChanged(nameof(WorkingCount));

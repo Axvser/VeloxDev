@@ -1,10 +1,12 @@
 using CliWrap;
 using CliWrap.Buffered;
+using Microsoft.Agents.AI;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
@@ -59,6 +61,65 @@ public class McpScope
     }
 
     /// <summary>
+    /// How far the Agent may go in adding MCP servers of its own. Defaults to
+    /// <see cref="McpSelfServiceLevel.Closed"/>, under which the add tool does not exist.
+    /// </summary>
+    public McpSelfServiceLevel SelfServiceLevel { get; private set; } = McpSelfServiceLevel.Closed;
+
+    /// <summary>
+    /// Opens the self-service ladder to <paramref name="level"/>. Read the level's documentation before
+    /// raising it: at <see cref="McpSelfServiceLevel.AllConfirmed"/> and above the Agent can cause a
+    /// package to be installed and launched on this machine.
+    /// </summary>
+    public McpScope WithSelfService(McpSelfServiceLevel level)
+    {
+        if (SelfServiceLevel == level) return this;
+        SelfServiceLevel = level;
+        // The level decides whether AddMcpServer exists and what the prompt says the model may do with
+        // it, so a cached render keyed on Version has to be invalidated here.
+        Interlocked.Increment(ref _version);
+        return this;
+    }
+
+    /// <summary>
+    /// Asks the user to approve an operation the Agent requested. Returns <c>true</c> to proceed.
+    /// Registered on this scope so MCP self-service can gate itself without depending on the workflow
+    /// layer; <c>WorkflowAgentScope.WithMcps</c> wires this to the scope's own confirmation handler.
+    /// When no handler is registered the answer is <c>false</c> — an unanswerable prompt must deny, not
+    /// silently allow.
+    /// </summary>
+    public McpScope WithConfirmationHandler(Func<string, string, Task<bool>> handler)
+    {
+        _confirmationHandler = handler;
+        return this;
+    }
+
+    private Func<string, string, Task<bool>>? _confirmationHandler;
+
+    /// <summary>Runs the registered confirmation handler, denying when there is none.</summary>
+    internal Func<string, string, Task<bool>> ConfirmationResolver =>
+        _confirmationHandler ?? ((_, _) => Task.FromResult(false));
+
+    /// <summary>
+    /// Whether a server of this run mode may be added by the Agent at the current
+    /// <see cref="SelfServiceLevel"/>.
+    /// </summary>
+    public bool CanAddServer(McpServerRunMode runMode)
+    {
+        if (SelfServiceLevel == McpSelfServiceLevel.Closed) return false;
+
+        var isLocal = runMode != McpServerRunMode.Http;
+        if (!isLocal) return true;
+
+        // Local modes install and launch a package, so they open one rung later than remote ones.
+        return SelfServiceLevel >= McpSelfServiceLevel.AllConfirmed;
+    }
+
+    /// <summary>Whether adding a server at this level requires the user's agreement.</summary>
+    public bool RequiresConfirmationToAdd()
+        => SelfServiceLevel is McpSelfServiceLevel.RemoteConfirmed or McpSelfServiceLevel.AllConfirmed;
+
+    /// <summary>
     /// Global connection timeout (Http mode only). Acts as the remote server's transport-layer
     /// connection timeout + MCP initialization timeout, with a hard fallback via the host-side CTS
     /// (SDK 2.x internal timeouts may fail for some remote servers — see csharp-sdk#784).
@@ -86,11 +147,24 @@ public class McpScope
     private readonly Dictionary<string, IReadOnlyList<AITool>> _loadedToolSets = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Live clients of currently connected servers, keyed the same way as <see cref="_loadedToolSets"/>.
+    /// A client MUST be retained for as long as its tools are offered: every <c>McpClientTool</c> holds a
+    /// reference to its owning <see cref="McpClient"/>, and for stdio modes that client owns the child
+    /// process. Dropping the reference without disposing leaks the process.
+    /// </summary>
+    private readonly Dictionary<string, McpClient> _loadedClients = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Configurations of currently connected servers, so teardown failures can be reported against the
+    /// server they belong to instead of a name alone.
+    /// </summary>
+    private readonly Dictionary<string, McpServerConfiguration> _loadedConfigs = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// All tools of currently connected MCP servers (aggregated per server). Once a server loads
-    /// successfully mid-session (<see cref="LoadAsync"/>), its tools are immediately available; they
-    /// disappear automatically after unloading (<see cref="UnloadServer"/>). Each Agent conversation
-    /// assembles <c>ChatOptions.Tools</c> as "base tools + <see cref="LoadedTools"/>", so tools can be
-    /// added/removed mid-session.
+    /// successfully mid-session (<see cref="LoadAsync"/> / <see cref="AddAsync"/>), its tools are
+    /// immediately available; they disappear automatically after unloading
+    /// (<see cref="UnloadServer"/> / <see cref="UnloadServerAsync"/>).
     /// </summary>
     public IReadOnlyList<AITool> LoadedTools
     {
@@ -101,23 +175,191 @@ public class McpScope
         }
     }
 
+    private long _version;
+
     /// <summary>
-    /// Unloads a server (mid-session removal): removes its tool set and resets its status to
-    /// <see cref="McpServerStatus.NotStarted"/>. Returns whether any loaded tools were present.
+    /// Monotonic version of the loaded-server set. Advances whenever a server is loaded, added or
+    /// unloaded, so a prompt provider caching on it knows when its tool list went stale.
+    /// </summary>
+    public long Version => Interlocked.Read(ref _version);
+
+    /// <summary>
+    /// Identifies this scope for a context provider's session-state key. The Agent Framework throws when
+    /// two providers attached to one agent share a key, and keys default to the provider's type name — so
+    /// the discriminator has to live on the scope, not on the provider.
+    /// <para>
+    /// Per scope, deliberately: two providers built from <i>one</i> scope then collide and fail loudly at
+    /// agent construction, which is the right outcome. A per-provider id would instead let both through
+    /// and duplicate every MCP tool and the inventory block in the same turn.
+    /// </para>
+    /// </summary>
+    internal string InstanceId { get; } = Guid.NewGuid().ToString("N");
+
+    // ── Registered configurations ───────────────────────────────────────────
+
+    private readonly object _registeredLock = new();
+    private readonly List<McpServerConfiguration> _registered = [];
+
+    /// <summary>
+    /// The configurations the Agent may load by name. Populated by <see cref="WithServers"/>, and also by
+    /// whatever <see cref="LoadAsync"/> or <see cref="AddAsync"/> was actually given — so a host that
+    /// only loads directly still gets a reloadable set rather than an empty one.
+    /// </summary>
+    public IReadOnlyList<McpServerConfiguration> RegisteredServers
+    {
+        get
+        {
+            lock (_registeredLock)
+                return [.. _registered];
+        }
+    }
+
+    /// <summary>
+    /// Pre-registers configurations for the Agent to load by name. A later call with the same name
+    /// replaces the earlier one.
+    /// </summary>
+    public McpScope WithServers(params McpServerConfiguration[] servers)
+    {
+        var changed = false;
+        foreach (var config in servers ?? [])
+        {
+            if (config is null) continue;
+            Remember(config);
+            changed = true;
+        }
+        // What the Agent may load by name is part of what it is told, so a cached render is stale now.
+        if (changed) Interlocked.Increment(ref _version);
+        return this;
+    }
+
+    /// <summary>Records a configuration under its name, replacing any earlier one with that name.</summary>
+    private void Remember(McpServerConfiguration config)
+    {
+        lock (_registeredLock)
+        {
+            _registered.RemoveAll(c => string.Equals(c.Name, config.Name, StringComparison.OrdinalIgnoreCase));
+            _registered.Add(config);
+        }
+    }
+
+    /// <summary>
+    /// Makes a server's tools available without connecting to anything. Internal for tests.
+    /// <para>
+    /// The loaded-server path is the one a composing host is most likely to duplicate, and it is otherwise
+    /// unreachable without a live MCP server or a fake transport — so without this seam the tests that
+    /// guard it would assert against an empty set and pass no matter what.
+    /// </para>
+    /// </summary>
+    /// <param name="name">Server name, as it would appear in the status list.</param>
+    /// <param name="tools">The tools to expose as that server's.</param>
+    internal void SeedLoadedTools(string name, IEnumerable<AITool> tools)
+    {
+        lock (_loadedToolsLock)
+            _loadedToolSets[name] = [.. tools];
+
+        UpdateStatus(() => Status.Track(new McpServerStatusViewModel
+        {
+            Name = name,
+            State = McpServerStatus.Connected,
+            ToolCount = _loadedToolSets[name].Count,
+        }));
+
+        Interlocked.Increment(ref _version);
+    }
+
+    /// <summary>
+    /// What the model is told about the currently connected servers, as a Markdown table. Empty when no
+    /// server has been registered.
+    /// <para>
+    /// Reads the status snapshot rather than the bound collection: a prompt is rendered on the agent
+    /// invocation thread, not the UI thread.
+    /// </para>
+    /// </summary>
+    public string BuildInventoryBlock()
+    {
+        var servers = Status.Snapshot;
+        if (servers.Count == 0) return string.Empty;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("## Connected MCP servers");
+        sb.AppendLine();
+        sb.AppendLine("| Server | State | Tools |");
+        sb.AppendLine("| ------ | ----- | ----- |");
+        foreach (var server in servers)
+            sb.AppendLine($"| {server.Name} | {server.StateText} | {server.ToolCount} |");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Creates the context provider that contributes this scope's server inventory, its management tools
+    /// and every connected server's tools on each agent invocation — everything a host needs to use MCP
+    /// without the workflow layer.
+    /// </summary>
+    /// <param name="policy">
+    /// How the contributed tools behave. Omit for standalone use: the provider then builds a thread-only
+    /// policy from this scope's own <see cref="WithSynchronizationContext"/>. A composing host passes
+    /// <i>its</i> policy instead, so its budgets, callbacks and side effects still apply — and must pass
+    /// the same instance it gives every other source, or the call counts diverge.
+    /// </param>
+    public AIContextProvider CreateContextProvider(AgentToolPolicy? policy = null)
+        => new McpAgentContextProvider(this, policy);
+
+    /// <summary>
+    /// Unloads a server (mid-session removal): removes its tool set, resets its status to
+    /// <see cref="McpServerStatus.NotStarted"/>, and disposes the underlying client (terminating the
+    /// child process for stdio modes). Returns whether any loaded tools were present.
+    /// <para>
+    /// Blocks until disposal completes. Prefer <see cref="UnloadServerAsync"/> in async code — this
+    /// overload exists for the synchronous callers the public surface already had.
+    /// </para>
     /// </summary>
     public bool UnloadServer(string name)
+        => UnloadServerAsync(name).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Unloads a server (mid-session removal): removes its tool set, resets its status to
+    /// <see cref="McpServerStatus.NotStarted"/>, and disposes the underlying client. Returns whether any
+    /// loaded tools were present. The server can be loaded again later via
+    /// <see cref="LoadAsync"/> or <see cref="AddAsync"/>.
+    /// </summary>
+    public async Task<bool> UnloadServerAsync(string name)
     {
+        McpClient? client;
         bool removed;
         lock (_loadedToolsLock)
+        {
             removed = _loadedToolSets.Remove(name);
+            if (!_loadedClients.TryGetValue(name, out client)) client = null;
+            _loadedClients.Remove(name);
+        }
 
-        UpdateStatus(() =>
+        await RunOnUIAsync(() =>
         {
             var status = Status.Servers.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
             if (status is not null)
                 status.State = McpServerStatus.NotStarted;
-        });
+        }).ConfigureAwait(false);
+
+        if (client is not null)
+            await client.DisposeAsync().ConfigureAwait(false);
+
+        Interlocked.Increment(ref _version);
         return removed;
+    }
+
+    /// <summary>
+    /// Disposes every connected server's client. For stdio modes this terminates the child processes,
+    /// which would otherwise outlive the scope. Safe to call more than once.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        var failures = await ReleaseAsync(DetachAllClients()).ConfigureAwait(false);
+        lock (_loadedToolsLock)
+            _loadedToolSets.Clear();
+
+        // Unlike the replace path, explicit disposal surfaces teardown failures to its caller.
+        if (failures.Count > 0)
+            throw new AggregateException("One or more MCP clients failed to dispose.", failures);
     }
 
     /// <summary>
@@ -145,6 +387,40 @@ public class McpScope
         ui.Post(_ => update(), null);
     }
 
+    /// <summary>
+    /// Marshals a status update to the UI thread and <b>awaits it</b>, so a caller that has just
+    /// completed a load step observes the status it caused. <see cref="UpdateStatus"/> posts
+    /// asynchronously, which leaves an ordering gap for anything awaited afterwards.
+    /// <para>
+    /// Awaiting (rather than <c>Send</c>-ing) is deliberate: the caller here is off the UI thread and the
+    /// UI thread may itself be awaiting this operation, so a blocking send would deadlock.
+    /// </para>
+    /// </summary>
+    private Task RunOnUIAsync(Action update)
+    {
+        var ui = UIContext;
+        if (ui is null || ReferenceEquals(ui, SynchronizationContext.Current))
+        {
+            update();
+            return Task.CompletedTask;
+        }
+
+        var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ui.Post(_ =>
+        {
+            try
+            {
+                update();
+                tcs.TrySetResult(null);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        }, null);
+        return tcs.Task;
+    }
+
     // ── Remote (Http) OAuth redirect ─────────────────────────────────────────
 
     private AuthorizationRedirectDelegate? _oauthAuthorizationRedirect;
@@ -167,11 +443,12 @@ public class McpScope
     public async Task<AITool[]> LoadAsync(
         IEnumerable<McpServerConfiguration> servers, CancellationToken ct = default)
     {
-        var mcpRoot = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory, McpRootRelative));
-        Directory.CreateDirectory(mcpRoot);
+        var mcpRoot = ResolveMcpRoot();
 
-        UpdateStatus(() => { Status.Reset(); Status.SetLoading(true); });
+        await RunOnUIAsync(() => { Status.Reset(); Status.SetLoading(true); }).ConfigureAwait(false);
+        // REPLACE semantics: whatever was loaded before is going away, so its clients must be released
+        // here — otherwise the stdio child processes of the replaced servers outlive the reload.
+        await ReleaseAsync(DetachAllClients()).ConfigureAwait(false);
         lock (_loadedToolsLock)
             _loadedToolSets.Clear();
         try
@@ -180,51 +457,132 @@ public class McpScope
             foreach (var config in servers)
             {
                 if (config is null) continue;
-                allTools.AddRange(await LoadOneAsync(config, mcpRoot, ct));
+                // Loading a configuration makes it reloadable by name afterwards, so the Agent's
+                // management tools can bring it back without the host handing the list over again.
+                Remember(config);
+                allTools.AddRange(await LoadOneAsync(config, mcpRoot, ct).ConfigureAwait(false));
             }
             return [.. allTools];
         }
         finally
         {
-            UpdateStatus(() => Status.SetLoading(false));
+            await RunOnUIAsync(() => Status.SetLoading(false)).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Loads <b>one</b> server without disturbing any server that is already loaded: the others keep
+    /// their tools, their status entries and their live clients. This is the incremental counterpart to
+    /// the destructive <see cref="LoadAsync"/>, and the entry point for adding a server mid-session.
+    /// Returns the server's tools (empty when it failed — the failure is recorded on its status and
+    /// raised through <see cref="ServerError"/>).
+    /// </summary>
+    public async Task<AITool[]> AddAsync(McpServerConfiguration config, CancellationToken ct = default)
+    {
+        if (config is null) throw new ArgumentNullException(nameof(config));
+        var mcpRoot = ResolveMcpRoot();
+        Remember(config);
+
+        await RunOnUIAsync(() => Status.SetLoading(true)).ConfigureAwait(false);
+        try
+        {
+            return await LoadOneAsync(config, mcpRoot, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            await RunOnUIAsync(() => Status.SetLoading(false)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Resolves and ensures the MCP installation root.</summary>
+    private string ResolveMcpRoot()
+    {
+        var mcpRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, McpRootRelative));
+        Directory.CreateDirectory(mcpRoot);
+        return mcpRoot;
+    }
+
+    /// <summary>Detaches every loaded client (and its configuration) so it can be released.</summary>
+    private (McpServerConfiguration? Config, McpClient Client)[] DetachAllClients()
+    {
+        lock (_loadedToolsLock)
+        {
+            var live = _loadedClients
+                .Select(kvp => (
+                    Config: _loadedConfigs.TryGetValue(kvp.Key, out var cfg) ? cfg : null,
+                    Client: kvp.Value))
+                .ToArray();
+            _loadedClients.Clear();
+            _loadedConfigs.Clear();
+            return live;
+        }
+    }
+
+    /// <summary>
+    /// Releases clients, reporting each failure against its own server and never letting one
+    /// unresponsive server strand the rest. Returns the failures for callers that must surface them.
+    /// </summary>
+    private async Task<List<Exception>> ReleaseAsync((McpServerConfiguration? Config, McpClient Client)[] live)
+    {
+        var failures = new List<Exception>();
+        foreach (var (config, client) in live)
+        {
+            try
+            {
+                await client.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                if (config is not null) ServerError?.Invoke(config, ex);
+                failures.Add(ex);
+            }
+        }
+        return failures;
     }
 
     private async Task<AITool[]> LoadOneAsync(McpServerConfiguration config, string mcpRoot, CancellationToken ct)
     {
-        var status = TrackServer(config);
+        var status = await TrackServerAsync(config).ConfigureAwait(false);
         try
         {
             // Local mode: first install/prepare the runtime (Installing), then connect (Connecting).
             if (config.RunMode is McpServerRunMode.Npm or McpServerRunMode.Pip)
             {
-                SetServerState(status, McpServerStatus.Installing);
+                await SetServerStateAsync(status, McpServerStatus.Installing).ConfigureAwait(false);
                 if (config.RunMode == McpServerRunMode.Npm)
-                    await EnsureNpmPackageAsync(config.Package, config.Version, mcpRoot, ct);
+                    await EnsureNpmPackageAsync(config.Package, config.Version, mcpRoot, ct).ConfigureAwait(false);
                 else
-                    await EnsurePipPackageAsync(config.Package, config.Version, mcpRoot, ct);
+                    await EnsurePipPackageAsync(config.Package, config.Version, mcpRoot, ct).ConfigureAwait(false);
             }
 
-            SetServerState(status, McpServerStatus.Connecting);
-            var tools = await ConnectServerAsync(config, mcpRoot, ct);
+            await SetServerStateAsync(status, McpServerStatus.Connecting).ConfigureAwait(false);
+            var (client, tools) = await ConnectServerAsync(config, mcpRoot, ct).ConfigureAwait(false);
 
-            UpdateStatus(() =>
+            await RunOnUIAsync(() =>
             {
                 status.ToolCount = tools.Length;
                 status.State = McpServerStatus.Connected;
-            });
+            }).ConfigureAwait(false);
             lock (_loadedToolsLock)
+            {
                 _loadedToolSets[config.Name] = tools;
+                _loadedClients[config.Name] = client;
+                _loadedConfigs[config.Name] = config;
+            }
+            Interlocked.Increment(ref _version);
             return tools;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            UpdateStatus(() =>
+            await RunOnUIAsync(() =>
             {
                 status.Error = ex.Message;
                 status.State = McpServerStatus.Error;
-            });
+            }).ConfigureAwait(false);
             ServerError?.Invoke(config, ex);
+            // A failed server changes observable state (a new status entry in Error) even though it
+            // contributes no tools, so caches keyed on Version must still be invalidated.
+            Interlocked.Increment(ref _version);
             return [];
         }
     }
@@ -238,13 +596,21 @@ public class McpScope
 
     // ── Status driving helpers ─────────────────────────────────────────────
 
-    private McpServerStatusViewModel TrackServer(McpServerConfiguration config)
+    /// <summary>
+    /// Ensures a status entry exists for <paramref name="config"/> and returns it, reusing a same-named
+    /// entry rather than duplicating it. The lookup and the mutation both run inside the marshalled
+    /// block: <see cref="McpStatusViewModel.Servers"/> is an <c>ObservableCollection</c> bound to the
+    /// host UI, so reading it from the loading thread is a cross-thread access.
+    /// </summary>
+    private async Task<McpServerStatusViewModel> TrackServerAsync(McpServerConfiguration config)
     {
-        // When reloading a same-named server, update the existing status entry to avoid duplicates.
-        var existing = Status.Servers.FirstOrDefault(s => string.Equals(s.Name, config.Name, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null)
+        McpServerStatusViewModel? status = null;
+        await RunOnUIAsync(() =>
         {
-            UpdateStatus(() =>
+            var existing = Status.Servers.FirstOrDefault(
+                s => string.Equals(s.Name, config.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (existing is not null)
             {
                 existing.Description = config.Description;
                 existing.RunMode = config.RunMode;
@@ -252,23 +618,26 @@ public class McpScope
                 existing.Error = null;
                 existing.ToolCount = 0;
                 existing.State = McpServerStatus.NotStarted;
-            });
-            return existing;
-        }
+                status = existing;
+                return;
+            }
 
-        var status = new McpServerStatusViewModel
-        {
-            Name = config.Name,
-            Description = config.Description,
-            RunMode = config.RunMode,
-            Endpoint = config.Endpoint,
-        };
-        UpdateStatus(() => Status.Track(status));
-        return status;
+            var created = new McpServerStatusViewModel
+            {
+                Name = config.Name,
+                Description = config.Description,
+                RunMode = config.RunMode,
+                Endpoint = config.Endpoint,
+            };
+            Status.Track(created);
+            status = created;
+        }).ConfigureAwait(false);
+
+        return status!;
     }
 
-    private void SetServerState(McpServerStatusViewModel status, McpServerStatus state)
-        => UpdateStatus(() => status.State = state);
+    private Task SetServerStateAsync(McpServerStatusViewModel status, McpServerStatus state)
+        => RunOnUIAsync(() => status.State = state);
 
     // ── Runtime directory helpers ──────────────────────────────────────────
 
@@ -379,7 +748,7 @@ public class McpScope
 
     // ── MCP protocol connection ────────────────────────────────────────────
 
-    private async Task<AITool[]> ConnectServerAsync(
+    private async Task<(McpClient Client, AITool[] Tools)> ConnectServerAsync(
         McpServerConfiguration config, string mcpRoot, CancellationToken ct)
     {
         var transport = config.RunMode == McpServerRunMode.Http
@@ -403,17 +772,38 @@ public class McpScope
             ? new McpClientOptions { InitializationTimeout = to }
             : null;
 
+        var client = await McpClient.CreateAsync(transport, options, null, connectCt).ConfigureAwait(false);
         try
         {
-            var client = await McpClient.CreateAsync(transport, options, null, connectCt);
-            var tools = await client.ListToolsAsync();
-            return [.. tools.Cast<AITool>()];
+            var tools = await client.ListToolsAsync().ConfigureAwait(false);
+            return (client, [.. tools.Cast<AITool>()]);
         }
         catch (OperationCanceledException) when (
             timeoutCts is { IsCancellationRequested: true } && !ct.IsCancellationRequested)
         {
+            await SafeDisposeAsync(client).ConfigureAwait(false);
             throw new TimeoutException(
                 $"MCP server '{config.Name}' connection timed out after {effectiveTimeout}.");
+        }
+        catch
+        {
+            // Listing failed after the client (and, for stdio, its child process) already exists. The
+            // caller never gets a reference in this path, so it must be released here.
+            await SafeDisposeAsync(client).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>Disposes during a failure path, where a teardown error must not mask the original one.</summary>
+    private static async Task SafeDisposeAsync(McpClient client)
+    {
+        try
+        {
+            await client.DisposeAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Intentionally ignored: the caller is already unwinding a more informative failure.
         }
     }
 

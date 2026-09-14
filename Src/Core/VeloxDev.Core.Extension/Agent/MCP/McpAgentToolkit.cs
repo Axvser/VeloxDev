@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,26 +15,189 @@ namespace VeloxDev.AI.MCP;
 /// MCP management tools callable by the Agent: list server status, load (install and connect) the
 /// host pre-registered servers. Server configuration is provided in advance by the host
 /// (<see cref="McpServerConfiguration"/>); the Agent does not construct arbitrary configs — the
-/// security boundary matches the workflow tools: "host registers, Agent operates". Registered via
-/// <c>WorkflowAgentScope.WithTools(...)</c>, they get the same UI-thread marshalling / call counting /
-/// interaction-safety hints as the other tools.
+/// security boundary matches the workflow tools: "host registers, Agent operates".
+/// <para>
+/// Reach the model through <see cref="McpScope.CreateContextProvider"/>, which contributes these tools
+/// — and every connected server's — already wrapped so they obey the composing host's policy. Use
+/// <see cref="CreateTools(AgentToolPolicy)"/> directly only when assembling providers by hand; the
+/// parameterless <see cref="CreateTools()"/> returns them unwrapped, with no marshalling or accounting.
+/// </para>
 /// </summary>
 public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfiguration> servers)
 {
     private readonly McpScope _scope = scope ?? throw new ArgumentNullException(nameof(scope));
     private readonly IReadOnlyList<McpServerConfiguration> _servers = servers ?? [];
 
-    /// <summary>Creates the MCP management tools: query / load / unload / describe capabilities (read-only + restricted operations; configuration is immutable once loaded).</summary>
+    /// <summary>
+    /// Names of the management tools that are always registered, in registration order. Exposed so a host
+    /// composing several tool sources can classify them without repeating the literals.
+    /// </summary>
+    public static readonly string[] ToolNames =
+        ["ListMcpServers", "LoadMcpServers", "UnloadMcpServer", "DescribeMcpServer"];
+
+    /// <summary>
+    /// Name of the tool that lets the model add a server of its own. Registered only when the scope's
+    /// <see cref="McpScope.SelfServiceLevel"/> has been opened past
+    /// <see cref="McpSelfServiceLevel.Closed"/>.
+    /// </summary>
+    public const string AddToolName = "AddMcpServer";
+
+    /// <summary>
+    /// Creates the MCP management tools: query / load / unload / describe capabilities. Adding a server
+    /// the host did not pre-register is a separate opt-in — see
+    /// <see cref="McpScope.WithSelfService"/> — and its tool is registered only once the host has opened
+    /// that gate.
+    /// </summary>
     public IList<AITool> CreateTools()
     {
-        return
-        [
-            AIFunctionFactory.Create(ListServers, "ListMcpServers"),
-            AIFunctionFactory.Create(LoadServers, "LoadMcpServers"),
-            AIFunctionFactory.Create(UnloadServer, "UnloadMcpServer"),
-            AIFunctionFactory.Create(DescribeServer, "DescribeMcpServer"),
-        ];
+        var tools = new List<AITool>
+        {
+            AIFunctionFactory.Create(ListServers, ToolNames[0]),
+            AIFunctionFactory.Create(LoadServers, ToolNames[1]),
+            AIFunctionFactory.Create(UnloadServer, ToolNames[2]),
+            AIFunctionFactory.Create(DescribeServer, ToolNames[3]),
+        };
+
+        // At Closed the tool is absent rather than present-and-refusing: a tool the model can see but
+        // never use only wastes prompt budget and invites retries.
+        if (_scope.SelfServiceLevel != McpSelfServiceLevel.Closed)
+            tools.Add(AIFunctionFactory.Create(AddServer, AddToolName));
+
+        return tools;
     }
+
+    /// <summary>
+    /// Creates the management tools wrapped so that every call obeys <paramref name="policy"/> —
+    /// marshalled onto the host's thread, gated, and reported afterwards. This is what a context provider
+    /// contributes; registering the unwrapped set by hand gets none of it.
+    /// </summary>
+    public IList<AITool> CreateTools(AgentToolPolicy policy)
+    {
+        if (policy is null) throw new ArgumentNullException(nameof(policy));
+        return [.. CreateTools().Select(tool =>
+            tool is AIFunction function ? (AITool)new TrackedAIFunction(function, policy) : tool)];
+    }
+
+    /// <summary>
+    /// The prompt text describing these tools.
+    /// <para>
+    /// Generated rather than fixed, because what the model may do with MCP depends on the host's
+    /// <see cref="McpScope.SelfServiceLevel"/>: a paragraph promising that servers cannot be added would
+    /// be a lie at every level above <see cref="McpSelfServiceLevel.Closed"/>, and one inviting the model
+    /// to add them would be a lie at it.
+    /// </para>
+    /// </summary>
+    public string BuildPromptContext()
+    {
+        var sb = new StringBuilder();
+        sb.Append("MCP server management tools: ListMcpServers shows each server's alive/installing/connecting/error state and tool count; ");
+        sb.Append("DescribeMcpServer exports a connected server's tool-capability prompt (without activating the tools) so you can tell the user what it can do; ");
+        sb.Append("LoadMcpServers loads the servers the host pre-registered (installing and connecting when needed); ");
+        sb.Append("UnloadMcpServer removes a server mid-session — its tools leave the next turn's tool set, and it can be loaded again. ");
+        sb.Append(_scope.SelfServiceLevel switch
+        {
+            McpSelfServiceLevel.Closed =>
+                "You cannot add a server yourself: the configuration is fixed by the host, and no tool to author one exists. "
+                + "Do not attempt to modify or reconfigure servers.",
+            McpSelfServiceLevel.RemoteConfirmed =>
+                "AddMcpServer can connect a REMOTE (Http) server, but only after the user confirms it — ask them first, and expect a refusal if they decline. "
+                + "Locally launched servers must be pre-registered by the host.",
+            McpSelfServiceLevel.AllConfirmed =>
+                "AddMcpServer can connect a remote or a locally launched server, but only after the user confirms it — ask them first, and expect a refusal if they decline.",
+            _ =>
+                "AddMcpServer can connect any server without asking. Prefer the servers the host pre-registered, and add one of your own only when the task needs it.",
+        });
+        sb.Append(" Loading a local server installs npm/pip runtimes and may take time — confirm with the user before calling.");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Adds a server the host did not pre-register and connects it. Available only when the host raised
+    /// <see cref="McpScope.SelfServiceLevel"/>; local run modes (which install and launch a package)
+    /// require the higher rungs, and the rungs below <see cref="McpSelfServiceLevel.Unrestricted"/>
+    /// require the user's agreement.
+    /// </summary>
+    [Description("Adds and connects an MCP server that the host did not pre-register, then makes its tools available for the rest of the session. The host must have enabled this. Run modes: 'Http' for a remote server (give endpoint), or 'Npx'/'Npm'/'Pip'/'Uvx'/'Dotnet'/'Exe' for a server launched locally (give package) — local modes install and start software on the user's machine, so they may be refused outright or require confirmation. Ask the user first when the server is one they did not mention.")]
+    private async Task<string> AddServer(
+        [Description("Server name. Must not already be registered or connected.")] string name,
+        [Description("Run mode: 'Http' for remote, or 'Npx','Npm','Pip','Uvx','Dotnet','Exe' for local.")] string runMode,
+        [Description("Remote mode only: the endpoint URL.")] string? endpoint = null,
+        [Description("Local modes only: the package name, or the path for Dotnet/Exe.")] string? package = null,
+        [Description("Optional JSON array of command-line arguments, e.g. [\"C:/data\"].")] string? argumentsJson = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Error("A server name is required.");
+        if (!Enum.TryParse<McpServerRunMode>(runMode, true, out var mode))
+            return Error($"Unknown run mode '{runMode}'. Valid: {string.Join(", ", Enum.GetNames(typeof(McpServerRunMode)))}.");
+        if (!_scope.CanAddServer(mode))
+        {
+            var isLocal = mode != McpServerRunMode.Http;
+            return Error(isLocal
+                ? $"Adding a local '{mode}' server is disabled by host policy. Only remote (Http) servers may be added at the current level, and local packages must be pre-registered by the host."
+                : "Adding MCP servers is disabled by host policy. The host must enable it via WithSelfService.");
+        }
+
+        if (mode == McpServerRunMode.Http && string.IsNullOrWhiteSpace(endpoint))
+            return Error("An 'endpoint' URL is required for an Http server.");
+        if (mode != McpServerRunMode.Http && string.IsNullOrWhiteSpace(package))
+            return Error($"A 'package' is required for a {mode} server.");
+
+        string[] arguments = [];
+        if (!string.IsNullOrWhiteSpace(argumentsJson))
+        {
+            try
+            {
+                arguments = [.. JArray.Parse(argumentsJson!).Select(t => t.Value<string>()).OfType<string>()];
+            }
+            catch (Exception ex)
+            {
+                return Error($"Invalid arguments JSON: {ex.Message}");
+            }
+        }
+
+        var config = new McpServerConfiguration
+        {
+            Name = name,
+            RunMode = mode,
+            Description = $"Added by the Agent{(mode == McpServerRunMode.Http ? $" ({endpoint})" : $" ({package})")}.",
+            Endpoint = endpoint,
+            Package = package ?? string.Empty,
+            Arguments = arguments,
+        };
+
+        if (_scope.RequiresConfirmationToAdd())
+        {
+            var description = mode == McpServerRunMode.Http
+                ? $"Connect the Agent to the remote MCP server '{name}' at {endpoint}. Its tools become available for the rest of this session."
+                : $"Install (if needed) and launch the local MCP server '{name}' from package '{package}' on this machine, and give the Agent its tools for the rest of this session.";
+            // Awaited without ConfigureAwait: this tool is registered through the scope, so it runs on the
+            // UI thread, and everything after this point reads the UI-bound status collection.
+            if (!await _scope.ConfirmationResolver($"mcp-add:{name}", description))
+                return JsonConvert.SerializeObject(
+                    new { status = "denied", message = "The user declined to add this server. Do not retry without asking them." },
+                    Formatting.None);
+        }
+
+        var tools = await _scope.AddAsync(config, ct);
+        var status = _scope.Status.Servers.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        return JsonConvert.SerializeObject(new
+        {
+            status = tools.Length > 0 ? "ok" : "error",
+            server = name,
+            runMode = mode.ToString(),
+            toolCount = tools.Length,
+            state = status?.State.ToString(),
+            error = status?.Error,
+            message = tools.Length > 0
+                ? $"'{name}' connected — its {tools.Length} tool(s) are available now."
+                : $"'{name}' could not be connected. See 'error'.",
+        }, Formatting.None);
+    }
+
+    private static string Error(string message)
+        => JsonConvert.SerializeObject(new { status = "error", message }, Formatting.None);
 
     /// <summary>
     /// Exports a connected MCP server's tool capabilities as plain prompts — each tool's name and
@@ -69,11 +233,11 @@ public sealed class McpAgentToolkit(McpScope scope, IReadOnlyList<McpServerConfi
     /// (the next conversation call no longer sees them) and resets its status to NotStarted.
     /// The server can be loaded again later with <see cref="LoadServers"/>.
     /// </summary>
-    [Description("Unloads a connected MCP server mid-session: removes its tools from the Agent's tool set and resets its status to NotStarted. Pass the server name. The server can be loaded again later via LoadMcpServers. Useful to free resources or drop a server no longer needed.")]
-    private string UnloadServer(
+    [Description("Unloads a connected MCP server mid-session: removes its tools from the Agent's tool set, resets its status to NotStarted, and tears down the connection (for a locally-launched server this terminates its process). Pass the server name. The server can be loaded again later via LoadMcpServers. Useful to free resources or drop a server no longer needed.")]
+    private async Task<string> UnloadServer(
         [Description("Server name to unload, e.g. \"Microsoft Learn\".")] string serverName)
     {
-        var removed = _scope.UnloadServer(serverName);
+        var removed = await _scope.UnloadServerAsync(serverName);
         return JsonConvert.SerializeObject(
             new
             {
