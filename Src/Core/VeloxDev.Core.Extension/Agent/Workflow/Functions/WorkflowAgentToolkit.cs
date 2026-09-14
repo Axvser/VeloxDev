@@ -9,6 +9,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using VeloxDev.AI.Skills;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
@@ -39,7 +40,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
     public IList<AITool> CreateTools(WorkflowToolCategory categories = WorkflowToolCategory.All)
     {
         AITool T(Delegate method, string name)
-            => new TrackedAIFunction(AIFunctionFactory.Create(method, name), this);
+            => new TrackedAIFunction(AIFunctionFactory.Create(method, name), Policy);
 
         var tools = new List<AITool>();
 
@@ -156,106 +157,98 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         // accounting, ToolCalled callback and auto-dirty handling as the built-in tools. Non-AIFunction
         // tools (e.g. raw MCP client tools) are added as-is.
         foreach (var tool in _scope.CustomTools)
-            tools.Add(WrapCustomTool(tool));
+            tools.Add(WrapTool(tool));
         foreach (var tool in _scope.QueryOnlyCustomTools)
-            tools.Add(WrapCustomTool(tool));
+            tools.Add(WrapTool(tool));
 
         return tools;
     }
 
     /// <summary>
-    /// Wraps an <c>AIFunction</c> custom tool with <see cref="TrackedAIFunction"/> so it receives the
-    /// same tracking (UI marshal, call counting, callback, auto-dirty) as the built-in tools.
+    /// Wraps an <c>AIFunction</c> with <see cref="TrackedAIFunction"/> so it receives the same tracking
+    /// (UI marshal, call counting, callback, auto-dirty) as the built-in tools — used for both
+    /// developer-registered tools and tools sourced from outside, such as a connected MCP server.
     /// Non-<c>AIFunction</c> tools are returned unchanged.
     /// </summary>
-    private AITool WrapCustomTool(AITool tool)
-        => tool is AIFunction fn ? new TrackedAIFunction(fn, this) : tool;
+    internal AITool WrapTool(AITool tool)
+        => tool is AIFunction fn ? new TrackedAIFunction(fn, Policy) : tool;
+
+    private AgentToolPolicy? _policy;
 
     /// <summary>
-    /// Wraps an <see cref="AIFunction"/> so that <see cref="Track"/> is called
-    /// after every invocation, ensuring call counting and callback dispatch.
+    /// This toolkit's policy for the shared <see cref="TrackedAIFunction"/>: marshal onto the scope's UI
+    /// context, enforce the three call budgets, and on completion count the call, raise the scope's
+    /// callback, and mark the tree dirty for a mutation when the host asked for that.
+    /// <para>
+    /// <b>One instance per scope, shared with everything the scope composes.</b> The subsystem context
+    /// providers are handed this same reference, so a tool sourced from MCP or a skill counts against the
+    /// same budgets and raises the same callback as a built-in one. Its hooks read the scope live, so
+    /// <c>With*</c> calls made <i>after</i> the subsystems were attached still reach their tools.
+    /// </para>
+    /// <para>
+    /// Built lazily so it can read <see cref="WorkflowAgentScope.UIContext"/>, which a host is free to
+    /// register after this toolkit exists.
+    /// </para>
     /// </summary>
-    private sealed class TrackedAIFunction(AIFunction inner, WorkflowAgentToolkit toolkit) : DelegatingAIFunction(inner)
+    internal AgentToolPolicy Policy => _policy ??= new AgentToolPolicy
     {
-        private readonly WorkflowAgentToolkit _toolkit = toolkit;
+        MarshalTo = () => _scope.UIContext,
+        Refuse = CheckBudget,
+        AfterCall = TrackAsync,
+    };
 
-        protected override async ValueTask<object?> InvokeCoreAsync(
-            AIFunctionArguments arguments, CancellationToken cancellationToken)
-        {
-            // Workflow components are UI-bound, so when the host configured a UI SynchronizationContext
-            // and we are not already on it, marshal the entire tool call (body + tracking) onto it.
-            var uiContext = _toolkit._scope.UIContext;
-            if (uiContext is not null && !ReferenceEquals(uiContext, SynchronizationContext.Current))
-            {
-                return await RunOnContextAsync(uiContext, cancellationToken,
-                    () => InvokeCoreInnerAsync(arguments, cancellationToken)).ConfigureAwait(false);
-            }
-            return await InvokeCoreInnerAsync(arguments, cancellationToken).ConfigureAwait(false);
-        }
+    /// <summary>
+    /// The pre-flight gate: returns the refusal message when a configured call limit is already reached,
+    /// or <c>null</c> to let the call through. Runs inside the marshalled block, before the tool body.
+    /// </summary>
+    private string? CheckBudget(string toolName)
+    {
+        if (_scope.MaxToolCalls.HasValue && _toolCallCount >= _scope.MaxToolCalls.Value)
+            return $"Tool call limit ({_scope.MaxToolCalls.Value}) exceeded. No further tool calls are allowed.";
 
-        private async ValueTask<object?> InvokeCoreInnerAsync(
-            AIFunctionArguments arguments, CancellationToken cancellationToken)
-        {
-            // ── Pre-flight: reject if any configured call limit would be exceeded ──
-            if (_toolkit._scope.MaxToolCalls.HasValue && _toolkit._toolCallCount >= _toolkit._scope.MaxToolCalls.Value)
-                return WorkflowAgentToolkit.Error($"Tool call limit ({_toolkit._scope.MaxToolCalls.Value}) exceeded. No further tool calls are allowed.");
-            bool isQueryTool = _toolkit.IsQueryTool(Name);
-            if (!isQueryTool && _toolkit._scope.MaxWriteToolCalls.HasValue && _toolkit._writeToolCallCount >= _toolkit._scope.MaxWriteToolCalls.Value)
-                return WorkflowAgentToolkit.Error($"Mutation tool call limit ({_toolkit._scope.MaxWriteToolCalls.Value}) exceeded. No further mutation tool calls are allowed.");
-            if (isQueryTool && _toolkit._scope.MaxReadToolCalls.HasValue && _toolkit._readToolCallCount >= _toolkit._scope.MaxReadToolCalls.Value)
-                return WorkflowAgentToolkit.Error($"Query tool call limit ({_toolkit._scope.MaxReadToolCalls.Value}) exceeded. No further query tool calls are allowed.");
+        bool isQueryTool = IsQueryTool(toolName);
+        if (!isQueryTool && _scope.MaxWriteToolCalls.HasValue && _writeToolCallCount >= _scope.MaxWriteToolCalls.Value)
+            return $"Mutation tool call limit ({_scope.MaxWriteToolCalls.Value}) exceeded. No further mutation tool calls are allowed.";
+        if (isQueryTool && _scope.MaxReadToolCalls.HasValue && _readToolCallCount >= _scope.MaxReadToolCalls.Value)
+            return $"Query tool call limit ({_scope.MaxReadToolCalls.Value}) exceeded. No further query tool calls are allowed.";
 
-            try
-            {
-                var result = await base.InvokeCoreAsync(arguments, cancellationToken);
-                var resultText = result?.ToString() ?? string.Empty;
-                await _toolkit.TrackAsync(Name, resultText);
-                return result;
-            }
-            catch (Exception ex)
-            {
-                return WorkflowAgentToolkit.Error($"Tool '{Name}' threw an unhandled exception: {ex.Message}");
-            }
-        }
-
-        private static async ValueTask<T> RunOnContextAsync<T>(
-            SynchronizationContext context, CancellationToken ct, Func<ValueTask<T>> body)
-        {
-            var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-            using (ct.Register(() => tcs.TrySetCanceled(ct)))
-            {
-                context.Post(async _ =>
-                {
-                    try
-                    {
-                        var result = await body();
-                        tcs.TrySetResult(result);
-                    }
-                    catch (Exception ex)
-                    {
-                        tcs.TrySetException(ex);
-                    }
-                }, null);
-                return await tcs.Task.ConfigureAwait(false);
-            }
-        }
+        return null;
     }
 
     /// <summary>
     /// Tool names that are purely read-only queries and must never trigger a dirty mark.
     /// Every other tool is treated as a mutation when <see cref="WorkflowAgentScope.AutoMarkDirty"/> is enabled.
     /// </summary>
-    private static readonly HashSet<string> QueryToolNames = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> QueryToolNames = BuildQueryToolNames();
+
+    /// <summary>
+    /// Builds <see cref="QueryToolNames"/>, including the skill tools by name from their own toolkit.
+    /// <para>
+    /// A skill tool changes what the model is shown and never the workflow graph, so it belongs on this
+    /// side regardless of how it reaches the agent — whether the host registered it or the skill context
+    /// provider contributed it. Taking the names from <see cref="SkillAgentToolkit.ToolNames"/> rather
+    /// than repeating the literals keeps the two in step.
+    /// </para>
+    /// </summary>
+    private static HashSet<string> BuildQueryToolNames()
     {
-        "ListNodes", "GetNodeDetail", "GetNodeDetailById", "ListConnections", "GetTypeSchema",
-        "GetWorkflowSummary", "GetComponentContext",
-        "ListComponentCommands", "GetChangesSinceSnapshot", "TakeSnapshot",
-        "GetFullTopology", "FindNodes", "ResolveSlotId", "ListSlotProperties",
-        "GetEnumSlotByValue", "GetLinkDetail", "GetNodeStatistics", "ListCreatableTypes",
-        "ValidateWorkflow", "SearchForward", "SearchReverse", "SearchAllRelative",
-        "IsConnected", "FindPath", "RequestSelection", "RequestConfirmation",
-        "CompileWorkflow", "CompileNodeResult", "GetCompileStatus", "GetExecutionLog",
-    };
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "ListNodes", "GetNodeDetail", "GetNodeDetailById", "ListConnections", "GetTypeSchema",
+            "GetWorkflowSummary", "GetComponentContext",
+            "ListComponentCommands", "GetChangesSinceSnapshot", "TakeSnapshot",
+            "GetFullTopology", "FindNodes", "ResolveSlotId", "ListSlotProperties",
+            "GetEnumSlotByValue", "GetLinkDetail", "GetNodeStatistics", "ListCreatableTypes",
+            "ValidateWorkflow", "SearchForward", "SearchReverse", "SearchAllRelative",
+            "IsConnected", "FindPath", "RequestSelection", "RequestConfirmation",
+            "CompileWorkflow", "CompileNodeResult", "GetCompileStatus", "GetExecutionLog",
+        };
+
+        foreach (var name in SkillAgentToolkit.ToolNames)
+            names.Add(name);
+
+        return names;
+    }
 
     /// <summary>
     /// Wraps a tool result with call counting, callback invocation, max-call enforcement,
@@ -423,7 +416,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         var newAnchor = new Anchor(n.Anchor.Horizontal + offsetX, n.Anchor.Vertical + offsetY, n.Anchor.Layer);
         var completion = WaitForExitedAsync(n.SetAnchorCommand, cancellationToken);
         n.SetAnchorCommand.Execute(newAnchor);
-        await completion.ConfigureAwait(false);
+        await completion;
         return Ok($"Moved {nodeIndex} by ({offsetX},{offsetY}).");
     }
 
@@ -438,7 +431,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var completion = WaitForExitedAsync(node!.SetAnchorCommand, cancellationToken);
         node.SetAnchorCommand.Execute(new Anchor(left, top, layer));
-        await completion.ConfigureAwait(false);
+        await completion;
         return Ok($"Position {nodeIndex} → ({left},{top},{layer}).");
     }
 
@@ -457,7 +450,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             return Ok($"Resized {nodeIndex} → ({width},{height}).");
         var completion = WaitForExitedAsync(n.SetSizeCommand, cancellationToken);
         n.SetSizeCommand.Execute(newSize);
-        await completion.ConfigureAwait(false);
+        await completion;
         return Ok($"Resized {nodeIndex} → ({width},{height}).");
     }
 
@@ -469,7 +462,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         var completion = WaitForExitedAsync(node!.DeleteCommand, cancellationToken);
         node.DeleteCommand.Execute(null);
-        await completion.ConfigureAwait(false);
+        await completion;
         return Ok($"Node {nodeIndex} deleted.");
     }
 
@@ -482,7 +475,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!TryGetSlot(nodeIndex, slotIndex, out var slot, out var error)) return error;
         var completion = WaitForExitedAsync(slot!.DeleteCommand, cancellationToken);
         slot.DeleteCommand.Execute(null);
-        await completion.ConfigureAwait(false);
+        await completion;
         return Ok($"Slot [{nodeIndex}][{slotIndex}] deleted.");
     }
 
@@ -575,7 +568,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         {
             var completion = WaitForExitedAsync(link.DeleteCommand, cancellationToken);
             link.DeleteCommand.Execute(null);
-            await completion.ConfigureAwait(false);
+            await completion;
             return Ok($"Disconnected [{senderNodeIndex}][{senderSlotIndex}]✕[{receiverNodeIndex}][{receiverSlotIndex}].");
         }
         return Error("No connection found between the specified slots.");
@@ -592,7 +585,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
-            await WaitForCommandAsync(node!.ReceiveCommand, new TaskContext(data: parameter), cancellationToken).ConfigureAwait(false);
+            await WaitForCommandAsync(node!.ReceiveCommand, new TaskContext(data: parameter), cancellationToken);
             return Ok($"Receive on node {nodeIndex} completed.");
         }
         catch (OperationCanceledException)
@@ -616,7 +609,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
-            await WaitForCommandAsync(node!.BroadcastCommand, parameter, cancellationToken).ConfigureAwait(false);
+            await WaitForCommandAsync(node!.BroadcastCommand, parameter, cancellationToken);
             return Ok($"Broadcast on node {nodeIndex} completed.");
         }
         catch (Exception ex)
@@ -1523,7 +1516,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
         try
         {
-            await WaitForCommandAsync(node!.ReverseBroadcastCommand, parameter, cancellationToken).ConfigureAwait(false);
+            await WaitForCommandAsync(node!.ReverseBroadcastCommand, parameter, cancellationToken);
             return Ok($"Reverse broadcast on node {nodeIndex} completed.");
         }
         catch (Exception ex)
@@ -1547,7 +1540,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         {
             var completion = WaitForExitedAsync(link.DeleteCommand, cancellationToken);
             link.DeleteCommand.Execute(null);
-            await completion.ConfigureAwait(false);
+            await completion;
             return Ok($"Disconnected {senderSlotId}→{receiverSlotId}.");
         }
         return Error("No connection found between the specified slots.");
@@ -1761,7 +1754,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             }
             try
             {
-                await WaitForCommandAsync(Tree.Nodes[idx].ReceiveCommand, new TaskContext(data: parameter), cancellationToken).ConfigureAwait(false);
+                await WaitForCommandAsync(Tree.Nodes[idx].ReceiveCommand, new TaskContext(data: parameter), cancellationToken);
                 completed++;
             }
             catch (Exception ex)
@@ -1811,7 +1804,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         try
         {
             var compiler = new CompilerViewModel();
-            var graphs = await compiler.CompileAsync(node!, role).ConfigureAwait(false);
+            var graphs = await compiler.CompileAsync(node!, role);
             if (graphs.Count == 0)
                 return Error(role == CompileRole.Terminal
                     ? "Compile produced no graph for this terminal node."
@@ -1822,7 +1815,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
                 Data = seed,
                 Target = role == CompileRole.Terminal ? node : null,
             };
-            await new RuntimeEngine().RunAsync(graphs[0], context, ct).ConfigureAwait(false);
+            await new RuntimeEngine().RunAsync(graphs[0], context, ct);
 
             // Forward-consistent semantics: a Terminal run only reports a result when the target node was
             // actually driven. If a router on its cone decided on a sibling branch, the target is simply not
@@ -2029,7 +2022,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         try
         {
             var compiler = new CompilerViewModel();
-            var graphs = await compiler.CompileAsync(node!, role).ConfigureAwait(false);
+            var graphs = await compiler.CompileAsync(node!, role);
 
             var entries = new JArray();
             foreach (var g in graphs)
@@ -2681,8 +2674,8 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             command.Failed += onFailed;
             try
             {
-                await command.ExecuteAsync(parameter).ConfigureAwait(false);
-                await tcs.Task.ConfigureAwait(false);
+                await command.ExecuteAsync(parameter);
+                await tcs.Task;
             }
             finally
             {
@@ -2711,7 +2704,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
             command.Failed += onFailed;
             try
             {
-                await tcs.Task.ConfigureAwait(false);
+                await tcs.Task;
             }
             finally
             {
@@ -2763,7 +2756,7 @@ public sealed class WorkflowAgentToolkit(WorkflowAgentScope scope)
         var recvCompletion = WaitForExitedAsync(Tree.ReceiveConnectionCommand, ct);
         Tree.SendConnectionCommand.Execute(sender);
         Tree.ReceiveConnectionCommand.Execute(receiver);
-        await Task.WhenAll(sendCompletion, recvCompletion).ConfigureAwait(false);
+        await Task.WhenAll(sendCompletion, recvCompletion);
     }
 
     /// <summary>

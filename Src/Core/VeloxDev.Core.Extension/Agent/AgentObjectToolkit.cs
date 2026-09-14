@@ -48,7 +48,7 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
     public IList<AITool> CreateTools()
     {
         AITool T(Delegate method, string name)
-            => new TrackedAIFunction(AIFunctionFactory.Create(method, name), this);
+            => new TrackedAIFunction(AIFunctionFactory.Create(method, name), Policy);
 
         return
         [
@@ -67,34 +67,30 @@ public sealed class AgentObjectToolkit(object target, AgentLanguages language = 
 
     // ────────────────────────── Tracking ──────────────────────────
 
-    private sealed class TrackedAIFunction(AIFunction inner, AgentObjectToolkit toolkit) : DelegatingAIFunction(inner)
+    private AgentToolPolicy? _policy;
+
+    /// <summary>
+    /// This toolkit's policy for the shared <see cref="TrackedAIFunction"/>: one global call ceiling, and
+    /// a <see cref="ToolCalled"/> notification after each call.
+    /// <para>
+    /// It registers no thread marshalling on purpose. The wrapped target is an arbitrary object rather
+    /// than a UI-bound component, so there is no thread it must run on; a host that needs one can set
+    /// <see cref="AgentToolPolicy.MarshalTo"/> on a policy of its own.
+    /// </para>
+    /// </summary>
+    private AgentToolPolicy Policy => _policy ??= new AgentToolPolicy
     {
-        private readonly AgentObjectToolkit _toolkit = toolkit;
+        Refuse = _ => MaxToolCalls.HasValue && _toolCallCount >= MaxToolCalls.Value
+            ? $"Tool call limit ({MaxToolCalls.Value}) exceeded. No further tool calls are allowed."
+            : null,
+        AfterCall = TrackAsync,
+    };
 
-        protected override async ValueTask<object?> InvokeCoreAsync(
-            AIFunctionArguments arguments, CancellationToken cancellationToken)
-        {
-            // ── Pre-flight: reject if call limit would be exceeded ──
-            if (_toolkit.MaxToolCalls.HasValue && _toolkit._toolCallCount >= _toolkit.MaxToolCalls.Value)
-                return JsonConvert.SerializeObject(new { status = "error", message = $"Tool call limit ({_toolkit.MaxToolCalls.Value}) exceeded. No further tool calls are allowed." });
-
-            try
-            {
-                var result = await base.InvokeCoreAsync(arguments, cancellationToken);
-                _toolkit.Track(Name, result?.ToString() ?? string.Empty);
-                return result;
-            }
-            catch (Exception ex)
-            {
-                return JsonConvert.SerializeObject(new { status = "error", message = $"Tool '{Name}' threw an unhandled exception: {ex.Message}" });
-            }
-        }
-    }
-
-    private void Track(string toolName, string result)
+    private Task TrackAsync(string toolName, string result)
     {
         var count = Interlocked.Increment(ref _toolCallCount);
         ToolCalled?.Invoke(this, new AgentToolCallEventArgs(toolName, result, count));
+        return Task.CompletedTask;
     }
 
     // ────────────────────────── Context ──────────────────────────
