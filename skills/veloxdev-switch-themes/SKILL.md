@@ -40,7 +40,7 @@ public partial class MainWindow { … }
 
 ⚙ The type parameters are **one converter followed by the themes**; the constructor arguments are the property name followed by **one argument array per theme, in the same order**. Position is the pairing — a theme listed second takes the second array, so swapping two theme type arguments silently swaps their values.
 
-⚙ **At least one converter and two themes; at most one converter and seven themes.** Beyond that the attribute arity does not exist.
+⚙ **At least one converter and two themes, and at most six.** The attribute itself declares arities all the way up to seven themes — but the generator only registers the two-to-six-theme forms, so **a seven-theme declaration compiles and then generates nothing at all**, silently, exactly like a missing `partial`. Stay at six or fewer.
 
 ⚙ The converter comes from the adapter package and is instantiated by the generator, so it needs a **public parameterless constructor**.
 
@@ -116,7 +116,7 @@ Transition.Pause(mainWindow);                       // freeze the whole switch
 Transition.Resume(mainWindow);
 Transition.SetRate(mainWindow, 0.5);                // half speed; 0 also pauses
 Transition.Seek(mainWindow, TimeSpan.FromSeconds(2)); // jump to 2s in, keeping the rate
-Transition.IsPaused(mainWindow);                    // true once any target is paused
+Transition.IsPaused(mainWindow);                    // true only when every run on the target is paused
 Transition.Position(mainWindow);                    // how far into the current pass
 Transition.Exit(mainWindow);                        // stop it outright, leaving values where they are
 ```
@@ -141,12 +141,14 @@ partial void OnThemeChanging(Type? oldValue, Type? newValue) { … }
 The generator also emits a set of accessors on the class:
 
 ```csharp
-SetThemeValue<Light>(nameof(Background), ["#ffffff"]);   // override one value for one theme
-RestoreThemeValue<Light>(nameof(Foreground));            // put it back
+SetThemeValue<Light>(nameof(Background), new object?[] { "#ffffff" });   // override one value for one theme
+RestoreThemeValue<Light>(nameof(Foreground));                           // put it back
 
 var declared = GetStaticThemeCache();   // what the attributes declared
 var overrides = GetActiveThemeCache();  // what has been changed at runtime
 ```
+
+⚙ **The value array is written the same way the attribute writes it, but not in the same syntax.** In the attribute a collection expression works — `["#ffffff"]` — because the constructor takes `params object?[]`. `SetThemeValue`'s second parameter is a plain `object?`, so there a collection expression **does not compile** (`CS9174`): spell it `new object?[] { "#ffffff" }`.
 
 ⚙ **An override wins over the declared value**, and only the properties you changed appear in the active cache.
 

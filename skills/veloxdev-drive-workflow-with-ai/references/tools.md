@@ -1,6 +1,6 @@
 # The tool surface
 
-62 built-in tools, grouped by the flags of `WorkflowToolCategory`. Names are the C# method names and are passed to the model verbatim.
+60 built-in tools, grouped by the flags of `WorkflowToolCategory` — **62 once the two interaction tools register**, which takes both handlers configured *and* `WithInteractionSafety > 0`. Names are the C# method names and are passed to the model verbatim.
 
 **R** = read-only: never dirties the tree, counts against `MaxReadToolCalls`. **M** = mutating: counts against `MaxWriteToolCalls`. **\*** = mutating and **not undoable**.
 
@@ -28,7 +28,16 @@
 | `CompileNodeResult(nodeIndex)` | the Terminal-role reverse compile of that node's ancestor cone |
 | `GetCompileStatus` | the current compile identity without recompiling |
 | `GetExecutionLog` | the tree's execution log — direct node executions only |
+
+## Analytics
+
+A category of its own with exactly one member — its flag is neither `Query` nor `Mutation`:
+
+| Tool | Effect |
+|---|---|
 | `GetNodeStatistics(nodeIndex)` | in/out degree, connected node ids, slot count |
+
+⚙ **It is read-only** (it counts against `MaxReadToolCalls`), so it behaves like a Query tool — but it is **not registered by the `Query` flag**. A host that passes `WorkflowToolCategory.Query` alone does not get it. If you filter categories at all, name `Analytics` explicitly alongside `Query`.
 
 ## Graph traversal — read-only
 

@@ -117,6 +117,6 @@ Management tools: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `Descri
 
 ⚙ **Language selection maps `Chinese → "zh"` and everything else to `"en"`, with a per-file fallback to English.** A partially translated resource set degrades document by document rather than all at once.
 
-⚙ `GetComponentContext(fullTypeName, language)` accepts only `"English"` and `"Chinese"`, even though `AgentLanguages` has thirty-two values and the resource set has two, so that is the real limit on the tool.
+⚙ `GetComponentContext(fullTypeName, language)` accepts only `"English"` and `"Chinese"`, even though `AgentLanguages` declares thirty-four names over thirty-three distinct values (`Chinese` is an alias of `ChineseSimplified`) and the resource set has two, so that is the real limit on the tool.
 
 ⚙ The safety documents are prose injected into the prompt. See the SKILL's warning: they change what the model is *told*, not what the code lets it do.

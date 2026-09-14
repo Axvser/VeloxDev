@@ -96,12 +96,18 @@ VeloxDev is meant to be extended, and each of these is the seam the library expe
 
 The behaviour that matters is visual and interactive, so check it in a running app rather than by reading code:
 
-⚙ Drag a node, drag a slot onto another slot, pan and zoom until the pointer stays under what you grabbed, then save and reload the graph. Those five cover most of the model, the canvas and the serialization at once.
+⚙ Drag a node, drag a slot onto another slot, pan and zoom until the pointer stays under what you grabbed, then save and reload the graph. Those cover most of the model, the canvas and the serialization at once.
 
 ⚙ **Test at a deep zoom, not at 100%.** Links that vanish, links that detach from their port and a camera that drifts are all invisible at 100% and obvious at 40%.
 
 ⚙ When something does not work, the order to suspect is: `partial` on the class → `InitializeWorkflow()` called → the slot's channel permits the connection → the slot has been measured (is the anchor still `NaN`?) → the view is bound to the right property.
 
 ⚙ If you are working against a checkout rather than NuGet, `Examples/Workflow/Common/Lib` is a working node library to compare against — a controller, a dynamic router, a python worker, a timer and an agent message node — and `Examples/Workflow/<GUI> Trimmed/Demo` is a complete, minimal editor on your GUI. `Src/Core/VeloxDev.Core/WorkflowSystem/` holds the model and `Src/Adapters/VeloxDev.<GUI>/` the view layer; both are small enough to read when a reference here does not answer the question.
+
+⚙ **The `"Trimmed"` in those folder names means *minimal demo*, not trim configuration.** The library is **not** AOT- or trim-safe — `VeloxDev.Core` declares `IsTrimmable=false`, and the animation path compiles expression trees at runtime. Nothing warns you at build time; it surfaces at publish.
+
+⚙ **Undo coverage is structural, and the gaps are by design.** Node and slot create/delete, connect/disconnect, selector changes and their cascades are undoable; **position, size and direct property patches are not** — a drag leaves no history entry. Do not build a feature that assumes a drag can be undone.
+
+⚙ **Fan-out is sequential.** A compiled run shares one runtime context that is intentionally not thread-safe, so parallel branches do not execute in parallel.
 
 ⚙ The repository Wiki (`Docs/VeloxDev.Docs`) has a per-subsystem QuickStart and API walkthrough and is the long-form companion to these references.

@@ -40,7 +40,7 @@ public virtual void OnPropertyChanged(string propertyName);
 
 ⚙ **The callbacks take `(oldValue, newValue)` in one method.** This is *not* CommunityToolkit's `OnNameChanging(value)`; if you have used that generator, this is the signature to unlearn.
 
-⚙ **Naming**: one leading `_` is stripped and the next character upper-cased; otherwise just the first character. `_index` → `Index`, `title` → `Title`, `intervalMilliseconds` → `IntervalMilliseconds`, `m_value` → `M_value`. There is no camel-case splitting, and the rest is preserved verbatim — so `[VeloxProperty] private string user_name;` gives you a `user_name` property, not `UserName`.
+⚙ **Naming**: one leading `_` is stripped and the next character upper-cased; otherwise just the first character. `_index` → `Index`, `title` → `Title`, `intervalMilliseconds` → `IntervalMilliseconds`, `m_value` → `M_value`. There is no camel-case splitting, and the rest is preserved verbatim — so `[VeloxProperty] private string user_name;` gives you a `User_name` property, not `UserName`: first character upper-cased, the underscore and everything after it left untouched.
 
 ⚙ The property form synthesises `_camelCase` (`InputSlot` → `_inputSlot`). Generated init code elsewhere depends on that exact name, so a hand-written field of a different name breaks it silently.
 
@@ -97,11 +97,11 @@ void M();
 
 ## Interoperating with another MVVM framework
 
-⚙ **The generator detects the host framework and adapts the setter.** If the class derives from Prism's `BindableBase` (or any base with `SetProperty(ref T, T, string)`), implements ReactiveUI's `IReactiveObject`, or derives from Caliburn.Micro's `PropertyChangedBase`, the setter delegates to that framework's raise method instead of assigning directly. CommunityToolkit.Mvvm is detected by attribute.
+⚙ **The generator detects the host framework and adapts the setter.** If the class derives from Prism's `BindableBase` (or any base with `SetProperty(ref T, T, string)`), implements ReactiveUI's `IReactiveObject`, or derives from Caliburn.Micro's `PropertyChangedBase`, the setter routes through that framework's raise method. CommunityToolkit.Mvvm is detected by its `[ObservableObject]` **attribute** — a class that only *derives* from `ObservableObject` without the attribute still lands on the same path, because the generic `SetProperty(ref T, T, string)` probe matches it. Caliburn is the one that does not delegate the assignment: it still writes the field itself, then calls `NotifyOfPropertyChange`.
 
 ⚙ **A member already carrying `[ObservableProperty]`, `[Reactive]` or another competing attribute is skipped by design** — the two generators would fight over the same property.
 
-⚙ With a framework setter, `OnPropertyChanged` is *not* called by the generated setter (the framework's own method raises it), but your `OnXChanged` partial still runs. The VeloxDev callback contract holds either way.
+⚙ **Whether the generated setter also calls `OnPropertyChanged` depends on the framework.** On the `SetProperty` path (CommunityToolkit, Prism) it does **not** — that framework's own method raises the event, and calling it again would double-fire. On the ReactiveUI and Caliburn paths it **does**. Your `OnXChanged` partial runs either way, so the VeloxDev callback contract holds regardless.
 
 ## Silent failures
 
@@ -157,9 +157,9 @@ Gives a POCO a Unity-style lifecycle — `Awake` / `Start` / `Update` / `LateUpd
 
 ## Reference
 
-⚙ `Examples/MVVM/WPF/Demo` and `Examples/MVVM/Avalonia/Demo` — the richest MVVM sample: observable properties, collections with every hook, six commands, and the lock / interrupt / clear lifecycle.
+⚙ `Examples/MVVM/WPF/Demo` and `Examples/MVVM/Avalonia/Demo` — the richest MVVM sample: observable properties, collections with every hook, seven commands, and the lock / interrupt / clear lifecycle.
 
-⚙ `Examples/MonoBehaviour/WPF/Demo` — one window with three nested `[MonoBehaviour]` components, start on load and `await StopAsync` on close.
+⚙ `Examples/MonoBehaviour/WPF/Demo` — one window that is **itself** the `[MonoBehaviour]`: the attribute is on `MainWindow`, `MonoBehaviourManager.Start` runs on load, and close calls `CloseMonoBehaviour()` and then a deliberately **un-awaited** `StopAsync` (the pumps are background threads, so awaiting would only make the close look stuck).
 
 ⚙ `Src/Generators/VeloxDev.Core.Generator/Writers/` — `MVVMWriter.cs`, `CommandWriter.cs`, `MonoWriter.cs`. The generated shape is exactly what these emit, and reading the setter body is faster than guessing.
 

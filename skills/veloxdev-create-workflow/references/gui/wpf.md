@@ -4,6 +4,8 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/` — `TreeView.xaml` (the surface and both templates), `NodeView.xaml`, `SlotView.xaml`, `LinkView.xaml`, `CustomTemplateSelector.cs`, `WorkflowGridDecorator.cs`, `MinimapOverlay.cs`. ViewModels beside it at `Demo/ViewModels/Workflow/`. The demo names its selector and decorator `CustomTemplateSelector` / `WorkflowGridDecorator`; the templates use `TemplateSelector` / `GridDecorator`, so do not be thrown by the difference.
 
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+
 ## Writing the surface
 
 ```xml

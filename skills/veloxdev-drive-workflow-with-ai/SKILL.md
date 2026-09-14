@@ -41,7 +41,7 @@ var response = await agent.RunAsync(message, session, new ChatClientAgentRunOpti
 | `WithAllowedGenericCommands(params string[])` | **empty** | `ExecuteCommandOnNode`, `ExecuteCommandById` — and it *narrows* them to the listed names |
 | `WithSelectionHandler` / `WithConfirmationHandler` | **null** | registers `RequestSelection` / `RequestConfirmation` |
 | `WithInteractionSafety(0…3)` | `1` | 0 Silent · 1 Cautious · 2 Balanced · 3 Strict |
-| `WithAutoMarkDirty(bool)` | off | re-indexes after every mutating tool call, instead of requiring one `MarkDirty` at the end |
+| `WithAutoMarkDirty(bool)` | off | marks the tree dirty after every non-query tool call, instead of requiring one `MarkDirty` at the end |
 | `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | unlimited | pre-flight caps; exceeding one returns an error object rather than throwing |
 
 ⚙ **`WithInteractionSafety` is prompt-only.** Levels 1–3 inject a safety policy into the system prompt and nothing else — no tool body consults the handler. A host that sets level 3 and believes destructive calls are gated is mistaken; gate them in `WithAllowedGenericCommands` or in your own handler.

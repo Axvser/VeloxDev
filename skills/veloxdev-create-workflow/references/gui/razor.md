@@ -6,6 +6,8 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/` — note `Components/`, the Blazor convention. Every role is a `.razor` + `.razor.cs` pair, including the selector, decorator and minimap. The JS half of the adapter ships in the package, not the demo.
 
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+
 There is a long-form adapter README at `Src/Adapters/VeloxDev.Razor/README.md`.
 
 ## Writing the surface

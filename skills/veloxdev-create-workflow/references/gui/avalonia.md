@@ -4,6 +4,8 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/Avalonia Trimmed/Demo/` — note the extra nesting, the project sits at `Demo/Demo/`, so the views are at `Demo/Demo/Views/Workflow/` and the ViewModels at `Demo/Demo/ViewModels/Workflow/`. `TreeView.axaml` is the surface and carries the compiled-binding `x:DataType` the template ships as a placeholder.
 
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+
 ## Writing the surface
 
 The attached properties and the `PART_` names are the same as WPF — see [wpf.md](wpf.md#writing-the-surface) for the markup; only the XML namespace differs:

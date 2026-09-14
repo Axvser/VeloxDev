@@ -186,6 +186,8 @@ public interface IRedirectable
 
 ⚙ **A redirect target must be strictly earlier than the requesting node's `Order`.** Anything else is ignored with a single log line and the flow carries on as if nothing had happened.
 
+⚙ **This is a contract, not a shipped feature.** The engine drives `IRedirectable` end to end and the behaviour is covered by contract tests, but **nothing outside the test suite implements it** — no node in `Examples/Workflow/Common/Lib` or in any demo does. Treat it as an engine capability you would be the first to exercise, not as a pattern to copy from somewhere.
+
 ⚙ The whole graph is re-run from the accepted target, with `Order < target` skipped; `Attempt` increments per pass. **50 redirects** is the cap, after which it throws. If the target is a router's own order, only the branch is re-routed and the router is not driven again.
 
 ⚙ **The compiled graph is always acyclic** — a redirect is purely a runtime contract.

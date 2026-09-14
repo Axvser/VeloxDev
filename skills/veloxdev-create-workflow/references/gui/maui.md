@@ -4,15 +4,23 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/` — note `Controls/`, not `Views/`. `TreeView.xaml` is where `x:Name="Root"` and the node-only pooling live, and it is the file to copy when your generated pack disagrees with it.
 
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+
 ## Writing the surface
 
-⚙ **MAUI has no attached properties.** The host must be a `ContentView`, and the settings are method calls:
+⚙ **The host must be a `ContentView`, and the settings are attached properties** — the same ones WPF uses, so [wpf.md](wpf.md#writing-the-surface) is the map. Only the namespace assembly changes:
+
+```xml
+xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
+```
 
 ```csharp
 WorkflowSurfaceBehavior.SetIsEnabled(host, true);
-WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);   // the DataContext the XAML adapters get for free
+WorkflowSurfaceBehavior.SetScrollViewerName(host, "PART_ScrollViewer");
 WorkflowSurfaceBehavior.Refresh(host);                 // after a mutation
 ```
+
+⚙ **The tree arrives as the host's `BindingContext`.** There is no `SetWorkflowTree` on this adapter — that method exists only on the WinForms one, which has no binding system to carry the tree. Set or bind the `ContentView`'s `BindingContext` to your tree; the behaviour subscribes to `BindingContextChanged` and re-reads it from the host, or from any of the `PART_` elements.
 
 ## Adding your own content to a node
 

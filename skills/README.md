@@ -43,12 +43,14 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 | Skill | References |
 |---|---|
 | `veloxdev-create-workflow` | `references/model.md` (Tree/Node/Slot/Link, helpers, undo, serialization) · `canvas-math.md` (the complete coordinate model) · `execution.md` (the compiler and runtime engine) · `view-layer.md` (what any GUI must supply) · `templates.md` (the `dotnet new` packs) · `new-adapter.md` (supporting an unsupported GUI) · `gui/<gui>.md` × 7 (per-GUI adapter and template detail) |
-| `veloxdev-drive-workflow-with-ai` | `references/tools.md` (the 62 tools) · `references/mcp.md` (MCP configuration and lifecycle) |
+| `veloxdev-drive-workflow-with-ai` | `references/tools.md` (the tool surface, by category) · `references/mcp.md` (MCP configuration and lifecycle) |
 | `veloxdev-create-animation` | `references/adapter.md` (the transition-system adapter contract) |
 
 ## Keeping them accurate
 
-A skill that names a file, a type or a demo that no longer exists is worse than no skill: the agent will follow it and produce code that does not compile. Two habits keep this honest:
+A skill that names a file, a type or a demo that no longer exists is worse than no skill: the agent will follow it and produce code that does not compile. Four habits keep this honest:
 
 - **A skill's code examples use real repository types.** If an example names a type, that type should exist — otherwise a reader cannot go and look at it, and the example teaches a shape the library does not have.
+- **…and the reader can compile them.** A type that lives only inside `Examples/` as `internal` is a real repository type but not one a consuming project can name. Show the *shape* the demo demonstrates, never the demo's own scaffolding class.
+- **A convention claimed as the repository's is one the repository keeps.** "Every rule below is a convention this repository already follows" is a checkable claim — check it against `Examples/`. If the demos do not do it, the rule is a recommendation and has to say so.
 - **A skill's file references are checked against the tree.** Demos get moved, deleted and renamed. `Examples/` is the most volatile part of the repository, so those references are the ones that rot first.

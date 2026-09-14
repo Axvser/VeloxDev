@@ -4,6 +4,8 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/` — seven single `.cs` files, no markup. `TreeView.cs` carries the committed-zoom state machine, `LinkView.cs` the self-bounding geometry, `GridDecorator.cs` and `MinimapOverlay.cs` the two Jalium-only overlays. **The zoom itself lives in the demo's window, not in the view folder** — look there for the host-driven zoom pattern.
 
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+
 ## Writing the surface
 
 The attached properties match WPF, with one addition — zoom is an explicit call:
@@ -60,4 +62,4 @@ This matters because **Jalium's renderer culls child elements by layout box**. A
 
 ⚙ The generated tree also disables the default virtualize inset path if you replace `GridDecorator` with your own type — check `RulerThickness` before you do.
 
-⚙ **Packaging is the odd one out**: this pack's csproj sits one level higher than the other six (no `working/` folder) and omits the license expression, repository URL and reference payload the others carry. Nothing about the generated code depends on it, but a diff across packs will show it.
+⚙ **Packaging is the odd one out**: this pack's csproj sits one level higher than the other six — theirs live inside `working/`, this one beside it. The `working/content/` pack tree itself is present and the same as theirs, so the difference is the csproj's location, not a missing folder. It also omits the license expression, repository URL and reference payload the others carry. Nothing about the generated code depends on it, but a diff across packs will show it.

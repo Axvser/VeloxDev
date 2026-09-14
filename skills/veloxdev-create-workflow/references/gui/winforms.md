@@ -6,6 +6,8 @@ There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md
 
 ⚙ **Reference implementation:** `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/` — all seven roles are single `.cs` files. `TreeView.cs` is where the pull model lives: the self-driven viewport, the virtualize inset and the `Refresh` calls.
 
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+
 ## This adapter is different: nothing binds
 
 WinForms has no attached properties, no bindings and no render transform. **The surface repositions everything itself, and you must tell it when something changed.**

@@ -224,7 +224,9 @@ The four-point golden-stub elbow is the shared geometry — every adapter draws 
 
 Plus `WorkflowBounds` — a struct with `FromNode`, `FromNodes`, `Union`, `IsEmpty`, in collapsed space.
 
-⚙ Several members are *named* "world" (`ToWorld`, `GridWorldLeft`, `WorkflowBounds`) but operate in **collapsed** space. The only real collapsed→world step in the whole library is inside `WorldAtViewportCenter`. Trust the table, not the name.
+⚙ Several members are *named* "world" (`ToWorld`, `GridWorldLeft`, `WorkflowBounds`) but operate in **collapsed** space. Trust the table, not the name.
+
+⚙ **`WorldAtViewportCenter` is not the only collapsed→world step.** `WorkflowNodeEx.StandardMove` and `StandardSetLayer` both convert, through the shared `ViewToWorldFactors`, because a drag delta arrives in **view** space while `Anchor` is stored in **world** space. If you write your own drag, use those methods rather than doing the multiply yourself: `StandardSetAnchor` for an anchor that is already world (`screen − ActualOffset`), `StandardMove` for a view-space delta. Getting this wrong produces positions that drift as `Scale` changes and that compile cleanly.
 
 ⚙ `ClampScrollOffset` and `EnsureNegativeCover` are the two members of this class that write to `CanvasLayout`; everything else is pure.
 

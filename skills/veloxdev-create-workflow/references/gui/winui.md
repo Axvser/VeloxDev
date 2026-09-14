@@ -4,9 +4,17 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/` — read `TreeView.xaml` and `LinkView.xaml` **together**; they are the pair that implements the offset frame described below, and neither makes sense alone. ViewModels at `Demo/ViewModels/Workflow/`.
 
+⚙ **The "Trimmed" in that path means *minimal demo*, not trim configuration** — the library is **not** AOT- or trim-safe (`IsTrimmable=false`, and the animation path compiles expression trees at runtime). Do not read publish-time safety into the folder name.
+
 ## Writing the surface
 
-The attached properties and the `PART_` names are the same as WPF — see [wpf.md](wpf.md#writing-the-surface); only the `clr-namespace` assembly changes to `VeloxDev.WinUI`.
+The attached properties and the `PART_` names are the same as WPF — see [wpf.md](wpf.md#writing-the-surface); only the namespace declaration changes, and WinUI spells it differently:
+
+```xml
+xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
+```
+
+⚙ **WinUI has no `clr-namespace:…;assembly=` form.** Copying the WPF spelling into a WinUI file leaves the attached properties unresolved — the `using:` form above is this dialect's equivalent, and it takes no `;assembly=` suffix.
 
 ⚙ **Attach the zoom handler to the ScrollViewer, not the Canvas**, and expect one native scroll before it can be marked handled: WinUI has no preview/tunnel phase and marks the wheel event handled itself, so the adapter registers with `handledEventsToo: true`. Attaching to the `Canvas` only covers the hit-testable area.
 

@@ -56,7 +56,7 @@ var p = data.Aop();
 
 ⚙ `Aop()` is **generated for every class that has at least one marked member** — do not write it. It returns the generated interface, whose type name you never need to spell.
 
-⚙ **One proxy per instance, cached**, and the cache is a `ConditionalWeakTable`, so the proxy dies with the instance it wraps. Call `Aop()` wherever you need it rather than storing it.
+⚙ **One proxy per instance, cached**, and the proxy-to-target lookup is a `ConditionalWeakTable`. Do not read that as a lifetime guarantee, though — the proxy is *also* registered in a static map and holds its target, so it, and the instance it wraps, live until the process ends (see Pitfalls). Call `Aop()` wherever you need it rather than storing it.
 
 ⚙ `Aop.GetTarget<T>(proxy)` goes the other way, from a proxy back to the instance it wraps.
 
@@ -88,7 +88,7 @@ p.SetProxy(ProxyMembers.Method, nameof(TeamViewModel.Reset), start, coverage, en
 
 ⚙ **`end`'s return is thrown away** — a handler that "returns the new result" changes nothing. To change what the caller receives, use `coverage`.
 
-⚙ A getter's or setter's `previous` on `end` is the value that was read or written, so reacting to a write is `(parameters, previous) => { var written = parameters?[0]; … }` on the `end` stage.
+⚙ **A getter's `previous` on `end` is the value that was read**, because a getter returns it and so it flows through. **A setter's is `null`** — a setter returns `void`, so there is nothing to pass on, and the written value reaches you only through `parameters?[0]`. Reacting to a write is therefore `(parameters, previous) => { var written = parameters?[0]; … }` on the `end` stage, never `previous`.
 
 ### Worked examples
 
