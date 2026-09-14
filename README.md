@@ -26,7 +26,7 @@
 
 </div>
 
-> **What this is** — a **node editor / node-graph / workflow-editor** framework for **.NET / C#**. Drag nodes, wire slots into links on a **zoomable, virtualized canvas**, drive the graph with a **compiled dataflow execution engine**, gate every edit behind **undo/redo**, and control it all through an **AI agent** (function calling + **MCP**). One model → **7 GUIs**: WPF · Avalonia · WinUI · MAUI · WinForms · Blazor · Jalium.
+> **What this is** — a **node editor / node-graph / workflow-editor** framework for **.NET / C#**. Drag nodes, wire slots into links on a **zoomable, virtualized canvas**, drive the graph with a **compiled, pull-based execution engine**, gate structural edits behind **undo/redo**, and control it all through an **AI agent** (function calling + **MCP**). One model → **7 GUIs**: WPF · Avalonia · WinUI · MAUI · WinForms · Blazor · Jalium.
 
 ## ✨ What is VeloxDev?
 
@@ -34,11 +34,11 @@ VeloxDev gives .NET developers a complete foundation for building **interactive 
 
 Three ideas hold the whole project together:
 
-1. **One model, every GUI.** The workflow model, compile-time identity, runtime engine, serialization and undo/redo live in `VeloxDev.Core` with **zero UI dependencies**. Platform adapters (WPF, Avalonia, WinUI, MAUI, WinForms, Razor, Jalium) supply only the views. Your graph data and its execution semantics behave identically on every platform.
-2. **A real execution engine, not just a canvas.** Besides the drag-and-drop surface, `CompilerEx` compiles any reachable sub-graph into a plan (linear chain / branch / parallel fan-out) and drives it deterministically — including **reverse (Terminal) compilation**: ask "what would this node output?" and it computes just the ancestor cone that feeds it, with no controller needed.
+1. **One model, every GUI.** The workflow model, compile-time identity, runtime engine, serialization and the command/undo-redo stack live in `VeloxDev.Core` with **zero UI dependencies**. Platform adapters (WPF, Avalonia, WinUI, MAUI, WinForms, Razor, Jalium) supply the views plus the platform glue only they can provide — timers and frame pacers, thread marshalling, native value conversion. Your graph data and its execution semantics behave identically on every platform.
+2. **A real execution engine, not just a canvas.** Besides the drag-and-drop surface, `CompilerEx` compiles any reachable sub-graph into a plan (linear chain / router branch / fan-out group) and drives it deterministically — including **reverse (Terminal) compilation**: ask "what would this node output?" and it computes just the ancestor cone that feeds it, with no controller needed. Fan-out branches execute **in order, not concurrently**: a compiled run shares one runtime blackboard, which is deliberately not thread-safe.
 3. **AI is a first-class controller.** A 60+ function-calling *Workflow Agent* lets an LLM inspect, build and mutate graphs at runtime through natural language — with the same undo/redo, validation and lifecycle the GUI uses, plus optional **MCP** tool connectivity.
 
-> **Why not just a WPF node editor?** Libraries like Nodify and NodeNetwork are excellent, but they are **WPF-only canvases** — they draw the graph and stop there. VeloxDev runs the same node graph on Avalonia, WinUI, MAUI, WinForms and Blazor, and layers on what a canvas alone cannot give you: a **compiled forward + reverse execution engine**, and an **AI agent** that edits and runs the graph through the same undoable commands as the GUI.
+> **Why not just a WPF node editor?** Libraries like Nodify and NodeNetwork are excellent, but they are **WPF-only canvases** — they draw the graph and stop there. VeloxDev runs the same node graph on Avalonia, WinUI, MAUI, WinForms and Blazor, and layers on what a canvas alone cannot give you: a **compiled forward + reverse execution engine**, and an **AI agent** that edits and runs the graph through the same commands the GUI uses.
 
 ### The workflow system
 
@@ -54,7 +54,7 @@ Three ideas hold the whole project together:
 | 🪶 **MVVM** | Source generators for observable properties and async, cancellable commands — keeps node ViewModels lightweight | |
 | 🎞️ **Transition** | Cross-platform interpolation animation with easing & Fluent API — smooth visual feedback for workflow state changes | [Platform Adapter Package](#platform-adapter-packages) |
 | 🎨 **Theme** | Runtime theme switching with animated transitions — instant visual identity for your editor | [Platform Adapter Package](#platform-adapter-packages) |
-| 🌀 **AOP** | Compile-time aspect proxies — intercept node execution, add logging or validation without modifying business logic | |
+| 🌀 **AOP** | Generated aspect interfaces with runtime proxies — intercept node members for logging or validation without modifying business logic | |
 | ⚙️ **MonoBehaviour** | Frame-driven lifecycle loop — tick-based node simulation or real-time graph execution | |
 
 ### Platform adapter packages
@@ -77,7 +77,7 @@ Adapter API docs: [WinForms](Src/Adapters/VeloxDev.WinForms/README.md) · [Razor
 
 - **A workflow is a Tree of Nodes.** Every Node is a ViewModel + a *Helper* (component/helper pattern). Nodes own **Slots**; slots are wired into **Links**. A slot has a *channel* (one/many, sender/receiver/both) that governs how connections are validated.
 - **Views are templates over the model.** The adapter's `WorkflowSurface` hosts Node/Slot/Link views (plus grid decorator, minimap, ruler and tree views), virtualized against a spatial index so graphs with thousands of nodes stay fluid.
-- **Everything the user does is an undoable command.** Move/anchor/size, create/delete slot, connect/disconnect and selector changes all flow through `IVeloxCommand` with a redo/undo pair — the Agent tool layer uses the *same* commands the GUI does.
+- **Structural edits are undoable commands.** Create/delete node or slot, connect/disconnect, selector changes and their cascades all flow through `IVeloxCommand` with a redo/undo pair — and the Agent tool layer uses the *same* commands the GUI does. Position and size are outside that history: `SetAnchor`/`SetSize` are commands with **no undo entry**, in the GUI and in the Agent alike.
 - **Execution is compiled, then driven.** Nodes expose one receive entry `ReceiveCommand → Helper.ReceiveAsync(ITaskContext, ct)`. The engine (`RuntimeEngine`) compiles a sub-graph into segments once and then *pulls* data through them — nodes do not broadcast to each other on their own during a compiled run.
 - **Phases are explicit.** Compile time assigns every node a fixed identity (`Order/ChainIndex/Offset`) and runs dataflow *validation* without data; runtime reuses the same `AccessAsync` gate with real payloads. A context hierarchy (`IContext → IAccessContext → ITaskContext`, plus `ICompileContext` / `IRuntimeContext`) describes every hand-off.
 
@@ -114,12 +114,13 @@ if (probe.TargetReached) Console.WriteLine(probe.Data);   // that node's output
 else Console.WriteLine("target NOT reached — no value fabricated");
 ```
 
-The plan it produces is a small tree of segments: a **linear chain**, a **router branch** (a node implementing `ICompileTimeRouter`, Static or Dynamic), and **parallel fan-out groups** — and it is always acyclic; "loops" are expressed as runtime *redirects* (`IRedirectable`), never as graph cycles.
+The plan it produces is a small tree of segments: a **linear chain**, a **router branch** (a node implementing `ICompileTimeRouter`, Static or Dynamic), and **fan-out groups** (branches off the same source, driven in order) — and it is always acyclic. Looping is expressed as runtime *redirects* instead of graph cycles: when a node signals an error, the engine checks for `IRedirectable` and, if the node implements it, re-runs the graph toward the returned target under an internal retry limit. Redirects are therefore an extension point you implement on your own nodes — the engine supports them end to end and they are covered by contract tests, but no shipped sample node implements one.
 
-Two properties worth calling out, because they keep reverse compilation honest:
+Three properties worth calling out, because they keep reverse compilation honest:
 
 - **Branches are real, never bypassed.** Terminal compilation keeps a router's true `BranchSegment` behavior; it only compiles the branch that leads into the target's cone. If the router actually selects a *sibling* branch at runtime, the target is **not reached** — you get an explicit "… was NOT reached … No result was produced." outcome, never a fabricated value. (Agent tools surface this as a specific error message; set the router's selection to the right branch and retry.)
 - **Joins aggregate by source.** A multi-input node receives an `IGroupData` — a read-only map keyed by its upstream node — so a join "waits for all inputs" even when fan-out ran sequentially (the shared runtime session is intentionally not thread-safe).
+- **`TargetReached` means "the target was driven", not "a value was produced".** The flag is set as the engine enters the target node, so read it together with the run status: a target that throws surfaces as a run error (`Run failed: …`), not as a reached target.
 
 ```csharp
 // Minimal "node" — the generator wires INotifyPropertyChanged, slot lifecycle and commands.
@@ -158,7 +159,7 @@ var agent = chatClient.AsAIAgent(
 
 Highlights of the tool surface:
 
-- **Inspect & mutate like the GUI** — `ListNodes`, `GetFullTopology`, `CreateNode`, `ConnectByProperty`, `PatchNodeProperties`, `SetEnumSlotCollection`, `Undo`/`Redo`, `MoveNode`, … every mutation dispatches a real component command, so undo/redo stays the source of truth.
+- **Inspect & mutate like the GUI** — `ListNodes`, `GetFullTopology`, `CreateNode`, `ConnectByProperty`, `PatchNodeProperties`, `SetEnumSlotCollection`, `Undo`/`Redo`, `MoveNode`, … every mutation dispatches the same component command the GUI dispatches, so the Agent and the GUI share one edit path — including the same undo semantics, i.e. the moves and property patches that create no undo entry.
 - **Execute at three levels** — node-level (`ExecuteNode`), chain-level (`RunCompiledWorkflow`, Root role), and **result-level** (`GetNodeResult`, Terminal role). Plans can be read without running via `CompileWorkflow` / `CompileNodeResult`.
 - **Gated by policy, not just prose** — node-execution tools are disabled until the host calls `WithAllowNodeExecution(true)`; generic command execution is allow-listed; interaction tools appear only when a selection/confirmation handler is wired. `MaxToolCalls`, `MaxReadToolCalls` and `MaxWriteToolCalls` bound a session.
 - **Precision is baked into the prompt, in the host's language** — embedded (en/zh) prompt docs describe tool semantics, error/rejection handling, mount-before-operate and the exact "target not reached" contract, so the agent knows *before calling* what each tool does and what errors mean.
@@ -280,6 +281,19 @@ dotnet test Src/Core/VeloxDev.Core.Test --filter "FullyQualifiedName~CompilerEx"
 ```
 
 Coverage is collected with **coverlet** (`--collect:"XPlat Code Coverage"`). The `CompilerEx` execution engine — compile decomposition, runtime driving, redirects, joins, and reverse compilation — is covered end-to-end with self-contained contract tests (probe nodes, no UI/no demo dependency). A full XML-comment/language pass keeps the public API documented in English.
+
+---
+
+## ⚠️ Scope & status
+
+Worth knowing before you depend on them:
+
+- **Not AOT- or trim-safe, and it says so.** `VeloxDev.Core` declares `IsTrimmable=false`, and the animation path compiles expression trees at runtime (`Expression.Lambda(...).Compile()`). There are no `RequiresUnreferencedCode` / `DynamicallyAccessedMembers` annotations anywhere in it. (The `Examples/*/"Trimmed"` folders are *minimal* demos — the name is not about trimming configuration.)
+- **Redirects are a contract, not a shipped feature.** The engine drives `IRedirectable` end to end and the behaviour is covered by contract tests, but nothing outside the test suite implements it, and a redirect target must be strictly backward.
+- **Undo coverage is structural.** Node/slot create and delete, connect/disconnect, selector changes and their cascades are undoable; position, size and direct property patches are not.
+- **Fan-out is sequential by design** — a compiled run shares one runtime context that is intentionally not thread-safe.
+- **Animation overshoot is per-type today.** When an ease overshoots (Back/Elastic), numeric samplers extrapolate past the endpoint while the remaining samplers pin to it. Unifying the two is an open pass.
+- **The one model / 7 GUIs seam is at data and geometry, not rendering.** The transition engine and the workflow surface math live in Core and each adapter contributes only a small pacer subclass, but the *view* layer (surface behaviour, virtualization window, pooling, link rendering) is implemented per platform.
 
 ---
 
