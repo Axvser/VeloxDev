@@ -89,27 +89,29 @@ NotStarted → Installing (local modes only) → Connecting → Connected | Erro
 
 ## Merging with the agent
 
-Two paths, and they are not equivalent:
+One line. Attach the scope and let its context provider carry both halves:
 
 ```csharp
-// 1. the four MCP management tools — wrapped, tracked, budgeted
-scope.WithTools("<MCP management prompt text>",
-    [.. new McpAgentToolkit(mcp, mcpServers).CreateTools()]);
-
-// 2. the actual server tools — raw, per conversation
-new ChatClientAgentRunOptions
-{
-    ChatOptions = new ChatOptions { Tools = [.. _baseTools, .. mcp.LoadedTools] }
-}
+scope.WithMcps(mcp);
 ```
 
-Management tools: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `DescribeMcpServer`.
+That contributes the management tools, the prompt text describing them, the server inventory, and the tools of every connected server — each turn, from the scope's current state.
 
-⚙ **Tools merged through `ChatOptions.Tools` bypass the tracking wrapper entirely.** They are not counted against `MaxToolCalls` / `MaxReadToolCalls` / `MaxWriteToolCalls`, not marshalled onto your synchronization context, and do not raise `ToolCalled` or mark the tree dirty. If any of that matters, wrap them yourself or register them through `scope.WithTools`.
+Management tools: `ListMcpServers`, `LoadMcpServers`, `UnloadMcpServer`, `DescribeMcpServer`, plus `AddMcpServer` when self-service is open.
 
-⚙ **Assembling the list per conversation is the point**, not a workaround: a server loaded mid-conversation becomes available on the next turn without rebuilding the agent. That is why the demo exposes `BuildRunOptions()` rather than baking the tools in.
+⚙ **Do not also register them with `WithTools`.** The provider already contributes them, and the framework unions tool lists without deduplicating by name — registering them twice puts every one of them in the prompt twice.
 
-⚙ **The host registers; the agent operates.** Configurations are fixed when you call `LoadAsync`, and the model can only load, unload and inspect. It cannot author a configuration or change one — keep that property if you write your own MCP layer.
+⚙ **Registering configurations on the scope is what makes them reloadable.** `mcp.WithServers(...)` pre-registers the ones the Agent may load by name; `LoadAsync` and `AddAsync` also record whatever they are given, so a host that only loads directly still ends up with a reloadable set.
+
+⚙ **`WithMcps` is what makes a connected server's tools first-class.** They join the per-turn tool set through the context provider, wrapped like every other tool, so they are counted against `MaxToolCalls` / `MaxReadToolCalls` / `MaxWriteToolCalls`, marshalled onto your synchronization context, and raise `ToolCalled`. It also wires MCP self-service to the scope's own confirmation handler, so approval is configured once.
+
+⚙ **Merging `mcp.LoadedTools` into `ChatOptions.Tools` by hand is now the wrong path twice over** — it bypasses the wrapper, and it duplicates every tool, because the provider already offers them and the framework unions tool lists without deduplicating by name.
+
+⚙ **A server loaded mid-conversation becomes available on the next turn** without rebuilding the agent: the provider re-renders whenever `McpScope.Version` advances.
+
+⚙ **The default level is `Closed`: the host registers, the agent operates.** Configurations are fixed when you call `LoadAsync`, and the model can only load, unload and inspect. `WithSelfService(level)` opens it in rungs — `RemoteConfirmed` (remote Http servers, confirmed), `AllConfirmed` (local ones too, each confirmed), `Unrestricted` (no asking). Below `Unrestricted`, a level that needs confirmation **denies when no confirmation handler is registered**, rather than allowing.
+
+⚙ **Unloading now tears the connection down.** `UnloadServerAsync` disposes the client, which for stdio modes terminates the child process. The synchronous `UnloadServer` does the same, blocking; prefer the async overload. `McpScope` implements `IAsyncDisposable`, and the clients are retained for as long as their tools are offered — an `McpClientTool` holds a reference to its client, so dropping one would break the other.
 
 ## Prompting
 
