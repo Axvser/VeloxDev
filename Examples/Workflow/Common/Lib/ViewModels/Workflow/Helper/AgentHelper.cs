@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.MCP;
+using VeloxDev.AI.Skills;
 using VeloxDev.AI.Workflow;
 using VeloxDev.WorkflowSystem;
 
@@ -70,25 +71,9 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// <summary>Loads all pre-registered MCP servers (status is driven live through <see cref="Mcp"/>).</summary>
     public async Task LoadMcpServersAsync() => await Mcp.LoadAsync(McpServers);
 
-    // ── Dynamic tool set (add/remove MCP tools mid-session) ──────────────────────
-
-    private readonly List<AITool> _baseTools = [];
-
-    /// <summary>
-    /// Fixed tool set (workflow tools + MCP management tools), created once in <see cref="ProvideAgent"/>.
-    /// </summary>
-    internal void SetBaseTools(IEnumerable<AITool> tools)
-    {
-        _baseTools.Clear();
-        _baseTools.AddRange(tools);
-    }
-
-    /// <summary>
-    /// Assembles the run options for this conversation: base tools + tools of the currently connected MCP servers.
-    /// Re-assembled on every conversation call — servers loaded/unloaded mid-session take effect on the next conversation (no Agent rebuild needed).
-    /// </summary>
-    public ChatClientAgentRunOptions BuildRunOptions()
-        => new() { ChatOptions = new ChatOptions { Tools = [.. _baseTools, .. Mcp.LoadedTools] } };
+    // The tool set is no longer assembled here. The scope's context provider renders it on every
+    // invocation, which is what lets a skill switched off, a custom tool registered late, or an MCP
+    // server loaded mid-session reach the model on the very next turn without rebuilding the agent.
 
     public async override void Install(IWorkflowTreeViewModel tree)
     {
@@ -111,6 +96,14 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// Raised after each agent tool call. Subscribe from the View to trigger virtualization with a fresh viewport.
     /// </summary>
     public event Action? ToolCalled;
+
+    /// <summary>
+    /// Records a tool call in the tree's structured transcript so the chat panel can render it collapsed.
+    /// The tool-call callback fires from inside the marshalled call, so this already runs on the UI thread
+    /// — which is what makes it safe to append to a bound collection.
+    /// </summary>
+    internal void RecordToolCall(AgentToolCallEventArgs args)
+        => Component?.AppendToolCall(args.ToolName, args.Result);
 
     #pragma warning disable CS0067 // used by external subscribers
     /// <summary>
@@ -165,6 +158,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             .WithToolCallCallback(args =>           // tool-call callback
             {
                 helper.ToolCalled?.Invoke();
+                helper.RecordToolCall(args);
                 return Task.CompletedTask;
             })
             .WithSelectionHandler(async args => // the Agent asks the user which action to perform
@@ -176,7 +170,17 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             {
                 if (helper.ConfirmationHandler is not null)
                     await helper.ConfirmationHandler(args);
-            });
+            })
+            // Skills become individually switchable. The library's own prompt documents arrive with the
+            // scope as embedded skills; "skills" is a disk root (resolved against the app base directory)
+            // where an application drops its own Agent Skills folders — it is allowed not to exist yet.
+            .WithSkills("skills")
+            // MCP servers join the tool set per turn, so load/unload takes effect on the next turn.
+            .WithMcps(helper.Mcp);
+
+        // The configurations the Agent may load by name. Registering them on the scope — rather than only
+        // handing them to a toolkit — is what lets LoadMcpServers bring one back after it was unloaded.
+        helper.Mcp.WithServers([.. helper.McpServers]);
 
         // Interaction-tool aggressiveness 0~3
         scope.WithInteractionSafety(helper.InteractionSafety);
@@ -184,26 +188,18 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         foreach (var kvp in helper.InteractionSafetyPrompts)
             scope.WithInteractionSafetyPrompt(kvp.Key, kvp.Value);
 
-        // Register MCP server management tools: the Agent can list status, load (install and connect if needed),
-        // unload, and describe capabilities.
-        // Security model: server configuration is fixed once at load time and cannot change afterwards;
-        // the Agent can only load/unload/inspect, never reconfigure mid-session.
-        // The tool set is assembled per conversation from the current load state.
-        scope.WithTools(
-            "MCP server management tools: ListMcpServers shows each MCP server's alive/installing/connecting/error state and tool count; " +
-            "DescribeMcpServer exports a connected server's tool-capability prompt (without activating the tools) so you can tell the user what it can do; " +
-            "LoadMcpServers loads host pre-registered servers (installing and connecting when needed); " +
-            "UnloadMcpServer removes a server mid-session (its tools disappear from the next conversation's tool set; it can be loaded again). " +
-            "Server configuration is fixed once by the host at load time and cannot change afterwards — do not attempt to modify or reconfigure servers (directory sets, etc.). " +
-            "Loading a local server installs npm/pip runtimes and may take time — confirm with the user before calling.",
-            [.. new McpAgentToolkit(helper.Mcp, helper.McpServers).CreateTools()]);
+        // The MCP and skill management tools are no longer registered here. Each subsystem's context
+        // provider contributes its own tools and its own prompt text on every turn, so a host attaches the
+        // subsystem and is done. Registering them here as well would duplicate every one of them — the
+        // framework unions tool lists without deduplicating by name.
+        //
+        // This demo stays at McpSelfServiceLevel.Closed, so the Agent may load/unload/inspect the servers
+        // below but never author one. Raising the level via Mcp.WithSelfService(...) adds AddMcpServer and
+        // changes what the prompt says the model may do; see McpSelfServiceLevel.
 
-        // Progressive context
+        // Progressive context: the static skeleton. Skills put the scope under dynamic management, so the
+        // provider renders them per turn instead — the two must not both carry the corpus.
         var contextPrompt = scope.ProvideProgressiveContextPrompt();
-
-        // Create the MAF tool set (fixed part) and save it as the "base tools"; MCP server tools are merged in
-        // dynamically per conversation via BuildChatOptions, so servers loaded/unloaded mid-session need no Agent rebuild.
-        helper.SetBaseTools(scope.ProvideTools());
 
         var apiKey = Environment.GetEnvironmentVariable(EnvironmentVariableName);
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -220,7 +216,15 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             }).GetChatClient(string.IsNullOrWhiteSpace(Model) ? "deepseek-v4-flash" : Model)
               .AsIChatClient();
 
-        var agent = chatClient.AsAIAgent(instructions: contextPrompt);
+        // The static skeleton is the agent's own instructions; everything that changes — skills, the tool
+        // set, connected MCP servers — is contributed per invocation by the context providers. Tools are
+        // deliberately NOT passed through ChatOptions: the framework unions that list with the providers'
+        // without deduplicating, so the same tool offered through both channels reaches the model twice.
+        var agent = chatClient.AsAIAgent(new ChatClientAgentOptions
+        {
+            ChatOptions = new ChatOptions { Instructions = contextPrompt },
+            AIContextProviders = scope.CreateContextProviders(),
+        });
 
         return agent;
     }

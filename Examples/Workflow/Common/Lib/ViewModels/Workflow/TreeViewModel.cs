@@ -56,8 +56,8 @@ public partial class TreeViewModel
                 return;
             }
 
-            var response = await helper.Agent.RunAsync(
-                message, helper.Session, helper.BuildRunOptions());
+            // No run options: the agent's context providers supply the tool set on every invocation.
+            var response = await helper.Agent.RunAsync(message, helper.Session);
 
             if (response is not null)
             {
@@ -88,7 +88,7 @@ public partial class TreeViewModel
         var isFirstLine = true;
 
         await foreach (var response in helper.Agent!.RunStreamingAsync(
-            message, helper.Session!, helper.BuildRunOptions()))
+            message, helper.Session!))
         {
             var text = response.Text;
             if (string.IsNullOrEmpty(text))
@@ -181,6 +181,16 @@ public partial class TreeViewModel
         }
         AgentLog.Add(entry);
         AgentMessages.Add(AgentMessageViewModel.FromLogLine(entry));
+    }
+
+    /// <summary>
+    /// Records a tool call as its own message rather than a log line. The panels render these collapsed —
+    /// a tool result is a JSON payload, and printing one inline buries the conversation it interrupted.
+    /// </summary>
+    public void AppendToolCall(string toolName, string result)
+    {
+        if (string.IsNullOrWhiteSpace(toolName)) return;
+        AgentMessages.Add(AgentMessageViewModel.ToolCall(toolName, result));
     }
 
     // ── Session Markdown transcript (fed directly to the AvalonMarkdown MarkdownView in the Avalonia Full Demo) ──
