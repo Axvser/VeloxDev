@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.AI;
+﻿using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,6 +8,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using VeloxDev.AI;
+using VeloxDev.AI.MCP;
+using VeloxDev.AI.Skills;
 using VeloxDev.AI.Workflow.Functions;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.WorkflowSystem;
@@ -106,6 +109,10 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithPromptLanguage(AgentLanguages language)
     {
         _defaultLanguage = language;
+        // Propagate to anything already attached: the skill subsystem renders in the prompt language, and
+        // the order of WithSkills and this call is the host's business.
+        Skills?.WithPromptLanguage(language);
+        BumpVersion();
         return this;
     }
 
@@ -119,6 +126,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithOutputLanguage(AgentLanguages language)
     {
         _outputLanguage = language;
+        BumpVersion();
         return this;
     }
 
@@ -157,9 +165,11 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// returned by <see cref="ProvideTools"/>. Each tool is wrapped with the same tracked wrapper as the
     /// built-in tools, so it receives UI-thread marshalling (<see cref="WithSynchronizationContext"/>),
     /// <see cref="WithMaxToolCalls"/> accounting, the <see cref="WithToolCallCallback"/> notification, and
-    /// (when <see cref="WithAutoMarkDirty"/> is enabled) automatic dirty marking. Non-<c>AIFunction</c>
-    /// tools (e.g. raw MCP client tools) are added as-is — convert them with the SDK's
-    /// <c>ToAIFunction()</c>/<c>AsAIFunction()</c> to opt into the tracked wrapper.
+    /// (when <see cref="WithAutoMarkDirty"/> is enabled) automatic dirty marking. A tool that is not an
+    /// <c>AIFunction</c> is added as-is and gets none of that — wrap it with the SDK's
+    /// <c>ToAIFunction()</c>/<c>AsAIFunction()</c> to opt in. MCP client tools are <c>AIFunction</c>s and
+    /// are therefore wrapped by default; attaching an <see cref="McpScope"/> via
+    /// <see cref="WithMcps"/> is what brings them in without registering each one by hand.
     /// Use <paramref name="promptContext"/> to inject instructions into the system prompt describing
     /// when and how to use these tools; pass <c>null</c> if the tool metadata is self-explanatory.
     /// </summary>
@@ -169,6 +179,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     {
         _customTools.AddRange(tools);
         AppendCustomToolPrompt(promptContext);
+        BumpVersion();
         return this;
     }
 
@@ -188,6 +199,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
                 _queryOnlyCustomToolNames.Add(tool.Name);
         }
         AppendCustomToolPrompt(promptContext);
+        BumpVersion();
         return this;
     }
 
@@ -222,6 +234,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithAllowNodeExecution(bool enabled = false)
     {
         AllowNodeExecution = enabled;
+        BumpVersion();
         return this;
     }
 
@@ -242,6 +255,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             var name = c.EndsWith("Command", StringComparison.OrdinalIgnoreCase) ? c : c + "Command";
             _allowedGenericCommands.Add(name);
         }
+        BumpVersion();
         return this;
     }
 
@@ -268,6 +282,10 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithSynchronizationContext(SynchronizationContext? context)
     {
         UIContext = context;
+        // Propagate to anything already attached: the order of WithSkills / WithMcps and this call is
+        // the host's business, and a skill list left unbound would throw when a UI binds it.
+        Skills?.WithSynchronizationContext(context);
+        Mcp?.WithSynchronizationContext(context);
         return this;
     }
 
@@ -357,6 +375,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentScope WithInteractionSafety(int level)
     {
         _interactionSafety = Math.Max(0, Math.Min(3, level));
+        BumpVersion();
         return this;
     }
 
@@ -373,6 +392,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     {
         if (level < 1 || level > 3) return this;
         _safetyPromptOverrides[level] = promptBody ?? string.Empty;
+        BumpVersion();
         return this;
     }
 
@@ -401,6 +421,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
                 FreeTextResponse = args.FreeTextResponse,
             };
         };
+        BumpVersion();
         return this;
     }
 
@@ -418,6 +439,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             await handler(args);
             return args.Result;
         };
+        BumpVersion();
         return this;
     }
 
@@ -533,6 +555,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         {
             CustomerEnums[lang] = [.. enums];
         }
+        BumpVersion();
         return this;
     }
 
@@ -547,6 +570,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         {
             CustomerInterfaces[lang] = [.. interfaces];
         }
+        BumpVersion();
         return this;
     }
 
@@ -561,6 +585,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         {
             CustomerComponents[lang] = [.. components];
         }
+        BumpVersion();
         return this;
     }
 
@@ -579,6 +604,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         {
             CustomerData[lang] = [.. dataTypes];
         }
+        BumpVersion();
         return this;
     }
 
@@ -658,6 +684,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         foreach (var type in registeredComponents.ToArray())
             ScanComponentMembers(type, lang, workflowBase);
 
+        BumpVersion();
         return this;
     }
 
@@ -913,8 +940,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine(BuildInteractionSafetyPrompt(language));
 
         // ── Built-in Skills ──
-        result.AppendLine(AgentEmbeddedResources.ReadAllSkills(SystemName, language).TrimEnd());
-        result.AppendLine();
+        AppendEmbeddedSkills(result, language);
         AppendOutputLanguageDirective(result);
         return result.ToString();
     }
@@ -1057,8 +1083,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         result.AppendLine(BuildInteractionSafetyPrompt(language));
 
         // ── Built-in Skills ──
-        result.AppendLine(AgentEmbeddedResources.ReadAllSkills(SystemName, language).TrimEnd());
-        result.AppendLine();
+        AppendEmbeddedSkills(result, language);
         AppendOutputLanguageDirective(result);
         return result.ToString();
     }
@@ -1140,25 +1165,249 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
         return result.ToString();
     }
 
-    /// <summary>
-    /// Creates a <see cref="WorkflowAgentToolkit"/> that provides MAF-compatible
-    /// <see cref="AITool"/> instances for full operational control over the scoped tree.
-    /// </summary>
-    public WorkflowAgentToolkit CreateToolkit() => new(this);
+    private WorkflowAgentToolkit? _toolkit;
 
     /// <summary>
-    /// Convenience method: creates the toolkit and returns all tools ready for use
-    /// with <c>ChatOptions.Tools</c> or <c>AsAIAgent(tools: ...)</c>.
+    /// The scope's <see cref="WorkflowAgentToolkit"/>, providing MAF-compatible <see cref="AITool"/>
+    /// instances for full operational control over the scoped tree.
+    /// <para>
+    /// There is exactly one toolkit per scope, created on first use. It owns mutable state — the call
+    /// counters the budgets are enforced against and the state tracker behind
+    /// <c>GetChangesSinceSnapshot</c> — so handing out a fresh instance per call would silently give
+    /// each caller its own budget and its own snapshot history.
+    /// </para>
+    /// </summary>
+    public WorkflowAgentToolkit CreateToolkit() => _toolkit ??= new WorkflowAgentToolkit(this);
+
+    /// <summary>
+    /// Convenience method: returns all tools ready for use with <c>ChatOptions.Tools</c> or
+    /// <c>AsAIAgent(tools: ...)</c>.
+    /// <para>
+    /// Prefer <see cref="CreateContextProvider"/> when the tool set must follow the scope's state: this
+    /// snapshot is computed once and does not pick up later registrations.
+    /// </para>
     /// </summary>
     public IList<AITool> ProvideTools() => CreateToolkit().CreateTools();
 
     /// <summary>
-    /// Convenience method: creates the toolkit and returns only the tools in the given
+    /// Convenience method: returns only the tools in the given
     /// <see cref="WorkflowToolCategory"/> flags. Use this to shrink the tool surface exposed to
     /// the LLM (lower token cost, better tool-selection accuracy). Custom tools registered via
     /// <see cref="WithTools"/> are always included.
     /// </summary>
     public IList<AITool> ProvideTools(WorkflowToolCategory categories) => CreateToolkit().CreateTools(categories);
+
+    // ── Dynamic context (per-invocation prompt + tool surface) ──────────────
+
+    private long _version;
+
+    /// <summary>
+    /// Monotonic version of everything this scope can be configured with. Every setter that changes what
+    /// the Agent is shown advances it, so a context provider caching on it re-renders exactly when
+    /// something actually changed.
+    /// </summary>
+    public long Version => Interlocked.Read(ref _version);
+
+    /// <summary>
+    /// Attached skill scope, or <c>null</c> when skills are not under dynamic management. Set by
+    /// <see cref="WithSkills(string)"/> or <see cref="WithSkills(SkillScope)"/>.
+    /// </summary>
+    public SkillScope? Skills { get; private set; }
+
+    /// <summary>
+    /// Attached MCP scope, or <c>null</c> when no MCP servers are wired. Set by
+    /// <see cref="WithMcps"/>. Its loaded tools join the Agent's tool set on every turn, wrapped like
+    /// the built-in tools so they take part in call accounting, UI-thread marshalling and dirty marking.
+    /// </summary>
+    public McpScope? Mcp { get; private set; }
+
+    private readonly List<Func<WorkflowAgentScope, AIContextProvider>> _contextProviderFactories = [];
+
+    /// <summary>
+    /// Identifies this scope for the context provider's session-state key. Two providers of the same type
+    /// attached to one agent must not share a key, and a scope's tree is what makes it distinct.
+    /// </summary>
+    internal string StateDiscriminator { get; } =
+        tree is IWorkflowIdentifiable identifiable && !string.IsNullOrEmpty(identifiable.RuntimeId)
+            ? identifiable.RuntimeId
+            : Guid.NewGuid().ToString("N");
+
+    /// <summary>
+    /// Brings skills under dynamic management: they are discovered from <paramref name="rootPath"/> — a
+    /// directory of Agent Skills folders, resolved against the application base directory when relative —
+    /// and can be switched on or off at any point, by the host or by the Agent.
+    /// <para>
+    /// Calling this also moves the library's own embedded prompt documents into the same skill list, so
+    /// they become individually switchable too. They stay injected in full while enabled: the switchable
+    /// form does not thin them out.
+    /// </para>
+    /// </summary>
+    /// <param name="rootPath">Root directory containing the skill folders.</param>
+    public WorkflowAgentScope WithSkills(string rootPath)
+    {
+        var skills = Skills ??= new SkillScope().WithSource(new EmbeddedSkillSource(SystemName));
+        // Bind the skill list to the same thread the components are bound to, so a host can bind
+        // Status.Skills directly.
+        skills.WithSynchronizationContext(UIContext);
+        // The skill subsystem renders in whatever language it is told, and the scope owns that choice.
+        skills.WithPromptLanguage(_defaultLanguage);
+        skills.WithSkillRoot(rootPath);
+        skills.Refresh();
+        _skillProvider = skills.CreateContextProvider(SharedPolicy);
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>
+    /// Attaches an already-built <see cref="SkillScope"/>. Use it to share one skill data layer between
+    /// scopes, or to supply custom <see cref="ISkillSource"/> instances only.
+    /// </summary>
+    public WorkflowAgentScope WithSkills(SkillScope skills)
+    {
+        Skills = skills ?? throw new ArgumentNullException(nameof(skills));
+        Skills.WithSynchronizationContext(UIContext);
+        Skills.WithPromptLanguage(_defaultLanguage);
+        _skillProvider = Skills.CreateContextProvider(SharedPolicy);
+        BumpVersion();
+        return this;
+    }
+
+    private AIContextProvider? _skillProvider;
+    private AIContextProvider? _mcpProvider;
+
+    /// <summary>
+    /// The policy every tool source this scope composes is given, so a tool from MCP or a skill is
+    /// counted, reported and dirtied exactly like a built-in one.
+    /// <para>
+    /// One shared instance, not a copy per source: separate policies would mean separate call counters,
+    /// and the budgets would stop being budgets. It reads the scope live, so a <c>With*</c> call made
+    /// after a subsystem was attached still governs that subsystem's tools.
+    /// </para>
+    /// </summary>
+    private AgentToolPolicy SharedPolicy => CreateToolkit().Policy;
+
+    /// <summary>
+    /// The Agent-facing skill tools, bound to this scope's skill set and prompt language. The language
+    /// is taken from <see cref="WithPromptLanguage"/> so a skill's text is read in the same language the
+    /// rest of the prompt is written in.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No skill scope is attached — call <see cref="WithSkills(string)"/> first.</exception>
+    public SkillAgentToolkit CreateSkillToolkit()
+    {
+        if (Skills is null)
+            throw new InvalidOperationException($"{nameof(WithSkills)} must be called before {nameof(CreateSkillToolkit)}().");
+        return new SkillAgentToolkit(Skills) { Language = _defaultLanguage };
+    }
+
+    /// <summary>The language the Agent's prompt is written in, set by <see cref="WithPromptLanguage"/>.</summary>
+    public AgentLanguages PromptLanguage => _defaultLanguage;
+
+    /// <summary>
+    /// Attaches the MCP scope whose servers this Agent may use. Loaded server tools become part of the
+    /// per-turn tool set, so loading or unloading a server takes effect on the next turn without
+    /// rebuilding the agent.
+    /// </summary>
+    public WorkflowAgentScope WithMcps(McpScope mcp)
+    {
+        Mcp = mcp ?? throw new ArgumentNullException(nameof(mcp));
+
+        // MCP self-service gates itself against the same confirmation handler the workflow tools use, so
+        // an approval is configured once. The delegate resolves lazily, which keeps registration order in
+        // the fluent chain irrelevant. A handler set directly on the MCP scope is replaced by this.
+        mcp.WithConfirmationHandler(ResolveConfirmationAsync);
+        // Same UI thread as the components: the MCP status list is meant to be bound by the host.
+        mcp.WithSynchronizationContext(UIContext);
+        // Composed with this scope's policy, so MCP-sourced tools join the same budgets and callbacks.
+        // Without it the subsystem would fall back to marshalling only, and its calls would go uncounted.
+        _mcpProvider = mcp.CreateContextProvider(SharedPolicy);
+
+        BumpVersion();
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a factory for an additional context provider. Factories run once, from
+    /// <see cref="CreateContextProviders"/>, in registration order; the framework chains the resulting
+    /// providers so each sees the context built by the previous one.
+    /// <para>
+    /// Use this to contribute prompt text or tools of your own alongside the scope's. Do not contribute
+    /// tool names the scope already provides — the framework unions tool lists without deduplicating.
+    /// </para>
+    /// </summary>
+    /// <param name="factory">Receives this scope and returns a provider.</param>
+    public WorkflowAgentScope WithContextProvider(Func<WorkflowAgentScope, AIContextProvider> factory)
+    {
+        if (factory is null) throw new ArgumentNullException(nameof(factory));
+        _contextProviderFactories.Add(factory);
+        return this;
+    }
+
+    /// <summary>
+    /// Creates the scope's context provider — the object that renders the current skills, prompt text and
+    /// full tool set on every invocation. Attach it through
+    /// <c>ChatClientAgentOptions.AIContextProviders</c>.
+    /// </summary>
+    public AIContextProvider CreateContextProvider() => new WorkflowAgentContextProvider(this);
+
+    /// <summary>
+    /// Creates every context provider to attach: the scope's own, plus one per factory registered with
+    /// <see cref="WithContextProvider"/>. Pass the result to
+    /// <c>ChatClientAgentOptions.AIContextProviders</c>.
+    /// </summary>
+    /// <summary>
+    /// Creates every context provider to attach: this scope's own, then one for each attached subsystem,
+    /// then one per factory registered with <see cref="WithContextProvider"/>. Pass the result to
+    /// <c>ChatClientAgentOptions.AIContextProviders</c>.
+    /// <para>
+    /// The order is fixed rather than the order the host attached things in, because the framework
+    /// concatenates what providers contribute — so the sequence of <c>WithSkills</c> and
+    /// <c>WithMcps</c> calls would otherwise decide how the prompt reads.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<AIContextProvider> CreateContextProviders()
+    {
+        var providers = new List<AIContextProvider> { CreateContextProvider() };
+        if (_skillProvider is not null) providers.Add(_skillProvider);
+        if (_mcpProvider is not null) providers.Add(_mcpProvider);
+        foreach (var factory in _contextProviderFactories) providers.Add(factory(this));
+        return providers;
+    }
+
+    /// <summary>
+    /// The prompt text this scope contributes on every invocation.
+    /// <para>
+    /// Nothing, currently: skills and MCP are each owned by their own context provider, and this scope has
+    /// no other per-turn prompt of its own. The method stays because a workflow-specific block would
+    /// belong here rather than in the composition.
+    /// </para>
+    /// </summary>
+    internal string? BuildDynamicInstructions() => null;
+
+    /// <summary>
+    /// The tools this scope offers on every invocation: the built-in workflow tools and the
+    /// developer-registered ones, all wrapped so they obey the shared policy.
+    /// <para>
+    /// A subsystem's tools are <b>not</b> included. Each subsystem contributes its own, which is what
+    /// keeps the subsystems usable on their own and keeps this list from having to know about them.
+    /// </para>
+    /// </summary>
+    internal IReadOnlyList<AITool> BuildDynamicTools()
+        => [.. CreateToolkit().CreateTools()];
+
+    /// <summary>Advances <see cref="Version"/>, invalidating any provider render cached against it.</summary>
+    private void BumpVersion() => Interlocked.Increment(ref _version);
+
+    /// <summary>
+    /// Appends the library's embedded skill corpus to a statically built prompt — unless skills are under
+    /// dynamic management, where <see cref="WorkflowAgentContextProvider"/> renders them per turn and
+    /// appending them here as well would duplicate the whole corpus.
+    /// </summary>
+    private void AppendEmbeddedSkills(StringBuilder result, AgentLanguages language)
+    {
+        if (Skills is not null) return;
+        result.AppendLine(AgentEmbeddedResources.ReadAllSkills(SystemName, language).TrimEnd());
+        result.AppendLine();
+    }
 
     private void AppendPreloadedComponentSummaries(StringBuilder result, AgentLanguages language)
     {
