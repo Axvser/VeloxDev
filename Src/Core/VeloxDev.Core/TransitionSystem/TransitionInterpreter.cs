@@ -182,7 +182,10 @@ public abstract class TransitionInterpreterCore : IDisposable
                 _pacer = CreateFramePacer(target, frameSet.Host);
             }
 
-            effect.InvokeStart(target, Args);
+            if (Report(effect, target, Args, diagnostics, "Start", StartCallback))
+            {
+                throw new OperationCanceledException();
+            }
             while (true)
             {
                 // The counter is read rather than held, so a seek can move the animation to another pass: the loop
@@ -199,17 +202,17 @@ public abstract class TransitionInterpreterCore : IDisposable
                 }
                 run.NextCycle();
             }
-            effect.InvokeCompleted(target, Args);
+            Report(effect, target, Args, diagnostics, "Completed", CompletedCallback);
         }
         catch (OperationCanceledException)
         {
-            Report(effect, target, diagnostics, "Canceled", () => effect.InvokeCancled(target, Args));
+            Report(effect, target, Args, diagnostics, "Canceled", CanceledCallback);
         }
         catch (Exception exception)
         {
             // 任何一条没在本地报过的逃逸路径，都在这里收口。
             diagnostics.Error("Run", exception);
-            Report(effect, target, diagnostics, "Canceled", () => effect.InvokeCancled(target, Args));
+            Report(effect, target, Args, diagnostics, "Canceled", CanceledCallback);
         }
         finally
         {
@@ -218,7 +221,7 @@ public abstract class TransitionInterpreterCore : IDisposable
             // whose only release point is its own Dispose — so skipping this leaks one timer per animation.
             try
             {
-                Report(effect, target, diagnostics, "Finally", () => effect.InvokeFinally(target, Args));
+                Report(effect, target, Args, diagnostics, "Finally", FinallyCallback);
             }
             finally
             {
@@ -231,13 +234,35 @@ public abstract class TransitionInterpreterCore : IDisposable
         }
     }
 
-    /// <summary>Runs one callback, reporting rather than propagating whatever it throws.</summary>
-    /// <returns>True when it threw.</returns>
-    private static bool Report(ITransitionEffectCore effect, object target, TransitionDiagnostics diagnostics, string stage, Action callback)
+    /// <summary>Runs one callback, reporting rather than propagating whatever it throws. True when it threw.</summary>
+    /// <remarks>
+    /// The callback arrives as an argument rather than as a closure written at the call site: the frame path runs
+    /// these three times per frame, and a lambda there would capture the frame's locals and allocate every time.
+    /// </remarks>
+    private static bool Report(
+        ITransitionEffectCore effect,
+        object target,
+        TransitionEventArgs args,
+        TransitionDiagnostics diagnostics,
+        string stage,
+        Action<ITransitionEffectCore, object, TransitionEventArgs> callback)
     {
-        try { callback(); return false; }
+        try { callback(effect, target, args); return false; }
         catch (Exception exception) { diagnostics.Error(stage, exception); return true; }
     }
+
+    private static bool ReportMarshaling(Action<double> apply, double easedT, TransitionDiagnostics diagnostics)
+    {
+        try { apply(easedT); return false; }
+        catch (Exception exception) { diagnostics.Error("Marshaling", exception); return true; }
+    }
+
+    private static readonly Action<ITransitionEffectCore, object, TransitionEventArgs> UpdateCallback = static (e, t, a) => e.InvokeUpdate(t, a);
+    private static readonly Action<ITransitionEffectCore, object, TransitionEventArgs> LateUpdateCallback = static (e, t, a) => e.InvokeLateUpdate(t, a);
+    private static readonly Action<ITransitionEffectCore, object, TransitionEventArgs> StartCallback = static (e, t, a) => e.InvokeStart(t, a);
+    private static readonly Action<ITransitionEffectCore, object, TransitionEventArgs> CompletedCallback = static (e, t, a) => e.InvokeCompleted(t, a);
+    private static readonly Action<ITransitionEffectCore, object, TransitionEventArgs> CanceledCallback = static (e, t, a) => e.InvokeCancled(t, a);
+    private static readonly Action<ITransitionEffectCore, object, TransitionEventArgs> FinallyCallback = static (e, t, a) => e.InvokeFinally(t, a);
 
     private async Task RunPassAsync(
         object target,
@@ -327,9 +352,10 @@ public abstract class TransitionInterpreterCore : IDisposable
         }
 
         // 一个抛异常的帧整帧作废：后面的回调不再跑，这一趟也就此结束 —— 半坏的动画不该继续以帧率出错。
-        if (Report(effect, target, diagnostics, "Update", () => effect.InvokeUpdate(target, Args))
-            || Report(effect, target, diagnostics, "Marshaling", () => apply(easedT))
-            || Report(effect, target, diagnostics, "LateUpdate", () => effect.InvokeLateUpdate(target, Args)))
+        // 回调是缓存好的静态委托，不是就地写的 lambda：后者每帧都会捕获本方法的局部变量，一个闭包就是一次分配。
+        if (Report(effect, target, Args, diagnostics, "Update", UpdateCallback)
+            || ReportMarshaling(apply, easedT, diagnostics)
+            || Report(effect, target, Args, diagnostics, "LateUpdate", LateUpdateCallback))
         {
             throw new OperationCanceledException();
         }
