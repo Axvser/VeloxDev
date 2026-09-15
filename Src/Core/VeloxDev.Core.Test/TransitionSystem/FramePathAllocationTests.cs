@@ -105,4 +105,32 @@ public class FramePathAllocationTests
         pacer.Tick();
         _ = loop;
     }
+
+    /// <summary>
+    /// A query on a target with nothing running is the common case for a per-frame readout, and it used to build two
+    /// lists to answer "nothing".
+    /// </summary>
+    [TestMethod]
+    public void QueryingATargetWithNothingRunningDoesNotAllocate()
+    {
+        var target = new Target();
+
+        // Warm up: the weak tables and the first lookups.
+        _ = TransitionCore.Position(target);
+        _ = TransitionCore.Cycle(target);
+        _ = TransitionCore.Rate(target);
+        _ = TransitionCore.IsPaused(target);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var index = 0; index < 100; index++)
+        {
+            _ = TransitionCore.Position(target);
+            _ = TransitionCore.Cycle(target);
+            _ = TransitionCore.Rate(target);
+            _ = TransitionCore.IsPaused(target);
+        }
+        var after = GC.GetAllocatedBytesForCurrentThread();
+
+        Assert.AreEqual(before, after, $"four idle queries allocated {(after - before) / 100.0:F1} bytes");
+    }
 }

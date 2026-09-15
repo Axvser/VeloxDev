@@ -127,10 +127,9 @@ public abstract class TransitionCore
     /// </summary>
     public static int Cycle<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
         where T : class
-    {
-        var runs = TransitionSchedulerCore.CollectRuns(target, IncludeMutual, IncludeNoMutual);
-        return runs.Count == 0 ? 0 : (int)runs[0].Cycle;
-    }
+        => TransitionSchedulerCore.TryGetFirstRun(target, IncludeMutual, IncludeNoMutual, out var run)
+            ? (int)run!.Cycle
+            : 0;
 
     /// <summary>
     /// True when every animation running on <paramref name="target"/> is paused, and there is at least one.
@@ -138,10 +137,10 @@ public abstract class TransitionCore
     public static bool IsPaused<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
         where T : class
     {
-        var runs = TransitionSchedulerCore.CollectRuns(target, IncludeMutual, IncludeNoMutual);
-        if (runs.Count == 0) return false;
+        // 只有这一条查询要看全部 run，所以先去问一句"有没有"：没有就不必建那张表。
+        if (!TransitionSchedulerCore.TryGetFirstRun(target, IncludeMutual, IncludeNoMutual, out _)) return false;
 
-        foreach (var run in runs)
+        foreach (var run in TransitionSchedulerCore.CollectRuns(target, IncludeMutual, IncludeNoMutual))
         {
             if (!run.Timeline.IsPaused) return false;
         }
@@ -154,10 +153,9 @@ public abstract class TransitionCore
     /// </summary>
     public static TimeSpan Position<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
         where T : class
-    {
-        var runs = TransitionSchedulerCore.CollectRuns(target, IncludeMutual, IncludeNoMutual);
-        return runs.Count == 0 ? TimeSpan.Zero : PositionOf(runs[0]);
-    }
+        => TransitionSchedulerCore.TryGetFirstRun(target, IncludeMutual, IncludeNoMutual, out var run)
+            ? PositionOf(run!)
+            : TimeSpan.Zero;
 
     /// <summary>
     /// The rate the animation on <paramref name="target"/> is set to, or zero when nothing is running. Never negative.
@@ -165,10 +163,9 @@ public abstract class TransitionCore
     /// </summary>
     public static double Rate<T>(T target, bool IncludeMutual = true, bool IncludeNoMutual = false)
         where T : class
-    {
-        var runs = TransitionSchedulerCore.CollectRuns(target, IncludeMutual, IncludeNoMutual);
-        return runs.Count == 0 ? 0d : runs[0].Timeline.Rate;
-    }
+        => TransitionSchedulerCore.TryGetFirstRun(target, IncludeMutual, IncludeNoMutual, out var run)
+            ? run!.Timeline.Rate
+            : 0d;
 
     private static void SeekRun(TransitionRun run, TimeSpan position)
         => run.PassAnchor = run.Timeline.Ticks - TimeConversion.SpanToTicks(position, run.Timeline.TicksPerSecond);
@@ -436,6 +433,9 @@ public class TransitionCore<
             {
                 TransitionCore.RemoveNoMutual(target, [coreScheduler]);
             }
+
+            // 这一趟是 run 的唯一主人：循环已经结束，最后一个读者也在上面几行里走了。
+            run.Dispose();
         }
     }
 

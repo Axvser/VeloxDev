@@ -16,7 +16,7 @@ namespace VeloxDev.TransitionSystem.Abstractions;
 /// operation each is enough.
 /// </para>
 /// </remarks>
-internal sealed class TransitionRun
+internal sealed class TransitionRun : IDisposable
 {
     private long _passAnchor;
     private long _cycle;
@@ -56,4 +56,15 @@ internal sealed class TransitionRun
     }
 
     internal void NextCycle() => Interlocked.Increment(ref _cycle);
+
+    /// <summary>
+    /// Releases the token source. Called by whoever owns the run, once the animation is over.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not done by <c>Untrack</c>, and deliberately after the last reader rather than at the first
+    /// opportunity: afterwards <c>Cancel</c> and <c>Register</c> throw while <c>IsCancellationRequested</c> keeps
+    /// answering, which is what lets a drain that arrives late stay quiet and a frame that lands late still see the
+    /// cancellation it was posted under.
+    /// </remarks>
+    public void Dispose() => Cts.Dispose();
 }

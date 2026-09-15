@@ -232,10 +232,30 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
     /// </summary>
     internal void Track(TransitionRun run) => _activeRuns.TryAdd(run.Cts, run);
 
+    /// <remarks>
+    /// Unregistering and releasing are separate: a run leaves this table while its token source is still being read
+    /// by whoever owns it, so the owner disposes it — see <see cref="TransitionRun.Dispose"/>.
+    /// </remarks>
     internal void Untrack(TransitionRun run) => _activeRuns.TryRemove(run.Cts, out _);
 
-    /// <summary>The runs registered right now, for a control call that acts on all of them.</summary>
-    internal List<TransitionRun> SnapshotActive() => [.. _activeRuns.Values];
+    /// <summary>Appends the runs registered right now, for a control call that acts on all of them.</summary>
+    internal void AddActiveTo(List<TransitionRun> runs)
+    {
+        foreach (var pair in _activeRuns) runs.Add(pair.Value);
+    }
+
+    /// <summary>The first run registered right now, without building a list — for the queries that want one run.</summary>
+    internal bool TryGetFirstActive(out TransitionRun? run)
+    {
+        foreach (var pair in _activeRuns)
+        {
+            run = pair.Value;
+            return true;
+        }
+
+        run = null;
+        return false;
+    }
 
     /// <summary>
     /// Bumps the generation and takes every registered token out of the active set, returning them to be cancelled
@@ -298,16 +318,43 @@ public abstract class TransitionSchedulerCore : ITransitionSchedulerCore
         List<TransitionRun> runs = [];
         if (includeMutual && MutualSchedulers.TryGetValue(target, out var mutual))
         {
-            runs.AddRange(((TransitionSchedulerCore)mutual).SnapshotActive());
+            ((TransitionSchedulerCore)mutual).AddActiveTo(runs);
         }
         if (includeNoMutual && NoMutualSchedulers.TryGetValue(target, out var nomutual))
         {
             foreach (var scheduler in nomutual.Keys)
             {
-                runs.AddRange(((TransitionSchedulerCore)scheduler).SnapshotActive());
+                ((TransitionSchedulerCore)scheduler).AddActiveTo(runs);
             }
         }
         return runs;
+    }
+
+    /// <summary>
+    /// The first run on <paramref name="target"/>, without building a list.
+    /// </summary>
+    /// <remarks>
+    /// The queries that only ever look at one run go through here, so asking a target with nothing running — which is
+    /// what a per-frame <c>Transition.Position(target)</c> does most of the time — allocates nothing at all.
+    /// </remarks>
+    internal static bool TryGetFirstRun(object target, bool includeMutual, bool includeNoMutual, out TransitionRun? run)
+    {
+        if (includeMutual && MutualSchedulers.TryGetValue(target, out var mutual)
+            && ((TransitionSchedulerCore)mutual).TryGetFirstActive(out run))
+        {
+            return true;
+        }
+
+        if (includeNoMutual && NoMutualSchedulers.TryGetValue(target, out var nomutual))
+        {
+            foreach (var scheduler in nomutual.Keys)
+            {
+                if (((TransitionSchedulerCore)scheduler).TryGetFirstActive(out run)) return true;
+            }
+        }
+
+        run = null;
+        return false;
     }
 
     internal WeakReference<object>? targetref = null;

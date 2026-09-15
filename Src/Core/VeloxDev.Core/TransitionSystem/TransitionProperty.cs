@@ -1,6 +1,6 @@
-using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
@@ -605,10 +605,17 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
             throw new ArgumentNullException(nameof(propertyInfo));
         }
 
-        return FromPropertyCache.GetOrAdd(propertyInfo, static info => new TransitionProperty([info]));
+        return FromPropertyCache.GetValue(propertyInfo, static info => new TransitionProperty([info]));
     }
 
-    private static readonly ConcurrentDictionary<PropertyInfo, TransitionProperty> FromPropertyCache = new();
+    /// <summary>
+    /// Keyed weakly, and deliberately not a <c>ConcurrentDictionary</c>: the entry is a strong
+    /// chain — path → segment → <see cref="PropertyInfo"/> → <c>Type</c> → <c>Assembly</c> — so a strong key would
+    /// pin the assembly for the life of the process, and a collectible <c>AssemblyLoadContext</c> could never
+    /// unload. The value referring back to the key is what a weak table is designed for; the memo still holds for
+    /// as long as the property itself does, which is every case the cache exists for.
+    /// </summary>
+    private static readonly ConditionalWeakTable<PropertyInfo, TransitionProperty> FromPropertyCache = new();
 
     /// <summary>
     /// Declares a set of animatable member paths from expressions (for <see cref="ISampleable.GetAnimatableMembers"/>).

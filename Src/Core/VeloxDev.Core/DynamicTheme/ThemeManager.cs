@@ -280,7 +280,15 @@ namespace VeloxDev.DynamicTheme
                 Interlocked.CompareExchange(ref _activeSwitch, null, runs);
             }
 
-            if (faulted || runs.Any(static item => WasCancelled(item.Run)))
+            // 先问再释放：这一场是这些 run 的唯一主人，而释放之后令牌源除了 IsCancellationRequested 之外
+            // 什么都不再答。
+            var stopped = faulted || runs.Any(static item => WasCancelled(item.Run));
+            foreach (var item in runs)
+            {
+                item.Run.Dispose();
+            }
+
+            if (stopped)
             {
                 return false;
             }
