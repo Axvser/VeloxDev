@@ -1,36 +1,22 @@
-using Avalonia.Threading;
 using System;
+using Avalonia.Threading;
+using VeloxDev.Threading;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class UIThreadInspector() : UIThreadInspectorCore<DispatcherPriority>
+    public class UIThreadInspector() : TransitionHostBase<DispatcherPriority>
     {
-        public override bool IsAppAlive() => true;
+        public override ThreadRef ThreadFor(object target) => ThreadRef.From(Dispatcher.UIThread);
 
-        public override bool IsUIThread() => Dispatcher.UIThread?.CheckAccess() ?? default;
+        protected override bool IsCurrentThread(ThreadRef thread)
+            => thread.TryGet<Dispatcher>(out var dispatcher) && dispatcher.CheckAccess();
 
-        public override object? ProtectedGetValue(object target, ITransitionProperty property)
+        protected override DispatcherPriority InternalPriority => DispatcherPriority.Send;
+
+        protected override bool PostCore(object target, Action action, DispatcherPriority priority)
         {
-            if (IsUIThread())
-            {
-                return property.GetValue(target);
-            }
-            else
-            {
-                return Dispatcher.UIThread?.Invoke(() => property.GetValue(target));
-            }
-        }
+            if (!ThreadFor(target).TryGet<Dispatcher>(out var dispatcher)) return false;
 
-        public override bool ProtectedInvoke(object target, Action action, DispatcherPriority priority)
-        {
-            if (IsUIThread())
-            {
-                action.Invoke();
-                return true;
-            }
-
-            var dispatcher = Dispatcher.UIThread;
-            if (dispatcher is null) return false;
             dispatcher.InvokeAsync(action, priority);
             return true;
         }

@@ -1,4 +1,5 @@
-﻿using System.Threading;
+using System.Threading;
+using VeloxDev.Threading;
 using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
@@ -10,15 +11,16 @@ namespace VeloxDev.TransitionSystem.Abstractions;
 /// </summary>
 /// <typeparam name="TPriorityCore">
 /// The host's dispatcher priority type, or <see cref="NonPriority"/> for a host that has none. Carrying it as a type
-/// parameter lets <see cref="Apply"/> hand the priority to the inspector unboxed: the previous <c>object?</c>
-/// parameter boxed a <c>DispatcherPriority</c> on every frame of every animation.
+/// parameter lets <see cref="Apply"/> hand the priority to the host unboxed: the previous <c>object?</c> parameter
+/// boxed a <c>DispatcherPriority</c> on every frame of every animation.
 /// </typeparam>
 public sealed class SamplerSet<TPriorityCore>
 {
-    private readonly IUIThreadInspector<TPriorityCore> _inspector;
+    private readonly ITransitionHost<TPriorityCore> _host;
     private readonly List<Entry> _entries = [];
     private volatile CancellationTokenSource? _cts;
     private TransitionRun? _run;
+    private TransitionDiagnostics? _diagnostics;
 
     // Reusable UI-thread apply delegate: one closure per target (fixed per animation), with the time passed via a
     // field instead of a capture — avoids a closure allocation per sample.
@@ -47,9 +49,9 @@ public sealed class SamplerSet<TPriorityCore>
         public object? Working;
     }
 
-    public SamplerSet(IUIThreadInspector<TPriorityCore> inspector)
+    public SamplerSet(ITransitionHost<TPriorityCore> host)
     {
-        _inspector = inspector ?? throw new ArgumentNullException(nameof(inspector));
+        _host = host ?? throw new ArgumentNullException(nameof(host));
     }
 
     internal void Add(ITransitionProperty property, ISampler sampler, object? start, object? end, object? options)
@@ -77,20 +79,22 @@ public sealed class SamplerSet<TPriorityCore>
 
     internal void SetRun(TransitionRun run) => _run = run;
 
-    /// <summary>
-    /// The inspector every write goes through, exposed so the interpreter can derive its frame pacer from the same
-    /// answer instead of re-deriving the thread from the platform and risking a pacer on a different one.
-    /// </summary>
-    internal IUIThreadInspectorCore Inspector => _inspector;
+    internal void SetDiagnostics(TransitionDiagnostics diagnostics) => _diagnostics = diagnostics;
 
-    public bool CanSetValue() => _inspector.IsAppAlive();
+    /// <summary>
+    /// The host every write goes through, exposed so the interpreter can derive its frame pacer from the same answer
+    /// instead of re-deriving the thread from the platform and risking a pacer on a different one.
+    /// </summary>
+    internal ITransitionHost<TPriorityCore> Host => _host;
+
+    public bool CanSetValue() => _host.IsAlive;
 
     /// <summary>
     /// Marshals the per-property updates to the UI thread. Returns immediately when the animation is cancelled or
     /// the app is no longer alive, so stale queued frames never overwrite a reset result.
     /// </summary>
     /// <param name="priority">
-    /// Passed straight to the inspector, unboxed. Omitting it passes <c>default(TPriorityCore)</c> — the zero value
+    /// Passed straight to the host, unboxed. Omitting it passes <c>default(TPriorityCore)</c> — the zero value
     /// of the host's priority, which for <see cref="NonPriority"/> is the whole story, since it carries nothing.
     /// </param>
     public void Apply(object target, double t, TPriorityCore priority = default!)
@@ -105,7 +109,10 @@ public sealed class SamplerSet<TPriorityCore>
                 BitConverter.Int64BitsToDouble(Interlocked.Read(ref _cachedTimeBits)));
         }
         Interlocked.Exchange(ref _cachedTimeBits, BitConverter.DoubleToInt64Bits(t));
-        _inspector.ProtectedInvoke(target, _cachedApply!, priority);
+        if (!_host.Post(target, _cachedApply!, priority))
+        {
+            _diagnostics?.Warn("Dropped", "the host refused a frame; the animation carries on without it.");
+        }
     }
 
     private void ApplyCore(object target, double t)
@@ -118,7 +125,30 @@ public sealed class SamplerSet<TPriorityCore>
         foreach (var entry in _entries)
         {
             if (!CanSetValue()) return;
-            entry.Sampler.InsertFrame(target, entry.Property, ref entry.Working, entry.Start, entry.End, entry.Options, t);
+
+            try
+            {
+                entry.Sampler.InsertFrame(target, entry.Property, ref entry.Working, entry.Start, entry.End, entry.Options, t);
+            }
+            catch (Exception exception)
+            {
+                // 一个绘制不动的动画不该继续以帧率抛异常：报一次，结束这一趟。
+                _diagnostics?.Error("Sampling", exception);
+                CancelQuietly();
+                return;
+            }
+        }
+    }
+
+    private void CancelQuietly()
+    {
+        try
+        {
+            _cts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 动画或适配器已经释放了令牌源，没有可取消的东西了。
         }
     }
 }

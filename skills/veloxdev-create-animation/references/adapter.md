@@ -4,31 +4,43 @@ A GUI gets support by implementing a handful of small classes against Core's int
 
 Put them in a namespace of your choosing and mirror the seven official adapters (`Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/`), which are the reference implementations.
 
-An adapter needs two namespaces: `VeloxDev.TransitionSystem` for the types users name, and `VeloxDev.TransitionSystem.Abstractions` for the bases it derives from (`InterpolatorCore`, `StateCore`, `TransitionInterpreterCore`, `UIThreadInspectorCore` — all `*Core`).
+An adapter needs three namespaces: `VeloxDev.TransitionSystem` for the types users name, `VeloxDev.TransitionSystem.Abstractions` for the bases it derives from (`InterpolatorCore`, `StateCore`, `TransitionInterpreterCore`, `TransitionHostBase`), and `VeloxDev.Threading` for `NonPriority` and `ThreadRef`.
 
 ## 1. `UIThreadInspector` — the only class that needs real platform knowledge
 
-Implement `IsAppAlive`, `IsUIThread`, `ProtectedGetValue`, `ProtectedInvoke` (and `ProtectedInvokeAsync` if you take the base's help). This is where a new adapter is most likely to be subtly wrong, and the seven existing ones disagree with each other in instructive ways.
+Derive from `TransitionHostBase<TPriorityCore>` and answer **three** members. Everything else — inline-versus-queue, the await-only-when-accepted rule, the blocking read, liveness — lives in the base and in the two subsystems underneath it (`VeloxDev.Threading`, `VeloxDev.Lifetime`), so no adapter can derive it differently from another.
+
+| Member | The question it answers |
+|---|---|
+| `ThreadRef ThreadFor(object target)` | which thread owns this target, or `ThreadRef.None` |
+| `bool IsCurrentThread(ThreadRef thread)` | whether the calling thread is that one |
+| `bool PostCore(object target, Action action, TPriorityCore priority)` | the platform's one queue entry point |
 
 **Route by the target, not by a captured global.** If the target is a UI object it already knows its thread, so a background-thread start marshals straight there with no capture and no wrong-thread hop:
 
 ```csharp
 // WPF — Src/Adapters/VeloxDev.WPF/PlatformAdapters/UIThreadInspector.cs
-private static Dispatcher? DispatcherFor(object target)
-    => target is DispatcherObject dispatcherObject ? dispatcherObject.Dispatcher : Application.Current?.Dispatcher;
+public override ThreadRef ThreadFor(object target)
+{
+    try
+    {
+        var dispatcher = target is DispatcherObject o ? o.Dispatcher
+            : System.Windows.Application.Current?.Dispatcher ?? Dispatcher.FromThread(Thread.CurrentThread);
+        return ThreadRef.From(dispatcher);
+    }
+    catch { return ThreadRef.None; }
+}
 ```
 
-WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a lazily captured global. Jalium chains three levels — the target, then `Application.Current`, then a static main dispatcher — with the reason written down: *"so even POCO targets marshal correctly."*
+WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a lazily captured global. Jalium chains three levels — the target, then `Application.Current`, then a static main dispatcher — with the reason written down: *"so even POCO targets marshal correctly."* WinForms cannot name a `Control`'s thread, so it overrides `IsCurrent` to ask the Control instead (`!control.InvokeRequired`), which is the same question answered where it is actually known.
 
-**`ProtectedInvoke` must report acceptance honestly.** It returns `false` when the action could not be queued at all, and on the Core side that flag is the only thing standing between a dropped frame and a hung pipeline:
+**`PostCore` must report acceptance honestly.** It returns `false` when the action could not be queued at all, and that flag is the only thing standing between a dropped frame and a hung pipeline — `PostAsync` only waits on a completion source once the queue reported the work was accepted, so an optimistic `true` for work that was silently dropped hangs the consumer for the rest of the process. Check what your host says when the queue is gone (`HasShutdownStarted`, a refused `TryEnqueue`, a detached handle) and return `false`.
 
-> *"an action the host silently dropped would never complete its completion source, and a caller waiting on it would hold the scheduler's gate for the rest of the process"* — `Src/Core/VeloxDev.Core/TransitionSystem/UIThreadInspector.cs`
+⚙ `IThreadDispatcher.Run<T>` reports the same failure the same way — `default` when the work could not be queued.
 
-So check what your host reports when the queue is gone (`HasShutdownStarted`, a refused `TryEnqueue`, a detached handle) and return `false` — do not return `true` optimistically.
+**Liveness is a state you have to keep, and it differs per host.** WPF and Avalonia carry none. The others each invent something, and all of them report through `Lifetime` rather than a private flag:
 
-**Liveness is a state you have to keep, and it differs per host.** WPF and Avalonia simply return `IsAppAlive() => true` and carry no state at all. The others each invent something:
-
-⚙ WinUI clears a flag when `TryEnqueue` refuses — and **nothing ever sets it back**, not even `CaptureUIThread`.
+⚙ WinUI reports both directions, so one refused enqueue no longer kills the application for the rest of the process: `Lifetime.SetAlive(queue.TryEnqueue(...))`.
 
 ⚙ WinForms subscribes once, on first capture: `Application.ApplicationExit += (_, _) => _isAppAlive = false;`
 
@@ -36,22 +48,21 @@ So check what your host reports when the queue is gone (`HasShutdownStarted`, a 
 
 ⚙ Razor has no signal to observe, so it exposes a manual `NotifyShutdown()` for the host to call.
 
-**With no dispatcher object, find the host's thread another way.** MAUI inverts its own flag — `Application.Current?.Dispatcher?.IsDispatchRequired == false` — so an unknown state is treated as *not* the UI thread and the work is dispatched. WinForms keeps a `SynchronizationContext` plus a thread id, and guards capture with a string comparison:
+**`IsCurrentThread` is the one predicate the base cannot supply** — it holds an opaque handle and cannot compare it to the calling thread. Default it from the target, which is correct for any GUI: a view must be created on the UI thread, so the thread a target is on and the application's UI thread are the same one. MAUI inverts its own flag (`!dispatcher.IsDispatchRequired`), so an unknown state is treated as *not* the UI thread and the work is dispatched; WinForms and Razor compare the captured `SynchronizationContext` by reference.
 
-```csharp
-// Src/Adapters/VeloxDev.WinForms/PlatformAdapters/UIThreadInspector.cs
-if (current?.GetType().Name != "WindowsFormsSynchronizationContext") return;
-```
-
-⚙ Razor accepts *any* non-null `SynchronizationContext`.
-
-**Reads happen once per animation, off the UI thread — wait for them.** `ProtectedGetValue` is called during prepare, and WinUI shows the pattern: queue with `TryEnqueue`, complete a `TaskCompletionSource`, block on the result, and clear the alive flag if the enqueue was refused. WPF and Avalonia simply use a blocking `Invoke`.
-
-**Exception behaviour is not uniform, so do not rely on a bug surfacing.** WinUI swallows exceptions on the write path (`catch { }`) but rethrows on the read path; WinForms' posted write swallows too; MAUI and Razor propagate through the TCS — and MAUI is the only adapter whose write path throws outright.
+**Exception behaviour is uniform, and Core owns it.** A throw from a callback, a sampler or a host ends the run and is reported through the effect's `Error` event; nothing propagates to the animation's caller. Do not add a `catch { }` of your own on the write path — `SamplerSet` already reports and stops the run there, and a second swallow only hides which layer saw the failure.
 
 ⚙ **Re-check cancellation after marshaling.** Core does this for you in `SamplerSet`, but if you write your own frame path: the write lands on the UI thread whenever the message is pumped, and the animation may have been cancelled in between. Checking only before queueing lets a stale frame overwrite a reset.
 
 **Which one to copy:** WPF if your host has a dispatcher; WinForms if it does not. Add WinUI's `TaskCompletionSource` read if your host cannot read a property from a background thread directly.
+
+### The frame pacer
+
+`TransitionInterpreterCore.CreateFramePacer` returns a `FramePacerCore` the loop waits through, or null to fall back to the thread-pool timer. Derive the pacer from `affinity.ThreadFor(target)`, never from the platform — a pacer that disagrees with the write path turns every frame into a dispatch, which is the one thing the sampling path avoids.
+
+⚙ **The timer must be repeating.** `Arm` is called once per frame and `Disarm` stops the timer on every tick, so exactly one tick per arm is drawn — but only if the timer re-arms. MAUI's `IDispatcherTimer` with `IsRepeating = false` fires **once and never again**, which silently caps every animation at two frames: values freeze at their start, the closed-form half of the suite still passes, and nothing throws. WinUI's `DispatcherQueueTimer` re-arms correctly with the same flag, so this is a per-host check, not a rule you can copy across.
+
+⚙ **Release the timer in `Dispose`.** The base's `Dispose` only stops the wait and releases the pending continuation; a host timer with its own teardown (WinForms', Avalonia's) is released by an override calling `base.Dispose()` and then detaching its tick and disposing.
 
 ## 2. Samplers — where an adapter's real value is
 

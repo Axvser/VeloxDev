@@ -1,14 +1,13 @@
+using VeloxDev.Threading;
+
 namespace VeloxDev.TransitionSystem
 {
     public class TransitionInterpreter() : TransitionInterpreterCore<TransitionEffect>
     {
-        // Deliberately not inspector.IsUIThread(): the inspector captures one thread once, so on a second WinForms UI
-        // thread it would answer false while this thread does have a message loop — and a Forms.Timer can only be
-        // built on the thread it ticks on.
-        protected override FramePacerCore? CreateFramePacer(object target, IUIThreadInspectorCore inspector)
-            => SynchronizationContext.Current?.GetType().Name == "WindowsFormsSynchronizationContext"
-                ? new FormsFramePacer()
-                : null;
+        // A Forms.Timer can only be built on the thread it will tick on, so the pacer is taken only when the caller
+        // is already on the target's thread.
+        protected override FramePacerCore? CreateFramePacer(object target, IThreadAffinity affinity)
+            => affinity.IsCurrent(target) ? new FormsFramePacer() : null;
 
         private sealed class FormsFramePacer : FramePacerCore
         {

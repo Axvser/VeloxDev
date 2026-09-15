@@ -19,12 +19,8 @@ public class SamplingLoopTests
     {
     }
 
-    private sealed class ImmediateInspector : UIThreadInspectorCore
+    private sealed class ImmediateInspector : ImmediateHost
     {
-        public override bool IsAppAlive() => true;
-        public override bool IsUIThread() => true;
-        public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override bool ProtectedInvoke(object target, Action action) { action(); return true; }
     }
 
     // Duration=0 makes each pass sample exactly once (no real-time wait), so these tests are deterministic.

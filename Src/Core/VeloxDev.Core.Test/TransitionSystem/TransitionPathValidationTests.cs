@@ -30,12 +30,8 @@ public class TransitionPathValidationTests
     {
     }
 
-    private sealed class ImmediateInspector : UIThreadInspectorCore
+    private sealed class ImmediateInspector : ImmediateHost
     {
-        public override bool IsAppAlive() => true;
-        public override bool IsUIThread() => true;
-        public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override bool ProtectedInvoke(object target, Action action) { action(); return true; }
     }
 
     private sealed class TestTransition : TransitionCore<

@@ -19,12 +19,8 @@ public class StructAssemblerTests
 
     private sealed class TestInterpolator : InterpolatorCore { }
 
-    private sealed class ImmediateInspector : UIThreadInspectorCore
+    private sealed class ImmediateInspector : ImmediateHost
     {
-        public override bool IsAppAlive() => true;
-        public override bool IsUIThread() => true;
-        public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override bool ProtectedInvoke(object target, Action action) { action(); return true; }
     }
 
     private static readonly Func<Type, bool> CanAnimate = static type => type == typeof(double);

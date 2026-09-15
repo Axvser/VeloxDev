@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 
@@ -22,29 +22,17 @@ public class FramePacerTests
         public double Value { get; set; }
     }
 
-    private sealed class ImmediateInspector : UIThreadInspectorCore
+    private sealed class ImmediateInspector : ImmediateHost
     {
-        public override bool IsAppAlive() => true;
-        public override bool IsUIThread() => true;
-        public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override bool ProtectedInvoke(object target, Action action) { action(); return true; }
     }
 
-    /// <summary>
-    /// An inspector that additionally names the UI thread for a target — the capability a host opts into with
-    /// <see cref="IUIThreadAffinity"/>, and the only thing an adapter's pacer is allowed to be derived from.
-    /// </summary>
-    private sealed class AffineInspector : UIThreadInspectorCore, IUIThreadAffinity
+    /// <summary>An inspector that names a UI thread for a target — the only thing a host's pacer may be derived from.</summary>
+    private sealed class AffineInspector : ImmediateHost
     {
         /// <summary>Stands in for the host's UI-thread handle — a dispatcher, a queue, a message loop.</summary>
         public static readonly object Handle = new();
 
-        public override bool IsAppAlive() => true;
-        public override bool IsUIThread() => true;
-        public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override bool ProtectedInvoke(object target, Action action) { action(); return true; }
-
-        public object? ThreadFor(object target) => Handle;
+        public override ThreadRef ThreadFor(object target) => ThreadRef.From(Handle);
     }
 
     private sealed class TestInterpolator : InterpolatorCore
@@ -86,8 +74,6 @@ public class FramePacerTests
         public static int Requests;
 
         /// <summary>Whether the inspector Core handed over declared affinity at all.</summary>
-        public static bool InspectorDeclaresAffinity;
-
         /// <summary>Makes <see cref="CreateFramePacer"/> decline, to exercise the default timer path.</summary>
         public static bool SuppressPacer;
 
@@ -95,14 +81,12 @@ public class FramePacerTests
         {
             Pacer = null;
             Requests = 0;
-            InspectorDeclaresAffinity = false;
             SuppressPacer = false;
         }
 
-        protected override FramePacerCore? CreateFramePacer(object target, IUIThreadInspectorCore inspector)
+        protected override FramePacerCore? CreateFramePacer(object target, IThreadAffinity affinity)
         {
             Interlocked.Increment(ref Requests);
-            InspectorDeclaresAffinity = inspector is IUIThreadAffinity;
             return SuppressPacer ? null : Pacer = new ManualFramePacer();
         }
     }
@@ -114,8 +98,8 @@ public class FramePacerTests
     private sealed class SeamInterpreter : TransitionInterpreterCore<TransitionEffectCore>
     {
         public static object? SeenTarget;
-        public static IUIThreadInspectorCore? SeenInspector;
-        public static object? SeenHandle;
+        public static IThreadAffinity? SeenInspector;
+        public static ThreadRef SeenHandle;
 
         /// <summary>The effect's Update callbacks seen so far — one per frame drawn.</summary>
         public static int FramesSeen;
@@ -127,20 +111,20 @@ public class FramePacerTests
         {
             SeenTarget = null;
             SeenInspector = null;
-            SeenHandle = null;
+            SeenHandle = ThreadRef.None;
             FramesSeen = 0;
             FramesWhenAsked = -1;
         }
 
-        protected override FramePacerCore? CreateFramePacer(object target, IUIThreadInspectorCore inspector)
+        protected override FramePacerCore? CreateFramePacer(object target, IThreadAffinity affinity)
         {
             SeenTarget = target;
-            SeenInspector = inspector;
+            SeenInspector = affinity;
             FramesWhenAsked = FramesSeen;
 
             // The adapters' shape, verbatim: derived from the inspector's own answer for this target, never
             // re-derived from the platform.
-            SeenHandle = (inspector as IUIThreadAffinity)?.ThreadFor(target);
+            SeenHandle = affinity.ThreadFor(target);
             return null;
         }
     }
@@ -256,10 +240,6 @@ public class FramePacerTests
 
         Assert.IsNull(PacerInterpreter.Pacer);
 
-        // 这条退路的前提是：检查器可以不实现亲和性。适配器里那些 `?? 应用 Dispatcher` 兜底分支存在的理由就是它，
-        // 所以这里把「检查器没有亲和性」也钉住——哪天所有检查器都被要求实现它了，这些分支就该一起删掉。
-        Assert.IsFalse(PacerInterpreter.InspectorDeclaresAffinity, "an inspector without affinity is a supported shape");
-
         var deadline = Environment.TickCount64 + 3000;
         while (target.Value <= 0.05d && Environment.TickCount64 < deadline) await Task.Delay(10);
 
@@ -294,7 +274,8 @@ public class FramePacerTests
                 "the pacer must be asked about the target being animated, not some other object");
             Assert.IsTrue(ReferenceEquals(inspector, SeamInterpreter.SeenInspector),
                 "and about the very inspector the frame set holds, or the two answers can disagree");
-            Assert.IsTrue(ReferenceEquals(AffineInspector.Handle, SeamInterpreter.SeenHandle),
+            Assert.IsTrue(SeamInterpreter.SeenHandle.TryGet<object>(out var handle)
+                          && ReferenceEquals(AffineInspector.Handle, handle),
                 "the pacer is derived from the inspector's own answer, never re-derived from the platform");
 
             // 这就是「及早解析」：惰性解析发生在第一次装帧之后，那时首帧已经画过了，这里就不会是 0。对 Avalonia/
@@ -319,33 +300,38 @@ public class FramePacerTests
     }
 
     /// <summary>
-    /// A host callback that throws must not cost the loop its own resources.
+    /// A host callback that throws must not cost the loop its own resources, and must not reach the caller.
     /// </summary>
     /// <remarks>
     /// The pacer is host-supplied and may own a live timer whose only release point is its own <c>Dispose</c>, so a
     /// skipped release leaks one timer per animation — and unlike the exception, the leak lasts for the rest of the
-    /// process. The callback still propagates: swallowing it would hide a host bug rather than contain one.
+    /// process.
     /// </remarks>
     [TestMethod]
-    public async Task AThrowingFinalCallbackStillReleasesThePacer()
+    public async Task AThrowingFinalCallbackIsReportedAndStillReleasesThePacer()
     {
         var target = new Target();
         var state = new StateCore();
         state.SetValue<Target, double>(t => t.Value, 1d);
 
-        // 零时长：整趟 pass 一步走完，不装表，于是这一段循环同步跑到底——异常与释放都已经发生。
+        // 零时长：整趟 pass 一步走完，不装表，于是这一段循环同步跑到底——上报与释放都已经发生。
         var effect = new TransitionEffectCore { Duration = TimeSpan.Zero, FPS = 60 };
         effect.Finally += (_, _) => throw new InvalidOperationException("a host's own callback");
+
+        TransitionEventArgs? reported = null;
+        effect.Error += (_, e) => reported = e;
 
         var frameSet = new TestInterpolator().Prepare(target, state, effect, new ImmediateInspector());
         var interpreter = new PacerInterpreter();
         using var cts = new CancellationTokenSource();
 
-        var loop = interpreter.Execute(target, frameSet, effect, cts);
+        await interpreter.Execute(target, frameSet, effect, cts);
         var pacer = PacerInterpreter.Pacer;
         Assert.IsNotNull(pacer, "the interpreter must have been asked for a pacer");
 
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => loop);
+        Assert.IsNotNull(reported, "the callback's exception must reach the Error channel");
+        Assert.AreEqual("Finally", reported!.Stage);
+        Assert.IsInstanceOfType<InvalidOperationException>(reported.Exception);
 
         Assert.IsTrue(pacer.IsDisposed,
             "the callback is host code; the resources are the loop's, and one must not be able to take the other");

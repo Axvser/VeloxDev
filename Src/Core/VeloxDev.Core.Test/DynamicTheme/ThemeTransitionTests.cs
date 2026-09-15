@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using VeloxDev.DynamicTheme;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
@@ -92,12 +92,8 @@ public class ThemeTransitionTests
     }
 
     /// <summary>Runs frames inline, so a sampling loop needs no dispatcher.</summary>
-    private sealed class ImmediateInspector : UIThreadInspectorCore
+    private sealed class ImmediateInspector : ImmediateHost
     {
-        public override bool IsAppAlive() => true;
-        public override bool IsUIThread() => true;
-        public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override bool ProtectedInvoke(object target, Action action) { action(); return true; }
     }
 
     private sealed class TestInterpreter : TransitionInterpreterCore<TransitionEffectCore>

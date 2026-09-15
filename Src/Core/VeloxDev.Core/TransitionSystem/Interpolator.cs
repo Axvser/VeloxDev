@@ -78,27 +78,6 @@ public abstract class InterpolatorCore
         return matched is not null;
     }
 
-    /// <summary>
-    /// The scheduler this platform animates <paramref name="target"/> with, for a caller that knows the target only
-    /// as an <see cref="object"/>, or null when it cannot carry <paramref name="effect"/>.
-    /// </summary>
-    /// <remarks>
-    /// The theme system runs one switch across targets of many runtime types, so it cannot name the type argument of
-    /// <c>Transition&lt;T&gt;</c>. Which inspector, interpreter and dispatcher priority to build a scheduler from is
-    /// the one thing the platform knows and Core does not.
-    /// <para>
-    /// Null is the honest answer both for "this platform has not opted in" and for "this effect does not belong to
-    /// this platform" — the second mirroring the cast the scheduler itself performs before running. The caller then
-    /// switches without animating rather than starting a run that draws nothing.
-    /// </para>
-    /// <para>
-    /// An implementation must go through <c>TransitionSchedulerCore&lt;...&gt;.FindOrCreate</c>, not construct a
-    /// scheduler directly: only that path files it under the target, which is what makes a later
-    /// <c>Transition.Pause</c>, <c>Seek</c> or <c>Exit</c> able to find the animation.
-    /// </para>
-    /// </remarks>
-    public virtual TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect) => null;
-
     public static bool RegisterInterpolator(Type type, ISampler sampler)
     {
         // Atomic last-writer-wins install. AddOrUpdate makes the update unconditional and atomic, so the
@@ -112,6 +91,27 @@ public abstract class InterpolatorCore
     }
 
     /// <summary>
+    /// The host this platform animates <paramref name="target"/> with, for a caller that knows the target only
+    /// as an <see cref="object"/>, or null when it cannot carry <paramref name="effect"/>.
+    /// </summary>
+    /// <remarks>
+    /// The theme system runs one switch across targets of many runtime types, so it cannot name the type argument of
+    /// <c>Transition&lt;T&gt;</c>. Which host, interpreter and dispatcher priority to build a scheduler from is the
+    /// one thing the platform knows and Core does not.
+    /// <para>
+    /// Null is the honest answer both for "this platform has not opted in" and for "this effect does not belong to
+    /// this platform" — the second mirroring the cast the scheduler itself performs before running. The caller then
+    /// switches without animating rather than starting a run that draws nothing.
+    /// </para>
+    /// <para>
+    /// An implementation must go through <c>TransitionSchedulerCore&lt;...&gt;.FindOrCreate</c>, not construct a
+    /// scheduler directly: only that path files it under the target, which is what makes a later
+    /// <c>Transition.Pause</c>, <c>Seek</c> or <c>Exit</c> able to find the animation.
+    /// </para>
+    /// </remarks>
+    public virtual TransitionSchedulerCore? CreateScheduler(object target, ITransitionEffectCore effect) => null;
+
+    /// <summary>
     /// Reads each animated property's current and target values, resolves its <see cref="ISampler"/> (override →
     /// registry), and stores the normalized endpoints in the <see cref="SamplerSet{TPriorityCore}"/>. A struct
     /// <see cref="ISampleable"/> is assembled member by member; reference types are never expanded.
@@ -119,18 +119,32 @@ public abstract class InterpolatorCore
     /// <remarks>
     /// Frozen index arguments are resolved here, once, against <paramref name="target"/> — the first moment a target
     /// exists. Everything else stays keyed by the <em>unbound</em> path; only the property handed to the sampler is
-    /// bound. An override that does not call the base loses the freeze silently.
+    /// bound. A property that cannot be prepared is reported through the effect's <c>Warn</c> and skipped, which is
+    /// the behaviour a host opts into by declaring a path that only some targets match.
     /// </remarks>
-    public virtual SamplerSet<TPriorityCore> Prepare<TPriorityCore>(object target, IFrameState state, ITransitionEffectCore effect, IUIThreadInspector<TPriorityCore> inspector)
+    public virtual SamplerSet<TPriorityCore> Prepare<TPriorityCore>(
+        object target,
+        IFrameState state,
+        ITransitionEffectCore effect,
+        ITransitionHost<TPriorityCore> host)
     {
-        var set = new SamplerSet<TPriorityCore>(inspector);
+        var set = new SamplerSet<TPriorityCore>(host);
+        var diagnostics = new TransitionDiagnostics(effect, target);
+        set.SetDiagnostics(diagnostics);
+
         foreach (var kvp in state.Values)
         {
             // 冻结档在这一刻把索引钉死；没有冻结实参时 BindTo 返回自身，不产生任何额外对象。
             var bound = kvp.Key is TransitionProperty property ? property.BindTo(target) : kvp.Key;
-            var currentValue = inspector.ProtectedGetValue(target, bound);
-            // The path is invalid for the current target (intermediate type mismatch) → skip this property to avoid distorting interpolation by treating it as a null value.
-            if (ReferenceEquals(currentValue, TransitionProperty.UnreadablePath)) continue;
+            var currentValue = host.Run<object?>(target, () => bound.GetValue(target));
+
+            // 路径对当前目标无效（中间对象运行时类型不符）→ 跳过，否则会被当成 null 参与插值而扭曲结果。
+            if (ReferenceEquals(currentValue, TransitionProperty.UnreadablePath))
+            {
+                diagnostics.Warn("Unreadable", $"'{bound.Path}' does not match the target's runtime type.");
+                continue;
+            }
+
             var newValue = kvp.Value;
             state.TryGetOptions(kvp.Key, out var options);
 
@@ -150,7 +164,11 @@ public abstract class InterpolatorCore
                 sampler = StructAssembler.Create(kvp.Key, sampleable, currentValue, newValue);
             }
 
-            if (sampler == null) continue;
+            if (sampler == null)
+            {
+                diagnostics.Warn("Unsampled", $"'{bound.Path}' has no sampler for {kvp.Key.PropertyType.Name}.");
+                continue;
+            }
 
             var normStart = sampler.NormalizeStart(currentValue, newValue, options);
             var normEnd = sampler.NormalizeEnd(currentValue, newValue, options);

@@ -1,8 +1,9 @@
 using System.Windows.Forms;
+using VeloxDev.Threading;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class UIThreadInspector : UIThreadInspectorCore
+    public class UIThreadInspector : TransitionHostBase<NonPriority>
     {
         private static SynchronizationContext? _uiSyncContext;
         private static int _uiThreadId = -1;
@@ -36,7 +37,7 @@ namespace VeloxDev.TransitionSystem
             _uiThreadId = Thread.CurrentThread.ManagedThreadId;
             _isAppAlive = true;
 
-            Application.ApplicationExit += (_, _) => _isAppAlive = false;
+            System.Windows.Forms.Application.ApplicationExit += (_, _) => _isAppAlive = false;
         }
 
         /// <summary>
@@ -47,53 +48,41 @@ namespace VeloxDev.TransitionSystem
         private static Control? ControlDispatcher(object target)
             => target is Control control && control.IsHandleCreated ? control : null;
 
-        public override bool IsAppAlive() => _isAppAlive;
+        public override bool IsAlive => _isAppAlive;
 
-        public override bool IsUIThread()
+        public override ThreadRef ThreadFor(object target)
         {
             EnsureCaptured();
-            return Thread.CurrentThread.ManagedThreadId == _uiThreadId;
+            return ThreadRef.From(_uiSyncContext);
         }
 
-        public override object? ProtectedGetValue(object target, ITransitionProperty property)
+        /// <summary>
+        /// Asked of the target first: WinForms exposes no way to name a Control's thread, but the Control answers
+        /// whether the caller is on it, which is the same question.
+        /// </summary>
+        public override bool IsCurrent(object target)
         {
-            var control = ControlDispatcher(target);
-            if (control != null)
-            {
-                if (!control.InvokeRequired) return property.GetValue(target);
-                return control.Invoke((Func<object?>)(() => property.GetValue(target)));
-            }
-
-            if (IsUIThread()) return property.GetValue(target);
-            if (_uiSyncContext == null) return default;
-
-            var tcs = new TaskCompletionSource<object?>();
-            _uiSyncContext.Post(_ =>
-            {
-                try { tcs.SetResult(property.GetValue(target)); }
-                catch (Exception ex) { tcs.SetException(ex); }
-            }, null);
-            return tcs.Task.GetAwaiter().GetResult();
+            EnsureCaptured();
+            return ControlDispatcher(target) is { } control
+                ? !control.InvokeRequired
+                : Thread.CurrentThread.ManagedThreadId == _uiThreadId;
         }
 
-        public override bool ProtectedInvoke(object target, Action action)
+        protected override bool IsCurrentThread(ThreadRef thread)
+            => thread.TryGet<SynchronizationContext>(out var context)
+               && ReferenceEquals(SynchronizationContext.Current, context);
+
+        protected override bool PostCore(object target, Action action, NonPriority priority)
         {
-            var control = ControlDispatcher(target);
-            if (control != null)
+            if (ControlDispatcher(target) is { } control)
             {
-                if (!control.InvokeRequired) { action(); return true; }
                 control.BeginInvoke(action);
                 return true;
             }
 
-            if (IsUIThread()) { action(); return true; }
-            if (_uiSyncContext == null) return false;
+            if (_uiSyncContext is null) return false;
 
-            _uiSyncContext.Post(_ =>
-            {
-                try { action(); }
-                catch { }
-            }, null);
+            _uiSyncContext.Post(_ => action(), null);
             return true;
         }
     }

@@ -1,3 +1,4 @@
+using VeloxDev.Threading;
 using VeloxDev.TimeLine;
 using VeloxDev.Timing;
 
@@ -59,12 +60,11 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// <summary>
     /// The host's own frame pacer, or null to wait on the default thread-pool timer.
     /// </summary>
-    /// <param name="target">The object being sampled — whose UI thread this loop belongs on.</param>
-    /// <param name="inspector">
-    /// The inspector the frame set was built with, and the very instance whose <c>ProtectedInvoke</c> runs every
-    /// property write. A host that also implements <see cref="IUIThreadAffinity"/> should derive the pacer from
-    /// <c>(inspector as IUIThreadAffinity)?.ThreadFor(target)</c>: a pacer that disagrees with the write path turns
-    /// every frame into a dispatch, which is the one thing the sampling path is built to avoid.
+    /// <param name="target">The object being sampled — whose thread this loop belongs on.</param>
+    /// <param name="affinity">
+    /// The host the frame set was built with, and the very instance whose <c>Post</c> runs every property write. A
+    /// host should derive the pacer from <c>affinity.ThreadFor(target)</c>: a pacer that disagrees with the write
+    /// path turns every frame into a dispatch, which is the one thing the sampling path is built to avoid.
     /// </param>
     /// <remarks>
     /// Called at most once per run, before the loop's first frame, and still synchronously on the thread the loop was
@@ -72,16 +72,11 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// <see cref="FramePacerCore"/> for why waiting on that thread is the only allocation-free way to keep the loop
     /// there.
     /// <para>
-    /// An inspector that does not implement <see cref="IUIThreadAffinity"/> is a supported shape, not a broken one —
-    /// a third-party host's inspector, or one of the platforms that cannot name a dispatcher at all. An override
-    /// should still answer such an inspector from an application-level thread, the way it did before this seam
-    /// existed: that can only preserve a pacer the host already had, never hand it one it did not.
-    /// </para>
-    /// <para>
-    /// Null is equally supported and means the loop waits on the default thread-pool timer.
+    /// <see cref="ThreadRef.None"/> and null are both supported answers and mean the loop waits on the default
+    /// thread-pool timer.
     /// </para>
     /// </remarks>
-    protected virtual FramePacerCore? CreateFramePacer(object target, IUIThreadInspectorCore inspector) => null;
+    protected virtual FramePacerCore? CreateFramePacer(object target, IThreadAffinity affinity) => null;
 
     /// <summary>
     /// Arranges for <paramref name="continuation"/> to run once, no earlier than <paramref name="interval"/> from
@@ -94,11 +89,6 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// Must not block the calling thread, and must invoke <paramref name="continuation"/> exactly once — including
     /// when cancelled. An implementation that simply stopped calling back would park the loop for good; nothing else
     /// would wake it.
-    /// </para>
-    /// <para>
-    /// The pacer is not resolved here. It is resolved by <see cref="ExecuteSamplingLoopAsync{TPriorityCore}"/> before
-    /// the loop's first frame, while the loop is still synchronously on the thread that started it — see the note
-    /// there for why that timing matters.
     /// </para>
     /// </remarks>
     protected virtual void ArmNextFrame(Action continuation, TimeSpan interval, CancellationToken cancellationToken)
@@ -128,13 +118,11 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// <c>ICriticalNotifyCompletion</c>, so the builder flows the caller's <see cref="ExecutionContext"/> into the
     /// continuation instead of suppressing it.
     /// <para>
-    /// That does <b>not</b> keep the loop on the UI thread, which is what this remark used to claim. Restoring the
-    /// <see cref="SynchronizationContext"/> is <c>Task</c>'s doing — it lives in <c>TaskAwaiter</c>, not in the
-    /// builder — so a custom awaiter's continuation resumes on whatever thread completed the wait. Measured
-    /// directly: an <c>INotifyCompletion</c>-only awaiter completed from the thread pool resumed on the pool, not on
-    /// the context it was awaited under. A loop started on a UI thread therefore drifts to a pool thread after its
-    /// first frame, and the effect's <c>Update</c>/<c>LateUpdate</c> callbacks run there; only the property writes
-    /// are marshalled, because <see cref="SamplerSet{TPriorityCore}.Apply"/> goes through the inspector.
+    /// That does <b>not</b> keep the loop on the UI thread: restoring the <see cref="SynchronizationContext"/> is
+    /// <c>Task</c>'s doing, so a custom awaiter's continuation resumes on whatever thread completed the wait. A loop
+    /// started on a UI thread therefore drifts to a pool thread after its first frame unless the host supplied a
+    /// pacer, and the effect's <c>Update</c>/<c>LateUpdate</c> callbacks run there; the property writes are
+    /// marshalled either way, because <see cref="SamplerSet{TPriorityCore}.Apply"/> goes through the host.
     /// </para>
     /// </remarks>
     internal readonly struct FrameWait(TransitionInterpreterCore interpreter, TimeSpan interval, CancellationToken token)
@@ -161,6 +149,11 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// in [0,1] and applies via the frame set (which marshals the writes to the UI thread). The final frame of each
     /// pass is the exact endpoint.
     /// </summary>
+    /// <remarks>
+    /// <b>An exception never leaves this method.</b> A callback, a sampler or a host that throws ends the run and is
+    /// reported through the effect's <c>Error</c>; the run then unwinds down its normal cancellation path so that
+    /// <c>Canceled</c> and <c>Finally</c> still fire and the loop's own resources are still released.
+    /// </remarks>
     protected async Task ExecuteSamplingLoopAsync<TPriorityCore>(
         object target,
         SamplerSet<TPriorityCore> frameSet,
@@ -173,23 +166,20 @@ public abstract class TransitionInterpreterCore : IDisposable
         var run = frameSet.Run;
         var durationMs = effect.Duration.TotalMilliseconds;
         var foreverloop = effect.LoopTime == int.MaxValue;
+        var diagnostics = new TransitionDiagnostics(effect, target, Args);
+        frameSet.SetDiagnostics(diagnostics);
+
         try
         {
             // Resolved here rather than on the first arm: everything up to the first await in this method still runs
             // synchronously on the thread that started the loop, which is the thread a host's timer has to be built
             // on (Avalonia's DispatcherTimer and WinForms' Timer tick on their creating thread and cannot name one).
-            // The old lazy resolution ran on the first *arm* instead, which is after RunPassAsync may already have
-            // parked on a stalled timeline and resumed on another thread — so one stalled first frame could cost the
-            // host its pacer for the rest of the animation, silently. `_pacerResolved` is still needed because null
-            // is a meaningful answer: it means "asked once, and the answer was no".
-            //
-            // Inside the try, not before it. A host override that throws is a host bug, and the cost of it should be
-            // that host's pacer — the loop then waits on the thread-pool timer, exactly as if the override had
-            // returned null — rather than an exception escaping this method with no frame drawn and no callback run.
+            // `_pacerResolved` is still needed because null is a meaningful answer: it means "asked once, and the
+            // answer was no".
             if (!_pacerResolved)
             {
                 _pacerResolved = true;
-                _pacer = CreateFramePacer(target, frameSet.Inspector);
+                _pacer = CreateFramePacer(target, frameSet.Host);
             }
 
             effect.InvokeStart(target, Args);
@@ -201,29 +191,34 @@ public abstract class TransitionInterpreterCore : IDisposable
                 if (!foreverloop && run.Cycle > effect.LoopTime) break;
 
                 if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
-                await RunPassAsync(target, effect, run, durationMs, cts, apply, forward: true);
+                await RunPassAsync(target, effect, run, durationMs, cts, apply, diagnostics, forward: true);
                 if (effect.IsAutoReverse)
                 {
                     if (cts.IsCancellationRequested || Args.Handled) throw new OperationCanceledException();
-                    await RunPassAsync(target, effect, run, durationMs, cts, apply, forward: false);
+                    await RunPassAsync(target, effect, run, durationMs, cts, apply, diagnostics, forward: false);
                 }
                 run.NextCycle();
             }
             effect.InvokeCompleted(target, Args);
         }
-        catch
+        catch (OperationCanceledException)
         {
-            effect.InvokeCancled(target, Args);
+            Report(effect, target, diagnostics, "Canceled", () => effect.InvokeCancled(target, Args));
+        }
+        catch (Exception exception)
+        {
+            // 任何一条没在本地报过的逃逸路径，都在这里收口。
+            diagnostics.Error("Run", exception);
+            Report(effect, target, diagnostics, "Canceled", () => effect.InvokeCancled(target, Args));
         }
         finally
         {
             // Nested, so a throwing callback cannot take the loop's own resources with it. The callback is host code
             // and a host may throw from it; the resources are this loop's, and a host's pacer can own a live timer
-            // whose only release point is its own Dispose — so skipping this leaks one timer per animation, which
-            // outlives the exception by the rest of the process.
+            // whose only release point is its own Dispose — so skipping this leaks one timer per animation.
             try
             {
-                effect.InvokeFinally(target, Args);
+                Report(effect, target, diagnostics, "Finally", () => effect.InvokeFinally(target, Args));
             }
             finally
             {
@@ -236,6 +231,14 @@ public abstract class TransitionInterpreterCore : IDisposable
         }
     }
 
+    /// <summary>Runs one callback, reporting rather than propagating whatever it throws.</summary>
+    /// <returns>True when it threw.</returns>
+    private static bool Report(ITransitionEffectCore effect, object target, TransitionDiagnostics diagnostics, string stage, Action callback)
+    {
+        try { callback(); return false; }
+        catch (Exception exception) { diagnostics.Error(stage, exception); return true; }
+    }
+
     private async Task RunPassAsync(
         object target,
         ITransitionEffectCore effect,
@@ -243,6 +246,7 @@ public abstract class TransitionInterpreterCore : IDisposable
         double durationMs,
         CancellationTokenSource cts,
         Action<double> apply,
+        TransitionDiagnostics diagnostics,
         bool forward)
     {
         var timeline = run.Timeline;
@@ -263,12 +267,9 @@ public abstract class TransitionInterpreterCore : IDisposable
                 // parks again. A plain pause therefore costs one frame and then no timer wake-ups at all.
                 // IsAdvancing rather than IsPaused: a rate of zero freezes the timeline without pausing it, and this
                 // loop has to park for that too.
-                EmitFrame(target, effect, durationMs, forward, ToMilliseconds(timeline, timeline.Ticks - run.PassAnchor), apply);
+                EmitFrame(target, effect, durationMs, forward, ToMilliseconds(timeline, timeline.Ticks - run.PassAnchor), apply, diagnostics);
 
                 // 不是 ConfigureAwait(false)：这里等的是一个 Task，所以把它投回捕获的上下文是有意义的。
-                // 注意这修不了整条循环的线程归属——见 FrameWait 的说明，自定义 awaiter 的续体不恢复
-                // SynchronizationContext，循环本来就已经不在启动它的上下文上了。这一处只保证暂停等待本身
-                // 不再额外把循环推向池线程。
                 await timeline.WaitWhileStalledAsync(cts.Token);
                 continue;
             }
@@ -276,7 +277,7 @@ public abstract class TransitionInterpreterCore : IDisposable
             // A pass ends in exactly one place: at its far end. The timeline only ever moves forwards, so there is no
             // second bound to check.
             var elapsedTicks = timeline.Ticks - run.PassAnchor;
-            if (EmitFrame(target, effect, durationMs, forward, ToMilliseconds(timeline, elapsedTicks), apply)) return;
+            if (EmitFrame(target, effect, durationMs, forward, ToMilliseconds(timeline, elapsedTicks), apply, diagnostics)) return;
 
             // Read per frame rather than once up front, so a rate cap can be tightened on a running animation.
             // FPS is a *maximum* sample rate, not a frame grid: an animation slows down when it is lowered and
@@ -303,7 +304,8 @@ public abstract class TransitionInterpreterCore : IDisposable
         double durationMs,
         bool forward,
         double elapsedMs,
-        Action<double> apply)
+        Action<double> apply,
+        TransitionDiagnostics diagnostics)
     {
         if (elapsedMs < 0d) elapsedMs = 0d;
 
@@ -324,9 +326,13 @@ public abstract class TransitionInterpreterCore : IDisposable
             easedT = effect.Ease.Ease(easeIn);
         }
 
-        effect.InvokeUpdate(target, Args);
-        apply(easedT);
-        effect.InvokeLateUpdate(target, Args);
+        // 一个抛异常的帧整帧作废：后面的回调不再跑，这一趟也就此结束 —— 半坏的动画不该继续以帧率出错。
+        if (Report(effect, target, diagnostics, "Update", () => effect.InvokeUpdate(target, Args))
+            || Report(effect, target, diagnostics, "Marshaling", () => apply(easedT))
+            || Report(effect, target, diagnostics, "LateUpdate", () => effect.InvokeLateUpdate(target, Args)))
+        {
+            throw new OperationCanceledException();
+        }
 
         return rawT >= 1d;
     }
@@ -364,14 +370,7 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// <para>
     /// What the interpreter does own is the pacer, and a host's pacer can own a disposable timer whose
     /// unsubscribe-and-release lives only in its own <c>Dispose</c> — WinForms' does — so releasing it here is the
-    /// difference between dropping that timer and leaking one per animation. Nothing else released it: the
-    /// scheduler's <c>finally</c> only releases its gate, and never disposed the interpreter it built.
-    /// </para>
-    /// <para>
-    /// <c>_pacerResolved</c> is cleared with it, so an interpreter that is executed a second time asks its host for a
-    /// fresh pacer instead of silently falling back to the thread-pool timer. Nothing in the repository does that —
-    /// the scheduler builds one interpreter per run — but <see cref="ExecuteSamplingLoopAsync{TPriorityCore}"/> is
-    /// public, and a stale "already asked, and the answer was no" would be invisible.
+    /// difference between dropping that timer and leaking one per animation.
     /// </para>
     /// </remarks>
     internal void ReleaseLoopResources()

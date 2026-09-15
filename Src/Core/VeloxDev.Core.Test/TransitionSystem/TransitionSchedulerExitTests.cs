@@ -25,18 +25,20 @@ public class TransitionSchedulerExitTests
     }
 
     /// <summary>
-    /// Models what five of the seven adapters do (WPF, Avalonia, Jalium, WinForms, WinUI): ProtectedInvoke queues
-    /// the action and returns, so it runs on the UI thread when the message is pumped — a different moment from
-    /// the one that queued it. MAUI and Razor block instead, which is why the window this guards is adapter-half.
+    /// Models the fire-and-forget adapters: a write is queued and runs when the message is pumped — a different
+    /// moment from the one that queued it — while a read is answered inline.
     /// </summary>
-    private sealed class DeferredInspector : UIThreadInspectorCore
+    private sealed class DeferredInspector : TransitionHostBase<NonPriority>
     {
         public static readonly List<Action> Pending = [];
 
-        public override bool IsAppAlive() => true;
-        public override bool IsUIThread() => true;
-        public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override bool ProtectedInvoke(object target, Action action) { Pending.Add(action); return true; }
+        public override ThreadRef ThreadFor(object target) => ThreadRef.None;
+
+        protected override bool IsCurrentThread(ThreadRef thread) => false;
+
+        protected override bool PostCore(object target, Action action, NonPriority priority) { Pending.Add(action); return true; }
+
+        public override T Run<T>(object target, Func<T> body) => body();
 
         public static void Pump()
         {
@@ -49,12 +51,8 @@ public class TransitionSchedulerExitTests
         }
     }
 
-    private sealed class ImmediateInspector : UIThreadInspectorCore
+    private sealed class ImmediateInspector : ImmediateHost
     {
-        public override bool IsAppAlive() => true;
-        public override bool IsUIThread() => true;
-        public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override bool ProtectedInvoke(object target, Action action) { action(); return true; }
     }
 
     [TestMethod]

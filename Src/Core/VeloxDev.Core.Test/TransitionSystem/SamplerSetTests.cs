@@ -12,15 +12,12 @@ public class SamplerSetTests
         public double Value { get; set; }
     }
 
-    private sealed class FakeInspector : IUIThreadInspector<NonPriority>
+    private sealed class FakeInspector : InlinePostHost<NonPriority>
     {
         public Func<bool> Alive { get; set; } = static () => true;
         public int InvokeCount { get; private set; }
-        public bool IsAppAlive() => Alive();
-        public bool IsUIThread() => true;
-        public bool ProtectedInvoke(object target, Action action, NonPriority priority) { InvokeCount++; action(); return true; }
-        public Task<bool> ProtectedInvokeAsync(object target, Action action, NonPriority priority) => Task.FromResult(ProtectedInvoke(target, action, priority));
-        public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
+        public override bool IsAlive => Alive();
+        protected override bool PostCore(object target, Action action, NonPriority priority) { InvokeCount++; action(); return true; }
     }
 
     private static ITransitionProperty Property => TransitionProperty.FromProperty(typeof(Target).GetProperty(nameof(Target.Value))!);
@@ -78,40 +75,13 @@ public class SamplerSetTests
         Assert.AreEqual(0, inspector.InvokeCount);
     }
 
-    /// <summary>
-    /// Models the real marshalling: the write is queued and lands on the UI thread later, so the point where the
-    /// frame is checked and the point where it is written are different moments.
-    /// </summary>
-    private sealed class DeferredInspector : IUIThreadInspector<NonPriority>
-    {
-        private readonly List<Action> _pending = [];
-
-        public bool IsAppAlive() => true;
-
-        public bool IsUIThread() => true;
-
-        public bool ProtectedInvoke(object target, Action action, NonPriority priority) { _pending.Add(action); return true; }
-        public Task<bool> ProtectedInvokeAsync(object target, Action action, NonPriority priority) => Task.FromResult(ProtectedInvoke(target, action, priority));
-
-        public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-
-        public void Pump()
-        {
-            var pending = _pending.ToArray();
-            _pending.Clear();
-            foreach (var action in pending)
-            {
-                action();
-            }
-        }
-    }
 
     [TestMethod]
     public void Apply_FrameQueuedBeforeCancellation_IsDroppedWhenItFinallyLands()
     {
         // A frame queued while the animation was still alive, cancelled before the UI thread pumped it, must be
         // dropped when it lands — otherwise it executes after a reset has already been applied and overwrites it.
-        var inspector = new DeferredInspector();
+        var inspector = new DeferredHost();
         var set = new SamplerSet<NonPriority>(inspector);
         set.Add(Property, new DoubleSampler(), 10d, 100d, null);
         var target = new Target { Value = 50d };
@@ -133,14 +103,6 @@ public class SamplerSetTests
         High,
     }
 
-    private sealed class PriorityInspector : IUIThreadInspector<FakePriority>
-    {
-        public bool IsAppAlive() => true;
-        public bool IsUIThread() => true;
-        public bool ProtectedInvoke(object target, Action action, FakePriority priority) { action(); return true; }
-        public Task<bool> ProtectedInvokeAsync(object target, Action action, FakePriority priority) => Task.FromResult(ProtectedInvoke(target, action, priority));
-        public object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-    }
 
     [TestMethod]
     public void Apply_DoesNotAllocate_ForAValueTypePriority()
@@ -148,7 +110,7 @@ public class SamplerSetTests
         // The frame path runs once per frame per animation, so the priority must reach the inspector unboxed. It
         // used to travel as an object? parameter, which boxed a DispatcherPriority every frame; this is the only
         // thing that can prove the box is gone — reading the signature cannot.
-        var set = new SamplerSet<FakePriority>(new PriorityInspector());
+        var set = new SamplerSet<FakePriority>(new InlinePostHost<FakePriority>());
         var target = new Target();
 
         set.Apply(target, 0.5, FakePriority.High); // warms up: caches the reusable apply delegate
@@ -160,6 +122,6 @@ public class SamplerSetTests
         }
         var after = GC.GetAllocatedBytesForCurrentThread();
 
-        Assert.AreEqual(before, after, "Apply must not allocate per frame");
+        Assert.AreEqual(before, after, "the priority must reach the host unboxed");
     }
 }

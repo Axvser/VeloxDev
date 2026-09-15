@@ -1,14 +1,13 @@
 using Microsoft.Maui.Dispatching;
+using VeloxDev.Threading;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class UIThreadInspector() : UIThreadInspectorCore, IUIThreadAffinity
+    public class UIThreadInspector() : TransitionHostBase<NonPriority>
     {
-        public override bool IsAppAlive() => Application.Current?.Windows?.Count > 0;
+        public override bool IsAlive => Microsoft.Maui.Controls.Application.Current?.Windows?.Count > 0;
 
-        public override bool IsUIThread() => Application.Current?.Dispatcher?.IsDispatchRequired == false;
-
-        public object? ThreadFor(object target) => DispatcherFor(target);
+        public override ThreadRef ThreadFor(object target) => ThreadRef.From(DispatcherFor(target));
 
         internal static IDispatcher? ApplicationDispatcher
         {
@@ -16,11 +15,11 @@ namespace VeloxDev.TransitionSystem
             {
                 try
                 {
-                    return Application.Current?.Dispatcher;
+                    return Microsoft.Maui.Controls.Application.Current?.Dispatcher;
                 }
                 catch (Exception)
                 {
-                    // The application exists but its dispatcher is not built yet.
+                    // 应用存在但它的 dispatcher 还没建起来。
                     return null;
                 }
             }
@@ -36,62 +35,22 @@ namespace VeloxDev.TransitionSystem
                 }
                 catch (Exception)
                 {
-                    // Not attached to a handler yet.
+                    // 还没挂到 handler 上。
                 }
             }
 
             return ApplicationDispatcher;
         }
 
-        public override object? ProtectedGetValue(object target, ITransitionProperty property)
+        protected override bool IsCurrentThread(ThreadRef thread)
+            => thread.TryGet<IDispatcher>(out var dispatcher) && !dispatcher.IsDispatchRequired;
+
+        protected override bool PostCore(object target, Action action, NonPriority priority)
         {
             var dispatcher = DispatcherFor(target);
-            if (dispatcher is null)
-            {
-                return IsUIThread() ? property.GetValue(target) : default;
-            }
+            if (dispatcher is null) return false;
 
-            if (!dispatcher.IsDispatchRequired)
-            {
-                return property.GetValue(target);
-            }
-
-            var tcs = new TaskCompletionSource<object?>();
-            if (!dispatcher.Dispatch(() =>
-            {
-                try
-                {
-                    var value = property.GetValue(target);
-                    tcs.SetResult(value);
-                }
-                catch (Exception ex)
-                {
-                    tcs.SetException(ex);
-                }
-            }))
-            {
-                return default;
-            }
-
-            return tcs.Task.GetAwaiter().GetResult();
-        }
-
-        public override bool ProtectedInvoke(object target, Action action)
-        {
-            var dispatcher = DispatcherFor(target);
-            if (dispatcher is null)
-            {
-                if (!IsUIThread()) return false;
-                action.Invoke();
-                return true;
-            }
-
-            if (!dispatcher.IsDispatchRequired)
-            {
-                action.Invoke();
-                return true;
-            }
-
+            // Dispatch 的返回值本身就是"有没有被接受"。
             return dispatcher.Dispatch(action);
         }
     }

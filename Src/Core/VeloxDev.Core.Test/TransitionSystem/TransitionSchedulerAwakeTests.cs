@@ -21,18 +21,21 @@ public class TransitionSchedulerAwakeTests
     }
 
     /// <summary>
-    /// Models the five fire-and-forget adapters from the background-thread side: this is not the UI thread, and
-    /// ProtectedInvoke queues the action and returns. Nothing runs until <see cref="Pump"/> stands in for the UI
-    /// thread draining its queue.
+    /// Models the fire-and-forget adapters from the background-thread side: this is not the UI thread, and a write
+    /// is queued until <see cref="Pump"/> stands in for the UI thread draining its queue. A read is still answered
+    /// inline, which is the split the real adapters have.
     /// </summary>
-    private sealed class OffThreadInspector : UIThreadInspectorCore
+    private sealed class OffThreadInspector : TransitionHostBase<NonPriority>
     {
         public static readonly List<Action> Pending = [];
 
-        public override bool IsAppAlive() => true;
-        public override bool IsUIThread() => false;
-        public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override bool ProtectedInvoke(object target, Action action) { Pending.Add(action); return true; }
+        public override ThreadRef ThreadFor(object target) => ThreadRef.None;
+
+        protected override bool IsCurrentThread(ThreadRef thread) => false;
+
+        protected override bool PostCore(object target, Action action, NonPriority priority) { Pending.Add(action); return true; }
+
+        public override T Run<T>(object target, Func<T> body) => body();
 
         public static void Pump()
         {
@@ -52,10 +55,10 @@ public class TransitionSchedulerAwakeTests
 
         public RecordingInterpolator(List<string> order) => _order = order;
 
-        public override SamplerSet<TPriorityCore> Prepare<TPriorityCore>(object target, IFrameState state, ITransitionEffectCore effect, IUIThreadInspector<TPriorityCore> inspector)
+        public override SamplerSet<TPriorityCore> Prepare<TPriorityCore>(object target, IFrameState state, ITransitionEffectCore effect, ITransitionHost<TPriorityCore> host)
         {
             _order.Add("prepare");
-            return base.Prepare(target, state, effect, inspector);
+            return base.Prepare(target, state, effect, host);
         }
     }
 

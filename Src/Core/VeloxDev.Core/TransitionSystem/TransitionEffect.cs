@@ -1,4 +1,6 @@
-﻿using VeloxDev.TimeLine;
+﻿using System.Diagnostics;
+using VeloxDev.Threading;
+using VeloxDev.TimeLine;
 using VeloxDev.WeakTypes;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
@@ -20,6 +22,8 @@ public class TransitionEffectCore<TPriorityCore> : TransitionEffectCore, ITransi
             _cancled = _cancled.Clone(),
             _completed = _completed.Clone(),
             _finally = _finally.Clone(),
+            _warn = _warn.Clone(),
+            _error = _error.Clone(),
             IsAutoReverse = IsAutoReverse,
             LoopTime = LoopTime,
             Duration = Duration,
@@ -45,13 +49,14 @@ public class TransitionEffectCore : ITransitionEffectCore, ITransitionEffect<Non
     protected WeakDelegate<EventHandler<TransitionEventArgs>> _cancled = new();
     protected WeakDelegate<EventHandler<TransitionEventArgs>> _completed = new();
     protected WeakDelegate<EventHandler<TransitionEventArgs>> _finally = new();
+    protected WeakDelegate<EventHandler<TransitionEventArgs>> _warn = new();
+    protected WeakDelegate<EventHandler<TransitionEventArgs>> _error = new();
 
     public virtual int FPS { get; set; } = 60;
     public virtual TimeSpan Duration { get; set; } = TimeSpan.FromMilliseconds(0);
     public virtual bool IsAutoReverse { get; set; } = false;
     public virtual int LoopTime { get; set; } = 0;
     public virtual IEaseCalculator Ease { get; set; } = Eases.Default;
-
 
     public virtual event EventHandler<TransitionEventArgs> Awaked
     {
@@ -88,6 +93,16 @@ public class TransitionEffectCore : ITransitionEffectCore, ITransitionEffect<Non
         add => _finally.AddHandler(value);
         remove => _finally.RemoveHandler(value);
     }
+    public virtual event EventHandler<TransitionEventArgs> Warn
+    {
+        add => _warn.AddHandler(value);
+        remove => _warn.RemoveHandler(value);
+    }
+    public virtual event EventHandler<TransitionEventArgs> Error
+    {
+        add => _error.AddHandler(value);
+        remove => _error.RemoveHandler(value);
+    }
 
     public virtual void InvokeAwake(object sender, TransitionEventArgs e)
     {
@@ -118,6 +133,19 @@ public class TransitionEffectCore : ITransitionEffectCore, ITransitionEffect<Non
         _finally.GetInvocationList()?.Invoke(sender, e);
     }
 
+    public virtual void InvokeWarn(object sender, TransitionEventArgs e)
+    {
+        Debug.WriteLine($"[VeloxDev.Transition] warn @{e.Stage}: {e.Message}");
+        _warn.GetInvocationList()?.Invoke(sender, e);
+    }
+
+    public virtual void InvokeError(object sender, TransitionEventArgs e)
+    {
+        // Debug.Fail 不用：它在无交互宿主里会直接终止进程，而那正是这条通道要防的事。
+        Debug.WriteLine($"[VeloxDev.Transition] error @{e.Stage}: {e.Exception}");
+        _error.GetInvocationList()?.Invoke(sender, e);
+    }
+
     public ITransitionEffectCore Clone()
     {
         var copy = new TransitionEffectCore()
@@ -129,6 +157,8 @@ public class TransitionEffectCore : ITransitionEffectCore, ITransitionEffect<Non
             _cancled = _cancled.Clone(),
             _completed = _completed.Clone(),
             _finally = _finally.Clone(),
+            _warn = _warn.Clone(),
+            _error = _error.Clone(),
             IsAutoReverse = IsAutoReverse,
             LoopTime = LoopTime,
             Duration = Duration,

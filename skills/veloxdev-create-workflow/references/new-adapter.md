@@ -117,7 +117,7 @@ Pull is survivable but costly: the caller must refresh after every mutation, and
 
 A workable order, bottom-up — each step is verifiable on its own:
 
-1. **`UIThreadInspector`** — `IsUIThread`, `ProtectedInvoke`, `ProtectedGetValue`, `IsAppAlive`. This is the only class needing real platform knowledge; copy the shipped one closest to your host.
+1. **`UIThreadInspector`** — `ThreadFor`, `IsCurrentThread`, `PostCore`. This is the only class needing real platform knowledge; copy the shipped one closest to your host.
 2. **Samplers** — one `ISampler` per framework-owned value type (brush, colour, transform, thickness). Core already covers the primitives. Register them in a static constructor.
 3. **`Interpolator`** — an `InterpolatorCore` subclass that registers those samplers and implements `CreateScheduler`. This is also what makes a theme switch animate on your platform.
 4. **State, interpreter, scheduler** — only if your framework's value types need their own write path.
@@ -125,7 +125,7 @@ A workable order, bottom-up — each step is verifiable on its own:
 6. **The node, slot and link behaviours** — drag, connect, and slot measurement.
 7. **The grid decorator and minimap**, implementing Core's `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay`.
 
-Steps 1–4 are the "adapter" in the transition-system sense too: the sampler and `CreateScheduler` contracts in full — including `ProtectedInvoke`'s honesty rule and the colour, size and transform conventions — are in [the animation skill's adapter reference](../../veloxdev-create-animation/references/adapter.md).
+Steps 1–4 are the "adapter" in the transition-system sense too: the sampler and `CreateScheduler` contracts in full — including `PostCore`'s honesty rule and the colour, size and transform conventions — are in [the animation skill's adapter reference](../../veloxdev-create-animation/references/adapter.md).
 
 ## Verifying it
 

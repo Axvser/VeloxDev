@@ -4,14 +4,13 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using System;
 using System.Threading;
-using System.Threading.Tasks;
+using VeloxDev.Threading;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class UIThreadInspector : UIThreadInspectorCore<DispatcherQueuePriority>, IUIThreadAffinity
+    public class UIThreadInspector : TransitionHostBase<DispatcherQueuePriority>
     {
         private static DispatcherQueue? _dispatcherQueue;
-        private static volatile bool _isAppAlive = true;
 
         /// <summary>Captures the current thread's queue. Only needed for a non-<see cref="DependencyObject"/> target.</summary>
         public static void CaptureUIThread()
@@ -41,55 +40,22 @@ namespace VeloxDev.TransitionSystem
             return EnsureQueue();
         }
 
-        public object? ThreadFor(object target) => QueueFor(target);
+        public override ThreadRef ThreadFor(object target) => ThreadRef.From(QueueFor(target));
 
-        public override bool IsAppAlive() => _isAppAlive;
+        protected override bool IsCurrentThread(ThreadRef thread)
+            => thread.TryGet<DispatcherQueue>(out var queue) && queue.HasThreadAccess;
 
-        public override bool IsUIThread()
-        {
-            var queue = EnsureQueue();
-            return queue?.HasThreadAccess ?? false;
-        }
+        protected override DispatcherQueuePriority InternalPriority => DispatcherQueuePriority.Normal;
 
-        public override object? ProtectedGetValue(object target, ITransitionProperty property)
+        protected override bool PostCore(object target, Action action, DispatcherQueuePriority priority)
         {
             var queue = QueueFor(target);
-            if (queue != null)
-            {
-                if (queue.HasThreadAccess) return property.GetValue(target);
+            if (queue is null) return false;
 
-                var tcs = new TaskCompletionSource<object?>();
-                if (queue.TryEnqueue(() =>
-                {
-                    try { tcs.SetResult(property.GetValue(target)); }
-                    catch (Exception ex) { tcs.SetException(ex); }
-                }))
-                    return tcs.Task.GetAwaiter().GetResult();
-
-                _isAppAlive = false;
-                return default;
-            }
-            return IsUIThread() ? property.GetValue(target) : default;
-        }
-
-        public override bool ProtectedInvoke(object target, Action action, DispatcherQueuePriority priority)
-        {
-            var queue = QueueFor(target);
-            if (queue != null)
-            {
-                if (queue.HasThreadAccess) { action(); return true; }
-                if (queue.TryEnqueue(priority, () =>
-                {
-                    try { action(); }
-                    catch { }
-                }))
-                    return true;
-                _isAppAlive = false;
-                return false;
-            }
-            if (!IsUIThread()) return false;
-            action();
-            return true;
+            // 队列拒绝说明这个应用在退出，接纳说明它还活着：两个方向都报，一次瞬时拒绝不会永久判死。
+            var accepted = queue.TryEnqueue(priority, () => action());
+            Lifetime.SetAlive(accepted);
+            return accepted;
         }
     }
 }

@@ -1,22 +1,15 @@
 using System;
-using System.Threading;
 using Microsoft.UI.Dispatching;
+using VeloxDev.Threading;
 
 namespace VeloxDev.TransitionSystem
 {
     public partial class TransitionInterpreter() : TransitionInterpreterCore<TransitionEffect, DispatcherQueuePriority>
     {
-        protected override FramePacerCore? CreateFramePacer(object target, IUIThreadInspectorCore inspector)
-        {
-            if (inspector is IUIThreadAffinity affinity)
-            {
-                return affinity.ThreadFor(target) is DispatcherQueue queue ? new DispatcherQueueFramePacer(queue) : null;
-            }
-
-            return (DispatcherQueue.GetForCurrentThread() ?? UIThreadInspector.CapturedQueue) is { } fallback
-                ? new DispatcherQueueFramePacer(fallback)
+        protected override FramePacerCore? CreateFramePacer(object target, IThreadAffinity affinity)
+            => affinity.ThreadFor(target).TryGet<DispatcherQueue>(out var queue)
+                ? new DispatcherQueueFramePacer(queue)
                 : null;
-        }
 
         private sealed class DispatcherQueueFramePacer(DispatcherQueue queue) : FramePacerCore
         {
@@ -30,6 +23,18 @@ namespace VeloxDev.TransitionSystem
             }
 
             protected override void Disarm() => _timer?.Stop();
+
+            public override void Dispose()
+            {
+                base.Dispose();
+
+                if (_timer is not null)
+                {
+                    _timer.Stop();
+                    _timer.Tick -= OnTick;
+                    _timer = null;
+                }
+            }
 
             private DispatcherQueueTimer CreateTimer()
             {

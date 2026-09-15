@@ -463,7 +463,7 @@ public sealed class TransitionProperty : ITransitionProperty, IEquatable<Transit
 
     /// <summary>
     /// Compiles the "per-segment navigation + type/null checks" into a single delegate, eliminating per-frame
-    /// per-property reflection overhead (the hot path of <c>SamplerSet</c> / <c>ProtectedGetValue</c>).
+    /// per-property reflection overhead (the hot path of <c>SamplerSet</c> and of the host's read).
     ///
     /// The semantics distinguish two kinds of "cannot read":
     /// - The intermediate object is null (the value is genuinely null) → returns null, and the interpolator starts

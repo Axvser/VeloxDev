@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Threading;
+using VeloxDev.TimeLine;
 using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
@@ -262,19 +263,19 @@ public class TransitionCore<
     TStateCore,
     TEffectCore,
     TInterpolatorCore,
-    TUIThreadInspectorCore,
+    THost,
     TTransitionInterpreterCore,
     TPriorityCore> : StateSnapshotCore<T>
     where T : class
     where TStateCore : IFrameState, new()
     where TEffectCore : ITransitionEffect<TPriorityCore>, new()
     where TInterpolatorCore : InterpolatorCore, new()
-    where TUIThreadInspectorCore : IUIThreadInspector<TPriorityCore>, new()
+    where THost : ITransitionHost<TPriorityCore>, new()
     where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
 {
     protected TStateCore state = new();
-    protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? root;
-    protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? next = null;
+    protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? root;
+    protected TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? next = null;
     protected TEffectCore effect = new();
     protected TInterpolatorCore interpolator = new();
 
@@ -286,7 +287,7 @@ public class TransitionCore<
     /// </summary>
     public static void Execute(
         T target,
-        IEnumerable<TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>> values,
+        IEnumerable<TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>> values,
         bool CanMutualTask = false)
     {
         foreach (var snapshot in values)
@@ -317,6 +318,31 @@ public class TransitionCore<
 
     internal override async void CoreExecute(object target, bool CanMutualTask = true, ITimeSourceControl? timeline = null)
     {
+        try
+        {
+            await ExecuteCoreAsync(target, CanMutualTask, timeline);
+        }
+        catch (Exception exception)
+        {
+            // async void 没有调用者可以承接异常，让它逃出去就是宿主进程的未处理异常。动画不终止宿主。
+            try
+            {
+                (root ?? this).effect.InvokeError(target, new TransitionEventArgs
+                {
+                    Stage = "Run",
+                    Message = exception.Message,
+                    Exception = exception,
+                });
+            }
+            catch
+            {
+                // 报错通道自己抛了：没有别的去处，也只能到此为止。
+            }
+        }
+    }
+
+    private async Task ExecuteCoreAsync(object target, bool CanMutualTask, ITimeSourceControl? timeline)
+    {
         if (target is not T)
             throw new InvalidDataException($"The target is not a {typeof(T).Name} !");
 
@@ -334,7 +360,7 @@ public class TransitionCore<
         await gate.WaitAsync();
         try
         {
-            scheduler = TransitionSchedulerCore<TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>.FindOrCreate(target, CanMutualTask);
+            scheduler = TransitionSchedulerCore<THost, TTransitionInterpreterCore, TPriorityCore>.FindOrCreate(target, CanMutualTask);
             if (CanMutualTask)
             {
                 // A mutually-exclusive animation supersedes whatever is running on the target. Drained here, under
@@ -374,7 +400,7 @@ public class TransitionCore<
         Queue<IFrameState> states = [];
         int Count = 0;
 
-        TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore>? currentNode = root;
+        TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore>? currentNode = root;
         do
         {
             interpolators.Enqueue(currentNode.interpolator);
@@ -443,7 +469,7 @@ public class TransitionCore<
             // 量延迟必须用墙钟，不能用总线：总线可能因为 rate 为 0 冻住而 IsPaused 仍为 false（于是上面不 park），
             // 那时总线时间不前进，用总线量的话 remaining 永远减不下去，这个循环就死不退出。
             // 采样循环那边相反，用的是 ConfigureAwait(true)——那里停在哪个线程上会决定用户回调的线程，
-            // 这里只是段间等待，醒来后立刻经 ProtectedInvoke 编组，落回哪个线程都不影响正确性。
+            // 这里只是段间等待，醒来后立刻经宿主编组，落回哪个线程都不影响正确性。
             var before = Stopwatch.GetTimestamp();
             await wait.Await(remaining, ct);
             var elapsedMs = Math.Max(
@@ -456,7 +482,7 @@ public class TransitionCore<
     internal override T1 CoreThen<T1>()
     {
         var newNode = new T1();
-        if (newNode is not TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore> converted)
+        if (newNode is not TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore> converted)
         {
             throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }
@@ -467,7 +493,7 @@ public class TransitionCore<
     internal override T1 CoreAwaitThen<T1>(TimeSpan timeSpan)
     {
         var newNode = new T1();
-        if (newNode is not TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, TUIThreadInspectorCore, TTransitionInterpreterCore, TPriorityCore> converted)
+        if (newNode is not TransitionCore<T, TStateCore, TEffectCore, TInterpolatorCore, THost, TTransitionInterpreterCore, TPriorityCore> converted)
         {
             throw new InvalidOperationException($"The current TransitionCore is not of type {typeof(T1).Name}.");
         }

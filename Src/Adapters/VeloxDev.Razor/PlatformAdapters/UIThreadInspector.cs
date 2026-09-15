@@ -1,6 +1,8 @@
+using VeloxDev.Threading;
+
 namespace VeloxDev.TransitionSystem
 {
-    public class UIThreadInspector : UIThreadInspectorCore
+    public class UIThreadInspector : TransitionHostBase<NonPriority>
     {
         private static SynchronizationContext? _uiSyncContext;
         private static int _uiThreadId = -1;
@@ -35,51 +37,24 @@ namespace VeloxDev.TransitionSystem
             _isAppRunning = true;
         }
 
-        public override bool IsAppAlive() => _isAppRunning;
+        public override bool IsAlive => _isAppRunning;
 
-        public override bool IsUIThread()
+        public override ThreadRef ThreadFor(object target)
         {
             EnsureCaptured();
-            return Thread.CurrentThread.ManagedThreadId == _uiThreadId;
+            return ThreadRef.From(_uiSyncContext);
         }
 
-        public override object? ProtectedGetValue(object target, ITransitionProperty property)
+        protected override bool IsCurrentThread(ThreadRef thread)
+            => thread.TryGet<SynchronizationContext>(out var context)
+               && ReferenceEquals(SynchronizationContext.Current, context);
+
+        protected override bool PostCore(object target, Action action, NonPriority priority)
         {
-            if (IsUIThread()) return property.GetValue(target);
-            if (_uiSyncContext == null) return default;
+            if (_uiSyncContext is null) return false;
 
-            var tcs = new TaskCompletionSource<object?>();
-            _uiSyncContext.Post(_ =>
-            {
-                try { tcs.SetResult(property.GetValue(target)); }
-                catch (Exception ex) { tcs.SetException(ex); }
-            }, null);
-            return tcs.Task.GetAwaiter().GetResult();
-        }
-
-        public override bool ProtectedInvoke(object target, Action action)
-        {
-            if (IsUIThread())
-            {
-                action.Invoke();
-                return true;
-            }
-            if (_uiSyncContext == null) return false;
-
-            var tcs = new TaskCompletionSource<object?>();
-            _uiSyncContext.Post(_ =>
-            {
-                try
-                {
-                    action.Invoke();
-                    tcs.SetResult(null);
-                }
-                catch (Exception ex)
-                {
-                    tcs.SetException(ex);
-                }
-            }, null);
-            tcs.Task.GetAwaiter().GetResult();
+            // Post 没有失败信号，只能按"已接受"记；真正的丢弃由帧侧的取消标记兜住。
+            _uiSyncContext.Post(_ => action(), null);
             return true;
         }
     }

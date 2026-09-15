@@ -1,4 +1,4 @@
-using VeloxDev.TransitionSystem;
+﻿using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 using VeloxDev.TransitionSystem.NativeSamplers;
 
@@ -25,12 +25,8 @@ public class EaseOvershootTests
     {
     }
 
-    private sealed class ImmediateInspector : UIThreadInspectorCore
+    private sealed class ImmediateInspector : ImmediateHost
     {
-        public override bool IsAppAlive() => true;
-        public override bool IsUIThread() => true;
-        public override object? ProtectedGetValue(object target, ITransitionProperty property) => property.GetValue(target);
-        public override bool ProtectedInvoke(object target, Action action) { action(); return true; }
     }
 
     /// <summary>Returns a fixed eased value, so the test does not depend on frame timing to hit the overshoot.</summary>

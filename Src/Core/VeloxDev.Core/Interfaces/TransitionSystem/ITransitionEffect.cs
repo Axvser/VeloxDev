@@ -25,6 +25,9 @@ namespace VeloxDev.TransitionSystem
         public event EventHandler<TransitionEventArgs> Completed;
         public event EventHandler<TransitionEventArgs> Finally;
 
+        public event EventHandler<TransitionEventArgs> Warn;
+        public event EventHandler<TransitionEventArgs> Error;
+
         public void InvokeAwake(object sender, TransitionEventArgs e);
         public void InvokeStart(object sender, TransitionEventArgs e);
         public void InvokeUpdate(object sender, TransitionEventArgs e);
@@ -32,6 +35,8 @@ namespace VeloxDev.TransitionSystem
         public void InvokeCompleted(object sender, TransitionEventArgs e);
         public void InvokeCancled(object sender, TransitionEventArgs e);
         public void InvokeFinally(object sender, TransitionEventArgs e);
+        public void InvokeWarn(object sender, TransitionEventArgs e);
+        public void InvokeError(object sender, TransitionEventArgs e);
 
         public ITransitionEffectCore Clone();
     }

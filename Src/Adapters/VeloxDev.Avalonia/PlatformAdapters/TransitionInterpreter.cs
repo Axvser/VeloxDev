@@ -1,15 +1,13 @@
 using System;
-using System.Threading;
 using Avalonia.Threading;
+using VeloxDev.Threading;
 
 namespace VeloxDev.TransitionSystem
 {
     public class TransitionInterpreter() : TransitionInterpreterCore<TransitionEffect, DispatcherPriority>
     {
-        // The one adapter that cannot answer IUIThreadAffinity — see Avalonia's UIThreadInspector — so this asks the
-        // inspector rather than repeating its expression.
-        protected override FramePacerCore? CreateFramePacer(object target, IUIThreadInspectorCore inspector)
-            => inspector.IsUIThread() ? new UiThreadFramePacer() : null;
+        protected override FramePacerCore? CreateFramePacer(object target, IThreadAffinity affinity)
+            => affinity.ThreadFor(target).IsNone ? null : new UiThreadFramePacer();
 
         private sealed class UiThreadFramePacer : FramePacerCore
         {
@@ -24,8 +22,22 @@ namespace VeloxDev.TransitionSystem
 
             protected override void Disarm() => _timer?.Stop();
 
+            public override void Dispose()
+            {
+                base.Dispose();
+
+                // Avalonia 的 DispatcherTimer 持有平台定时器，只停表不够。
+                if (_timer is not null)
+                {
+                    _timer.Stop();
+                    _timer.Tick -= OnTick;
+                    _timer = null;
+                }
+            }
+
             private DispatcherTimer CreateTimer()
             {
+                // Avalonia 只有一个 UI dispatcher，无参构造就绑到它。
                 var timer = new DispatcherTimer();
                 timer.Tick += OnTick;
                 return timer;

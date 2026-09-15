@@ -1,20 +1,14 @@
-using System.Threading;
-using System.Windows;
 using System.Windows.Threading;
+using VeloxDev.Threading;
 
 namespace VeloxDev.TransitionSystem
 {
     public class TransitionInterpreter() : TransitionInterpreterCore<TransitionEffect, DispatcherPriority>
     {
-        protected override FramePacerCore? CreateFramePacer(object target, IUIThreadInspectorCore inspector)
-        {
-            if (inspector is IUIThreadAffinity affinity)
-            {
-                return affinity.ThreadFor(target) is Dispatcher dispatcher ? new DispatcherFramePacer(dispatcher) : null;
-            }
-
-            return Application.Current?.Dispatcher is { } appDispatcher ? new DispatcherFramePacer(appDispatcher) : null;
-        }
+        protected override FramePacerCore? CreateFramePacer(object target, IThreadAffinity affinity)
+            => affinity.ThreadFor(target).TryGet<Dispatcher>(out var dispatcher)
+                ? new DispatcherFramePacer(dispatcher)
+                : null;
 
         private sealed class DispatcherFramePacer(Dispatcher dispatcher) : FramePacerCore
         {
@@ -28,6 +22,15 @@ namespace VeloxDev.TransitionSystem
             }
 
             protected override void Disarm() => _timer?.Stop();
+
+            public override void Dispose()
+            {
+                base.Dispose();
+
+                // WPF 的定时器在它所属的 dispatcher 上排队，不停表就会在动画结束后继续占着它。
+                _timer?.Stop();
+                _timer = null;
+            }
 
             private DispatcherTimer CreateTimer()
             {

@@ -1,17 +1,18 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using VeloxDev.Threading;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
 
 public class TransitionSchedulerCore<
-    TUIThreadInspectorCore,
+    THost,
     TTransitionInterpreterCore,
     TPriorityCore> : TransitionSchedulerCore, ITransitionScheduler<TPriorityCore>
-    where TUIThreadInspectorCore : IUIThreadInspector<TPriorityCore>, new()
+    where THost : ITransitionHost<TPriorityCore>, new()
     where TTransitionInterpreterCore : class, ITransitionInterpreter<TPriorityCore>, new()
 {
-    protected static readonly TUIThreadInspectorCore uIThreadInspector = new();
+    protected static readonly THost host = new();
 
     public override async Task Execute(
         InterpolatorCore producer,
@@ -43,25 +44,49 @@ public class TransitionSchedulerCore<
             // Exit() ran while this animation was queued: it was cancelled before it ever started.
             if (generation != Generation) return;
 
+            var diagnostics = new TransitionDiagnostics(effect, target, newInterpreter.Args);
+
             // Awaited, not fired and forgotten. Awake can veto the animation through Args.Handled and may put the
             // target into the state the animation is meant to start from, so Prepare must not read the target until
-            // it has run. Waiting is safe because ProtectedInvokeAsync only waits when the action was accepted.
-            var awoken = await uIThreadInspector.ProtectedInvokeAsync(target, () =>
+            // it has run. Waiting is safe because PostAsync only waits when the action was accepted.
+            bool awoken;
+            try
             {
-                // Re-checked inside the action, not only before queueing it: on WPF, Avalonia, Jalium, WinForms and
-                // WinUI the dispatch is fire-and-forget (InvokeAsync/BeginInvoke/TryEnqueue), so this runs on the UI
-                // thread whenever the message is pumped — which can be after an Exit has already cancelled the
-                // animation and published its reset. A cancelled animation does not awake; an Awake that
-                // reinitialises state would otherwise undo that reset.
-                if (newCts.IsCancellationRequested) return;
-                effect.InvokeAwake(target, newInterpreter.Args);
-            }, effect.Priority);
+                awoken = await host.PostAsync(target, () =>
+                {
+                    // Re-checked inside the action, not only before queueing it: the dispatch is fire-and-forget, so
+                    // this runs on the UI thread whenever the message is pumped — which can be after an Exit has
+                    // already cancelled the animation and published its reset.
+                    if (newCts.IsCancellationRequested) return;
+                    effect.InvokeAwake(target, newInterpreter.Args);
+                }, effect.Priority);
+            }
+            catch (Exception exception)
+            {
+                // 宿主回调抛出的异常到此为止：动画结束，宿主进程不受影响。
+                diagnostics.Error("Awake", exception);
+                return;
+            }
 
             // The host's queue is gone: nothing would be dispatched, frames included, so give up rather than start an
             // animation that cannot draw. Leaving here still releases the gate through the finally below.
-            if (!awoken) return;
+            if (!awoken)
+            {
+                diagnostics.Warn("Dropped", "the host's dispatch queue refused the animation's Awake.");
+                return;
+            }
 
-            var frameSet = producer.Prepare<TPriorityCore>(target, state, effect, uIThreadInspector);
+            SamplerSet<TPriorityCore> frameSet;
+            try
+            {
+                frameSet = producer.Prepare(target, state, effect, host);
+            }
+            catch (Exception exception)
+            {
+                // 一个准备不出来的属性不该带走整趟动画，更不该带走宿主进程。
+                diagnostics.Error("Prepare", exception);
+                return;
+            }
 
             // The run reaches the interpreter through the sampler set, the same way the token source does. It is
             // registered under the very token source this call was handed, so a caller that registered none — a
@@ -93,21 +118,21 @@ public class TransitionSchedulerCore<
             // GetValue installs atomically. A TryGetValue-then-Add pair races: two concurrent animations can both
             // miss and the loser's Add throws.
             var scheduler = MutualSchedulers.GetValue(source, static key => new TransitionSchedulerCore<
-                TUIThreadInspectorCore,
+                THost,
                 TTransitionInterpreterCore,
                 TPriorityCore>()
             {
                 TargetRef = new WeakReference<object>(key)
             });
             return scheduler as TransitionSchedulerCore<
-                TUIThreadInspectorCore,
+                THost,
                 TTransitionInterpreterCore,
                 TPriorityCore> ?? throw new ArgumentException($"The interpolator in the dictionary failed to be converted to the specified type ⌈ TransitionScheduler<{nameof(T)}> ⌋.");
         }
         else
         {
             return new TransitionSchedulerCore<
-                   TUIThreadInspectorCore,
+                   THost,
                    TTransitionInterpreterCore,
                    TPriorityCore>()
             {
