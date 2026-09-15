@@ -60,19 +60,16 @@ namespace VeloxDev.TransitionSystem
         /// Asked of the target first: WinForms exposes no way to name a Control's thread, but the Control answers
         /// whether the caller is on it, which is the same question.
         /// </summary>
-        public override bool IsCurrent(object target)
-        {
-            EnsureCaptured();
-            return ControlDispatcher(target) is { } control
+        protected override bool IsCurrentFor(object target, ThreadRef thread)
+            => ControlDispatcher(target) is { } control
                 ? !control.InvokeRequired
-                : Thread.CurrentThread.ManagedThreadId == _uiThreadId;
-        }
+                : base.IsCurrentFor(target, thread);
 
         protected override bool IsCurrentThread(ThreadRef thread)
             => thread.TryGet<SynchronizationContext>(out var context)
                && ReferenceEquals(SynchronizationContext.Current, context);
 
-        protected override bool PostCore(object target, Action action, NonPriority priority)
+        protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority)
         {
             if (ControlDispatcher(target) is { } control)
             {
@@ -80,9 +77,9 @@ namespace VeloxDev.TransitionSystem
                 return true;
             }
 
-            if (_uiSyncContext is null) return false;
+            if (!thread.TryGet<SynchronizationContext>(out var context)) return false;
 
-            _uiSyncContext.Post(_ => action(), null);
+            context.Post(_ => action(), null);
             return true;
         }
     }

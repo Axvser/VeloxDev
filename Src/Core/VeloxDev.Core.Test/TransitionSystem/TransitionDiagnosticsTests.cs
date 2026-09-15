@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 using VeloxDev.TransitionSystem.NativeSamplers;
@@ -178,6 +178,6 @@ public class TransitionDiagnosticsTests
 
         protected override bool IsCurrentThread(ThreadRef thread) => false;
 
-        protected override bool PostCore(object target, Action action, NonPriority priority) => false;
+        protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority) => false;
     }
 }

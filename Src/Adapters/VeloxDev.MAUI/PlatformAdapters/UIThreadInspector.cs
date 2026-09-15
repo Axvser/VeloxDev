@@ -45,10 +45,9 @@ namespace VeloxDev.TransitionSystem
         protected override bool IsCurrentThread(ThreadRef thread)
             => thread.TryGet<IDispatcher>(out var dispatcher) && !dispatcher.IsDispatchRequired;
 
-        protected override bool PostCore(object target, Action action, NonPriority priority)
+        protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority)
         {
-            var dispatcher = DispatcherFor(target);
-            if (dispatcher is null) return false;
+            if (!thread.TryGet<IDispatcher>(out var dispatcher)) return false;
 
             // Dispatch 的返回值本身就是"有没有被接受"。
             return dispatcher.Dispatch(action);

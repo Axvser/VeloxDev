@@ -12,18 +12,29 @@ public abstract class ThreadDispatcherBase<TPriorityCore> : IThreadDispatcher<TP
 {
     public abstract ThreadRef ThreadFor(object target);
 
+    public virtual bool IsCurrent(object target) => IsCurrentFor(target, ThreadFor(target));
+
+    /// <summary>
+    /// Whether the calling thread owns <paramref name="target"/>, given the thread already resolved for it.
+    /// </summary>
     /// <remarks>
-    /// Defaults to the target's own thread, which is correct for any GUI: a view must be created on the UI thread, so
-    /// the thread a target is on and the application's UI thread are the same one. A host that can answer more
-    /// precisely overrides this — WinForms reads it off the Control, the only way to be right for a second UI thread.
+    /// The form the write path uses, so the lookup happens once: a host that can answer more precisely for a target
+    /// overrides this rather than <see cref="IsCurrent"/>, and <see cref="PostCore"/> is handed the same answer.
     /// </remarks>
-    public virtual bool IsCurrent(object target) => IsCurrentThread(ThreadFor(target));
+    protected virtual bool IsCurrentFor(object target, ThreadRef thread) => IsCurrentThread(thread);
 
     /// <summary>Whether the calling thread is the one <paramref name="thread"/> names.</summary>
     protected abstract bool IsCurrentThread(ThreadRef thread);
 
-    /// <summary>Queues <paramref name="action"/> on the target's thread. Must not block; false means it was refused.</summary>
-    protected abstract bool PostCore(object target, Action action, TPriorityCore priority);
+    /// <summary>
+    /// Queues <paramref name="action"/> on the target's thread — the one already resolved from it — and returns
+    /// whether it was accepted.
+    /// </summary>
+    /// <remarks>
+    /// Must not block. A host that needs the target rather than the thread (WinForms posts through the Control it was
+    /// given) is free to ignore <paramref name="thread"/>.
+    /// </remarks>
+    protected abstract bool PostCore(object target, ThreadRef thread, Action action, TPriorityCore priority);
 
     /// <remarks>
     /// Defaulted rather than required because <c>default(NonPriority)</c> is the whole story for a host that has no
@@ -33,14 +44,18 @@ public abstract class ThreadDispatcherBase<TPriorityCore> : IThreadDispatcher<TP
     protected virtual TPriorityCore InternalPriority => default!;
 
     public bool Post(object target, Action action, TPriorityCore priority)
-        => IsCurrent(target) ? RunInline(action) : PostCore(target, action, priority);
+    {
+        var thread = ThreadFor(target);
+        return IsCurrentFor(target, thread) ? RunInline(action) : PostCore(target, thread, action, priority);
+    }
 
     public async Task<bool> PostAsync(object target, Action action, TPriorityCore priority)
     {
-        if (IsCurrent(target)) return RunInline(action);
+        var thread = ThreadFor(target);
+        if (IsCurrentFor(target, thread)) return RunInline(action);
 
         var completion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var accepted = PostCore(target, () =>
+        var accepted = PostCore(target, thread, () =>
         {
             try { action(); completion.TrySetResult(null); }
             catch (Exception exception) { completion.TrySetException(exception); }
@@ -55,10 +70,11 @@ public abstract class ThreadDispatcherBase<TPriorityCore> : IThreadDispatcher<TP
 
     public virtual T Run<T>(object target, Func<T> body)
     {
-        if (IsCurrent(target)) return body();
+        var thread = ThreadFor(target);
+        if (IsCurrentFor(target, thread)) return body();
 
         var completion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!PostCore(target, () =>
+        if (!PostCore(target, thread, () =>
             {
                 try { completion.TrySetResult(body()); }
                 catch (Exception exception) { completion.TrySetException(exception); }

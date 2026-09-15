@@ -49,12 +49,12 @@ namespace VeloxDev.TransitionSystem
             => thread.TryGet<SynchronizationContext>(out var context)
                && ReferenceEquals(SynchronizationContext.Current, context);
 
-        protected override bool PostCore(object target, Action action, NonPriority priority)
+        protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority)
         {
-            if (_uiSyncContext is null) return false;
+            if (!thread.TryGet<SynchronizationContext>(out var context)) return false;
 
             // Post 没有失败信号，只能按"已接受"记；真正的丢弃由帧侧的取消标记兜住。
-            _uiSyncContext.Post(_ => action(), null);
+            context.Post(_ => action(), null);
             return true;
         }
     }

@@ -47,10 +47,9 @@ namespace VeloxDev.TransitionSystem
 
         protected override DispatcherQueuePriority InternalPriority => DispatcherQueuePriority.Normal;
 
-        protected override bool PostCore(object target, Action action, DispatcherQueuePriority priority)
+        protected override bool PostCore(object target, ThreadRef thread, Action action, DispatcherQueuePriority priority)
         {
-            var queue = QueueFor(target);
-            if (queue is null) return false;
+            if (!thread.TryGet<DispatcherQueue>(out var queue)) return false;
 
             // 队列拒绝说明这个应用在退出，接纳说明它还活着：两个方向都报，一次瞬时拒绝不会永久判死。
             var accepted = queue.TryEnqueue(priority, () => action());

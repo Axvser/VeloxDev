@@ -1,4 +1,4 @@
-using VeloxDev.Threading;
+﻿using VeloxDev.Threading;
 using VeloxDev.TransitionSystem.Abstractions;
 
 namespace VeloxDev.Core.Test;
@@ -10,7 +10,7 @@ internal class ImmediateHost : TransitionHostBase<NonPriority>
 
     protected override bool IsCurrentThread(ThreadRef thread) => true;
 
-    protected override bool PostCore(object target, Action action, NonPriority priority)
+    protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority)
     {
         action();
         return true;
@@ -29,7 +29,7 @@ internal class InlinePostHost<TPriority> : TransitionHostBase<TPriority>
 
     protected override TPriority InternalPriority => default!;
 
-    protected override bool PostCore(object target, Action action, TPriority priority)
+    protected override bool PostCore(object target, ThreadRef thread, Action action, TPriority priority)
     {
         action();
         return true;
@@ -49,7 +49,7 @@ internal sealed class DeferredHost : TransitionHostBase<NonPriority>
 
     protected override bool IsCurrentThread(ThreadRef thread) => false;
 
-    protected override bool PostCore(object target, Action action, NonPriority priority)
+    protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority)
     {
         _pending.Add(action);
         return true;

@@ -36,7 +36,7 @@ public class TransitionSchedulerExitTests
 
         protected override bool IsCurrentThread(ThreadRef thread) => false;
 
-        protected override bool PostCore(object target, Action action, NonPriority priority) { Pending.Add(action); return true; }
+        protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority) { Pending.Add(action); return true; }
 
         public override T Run<T>(object target, Func<T> body) => body();
 

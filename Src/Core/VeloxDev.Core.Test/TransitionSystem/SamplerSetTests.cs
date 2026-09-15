@@ -17,7 +17,7 @@ public class SamplerSetTests
         public Func<bool> Alive { get; set; } = static () => true;
         public int InvokeCount { get; private set; }
         public override bool IsAlive => Alive();
-        protected override bool PostCore(object target, Action action, NonPriority priority) { InvokeCount++; action(); return true; }
+        protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority) { InvokeCount++; action(); return true; }
     }
 
     private static ITransitionProperty Property => TransitionProperty.FromProperty(typeof(Target).GetProperty(nameof(Target.Value))!);

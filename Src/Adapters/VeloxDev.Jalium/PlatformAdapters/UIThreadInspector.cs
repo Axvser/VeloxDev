@@ -30,9 +30,9 @@ namespace VeloxDev.TransitionSystem
 
         protected override DispatcherPriority InternalPriority => DispatcherPriority.Send;
 
-        protected override bool PostCore(object target, Action action, DispatcherPriority priority)
+        protected override bool PostCore(object target, ThreadRef thread, Action action, DispatcherPriority priority)
         {
-            if (!ThreadFor(target).TryGet<Dispatcher>(out var dispatcher)) return false;
+            if (!thread.TryGet<Dispatcher>(out var dispatcher)) return false;
             if (dispatcher.HasShutdownStarted) return false;
 
             dispatcher.BeginInvoke(priority, action);
