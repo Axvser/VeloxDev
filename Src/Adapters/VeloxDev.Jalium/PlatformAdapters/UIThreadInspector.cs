@@ -1,27 +1,30 @@
+using System.Threading;
 using Jalium.UI;
 using Jalium.UI.Threading;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class UIThreadInspector() : UIThreadInspectorCore<DispatcherPriority>
+    public class UIThreadInspector() : UIThreadInspectorCore<DispatcherPriority>, IUIThreadAffinity
     {
         public override bool IsAppAlive() => true;
 
         public override bool IsUIThread()
-            => Dispatcher.MainDispatcher?.CheckAccess() ?? Application.Current?.Dispatcher?.CheckAccess() ?? default;
+            => Application.Current?.Dispatcher?.CheckAccess() ?? Dispatcher.MainDispatcher?.CheckAccess() ?? false;
 
-        /// <summary>The target object (a DispatcherObject like a UI element) takes priority — it owns a
-        /// Dispatcher; otherwise fall back to Application.Current, then the static main dispatcher so even
-        /// POCO targets marshal correctly.</summary>
-        private static Dispatcher? DispatcherFor(object target)
+        public object? ThreadFor(object target)
             => target is DispatcherObject dispatcherObject ? dispatcherObject.Dispatcher
-               : Application.Current?.Dispatcher ?? Dispatcher.MainDispatcher;
+               : Application.Current?.Dispatcher
+                 ?? Dispatcher.FromThread(Thread.CurrentThread)
+                 ?? Dispatcher.MainDispatcher;
+
+        private Dispatcher? DispatcherFor(object target) => (Dispatcher?)ThreadFor(target);
 
         public override object? ProtectedGetValue(object target, ITransitionProperty property)
         {
             var dispatcher = DispatcherFor(target);
             if (dispatcher == null) return IsUIThread() ? property.GetValue(target) : default;
             if (dispatcher.CheckAccess()) return property.GetValue(target);
+            if (dispatcher.HasShutdownStarted) return default;
             return dispatcher.Invoke(() => property.GetValue(target));
         }
 
@@ -36,6 +39,7 @@ namespace VeloxDev.TransitionSystem
             }
 
             if (dispatcher.CheckAccess()) { action(); return true; }
+            if (dispatcher.HasShutdownStarted) return false;
             dispatcher.BeginInvoke(priority, action);
             return true;
         }

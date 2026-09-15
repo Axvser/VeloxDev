@@ -1,26 +1,27 @@
+using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 
 namespace VeloxDev.TransitionSystem
 {
-    public class UIThreadInspector() : UIThreadInspectorCore<DispatcherPriority>
+    public class UIThreadInspector() : UIThreadInspectorCore<DispatcherPriority>, IUIThreadAffinity
     {
         public override bool IsAppAlive() => true;
 
-        public override bool IsUIThread() => Application.Current?.Dispatcher?.CheckAccess() ?? default;
+        public override bool IsUIThread() => Application.Current?.Dispatcher?.CheckAccess() ?? false;
 
-        /// <summary>
-        /// The target object (<see cref="DispatcherObject"/>) takes priority: a UI element carries its owning
-        /// <see cref="Dispatcher"/>, so it can be marshaled directly from any thread; otherwise fall back to <see cref="Application.Current"/>.
-        /// </summary>
-        private static Dispatcher? DispatcherFor(object target)
-            => target is DispatcherObject dispatcherObject ? dispatcherObject.Dispatcher : Application.Current?.Dispatcher;
+        public object? ThreadFor(object target)
+            => target is DispatcherObject dispatcherObject ? dispatcherObject.Dispatcher
+               : Application.Current?.Dispatcher ?? Dispatcher.FromThread(Thread.CurrentThread);
+
+        private Dispatcher? DispatcherFor(object target) => (Dispatcher?)ThreadFor(target);
 
         public override object? ProtectedGetValue(object target, ITransitionProperty property)
         {
             var dispatcher = DispatcherFor(target);
             if (dispatcher == null) return IsUIThread() ? property.GetValue(target) : default;
             if (dispatcher.CheckAccess()) return property.GetValue(target);
+            if (dispatcher.HasShutdownStarted) return default;
             return dispatcher.Invoke(() => property.GetValue(target));
         }
 

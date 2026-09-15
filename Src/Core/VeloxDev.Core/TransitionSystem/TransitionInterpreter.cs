@@ -59,13 +59,29 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// <summary>
     /// The host's own frame pacer, or null to wait on the default thread-pool timer.
     /// </summary>
+    /// <param name="target">The object being sampled — whose UI thread this loop belongs on.</param>
+    /// <param name="inspector">
+    /// The inspector the frame set was built with, and the very instance whose <c>ProtectedInvoke</c> runs every
+    /// property write. A host that also implements <see cref="IUIThreadAffinity"/> should derive the pacer from
+    /// <c>(inspector as IUIThreadAffinity)?.ThreadFor(target)</c>: a pacer that disagrees with the write path turns
+    /// every frame into a dispatch, which is the one thing the sampling path is built to avoid.
+    /// </param>
     /// <remarks>
-    /// Called at most once per interpreter, on its first frame, so an implementation may capture the current
-    /// thread's dispatcher — which is the thread the loop was started on. A host that owns a UI thread returns a
-    /// pacer that waits on that thread, so the loop stays there and its effect callbacks run there; see
-    /// <see cref="FramePacerCore"/> for why waiting is the only allocation-free way to achieve that.
+    /// Called at most once per run, before the loop's first frame, and still synchronously on the thread the loop was
+    /// started on — so an implementation may also capture the current thread's dispatcher. See
+    /// <see cref="FramePacerCore"/> for why waiting on that thread is the only allocation-free way to keep the loop
+    /// there.
+    /// <para>
+    /// An inspector that does not implement <see cref="IUIThreadAffinity"/> is a supported shape, not a broken one —
+    /// a third-party host's inspector, or one of the platforms that cannot name a dispatcher at all. An override
+    /// should still answer such an inspector from an application-level thread, the way it did before this seam
+    /// existed: that can only preserve a pacer the host already had, never hand it one it did not.
+    /// </para>
+    /// <para>
+    /// Null is equally supported and means the loop waits on the default thread-pool timer.
+    /// </para>
     /// </remarks>
-    protected virtual FramePacerCore? CreateFramePacer() => null;
+    protected virtual FramePacerCore? CreateFramePacer(object target, IUIThreadInspectorCore inspector) => null;
 
     /// <summary>
     /// Arranges for <paramref name="continuation"/> to run once, no earlier than <paramref name="interval"/> from
@@ -79,6 +95,11 @@ public abstract class TransitionInterpreterCore : IDisposable
     /// when cancelled. An implementation that simply stopped calling back would park the loop for good; nothing else
     /// would wake it.
     /// </para>
+    /// <para>
+    /// The pacer is not resolved here. It is resolved by <see cref="ExecuteSamplingLoopAsync{TPriorityCore}"/> before
+    /// the loop's first frame, while the loop is still synchronously on the thread that started it — see the note
+    /// there for why that timing matters.
+    /// </para>
     /// </remarks>
     protected virtual void ArmNextFrame(Action continuation, TimeSpan interval, CancellationToken cancellationToken)
     {
@@ -87,12 +108,6 @@ public abstract class TransitionInterpreterCore : IDisposable
         {
             continuation();
             return;
-        }
-
-        if (!_pacerResolved)
-        {
-            _pacerResolved = true;
-            _pacer = CreateFramePacer();
         }
 
         if (_pacer is not null)
@@ -160,6 +175,23 @@ public abstract class TransitionInterpreterCore : IDisposable
         var foreverloop = effect.LoopTime == int.MaxValue;
         try
         {
+            // Resolved here rather than on the first arm: everything up to the first await in this method still runs
+            // synchronously on the thread that started the loop, which is the thread a host's timer has to be built
+            // on (Avalonia's DispatcherTimer and WinForms' Timer tick on their creating thread and cannot name one).
+            // The old lazy resolution ran on the first *arm* instead, which is after RunPassAsync may already have
+            // parked on a stalled timeline and resumed on another thread — so one stalled first frame could cost the
+            // host its pacer for the rest of the animation, silently. `_pacerResolved` is still needed because null
+            // is a meaningful answer: it means "asked once, and the answer was no".
+            //
+            // Inside the try, not before it. A host override that throws is a host bug, and the cost of it should be
+            // that host's pacer — the loop then waits on the thread-pool timer, exactly as if the override had
+            // returned null — rather than an exception escaping this method with no frame drawn and no callback run.
+            if (!_pacerResolved)
+            {
+                _pacerResolved = true;
+                _pacer = CreateFramePacer(target, frameSet.Inspector);
+            }
+
             effect.InvokeStart(target, Args);
             while (true)
             {
@@ -186,6 +218,12 @@ public abstract class TransitionInterpreterCore : IDisposable
         finally
         {
             effect.InvokeFinally(target, Args);
+
+            // The loop is over, so this is where its own resources stop being needed — releasing them here rather
+            // than in Dispose() covers every caller, including a test that drives the interpreter directly, and
+            // releases the pacer without cancelling the token source, which is not always this interpreter's to
+            // cancel (the scheduler resolves it from the caller, and Transition hands one source to every segment).
+            ReleaseLoopResources();
         }
     }
 
@@ -299,11 +337,40 @@ public abstract class TransitionInterpreterCore : IDisposable
             oldCts.Cancel();
         }
 
-        _pacer?.Dispose();
-        _pacer = null;
-        _wait?.Dispose();
-        _wait = null;
+        ReleaseLoopResources();
 
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the resources the loop itself owns — the frame pacer and the reused wait — without touching the token
+    /// source.
+    /// </summary>
+    /// <remarks>
+    /// Called by the sampling loop when it ends, and by <see cref="Dispose"/>. Cancelling the token source is the part
+    /// that is deliberately left out: the scheduler resolves a run's token source from its caller
+    /// (<c>externCts</c>), and one caller can hand the same source to several runs — <c>Transition</c> loops over its
+    /// segments passing a single source to every <c>Execute</c> — so cancelling it on the way out would end the
+    /// animation after its first segment.
+    /// <para>
+    /// What the interpreter does own is the pacer, and a host's pacer can own a disposable timer whose
+    /// unsubscribe-and-release lives only in its own <c>Dispose</c> — WinForms' does — so releasing it here is the
+    /// difference between dropping that timer and leaking one per animation. Nothing else released it: the
+    /// scheduler's <c>finally</c> only releases its gate, and never disposed the interpreter it built.
+    /// </para>
+    /// <para>
+    /// <c>_pacerResolved</c> is cleared with it, so an interpreter that is executed a second time asks its host for a
+    /// fresh pacer instead of silently falling back to the thread-pool timer. Nothing in the repository does that —
+    /// the scheduler builds one interpreter per run — but <see cref="ExecuteSamplingLoopAsync{TPriorityCore}"/> is
+    /// public, and a stale "already asked, and the answer was no" would be invisible.
+    /// </para>
+    /// </remarks>
+    internal void ReleaseLoopResources()
+    {
+        _pacer?.Dispose();
+        _pacer = null;
+        _pacerResolved = false;
+        _wait?.Dispose();
+        _wait = null;
     }
 }

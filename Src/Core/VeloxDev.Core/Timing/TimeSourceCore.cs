@@ -40,10 +40,18 @@ public static class TimeConversion
 /// parks its consumers while it is paused.
 /// </summary>
 /// <remarks>
-/// Time is raw <see cref="Stopwatch"/> ticks — an integer, not milliseconds as a <see cref="double"/>. Precision
-/// is not the reason (a double holds exact integer ticks for decades); the reason is that the whole clock state can
+/// Also the base a host that owns time derives from. Two seams, one per shape of host: a <em>pull</em> host answers
+/// "what time is it now" and supplies the stamp through the protected constructor, while a <em>push</em> host whose
+/// position arrives in a callback returns the last value it was given and reports its feed through
+/// <see cref="SetHostFeeding"/>. Everything either of them would otherwise have to re-derive — the anchor
+/// arithmetic, the epoch protocol, the overflow guard, the park signal — stays here.
+/// <para>
+/// Time is raw integer ticks in the source's own unit — not milliseconds as a <see cref="double"/>. Precision is
+/// not the reason (a double holds exact integer ticks for decades); the reason is that the whole clock state can
 /// then be a set of <see cref="long"/> fields, which are individually atomic on 32-bit as well as 64-bit and cost
-/// nothing to swap.
+/// nothing to swap. The unit is the machine clock's by default; a host counting elsewhere declares its own, because
+/// every conversion a consumer makes divides by it.
+/// </para>
 /// <para>
 /// Absolute, never restarted — which is what lets several consumers be anchored to one instance and share a
 /// transport. A per-consumer pass is expressed as an <em>anchor</em> into this timeline, not by resetting it, so
@@ -51,11 +59,11 @@ public static class TimeConversion
 /// </para>
 /// <para>
 /// Reading the position is lock-free: the coherent fields are published under a sequence counter, and because the
-/// only writers are control calls — pause, resume, rate, seek — a reader effectively never retries. Writing takes
-/// the write gate, which no reader ever touches.
+/// only writers are control calls — pause, resume, rate, seek, and a host's feed report — a reader effectively never
+/// retries. Writing takes the write gate, which no reader ever touches.
 /// </para>
 /// </remarks>
-public sealed class TimeSourceCore : ITimeSourceControl
+public class TimeSourceCore : ITimeSourceControl
 {
     /// <summary>
     /// Playback rates are held as integers scaled by this, so the clock's state is integral throughout. Four
@@ -89,6 +97,20 @@ public sealed class TimeSourceCore : ITimeSourceControl
     private bool _paused;
 
     /// <summary>
+    /// True while whoever owns the clock behind this source is delivering. True by default, and left alone by every
+    /// control call: a source that computes its position from the machine clock is being fed by definition, and only
+    /// a pushed host — one whose position arrives in a callback — ever clears it.
+    /// </summary>
+    /// <remarks>
+    /// It exists because <see cref="IsAdvancing"/> cannot be derived from <see cref="IsPaused"/> and
+    /// <see cref="Rate"/> alone. A host that stops feeding freezes the position without pausing anything, and a
+    /// source that reported advancing through that would never let its consumers park — the failure
+    /// <see cref="ITimeSource.IsAdvancing"/> describes, and the reason the predicate is stated as an invariant rather
+    /// than a formula.
+    /// </remarks>
+    private bool _hostFeeding = true;
+
+    /// <summary>
     /// Non-null exactly while the clock is <em>not advancing</em> — that is, while <see cref="IsAdvancing"/> is
     /// false, whether that is because of a pause or a rate of zero. Bound to the predicate a consumer parks on
     /// rather than to the pause, so the two can never disagree and leave a consumer spinning on
@@ -101,11 +123,63 @@ public sealed class TimeSourceCore : ITimeSourceControl
     /// </summary>
     private TaskCompletionSource<bool>? _parkGate;
 
-    public TimeSourceCore()
-    {
-        TicksPerSecond = TimeConversion.DefaultTicksPerSecond;
+    /// <summary>
+    /// The machine clock, and the stamp of the public constructor. A cached delegate rather than a method group, so
+    /// the default path allocates nothing beyond the source itself.
+    /// </summary>
+    private static readonly Func<long> MachineStamp = static () => Stopwatch.GetTimestamp();
 
-        var stamp = NowStamp();
+    /// <summary>
+    /// Where the position comes from.
+    /// </summary>
+    /// <remarks>
+    /// A delegate rather than a virtual method, deliberately. The stamp is read once from the constructor, and a
+    /// virtual would run the override before the subclass's own constructor had assigned anything it might read —
+    /// the classic construction-order trap, here with a clock for a symptom.
+    /// </remarks>
+    private readonly Func<long> _nowStamp;
+
+    public TimeSourceCore() : this(MachineStamp, TimeConversion.DefaultTicksPerSecond)
+    {
+    }
+
+    /// <summary>
+    /// A source whose position comes from somewhere other than the machine clock: the seam a host that owns time
+    /// uses, instead of reimplementing the timeline.
+    /// </summary>
+    /// <param name="nowStamp">
+    /// Reads the host's clock, in <paramref name="ticksPerSecond"/> units. Everything else is inherited unchanged —
+    /// the anchor arithmetic, the epoch protocol, the overflow guard in <see cref="Advance"/> and the park signal all
+    /// stay here, and only "what time is it" moves to the host.
+    /// <para>
+    /// A host that <em>pushes</em> the position from a callback rather than answering with the current time returns
+    /// the last value it was given, and calls <see cref="SetHostFeeding"/> as its feed starts and stops. Supplying
+    /// this without that is the one combination that breaks: a frozen stamp behind an <see cref="IsAdvancing"/> that
+    /// still reads true.
+    /// </para>
+    /// </param>
+    /// <param name="ticksPerSecond">
+    /// The unit <paramref name="nowStamp"/> counts in, and what <see cref="TicksPerSecond"/> reports. Defaults to
+    /// <see cref="Stopwatch.Frequency"/> for the machine clock, which is not portable — a host counting elsewhere
+    /// must say so, or every conversion a consumer makes is quietly wrong by the ratio between the two.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="nowStamp"/> is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ticksPerSecond"/> is not positive.</exception>
+    protected TimeSourceCore(Func<long> nowStamp, long ticksPerSecond)
+    {
+        // 不用 ThrowIfNull / ThrowIfLessThan：Core 多目标到 netstandard2.0 与 netframework4.6.1，那两个助手在
+        // 这些目标上不存在。
+        if (nowStamp is null) throw new ArgumentNullException(nameof(nowStamp));
+        if (ticksPerSecond < 1L)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(ticksPerSecond), ticksPerSecond, "A tick unit is the divisor of every conversion and must be positive.");
+        }
+
+        _nowStamp = nowStamp;
+        TicksPerSecond = ticksPerSecond;
+
+        var stamp = nowStamp();
         _origin = stamp;
         _anchorReal = stamp;
         _anchorVirtual = stamp;
@@ -126,15 +200,17 @@ public sealed class TimeSourceCore : ITimeSourceControl
     public bool IsPaused => Volatile.Read(ref _paused);
 
     /// <summary>
-    /// True while the position is moving. A rate of zero freezes the clock without pausing it, so this — not
-    /// <see cref="IsPaused"/> — is what a consumer parks on.
+    /// True while the position is moving. A rate of zero freezes the clock without pausing it, and a host that has
+    /// stopped feeding freezes it without doing anything at all, so this — not <see cref="IsPaused"/> — is what a
+    /// consumer parks on.
     /// </summary>
     public bool IsAdvancing => Advances;
 
     /// <summary>
-    /// The one place the two flags are combined, so the property and the park signal cannot disagree.
+    /// The one place the three flags are combined, so the property and the park signal cannot disagree.
     /// </summary>
-    private bool Advances => !Volatile.Read(ref _paused) && Volatile.Read(ref _rate) > 0L;
+    private bool Advances
+        => Volatile.Read(ref _hostFeeding) && !Volatile.Read(ref _paused) && Volatile.Read(ref _rate) > 0L;
 
     /// <inheritdoc />
     public long Epoch => Volatile.Read(ref _epoch);
@@ -265,6 +341,46 @@ public sealed class TimeSourceCore : ITimeSourceControl
         gate.TrySetResult(true);
     }
 
+    /// <summary>
+    /// Reports that whoever feeds this source has stopped or resumed delivering.
+    /// </summary>
+    /// <remarks>
+    /// The seam a pushed host uses. Its feed falling silent freezes the position without anyone calling
+    /// <see cref="Pause"/>, and <see cref="IsAdvancing"/> has to say so or every loop anchored here goes on sampling
+    /// a frame that is not changing — see <see cref="ITimeSource.IsAdvancing"/> for why that failure is worth a
+    /// method of its own.
+    /// <para>
+    /// A method here rather than an <c>IsAdvancing</c> a host overrides, for the reason
+    /// <see cref="TransitionSystem.FramePacerCore"/> gives about its own base: the predicate and the park signal
+    /// have to move together, the host cannot see whether they did, and getting it wrong is invisible from the
+    /// host's side. Routing the change through the one place that already maintains that pairing is cheaper than
+    /// asking every host to re-derive it.
+    /// </para>
+    /// <para>
+    /// Not a rebase: the position picks up exactly where it stopped, so an accumulator's basis stays valid and
+    /// <see cref="Epoch"/> does not move. A host whose own clock keeps running while its feed is silent is
+    /// describing a jump rather than a stall, and says so with <see cref="Seek"/> instead.
+    /// </para>
+    /// <para>
+    /// Idempotent, and callable from any thread — including the host's own, which is usually not the UI thread.
+    /// </para>
+    /// </remarks>
+    protected void SetHostFeeding(bool feeding)
+    {
+        TaskCompletionSource<bool>? woken;
+        lock (_writeGate)
+        {
+            if (_hostFeeding == feeding) return;
+
+            _hostFeeding = feeding;
+            woken = RefreshParkGate();
+        }
+
+        // 与 Resume 同样的理由放在写闸之外：完成一个 gate 会同步跑它的续体，而续体若重入控制调用，
+        // 会死在不可重入的锁上。
+        woken?.TrySetResult(true);
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// The cancellation arm exists because a parked consumer's wait knows nothing about its own token: without it
@@ -331,7 +447,7 @@ public sealed class TimeSourceCore : ITimeSourceControl
                     continue;
                 }
 
-                return Advance(virtualTicks, NowStamp() - anchorReal, speed);
+                return Advance(virtualTicks, _nowStamp() - anchorReal, speed);
             }
         }
     }
@@ -350,8 +466,6 @@ public sealed class TimeSourceCore : ITimeSourceControl
 
     private static TaskCompletionSource<bool> NewGate()
         => new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-    private static long NowStamp() => Stopwatch.GetTimestamp();
 
     /// <summary>
     /// Moves a virtual position on by <paramref name="elapsedTicks"/> of real time at <paramref name="speed"/>.
@@ -390,7 +504,7 @@ public sealed class TimeSourceCore : ITimeSourceControl
 
     private void Rebase(long? speed, long? rate, long? virtualTarget)
     {
-        var realNow = NowStamp();
+        var realNow = _nowStamp();
 
         // The new position before the rebase is where the timeline is at this instant. Holding the write gate means
         // no other writer can be between its two version bumps, so the sequence protocol below holds.

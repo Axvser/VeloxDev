@@ -1136,8 +1136,8 @@ namespace VeloxDev.TimeLine
         /// The time source a channel's frames advance on, or null when that channel does not exist yet.
         /// </summary>
         /// <remarks>
-        /// This is what lets an animation share a channel's transport: passing it to
-        /// <c>Transition.Execute(target, bus, ...)</c> anchors the animation to the same clock, so one
+        /// This is what lets an animation share a channel's transport: passing it to the snapshot's
+        /// <c>Execute(target, timeline)</c> overload anchors the animation to the same clock, so one
         /// <c>Pause()</c> on the channel stops the frame callbacks and the animation together and the channel's rate
         /// multiplies both. Null is the honest answer for a channel that was never started — a query must not create
         /// one as a side effect.

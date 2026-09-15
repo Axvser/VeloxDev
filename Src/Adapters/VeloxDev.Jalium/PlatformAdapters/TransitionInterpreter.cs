@@ -6,24 +6,18 @@ namespace VeloxDev.TransitionSystem
 {
     public class TransitionInterpreter() : TransitionInterpreterCore<TransitionEffect, DispatcherPriority>
     {
-        /// <summary>
-        /// Waits each frame on the main dispatcher's thread, so the sampling loop — and the effect's
-        /// <c>Update</c>/<c>LateUpdate</c> callbacks — run there.
-        /// </summary>
-        /// <remarks>
-        /// Falls back the way the inspector does: the application's dispatcher, then the static main one, and only
-        /// then null — which keeps the thread-pool pacer rather than minting a dispatcher on whichever thread first
-        /// armed the loop.
-        /// </remarks>
-        protected override FramePacerCore? CreateFramePacer()
-            => (Application.Current?.Dispatcher ?? Dispatcher.MainDispatcher) is { } dispatcher
-                ? new DispatcherFramePacer(dispatcher)
-                : null;
+        protected override FramePacerCore? CreateFramePacer(object target, IUIThreadInspectorCore inspector)
+        {
+            if (inspector is IUIThreadAffinity affinity)
+            {
+                return affinity.ThreadFor(target) is Dispatcher dispatcher ? new DispatcherFramePacer(dispatcher) : null;
+            }
 
-        /// <summary>
-        /// A one-shot wait on the main dispatcher: nothing is posted, so no dispatch operation is allocated per
-        /// frame.
-        /// </summary>
+            return (Application.Current?.Dispatcher ?? Dispatcher.MainDispatcher) is { } appDispatcher
+                ? new DispatcherFramePacer(appDispatcher)
+                : null;
+        }
+
         private sealed class DispatcherFramePacer(Dispatcher dispatcher) : FramePacerCore
         {
             private DispatcherTimer? _timer;

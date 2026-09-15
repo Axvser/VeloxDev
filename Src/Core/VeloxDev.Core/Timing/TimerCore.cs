@@ -10,10 +10,26 @@ namespace VeloxDev.Timing;
 /// Core installs its defaults in the static constructor, so a lookup always resolves whether or not any platform
 /// opted in. A platform replaces one by registering under the <em>contract</em> it is replacing — the key is the
 /// contract type, not the implementation type:
-/// <code>TimerCore.RegisterTimeSource&lt;ITimeSourceControl&gt;(static () => new WpfRenderTimeSource());</code>
+/// <code>TimerCore.RegisterTimeSource&lt;ITimeSourceControl&gt;(static () => new GameLoopTimeSource());</code>
 /// Registering under an implementation type would file it where nothing looks, so it is the contract that has to be
 /// named. Installation is last-writer-wins and atomic, the same rule
 /// <see cref="TransitionSystem.Abstractions.InterpolatorCore.RegisterInterpolator"/> follows.
+/// <para>
+/// The substitution that exists is for a <b>host that owns time</b> — a player loop, a media position, an audio
+/// callback — which supplies its clock through <see cref="TimeSourceCore"/>'s protected constructor and reports
+/// whether it is still feeding through <see cref="TimeSourceCore.SetHostFeeding"/>, rather than reimplementing the
+/// timeline behind <see cref="ITimeSourceControl"/>. It is deliberately <em>not</em> for a framework's render loop:
+/// a clock that only moves on frames makes the frame rate the timing authority, and the sampling path is built on
+/// the opposite — the timeline decides how far an animation has gone, and the wake-up is only a reminder. Holding a
+/// loop on a UI thread is a real but different problem, solved by <c>FramePacerCore</c> in the subsystem that owns
+/// the loop, not here.
+/// </para>
+/// <para>
+/// Every lookup builds a new instance, and a host with one clock keeps that shape: return a fresh wrapper over the
+/// one feed per call rather than a shared singleton, so each consumer keeps its own pause and rate. A singleton
+/// registered here would make pausing one channel pause every channel — the opposite of what the per-channel
+/// sources in <c>MonoBehaviourManager</c> are for.
+/// </para>
 /// <para>
 /// The keys are private and never handed out: a subclass or a caller replacing the dictionary wholesale would drop
 /// the defaults installed here and leave every lookup unresolvable.

@@ -8,23 +8,12 @@ using System.Threading.Tasks;
 
 namespace VeloxDev.TransitionSystem
 {
-    /// <summary>
-    /// WinUI 3 UI-thread detection/marshaling implementation.
-    ///
-    /// The target object (<see cref="DependencyObject"/>) takes priority: every <see cref="DependencyObject"/>
-    /// carries its owning <see cref="DispatcherQueue"/> (accessible from a non-UI thread), so if the animation
-    /// target is a UI element, a background-thread first start marshals directly to its UI thread with no capture.
-    /// Non-DependencyObject targets fall back to the lazily captured global queue; <see cref="CaptureUIThread"/> can pre-capture explicitly.
-    /// </summary>
-    public class UIThreadInspector : UIThreadInspectorCore<DispatcherQueuePriority>
+    public class UIThreadInspector : UIThreadInspectorCore<DispatcherQueuePriority>, IUIThreadAffinity
     {
         private static DispatcherQueue? _dispatcherQueue;
         private static volatile bool _isAppAlive = true;
 
-        /// <summary>
-        /// Optionally capture the <see cref="DispatcherQueue"/> on the UI thread. Only needed for non-DependencyObject
-        /// targets when the animation first starts from a background thread.
-        /// </summary>
+        /// <summary>Captures the current thread's queue. Only needed for a non-<see cref="DependencyObject"/> target.</summary>
         public static void CaptureUIThread()
         {
             var current = DispatcherQueue.GetForCurrentThread()
@@ -32,16 +21,8 @@ namespace VeloxDev.TransitionSystem
             Interlocked.CompareExchange(ref _dispatcherQueue, current, null);
         }
 
-        /// <summary>
-        /// The queue captured from the UI thread, if it has been captured yet — for a consumer that has to schedule
-        /// on it but was not itself called from the UI thread.
-        /// </summary>
         internal static DispatcherQueue? CapturedQueue => Volatile.Read(ref _dispatcherQueue);
 
-        /// <summary>
-        /// Lazily gets the global DispatcherQueue: captures it automatically the first time it is called on the UI thread.
-        /// Calling GetForCurrentThread() from a background thread only returns null, with no side effects.
-        /// </summary>
         private static DispatcherQueue? EnsureQueue()
         {
             var queue = Volatile.Read(ref _dispatcherQueue);
@@ -53,16 +34,14 @@ namespace VeloxDev.TransitionSystem
             return _dispatcherQueue;
         }
 
-        /// <summary>
-        /// DispatcherQueue derived from the target object: if the target is a <see cref="DependencyObject"/>,
-        /// uses its owning queue directly; otherwise falls back to the globally captured one.
-        /// </summary>
-        private static DispatcherQueue? QueueFor(object target)
+        internal static DispatcherQueue? QueueFor(object target)
         {
             if (target is DependencyObject dependencyObject && dependencyObject.DispatcherQueue is { } queue)
                 return queue;
             return EnsureQueue();
         }
+
+        public object? ThreadFor(object target) => QueueFor(target);
 
         public override bool IsAppAlive() => _isAppAlive;
 

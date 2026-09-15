@@ -2,25 +2,14 @@ namespace VeloxDev.TransitionSystem
 {
     public class TransitionInterpreter() : TransitionInterpreterCore<TransitionEffect>
     {
-        /// <summary>
-        /// Waits each frame on the UI thread, so the sampling loop — and the effect's
-        /// <c>Update</c>/<c>LateUpdate</c> callbacks — run there.
-        /// </summary>
-        /// <remarks>
-        /// Only when the loop is already on the UI thread, recognised the same way the inspector recognises it. A
-        /// <see cref="System.Windows.Forms.Timer"/> posts its tick to the thread that created it, so one built on a
-        /// background thread would never fire and would strand the loop; leaving the thread-pool pacer in place
-        /// instead is merely less ideal, not broken. A background first start therefore stays on the pool until the
-        /// animation is restarted from the UI thread.
-        /// </remarks>
-        protected override FramePacerCore? CreateFramePacer()
+        // Deliberately not inspector.IsUIThread(): the inspector captures one thread once, so on a second WinForms UI
+        // thread it would answer false while this thread does have a message loop — and a Forms.Timer can only be
+        // built on the thread it ticks on.
+        protected override FramePacerCore? CreateFramePacer(object target, IUIThreadInspectorCore inspector)
             => SynchronizationContext.Current?.GetType().Name == "WindowsFormsSynchronizationContext"
                 ? new FormsFramePacer()
                 : null;
 
-        /// <summary>
-        /// A one-shot wait on the UI thread's message queue.
-        /// </summary>
         private sealed class FormsFramePacer : FramePacerCore
         {
             private System.Windows.Forms.Timer? _timer;

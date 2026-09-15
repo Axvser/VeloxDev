@@ -39,13 +39,28 @@ public interface ITimeSource
     bool IsPaused { get; }
 
     /// <summary>
-    /// True while the position is moving — <c>!IsPaused &amp;&amp; Rate &gt; 0</c>.
+    /// True while the position is moving.
     /// </summary>
     /// <remarks>
     /// This, and not <see cref="IsPaused"/>, is the predicate a consumer parks on. The two differ because a rate of
     /// zero freezes the source without pausing it: a loop that checked only <see cref="IsPaused"/> would keep
     /// running with a frozen clock, and a loop that checked <see cref="IsAdvancing"/> but parked on the wrong signal
     /// would spin.
+    /// <para>
+    /// An invariant, not a formula over <see cref="IsPaused"/> and <see cref="Rate"/>: <b>true implies the position
+    /// is moving</b>, whatever the reason it might not be. A source whose position is advanced by a host rather than
+    /// computed from a clock at read time must report false whenever that host has stopped feeding it — a player
+    /// loop suspended, a decoder buffer empty, a tab in the background — even though nobody called
+    /// <see cref="ITimeSourceControl.Pause"/>. The two agree on the default source only because a
+    /// <see cref="System.Diagnostics.Stopwatch"/> never stops, and that is a property of that source rather than of
+    /// this contract.
+    /// </para>
+    /// <para>
+    /// Getting it wrong is silent, and is the one mistake this property exists to make impossible. A source that
+    /// reports true while frozen never lets its consumers park, so every loop anchored to it goes on writing
+    /// properties at its sampling rate for a frame that is not changing: no exception, no log, no frame — just work
+    /// that never stops.
+    /// </para>
     /// </remarks>
     bool IsAdvancing { get; }
 
@@ -66,6 +81,14 @@ public interface ITimeSource
     /// <para>
     /// It also returns on a nudge — a seek applied while stalled — so the new position can be drawn. Callers
     /// re-read the state after every wake instead of treating completion as "resumed".
+    /// </para>
+    /// <para>
+    /// A source whose position a host advances owes this signal to that host rather than to a control call. The
+    /// stall that has to be reported is the host falling silent, and no <see cref="ITimeSourceControl"/> method is
+    /// called when that happens — nothing would install the signal, a parked consumer would be released the instant
+    /// it parked, and the loop would spin. Such an implementation installs the signal when its feed stops and
+    /// releases it when the feed resumes, by the same rule as every other implementation: installed exactly while
+    /// <see cref="IsAdvancing"/> is false, whichever side made it false.
     /// </para>
     /// <para>
     /// Implementations must not take a write gate here, must complete continuations asynchronously rather than

@@ -77,6 +77,12 @@ public sealed class SamplerSet<TPriorityCore>
 
     internal void SetRun(TransitionRun run) => _run = run;
 
+    /// <summary>
+    /// The inspector every write goes through, exposed so the interpreter can derive its frame pacer from the same
+    /// answer instead of re-deriving the thread from the platform and risking a pacer on a different one.
+    /// </summary>
+    internal IUIThreadInspectorCore Inspector => _inspector;
+
     public bool CanSetValue() => _inspector.IsAppAlive();
 
     /// <summary>
