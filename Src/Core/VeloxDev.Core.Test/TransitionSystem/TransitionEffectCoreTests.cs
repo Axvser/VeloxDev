@@ -115,8 +115,7 @@ public class TransitionEffectCoreTests
         Assert.AreEqual(1, count);
 
         effect.Awaked -= handler;
-        // After removal, WeakDelegate may still invoke if reference is alive.
-        // But the design is weak-ref based, so we just verify no crash.
         effect.InvokeAwake(this, new TransitionEventArgs());
+        Assert.AreEqual(1, count, "unsubscribing takes effect on the next invoke");
     }
 }

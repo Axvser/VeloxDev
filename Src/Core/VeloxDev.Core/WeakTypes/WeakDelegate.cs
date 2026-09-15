@@ -1,5 +1,21 @@
 namespace VeloxDev.WeakTypes
 {
+    /// <summary>
+    /// One event's handler list: handlers can be added and removed by reference, and copied onto a clone of the owner.
+    /// </summary>
+    /// <remarks>
+    /// <b>Handlers are kept alive.</b> The combined delegate is cached in a strong field, so a subscription behaves
+    /// like an ordinary event — which is what the common spelling needs: <c>effect.Update += (_, _) =&gt; …</c> makes a
+    /// delegate nothing else references, and truly weak storage would let the next GC collect it, silencing the
+    /// animation with no exception and no frame. The weak list underneath is what a rebuild prunes: a handler
+    /// collected <em>before</em> the list was next touched is dropped instead of being invoked. That is the whole of
+    /// the weakness — it does not let a live subscription go, so a subscriber that needs to be collectable keeps its
+    /// own reference to the delegate and unsubscribes.
+    /// <para>
+    /// The read side is a volatile field read with no lock, so the per-frame invoke takes no lock and allocates
+    /// nothing; subscribing and unsubscribing rebuild it under one.
+    /// </para>
+    /// </remarks>
     public sealed class WeakDelegate<TDelegate>
         where TDelegate : Delegate
     {
