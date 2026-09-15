@@ -3,7 +3,7 @@ using VeloxDev.TransitionSystem.NativeSamplers;
 
 namespace VeloxDev.Core.Test.TransitionSystem;
 
-// These tests exercise the process-wide static registry InterpolatorCore.NativeInterpolators.
+// These tests exercise the process-wide sampler registry behind InterpolatorCore.
 // Each test writes only its own private Type key and always removes it in finally, so tests
 // are order-independent and never clobber each other or the native defaults — the identity
 // assertions hold regardless of parallelization. [DoNotParallelize] is kept purely as
@@ -73,10 +73,14 @@ public class InterpolatorCoreTests
     }
 
     [TestMethod]
-    public void NativeInterpolators_ContainsDefaults()
+    public void TheDefaultsAreRegistered()
     {
-        Assert.IsTrue(InterpolatorCore.NativeInterpolators.ContainsKey(typeof(double)));
-        Assert.IsTrue(InterpolatorCore.NativeInterpolators.ContainsKey(typeof(long)));
+        // 走公开契约而不是字典本身：注册表是私有的，而"默认装了哪些"本来也就只能从解析结果看出来。
+        Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(double), out var floating));
+        Assert.IsInstanceOfType<DoubleSampler>(floating);
+
+        Assert.IsTrue(InterpolatorCore.TryGetInterpolator(typeof(long), out var integral));
+        Assert.IsInstanceOfType<LongSampler>(integral);
     }
 
     [TestMethod]

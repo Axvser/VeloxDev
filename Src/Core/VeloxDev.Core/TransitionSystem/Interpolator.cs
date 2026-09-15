@@ -28,7 +28,15 @@ public abstract class InterpolatorCore
 #endif
     }
 
-    public static ConcurrentDictionary<Type, ISampler> NativeInterpolators { get; protected set; } = [];
+    /// <summary>
+    /// The process-wide registry. Private, and reached only through the three members below.
+    /// </summary>
+    /// <remarks>
+    /// Held the way <c>TimerCore</c> holds its factories rather than as a public property: a caller that could reach
+    /// the dictionary could replace it wholesale — dropping every default installed here — or clear it, and neither
+    /// is something a registration API should allow. The keys are never handed out.
+    /// </remarks>
+    private static readonly ConcurrentDictionary<Type, ISampler> Interpolators = new();
 
     /// <summary>
     /// Resolves the sampler for a type: the exact type first, then base classes nearest-first, then interfaces.
@@ -41,14 +49,14 @@ public abstract class InterpolatorCore
     /// </remarks>
     public static bool TryGetInterpolator(Type type, out ISampler? sampler)
     {
-        if (NativeInterpolators.TryGetValue(type, out sampler))
+        if (Interpolators.TryGetValue(type, out sampler))
         {
             return true;
         }
 
         for (var baseType = type.BaseType; baseType is not null; baseType = baseType.BaseType)
         {
-            if (NativeInterpolators.TryGetValue(baseType, out sampler))
+            if (Interpolators.TryGetValue(baseType, out sampler))
             {
                 return true;
             }
@@ -59,7 +67,7 @@ public abstract class InterpolatorCore
 
         foreach (var contract in type.GetInterfaces())
         {
-            if (!NativeInterpolators.TryGetValue(contract, out var candidate) || candidate is null)
+            if (!Interpolators.TryGetValue(contract, out var candidate) || candidate is null)
             {
                 continue;
             }
@@ -82,12 +90,12 @@ public abstract class InterpolatorCore
     {
         // Atomic last-writer-wins install. AddOrUpdate makes the update unconditional and atomic, so the
         // registration is guaranteed to land.
-        NativeInterpolators.AddOrUpdate(type, sampler, (_, _) => sampler);
+        Interpolators.AddOrUpdate(type, sampler, (_, _) => sampler);
         return true;
     }
     public static bool UnregisterInterpolator(Type type, out ISampler? sampler)
     {
-        return NativeInterpolators.TryRemove(type, out sampler);
+        return Interpolators.TryRemove(type, out sampler);
     }
 
     /// <summary>

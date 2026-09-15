@@ -1,8 +1,8 @@
 namespace VeloxDev.TransitionSystem;
 
 /// <summary>
-/// Handles sampling a property for a transition. Implementations are stateless singletons registered in
-/// <see cref="Abstractions.InterpolatorCore.NativeInterpolators"/> (or a per-property override).
+/// Handles sampling a property for a transition. Implementations are stateless singletons registered through
+/// <see cref="Abstractions.InterpolatorCore.RegisterInterpolator"/> (or a per-property override).
 /// <see cref="NormalizeStart"/> / <see cref="NormalizeEnd"/> produce the endpoint values written at t &lt;= 0 /
 /// t &gt;= 1; <see cref="InsertFrame"/> interpolates the middle frames. Implementations must never mutate the
 /// <c>start</c> / <c>end</c> values passed to <see cref="InsertFrame"/> — they are shared with the snapshot, and
