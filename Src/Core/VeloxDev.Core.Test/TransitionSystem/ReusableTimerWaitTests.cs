@@ -7,7 +7,12 @@ namespace VeloxDev.Core.Test.TransitionSystem;
 /// <see cref="ReusableTimerWait"/> 的契约。这里的每条断言都对应「采样循环停下来」的一种方式——一个不再唤醒的
 /// 等待对象不会报错，它只会让动画永远停在那里，所以这些必须是被测过的行为而不是注释。
 /// </summary>
+/// <remarks>
+/// 串行：分配那条断言量的是进程级计数（<c>GC.GetTotalAllocatedBytes</c>），方法级并行时别的方法的分配会落进
+/// 它的测量窗口，best-of-2 只是缓解。
+/// </remarks>
 [TestClass]
+[DoNotParallelize]
 public class ReusableTimerWaitTests
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(30);
@@ -91,10 +96,12 @@ public class ReusableTimerWaitTests
     [TestMethod]
     public async Task AwaitThrowsOnlyForCancellation()
     {
+        // 一个实例只绑一次令牌，绑上就粘住——所以两半各用一个实例。共用一个的话，第一次绑的是 None，
+        // 第二次的令牌根本不会登记，那个 await 只能等它自己的 30 秒超时，这条断言就白等了。
+        using var normal = new ReusableTimerWait();
+        await normal.Await(TimeSpan.FromMilliseconds(10), CancellationToken.None); // 正常唤醒：不抛
+
         using var wait = new ReusableTimerWait();
-
-        await wait.Await(TimeSpan.FromMilliseconds(10), CancellationToken.None); // 正常唤醒：不抛
-
         using var cts = new CancellationTokenSource();
         cts.CancelAfter(TimeSpan.FromMilliseconds(10));
         await Assert.ThrowsAsync<OperationCanceledException>(async () => await wait.Await(TimeSpan.FromSeconds(30), cts.Token));

@@ -1,4 +1,4 @@
-using VeloxDev.TransitionSystem;
+﻿using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 
 namespace VeloxDev.Core.Test.TransitionSystem;
@@ -8,7 +8,12 @@ namespace VeloxDev.Core.Test.TransitionSystem;
 /// put the target into the state the animation is meant to start from. On the five adapters that dispatch
 /// fire-and-forget, an unawaited Awake ran after Prepare instead — which is what these two tests pin.
 /// </summary>
+/// <remarks>
+/// 串行：两个方法共用一个静态的排队表（<see cref="OffThreadInspector.Pending"/>），方法级并行时一个方法的
+/// <c>Pump</c> 会把另一个方法排队的 Awake 抽走 —— 实测 5 次里 2~3 次红。
+/// </remarks>
 [TestClass]
+[DoNotParallelize]
 public class TransitionSchedulerAwakeTests
 {
     private sealed class Target
@@ -33,7 +38,7 @@ public class TransitionSchedulerAwakeTests
 
         protected override bool IsCurrentThread(ThreadRef thread) => false;
 
-        protected override bool PostCore(object target, Action action, NonPriority priority) { Pending.Add(action); return true; }
+        protected override bool PostCore(object target, ThreadRef thread, Action action, NonPriority priority) { Pending.Add(action); return true; }
 
         public override T Run<T>(object target, Func<T> body) => body();
 
