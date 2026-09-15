@@ -11,8 +11,20 @@ namespace VeloxDev.TransitionSystem
         public override bool IsUIThread() => Application.Current?.Dispatcher?.CheckAccess() ?? false;
 
         public object? ThreadFor(object target)
-            => target is DispatcherObject dispatcherObject ? dispatcherObject.Dispatcher
-               : Application.Current?.Dispatcher ?? Dispatcher.FromThread(Thread.CurrentThread);
+        {
+            try
+            {
+                return target is DispatcherObject dispatcherObject
+                    ? dispatcherObject.Dispatcher
+                    : Application.Current?.Dispatcher ?? Dispatcher.FromThread(Thread.CurrentThread);
+            }
+            catch (Exception)
+            {
+                // Per frame per property, where a throw is indistinguishable from the animation having failed. Null
+                // costs this target its pacer and nothing else.
+                return null;
+            }
+        }
 
         private Dispatcher? DispatcherFor(object target) => (Dispatcher?)ThreadFor(target);
 

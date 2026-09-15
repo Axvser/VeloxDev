@@ -217,13 +217,22 @@ public abstract class TransitionInterpreterCore : IDisposable
         }
         finally
         {
-            effect.InvokeFinally(target, Args);
-
-            // The loop is over, so this is where its own resources stop being needed — releasing them here rather
-            // than in Dispose() covers every caller, including a test that drives the interpreter directly, and
-            // releases the pacer without cancelling the token source, which is not always this interpreter's to
-            // cancel (the scheduler resolves it from the caller, and Transition hands one source to every segment).
-            ReleaseLoopResources();
+            // Nested, so a throwing callback cannot take the loop's own resources with it. The callback is host code
+            // and a host may throw from it; the resources are this loop's, and a host's pacer can own a live timer
+            // whose only release point is its own Dispose — so skipping this leaks one timer per animation, which
+            // outlives the exception by the rest of the process.
+            try
+            {
+                effect.InvokeFinally(target, Args);
+            }
+            finally
+            {
+                // The loop is over, so this is where its own resources stop being needed — releasing them here rather
+                // than in Dispose() covers every caller, including a test that drives the interpreter directly, and
+                // releases the pacer without cancelling the token source, which is not always this interpreter's to
+                // cancel (the scheduler resolves it from the caller, and Transition hands one source to every segment).
+                ReleaseLoopResources();
+            }
         }
     }
 

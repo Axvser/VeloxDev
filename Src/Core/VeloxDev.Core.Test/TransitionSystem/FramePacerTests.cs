@@ -58,6 +58,9 @@ public class FramePacerTests
 
         public TimeSpan LastInterval { get; private set; }
 
+        /// <summary>Whether the loop released this pacer on its way out.</summary>
+        public bool IsDisposed { get; private set; }
+
         protected override void Arm(TimeSpan interval)
         {
             Arms++;
@@ -68,6 +71,12 @@ public class FramePacerTests
 
         /// <summary>Runs the pending continuation, the way a host timer's tick would.</summary>
         public void Tick() => Fire();
+
+        public override void Dispose()
+        {
+            IsDisposed = true;
+            base.Dispose();
+        }
     }
 
     /// <summary>An interpreter that hands out a hand-driven pacer and counts how often it is asked for one.</summary>
@@ -307,6 +316,39 @@ public class FramePacerTests
         }
 
         await loop;
+    }
+
+    /// <summary>
+    /// A host callback that throws must not cost the loop its own resources.
+    /// </summary>
+    /// <remarks>
+    /// The pacer is host-supplied and may own a live timer whose only release point is its own <c>Dispose</c>, so a
+    /// skipped release leaks one timer per animation — and unlike the exception, the leak lasts for the rest of the
+    /// process. The callback still propagates: swallowing it would hide a host bug rather than contain one.
+    /// </remarks>
+    [TestMethod]
+    public async Task AThrowingFinalCallbackStillReleasesThePacer()
+    {
+        var target = new Target();
+        var state = new StateCore();
+        state.SetValue<Target, double>(t => t.Value, 1d);
+
+        // 零时长：整趟 pass 一步走完，不装表，于是这一段循环同步跑到底——异常与释放都已经发生。
+        var effect = new TransitionEffectCore { Duration = TimeSpan.Zero, FPS = 60 };
+        effect.Finally += (_, _) => throw new InvalidOperationException("a host's own callback");
+
+        var frameSet = new TestInterpolator().Prepare(target, state, effect, new ImmediateInspector());
+        var interpreter = new PacerInterpreter();
+        using var cts = new CancellationTokenSource();
+
+        var loop = interpreter.Execute(target, frameSet, effect, cts);
+        var pacer = PacerInterpreter.Pacer;
+        Assert.IsNotNull(pacer, "the interpreter must have been asked for a pacer");
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => loop);
+
+        Assert.IsTrue(pacer.IsDisposed,
+            "the callback is host code; the resources are the loop's, and one must not be able to take the other");
     }
 
     [TestMethod]
