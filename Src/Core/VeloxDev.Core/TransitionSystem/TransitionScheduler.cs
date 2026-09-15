@@ -35,6 +35,10 @@ public class TransitionSchedulerCore<
             targetref = null;
             return;
         }
+        // 线程归属在这里解析一次，仍同步跑在启动这一趟的线程上——对 Razor 这类"UI 线程随回路而变"的宿主，
+        // 这是唯一拿得到正确答案的时刻：帧是从采样循环的线程投出去的，那里没有调用方的上下文。
+        var thread = host.ThreadFor(target);
+
         var newCts = externCts ?? new CancellationTokenSource();
         TTransitionInterpreterCore newInterpreter = new();
         var generation = Generation;
@@ -94,6 +98,7 @@ public class TransitionSchedulerCore<
             // than getting a null one.
             if (_activeRuns.TryGetValue(newCts, out var run))
             {
+                run.Thread = thread;
                 frameSet.SetRun(run);
             }
 

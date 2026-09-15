@@ -44,10 +44,10 @@ public abstract class ThreadDispatcherBase<TPriorityCore> : IThreadDispatcher<TP
     protected virtual TPriorityCore InternalPriority => default!;
 
     public bool Post(object target, Action action, TPriorityCore priority)
-    {
-        var thread = ThreadFor(target);
-        return IsCurrentFor(target, thread) ? RunInline(action) : PostCore(target, thread, action, priority);
-    }
+        => Post(target, ThreadFor(target), action, priority);
+
+    public bool Post(object target, ThreadRef thread, Action action, TPriorityCore priority)
+        => IsCurrentFor(target, thread) ? RunInline(action) : PostCore(target, thread, action, priority);
 
     public async Task<bool> PostAsync(object target, Action action, TPriorityCore priority)
     {

@@ -109,7 +109,10 @@ public sealed class SamplerSet<TPriorityCore>
                 BitConverter.Int64BitsToDouble(Interlocked.Read(ref _cachedTimeBits)));
         }
         Interlocked.Exchange(ref _cachedTimeBits, BitConverter.DoubleToInt64Bits(t));
-        if (!_host.Post(target, _cachedApply!, priority))
+
+        // 这一趟的线程由启动它的调度器钉在 run 上；没有 run 的调用方——测试直接驱动解释器——才就近问宿主。
+        var thread = _run is { } bound && !bound.Thread.IsNone ? bound.Thread : _host.ThreadFor(target);
+        if (!_host.Post(target, thread, _cachedApply!, priority))
         {
             _diagnostics?.Warn("Dropped", "the host refused a frame; the animation carries on without it.");
         }

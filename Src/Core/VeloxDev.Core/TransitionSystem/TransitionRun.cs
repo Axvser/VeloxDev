@@ -1,3 +1,4 @@
+using VeloxDev.Threading;
 using VeloxDev.Timing;
 
 namespace VeloxDev.TransitionSystem.Abstractions;
@@ -31,6 +32,17 @@ internal sealed class TransitionRun : IDisposable
     internal CancellationTokenSource Cts { get; }
 
     internal ITimeSourceControl Timeline { get; }
+
+    /// <summary>
+    /// The thread this run posts its frames to, resolved once by the scheduler that started it.
+    /// </summary>
+    /// <remarks>
+    /// Pinned rather than asked per frame, because the write path runs on the sampling loop's thread and that thread
+    /// carries no answer for a host whose answer depends on the caller — a Blazor circuit's renderer has its own
+    /// synchronisation context, and every circuit after the first would post to the first one's. <see cref="ThreadRef.None"/>
+    /// for a run nobody started through a scheduler, which is how a test driving the interpreter directly gets one.
+    /// </remarks>
+    internal ThreadRef Thread { get; set; }
 
     /// <summary>
     /// Where in the timeline the running pass starts. A seek replaces it; the loop only reads it.

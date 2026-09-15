@@ -29,7 +29,16 @@ public interface IThreadDispatcher<TPriorityCore> : IThreadAffinity
     /// </remarks>
     bool Post(object target, Action action, TPriorityCore priority);
 
-    /// <summary>Same as <see cref="Post"/>, but completes once <paramref name="action"/> has actually run.</summary>
+    /// <summary>Hands <paramref name="action"/> to a thread the caller already resolved.</summary>
+    /// <remarks>
+    /// What a run that has a thread of its own uses. Asking <see cref="IThreadAffinity.ThreadFor"/> again per frame
+    /// gives the wrong answer for a host whose answer depends on the calling thread: the write path runs on the
+    /// sampling loop's thread, and a Blazor circuit's renderer — whose synchronisation context belongs to the circuit,
+    /// not to the process — cannot be named from there.
+    /// </remarks>
+    bool Post(object target, ThreadRef thread, Action action, TPriorityCore priority);
+
+    /// <summary>Same as <see cref="Post(object, Action, TPriorityCore)"/>, but completes once the action has run.</summary>
     Task<bool> PostAsync(object target, Action action, TPriorityCore priority);
 
     /// <remarks>

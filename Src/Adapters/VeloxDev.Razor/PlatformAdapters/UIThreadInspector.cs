@@ -39,10 +39,20 @@ namespace VeloxDev.TransitionSystem
 
         public override bool IsAlive => _isAppRunning;
 
+        /// <summary>
+        /// The calling thread's context when it has one, and the captured one otherwise.
+        /// </summary>
+        /// <remarks>
+        /// A Blazor Server process runs many circuits, each with its own synchronisation context, so "the UI thread"
+        /// is not a process-wide answer — it is whichever circuit is asking. A run is started on its circuit's thread
+        /// and pins the answer there (see <c>TransitionRun.Thread</c>), which is what keeps two live circuits from
+        /// posting into each other; the fallback serves an animation started from a background thread, where
+        /// <c>CaptureUIThread</c> on the circuit thread is what supplies it.
+        /// </remarks>
         public override ThreadRef ThreadFor(object target)
         {
             EnsureCaptured();
-            return ThreadRef.From(_uiSyncContext);
+            return ThreadRef.From(SynchronizationContext.Current ?? _uiSyncContext);
         }
 
         protected override bool IsCurrentThread(ThreadRef thread)
