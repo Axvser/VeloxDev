@@ -25,7 +25,17 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
-		<PackageReference Include="VeloxDev.Core.Generator" Version="9.0.0" />
+	</ItemGroup>
+
+	<!-- Debug 用本地生成器源码，Release 用包。analyzer 不随 ProjectReference 传递，
+	     所以用到生成器特性的项目都要各自重复这一对。 -->
+	<ItemGroup>
+		<ProjectReference Include="../../Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj"
+		                  OutputItemType="Analyzer"
+		                  ReferenceOutputAssembly="false"
+		                  Condition="'$(Configuration)' == 'Debug'" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="9.0.0"
+		                  Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 	<ItemGroup>

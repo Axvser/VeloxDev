@@ -27,6 +27,16 @@
 		<PackageReference Include="VeloxDev.Core" Version="9.0.0" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
+	<!-- 本项目自己也用生成器特性，而 analyzer 不随 ProjectReference 传递。 -->
+	<ItemGroup>
+		<ProjectReference Include="../../Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj"
+		                  OutputItemType="Analyzer"
+		                  ReferenceOutputAssembly="false"
+		                  Condition="'$(Configuration)' == 'Debug'" />
+		<PackageReference Include="VeloxDev.Core.Generator" Version="9.0.0"
+		                  Condition="'$(Configuration)' != 'Debug'" />
+	</ItemGroup>
+
 	<ItemGroup>
 	   <None Include="..\..\..\Assets\veloxdev-logo.png">
 			<Pack>True</Pack>

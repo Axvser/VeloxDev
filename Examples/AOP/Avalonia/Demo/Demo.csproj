@@ -30,4 +30,14 @@
       <ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
     </ItemGroup>
 
+    <!-- 本项目用 [AspectOriented]，analyzer 不随 ProjectReference 传递。 -->
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\..\Src\Generators\VeloxDev.Core.Generator\VeloxDev.Core.Generator.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false"
+                          Condition="'$(Configuration)' == 'Debug'" />
+        <PackageReference Include="VeloxDev.Core.Generator" Version="9.0.0"
+                          Condition="'$(Configuration)' != 'Debug'" />
+    </ItemGroup>
+
 </Project>
