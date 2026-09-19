@@ -90,6 +90,28 @@ A link whose endpoints have not been measured must draw nothing. Some adapters s
 
 ⚙ **Never hand a renderer an unbounded coordinate or a whole-world canvas size.** If you customize a link view on a framework with a size limit, keep the geometry local — your GUI's reference describes the technique its adapter uses (viewport-sized overlay, offset frame, or self-bounding).
 
+### Which way the data goes
+
+A settled link carries a **travelling highlight**, so its direction is read from the motion rather than from a mark that is a few pixels wide and invisible at 40% zoom. Every full demo does this; the Trimmed suites deliberately do not, because it is decoration rather than part of the editor.
+
+```csharp
+// the resting line, and the length of it that is lit as it passes
+stops[0].Offset = centre - HalfWidth;   // HalfWidth ≈ 0.04 of the link
+stops[1].Offset = centre;               // the band, at the lit colour
+stops[2].Offset = centre + HalfWidth;
+stops[1].Color  = Blend(Dim, Lit, mix);
+```
+
+⚙ **The line rests dim and the band is the same colour at full strength — do not paint the band a different colour.** The obvious reading of "highlight" is the link's colour pushed towards white, and it is invisible: cyan lifted 75% towards white differs from cyan in one channel out of three, on a 2px line, against a dark canvas. Dimming the *resting* line by alpha (about three fifths) keeps the hue and puts the contrast where the eye finds it, and the same rule works on the white links the non-Avalonia demos draw.
+
+⚙ **The band is a phase of the cycle, not a colour swap.** It comes up from the resting colour over the first third of its travel, travels fully lit and unchanged for the middle third, and settles back over the last third — the last phase is also what makes the loop seam invisible, since the line is uniformly dim at both ends of a cycle.
+
+⚙ **A virtual link (the rubber band under the pointer) and a selected link keep a flat pen.** One is not a settled connection and the other is already highlighted.
+
+⚙ Start the animation when the view attaches and `Transition.Exit(...)` it when the view detaches: views are pooled, and a released view that is handed a different link must not keep animating the previous one.
+
+⚙ The declaration is a **single looping segment** and the phases are a mapping from that one animated value — see [the animation skill's segments note](../../veloxdev-create-animation/SKILL.md#segments) for why a `Then()` chain cannot do this.
+
 ## Virtualization
 
 Handled for you, and you normally never touch it.

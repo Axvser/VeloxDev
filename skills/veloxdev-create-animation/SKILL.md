@@ -179,6 +179,23 @@ private sealed class RampTarget
 
 ⚙ Time spent paused inside a wait is not consumed — a pause of any length leaves the remaining delay unchanged.
 
+⚙ **Every segment after the first samples nothing, so do not build a multi-phase animation as a chain.** A segment's `LoopTime` repeats *that segment*, the queue of segments is walked exactly once, and the loop guard reads a pass counter the whole run shares (`Src/Core/VeloxDev.Core/TransitionSystem/TransitionInterpreter.cs`). By the time the second segment starts, that counter is already past its `LoopTime`, so the segment reports `Start` and `Completed` and **writes no frame at all** — the second property simply keeps its start value. Measured, not inferred: a two-segment chain with 120ms segments leaves the second segment's property with zero writes after a second of running.
+
+⚙ There is also **no chain-level loop**: `LoopTime = int.MaxValue` on a first segment runs that segment forever and the rest never start. A looping motion with phases inside it is **one** looping segment, with the phases expressed as a mapping from the single animated value:
+
+```csharp
+// the animated path is a scalar; its setter is what turns it into the phase's geometry and colour
+.Property(t => t.Progress, 1d)
+.Effect(new TransitionEffect()
+{
+    Duration = TimeSpan.FromSeconds(1.8),
+    LoopTime = int.MaxValue,
+    Ease = Eases.Default,
+});
+```
+
+Because a loop replays the endpoints captured when the run started, the value at the end of the cycle must land in the same visible state as the start — which is what makes the seam invisible. Several independent phases that must run one after another and repeat are separate declarations you start yourself, not a chain.
+
 ## Controlling a running animation
 
 All of it is addressed by **target**, and all of it is static on `Transition`:

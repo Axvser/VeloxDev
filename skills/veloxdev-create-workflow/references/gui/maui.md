@@ -38,6 +38,10 @@ If you add content to a node, **it will not scale with the zoom by itself.** Ext
 
 ⚙ Slot anchors are measured **canvas-local**, by summing the parent chain with `AbsoluteLayout.GetLayoutBounds` (which excludes `Translation`), and written through `SlotAnchorFromCanvasLocal`. Using the visual-centre form subtracts `ActualOffset` twice and offsets every link.
 
+⚙ **The travelling highlight is a property of the overlay, not of a view: `LinkFlowEnabled`**, off by default. Turning it on makes every settled link carry a band that shows which way its data flows (the rule the full demos follow — see [view-layer.md](../view-layer.md#which-way-the-data-goes)). It is the overlay's own animation, started on `Loaded` and exited on `Unloaded`, so the bands on every link advance together.
+
+⚙ **This overlay cannot stroke with a gradient.** `ICanvas` in the MAUI version this ships against has `SetFillPaint` and no stroke equivalent, so the band is drawn as a run of short pieces rather than as a gradient stroke. If you extend the flow, keep that shape — and note it is also why the band can follow a link's elbow, which a straight-axis gradient stroke cannot.
+
 ⚙ **Read `ScrollX` / `ScrollY`, never the requested scroll target** — an animated or clamped scroll makes the requested value a lie until the next frame. And guard `ScrollViewer.Width` / `Height` for `NaN` before using them as a viewport size.
 
 ## Zoom
