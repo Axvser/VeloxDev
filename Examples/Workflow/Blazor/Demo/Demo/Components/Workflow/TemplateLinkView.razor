@@ -15,10 +15,10 @@
     var dash = EffectiveIsVirtual ? "6 4" : "none";
     var markerEnd = EffectiveIsVirtual ? "" : $"url(#{markerId})";
 
-    // The travelling highlight: three stops whose position and colour come from the cycle's progress, and
-    // an axis along the link's own endpoints (userSpaceOnUse) so the band travels along the link rather
-    // than across a diagonal of its bounding box.
-    var stops = CurrentFlowStops();
+    // The travelling highlight: three stops at the offsets the cycle writes onto this component, and an axis
+    // along the link's own endpoints (userSpaceOnUse) so the band travels along the link rather than across a
+    // diagonal of its bounding box. The axis is re-derived here from the anchors and never the other way
+    // round: the cycle owns the offsets, so a render may read them but must not seat them.
     var axis = FlowAxis;
 
     <svg width="@CanvasWidthCss" height="@CanvasHeightCss"
@@ -35,9 +35,9 @@
             {
                 <linearGradient id="@FlowId" gradientUnits="userSpaceOnUse"
                                 x1="@axis[0]" y1="@axis[1]" x2="@axis[2]" y2="@axis[3]">
-                    <stop offset="@stops[0].Offset" stop-color="@stops[0].Color" />
-                    <stop offset="@stops[1].Offset" stop-color="@stops[1].Color" />
-                    <stop offset="@stops[2].Offset" stop-color="@stops[2].Color" />
+                    <stop offset="@N(BandTail)" stop-color="@DimCss" />
+                    <stop offset="@N(BandCentre)" stop-color="@BandColor" />
+                    <stop offset="@N(BandLead)" stop-color="@DimCss" />
                 </linearGradient>
             }
         </defs>

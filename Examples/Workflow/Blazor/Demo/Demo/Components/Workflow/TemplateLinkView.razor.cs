@@ -11,6 +11,11 @@ namespace Demo.Components.Workflow;
 /// stubs, mirroring the WPF template's geometry. Points derive from the endpoint slot
 /// anchors; the polyline spans the whole canvas so links are absolutely positioned
 /// (overflow visible) and redraw whenever the endpoints move.
+/// <para>
+/// The view is also the object the flow animates — <c>Transition&lt;TemplateLinkView&gt;</c>. A Razor component
+/// is a class, so the band's three stop offsets and its colour are this component's own members and the markup
+/// reads the cycle's position straight off it, with nothing in between to map back into stops.
+/// </para>
 /// </summary>
 public partial class TemplateLinkView : ComponentBase, IDisposable
 {
@@ -106,80 +111,37 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
 
     #region Flow effect
 
-    /// <summary>
-    /// The object the flow animation writes into. <c>Transition&lt;T&gt;</c> animates a member of a
-    /// reference type, and on this platform that object is not a visual — the browser paints the gradient,
-    /// so the only state is the cycle's progress. Raising <see cref="INotifyPropertyChanged"/> is what
-    /// repaints the component: a Razor view has no property system that would notice a value on its own.
-    /// </summary>
-    private sealed class LinkFlow : INotifyPropertyChanged
-    {
-        private static readonly PropertyChangedEventArgs PhaseChanged = new(nameof(Phase));
-
-        private double _phase;
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        /// <summary>Cycle progress, 0→1: the whole of the animated state.</summary>
-        public double Phase
-        {
-            get => _phase;
-            set
-            {
-                _phase = value;
-                PropertyChanged?.Invoke(this, PhaseChanged);
-            }
-        }
-    }
-
-    /// <summary>One stop of the flow gradient: where along the link it sits, and its colour.</summary>
-    /// <remarks>
-    /// Both members are already markup: the offset is formatted invariantly here rather than in the view,
-    /// because Razor writes a bare <c>double</c> with the current culture and a comma decimal separator
-    /// would serialize an SVG attribute that no browser can read.
-    /// </remarks>
-    private readonly record struct FlowStop(string Offset, string Color);
-
-    // The band, in gradient-offset units along the link: half its width, and where its centre sits at the
-    // end of each phase. The phases cover different distances, so they take different fractions of the
-    // cycle rather than equal thirds.
+    /// <summary>Half the band's width, in gradient-offset units.</summary>
     private const double BandHalfWidth = 0.04;
-    private const double EnterEnd = 0.30;
-    private const double FadeStart = 0.66;
-    private const double BandFrom = 0.06;
+
+    // The three phases, as the band's centre at the end of each: it forms as it enters, travels fully lit,
+    // and settles back on its way out. What the animation writes is these centres, plus and minus HalfWidth.
+    private const double BandStart = 0.06;
     private const double BandFormed = 0.34;
     private const double BandLeaving = 0.66;
-    private const double BandTo = 0.94;
+    private const double BandExit = 0.94;
+
+    private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(550);
+    private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(650);
+    private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(550);
 
     /// <summary>
-    /// Walks the band across the link once per cycle, forever, so the link reads as carrying data from the
-    /// sender's anchor to the receiver's. <see cref="LinkFlow.Phase"/> is the only animated value; the
-    /// gradient's stops are derived from it.
-    /// <para>
-    /// Declared once and executed per component rather than built per call: the endpoint is the same every
-    /// cycle, which is the case the animation reference puts in a <c>static readonly</c> field. A straight
-    /// line rather than an eased curve, because the band should move at a constant speed — an ease would
-    /// make each cycle pause at the ends and read as a series of pulses instead of a flow.
-    /// </para>
-    /// <para>
-    /// The phases are one looping segment and a piecewise mapping rather than three segments joined with
-    /// <c>Then()</c>, because nothing in the engine repeats a chain: a segment's <c>LoopTime</c> repeats
-    /// that segment, the queue of segments is walked exactly once, and the loop guard reads a pass counter
-    /// the whole run shares — so a second segment starts, completes, and writes no frame at all.
-    /// </para>
+    /// The band's three stop offsets, in gradient units along the link, and its colour: the whole of the
+    /// animated state, and the reason this component — rather than a model behind it — is the animation's
+    /// target. <c>Transition&lt;T&gt;</c> animates a member of a reference type, and a Razor component is a
+    /// class, so the animated paths read straight off the view and there is no scalar in between to map back
+    /// into stops. The offsets are formatted invariantly by <see cref="N"/> in the markup, because Razor
+    /// writes a bare <c>double</c> with the current culture and a comma decimal separator would serialize
+    /// an SVG attribute no browser can read.
     /// </summary>
-    private static readonly Transition<LinkFlow> Flow =
-        Transition<LinkFlow>.Create()
-            .Property(t => t.Phase, 1d)
-            .Effect(new TransitionEffect()
-            {
-                Duration = TimeSpan.FromSeconds(1.8),
-                LoopTime = int.MaxValue,
-                Ease = Eases.Default,
-            });
+    private double BandTail { get; set; }
+    private double BandCentre { get; set; }
+    private double BandLead { get; set; }
 
-    private readonly LinkFlow _flow = new();
+    /// <summary>The band's colour, as CSS markup: what the cycle writes and the middle stop reads.</summary>
+    private string BandColor { get; set; } = "rgba(0,0,0,0)";
 
+    private Transition<TemplateLinkView>? _flow;
     private bool _flowRunning;
     private IWorkflowLinkViewModel? _flowLink;
 
@@ -188,55 +150,85 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     private (int A, int R, int G, int B) _dimColor = (0x9E, 0xFF, 0xFF, 0xFF);
     private (int A, int R, int G, int B) _litColor = (0xFF, 0xFF, 0xFF, 0xFF);
 
+    /// <summary>The band's colour at full strength, as CSS, which the arrowhead also carries.</summary>
+    private string LitCss => Css(_litColor);
+
+    /// <summary>The line's resting colour, as CSS: the band's two shoulders, which the cycle never writes.</summary>
+    private string DimCss => Css(_dimColor);
+
     /// <summary>Identifies this link's gradient; one definition per link, referenced by its stroke.</summary>
     private string FlowId => $"veloxdev-flow-{MarkerSuffix}";
 
     /// <summary>The settled link's stroke: the flow gradient. A virtual one keeps its flat dashed colour.</summary>
     private string FlowStroke => EffectiveIsVirtual ? LineColor : $"url(#{FlowId})";
 
-    /// <summary>The band's colour, which the arrowhead also carries.</summary>
-    private string LitCss => Css(_litColor);
+    /// <summary>
+    /// The flow, as the three phases it is made of, declared one after the other and repeated forever.
+    /// </summary>
+    /// <remarks>
+    /// Built per component rather than held in a <c>static readonly</c> field, because two of its endpoints are the
+    /// link's own colours, and a declaration that reads a local is shared by every later execution of it — here
+    /// that would paint one link's band in another link's colour.
+    /// <para>
+    /// The paths go into the component itself: the three stop offsets and the band's colour, so a phase is a
+    /// handful of named writes and the phase structure is readable rather than computed. A straight line rather
+    /// than an eased curve, because the band should move at a constant speed — an ease would make each cycle pause
+    /// at the ends and read as pulses instead of flow.
+    /// </para>
+    /// </remarks>
+    private Transition<TemplateLinkView> BuildFlow() => Transition<TemplateLinkView>.Create()
+        // Phase 1 — the band forms as it enters: it travels a third of the link while coming up from the
+        // resting colour to the lit one.
+        .Property(v => v.BandTail, BandFormed - BandHalfWidth)
+        .Property(v => v.BandCentre, BandFormed)
+        .Property(v => v.BandLead, BandFormed + BandHalfWidth)
+        .Property(v => v.BandColor, LitCss)
+        .Effect(Repainting(EnterDuration))
+        .Then()
+        // Phase 2 — it travels fully lit and unchanged, which is the phase that reads as flow rather than as a
+        // pulse: nothing about it changes except where it is.
+        .Property(v => v.BandTail, BandLeaving - BandHalfWidth)
+        .Property(v => v.BandCentre, BandLeaving)
+        .Property(v => v.BandLead, BandLeaving + BandHalfWidth)
+        .Effect(Repainting(TravelDuration))
+        .Then()
+        // Phase 3 — it leaves, settling back to the resting colour over the last third of the travel. That is
+        // also what makes the seam invisible when the cycle repeats: the line is uniformly dim at both ends of
+        // a cycle, so the value snapping back to its captured start cannot be seen.
+        .Property(v => v.BandTail, BandExit - BandHalfWidth)
+        .Property(v => v.BandCentre, BandExit)
+        .Property(v => v.BandLead, BandExit + BandHalfWidth)
+        .Property(v => v.BandColor, DimCss)
+        .Effect(Repainting(ExitDuration))
+        .Repeat(int.MaxValue);
 
     /// <summary>
-    /// The gradient's three stops for the current cycle position: the band's two shoulders at the resting
-    /// colour, and the lit colour — or the mix on its way to it — between them.
+    /// One phase's effect: a straight line over <paramref name="duration"/>, with this component's repaint
+    /// attached.
     /// </summary>
-    private FlowStop[] CurrentFlowStops()
+    /// <remarks>
+    /// A repaint per frame is what this platform needs instead of a brush. In Avalonia the animated paths reach
+    /// the rendered object and the framework notices; here the browser paints the gradient and the component only
+    /// carries the values, so each frame has to be handed to the renderer by hand. <c>LateUpdate</c> rather than
+    /// <c>Update</c>: it fires after the frame's writes have landed, so what renders is the frame the animation
+    /// just wrote rather than the one before it.
+    /// </remarks>
+    private TransitionEffect Repainting(TimeSpan duration)
     {
-        var phase = _flow.Phase;
-        double centre;
-        double mix;
-        if (phase < EnterEnd)
+        var effect = new TransitionEffect()
         {
-            var t = phase / EnterEnd;
-            centre = BandFrom + (BandFormed - BandFrom) * t;
-            mix = t;
-        }
-        else if (phase < FadeStart)
-        {
-            var t = (phase - EnterEnd) / (FadeStart - EnterEnd);
-            centre = BandFormed + (BandLeaving - BandFormed) * t;
-            mix = 1d;
-        }
-        else
-        {
-            var t = (phase - FadeStart) / (1d - FadeStart);
-            centre = BandLeaving + (BandTo - BandLeaving) * t;
-            mix = 1d - t;
-        }
+            Duration = duration,
+            Ease = Eases.Default,
+        };
 
-        var dim = Css(_dimColor);
-        return
-        [
-            new FlowStop(N(centre - BandHalfWidth), dim),
-            new FlowStop(N(centre), Css(Blend(_dimColor, _litColor, mix))),
-            new FlowStop(N(centre + BandHalfWidth), dim),
-        ];
+        effect.LateUpdate += (_, _) => InvokeAsync(StateHasChanged);
+        return effect;
     }
 
     /// <summary>
     /// The gradient's axis, in the canvas coordinates the polyline is drawn in — the link's own endpoints,
     /// not its bounding box, so the band travels along the link rather than across a diagonal of its box.
+    /// Re-derived per render, and it writes nothing the cycle owns: see <see cref="AimFlow"/>.
     /// </summary>
     private string[] FlowAxis => Link?.Sender is { } sender && Link.Receiver is { } receiver
         ?
@@ -247,31 +239,64 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
         : ["0", "0", "0", "0"];
 
     /// <summary>
-    /// Starts the flow on a settled link and stops it on one that is not: a virtual link is the rubber band
-    /// under the pointer, and a band that streamed along it would claim a connection that does not exist
-    /// yet. Also restarts when this view is handed a different link, which is what the render-ready gate
+    /// Starts the cycle from the sender's end on a settled link and stops it on one that is not: a virtual link
+    /// is the rubber band under the pointer, and a band that streamed along it would claim a connection that does
+    /// not exist yet. Also restarts when this view is handed a different link, which is what the render-ready gate
     /// makes routine — a pooled view is reused before its first link is ever measured.
     /// </summary>
     private void SyncFlow()
     {
         if (EffectiveIsVirtual || !EffectiveCanRender)
         {
-            if (!_flowRunning) return;
-
-            Transition.Exit(_flow, IncludeMutual: true, IncludeNoMutual: true);
-            _flowRunning = false;
-            _flowLink = null;
+            StopFlow();
             return;
         }
 
         if (_flowRunning && ReferenceEquals(_flowLink, Link)) return;
 
-        // The transition reads its start value from the target, so the cycle has to be at its beginning
-        // before Execute — and the loop replays that captured start at every seam.
-        _flow.Phase = 0d;
-        Flow.Execute(_flow);
-        _flowRunning = true;
         _flowLink = Link;
+        StartFlow();
+    }
+
+    /// <summary>
+    /// Starts the cycle from the sender's end. Started when a view is handed a drawable link, so a pooled view
+    /// reused for another link animates that link rather than the one it was built for.
+    /// </summary>
+    private void StartFlow()
+    {
+        if (EffectiveIsVirtual || !EffectiveCanRender)
+        {
+            StopFlow();
+            return;
+        }
+
+        AimFlow();
+
+        // The transition reads its start values from the target, so the component has to be at the cycle's start
+        // before Execute — and the loop replays that captured start at every seam, so this is also the state each
+        // later cycle begins from.
+        BandTail = BandStart - BandHalfWidth;
+        BandCentre = BandStart;
+        BandLead = BandStart + BandHalfWidth;
+        BandColor = DimCss;
+
+        _flow!.Execute(this);
+        _flowRunning = true;
+    }
+
+    /// <summary>
+    /// Stops the cycle: a view that is no longer drawable, or one whose render is over, must not leave the old
+    /// animation running on it.
+    /// </summary>
+    private void StopFlow()
+    {
+        if (!_flowRunning) return;
+
+        // The cycle is started on the component itself, so this is also the call that unregisters it: from here on
+        // no frame can reach the renderer through it.
+        Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
+        _flowRunning = false;
+        _flowLink = null;
     }
 
     /// <summary>Parses the XAML-style colour literal the template symbols carry, as four channels.</summary>
@@ -303,9 +328,52 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     }
 
     /// <summary>
-    /// Recomputes the flow's colours from the link's own. The lit colour keeps the hue and is lifted a
-    /// little towards white; the resting line is the lit colour dimmed to about three fifths, which is what
-    /// makes a lit band read as a band.
+    /// Recomputes the flow's two colours from the link's own, and rebuilds the declaration whose endpoints they
+    /// are. Called whenever the view is handed its link, its parameters or its colour — the last of which is also
+    /// the only thing that can change what the declaration captures.
+    /// </summary>
+    /// <remarks>
+    /// Nothing here writes the band's position. The cycle owns those and writes them every frame from the endpoints
+    /// it captured, so re-seating them from a path that runs whenever the link moves — which is every frame of a
+    /// drag, since the anchors change under the band — would fight it for a frame. That reads as a band that
+    /// stutters while the canvas moves, and there is no code path here that could reset it.
+    /// </remarks>
+    private void AimFlow()
+    {
+        var lit = LitOf(ParseColor(LineColorOverride ?? "#DDFFFFFF"));
+        if (_flow is not null && lit == _litColor)
+        {
+            return;
+        }
+
+        _litColor = lit;
+        _dimColor = DimOf(lit);
+        _flow = BuildFlow();
+
+        // A view recycled onto a link of another colour gets its cycle restarted, from its own colour's starting
+        // state rather than the previous link's.
+        if (_flowRunning)
+        {
+            StartFlow();
+        }
+    }
+
+    /// <summary>
+    /// The band's colour: the link's own colour at full strength, lifted a little so a link that is already
+    /// white still has somewhere brighter to go.
+    /// </summary>
+    private static (int A, int R, int G, int B) LitOf((int A, int R, int G, int B) color)
+    {
+        const double lift = 0.45;
+
+        int Up(int channel) => (int)Math.Round(channel + (255 - channel) * lift);
+
+        return (0xFF, Up(color.R), Up(color.G), Up(color.B));
+    }
+
+    /// <summary>
+    /// The line's resting colour: the lit colour dimmed to a little under two thirds, which is what makes a
+    /// lit band read as a band.
     /// </summary>
     /// <remarks>
     /// Dimming by alpha is what keeps the hue. The alternative that suggests itself — a "highlight" that is
@@ -313,31 +381,18 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     /// on a 2px line against a dark canvas, a cyan link lifted 75% towards white differs from cyan in one
     /// channel out of three.
     /// </remarks>
-    private void UpdateFlowColors()
-    {
-        const double lift = 0.45;
-        var line = ParseColor(LineColorOverride ?? "#DDFFFFFF");
+    private static (int A, int R, int G, int B) DimOf((int A, int R, int G, int B) color)
+        => ((int)Math.Round(color.A * 0.62), color.R, color.G, color.B);
 
-        byte Up(int channel) => (byte)Math.Round(channel + (255 - channel) * lift);
-
-        _litColor = (0xFF, Up(line.R), Up(line.G), Up(line.B));
-        _dimColor = ((int)Math.Round(_litColor.A * 0.62), _litColor.R, _litColor.G, _litColor.B);
-    }
-
-    private void OnFlowChanged(object? sender, PropertyChangedEventArgs e) => InvokeAsync(StateHasChanged);
-
-    private static (int A, int R, int G, int B) Blend(
-        (int A, int R, int G, int B) from,
-        (int A, int R, int G, int B) to,
-        double t) => (
-        (int)Math.Round(from.A + (to.A - from.A) * t),
-        (int)Math.Round(from.R + (to.R - from.R) * t),
-        (int)Math.Round(from.G + (to.G - from.G) * t),
-        (int)Math.Round(from.B + (to.B - from.B) * t));
-
+    /// <summary>
+    /// Writes a colour as CSS markup. The alpha goes out invariantly for the same reason the offsets do — and here
+    /// it is more than an attribute: this string is an endpoint of the cycle, so a comma decimal separator would
+    /// not merely garble the rendered stop but leave the band's colour unparseable to the sampler that mixes it.
+    /// </summary>
     private static string Css((int A, int R, int G, int B) color) => color.A >= 0xFF
         ? $"rgb({color.R},{color.G},{color.B})"
-        : $"rgba({color.R},{color.G},{color.B},{color.A / 255d:0.###})";
+        : string.Create(CultureInfo.InvariantCulture,
+            $"rgba({color.R},{color.G},{color.B},{color.A / 255d:0.###})");
 
     private static string N(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
@@ -347,9 +402,11 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     protected override void OnInitialized()
     {
         Sync(Link);
-        UpdateFlowColors();
+
+        // The declaration's endpoints are the link's own colours, so the colours come first: the cycle is built
+        // from them, and a virtual link that never starts a cycle still needs them for the arrowhead.
+        AimFlow();
         SyncFlow();
-        _flow.PropertyChanged += OnFlowChanged;
     }
 
     private void Sync(IWorkflowLinkViewModel? link)
@@ -400,7 +457,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     protected override void OnParametersSet()
     {
         base.OnParametersSet();
-        UpdateFlowColors();
+        AimFlow();
         SyncFlow();
         if (IsVirtualOverride is not null || CanRenderOverride is not null)
         {
@@ -459,10 +516,9 @@ public partial class TemplateLinkView : ComponentBase, IDisposable
     public void Dispose()
     {
         // The animation outlives neither the component nor its render: a disposed link view that kept
-        // streaming would keep calling StateHasChanged into a renderer that has moved on.
-        Transition.Exit(_flow, IncludeMutual: true, IncludeNoMutual: true);
-        _flowRunning = false;
-        _flow.PropertyChanged -= OnFlowChanged;
+        // streaming would keep calling StateHasChanged into a renderer that has moved on. The cycle is started
+        // on the component itself, so stopping it is also what unregisters it.
+        StopFlow();
 
         if (_notifier is not null)
         {
