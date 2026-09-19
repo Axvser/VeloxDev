@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -46,9 +46,9 @@ public partial class PolylineCurveView : UserControl
         // What these two cover is the view entering and leaving the tree, not the view pool recycling it:
         // this pool hides a released view with Visibility = Collapsed and hands it a new DataContext rather
         // than detaching it, so a recycled view raises neither event. It does not need to: recycling rebinds
-        // the four anchor properties, which re-aims the brush at its new link and puts the cycle back at its
-        // start, and the animation was never stopped in the first place — it just goes on walking the band
-        // along whichever link the view is now drawing (see UpdateFlowBrush).
+        // the four anchor properties, which re-aims the brush at the link it is now drawing and re-derives
+        // its band, and the animation was never stopped in the first place — it goes on walking the band
+        // along whichever link the view holds (see UpdateFlowBrush and LinkFlow.Repaint).
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
 
@@ -174,6 +174,18 @@ public partial class PolylineCurveView : UserControl
         }
 
         /// <summary>
+        /// Re-derives the band's stops from the phase the cycle is at right now, without moving it.
+        /// </summary>
+        /// <remarks>
+        /// The brush has to be repainted whenever the link moves, because the gradient's axis is the link's
+        /// own and the stops' colours are mixed from its colour — and a link moves on every frame of a zoom
+        /// (the Core anchor getters collapse toward the origin) and of a node drag. Writing the phase back
+        /// to zero there would park the band at the sender's end for as long as the gesture lasted, so this
+        /// re-derives from the value the cycle is already at instead.
+        /// </remarks>
+        public void Repaint() => Apply();
+
+        /// <summary>
         /// Places the band and mixes its colour for the current phase — the three phases the cycle is made
         /// of, as one piecewise mapping.
         /// <para>
@@ -286,7 +298,10 @@ public partial class PolylineCurveView : UserControl
         var stops = brush.GradientStops;
         stops[0].Color = _flow.Dim;
         stops[2].Color = _flow.Dim;
-        _flow.Phase = 0d;
+
+        // The two shoulder stops are painted here and the middle one is left to the cycle — which is
+        // re-derived rather than restarted, since this runs while a gesture is in flight.
+        _flow.Repaint();
     }
 
     /// <summary>
